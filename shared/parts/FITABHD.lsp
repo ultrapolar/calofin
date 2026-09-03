@@ -111,7 +111,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.2")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.4")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -407,7 +407,9 @@
     (foreach s segs
       (setq d (fit:seg-dist q s))
       (if (or (null dmin) (< d dmin)) (setq dmin d)))
-    (setq out (cons dmin out)))
+    ;; a point with no outline to measure against contributes nothing
+    ;; rather than a nil the caller would compare against
+    (if dmin (setq out (cons dmin out))))
   (reverse out))
 
 ;; (worst rms) distance of the points from an outline.
@@ -416,7 +418,9 @@
   (foreach d ds
     (if (> d worst) (setq worst d))
     (setq ssum (+ ssum (* d d))))
-  (list worst (sqrt (/ ssum (length ds)))))
+  ;; no distances at all means nothing to average -- fit:flat-rms
+  ;; guards its mean the same way
+  (list worst (if ds (sqrt (/ ssum (length ds))) 0.0)))
 
 ;; LST without ONE element equal to V.
 (defun fit:drop-one (v lst / out done x)
@@ -4738,8 +4742,12 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq fit-pick (ssget "_I" '((0 . "POINT,INSERT"))))
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   ;; a preview a dead run left behind describes nothing - sweep it
   (setq swept (fit:purge-mine fit:*out-layer*))
   (if (> swept 0)

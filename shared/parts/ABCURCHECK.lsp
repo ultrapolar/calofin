@@ -99,7 +99,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.3")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1103,8 +1103,12 @@
     (princ))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (acc:run T)
   (command "_.UNDO" "_End")
   (setq undo-open nil)
@@ -1121,8 +1125,12 @@
     (princ))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (acc:run nil)
   (command "_.UNDO" "_End")
   (setq undo-open nil)
@@ -1143,8 +1151,12 @@
     (princ))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (setq ans (acc:ask "Erase which of ABCURCHECK's objects?"
                      "Marks All" "Marks" nil)
         n   (+ (acc:purge acc:*mark-layer* "MARK")

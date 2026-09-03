@@ -24,19 +24,26 @@ never modified.
    - arc / radius corners offset as true concentric arcs.
 4. **Step lines** -- selected lines that cross the pool, touching
    walls at both ends -- are recognized automatically and always bead
-   full length.
+   full length, unless the caller held one back (see below).
 5. **The side-wall question**:
-   `Are the side walls beaded? [Yes/No/Back] <No>`.
-   Answer `No` (or Enter) and every selected wall beads full length.
-   Answer `Yes` and you click each step (tread) that has beaded side
-   walls; each click assumes its breakline -- the next step line from
-   the click in the direction the bead is heading. The wall bead is
-   cut flush at that line, kept on the clicked side, and removed
-   everywhere else. Step-face beads always draw either way.
+   `Which steps have beaded side walls? [All/Some/None/Back] <All>`.
+   - `All` (or Enter) -- every selected wall beads full length.
+   - `Some` -- you click each step (tread) that has beaded side walls;
+     each click assumes its breakline, the next step line from the
+     click in the direction the bead is heading. The wall bead is cut
+     flush at that line, kept on the clicked side, and removed
+     everywhere else.
+   - `None` -- the side walls take no bead at all; only the step faces
+     bead.
+
+   Step-face beads draw whichever you pick. `Yes` and `No`, the words
+   this question took before v1.5, still answer it typed in full: `Yes`
+   reads as `Some`, `No` as `All`.
 6. A **report** prints on every run: source layers, chain split
-   (wall vs step), which treads were honored, offset asked vs the
-   offset actually measured back off the finished bead, and how many
-   bead objects landed on the output layer.
+   (wall vs step), which treads were honored, any step lines held
+   back, offset asked vs the offset actually measured back off the
+   finished bead, and how many bead objects landed on the output
+   layer.
 
 The whole run is one undo group -- a single `U` removes every bead.
 Esc mid-run cleans up the temporary chains and restores `OSMODE`,
@@ -75,6 +82,13 @@ At the top of `AUTOBEAD.lsp` (the `AUTOBEAD SETTINGS` block):
 * A clicked step whose ray toward the direction click meets no step
   line is counted and ignored (step lines get 6" of slop past their
   drawn ends). The bead then survives everywhere on that wall.
+* A caller can name step lines to leave unbeaded -- one point on each,
+  the fifth argument to `autobead-build`. CORNERSTP, HEMISTEP and
+  NORMIESTEP name the LAST step they drew: the line that closes a run
+  has no riser behind it, so it takes no bead. A held-back line is
+  still a step line -- it classifies, and it still works as a
+  breakline for the side walls -- it just never gets offset, and the
+  report says how many were held.
 * Every copy is verified to have landed exactly on top of its
   original; if any drifted, the run aborts and draws nothing rather
   than leave geometry in the wrong place. A copy that fails outright
@@ -91,10 +105,18 @@ At the top of `AUTOBEAD.lsp` (the `AUTOBEAD SETTINGS` block):
 
 ## Tests
 
-No dedicated test drives AUTOBEAD itself yet. `python3
-tests/test_shared.py` loads it (with everything else) into the
-repo's AutoLISP VM, so a file that no longer parses or collides with
-another tool fails there. The step routines' hand-off *to* AUTOBEAD --
+`python3 tests/test_autobead.py` runs AUTOBEAD in the repo's AutoLISP
+VM. The VM does not model OFFSET, PEDIT or the in-place copy, so no
+run can bead anything there -- the suite is about the two exits that
+matter for the rest of the session: the run that finds nothing to do
+and the run that dies mid-build both put OSMODE, CMDECHO and
+PEDITACCEPT back, close the one undo group, and take the pushed error
+mode off the stack (until v1.4 a clean run left it stacked, which
+refuses `command-s` inside every later tool's handler). Back at the
+direction click, Esc there, and the tutorial's written route are
+covered too. `CALOFIN_LISP_ROOT=shared` reruns it against the grouped
+twin, and `python3 tests/test_shared.py` still loads it with
+everything else. The step routines' hand-off *to* AUTOBEAD --
 the geometry and clicked treads `CORNERSTP`/`HEMISTEP`/`NORMIESTEP`
 pass it -- is covered from their side by
 `tests/test_cornerstp_geometry.py`.

@@ -26,7 +26,7 @@ parts/                 what it is built FROM - do not APPLOAD these:
 `parts/` exists so the folder you point AutoCAD at contains exactly one
 loadable file. The members still have to be there: `LAZPASS.lsp` is
 *generated from them*, they are where a `lisp/` change gets mirrored, and
-they are what gives git a per-tool diff instead of one 1.8 MB blob.
+they are what gives git a per-tool diff instead of one 3.4 MB blob.
 
 The acady drawing-standards matcher (`lisp/standards_checker/`) is a
 deprecated project and is not carried here. It still loads the old way,
@@ -39,7 +39,7 @@ file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-LAZPASS: calofin shared build loaded - 157 commands in one session.
+LAZPASS: calofin v3.5 loaded - 167 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:
@@ -52,13 +52,13 @@ python3 tools/build_shared_bundle.py
 
 It is the helper library: it defines the `cal:` helpers and exactly one
 command (`CALVER`). Loaded alone it looks like it worked -- it prints
-`CALOFIN-LIB v1.3 loaded` -- but not one tool comes with it, so `POOL`,
+`CALOFIN-LIB v1.5 loaded` -- but not one tool comes with it, so `POOL`,
 `SPA` and the rest are all still undefined. It now says so when that
 happens.
 
 ### The multi-file alternative
 
-`parts/CALOFIN-LOADER.lsp` keeps the build as 55 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 58 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog

@@ -15,17 +15,19 @@ verbatim, in the loader's own order, library first.
 """
 
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from callib import (BUNDLE, COMMAND, HELD, LOADER, PARTS_DIR as PARTS, ROOT,
-                    RULE, loader_members, read)
+from callib import (BUNDLE, CAL_SYM, COMMAND, HELD, LOADER,
+                    PARTS_DIR as PARTS, ROOT, RULE, decomment, loader_members,
+                    read)
 
 #: The calofin release this build belongs to.  Per-tool banners keep
 #: their own REVs -- they say what changed in one file; this says which
 #: set of them shipped together.  Bump it here and nowhere else: the
 #: bundle header and its load announcement are both generated from it.
-RELEASE = "v3.0"
+RELEASE = "v3.5"
 
 
 def held_back():
@@ -56,6 +58,23 @@ def build():
                 sys.exit("command %s is defined by more than one member - "
                          "the bundle would claim it twice" % c.upper())
         commands.extend(cmds)
+
+    # Every cal: helper the members call is one the library defines --
+    # a helper renamed in CALOFIN-LIB.lsp without re-mirroring passed
+    # every check and died on the first click -- and the footer checks
+    # the same list at load, the way it checks the commands.
+    lib_defs = {m for m in CAL_SYM.findall(read(PARTS / names[0]))
+                if not m.startswith("cal:*")}
+    # a call is a cal: name in head position or quoted; the globals are
+    # the earmuffed cal:*name* and are not calls (comments are blanked
+    # first: the prose names helpers too)
+    helpers = sorted({m.group(1) for n in names[1:]
+                      for m in re.finditer(r"[('](cal:[^\s()'*][^\s()']*)",
+                                           decomment(read(PARTS / n)))})
+    unknown = [h for h in helpers if h not in lib_defs]
+    if unknown:
+        sys.exit("members call cal: helpers the library does not define: %s"
+                 % unknown)
 
     out = [
         RULE,
@@ -125,6 +144,28 @@ def build():
         '  (princ (strcat "\\nLAZPASS: calofin %s loaded - "' % RELEASE,
         '                 (itoa (length lazpass:*want*))',
         '                 " commands in one session.")))',
+        "",
+        ";; ...and every library helper the tools above call, checked the",
+        ";; same way: a tool that calls one the library lacks looks fine",
+        ";; until its first click",
+        "(setq lazpass:*helpers* '(",
+    ] + ["  " + " ".join(helpers[i:i + 5])
+         for i in range(0, len(helpers), 5)] + [
+        "))",
+        "(setq lazpass:*nohelper* nil)",
+        "(foreach n lazpass:*helpers*",
+        "  (if (not (eval n))",
+        "    (setq lazpass:*nohelper* (cons n lazpass:*nohelper*))))",
+        "(if lazpass:*nohelper*",
+        "  (progn",
+        '    (princ "\\nLAZPASS: library helpers the tools call but the build lacks:")',
+        "    (foreach n (reverse lazpass:*nohelper*)",
+        '      (princ (strcat " " (vl-symbol-name n))))))',
+        "",
+        ";; the flag the header set for the library: cleared, so a later",
+        ";; APPLOAD of CALOFIN-LIB.lsp on its own in this drawing still says",
+        ";; what it is",
+        "(setq cal:*build-loading* nil)",
         "(princ)",
         "",
     ]

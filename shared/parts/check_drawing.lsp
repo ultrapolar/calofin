@@ -6,7 +6,14 @@
 ;;;
 ;;;  1. Dimensions (linear / aligned / rotated): both definition
 ;;;     points must lie on an object of some kind (line, arc, circle,
-;;;     polyline, ellipse, spline). A dimension with a stray
+;;;     polyline, ellipse, spline) -- OR on an ANCHOR: a point TWO
+;;;     OR MORE DIMENSIONS measure to counts as an object and is left
+;;;     exactly where it is, geometry under it or not. Dimensioning
+;;;     twice to the same spot -- the pair of dims pinning down a
+;;;     hypotenuse corner is the everyday case -- is how you say that
+;;;     spot is the object, and CHECK shifts nothing off it; a stray
+;;;     point nearer an anchor than any line is shifted onto the
+;;;     anchor. A dimension with a stray
 ;;;     definition point gets:
 ;;;       - a construction line (XLINE) drawn through its two dimmed
 ;;;         points on layer CHECK-CONSTRUCTION (yellow),
@@ -31,7 +38,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.6")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -42,6 +49,8 @@
 (setq *cfchk-arc-color*    6)       ; magenta: arcs whose endpoints were snapped
 (setq *cfchk-constr-layer* "CHECK-CONSTRUCTION")
 (setq *cfchk-constr-color* 2)       ; yellow
+(setq *cfchk-anchor-tol*   1.0e-4)  ; how close two dimension points must be to count as the same spot
+(setq *cfchk-anchor-min*   2)       ; that many dimensions meeting there make it an anchor
 
 ;; entity types dimensions and arc ends may attach to
 (setq *cfchk-curve-types*
@@ -145,27 +154,81 @@
 
 ;; --- audit 1: dimension attachment ---------------------------------
 
-(defun cfchk:fix-defpoint (ent gcode cands / ed pt near)
+(defun cfchk:dim-def-pts (ent / ed dtype p13 p14)
+  ;; the two definition points of a linear/aligned dimension (the ones
+  ;; CHECK shifts); nil for every other kind of dimension
+  (setq ed    (entget ent)
+        dtype (logand 7 (cdr (assoc 70 ed))))
+  (if (member dtype '(0 1))
+    (progn
+      (setq p13 (cdr (assoc 13 ed))
+            p14 (cdr (assoc 14 ed)))
+      (append (if p13 (list p13)) (if p14 (list p14))))))
+
+(defun cfchk:shared-anchors (dims / recs r e p found out)
+  ;; Every spot where *cfchk-anchor-min* or more DIMENSIONS put a
+  ;; definition point.  Dimensioning twice to the same spot is how a
+  ;; drafter says that spot matters -- the usual case is the pair of
+  ;; dims that pin down a hypotenuse corner, which is a point in space
+  ;; with no line running through it.  CHECK shifts points without
+  ;; asking first, so this is the rule that stops it walking such a
+  ;; corner onto the nearest wall.
+  ;; Returns the anchor points (WCS).
+  (foreach e dims
+    (foreach p (cfchk:dim-def-pts e)
+      (setq found nil)
+      (foreach r recs
+        (if (and (null found) (<= (distance p (car r)) *cfchk-anchor-tol*))
+          (setq found r)))
+      (cond
+        ((null found) (setq recs (cons (list p e) recs)))
+        ;; a dimension's own two points landing together is one
+        ;; dimension, not two -- it takes two to make an anchor
+        ((not (member e (cdr found)))
+         (setq recs (subst (cons (car found) (cons e (cdr found)))
+                           found recs))))))
+  (foreach r recs
+    (if (>= (length (cdr r)) *cfchk-anchor-min*)
+      (setq out (cons (car r) out))))
+  out)
+
+(defun cfchk:fix-defpoint (ent gcode cands anchors
+                           / ed pt near anch dnear danch sugg dsug)
   ;; shift one definition point onto the closest object when it is
-  ;; not already on one; returns the shift distance, nil if untouched
+  ;; not already on one; returns the shift distance, nil if untouched.
+  ;; A point another dimension also measures to is an ANCHOR and is
+  ;; never shifted; an anchor nearer than any object is where a stray
+  ;; point goes.
   (setq ed (entget ent)
         pt (cdr (assoc gcode ed)))
   (if pt
     (progn
-      (setq near (cfchk:nearest-curve pt nil cands))
-      (if (and near (> (caddr near) *cfchk-tol*))
-        (if (entmod (subst (cons gcode (cadr near)) (assoc gcode ed) ed))
-          (caddr near))))))
+      (setq near  (cfchk:nearest-curve pt nil cands)
+            dnear (if near (caddr near))
+            anch  (cfchk:closest-of pt anchors)
+            danch (if anch (distance pt anch)))
+      (cond
+        ((and dnear (<= dnear *cfchk-tol*)) nil)          ; on an object
+        ((and danch (<= danch *cfchk-anchor-tol*)) nil)   ; on an anchor
+        (t
+         (cond
+           ((and danch (or (null dnear) (< danch dnear)))
+            (setq sugg anch  dsug danch))
+           (near
+            (setq sugg (cadr near)  dsug dnear)))
+         (if (and sugg (> dsug *cfchk-tol*))
+           (if (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
+             dsug)))))))
 
-(defun cfchk:check-dim (ent cands / ed dtype p13 p14 d1 d2)
+(defun cfchk:check-dim (ent cands anchors / ed dtype p13 p14 d1 d2)
   (setq ed    (entget ent)
         dtype (logand 7 (cdr (assoc 70 ed))))
   (if (member dtype '(0 1))                 ; rotated/linear or aligned
     (progn
       (setq p13 (cdr (assoc 13 ed))         ; the two dimmed points
             p14 (cdr (assoc 14 ed))
-            d1  (cfchk:fix-defpoint ent 13 cands)
-            d2  (cfchk:fix-defpoint ent 14 cands))
+            d1  (cfchk:fix-defpoint ent 13 cands anchors)
+            d2  (cfchk:fix-defpoint ent 14 cands anchors))
       (if (or d1 d2)
         (progn
           (cfchk:make-xline p13 p14)        ; through the ORIGINAL points
@@ -174,7 +237,7 @@
           (princ (strcat "\n  Dimension " (cdr (assoc 5 ed)) ":"
                          (if d1 (strcat " point 1 shifted " (rtos d1 2 4)) "")
                          (if d2 (strcat " point 2 shifted " (rtos d2 2 4)) "")
-                         " onto nearest object; recolored red."))
+                         " onto the nearest object or anchor; recolored red."))
           'fixed)
         'ok))
     'skipped))
@@ -234,7 +297,7 @@
 ;; --- command -------------------------------------------------------
 
 (defun c:CHECK ( / *error* oldecho undo-open ss i e et cands dims arcs res
-                   ndf ndo nds naf nao nas)
+                   anchors ndf ndo nds naf nao nas)
   (defun *error* (msg)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
@@ -273,11 +336,24 @@
        (t
         (setq oldecho (getvar "CMDECHO"))
         (setvar "CMDECHO" 0)
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+        ;; only when undo is recording - _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+          (progn
+            (command "_.UNDO" "_Begin")
+            (setq undo-open T)))
         (cal:ensure-layer *cfchk-constr-layer* *cfchk-constr-color*)
+        ;; spots two or more dimensions measure to are anchors: a
+        ;; hypotenuse corner is dimmed twice precisely because there is
+        ;; no line through it, so those points are objects as far as
+        ;; this audit is concerned and nothing shifts off them
+        (setq anchors (cfchk:shared-anchors dims))
+        (if anchors
+          (princ (strcat "\n" (itoa (length anchors))
+                         " point(s) carry more than one dimension - treated"
+                         " as anchors and left alone.")))
         (foreach e dims
-          (setq res (cfchk:check-dim e cands))
+          (setq res (cfchk:check-dim e cands anchors))
           (cond ((eq res 'fixed)   (setq ndf (1+ ndf)))
                 ((eq res 'skipped) (setq nds (1+ nds)))
                 (t                 (setq ndo (1+ ndo)))))

@@ -491,8 +491,63 @@ def run(vm, script):
     return vm
 
 
+def run_cmd(vm, name, script=()):
+    """Drive any command in the file, not just c:STOCKCOVER."""
+    vm.script = list(script)
+    vm.prompts = []
+    fn = vm.get(Sym(name.lower()))
+    vm.call_defun(Sym(name.lower()), fn, [])
+    return vm
+
+
 def cmd_names(vm):
     return [c[0] for c in vm.commands if c]
+
+
+def companions():
+    """STOCKLIST and STOCKCOVER-CFG: the two commands beside the
+    headline one, neither of which had ever been run."""
+    print("companions -- STOCKLIST lists what is there")
+    vm, fake = build(files=["5M_Tech.dwg", "20M_Tech.dwg"])
+    run_cmd(vm, "c:STOCKLIST")
+    said = "".join(fake.said)
+    check("it counts the drawings and names the folder",
+          "2 stock drawing(s) in " in said, said)
+    check("and lists each stem, without the .dwg",
+          "5M_Tech" in said and "20M_Tech" in said and ".dwg" not in said,
+          said)
+
+    print("companions -- STOCKLIST when the folder is not reachable")
+    vm, fake = build(files=["5M_Tech.dwg"])
+    fake.folders = set()                    # the share is not mounted
+    run_cmd(vm, "c:STOCKLIST")
+    said = "".join(fake.said)
+    check("it says the folder is unreachable and how to repoint it",
+          "not reachable" in said and "STOCKCOVER-CFG" in said, said)
+
+    print("companions -- STOCKLIST when the folder is empty")
+    vm, fake = build(files=[])
+    run_cmd(vm, "c:STOCKLIST")
+    check("it says there are no DWGs", "no DWGs in" in "".join(fake.said),
+          "".join(fake.said))
+
+    print("companions -- STOCKCOVER-CFG repoints the folder")
+    vm, fake = build(files=["5M_Tech.dwg", "20M_Tech.dwg"])
+    fake.folders.add("D:\\NEWSTOCK")
+    run_cmd(vm, "c:STOCKCOVER-CFG", ["D:\\NEWSTOCK\\5M_Tech.dwg"])
+    said = "".join(fake.said)
+    check("the picked file's folder is remembered",
+          fake.env.get("StockCover_Folder") == "D:\\NEWSTOCK",
+          repr(fake.env))
+    check("it reports the new folder and what is in it",
+          "set to D:\\NEWSTOCK" in said and "DWG(s) there" in said, said)
+
+    print("companions -- Escape at the file dialog changes nothing")
+    vm, fake = build(files=["5M_Tech.dwg"])
+    before = dict(fake.env)
+    run_cmd(vm, "c:STOCKCOVER-CFG", [None])
+    check("it says unchanged", "unchanged." in "".join(fake.said))
+    check("and nothing was remembered", fake.env == before, repr(fake.env))
 
 
 def runtime():
@@ -678,6 +733,7 @@ def runtime():
 def main():
     structural()
     resolution()
+    companions()
     runtime()
     print()
     if failures:

@@ -106,14 +106,16 @@
 ;;;       LEFT from there, so there is no side to pick.  See "The side
 ;;;       profile" below for what is drawn and how it is dimensioned.
 ;;;     10. Finally, BEAD THE STEPS.  Every tread is beaded - that is the
-;;;       assumption - so the only thing asked is which steps carry the
-;;;       bead along their side walls: All of them, or Some, given by
-;;;       step number.  AUTOBEAD does the work on its own rules (2"
-;;;       toward the side you click, onto its Bead Track layer), so
-;;;       AUTOBEAD.lsp has to be loaded; when it is not, the run says
-;;;       so and finishes without beading.  The beads are their own
-;;;       undo group - AutoCAD does not nest them - so one U undoes
-;;;       the beads and the next undoes the steps.
+;;;       assumption - EXCEPT the last one drawn: the line that closes
+;;;       the run has no riser behind it, so it is handed to AUTOBEAD
+;;;       and held back there unbeaded.  The only thing asked is which
+;;;       steps carry the bead along their side walls: All of them,
+;;;       Some, given by step number, or None at all.  AUTOBEAD does
+;;;       the work on its own rules (2" toward the side you click, onto
+;;;       its Bead Track layer), so AUTOBEAD.lsp has to be loaded; when
+;;;       it is not, the run says so and finishes without beading.  The
+;;;       beads are their own undo group - AutoCAD does not nest them -
+;;;       so one U undoes the beads and the next undoes the steps.
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
@@ -190,7 +192,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.7") ; printed on load and at command start so a
+(setq *cs-version* "v4.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -639,7 +641,7 @@
                        score best j k tmp w1 w2 corner ang c r a1 a2
                        mid key start d1 d2 bis perp reflen tol txth
                        dist n drawn dep wid p h1 h2 nat e1 e2 bey
-                       prevL prevR dimflag w offd oldce oldstyle oldlu
+                       prevL prevR dimflag w offd oldce oldlay oldstyle oldlu
                        outflag stopf op1 pprev tout tprev lastdep
                        slog mark svdist svl svr svp svt svn s
                        bsides btreads bnums bside bdir bss pr be
@@ -653,6 +655,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -1015,9 +1018,15 @@
                              " run to its front edge."))))))))
 
   ;; ---- 8. prompt for each step and draw it ----------------------------
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T dist 0.0 n 1 drawn 0
-        oldce (getvar "CMDECHO"))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq dist 0.0 n 1 drawn 0
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                    ; quiet the dimstyle/dim commands
 
   (if outflag
@@ -1432,6 +1441,7 @@
   (if oldstyle (cs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -1439,9 +1449,10 @@
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
   ;; group - which is why this sits outside ours: AutoCAD does not nest
   ;; undo groups, so one U undoes the beads and the next undoes the
-  ;; steps.  Every tread is beaded; the only question left is which
-  ;; steps carry the bead along their side walls, and that is answered
-  ;; by step number here instead of by clicking each one.
+  ;; steps.  Every tread but the last drawn is beaded - that one closes
+  ;; the run and has no riser behind it - so the only question left is
+  ;; which steps carry the bead along their side walls, and that is
+  ;; answered by step number here instead of by clicking each one.
   (if (> drawn 0)
     (if (not (boundp 'autobead-build))
       (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
@@ -1459,11 +1470,13 @@
             (if (null btreads)
               (princ "\nNo tread lines to bead.")
               (progn
-                ;; every tread is beaded - the side walls are the question
-                (initget "All Some")
+                ;; every tread but the last is beaded - the side walls
+                ;; are the question, and None leaves them bare
+                (initget "All Some None")
                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
                                                      " beaded side walls?"
-                                                     " [All/Some] <All>: ")))
+                                                     " [All/Some/None]"
+                                                     " <All>: ")))
                                   ("All")))
                 (if (= bside "Some")
                   (progn
@@ -1498,12 +1511,16 @@
                     (autobead-ensure-layer *autobead-layer*)
                     (autobead-build
                       bss bdir
-                      (= bside "Some")
+                      bside
                       (if (= bside "Some")
                         (mapcar '(lambda (k)
                                    (cs-entmid (cdr (assoc k btreads))))
                                 bnums)
-                        nil)))))))))))
+                        nil)
+                      ;; the last step drawn still goes over as a step
+                      ;; line - it is a breakline like any other - but
+                      ;; it is named here so AUTOBEAD leaves it unbeaded
+                      (list (cs-entmid (cdr (last btreads))))))))))))))
   (cs-fclear)                       ; both exits clear the form store
   (princ))
 
@@ -1523,13 +1540,14 @@
 ;; Walkthrough for new users: pages of what CORNERSTP does and checks,
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses.
-(defun c:TUTORIALCORNERSTP ( / *error* undoflag oldce oldstyle org w1 w2
+(defun c:TUTORIALCORNERSTP ( / *error* undoflag oldce oldlay oldstyle org w1 w2
                                bis perp txth dist p h1 h2 nat tmp e1 e2
                                prevL prevR w offd n pt lst dep wid)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ CORNERSTP TUTORIAL " *cs-version*
@@ -1569,9 +1587,11 @@
   (princ "\n     dims climb with them.  Each depth is dimensioned beside")
   (princ "\n     its own step and the overall depth further out; the")
   (princ "\n     treads are not dimensioned.")
-  (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so the")
-  (princ "\n     only question is which steps have beaded SIDE WALLS:")
-  (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
+  (princ "\n  6. Bead the steps? [Yes/No] - every tread but the LAST is")
+  (princ "\n     beaded (the line that closes the run has no riser), so")
+  (princ "\n     the only question is which steps have beaded SIDE")
+  (princ "\n     WALLS: [All/Some/None].  Some takes the step numbers")
+  (princ "\n     (\"1 3 4\"); None leaves the side walls bare.")
   (princ "\n     Then click the side to bead toward and AUTOBEAD does the")
   (princ "\n     rest on its own rules - it has to be loaded for this.")
   (princ "\n  At any step tread prompt: Enter = done, Back = step back one")
@@ -1607,9 +1627,15 @@
         w2   (list org (cs-add org '(0.0 200.0 0.0)))
         bis  (cs-unit '(1.0 1.0 0.0))
         perp (cs-perp90 bis))
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 

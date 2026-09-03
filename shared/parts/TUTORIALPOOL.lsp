@@ -27,7 +27,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "082726 REV06")
+(setq tutorial:*version* "090126 REV07")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -336,13 +336,12 @@
 
 (defun c:TUTORIALPOOL ( / *error*)
 
+  ;; nothing to put back at this level: the gate below changes nothing,
+  ;; and tutorial:run carries the handler for what it changes
   (defun *error* (msg)
     (if (and msg
              (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPOOL error: " msg)))
-    (cal:sysrestore)
-    (pool:undoend)
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
   (if (null pool:*version*)
@@ -353,13 +352,26 @@
       (tutorial:run))
   (princ))
 
-(defun tutorial:run ( / topics textonly k org going fn)
+(defun tutorial:run ( / *error* undo-open topics textonly k org going fn)
+
+  ;; the handler lives where the group is opened, so the flag it reads
+  ;; is this run's own local -- it used to be pool:*undogrp*, shared
+  ;; with POOL and the demo
+  (defun *error* (msg)
+    (if (and msg
+             (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nTUTORIALPOOL error: " msg)))
+    (cal:sysrestore)
+    (if undo-open (setq undo-open (cal:undoend)))
+    (if *pop-error-mode* (*pop-error-mode*))
+    (princ))
+
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
   (setvar "CMDECHO" 0)
-  (pool:undobegin)
+  (setq undo-open (cal:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
 
@@ -389,7 +401,7 @@
     (setq k (1+ k)))
 
   (command "_.ZOOM" "_Extents")
-  (pool:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))

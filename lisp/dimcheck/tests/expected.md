@@ -12,6 +12,7 @@ green lines are the all-clear (and render at 3/4 height).
 | --- | --- | --- |
 | `dim_stray_point` | one dim, point 2 **NOT attached** (off by 25.0) | an attached dim |
 | `dim_attached_ok` | one dim, **OK** | any "off by" note |
+| `dim_shared_anchor` | three dims: the third **NOT attached** (off by 15.0), and two **on a shared anchor** | any finding against the two dims meeting at the corner |
 | `arc_unattached` | one arc, **NOT attached** to an object end (both ends) | endpoints OK |
 | `arc_attached_ok` | one arc, endpoints **OK** | a NOT-attached note |
 | `overlap_lines` | exactly **one** overlapping pair (overlap 40) | the third, clean line |
@@ -29,6 +30,11 @@ green lines are the all-clear (and render at 3/4 height).
   touch end to end (a normal continuation, not a duplicate) must never
   be reported. If it starts reporting something, the overlap fuzz
   tolerance has been loosened too far.
+- `dim_shared_anchor` is the anchor guard: two dims measuring to the
+  same point in space (a hypotenuse corner, with no geometry through
+  it) make that point an anchor, and neither may be asked to move off
+  it. The third dim in the same drawing proves the rule has not gone
+  blanket — a point only one dim measures to is still a stray.
 - `dim_attached_ok` and `arc_attached_ok` are the two all-clear guards
   — if either starts reporting a finding, the attachment tolerance has
   tightened too far.

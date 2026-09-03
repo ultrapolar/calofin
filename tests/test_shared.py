@@ -42,6 +42,28 @@ ORDER = re.findall(r'"([^"]+)"',
 #: name -> WIP | OMITTED, deliberately left out of the build
 HELD = dict(re.findall(r'\("([^"]+)"\s*\.\s*"(WIP|OMITTED)"\)', _loader_src))
 
+# The manifest's comment names the order that matters -- the library
+# first, every tool before the demo, tutorial or form that drives it,
+# PADDLE before the LINGUTTER that hands it a drawing, and the panel
+# last, after everything its buttons name.  Nothing enforced it: a
+# reorder loaded cleanly and this test followed ORDER wherever it went.
+print('shared -- the loader lists its members in the order the comment promises')
+
+
+def before(a, b):
+    assert ORDER.index(a) < ORDER.index(b), '%s must load before %s' % (a, b)
+
+
+assert ORDER[0] == 'CALOFIN-LIB.lsp', ORDER[0]
+assert ORDER[-1] == 'LAZPANEL.lsp', ORDER[-1]
+for tool, dependants in (('POOL.lsp', ('POOLDEMO.lsp', 'TUTORIALPOOL.lsp', 'LAZFORM.lsp')),
+                         ('SPA.lsp', ('TUTORIALSPA.lsp', 'LAZSPA.lsp')),
+                         ('PADDLE.lsp', ('LINGUTTER.lsp',)),
+                         ('CORNERSTP.lsp', ('LAZSTEP.lsp',))):
+    for d in dependants:
+        before(tool, d)
+print('  library first, panel last, every driver after what it drives')
+
 #: Not carried into the shared build: the acady drawing-standards
 #: matcher is a deprecated project and stays in lisp/ only.
 UNMIRRORED_DIRS = {'standards_checker'}
@@ -186,6 +208,33 @@ if want != bundle_cmds:
 if bvm.globals.get('lazpass:*missing*'):
     fail('the bundle reported commands missing on a clean load: %s'
          % bvm.globals.get('lazpass:*missing*'))
+# the same claim about the library helpers the tools call: every one is
+# bound, and a build that lost one would name it rather than wait for
+# the first click
+helpers = bvm.globals.get('lazpass:*helpers*')
+if not helpers:
+    fail('the bundle does not declare lazpass:*helpers*')
+unbound = [str(h) for h in helpers
+           if not (isinstance(bvm.globals.get(h), tuple)
+                   and bvm.globals.get(h)[0] == 'defun')]
+if unbound:
+    fail('library helpers the bundle calls but does not define: %s' % unbound)
+if bvm.globals.get('lazpass:*nohelper*'):
+    fail('the bundle reported helpers missing on a clean load: %s'
+         % bvm.globals.get('lazpass:*nohelper*'))
+print('  %d library helpers called by the tools, every one bound' % len(helpers))
+
+# the header tells the library it is arriving as part of a build; the
+# footer takes that back, so a later solo APPLOAD of CALOFIN-LIB.lsp
+# in the same drawing still says what it is
+if bvm.globals.get('cal:*build-loading*') not in (None, lispvm.NIL):
+    fail('the bundle left cal:*build-loading* set')
+bvm.printed.clear()
+bvm.load(os.path.join(PARTS, 'CALOFIN-LIB.lsp'))
+if not any('helper library ONLY' in str(s) for s in bvm.printed):
+    fail('a solo library load after the bundle no longer warns')
+print('  and a solo library load afterwards still says it brings no tools')
+
 # and it must NAME what is missing rather than just counting
 mvm = VM()
 mvm.load(BUNDLE)

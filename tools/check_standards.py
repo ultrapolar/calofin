@@ -30,7 +30,8 @@ import build_shared_bundle
 import check_registry
 import mirror_shared
 import release_lisp
-from callib import ROOT
+from callib import (COMMAND, NOT_A_TOOL, ROOT, decomment,
+                    headline_commands, lsp_files, read)
 
 #: The tiers, in the order a tool moves through them.  wip/ is the
 #: bench: files being drafted, no version banner, nothing generated
@@ -148,7 +149,11 @@ def check_twins_current(problems):
 
 
 def check_library_owns_cal(problems):
-    """Only the library defines cal: - a tool defining one has forked it."""
+    """Only the library defines cal: - a tool defining one has forked it.
+
+    And no lisp/ file may define OR call one: the standalone tier loads
+    alone, with no library under it, so a cal: call there is a routine
+    that works in the grouped build and dies in the one-file build."""
     for p in shared_members():
         if p.name in LIBRARY_FILES:
             continue
@@ -156,6 +161,79 @@ def check_library_owns_cal(problems):
             problems.append(
                 "shared/parts/%s defines %s - the cal: namespace belongs "
                 "to CALOFIN-LIB.lsp" % (p.name, sym))
+    for p in lsp_files(LISP_DIR):
+        if NOT_A_TOOL in p.parts:
+            continue
+        src = read(p)
+        for sym in set(CAL_SYM.findall(src)):
+            problems.append(
+                "%s defines %s - lisp/ is the standalone tier and carries "
+                "its own helpers" % (p.relative_to(ROOT), sym))
+        # comments name cal: helpers on purpose ("swapped for
+        # cal:ensure-layer"), so only real calls count
+        for sym in set(re.findall(r"\((cal:[^\s()]+)", decomment(src))):
+            problems.append(
+                "%s calls %s - the standalone build has no library under "
+                "it" % (p.relative_to(ROOT), sym))
+
+
+def check_version_reporters(problems):
+    """Every headline command answers to <COMMAND>VER.
+
+    The reporter is how a user says which build is loaded once the
+    drawing is open, and STANDARDS 6 fixes its name.  Satellites
+    (tutorials, DD*, -CFG, the VER commands themselves) are exempt by
+    the same rule callib uses for the panel roster."""
+    head = headline_commands()
+    for p in lsp_files(LISP_DIR):
+        if NOT_A_TOOL in p.parts:
+            continue
+        cmds = {m.upper() for m in COMMAND.findall(read(p))}
+        if not (cmds & head):
+            continue                 # satellites answer through their tool
+        if not any(c.endswith("VER") for c in cmds):
+            problems.append(
+                "%s defines %s but no VER command - a tool must be able to "
+                "say which build is loaded"
+                % (p.relative_to(ROOT), ", ".join(sorted(cmds & head))))
+
+
+def check_grouped_calls_resolve(problems):
+    """Every namespaced call in the grouped build resolves somewhere in
+    it.
+
+    The grouped tier loads as one session, so a tool may call another
+    tool's helper -- and the mirror renames some of those helpers onto
+    the library as it generates each twin.  Miss the rename in ONE
+    entry and that twin calls a function the build no longer defines.
+    Nothing else sees it: check_lisp reads one file at a time and only
+    checks a file's OWN prefix, so a call into another tool's namespace
+    is invisible to it, and the tiers-in-step check compares banners,
+    not bodies.  TUTORIALSPA shipped broken this way -- c:TUTORIALSPA
+    died at its first statement in LAZPASS.lsp until a test ran it.
+
+    Nested defuns count as definitions (a command may define helpers
+    inside itself), and earmuffed names are skipped: a global read as a
+    cond test looks exactly like a call.
+    """
+    members = list(shared_members())
+    defined = set()
+    for p in members:
+        defined |= {m.lower() for m in
+                    re.findall(r"\(defun\s+([^\s()]+)", decomment(read(p)))}
+    for p in members:
+        src = decomment(read(p))
+        seen = set()
+        for m in re.finditer(r"\((([a-z][\w-]*):[\w:+*<>=/-]+)", src):
+            name = m.group(1).lower()
+            if (name.startswith(("vl-", "vla-", "vlax-", "c:"))
+                    or "*" in name or name in seen or name in defined):
+                continue
+            seen.add(name)
+            problems.append(
+                "shared/parts/%s calls %s at line %d, which nothing in the "
+                "grouped build defines - a mirror swap renamed it away"
+                % (p.name, name, src[:m.start()].count("\n") + 1))
 
 
 def check_no_collisions(problems):
@@ -282,7 +360,9 @@ def main():
     problems = []
     check_twins(problems)
     check_library_owns_cal(problems)
+    check_version_reporters(problems)
     check_no_collisions(problems)
+    check_grouped_calls_resolve(problems)
     check_command_parity(problems)
     check_loader_lists_everything(problems)
     check_release_twins(problems)

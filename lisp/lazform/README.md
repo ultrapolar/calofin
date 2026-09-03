@@ -474,8 +474,13 @@ after the shape -- a cloud's bottom (`Straight` / `Rounded`), a
 kidney's type (`True` / `Asymmetric`) -- and it decides which radii the
 sheet is even asked for, so nothing under it comes alive until it is
 answered. **`detail`** is simple-or-complex, which every oasis run is
-asked; `Complex` is what brings `off` -- how far a Center pool's hump
-is off centre, left negative -- to life, on the one sheet that has it.
+asked; `Complex` is what brings `off` to life -- the third bulge's
+signed shift along X, left negative -- on the two sheets whose shape
+has a third bulge to place. It is the hump off centre on `OACenter`,
+and on `OATopRight` it is the corner bulge in off the right-hand bound,
+which leaves that bulge held by the top wall alone. (`OASIS` also takes
+that placement as the centre-to-centre tie back to the right bulge, and
+that one is typed: it needs a second number no sheet has a box for.)
 
 **A bulge's radius is drawn where it runs.** Every bulge is pinned to
 the envelope, so the line from its centre to the bound it touches *is*

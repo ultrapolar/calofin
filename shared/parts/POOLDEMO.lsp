@@ -31,7 +31,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "082726 REV03")
+(setq pooldemo:*version* "090126 REV07")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -176,8 +176,14 @@
   (pool:line (nth 3 q) (nth 2 q) "POOL")
   (pool:lined (nth 1 q) (nth 2 q))
   (pool:lined (nth 3 q) (nth 0 q))
-  (setq lend (pool:romend (nth 0 q) (nth 3 q) (list -1.0 0.0) 45.0 160.0 "POOL")
-        rend (pool:romend (nth 1 q) (nth 2 q) (list 1.0 0.0) 45.0 160.0 "POOL")
+  ;; pool:romend grew a second point pair (the stub feet) after this
+  ;; demo was written; a plain rectangular end has no stub, so both
+  ;; pairs are the same two points - the mapping POOL.LSP's own
+  ;; "ROman" branch uses when it forwards an un-offset end.
+  (setq lend (pool:romend (nth 0 q) (nth 3 q) (nth 0 q) (nth 3 q)
+                          (list -1.0 0.0) 45.0 160.0 "POOL")
+        rend (pool:romend (nth 1 q) (nth 2 q) (nth 1 q) (nth 2 q)
+                          (list 1.0 0.0) 45.0 160.0 "POOL")
         tipl (car lend) tipr (car rend))
   (setvar "CLAYER" "DIMENSION")
   (pool:dimrad (nth 3 lend) tipl (list -1.0 0.0) 30.0)
@@ -305,11 +311,16 @@
                    (list 440.0 240.0) (list 0.0 240.0)))
   (pool:line (list 0.0 0.0) (list 390.0 0.0) "POOL")
   (pool:line (list 0.0 240.0) (list 390.0 240.0) "POOL")
+  ;; the two extra points are the END-WALL ends (POOL REV20: a square
+  ;; end's corners can be treated, and the wall then stops short of
+  ;; them); neither of these ends is square, so they are the corners
   (setq lend (pool:muttend (nth 0 quad) (nth 3 quad)
                            (list 0.0 0.0) (list 0.0 240.0)
+                           (nth 0 quad) (nth 3 quad)
                            (list -1.0 0.0) "ROman" 40.0 160.0 40.0 "POOL")
         rend (pool:muttend (nth 1 quad) (nth 2 quad)
                            (list 390.0 0.0) (list 390.0 240.0)
+                           (nth 1 quad) (nth 2 quad)
                            (list 1.0 0.0) "Grecian" 40.0 160.0 0.0 "POOL")
         tipl (car lend) tipr (car rend))
   (setvar "CLAYER" "DIMENSION")
@@ -325,14 +336,13 @@
 
 ;;; -------------------- the command ------------------------------------
 
-(defun c:POOLDEMO ( / *error* cells k org)
+(defun c:POOLDEMO ( / *error*)
 
+  ;; nothing to put back at this level: the gate below changes nothing,
+  ;; and pooldemo:run carries the handler for what it changes
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
-    (cal:sysrestore)
-    (pool:undoend)
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
   (if (not (member 'pool:hopcalc (atoms-family 0)))
@@ -340,13 +350,25 @@
       (pooldemo:run))
   (princ))
 
-(defun pooldemo:run ( / cells k org)
+(defun pooldemo:run ( / *error* undo-open cells k org)
+
+  ;; the handler lives where the group is opened, so the flag it reads
+  ;; is this run's own local -- it used to be pool:*undogrp*, shared
+  ;; with POOL and the tutorial
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nPOOLDEMO error: " msg)))
+    (cal:sysrestore)
+    (if undo-open (setq undo-open (cal:undoend)))
+    (if *pop-error-mode* (*pop-error-mode*))
+    (princ))
+
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
   (setvar "CMDECHO" 0)
-  (pool:undobegin)
+  (setq undo-open (cal:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
 
@@ -372,12 +394,18 @@
     (setq k (1+ k)))
 
   (command "_.ZOOM" "_Extents")
-  (pool:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ (strcat "\nPOOLDEMO complete -- " (itoa (length cells))
                  " cells drawn.  If every cell looks right, POOL.LSP is"
                  " working in this drawing."))
+  (princ))
+
+;; Which build is loaded - the first thing to check when a run does
+;; something the notes above say it should not.
+(defun c:POOLDEMOVER ()
+  (princ (strcat "\nPOOLDEMO " pooldemo:*version*))
   (princ))
 
 (princ (strcat "\nPOOLDEMO " pooldemo:*version*

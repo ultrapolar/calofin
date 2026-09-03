@@ -1,5 +1,5 @@
 ;;; ===================================================================
-;;;  XFTCONV.lsp   -  Leica XFT / DXF survey import cleanup
+;;;  XFTCONV.lsp   -  survey import cleanup (Leica XFT / site trace)
 ;;;  AutoCAD 2018
 ;;;
 ;;;  Command:  XFTCONV   - highlight the import, that is the only answer
@@ -8,30 +8,47 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
+;;;  Two exports arrive in feet and mark their points differently, and
+;;;  XFTCONV reads both in the one pass - whichever it finds in the
+;;;  selection is the one it acts on:
+;;;
+;;;    Leica XFT     an X of 2 crossing LINEs on layer LEICA_POINT (a
+;;;                  POINT on that layer works too), with the point name
+;;;                  as TEXT / MTEXT on LEICA_POINT_NAME, stacked above
+;;;                  the marker
+;;;    site trace    a small CIRCLE on POOL_POINTS, BREAK_LINES or
+;;;                  CROSS_MEASUREMENTS, with the point name as TEXT
+;;;                  sitting ON the circle's centre.  A corner carries
+;;;                  two circles - one on POOL_POINTS, one on
+;;;                  CROSS_MEASUREMENTS where a diagonal ends - and the
+;;;                  pair collapses into the single block the location
+;;;                  deserves.
+;;;
 ;;;  What it does, to the objects you highlight:
 ;;;    1. scales the whole selection by 12 (feet -> inches), about the
 ;;;       middle of everything highlighted
-;;;    2. finds every Leica point marker in the selection
-;;;         - the X made of 2 crossing LINEs on layer LEICA_POINT
-;;;           (a POINT on that layer works too)
-;;;         - its name TEXT / MTEXT on layer LEICA_POINT_NAME  ("P22")
+;;;    2. finds every point marker of either flavour in the selection
 ;;;    3. replaces each one with an "ab_pt" block on layer POINTS,
 ;;;       attribute "number" set to the point number with the letter
-;;;       prefix stripped ("P22" -> "22")
-;;;    4. erases the old marker lines and the old name text
-;;;    5. erases every other TEXT / MTEXT left in the selection - the
-;;;       numbers live in the block attributes now, so the rest is noise
+;;;       prefix stripped ("P22" -> "22", "C1" -> "1")
+;;;    4. erases the old marker and the name text it used
+;;;    5. erases every other TEXT / MTEXT left in the selection - but
+;;;       only for the Leica flavour, whose text is nothing but point
+;;;       names.  A site trace labels its own break lines and diagonals
+;;;       ("Deep End", "Diagonal 1"), so a blanket purge there would
+;;;       throw the survey's annotation away with the noise.
 ;;;
 ;;;  Non-text geometry is scaled and otherwise left alone.  The whole
 ;;;  run is one UNDO step.
 ;;; ===================================================================
 
 
+
 ;;; -------------------------------------------------------------------
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.8") ; printed on load and at command start so a
+(setq *xft-version* "v1.12") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -48,6 +65,40 @@
   *xft-fuzz*         1e-4                 ; tolerance for "same point"
   *xft-purge-text*   t                    ; erase every TEXT/MTEXT left in the
                                           ; selection once the points are done
+)
+
+;; The site-trace flavour.  Same feet, same block out the other end, but
+;; the marker is a small CIRCLE instead of an X and it appears on three
+;; purpose layers rather than one - POOL_POINTS for the pool corners,
+;; BREAK_LINES for the shallow/deep breaks, CROSS_MEASUREMENTS for the
+;; ends of the diagonals.  A corner is therefore drawn twice, once per
+;; layer; xft:collect groups by location, so the two circles become the
+;; one block.
+;;
+;; The name text sits ON the centre rather than above it, which is why
+;; the reach here is a fraction of a text height where the Leica one is
+;; six of them: it only has to forgive an exporter that nudges the label,
+;; and a tight reach is what keeps a break line's own caption ("Deep
+;; End") from being read as a point number.
+;;
+;; The purge stays OFF for this flavour, too.  Its text is not all point
+;; names - the break lines and the diagonals are captioned - so erasing
+;; every leftover TEXT would take the survey's annotation with it.  The
+;; name text a point actually used is erased either way, in the swap.
+;;
+;; And the letter stays on the name.  Leica calls every point "P<n>", so
+;; the P is noise and "P22" -> "22" loses nothing.  The trace's letter is
+;; the point's family - C for a pool corner, S for a shallow-end break, D
+;; for a deep-end one - and the numbers restart per family.  Strip it and
+;; C1, S1 and D1 all become "1": three different points wearing one
+;; number, in the attribute every downstream tool labels them from.
+(setq
+  *xft-dot-layer*        "POOL_POINTS,BREAK_LINES,CROSS_MEASUREMENTS"
+                                          ; layers the circle markers sit on
+  *xft-dot-name-layer*   "TEXT"           ; layer of the point name text
+  *xft-dot-reach*        1.0              ; name search radius = this x text height
+  *xft-dot-purge-text*   nil              ; captions are not noise - see above
+  *xft-dot-strip-prefix* nil              ; keep "C1"/"S1"/"D1" whole - see above
 )
 
 (vl-load-com)   ; getboundingbox, for the middle of the selection
@@ -179,6 +230,41 @@
        (= 4 (logand 4 (cdr (assoc 70 tb)))))
 )
 
+;; Every locked layer that would be in the way, named so the message can
+;; say which one to unlock: the layer of anything highlighted that the
+;; swap has to erase, plus the block layer it inserts onto.  The
+;; SELECTION is walked rather than the layer table because
+;; *xft-dot-layer* is a comma list of three names and tblsearch takes
+;; one name, no wildcards - and because a locked layer with nothing of
+;; ours on it is not in the way at all.
+(defun xft:locked-layers (ss / i lay pats out)
+  (setq i    0
+        out  '()
+        pats (strcat (strcase *xft-marker-layer*) ","
+                     (strcase *xft-name-layer*) ","
+                     (strcase *xft-dot-layer*) ","
+                     (strcase *xft-dot-name-layer*)))
+  (while (< i (sslength ss))
+    (setq lay (cdr (assoc 8 (entget (ssname ss i)))))
+    (if (and (not (member (strcase lay) (mapcar 'strcase out)))
+             (wcmatch (strcase lay) pats)
+             (xft:locked lay))
+      (setq out (cons lay out)))
+    (setq i (1+ i))
+  )
+  (if (and (xft:locked *xft-block-layer*)
+           (not (member (strcase *xft-block-layer*) (mapcar 'strcase out))))
+    (setq out (cons *xft-block-layer* out)))
+  (reverse out)
+)
+
+(defun xft:namelist (items / out s)          ; "A, B, C" for a message
+  (setq out "")
+  (foreach s items
+    (setq out (if (= out "") s (strcat out ", " s))))
+  out
+)
+
 (defun xft:style ()
   (if (tblsearch "STYLE" *xft-att-style*)
     *xft-att-style*
@@ -260,29 +346,105 @@
 
 
 ;;; -------------------------------------------------------------------
+;;;  match markers to names, block in, marker out
+;;; -------------------------------------------------------------------
+
+;; GROUPS is ((centre ename ...) ...) from xft:collect, NAMES is
+;; ((point string height ename used) ...), and REACH is how far from a
+;; marker a name may sit, counted in that name's own text heights.
+;;
+;; Both exports put the name in the marker's column - the Leica one
+;; stacks it above, the site trace lands it on the centre - so a name in
+;; the same column wins over a merely closer one.  That is what keeps a
+;; tight cluster of points from stealing each other's tags.  Failing
+;; that, nearest-within-reach wins, and a name is used once.
+;;
+;; STRIP says whether the name's letter prefix comes off ("P22" -> "22")
+;; or the whole label goes in as it stands; either way MTEXT formatting
+;; codes are stripped and the result is trimmed.
+;;
+;; Returns (made blank): how many blocks went in, and how many of those
+;; found no name and carry a blank number.
+(defun xft:swap (groups names reach strip / g nm ctr best bestd bestr rank
+                                            txth lim d num made blank e)
+  (setq made 0 blank 0)
+  (foreach g groups
+    (setq ctr   (car g)
+          best  nil
+          bestd nil
+          bestr nil)
+    (foreach nm names
+      (if (not (nth 4 nm))
+        (progn
+          (setq txth (if (and (nth 2 nm) (> (nth 2 nm) 0.0)) (nth 2 nm) 1.0)
+                lim  (* reach txth)
+                d    (cal:d2 ctr (car nm))
+                rank (if (<= (abs (- (car (car nm)) (car ctr))) (* 0.5 txth)) 0 1))
+          (if (and (< d (* lim lim))
+                   (or (not best)
+                       (< rank bestr)
+                       (and (= rank bestr) (< d bestd))))
+            (setq best nm bestd d bestr rank)
+          )
+        )
+      )
+    )
+    (if best
+      (setq num   (if strip
+                    (xft:number (nth 1 best))
+                    (cal:trim (xft:plain (nth 1 best))))
+            names (subst (list (car best) (nth 1 best) (nth 2 best)
+                               (nth 3 best) t)
+                         best names))
+      (setq num "" blank (1+ blank))
+    )
+    (xft:insert ctr num)
+    (foreach e (cdr g) (entdel e))
+    (if best (entdel (nth 3 best)))
+    (setq made (1+ made))
+  )
+  (list made blank)
+)
+
+
+;;; -------------------------------------------------------------------
 ;;;  XFTCONV
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone
-                     ss base i en ed typ
-                     markers names g nm e
-                     ctr best bestd bestr rank txth d reach num
-                     nmade nblank nleft)
+(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone guard
+                     ss base i en ed typ locked
+                     markers names dots dotnames r
+                     nmade nblank ndots nleft)
 
   (defun xft:restore ()
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
     (if osclay (setvar "CLAYER"  osclay))
+    ;; The error mode pushed below is popped HERE, on every way out --
+    ;; the three quiet exits, the report, and the handler -- not in the
+    ;; handler alone.  A clean run used to leave the mode stacked for
+    ;; the rest of the session, and while it is stacked command-s is
+    ;; refused inside every later handler (AutoLISP reference,
+    ;; *push-error-using-command*), so the next tool's Esc left its
+    ;; undo group open without a word.
+    (if *pop-error-mode* (*pop-error-mode*))
   )
 
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
-    (while (> (getvar "CMDACTIVE") 0) (command))   ; back out of SCALE etc.
+    ;; back out of SCALE etc.  Bounded: CMDACTIVE carries a
+    ;; "dialog is up" bit no keystroke from here can clear, and an
+    ;; unbounded drain against it would hang with no Esc out.
+    (setq guard 0)
+    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+      (command)
+      (setq guard (1+ guard)))
     (xft:restore)
-    (if undone (command "_.UNDO" "_End"))
+    ;; through the catch: a throw here would strand the pop below, and
+    ;; error mode would stay pushed for the rest of the session
+    (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
-    (if *pop-error-mode* (*pop-error-mode*))
     (princ)
   )
 
@@ -295,7 +457,7 @@
         osclay (getvar "CLAYER"))
 
   (princ (strcat "\nXFTCONV " *xft-version*
-                 " - scale the survey and swap the Leica points for blocks."))
+                 " - scale the survey and swap its points for blocks."))
 
   ;; ---- selection -------------------------------------------------
   ;; the only prompt there is.  the scale factor and the base point used
@@ -317,11 +479,14 @@
     (progn
 
       ;; ---- locked layers would break the swap --------------------
-      (if (or (xft:locked *xft-marker-layer*)
-              (xft:locked *xft-name-layer*)
-              (xft:locked *xft-block-layer*))
+      ;; only the ones actually in the way are named: entdel and entmake
+      ;; both refuse a locked layer, and a layer nothing in the
+      ;; selection sits on cannot stop the run.
+      (setq locked (xft:locked-layers ss))
+      (if locked
         (progn
-          (princ "\nUnlock LEICA_POINT / LEICA_POINT_NAME / POINTS first, then run XFTCONV again.")
+          (princ (strcat "\nUnlock " (xft:namelist locked)
+                         " first, then run XFTCONV again."))
           (xft:restore)
           (princ)
         )
@@ -329,8 +494,12 @@
 
           (setvar "CMDECHO" 0)
           (setvar "OSMODE" 0)
-          (command "_.UNDO" "_Begin")
-          (setq undone t)
+          ;; only when undo is recording - _Begin in a drawing with UNDO
+          ;; off (bit 1 of UNDOCTL clear) errors out of the command
+          (if (= 1 (logand 1 (getvar "UNDOCTL")))
+            (progn
+              (command "_.UNDO" "_Begin")
+              (setq undone t)))
 
           ;; ---- 0. the layer and the block have to be there --------
           (cal:ensure-layer *xft-block-layer* 6)
@@ -348,7 +517,11 @@
           )
 
           ;; ---- 2. sort the selection into markers and names -------
-          (setq markers '() names '() i 0)
+          ;; the two flavours are kept apart rather than pooled: each
+          ;; matches its markers against its OWN names, at its own
+          ;; reach, so a site trace's captions can never be offered to a
+          ;; Leica marker six text heights away.
+          (setq markers '() names '() dots '() dotnames '() i 0)
           (while (< i (sslength ss))
             (setq en  (ssname ss i)
                   ed  (entget en)
@@ -363,6 +536,17 @@
                                        en
                                        nil)
                                  names)))
+              ;; the site trace writes its names on the general text
+              ;; layer, alongside the captions - the tight reach in
+              ;; xft:swap is what tells the two apart, not the layer
+              ((and (member typ '("TEXT" "MTEXT"))
+                    (xft:onlayer ed *xft-dot-name-layer*))
+               (setq dotnames (cons (list (xft:txtpt ed)
+                                          (cdr (assoc 1 ed))
+                                          (cdr (assoc 40 ed))
+                                          en
+                                          nil)
+                                    dotnames)))
               ;; the X marker - both lines share the same midpoint
               ((and (= typ "LINE") (xft:onlayer ed *xft-marker-layer*))
                (setq markers (xft:collect markers
@@ -371,58 +555,41 @@
               ;; some exports drop a plain POINT instead
               ((and (= typ "POINT") (xft:onlayer ed *xft-marker-layer*))
                (setq markers (xft:collect markers (cdr (assoc 10 ed)) en)))
+              ;; the site trace's circle.  Collecting by centre is what
+              ;; merges the POOL_POINTS copy of a corner with the
+              ;; CROSS_MEASUREMENTS one into a single block.
+              ((and (= typ "CIRCLE") (xft:onlayer ed *xft-dot-layer*))
+               (setq dots (xft:collect dots (cdr (assoc 10 ed)) en)))
             )
             (setq i (1+ i))
           )
 
-          ;; ---- 3. match each marker to its name ------------------
-          ;; the export stacks the name right above the marker, so a
-          ;; name in the same column wins over a merely closer one -
-          ;; that keeps tight clusters from stealing each other's tags
-          (setq nmade 0 nblank 0)
-          (foreach g markers
-            (setq ctr   (car g)
-                  best  nil
-                  bestd nil
-                  bestr nil)
-            (foreach nm names
-              (if (not (nth 4 nm))
-                (progn
-                  (setq txth  (if (and (nth 2 nm) (> (nth 2 nm) 0.0)) (nth 2 nm) 1.0)
-                        reach (* *xft-name-reach* txth)
-                        d     (cal:d2 ctr (car nm))
-                        rank  (if (<= (abs (- (car (car nm)) (car ctr))) (* 0.5 txth)) 0 1))
-                  (if (and (< d (* reach reach))
-                           (or (not best)
-                               (< rank bestr)
-                               (and (= rank bestr) (< d bestd))))
-                    (setq best nm bestd d bestr rank)
-                  )
-                )
-              )
-            )
-            (if best
-              (progn
-                (setq num (xft:number (nth 1 best)))
-                (setq names (subst (list (car best) (nth 1 best) (nth 2 best) (nth 3 best) t)
-                                   best names))
-              )
-              (setq num "" nblank (1+ nblank))
-            )
-            ;; ---- 4. new point in, old marker out ------------------
-            (xft:insert ctr num)
-            (foreach e (cdr g) (entdel e))
-            (if best (entdel (nth 3 best)))
-            (setq nmade (1+ nmade))
-          )
+          ;; ---- 3/4. name each marker, block in, marker out -------
+          (setq r      (xft:swap markers names *xft-name-reach* T)
+                nmade  (car r)
+                nblank (cadr r))
+          (setq r      (xft:swap dots dotnames *xft-dot-reach*
+                                 *xft-dot-strip-prefix*)
+                ndots  (car r)
+                nmade  (+ nmade ndots)
+                nblank (+ nblank (cadr r)))
 
           ;; ---- 5. every other bit of text in the selection goes ---
           ;; the numbers now live in the block attributes, so anything
           ;; still written as text is leftover import noise.  entget
           ;; comes back nil on what step 4 already erased, which keeps
           ;; entdel from toggling those back into the drawing.
+          ;;
+          ;; Per flavour, and off for the site trace: the Leica export
+          ;; writes nothing but point names, so sweeping the rest is
+          ;; the cleanup; the site trace captions its own break lines
+          ;; and diagonals, so the same sweep would be vandalism.  A
+          ;; selection holding both - which no real import does - is
+          ;; swept, because the Leica half's noise is the whole reason
+          ;; the setting is on by default.
           (setq nleft 0)
-          (if *xft-purge-text*
+          (if (or (and markers *xft-purge-text*)
+                  (and dots *xft-dot-purge-text*))
             (progn
               (setq i 0)
               (while (< i (sslength ss))
@@ -443,6 +610,10 @@
           ;; ---- report --------------------------------------------
           (princ (strcat "\n"
                          (itoa nmade) " point(s) replaced with \"" *xft-block* "\"."))
+          (if (> ndots 0)
+            (princ (strcat "\n" (itoa ndots)
+                           " of those were circle markers off a site trace ("
+                           *xft-dot-layer* ").")))
           (if (> nblank 0)
             (princ (strcat "\n" (itoa nblank)
                            " had no name text nearby - inserted with a blank number.")))

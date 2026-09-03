@@ -275,6 +275,33 @@ assert snapshot(a) != snapshot(run_form(runs, [BASE, NOBOTTOM])), \
     "the offset hump drew the same pool as the centred one"
 print("   and a hump 36 off to the left, drawn where the sheet put it")
 
+# the same slot on a top-right pool: the corner bulge's shift in off the
+# right-hand bound, which leaves it held by the top wall alone
+place = [('shape', 'TopRight'), ('detail', 'Complex'),
+         ('x', 443.0), ('y', 344.0), ('off', -60.0),
+         ('rl', 108.0), ('rt', 96.0), ('rr', 108.0),
+         ('ftl', 84.0), ('ftr', 90.0), ('fbc', 120.0)]
+a = run_form(place, [BASE, NOBOTTOM])
+b = by_prompts(['TopRight', 'Complex', BASE, 443.0, 344.0, 108.0, 96.0,
+                108.0, -60.0, 84.0, 90.0, 120.0, NOBOTTOM])
+assert snapshot(a) == snapshot(b), \
+    "the top-right placement did not come off the sheet"
+assert len(a.prompts) == 2, [p for p, _ in a.prompts]
+print("   and a corner bulge 60 in from the right bound, on the top wall")
+
+# Tie is a typed convenience and takes a second number no sheet has a
+# box for, so a sheet that answers the placement with the word is a
+# sheet that did not answer it: the question is asked, as it is for
+# anything else the store cannot supply
+worded = [q for q in place if q[0] != 'off'] + [('off', 'Tie')]
+a = run_form(worded, [BASE, -60.0, NOBOTTOM])
+asked = [q.strip().split(' [')[0] for q, _ in a.prompts]
+assert 'Top-right bulge off the right bound, left negative' in asked, asked
+assert snapshot(a) == snapshot(b), \
+    "the typed placement did not replace the word the sheet carried"
+print("   a sheet that says Tie is asked instead -- a tie needs a second"
+      " number, and a sheet can do that arithmetic itself")
+
 
 print("== the store does not leak between runs ==")
 # An answer nothing asked for must not be waiting for the next run: a

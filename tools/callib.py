@@ -179,6 +179,73 @@ def rev_of(text):
     return None
 
 
+def decomment(src):
+    """SRC with ``;`` comments blanked to spaces, everything else --
+    string literals included -- left exactly where it was.
+
+    ``strip`` blanks string CONTENTS, which is right for the structural
+    readers but wrong for the rules that are ABOUT a string: the load
+    banner, ``"_Begin"``, ``ssget "_I"``.  Offsets and line numbers are
+    preserved either way, so the two are interchangeable as inputs to a
+    span finder."""
+    out = list(src)
+    i, n = 0, len(src)
+    instr = False
+    while i < n:
+        ch = src[i]
+        if instr:
+            if ch == "\\" and i + 1 < n:
+                i += 2
+                continue
+            if ch == '"':
+                instr = False
+            i += 1
+            continue
+        if ch == '"':
+            instr = True
+            i += 1
+            continue
+        if ch == ";":
+            while i < n and src[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        i += 1
+    return "".join(out)
+
+
+def top_level_forms(src):
+    """(start, end) of every top-level parenthesised form in SRC.
+
+    Comments are blanked first so a ``;`` never unbalances the scan,
+    and the offsets returned index into SRC itself."""
+    masked = decomment(src)
+    depth, start, spans = 0, None, []
+    instr = False
+    i = 0
+    while i < len(masked):
+        ch = masked[i]
+        if instr:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == '"':
+                instr = False
+        elif ch == '"':
+            instr = True
+        elif ch == "(":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0 and start is not None:
+                spans.append((start, i + 1))
+                start = None
+        i += 1
+    return spans
+
+
 def strip(src, keep_strings=False):
     """SRC with comments removed and (by default) string literals
     blanked, newlines kept so line numbers still line up.

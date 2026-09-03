@@ -21,15 +21,20 @@ group, so one `U` reverts every change CHECK made.
 
 Every linear/aligned/rotated dimension's two definition points (the
 points you actually dimmed) must lie on an object of some kind —
-line, arc, circle, polyline, ellipse or spline. For a dimension with
-a point floating in space, CHECK:
+line, arc, circle, polyline, ellipse or spline — **or on an anchor**.
+A point two or more dimensions measure to is an anchor: it counts as
+an object and is left exactly where it is, geometry under it or not.
+Dimensioning twice to the same spot — the pair of dims pinning down a
+hypotenuse corner is the everyday case — is how you say that spot is
+the object, and CHECK, which shifts without asking, shifts nothing
+off it. For a dimension with a point floating in space, CHECK:
 
 * draws a **construction line** (XLINE) through the dimension's two
   original dimmed points on layer `CHECK-CONSTRUCTION` (yellow), so
   you can see what was measured before the fix,
 * shifts the stray definition point onto the **closest point of the
-  closest object** (the measurement text updates unless it is
-  overridden),
+  closest object** — or onto a **shared anchor** when one is nearer
+  (the measurement text updates unless it is overridden),
 * recolors the dimension **red** so you know it has been shifted.
 
 Angular, radial, diameter and ordinate dimensions are not auto-fixed;
@@ -55,7 +60,7 @@ know it was snapped.
 
 | Visual | Meaning |
 | --- | --- |
-| Red dimension | A definition point was shifted onto the nearest object |
+| Red dimension | A definition point was shifted onto the nearest object or anchor |
 | Yellow XLINE on `CHECK-CONSTRUCTION` | The original points of a shifted dimension |
 | Magenta arc | One or both endpoints were snapped |
 

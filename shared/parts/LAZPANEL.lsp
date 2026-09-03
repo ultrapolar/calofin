@@ -95,7 +95,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.3")
+(setq *lazpanel-version* "v3.9")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -175,6 +175,7 @@
     ("CDCALLOUT"        "Point-to-point cross dims")
     ("CDCREATE"         "Lines to cross dims")
     ("CHECK"            "Drawing check")
+    ("CONSTELLATION"    "Points from cross dims")
     ("CORNERSTP"        "Corner step")
     ("COVERCHECK"       "Cover review")
     ("COVERSCAN"        "Cover scan")
@@ -214,14 +215,17 @@
     ("POOLDEMO"         "Worked pool example")
     ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
+    ("SOCONV"           "SO survey onto our layers")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
     ("STAIRDIM"         "Stair dims")
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
+    ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
+    ("VSCONV"           "VS export onto shop layers")
     ("WCALST"           "Unroll curved band")
-    ("XFTCONV"          "Leica import cleanup")
+    ("XFTCONV"          "Survey import cleanup")
     ("XYPLOT"           "X/Y offset plot")
    ))
 
@@ -353,6 +357,10 @@
       "LINTXTCHK"
       "CCPRECHECK"
       "POINTRENAMER"
+      "CONSTELLATION"
+      "TYLERDRONESUITE"
+      "SOCONV"
+      "VSCONV"
       )
     )
      ("Layout"
@@ -393,14 +401,18 @@
       "ABCDEF"
       "ALTABCDEF"
       "XYPLOT"
+      "CONSTELLATION"
       "ABFIND"
       "ABMOVE"
       "POINTRENAMER"
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
+      "SOCONV"
+      "VSCONV"
       "DRONE"
       "TYDRN"
+      "TYLERDRONESUITE"
       )
     )
      ("Dimensions"
@@ -461,11 +473,14 @@
 (setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
 (setq lzp:*pos* nil)              ; where the panel was last standing
+(setq lzp:*poskey* "LazPanel_Pos") ; ...in the profile, kept over a restart
 (setq lzp:*go* nil)               ; the group a tab click asked for
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
 (setq lzp:*iconstep* nil)         ; the COM call the icon write died on
 (setq lzp:*msxmlwhy* nil)         ; what each MSXML ProgID said, newest first
 (setq lzp:*iconroute* nil)        ; which route actually wrote the file
+(setq lzp:*iconwrote* nil)        ; T when the last lzp:write-bmps wrote,
+                                  ; nil when both files were already there
 (setq lzp:*icondir* nil)          ; the folder the icons landed in
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
 (setq lzp:*page* nil)             ; the page the panel reopens on
@@ -1483,16 +1498,28 @@
       (progn
         (setq s (lzp:icon-file dir "16")
               l (lzp:icon-file dir "32"))
-        (if (and (lzp:bmp-write s 16 lzp:*icon16*)
-                 (lzp:bmp-write l 32 lzp:*icon32*))
-            (progn (setq lzp:*icondir* dir)
-                   (list s l))))))
+        ;; Both already on disk from an earlier load: nothing to write.
+        ;; The picture never changes, and writing it again on every
+        ;; drawing open (a Startup Suite runs this file per document)
+        ;; put two COM round trips and two file writes -- into a
+        ;; shared network support folder, on some sites -- behind every
+        ;; OPEN.  A missing or half-written pair is still rewritten.
+        (cond
+          ((and (findfile s) (findfile l))
+           (setq lzp:*icondir* dir)
+           (list s l))
+          ((and (lzp:bmp-write s 16 lzp:*icon16*)
+                (lzp:bmp-write l 32 lzp:*icon32*))
+           (setq lzp:*icondir* dir
+                 lzp:*iconwrote* t)
+           (list s l))))))
 
 ;; What to hand SetBitmaps: bare names when the files sit on the support
 ;; path, full temp paths as the fallback.
 (defun lzp:write-bmps ( / d)
   (setq lzp:*icondir* nil
-        lzp:*iconref* nil)
+        lzp:*iconref* nil
+        lzp:*iconwrote* nil)
   (cond
     ((and (setq d (lzp:support-dir)) (lzp:try-icons d))
      (setq lzp:*iconref* "name")
@@ -1609,7 +1636,8 @@
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPANEL error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZPANEL error: could not load the dialog file."))
+     (princ "\nLAZPANEL error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      ;; The page loop.  One page per group, so the eye lands on a dozen
      ;; buttons rather than all of them; the tab strip is the whole
@@ -1665,7 +1693,7 @@
               (strcat "(setq lzp:*go* \"" n
                       "\" lzp:*pos* (done_dialog 4))")))
           (action_tile "cancel" "(setq lzp:*pos* (done_dialog 0))")
-          (setq rc (start_dialog))
+          (setq rc (lzp:rundlg))
           (cond
             ((= rc 4) (setq g lzp:*go* lzp:*page* lzp:*go*))  ; a tab
             ;; the pin editor runs on the same loaded handle, then the
@@ -1685,16 +1713,62 @@
   (setq f nil lzp:*pick* nil)
   out)
 
-;; Open a page where the user last had the panel.  done_dialog reports
-;; the position it closed at and new_dialog takes one back, but only in
-;; its four-argument form -- and a build answering done_dialog with
-;; something other than a point would poison every reopen, so the shape
-;; is checked before it is trusted.
-(defun lzp:newdlg (name dcl)
-  (if (and lzp:*pos* (listp lzp:*pos*) (= (length lzp:*pos*) 2)
-           (numberp (car lzp:*pos*)) (numberp (cadr lzp:*pos*)))
-      (new_dialog name dcl "" lzp:*pos*)
+;; WHERE THE PANEL COMES BACK UP.  done_dialog reports the position it
+;; closed at, and that is the only chance to find out -- DCL cannot ask
+;; an open dialog where it is.  Held in lzp:*pos* alone that answer lasts
+;; until the file is reloaded, so the point also goes into the AutoCAD
+;; profile as "x,y" and is read back at the next open: come back after a
+;; restart and the panel is still where it was left.
+(defun lzp:pos-save (p)                 ; answers with what it was given,
+  (if (and p (listp p) (= (length p) 2) ; so it can wrap a done_dialog
+           (numberp (car p)) (numberp (cadr p)))
+    (setenv lzp:*poskey*
+            (strcat (itoa (fix (car p))) "," (itoa (fix (cadr p))))))
+  p)
+
+;; The saved point, or nil when there is nothing worth trusting.  Only a
+;; string this build could have written is taken -- the parse has to
+;; round-trip -- so a hand-edited or foreign profile value can do no
+;; more than centre the panel, which is what it did before.  The clamp
+;; is a rescue and not a fence: a point saved on a second monitor that
+;; has since been unplugged would otherwise put the panel where the
+;; mouse cannot reach it.  SCREENSIZE is the drawing area rather than
+;; the desktop, so the clamp can only ever pull one IN.
+(defun lzp:pos-read ( / s i x y scr)
+  (setq s (getenv lzp:*poskey*))
+  (if (and s (setq i (vl-string-search "," s)) (> i 0))
+    (progn
+      (setq x (atoi (substr s 1 i))
+            y (atoi (substr s (+ i 2))))
+      (if (= s (strcat (itoa x) "," (itoa y)))
+        (progn
+          (setq scr (getvar "SCREENSIZE"))
+          (if (and scr (listp scr) (= (length scr) 2)
+                   (numberp (car scr)) (numberp (cadr scr)))
+            (setq x (max 0 (min x (fix (- (car scr) 100.0))))
+                  y (max 0 (min y (fix (- (cadr scr) 100.0))))))
+          (list x y))))))
+
+;; Open a page where the user last had the panel.  new_dialog takes a
+;; position back, but only in its four-argument form -- and a build
+;; answering done_dialog with something other than a point would poison
+;; every reopen, so the shape is checked before it is trusted and the
+;; plain two-argument call is the fallback.  lzp:*pos* is this session's
+;; answer; the profile is the one the last session left behind.
+(defun lzp:newdlg (name dcl / p)
+  (setq p (if lzp:*pos* lzp:*pos* (lzp:pos-read)))
+  (if (and p (listp p) (= (length p) 2)
+           (numberp (car p)) (numberp (cadr p)))
+      (new_dialog name dcl "" p)
       (new_dialog name dcl)))
+
+;; start_dialog, then keep where the panel was left.  Saving here
+;; rather than in the five action tiles keeps setenv out of a dialog
+;; callback and gives the profile write one place to go wrong.
+(defun lzp:rundlg ( / rc)
+  (setq rc (start_dialog))
+  (lzp:pos-save lzp:*pos*)
+  rc)
 
 ;;; -------------------- commands ----------------------------------------
 
@@ -1722,14 +1796,23 @@
   (princ))
 
 ;; Open the pin editor on its own, without going through the panel.
-(defun c:LAZPIN ( / f dcl)
+(defun c:LAZPIN ( / *error* f dcl)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZPIN error: " msg)))
+    (princ))
   (lzp:pins-read)
   (lzp:recent-read)
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPIN error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZPIN error: could not load the dialog file."))
+     (princ "\nLAZPIN error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      (lzp:pin-edit dcl)
      (unload_dialog dcl)
@@ -1766,7 +1849,7 @@
   (setq paths (lzp:write-bmps))
   (cond
     (paths
-     (princ (strcat "\n  written to : "
+     (princ (strcat (if lzp:*iconwrote* "\n  written to : " "\n  on disk at : ")
                     (if lzp:*icondir* lzp:*icondir* "?")))
      (princ (strcat "\n  route      : "
                     (if lzp:*iconroute* lzp:*iconroute* "?")
@@ -1827,10 +1910,25 @@
                  (itoa (length lzp:*pins*)) " pinned."))
   (princ))
 
+;; Once per AutoCAD SESSION, not once per drawing.  LISP globals are
+;; per-document, so a Startup Suite runs this file again in every
+;; drawing opened -- and the toolbar, its picture and the CUI walk that
+;; finds it are all application-wide, so the second and every later
+;; document had nothing to do but do it anyway.  The blackboard
+;; (vl-bb-*) is the one namespace every document shares, so it carries
+;; the "done" mark; LAZBUTTON still calls lzp:button-init unconditionally
+;; for the drafter who closed the toolbar and wants it back.
+(defun lzp:first-load-p ()
+  (if (vl-bb-ref 'lzp:*button-done*)
+      nil
+      (progn (vl-bb-set 'lzp:*button-done* t) t)))
+
 ;; Put the button up as the file loads, quietly: in a session where
-;; the COM menu API is missing the panel still loads and LAZPANEL
-;; still runs -- the button is a convenience, never a gate.
-(vl-catch-all-apply 'lzp:button-init nil)
+;; the COM menu API (or the blackboard) is missing the panel still
+;; loads and LAZPANEL still runs -- the button is a convenience, never
+;; a gate.
+(vl-catch-all-apply
+  '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 
 (princ (strcat "\nLAZPANEL " *lazpanel-version*

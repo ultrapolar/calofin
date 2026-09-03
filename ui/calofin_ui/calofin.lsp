@@ -42,7 +42,8 @@
     "CDCREATE" "CDCALLOUT" "BPCALLOUT"
     ;; Points
     "ABCDEF" "ALTABCDEF" "XYPLOT" "ABFIND" "ABMOVE" "PERPPTS" "CPERPPTS"
-    "XFTCONV" "POINTRENAMER" "DRONE" "TYDRN"
+    "XFTCONV" "POINTRENAMER" "CONSTELLATION" "SOCONV" "VSCONV"
+    "DRONE" "TYDRN" "TYLERDRONESUITE"
     ;; deprecated but still shipped standalone (lisp/standards_checker/)
     "MATCHSTD" "ACADY-SCAN"))
 

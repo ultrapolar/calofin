@@ -143,6 +143,54 @@ assert _sugg("K") == 80.0, vm.prompts
 assert reportrow(vm, "HOP K")[1] == "80.00"
 print("   L asked cold; K offered the remainder (80), not M (40)")
 
+print("== R1d. the WIDTH is offered half the length, Enter takes it ==")
+# A pool runs about 2:1, so once the side is in the end question is
+# offered half of it.  36' across -> 18' up, one Enter.
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [432.0,                  # side pair: 36'
+          None,                   # end pair: Enter takes the offered 18'
+          "Square", "No"],        # square corners, no bottom
+         "R1d")
+_end = [p for p, a in vm.prompts if "End length (left & right)" in p]
+assert _end and " <216" in _end[0], _end
+# the offer does NOT loosen the question: a width is still required,
+# so NA is not on the table the way it is on a suggested NA letter
+assert "NA" not in _end[0], _end[0]
+for _lbl, _want in (("TOP SIDE (D-C)", "432.00"), ("LEFT END (A-D)", "216.00")):
+    _row = reportrow(vm, _lbl)
+    assert _row[1] == _want and _row[2] == _want, (_lbl, _row)
+print("   36' side offered an 18' end; one Enter drew a 2:1 pool")
+
+print("== R1e. typing over the offer wins; out of square both ends get it ==")
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [432.0, 430.0,           # TOP, BOTTOM -> half the mean is 215.5
+          240.0,                  # LEFT typed over the offer
+          None,                   # RIGHT: Enter takes the offer
+          "Square", None, None, None,   # corners A..D, Enter reusing A
+          "NA", "NA",             # both cross dims not taped
+          "No"],                  # no bottom
+         "R1e")
+_le = [p for p, a in vm.prompts if "End length LEFT" in p]
+_ri = [p for p, a in vm.prompts if "End length RIGHT" in p]
+assert _le and " <215.5" in _le[0], _le
+assert _ri and " <215.5" in _ri[0], _ri
+assert reportrow(vm, "LEFT END (A-D)")[1] == "240.00"
+assert reportrow(vm, "RIGHT END (B-C)")[1] == "215.50"
+print("   both ends offered half the mean side; a typed answer still wins")
+
+print("== R1f. an OVAL end is not offered half the side ==")
+# an oval spends length on the two end bulges, so half the straight
+# side is not half the pool -- the end is asked cold there
+vm = run(["Insquare", "Oval"] + BASE +
+         [360.0, 180.0,           # side pair, end pair (asked, not offered)
+          480.0, 60.0,            # total length, end radius
+          "No"],                  # no bottom
+         "R1f")
+assert not any("End length (left & right)" in p and " <" in p
+               for p, a in vm.prompts), \
+    [p for p, a in vm.prompts if "End length" in p]
+print("   the oval still asks its end cold")
+
 print("== R2. rectangle, out-of-square, Cut corners, Ends mode, wedge ==")
 vm = run(["Outofsquare", "Rectangle"] + BASE +
          [240.0, 240.0, 120.0, 120.0,        # TOP BOTTOM LEFT RIGHT
@@ -560,6 +608,22 @@ assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 60.0) < 0.5 and
            for c in dimcalls(vm)), "H must anchor at the deep tip"
 print("   roman + grecian ends on one body; H taped from the tip")
 
+print("== R13d. MUTT grecian end taped across its FACE only ==")
+# The same cut, the same tape: S and S1 NA with a 6'-0 face gives 4'-3
+# legs, so the shallow end's cut runs from (429,0) to (480,51).
+vm = run(["Insquare", "MU"] + BASE +
+         ["Square", "Grecian",     # deep / shallow end styles
+          480.0, 240.0,            # B tip-to-tip, A
+          "NA", "NA", 72.0,        # shallow grecian S, S1 NA; S2 = 6'-0
+          "No",                    # the square deep end's corners: none
+          "No"],                   # no bottom
+         "R13d")
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert hasseg((429.0, 0.0), (480.0, 51.0)), segs      # the cut, a 45
+assert hasseg((480.0, 51.0), (480.0, 189.0)), segs    # V = 240 - 2(51)
+assert hasseg((0.0, 0.0), (429.0, 0.0)), segs         # side stops at it
+print("   S and S1 NA: the face set both legs, and the end closed on them")
+
 print("== R13b. MUTT out-of-square: OVAL deep end, half round (R = NA) ==")
 vm = run(["Outofsquare", "MU"] + BASE +
          ["Oval", "Square",
@@ -567,14 +631,51 @@ vm = run(["Outofsquare", "MU"] + BASE +
           240.0,
           "NA",                     # oval deep R -> half round, ext 120
           "NA", "Back", "NA", "NA",  # Back inside the cross block too
+          "Yes", "Cut", 18.0, None, None,   # B chamfered, Enter reuses it at C
           "No"],
          "R13b")
 assert drawn(vm, 'ARC', 'POOL'), "oval deep end must draw an arc"
 segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
-assert hasseg((360.0, 0.0), (360.0, 240.0)), "square shallow wall at body end"
-assert hasseg((0.0, 0.0), (360.0, 0.0)), "body is B minus the half-round ext"
 assert any("Cross dim body A-C" in p for p, a in vm.prompts)
-print("   half-round deep end, square shallow end, crosses asked")
+# the square shallow end HAS corners, so out of square they are asked
+# one at a time -- and only its two: B and C, never the oval end's A/D
+_cq = [p for p, a in vm.prompts if "should Corner" in p]
+assert sorted(p.split("Corner ")[1][0] for p in _cq) == ["B", "C"], _cq
+# both chamfer faces drawn, 18" each, and the shallow wall now runs
+# between them instead of corner to corner
+_sb = 18.0 / (2.0 * _m.sin(_m.pi / 4))
+assert hasseg((360.0, _sb), (360.0, 240.0 - _sb)), "shallow wall stops at the cuts"
+assert hasseg((0.0, 0.0), (360.0 - _sb, 0.0)), "bottom side stops at the cut"
+print("   half-round deep end, chamfered square end, corners asked there only")
+
+print("== R13c. MUTT in-square: SQUARE deep end with RADIUS corners ==")
+vm = run(["Insquare", "MU"] + BASE +
+         ["Square", "Grecian",     # deep square / shallow grecian
+          480.0, 240.0,            # B tip to tip, A
+          50.0, 40.0, "NA",        # shallow grecian S S1 S2(check)
+          "Yes", "Radius", 24.0,   # the deep end's two corners, filleted
+          "No"],                   # no bottom
+         "R13c")
+# a square end asks ONE question for its pair in square, and it is
+# asked for the deep end alone -- the grecian end carries its own S/S1
+assert any("the DEEP end corners A and D" in p for p, a in vm.prompts), \
+    [p for p, a in vm.prompts if "corners" in p]
+assert not any("Corner A" in p for p, a in vm.prompts)
+# two fillet arcs on the deep end, both 24" radius
+_r = sorted(round(d[40], 4) for d in drawn(vm, 'ARC', 'POOL'))
+assert _r == [24.0, 24.0], _r
+# the deep end wall no longer reaches the true corners: it runs
+# between the two fillet tangents, 240 - 24 - 24 long
+segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert hasseg((0.0, 24.0), (0.0, 216.0)), "deep end wall stops at the fillets"
+assert hasseg((24.0, 0.0), (430.0, 0.0)), "bottom side starts at the fillet"
+# ... but A still READS the true 240: the number does not move, only
+# the extension-line origins
+assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 240.0) < 0.01 for c in dimcalls(vm))
+# and the report carries the treatment as one row for the pair
+_txt = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
+assert any((t or '') == "DEEP CORNER RAD" for t in _txt), _txt
+print("   square deep end filleted; wall attached, A still reads 240")
 
 print("== R14. lazy L with RADIUS outer corners + CUT inner corner ==")
 vm = run(["Insquare", "LA"] + BASE +
@@ -949,6 +1050,58 @@ assert sum(1 for x in _lens if abs(x - 84.0) <= 0.05) == 4, _lens    # S2 faces
 assert not any(abs(x - 319.50) < 0.6 for x in _lens), _lens
 assert not any(abs(x - 85.56) < 0.05 for x in _lens), _lens
 print("   T/V/S2 walls held true; S and S1 absorbed the error")
+
+print("== R16b. grecian Overall: the taped cut FACE fills in S and S1 ==")
+# S and S1 run out to a VIRTUAL sharp corner past the cut -- there is
+# nothing out there to hook a tape on -- so the number a crew actually
+# brings back is the face S2 across the cut.  With both legs NA the cut
+# is the 45 it is drawn as: a 6'-0 face gives 4'-3 legs (51", the
+# quarter inch a tape is read to), so T = B - 2(51) and V = A - 2(51).
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall",
+          480.0, 216.0,                   # B, A overalls
+          "NA", "NA", "NA", "NA",         # T, S, S1, V -- none taped
+          72.0,                           # S2 -- the cut face, 6'-0
+          None,                           # anything to record? Enter = No
+          "No"],                          # no bottom: every POOL line
+         "R16b")                          # is a perimeter edge
+_seg = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
+assert len(_seg) == 8, len(_seg)
+_lens = sorted(round(_m.dist(*s), 2) for s in _seg)
+assert sum(1 for x in _lens if abs(x - 378.00) <= 0.05) == 2, _lens  # T = 480-102
+assert sum(1 for x in _lens if abs(x - 114.00) <= 0.05) == 2, _lens  # V = 216-102
+# the four cut faces are the 45 the taped 6'-0 asked for: sqrt(2)*51
+assert sum(1 for x in _lens if abs(x - 72.12) <= 0.05) == 4, _lens
+# and the report says so in the crew's own letters: S and S1 both 4'-3
+# (the ACTUAL is read off the fitted shape, so it carries the fit's own
+# hair of slack -- 1/16" is what the end solver accepts)
+assert abs(float(reportrow(vm, "OV S")[2]) - 51.0) < 0.0625, \
+    reportrow(vm, "OV S")
+assert abs(float(reportrow(vm, "OV S1")[2]) - 51.0) < 0.0625, \
+    reportrow(vm, "OV S1")
+assert reportrow(vm, "OV S2")[1] == "72.00", reportrow(vm, "OV S2")
+print("   a 6'-0 face with S/S1 NA drew 51\" legs; T and V closed on them")
+
+print("== R16c. one leg pinned by its wall: the face closes the triangle ==")
+# T taped, S1 not: S = (B - T)/2 is a hard number, so the face is worth
+# more than a 45 guess -- S1 = sqrt(S2^2 - S^2), again to the 1/4".
+#   S = (480 - 378)/2 = 51,  S1 = sqrt(72^2 - 51^2) = 50.82 -> 50.75
+vm = run(["Insquare", "Grecian"] + BASE +
+         ["Overall",
+          480.0, 216.0,
+          378.0, "NA", "NA", "NA",        # T taped; S, S1, V not
+          72.0,                           # S2 -- the cut face
+          None, "No"],
+         "R16c")
+_lens = sorted(round(_m.dist(tuple(d[10][:2]), tuple(d[11][:2])), 2)
+               for d in drawn(vm, 'LINE', 'POOL'))
+assert sum(1 for x in _lens if abs(x - 378.00) <= 0.05) == 2, _lens  # T held
+assert sum(1 for x in _lens if abs(x - 114.50) <= 0.05) == 2, _lens  # V = 216-2(50.75)
+# the face lands back on the tape, within the quarter inch it was rounded to
+assert sum(1 for x in _lens if abs(x - 72.0) <= 0.25) == 4, _lens
+assert abs(float(reportrow(vm, "OV S1")[2]) - 50.75) < 0.0625, \
+    reportrow(vm, "OV S1")
+print("   a pinned leg and the face give the other leg, not a 45 guess")
 
 print("== R17. SIX-sided grecian hopper, sheet-letter input (W X L L1 G M K) ==")
 # the demonstrated-dims figure from 6sidedgrecianexample.dxf: W is the
@@ -1713,5 +1866,41 @@ _pool_x = [p[0] for d in drawn(vm, 'LINE', 'POOL')
 # it by more than its own rendered width, so it reads away from the pool
 assert _x < min(_pool_x) - 20.0, (_x, min(_pool_x))
 print("   left-hand corners pull the note back by its width")
+
+# ----------------------------------------------------------------------
+# the undo group is the command's own
+# ----------------------------------------------------------------------
+print("== U1. the undo flag is a local of the run, not a global shared with the demo ==")
+from lispvm import Sym  # noqa: E402
+# the last scenario's VM is a clean run: nothing open, nothing pushed
+assert vm.undo_groups == 0 and vm.error_mode_depth == 0, \
+    (vm.undo_groups, vm.error_mode_depth)
+assert Sym('pool:*undogrp*') not in vm.globals, "pool:*undogrp* is back"
+# a POOL cut short at its first question, then POOLDEMO in the same
+# session: the demo's handler used to read the flag POOL's death left
+# set, and close a group it never opened
+vm = VM()
+vm.load(LSP)
+vm.handle_errors = True
+
+
+def esc(vm):
+    raise LispError('Function cancelled', vm)
+
+
+vm.run('c:POOL', [esc])
+assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+assert vm.undo_groups == 0 and vm.error_mode_depth == 0, \
+    (vm.undo_groups, vm.error_mode_depth)
+assert not any('POOL error' in s for s in vm.printed), vm.printed[-3:]
+vm.load(os.path.join(os.path.dirname(LSP), 'POOLDEMO.LSP'))
+vm.loads("(defun atoms-family (n) (list 'pool:hopcalc))")
+vm.run('c:POOLDEMO', [])
+assert vm.undo_groups == 0 and vm.error_mode_depth == 0
+assert not any('POOLDEMO error' in s for s in vm.printed), vm.printed[-3:]
+assert [c[1] for c in vm.commands if c and c[0] == '_.UNDO'] == \
+    ['_Begin', '_End', '_Begin', '_End'], \
+    [c for c in vm.commands if c and c[0] == '_.UNDO']
+print("   POOL cut short closes its own group; POOLDEMO after it opens and closes its own")
 
 print("\nALL RUNTIME SCENARIOS PASSED")

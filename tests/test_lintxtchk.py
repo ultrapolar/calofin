@@ -151,7 +151,26 @@ check("OSMODE untouched on the cancel path",
       vm.sysvars['OSMODE'] == 4133)
 
 # ----------------------------------------------------------------------
-# 3. the VER command
+# 3. undo recording switched off
+# ----------------------------------------------------------------------
+print("with UNDO off")
+
+# _Begin in a drawing whose UNDOCTL has bit 1 clear errors out of the
+# command, so every tool in the tree asks first.  This is the one
+# behavioural test of that guard: the checklist still lands, and no
+# group is opened to close.
+vm = VM()
+vm.load(LSP)
+vm.sysvars['OSMODE'] = 4133
+vm.sysvars['UNDOCTL'] = 0
+vm.run('c:LINTXTCHK', [(0.0, 0.0, 0.0)])
+check("the checklist is placed anyway", len(texts(vm)) == 26)
+check("no undo group was opened",
+      not [c for c in vm.commands if c], repr(vm.commands))
+check("OSMODE is still restored", vm.sysvars['OSMODE'] == 4133)
+
+# ----------------------------------------------------------------------
+# 4. the VER command
 # ----------------------------------------------------------------------
 print("version command")
 

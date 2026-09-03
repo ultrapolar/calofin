@@ -199,7 +199,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.6")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.8")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -2211,9 +2211,14 @@
     (foreach s segs
       (setq d (cab:seg-dist q s))
       (if (or (null dmin) (< d dmin)) (setq dmin d)))
-    (if (> dmin w) (setq w dmin))
-    (setq sum (+ sum dmin) n (1+ n))
-    (if (> dmin on) (setq sumo (+ sumo dmin) no (1+ no))))
+    ;; dmin stays nil when there are no segments to measure against;
+    ;; the returns below already report "nothing measured" correctly,
+    ;; so the accumulators must simply not run
+    (if dmin
+      (progn
+        (if (> dmin w) (setq w dmin))
+        (setq sum (+ sum dmin) n (1+ n))
+        (if (> dmin on) (setq sumo (+ sumo dmin) no (1+ no))))))
   (list w
         (if (> n 0) (/ sum n) 0.0)
         (if (> no 0) (/ sumo no) nil)))
@@ -2735,8 +2740,12 @@
   ;; one undo group around the whole fit - a U after CABHD takes back
   ;; the edge, the markers and the previews in one step (the stale
   ;; purge above stays outside it, so U does not resurrect old junk)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
 
   (princ "\n\nCABHD - fit a pool perimeter through the surveyed points,")
   (princ "\n        up to the point number where the edge stops.")

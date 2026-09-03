@@ -28,7 +28,7 @@
 
 ;;; ------------------------ small math helpers ----------------------
 
-(setq *wcalst-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.7")   ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
 
 (defun wc:key (p)
@@ -379,6 +379,15 @@
   )
   (if (cdr run) (setq runs (cons (reverse run) runs)))
   (reverse runs)
+)
+
+;; A length as a percentage of the bottom-before length.  botb is
+;; zero when the trace gave fewer than two distinct bottom points, and
+;; a zero divisor here would throw AFTER the undo group opened, leaving
+;; a half-drawn pair of layouts behind - a degenerate band reports 0%
+;; and the run says so out loud instead.
+(defun wc:pctof (v botb)
+  (if (> botb 1e-9) (* 100.0 (/ (abs v) botb)) 0.0)
 )
 
 (defun wc:vdim (p1 p2 xline lay)
@@ -904,6 +913,11 @@
           dp1 dp2
     )
   )
+  (if (<= botb 1e-9)
+    (princ (strcat "\nThe far edge measured no length - fewer than two"
+                   " distinct bottom points came back, so the"
+                   " percentages below read 0%."))
+  )
 
   ;; ---- 8b. feature emission -------------------------------------------
   ;; two variants are produced:
@@ -978,8 +992,12 @@
   )
 
   ;; ---- 10. draw ----------------------------------------------------------
-  (command "_.UNDO" "_Begin")
-  (setq inundo T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq inundo T)))
   (setq lay2 (cal:ensure-layer "AIR-B" 1))
   (cal:ensure-layer "DIMENSION" 3)
 
@@ -1133,12 +1151,12 @@
              "DIMENSION")
     (cal:text (list tx (- vy (* 1.65 w))) th
              (strcat "DELTA:         " (rtos (- bota botb) 2 2)
-                     "  (" (rtos (* 100.0 (/ (abs (- bota botb)) botb)) 2 2)
+                     "  (" (rtos (wc:pctof (- bota botb) botb) 2 2)
                      "%" (if (< bota botb) " short)" " long)"))
              "DIMENSION")
     (cal:text (list tx (- vy (* 2.20 w))) th
              (strcat "AFTER CUTS:    " (rtos vresid 2 2)
-                     "  (" (rtos (* 100.0 (/ (abs vresid) botb)) 2 2)
+                     "  (" (rtos (wc:pctof vresid botb) 2 2)
                      "%)  [target <1%]"
                      (if (> (abs vresid) (* 0.01 botb)) "  ** OVER TARGET **" ""))
              "DIMENSION")
@@ -1161,14 +1179,14 @@
     (princ (strcat "\n  " (caddr vr) ": " (itoa dl) " dart(s), "
                    (itoa dr) " insert(s) (max " (itoa maxfeat)
                    "), after cuts " (rtos (cadr vr) 2 2)
-                   " (" (rtos (* 100.0 (/ (abs (cadr vr)) botb)) 2 2) "%)"
+                   " (" (rtos (wc:pctof (cadr vr) botb) 2 2) "%)"
                    (if (> (abs (cadr vr)) (* 0.01 botb)) " OVER TARGET" "")))
   )
   (princ (strcat "\n  top line " (rtos toplen 2 2)
                  ", bottom before " (rtos botb 2 2)
                  ", bottom after " (rtos bota 2 2)
                  ", delta " (rtos (- bota botb) 2 2)
-                 " (" (rtos (* 100.0 (/ (abs (- bota botb)) botb)) 2 2)
+                 " (" (rtos (wc:pctof (- bota botb) botb) 2 2)
                  "%)."))
   (if (> nmk 0)
     (princ (strcat " " (itoa (/ nmk 2)) " reference mark(s) carried along."))

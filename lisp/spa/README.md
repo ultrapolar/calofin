@@ -335,10 +335,17 @@ highlighted perimeter (`STOCKCOVER`, `PADDLE`, `AUTOBEAD`).
 
 A radius corner becomes a true arc segment of that polyline, carried as
 a bulge — `tan(θ/4)`, which for a square corner's quarter-turn fillet is
-`0.41421`. Radius dimensions still work: `DIMRADIUS` takes a polyline
-arc segment picked at a point on it exactly as it takes a bare arc. A
-round spa was already a single `CIRCLE` (or `ELLIPSE` when out of
-round), so it was bounded to begin with.
+`0.41421`. A round spa was already a single `CIRCLE` (or `ELLIPSE` when
+out of round), so it was bounded to begin with.
+
+A bulge is not an entity, though, and `DIMRADIUS` will not take one
+handed to it as an entity name — it answers *“Object selected is not a
+circle or arc”* however exactly the pick point sits on the curve. So the
+radius callout builds the arc it asks for from the corner's own three
+points, dimensions that, and erases it again. The outline stays one
+bounded entity and the callout is a real radius dimension; the only
+thing given up is associativity, since the arc it was measured against
+is gone by the time you see it.
 
 ## Millimetres
 

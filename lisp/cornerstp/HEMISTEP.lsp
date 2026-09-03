@@ -93,14 +93,16 @@
 ;;;       flight always runs DOWN AND TO THE LEFT from there, so there
 ;;;       is no side to pick.  See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
-;;;       assumption - so the only thing asked is which steps carry the
-;;;       bead along their side walls: All of them, or Some, given by
-;;;       step number.  AUTOBEAD does the work on its own rules (2"
-;;;       toward the side you click, onto its Bead Track layer), so
-;;;       AUTOBEAD.lsp has to be loaded; when it is not, the run says
-;;;       so and finishes without beading.  The beads are their own
-;;;       undo group - AutoCAD does not nest them - so one U undoes
-;;;       the beads and the next undoes the steps.
+;;;       assumption - EXCEPT the last one drawn: the line that closes
+;;;       the run has no riser behind it, so it is handed to AUTOBEAD
+;;;       and held back there unbeaded.  The only thing asked is which
+;;;       steps carry the bead along their side walls: All of them,
+;;;       Some, given by step number, or None at all.  AUTOBEAD does
+;;;       the work on its own rules (2" toward the side you click, onto
+;;;       its Bead Track layer), so AUTOBEAD.lsp has to be loaded; when
+;;;       it is not, the run says so and finishes without beading.  The
+;;;       beads are their own undo group - AutoCAD does not nest them -
+;;;       so one U undoes the beads and the next undoes the steps.
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
@@ -171,7 +173,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.7") ; printed on load and at command start so a
+(setq *hs-version* "v3.11") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -566,6 +568,15 @@
 
 ;; annotation text height in drawing units; DIMSCALE is 0 for
 ;; annotative dim styles, where the annotation scale governs instead
+;; The widest tread, for spacing the side profile's dimensions.  The
+;; list is empty when every logged step landed within 1e-6 of the one
+;; before it -- (apply 'max nil) is an error, so a degenerate run
+;; falls back to plain text-height spacing.  CORNERSTP skips its whole
+;; profile in that case (CORNERSTP.lsp, "No usable tread spacing").
+(defun hs-maxtread (treads)
+  (if treads (apply 'max treads) 0.0)
+)
+
 (defun hs-txth ( / h s)
   (setq h (getvar "DIMTXT")
         s (getvar "DIMSCALE"))
@@ -742,7 +753,7 @@
                       lin lp1 lp2 pieces arcs cmode sp spc dir u
                       q hp bscr best side pt inref stopf cum n wid dep
                       p op nat cen e1 e2 drawn tol txth offd pprev
-                      oldce oldstyle ea eb crown pts reflen lastdep
+                      oldce oldlay oldstyle ea eb crown pts reflen lastdep
                       dimflag slog mark svcum svp svn svea sveb rec pc oldlu
                       bmark bsides btreads bnums bside bdir bss pr be
                       wallA wallB lastwid kx fx
@@ -754,6 +765,7 @@
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
@@ -981,11 +993,17 @@
                        " current layer.")))))
 
   ;; ---- 4. widths and step treads, chord by chord -----------------------
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T cum 0.0 n 1 drawn 0
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq cum 0.0 n 1 drawn 0
         pprev sp                        ; tread chain starts at the axis
         offd  (* 2.0 txth)              ; tread-dim offset off the axis
-        oldce (getvar "CMDECHO"))
+        oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                  ; quiet the dimstyle/dim commands
 
   ;; In base-line mode the first width sits AT the wall: it is the top
@@ -1228,8 +1246,12 @@
         (progn
           ;; step treads, top step first: sort the logged axis distances
           ;; ascending and take successive differences
+          ;; the first difference is measured from zero and filtered
+          ;; like every other one -- CORNERSTP and NORMIESTEP both drop
+          ;; a sub-1e-6 opener, and an unfiltered seed here let a zero
+          ;; through where they would not
           (setq srt    (vl-sort tlist '<)
-                treads (list (car srt))
+                treads (if (> (car srt) 1e-6) (list (car srt)))
                 pv     (car srt))
           (foreach td (cdr srt)
             (if (> (- td pv) 1e-6)
@@ -1322,8 +1344,8 @@
                   (setq pgap (cond ((numberp *cs-profile-dimgap*)
                                     *cs-profile-dimgap*)
                                    ((max (* 4.0 txth)
-                                         (* 0.75 (apply 'max treads)))))
-                        pfo  (+ (apply 'max treads) pgap)
+                                         (* 0.75 (hs-maxtread treads)))))
+                        pfo  (+ (hs-maxtread treads) pgap)
                         jx   1)
                   (while (< jx (length cnrs))
                     (setq e1 (nth (1- jx) cnrs)
@@ -1352,6 +1374,7 @@
   (if oldstyle (hs-setstyle oldstyle))   ; back to the entry dim style
   (command "_.UNDO" "_End")
   (if oldce (setvar "CMDECHO" oldce))
+  (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
   (setq undoflag nil)
 
@@ -1359,9 +1382,10 @@
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
   ;; group - which is why this sits outside ours: AutoCAD does not nest
   ;; undo groups, so one U undoes the beads and the next undoes the
-  ;; steps.  Every tread is beaded; the only question left is which
-  ;; steps carry the bead along their side walls, and that is answered
-  ;; by step number here instead of by clicking each one.
+  ;; steps.  Every tread but the last drawn is beaded - that one closes
+  ;; the run and has no riser behind it - so the only question left is
+  ;; which steps carry the bead along their side walls, and that is
+  ;; answered by step number here instead of by clicking each one.
   (if (> drawn 0)
     (if (not (boundp 'autobead-build))
       (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
@@ -1378,11 +1402,13 @@
             (if (null btreads)
               (princ "\nNo tread lines to bead.")
               (progn
-                ;; every tread is beaded - the side walls are the question
-                (initget "All Some")
+                ;; every tread but the last is beaded - the side walls
+                ;; are the question, and None leaves them bare
+                (initget "All Some None")
                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
                                                      " beaded side walls?"
-                                                     " [All/Some] <All>: ")))
+                                                     " [All/Some/None]"
+                                                     " <All>: ")))
                                   ("All")))
                 (if (= bside "Some")
                   (progn
@@ -1417,12 +1443,16 @@
                     (autobead-ensure-layer *autobead-layer*)
                     (autobead-build
                       bss bdir
-                      (= bside "Some")
+                      bside
                       (if (= bside "Some")
                         (mapcar '(lambda (k)
                                    (hs-entmid (cdr (assoc k btreads))))
                                 bnums)
-                        nil)))))))))))
+                        nil)
+                      ;; the last step drawn still goes over as a step
+                      ;; line - it is a breakline like any other - but
+                      ;; it is named here so AUTOBEAD leaves it unbeaded
+                      (list (hs-entmid (cdr (last btreads))))))))))))))
   (hs-fclear)                       ; both exits clear the form store
   (princ))
 
@@ -1443,13 +1473,14 @@
 ;; then a live demonstration drawn step by step with the same geometry
 ;; code the real command uses - the numbers are the reference example
 ;; this routine was built against.
-(defun c:TUTORIALHEMISTEP ( / *error* undoflag oldce oldstyle org sp u dir
+(defun c:TUTORIALHEMISTEP ( / *error* undoflag oldce oldlay oldstyle org sp u dir
                               txth pt wallw wallA wallB ea eb pprev p cum
                               e1 e2 offd n lst wid dep crown pts kx)
   (defun *error* (msg)
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
+    (if oldlay (setvar "CLAYER" oldlay))
     (princ))
 
   (princ (strcat "\n================ HEMISTEP TUTORIAL " *hs-version*
@@ -1484,9 +1515,11 @@
   (princ "\n     to the LEFT from there, so the steps rise to the right")
   (princ "\n     and the dims climb with them - each depth beside its own")
   (princ "\n     step, the overall further out; the treads are not dimmed.")
-  (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
-  (princ "\n     only question is which steps have beaded SIDE WALLS:")
-  (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
+  (princ "\n  5. Bead the steps? [Yes/No] - every tread but the LAST is")
+  (princ "\n     beaded (the line that closes the run has no riser), so")
+  (princ "\n     the only question is which steps have beaded SIDE")
+  (princ "\n     WALLS: [All/Some/None].  Some takes the step numbers")
+  (princ "\n     (\"1 3 4\"); None leaves the side walls bare.")
   (princ "\n     Then click the side to bead toward and AUTOBEAD does the")
   (princ "\n     rest on its own rules - it has to be loaded for this.")
   (hs-tut-pause)
@@ -1518,9 +1551,15 @@
         u    '(1.0 0.0 0.0)
         dir  '(0.0 1.0 0.0)
         wallw 257.61)
-  (command "_.UNDO" "_Begin")
-  (setq undoflag T
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undoflag T)))
+  (setq 
         oldce (getvar "CMDECHO")
+        oldlay (getvar "CLAYER")
         oldstyle (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
 

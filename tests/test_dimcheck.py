@@ -263,14 +263,16 @@ def line(vm, p1, p2, layer='0'):
     return vm.entities[-1]
 
 
-def dim(vm, p13, p14, p10, layer='0', style='STANDARD'):
+def dim(vm, p13, p14, p10, layer='0', style='STANDARD', ang=0.0):
     """A rotated/linear DIMENSION straight into the database, the way
-    the VM's own _.DIMLINEAR would leave one (70=0, angle 0)."""
+    the VM's own _.DIMLINEAR would leave one (70=0).  ANG is the
+    dimension's direction, so a vertical run measures its own length
+    rather than its zero-width X projection."""
     vm.loads('(entmake (list (cons 0 "DIMENSION") (cons 8 "%s")'
-             ' (cons 3 "%s") (cons 70 0) (cons 50 0.0)'
+             ' (cons 3 "%s") (cons 70 0) (cons 50 %r)'
              ' (list 13 %r %r 0.0) (list 14 %r %r 0.0)'
              ' (list 10 %r %r 0.0)))'
-             % (layer, style, p13[0], p13[1], p14[0], p14[1],
+             % (layer, style, ang, p13[0], p13[1], p14[0], p14[1],
                 p10[0], p10[1]))
     return vm.entities[-1]
 
@@ -356,6 +358,23 @@ def seed_faults(vm):
     c1 = line(vm, (0.0, -60.0), (100.0, -60.0))     # overlap 60..100
     c2 = line(vm, (60.0, -60.0), (180.0, -60.0))
     return dict(a=a, b=b, d1=d1, d2=d2, d3=d3, arc=f, c1=c1, c2=c2)
+
+
+def seed_anchor(vm):
+    """The hypotenuse-corner drawing: two runs that stop short of the
+    corner they would meet at, and TWO dimensions measuring to that
+    corner - a point in space with no geometry through it.  Plus a dim
+    whose point is a genuine stray, and one that just misses the
+    corner."""
+    a = line(vm, (0.0, 0.0), (60.0, 0.0))            # bottom run
+    b = line(vm, (100.0, 40.0), (100.0, 100.0))      # right-hand run
+    corner = (100.0, 0.0)                            # 40 from either line
+    d1 = dim(vm, (0.0, 0.0), corner, (50.0, -20.0))
+    d2 = dim(vm, (100.0, 100.0), corner, (130.0, 50.0), ang=math.pi / 2.0)
+    lone = dim(vm, (10.0, 0.0), (40.0, 15.0), (20.0, 30.0))   # 15 off line A
+    near = dim(vm, (30.0, 0.0), (100.05, 0.06), (60.0, 70.0))  # 0.078 off the
+    return dict(a=a, b=b, d1=d1, d2=d2, lone=lone,             # corner
+                near=near, corner=corner)
 
 
 # ------------------------------------------------------------------
@@ -505,6 +524,80 @@ for k in ('d1', 'd2', 'd3', 'arc', 'a', 'b'):
     assert color_of(vm, ents[k]) == 256, (k, color_of(vm, ents[k]))
 assert color_of(vm, kept[0]) == 256, color_of(vm, kept[0])
 print("   every flag colour restored, report and marker removed")
+
+
+# ------------------------------------------------------------------
+print("== shared anchors: a point two dims meet at is not a stray ==")
+vm = build_vm()
+ents = seed_anchor(vm)
+h = {k: handle(e) for k, e in ents.items() if k != 'corner'}
+vm.run('c:DIMSCAN', [None, None])
+txt = report_texts(vm)[0]
+
+# the corner carries two dimensions, so neither is called unattached -
+# only the dim that really is off on its own, and the one that misses
+# the corner by more than the anchor tolerance
+assert 'Dim %s [STANDARD] = 100.0000: OK - point 2 on a shared anchor' \
+    % h['d1'] in txt, txt
+assert 'Dim %s [STANDARD] = 100.0000: OK - point 2 on a shared anchor' \
+    % h['d2'] in txt, txt
+assert 'Dim %s [STANDARD] = 30.0000: NOT attached - point 2 off by 15.0000' \
+    % h['lone'] in txt, txt
+assert 'Dim %s [STANDARD] = 70.0500: NOT attached - point 2 off the shared' \
+       ' anchor by 0.0781' % h['near'] in txt, txt
+assert 'Dimensions scanned: 4 (2 with a stray definition point,' \
+       ' 2 point(s) on a shared anchor)' in txt, txt
+print("   the corner reads as an anchor; the real strays still report")
+
+
+# ------------------------------------------------------------------
+print("== DIMCHECK: anchored points are never questioned ==")
+vm = build_vm()
+ents = seed_anchor(vm)
+h = {k: handle(e) for k, e in ents.items() if k != 'corner'}
+sel = selectable(vm)
+
+# review order is D2 (top row), NEAR, LONE, D1
+vm.run('c:DIMCHECK', [
+    None, sel,
+    'Yes',            # D2: its corner point is an anchor - nothing asked
+    'Move', 'Yes',    # NEAR: offered the anchor rather than a far-off line
+    'Keep', 'Yes',    # LONE: a real stray, kept where it was drawn
+    'Back',           # D1: mis-press - back to LONE
+    'Keep', 'Yes',    # LONE again
+    'Yes',            # D1: still nothing asked about its corner point
+])
+
+# three Move/Keep/Pick questions: NEAR, LONE and LONE again.  The two
+# dims meeting at the corner were never asked about it.
+asks = [p for p, _a in vm.prompts if '[Move/Keep/Pick]' in str(p)]
+assert len(asks) == 3, asks
+notes = ''.join(vm.printed)
+assert '1 point(s) carry more than one dimension' in notes, notes[-400:]
+assert 'dimension point 2 is shared with another dimension - treated as' \
+       ' an anchor point, left as drawn.' in notes
+
+# nothing moved off the corner
+for k in ('d1', 'd2'):
+    assert grp(vm, ents[k], 14)[:2] == [100.0, 0.0], (k, grp(vm, ents[k], 14))
+# ...and the near miss was offered the ANCHOR, not the 40-away line
+assert 'the shared anchor point is 0.0781 away' in notes, notes[-600:]
+assert grp(vm, ents['near'], 14)[:2] == [100.0, 0.0], \
+    grp(vm, ents['near'], 14)
+assert grp(vm, ents['lone'], 14)[:2] == [40.0, 15.0], \
+    grp(vm, ents['lone'], 14)
+print("   the corner held, the near miss snapped to it, the stray asked")
+
+# the tally counts each held point ONCE, though Back sent D1 - and its
+# anchored point - through the review a second time
+txt = report_texts(vm)[0]
+assert 'Dimensions checked: 4 (correct: 4, flagged to fix: 0,' \
+       ' points adjusted: 1, held at a shared anchor: 2)' in txt, txt
+assert 'Dim %s [STANDARD] = 100.0000: OK - 1 point(s) held at a shared' \
+       ' anchor' % h['d1'] in txt, txt
+assert 'Dim %s [STANDARD] = 70.0000: OK - 1 point(s) moved onto the' \
+       ' nearest object/anchor' % h['near'] in txt, txt
+print("   the report holds the count at one per point, Back and all")
 
 
 # ------------------------------------------------------------------

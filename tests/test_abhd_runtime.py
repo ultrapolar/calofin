@@ -121,12 +121,76 @@ def test_shaky_survey_is_not_spaghetti_in_the_lisp():
     print("  shaky survey: no loops, no hairpins, out of the LISP itself")
 
 
+def test_the_commands_wrap_the_fitter():
+    """c:ABHD and c:ADAB themselves, which nothing had ever run.
+
+    The fitter under them is compared segment-for-segment against its
+    mirror above; what was untested is the WRAPPER - the stale-marker
+    sweep, the pickfirst probe and where it sits relative to the undo
+    group, the bracket itself, and the phase name the error handler
+    reports.  These assertions stay at that altitude.
+    """
+    from lispvm import VM
+
+    def newvm():
+        vm = VM()
+        vm.load(LSP)
+        vm.sysvars['CMDECHO'] = 1
+        return vm
+
+    # the seven questions, all taking their Enter default, then Enter at
+    # the step-7 selection
+    WIZARD = [1.0, None, None, 'No', 'No', 'No', None]
+
+    for cmd in ('c:ABHD', 'c:ADAB'):
+        vm = newvm()
+        vm.run(cmd, [None] + (WIZARD if cmd == 'c:ABHD' else [None]))
+        order = [p for p, _ in vm.prompts]
+        assert order and order[0] == 'ssget _I', (cmd, order[:2])
+        undo = [c for c in vm.commands if c and c[0] == '_.UNDO']
+        assert undo == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']], (cmd, undo)
+        assert vm.sysvars['CMDECHO'] == 1, cmd
+    print("  both commands probe pickfirst first, then bracket one undo group")
+
+    # a pre-typed survey skips the step-7 selection entirely
+    vm = newvm()
+    vm.loads('''(entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord") '(2 . "POINTS")
+                    '(70 . 0) '(62 . 7) '(6 . "Continuous")))''')
+    for x, y in ((0.0, 0.0), (120.0, 0.0), (120.0, 60.0), (0.0, 60.0)):
+        vm.loads('(entmake (list \'(0 . "POINT") \'(8 . "POINTS")'
+                 ' (list 10 %r %r 0.0)))' % (x, y))
+    vm.pickfirst = ['<ss>'] + list(vm.entities)
+    # with a real survey the fit completes and offers its three
+    # candidates; "None" discards them, which is all this case is about
+    vm.run('c:ABHD', WIZARD[:-1] + ['None'])
+    assert 'Step 7 of 7' not in ''.join(vm.printed), 'step 7 was still asked'
+    assert not any(p == 'ssget' for p, _ in vm.prompts), vm.prompts
+    print("  a survey highlighted before ABHD is typed skips step 7")
+
+    # a marker left by an interrupted run is swept, and said out loud
+    vm = newvm()
+    vm.loads('''(entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 *PF-WALL-LAYER*) '(70 . 0) '(62 . 7)
+                    '(6 . "Continuous")))''')
+    vm.loads('(entmake (list \'(0 . "LWPOLYLINE") (cons 8 *PF-WALL-LAYER*)'
+             ' \'(90 . 2) \'(70 . 0) \'(10 0.0 0.0) \'(10 10.0 0.0)))')
+    stale = vm.entities[-1]
+    vm.loads('(pf:tag-mine (entlast))')
+    vm.run('c:ABHD', [None] + WIZARD)
+    assert 'cleared' in ''.join(vm.printed), ''.join(vm.printed)[:300]
+    assert stale in vm.deleted, 'the stale marker survived'
+    print("  a marker from an interrupted run is swept before the fit")
+
+
 def main():
     print("ABHD runtime tests (abhd.lsp in the AutoLISP VM)"
           + (" [%s tier]" % os.environ['CALOFIN_LISP_ROOT']
              if os.environ.get('CALOFIN_LISP_ROOT') else ""))
     test_fitter_matches_its_mirror()
     test_shaky_survey_is_not_spaghetti_in_the_lisp()
+    test_the_commands_wrap_the_fitter()
     print("\nall tests passed")
 
 

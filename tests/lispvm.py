@@ -186,7 +186,11 @@ def parse_all(src):
 
 
 def truthy(v):
-    return v is not NIL
+    """AutoLISP has exactly one false value, and '() IS it: an empty list
+    reads as nil, so (if '() ...) takes the else-branch and (null '())
+    is T.  The VM builds empty lists as Python [], which is not the NIL
+    object, so the test lives here rather than at every call site."""
+    return v is not NIL and not (isinstance(v, list) and not v)
 
 
 class VM:
@@ -219,12 +223,64 @@ class VM:
             # must produce the same output on every run, or the test
             # asserting on it would pass today and fail tomorrow.
             'CDATE': 20260821.143000, 'DATE': 2461274.5,
+            # Every variable the tree reads or writes, at AutoCAD's own
+            # default.  An unseeded name used to read as 0, which hid a
+            # class of bug (a text height scaled by a DIMSCALE of 0) and
+            # made every cancel test see "changed" settings that were
+            # only ever the VM inventing a value; a name not listed here
+            # now reads as nil, exactly as AutoCAD answers an unknown one.
+            'PDMODE': 0, 'VIEWSIZE': 100.0, 'PLINETYPE': 2, 'PICKFIRST': 1,
+            'CANNOSCALEVALUE': 1.0, 'DIMSCALE': 1.0, 'FILEDIA': 1,
+            'DIMTXT': 0.18, 'TEMPPREFIX': 'C:\\Temp\\',
+            'CECOLOR': 'BYLAYER', 'CELTYPE': 'BYLAYER', 'CELWEIGHT': -1,
+            'CELTSCALE': 1.0, 'CTAB': 'Model', 'TEXTSTYLE': 'STANDARD',
+            'SCREENSIZE': [1920.0, 1080.0], 'PEDITACCEPT': 0,
+            'VIEWCTR': [0.0, 0.0, 0.0], 'DIMASSOC': 2, 'TEXTSIZE': 0.2,
+            'FILLETRAD': 0.0, 'TRIMMODE': 1, 'DIMTMOVE': 0,
+            'DIMLUNIT': 2, 'DIMFRAC': 0, 'DIMDEC': 4, 'DIMZIN': 0,
+            'DIMPOST': '', 'DIMTAD': 0, 'DIMASZ': 0.18, 'DIMEXE': 0.18,
+            'DIMEXO': 0.0625, 'DIMGAP': 0.09, 'DIMTIX': 0, 'DIMTOFL': 0,
+            'DIMATFIT': 3, 'DIMLAYER': '.', 'CVPORT': 2, 'TILEMODE': 1,
         }
+        # *error* dispatch is OPT-IN (vm.handle_errors = True): with it
+        # on, a LispError raised outside vl-catch-all-apply runs the
+        # *error* the failing code can see -- dynamically, with every
+        # frame still live, so a handler reads its command's locals the
+        # way AutoCAD's does -- and then aborts the command, which run()
+        # reports as a normal return.  Off, the error propagates as it
+        # always has, so the suites that assert on a raised LispError
+        # keep their footing.
+        self.handle_errors = False
+        self.handled_errors = []   # the messages *error* was handed
+        self._catch_depth = 0      # inside vl-catch-all-apply: no dispatch
+        self._in_handler = False   # a throw inside *error* is not re-handled
+        # *push-error-using-command* stacks an error-handling mode for
+        # the document; *pop-error-mode* takes it off.  Both are bound
+        # so the (if *push-error-using-command* ...) guards see them,
+        # and the depth is what a test asserts on: a command that pushes
+        # and pops only from its handler leaves 1 behind after a clean
+        # run, which is the defect five tools carried until v3.2.
+        self.error_mode_depth = 0
+        self.error_mode_underflow = 0   # pops with nothing pushed
+        self.globals[Sym('*push-error-using-command*')] = T
+        self.globals[Sym('*pop-error-mode*')] = T
+        self.undo_groups = 0       # _.UNDO _Begin / _End balance
+        self.undo_marks = 0        # StartUndoMark / EndUndoMark balance
+        self.undo_log = []         # 'start' / 'end', in order
+        self.lock_log = []         # (layer name, locked?) per vla-put-Lock
         self.tablerecs = {}      # table -> {NAME: Ent} for tblobjname
         self.recdata = {}        # Ent -> alist for those records; kept
                                  # out of entdata, which is the DRAWING
         self.tables = {'LAYER': set(), 'LTYPE': {'CONTINUOUS'},
-                       'DIMSTYLE': {'STANDARD'}}
+                       'DIMSTYLE': {'STANDARD'}, 'STYLE': {'STANDARD'}}
+        # the ActiveX constants a routine compares against or hands to a
+        # property.  :vlax-true / :vlax-false are two distinct symbols
+        # that are BOTH non-nil, so they self-evaluate here; an unbound
+        # symbol would read as nil and make every lock test succeed.
+        for k in (':vlax-true', ':vlax-false'):
+            self.globals[Sym(k)] = Sym(k)
+        self.globals[Sym('acbylayer')] = 256
+        self.globals[Sym('aclnwtbylayer')] = -1
 
     # ---------------- scripted input
     def pop_script(self, prompt, kind):
@@ -327,6 +383,28 @@ class VM:
             for form in body:
                 r = self.eval(form)
             return r
+        except LispError as e:
+            # AutoCAD runs *error* at the point of failure, before any
+            # frame unwinds -- that is how the handler sees the locals
+            # (undo-open, the doc, the layers it unlocked) it has to
+            # put right.  The innermost defun is that point; the ones
+            # above see the error already handled and just unwind.
+            if (self.handle_errors and not self._catch_depth
+                    and not self._in_handler
+                    and not getattr(e, 'handled', False)):
+                h = self.get(Sym('*error*'))
+                if (isinstance(h, tuple) and h[0] == 'defun') or (
+                        isinstance(h, list) and h and h[0] == 'lambda'):
+                    e.handled = True
+                    msg = str(e).split('\n')[0]
+                    self.handled_errors.append(msg)
+                    self._in_handler = True
+                    try:
+                        self.call_value(h if isinstance(h, list)
+                                        else Sym('*error*'), [msg])
+                    finally:
+                        self._in_handler = False
+            raise
         finally:
             self.stack.pop()
             self.calls.pop()
@@ -509,12 +587,33 @@ class VM:
         fn = self.get(Sym(name.lower()))
         if not (isinstance(fn, tuple) and fn[0] == 'defun'):
             raise LispError(f"{name} is not defined", self)
-        r = self.call_defun(Sym(name.lower()), fn, [])
+        try:
+            r = self.call_defun(Sym(name.lower()), fn, [])
+        except LispError as e:
+            # the command went through its handler and was aborted --
+            # what the user sees is a prompt back, not a crash
+            if self.handle_errors and getattr(e, 'handled', False):
+                self._check_balanced(name)
+                return NIL
+            raise
+        self._check_balanced(name)
         if self.script:
             raise LispError(
                 f"{len(self.script)} scripted answers left over: "
                 f"{self.script[:6]!r}", self)
         return r
+
+    def _check_balanced(self, name):
+        """A command hands the session back the way it found it: no
+        undo group of its own still open, no error mode still pushed.
+        Either leftover is the class of defect that only shows up in
+        the NEXT command a drafter runs, so every run() checks."""
+        if self.undo_groups:
+            raise LispError(f"{name} returned with {self.undo_groups} undo "
+                            f"group(s) still open", self)
+        if self.error_mode_depth:
+            raise LispError(f"{name} returned with the error mode still "
+                            f"pushed ({self.error_mode_depth} deep)", self)
 
     def layer_of(self, e):
         for pair in self.entdata.get(e, []):
@@ -639,8 +738,8 @@ def _equal(vm, a):
     return T if same(x, y) else NIL
 
 
-BUILTINS[Sym('null')] = lambda vm, a: T if a[0] is NIL else NIL
-BUILTINS[Sym('not')] = lambda vm, a: T if a[0] is NIL else NIL
+BUILTINS[Sym('null')] = lambda vm, a: T if not truthy(a[0]) else NIL
+BUILTINS[Sym('not')] = lambda vm, a: T if not truthy(a[0]) else NIL
 BUILTINS[Sym('numberp')] = lambda vm, a: (T if isinstance(a[0], (int, float))
                                           else NIL)
 BUILTINS[Sym('listp')] = lambda vm, a: (T if (a[0] is NIL or
@@ -850,8 +949,19 @@ def _strcat(vm, a):
     return ''.join(a)
 BUILTINS[Sym('strlen')] = lambda vm, a: len(a[0]) if a else 0
 BUILTINS[Sym('itoa')] = lambda vm, a: str(int(num(a[0])))
-BUILTINS[Sym('atoi')] = lambda vm, a: int(a[0]) if re.match(r'^[+-]?\d+',
-                                                            a[0]) else 0
+
+
+@bi('atoi')
+def _atoi(vm, a):
+    """AutoLISP reads the leading integer and stops there: (atoi "34x")
+    is 34 and (atoi "x") is 0.  Testing the prefix and then converting
+    the WHOLE string, as this did, raised on every value AutoCAD simply
+    answers -- and a routine parsing a string it did not write is
+    exactly where that shows up."""
+    m = re.match(r'^[+-]?\d+', a[0])
+    return int(m.group()) if m else 0
+
+
 BUILTINS[Sym('atof')] = lambda vm, a: float(re.match(
     r'^[+-]?\d*\.?\d*', a[0]).group() or 0)
 BUILTINS[Sym('chr')] = lambda vm, a: chr(int(a[0]))
@@ -938,13 +1048,26 @@ BUILTINS[Sym('princ')] = _princ
 BUILTINS[Sym('prin1')] = lambda vm, a: (a[0] if a else NIL)
 BUILTINS[Sym('print')] = lambda vm, a: (a[0] if a else NIL)
 BUILTINS[Sym('terpri')] = lambda vm, a: NIL
-BUILTINS[Sym('prompt')] = lambda vm, a: NIL
+
+
+@bi('prompt')
+def _prompt(vm, a):
+    """(prompt msg) -- shown to the user like princ, returns nil.  It
+    used to be a silent no-op here, so a tool that reports through
+    prompt (AUTOBEAD, PADDLE) looked mute to every test."""
+    if a and isinstance(a[0], str):
+        vm.printed.append(a[0])
+    return NIL
+
+
 
 
 # sysvars, tables
 @bi('getvar')
 def _getvar(vm, a):
-    return vm.sysvars.get(a[0].upper(), 0)
+    """An unknown variable is nil, as in AutoCAD -- not 0, which this
+    VM used to invent and which no arithmetic ever complained about."""
+    return vm.sysvars.get(a[0].upper(), NIL)
 
 
 @bi('setvar')
@@ -1019,6 +1142,9 @@ def _entmake(vm, a):
         return alist
     if etype == 'LTYPE':
         vm.tables['LTYPE'].add(d[2])
+        return alist
+    if etype == 'STYLE':
+        vm.tables.setdefault('STYLE', set()).add(d[2])
         return alist
     # A BLOCK ... ENDBLK run defines a block: everything between the two
     # belongs to the definition in the block table, NOT to the drawing.
@@ -1303,6 +1429,25 @@ def _dimrot_angle(a):
 @bi('command')
 def _command(vm, a):
     vm.commands.append(list(a))
+    # One undo group per command (STANDARDS 5), and the VM keeps the
+    # count: _Begin with undo off errors out of the command in AutoCAD,
+    # and an _End with no group open is the strict reading of the same
+    # mistake -- a handler that closes a group it never opened.  Inside
+    # vl-catch-all-apply the raise is swallowed, so a guarded close in
+    # a handler stays quiet; what shows is a leftover count, which run()
+    # refuses to return with.
+    if a and isinstance(a[0], str) and a[0].upper().lstrip('._') == 'UNDO' \
+            and len(a) >= 2 and isinstance(a[1], str):
+        sub = a[1].upper().lstrip('_')
+        if sub == 'BEGIN':
+            if not (vm.sysvars.get('UNDOCTL', 5) & 1):
+                raise LispError('_.UNDO _Begin with undo off (UNDOCTL bit 1 '
+                                'clear) errors out of the command', vm)
+            vm.undo_groups += 1
+        elif sub == 'END':
+            if vm.undo_groups <= 0:
+                raise LispError('_.UNDO _End with no group open', vm)
+            vm.undo_groups -= 1
     # -DIMSTYLE Restore really does change the current dim style, and
     # code that saves/restores it round-trips through getvar, so the
     # VM has to model it or a wrong-style restore would go unnoticed
@@ -1805,10 +1950,13 @@ def _vl_catch_all_apply(vm, a):
     # the call to vl-catch-all-apply itself that is malformed
     if len(a) < 2:
         raise LispError("vl-catch-all-apply: too few arguments", vm)
+    vm._catch_depth += 1
     try:
         return vm.call_value(a[0], list(a[1] or []))
     except LispError as e:
         return CaughtError(str(e))
+    finally:
+        vm._catch_depth -= 1
 
 
 BUILTINS[Sym('vl-catch-all-error-p')] = lambda vm, a: (
@@ -2147,6 +2295,204 @@ def _vla_getboundingbox(vm, a):
     vm.set(a[1], [min(xs), min(ys), 0.0])
     vm.set(a[2], [max(xs), max(ys), 0.0])
     return NIL
+
+
+@bi('*push-error-using-command*')
+def _push_error_using_command(vm, a):
+    vm.error_mode_depth += 1
+    return T
+
+
+@bi('*pop-error-mode*')
+def _pop_error_mode(vm, a):
+    if vm.error_mode_depth <= 0:
+        vm.error_mode_underflow += 1
+    else:
+        vm.error_mode_depth -= 1
+    return T
+
+
+# The blackboard: vl-bb-ref / vl-bb-set are the one namespace every
+# document of an AutoCAD session shares (LISP globals are per document).
+# Module-level on purpose, so it survives a fresh VM() the way it
+# survives a second drawing being opened -- a test that stands for a
+# NEW session calls reset_blackboard() first.
+BLACKBOARD = {}
+
+
+def reset_blackboard():
+    BLACKBOARD.clear()
+
+
+@bi('vl-bb-ref')
+def _vl_bb_ref(vm, a):
+    return BLACKBOARD.get(a[0], NIL)
+
+
+@bi('vl-bb-set')
+def _vl_bb_set(vm, a):
+    BLACKBOARD[a[0]] = a[1]
+    return a[1]
+
+
+# The document, its undo marks, the layer collection and the entity
+# properties the cleanup tools drive through ActiveX.  A vla-object is
+# still the ename (or the layer's table record), so a property put
+# lands in the same alist entget reads.
+ACAD_OBJECT = '<acad-object>'
+ACTIVE_DOCUMENT = '<active-document>'
+LAYER_COLLECTION = '<layers>'
+
+BUILTINS[Sym('vlax-get-acad-object')] = lambda vm, a: ACAD_OBJECT
+
+
+@bi('vla-get-activedocument')
+def _vla_get_activedocument(vm, a):
+    if a[0] != ACAD_OBJECT:
+        raise LispError('vla-get-ActiveDocument: not the application '
+                        f'object: {a[0]!r}', vm)
+    return ACTIVE_DOCUMENT
+
+
+def _doc(vm, a, who):
+    if not a or a[0] != ACTIVE_DOCUMENT:
+        raise LispError(f'{who}: not the active document: '
+                        f'{a[0] if a else None!r}', vm)
+
+
+@bi('vla-startundomark')
+def _vla_startundomark(vm, a):
+    _doc(vm, a, 'vla-StartUndoMark')
+    vm.undo_marks += 1
+    vm.undo_log.append('start')
+    return NIL
+
+
+@bi('vla-endundomark')
+def _vla_endundomark(vm, a):
+    """Closing a mark nothing opened is the ActiveX error a handler
+    trips over when the failure came before StartUndoMark -- so it
+    throws here, and a handler that does not guard the close fails
+    the test instead of the drafter."""
+    _doc(vm, a, 'vla-EndUndoMark')
+    if vm.undo_marks <= 0:
+        raise LispError('vla-EndUndoMark: no undo mark is open', vm)
+    vm.undo_marks -= 1
+    vm.undo_log.append('end')
+    return NIL
+
+
+@bi('vla-get-layers')
+def _vla_get_layers(vm, a):
+    _doc(vm, a, 'vla-get-Layers')
+    return LAYER_COLLECTION
+
+
+@bi('vla-item')
+def _vla_item(vm, a):
+    """(vla-Item layers name) -- the layer's table record, the same one
+    tblobjname hands out, so a Lock put here shows in group 70 there.
+    A name the table does not hold throws, as the real collection's
+    Key-not-found does."""
+    if a[0] != LAYER_COLLECTION:
+        raise LispError(f'vla-Item: unsupported collection {a[0]!r}', vm)
+    rec = _tblobjname(vm, ['LAYER', a[1]])
+    if rec is NIL:
+        raise LispError(f'vla-Item: no layer named {a[1]!r}', vm)
+    return rec
+
+
+def _alist_of(vm, e, who):
+    data = vm.entdata.get(e, vm.recdata.get(e)) if isinstance(e, Ent) \
+        else None
+    if data is None or e in vm.deleted:
+        raise LispError(f'{who}: not an entity: {e!r}', vm)
+    return data
+
+
+def _dxf_put(vm, e, code, val, who):
+    data = _alist_of(vm, e, who)
+    for i, g in enumerate(data):
+        if isinstance(g, Dot) and g.a == code:
+            data[i] = Dot(code, val)
+            return val
+        if isinstance(g, list) and g and g[0] == code:
+            data[i] = Dot(code, val)
+            return val
+    data.append(Dot(code, val))
+    return val
+
+
+def _group(vm, e, code, who):
+    """One DXF group off an entity OR a table record -- _dxf reads the
+    drawing only, and a layer's lock bit lives in its record."""
+    for g in _alist_of(vm, e, who):
+        if isinstance(g, Dot) and g.a == code:
+            return g.b
+        if isinstance(g, list) and g and g[0] == code:
+            return g[1] if len(g) == 2 else g[1:]
+    return NIL
+
+
+def _flags(vm, e, who):
+    v = _group(vm, e, 70, who)
+    return v if isinstance(v, int) else 0
+
+
+@bi('vla-get-lock')
+def _vla_get_lock(vm, a):
+    _alist_of(vm, a[0], 'vla-get-Lock')
+    return Sym(':vlax-true') if _flags(vm, a[0], 'vla-get-Lock') & 4 \
+        else Sym(':vlax-false')
+
+
+@bi('vla-put-lock')
+def _vla_put_lock(vm, a):
+    f = _flags(vm, a[0], 'vla-put-Lock')
+    on = a[1] == Sym(':vlax-true')
+    _dxf_put(vm, a[0], 70, (f | 4) if on else (f & ~4), 'vla-put-Lock')
+    name = _group(vm, a[0], 2, 'vla-put-Lock')
+    vm.lock_log.append((str(name).upper(), on))
+    return NIL
+
+
+#: entity property -> DXF group, for the generic get/put pairs
+VLA_PROPS = {
+    'layer': 8, 'color': 62, 'linetype': 6, 'lineweight': 370,
+    'stylename': 7, 'height': 40, 'rotation': 50, 'textstring': 1,
+}
+
+
+def _vla_getter(prop, code):
+    def get(vm, a):
+        v = _group(vm, a[0], code, 'vla-get-' + prop)
+        if v is NIL or v is None:
+            # the defaults AutoCAD reports for a group the alist omits
+            v = {8: '0', 62: 256, 6: 'ByLayer', 370: -1, 7: 'Standard',
+                 40: 0.0, 50: 0.0, 1: ''}[code]
+        return v
+    return get
+
+
+def _vla_putter(prop, code):
+    def put(vm, a):
+        who = 'vla-put-' + prop
+        val = a[1]
+        if code == 8:
+            if val not in vm.tables['LAYER'] and val != '0':
+                raise LispError(f'{who}: no layer named {val!r}', vm)
+        if code == 7:
+            names = {x.upper() for x in vm.tables.get('STYLE', set())}
+            if str(val).upper() not in names:
+                raise LispError(f'{who}: no text style named {val!r}', vm)
+        _dxf_put(vm, a[0], code, val, who)
+        return NIL
+    return put
+
+
+for _prop, _code in VLA_PROPS.items():
+    BUILTINS[Sym('vla-get-' + _prop)] = _vla_getter(_prop, _code)
+    BUILTINS[Sym('vla-put-' + _prop)] = _vla_putter(_prop, _code)
 
 
 # vl-sort / vl-sort-i live with the other vl- builtins above.  A second

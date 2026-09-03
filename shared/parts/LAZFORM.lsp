@@ -87,7 +87,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.9")
+(setq *lazform-version* "v2.12")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  THIS build takes the table, its metrics, the tile palette and the
@@ -279,7 +279,7 @@
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
    (("x"  "X - hopper cut face length (check)")
-    ("s2" "S2 - corner cut face (check)")
+    ("s2" "S2 - corner cut face (check, sets NA S/S1)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
@@ -311,7 +311,7 @@
     ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
-   (("s2" "S2 - corner cut face (check)")
+   (("s2" "S2 - corner cut face (check, sets NA S/S1)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
@@ -452,7 +452,7 @@
     ("K"  "k"  455 620 455 750 "v" "K - hopper to bottom side")
     ("F"  "f"  420 580 690 580 "h" "F - hopper to slope break")
     ("E"  "e"  690 580 900 580 "h" "E - slope break to right end"))
-   (("s2" "S2 - corner cut face (check)")
+   (("s2" "S2 - corner cut face (check, sets NA S/S1)")
     ("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
@@ -533,7 +533,8 @@
     ("TL" "ftl" 484 471 469 402 "p" "TL - top-left tangent radius")
     ("RS" "ftr" 780 546 864 542 "p" "RS - right-side tangent radius")
     ("BC" "fbc" 500 824 500 894 "p" "BC - bottom-center tangent radius"))
-   ())
+   (("off"
+     "Top-right bulge off the right bound, left negative (complex only)")))
 
   ;; ---------------- Cloud ----------------
   ;;  Two bulges, joined over the top by a reverse arc.  The LEFT one
@@ -787,8 +788,13 @@
         sub (lzf:pickval c "sub"))
   (if (assoc sub (cadr r))
       (setq out (append out (cdr (assoc sub (cadr r))))))
-  ;; a hump off centre is a Center pool's question and a complex run's
-  (if (and (= (cadr c) "Center") (= (lzf:pickval c "detail") "Complex"))
+  ;; placing the third bulge along X is a complex run's question, and
+  ;; it belongs to the two shapes that have a third bulge to place: the
+  ;; hump off centre on a Center pool, the corner bulge off the right
+  ;; bound on a TopRight one.  Same slot, same signed number, so the
+  ;; two sheets carry the same box under their own wording
+  (if (and (member (cadr c) '("Center" "TopRight"))
+           (= (lzf:pickval c "detail") "Complex"))
       (setq out (cons "off" out)))
   out)
 
@@ -1005,6 +1011,7 @@
 (setq lzf:*insq* nil)           ; the in-square toggle, as it is set
 (setq lzf:*btype* 0)            ; the bottom-type row, as it is picked
 (setq lzf:*pos* nil)            ; where the dialog was last standing
+(setq lzf:*poskey* "LazForm_Pos") ; ...in the profile, kept over a restart
 (setq lzf:*go* nil)             ; the chart a tab click asked for
 (setq lzf:*ranchart* nil)       ; the chart Insert was finally pressed on
 
@@ -1595,7 +1602,8 @@
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZASCII error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZASCII error: could not load the dialog file."))
+     (princ "\nLAZASCII error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      (if (new_dialog "lazform_ascii" dcl)
        (progn
@@ -1739,13 +1747,22 @@
           "}")))
 
 ;; Show it, collect it, and hand POOL the same alist LAZFORM would.
-(defun lzf:txt-show (c / f dcl rc k out)
+(defun lzf:txt-show (c / *error* f dcl rc k out)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl (c:LAZASCII's handler is the pattern)
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZTXT error: " msg)))
+    (princ))
   (setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil lzf:*chart* c)
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZTXT error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZTXT error: could not load the dialog file."))
+     (princ "\nLAZTXT error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      (cond
        ((not (new_dialog "lazform_txt" dcl))
@@ -2151,7 +2168,8 @@
         lzf:*pvals* nil                 ; and the mode dropdowns with them
         lzf:*insq* nil                  ; the toggle's own starting state
         lzf:*btype* 0                   ; Normal, first in the list
-        lzf:*pos* nil                   ; where the user last had it
+        lzf:*pos* nil                   ; the profile decides where this
+                                        ; run opens, not the last page
         lzf:*ranchart* nil              ; no page has been accepted yet
         go chartkey)
   (cond
@@ -2160,7 +2178,8 @@
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZFORM error: could not write the dialog file."))
     ((< (setq dcl (load_dialog f)) 0)
-     (princ "\nLAZFORM error: could not load the dialog file."))
+     (princ "\nLAZFORM error: could not load the dialog file.")
+     (vl-file-delete f))
     (t
      ;; The page loop.  DCL has no tab tile, so a tab is a button that
      ;; closes this page and reopens the next -- and because
@@ -2253,7 +2272,7 @@
           (lzf:redraw)
           (lzf:btgrey c)
           (lzf:restate)
-          (setq rc (start_dialog))
+          (setq rc (lzf:rundlg))
           (cond
             ((= rc 4) (setq go lzf:*go*))     ; a tab: go round again
             (t (setq done t
@@ -2267,17 +2286,62 @@
   (setq f nil)
   out)
 
-;; Open a page where the user last had the dialog.  done_dialog reports
-;; the position it was closed at and new_dialog takes one back, but only
-;; as a 4-argument call -- and a build that answered done_dialog with
-;; something other than a point would poison every reopen, so the shape
-;; is checked before it is trusted and the plain 2-argument call is the
-;; fallback.
-(defun lzf:newdlg (name dcl)
-  (if (and lzf:*pos* (listp lzf:*pos*) (= (length lzf:*pos*) 2)
-           (numberp (car lzf:*pos*)) (numberp (cadr lzf:*pos*)))
-      (new_dialog name dcl "" lzf:*pos*)
+;; WHERE THE DIALOG COMES BACK UP.  done_dialog reports the position it
+;; closed at, and that is the only chance to find out -- DCL cannot ask
+;; an open dialog where it is.  Held in lzf:*pos* alone that answer lasts
+;; until the file is reloaded, so the point also goes into the AutoCAD
+;; profile as "x,y" and is read back at the next open: come back after a
+;; restart and the dialog is still where it was left.
+(defun lzf:pos-save (p)                 ; answers with what it was given,
+  (if (and p (listp p) (= (length p) 2) ; so it can wrap a done_dialog
+           (numberp (car p)) (numberp (cadr p)))
+    (setenv lzf:*poskey*
+            (strcat (itoa (fix (car p))) "," (itoa (fix (cadr p))))))
+  p)
+
+;; The saved point, or nil when there is nothing worth trusting.  Only a
+;; string this build could have written is taken -- the parse has to
+;; round-trip -- so a hand-edited or foreign profile value can do no
+;; more than centre the dialog, which is what it did before.  The clamp
+;; is a rescue and not a fence: a point saved on a second monitor that
+;; has since been unplugged would otherwise put the dialog where the
+;; mouse cannot reach it.  SCREENSIZE is the drawing area rather than
+;; the desktop, so the clamp can only ever pull one IN.
+(defun lzf:pos-read ( / s i x y scr)
+  (setq s (getenv lzf:*poskey*))
+  (if (and s (setq i (vl-string-search "," s)) (> i 0))
+    (progn
+      (setq x (atoi (substr s 1 i))
+            y (atoi (substr s (+ i 2))))
+      (if (= s (strcat (itoa x) "," (itoa y)))
+        (progn
+          (setq scr (getvar "SCREENSIZE"))
+          (if (and scr (listp scr) (= (length scr) 2)
+                   (numberp (car scr)) (numberp (cadr scr)))
+            (setq x (max 0 (min x (fix (- (car scr) 100.0))))
+                  y (max 0 (min y (fix (- (cadr scr) 100.0))))))
+          (list x y))))))
+
+;; Open a page where the user last had the dialog.  new_dialog takes a
+;; position back, but only in its four-argument form -- and a build
+;; answering done_dialog with something other than a point would poison
+;; every reopen, so the shape is checked before it is trusted and the
+;; plain two-argument call is the fallback.  lzf:*pos* is this session's
+;; answer; the profile is the one the last session left behind.
+(defun lzf:newdlg (name dcl / p)
+  (setq p (if lzf:*pos* lzf:*pos* (lzf:pos-read)))
+  (if (and p (listp p) (= (length p) 2)
+           (numberp (car p)) (numberp (cadr p)))
+      (new_dialog name dcl "" p)
       (new_dialog name dcl)))
+
+;; start_dialog, then keep where the dialog was left.  Saving here
+;; rather than in the three action tiles keeps setenv out of a dialog
+;; callback and gives the profile write one place to go wrong.
+(defun lzf:rundlg ( / rc)
+  (setq rc (start_dialog))
+  (lzf:pos-save lzf:*pos*)
+  rc)
 
 ;;; -------------------- commands ----------------------------------------
 

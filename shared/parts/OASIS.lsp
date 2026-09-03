@@ -74,7 +74,8 @@
 ;;;                                                     -> centre (X/2, Y-rT)
 ;;;                 TOPRIGHT  touches the Y-max AND the X-max bound
 ;;;                                                     -> centre (X-rT, Y-rT)
-;;;                 the cloud shapes have no third bulge.
+;;;                 either of them moves along X on a COMPLEX run, below.
+;;;                 The cloud shapes have no third bulge.
 ;;;
 ;;; So on an oasis the box's bottom edge is held by the two side bulges
 ;;; (each dips to it), the left edge by the left bulge, the top edge by
@@ -82,10 +83,39 @@
 ;;; centre-bulge pool, or by the right bulge AND the corner bulge, with
 ;;; a reverse curve between them, on a top-right one.  On a cloud the
 ;;; left bulge alone holds three of the four bounds, and the right bulge
-;;; the fourth.  On a centre-bulge
-;;; pool the top bulge has one degree of freedom left and it is spent
-;;; centring it: oasis:*topfrac* moves it along X if a job ever needs it
-;;; off-centre.  The corner bulge has none -- two tangencies pin it.
+;;; the fourth.
+;;;
+;;; Where the third bulge sits along X
+;;; ----------------------------------
+;;; The third bulge is the one the envelope does not finish pinning, and
+;;; a COMPLEX run is where the drawing gets to say the rest.  On a
+;;; centre-bulge pool it is tangent to the Y-max bound and nothing else,
+;;; so one number is left over -- where it sits along X -- and a simple
+;;; run spends it centring the hump (oasis:*topfrac*).  On a top-right
+;;; pool the second tangency is a CHOICE, not a law: the corner is where
+;;; a drawing usually puts that bulge, and plenty of pools carry it on
+;;; the TOP WALL ALONE, in off the right-hand bound with the right-side
+;;; reverse curve stretched across the gap.
+;;;
+;;; Both are the same one number: oasis:topcen's OFF, the third bulge's
+;;; signed shift along X from where its own tangencies would put it,
+;;; LEFT NEGATIVE, answer slot 12 on either shape.  Zero is the centred
+;;; hump and the corner bulge exactly as a simple run has always drawn
+;;; them, which is why a simple run never has to ask.
+;;;
+;;; A drawing that has the bulge off the corner rarely dimensions it
+;;; from the wall, though.  What it carries is the CENTRE-TO-CENTRE
+;;; distance back to the right bulge -- the same tie the check drawing
+;;; puts on every neighbouring pair.  So the top-right placement
+;;; question takes TIE as an answer, asks for that distance instead, and
+;;; turns it into the shift.  Two circles on the top wall are that far
+;;; from the right bulge's centre, one either side of it, and the INBOARD
+;;; one is taken: a bulge that has left the corner for the top wall has
+;;; come inwards, so a longer tie puts it further in and the answer reads
+;;; the way a measurement should.  The corner itself is Enter, and
+;;; anything outboard of the right bulge's centre is typed as the shift.
+;;; Every pool a tie can draw, that tie reads back -- the number the
+;;; check drawing prints between the pair is the pool it came off.
 ;;;
 ;;; Each tangent radius is then the circle of that radius sitting
 ;;; externally tangent to both of its neighbouring bulges -- two such
@@ -180,7 +210,10 @@
 ;;;     size can bridge them, because raising it grows both reaches
 ;;;     equally;
 ;;;   * a tangent radius too small to span the gap between its two
-;;;     bulges -- the routine says the smallest one that will.
+;;;     bulges -- the routine says the smallest one that will;
+;;;   * a placement that carries the third bulge's centre off the
+;;;     envelope, or a tie no circle on the top wall is that far from
+;;;     the right bulge's centre to satisfy.
 ;;;
 ;;; Anything that is merely unusual is drawn and reported, not refused.
 ;;; Two things are measured on the finished outline and named if they are
@@ -192,7 +225,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.3")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.5")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -293,12 +326,16 @@
 ;;     as the straight run between the two bulges' tangent points --
 ;;     exactly the reverse arc with an infinite radius, so the outline
 ;;     stays tangent-continuous through it;
-;;   * a Center pool's top bulge may be moved off centre by a signed
-;;     offset, left negative.
+;;   * the THIRD BULGE may be placed along X by a signed shift, left
+;;     negative -- a Center pool's hump off the middle of the top bound,
+;;     or a TopRight pool's corner bulge in off the right-hand bound so
+;;     that it sits on the top wall alone.  The top-right one takes that
+;;     placement as the centre-to-centre TIE back to the right bulge as
+;;     well, which is how a drawing carries it.
 ;;
 ;; Neither changes the ring downstream: a straight joiner is the "LINE"
-;; element the cloud's flat bottom already uses, and an offset hump is
-;; the same bulge at a different X.
+;; element the cloud's flat bottom already uses, and a placed third
+;; bulge is the same bulge at a different X.
 (defun oasis:complex-p (ans)
   (= (nth 11 ans) "Complex"))
 
@@ -322,13 +359,53 @@
   (if (oasis:cloud-p variant) (if h (* 0.5 h)) rl))
 
 ;; Where the third bulge sits, on the shapes that have one.  off is the
-;; complex run's signed shift of a Center pool's hump along X -- negative
-;; to the left, nil or zero for the centred one every simple run draws.
-;; A corner bulge has no such freedom: two bounds already hold it.
+;; complex run's signed shift of it along X, negative to the left, nil or
+;; zero for the placement every simple run draws.  It measures from a
+;; different mark on the two shapes, because their own tangencies do: on
+;; a CENTER pool from the middle of the top bound, where the hump is
+;; centred, and on a TOPRIGHT pool from the corner, where the second
+;; tangency puts it.  Either way the bulge stays tangent to the Y-max
+;; bound -- only its X moves -- so a shifted corner bulge is a bulge on
+;; the top wall alone, held off the X-max bound by the number given.
 (defun oasis:topcen (w h rt variant off)
   (if (= variant "TopRight")
-      (list (- w rt) (- h rt))
+      (list (+ (- w rt) (cond (off) (0.0))) (- h rt))
       (list (+ (* w oasis:*topfrac*) (cond (off) (0.0))) (- h rt))))
+
+;; How far the corner bulge's centre is from the right bulge's centre on
+;; a TOPRIGHT pool shifted by OFF -- the tie the check drawing prints
+;; between that pair, and the measurement oasis:tieoff below works back
+;; from.  At nil or zero it is the corner pool's own tie.
+(defun oasis:tiedist (w h rt rr off)
+  (distance (oasis:topcen w h rt "TopRight" off) (list (- w rr) rr)))
+
+;; The shift along X that leaves the corner bulge TIE from the right
+;; bulge's centre and still tangent to the Y-max bound, or nil when no
+;; circle on that wall is that far from it -- below the two centres' own
+;; Y separation there is none, and at exactly it the corner bulge stands
+;; straight above the right one.
+;;
+;; Two circles answer any longer tie, one either side of the right
+;; bulge's centre, and the INBOARD one is taken -- the one further in
+;; from the X-max bound.  That is the side this placement exists for: a
+;; bulge that has come off the corner onto the top wall has come inwards,
+;; and the tie then reads the way a measurement should, a longer one
+;; putting it further in.  The corner itself, and anything outboard of
+;; the right bulge's centre, is typed as the shift instead -- which is
+;; the answer Enter already gives.
+;;
+;; So every pool a tie can draw, the tie reads back: the number the check
+;; drawing prints between that pair, typed in here, is the pool it was
+;; printed from.
+(defun oasis:tieoff (w h rt rr tie / dy s cx)
+  (setq dy (- (- h rt) rr)
+        s  (- (* tie tie) (* dy dy)))
+  (if (>= s (- oasis:*fuzz*))
+      (progn
+        ;; the inboard of the two centres, less where the corner would
+        ;; have put it -- which is what the shift measures from
+        (setq cx (- (- w rr) (sqrt (max s 0.0))))
+        (- cx (- w rt)))))
 
 ;; Where a NXT cloud's three lobes sit.  All three are pinned by the
 ;; envelope alone, with nothing left to ask but their radii: the TOP-LEFT
@@ -395,7 +472,12 @@
                             "Right-side tangent radius"
                             "Top-right tangent radius"))
             ((= slot 9) "Bottom-center tangent radius")
-            ((= slot 12) "Top bulge off center, left negative")))))
+            ;; the same slot on both shapes -- the third bulge's shift
+            ;; along X -- worded from the mark it is measured off
+            ((= slot 12)
+             (if (= variant "TopRight")
+                 "Top-right bulge off the right bound, left negative"
+                 "Top bulge off center, left negative"))))))
 
 ;; Which answer slots this shape asks for, in the order it asks them.
 ;; The rest are either pinned by the envelope (a cloud's left bulge) or
@@ -403,9 +485,16 @@
 ;;
 ;; The head is the same for every run: the shape, the sub-type on the two
 ;; families that have one, then simple-or-complex.  Complex adds one
-;; question and only to the Center shape -- how far its hump is off
-;; centre; the straight runs it also allows are not questions of their
-;; own but answers to the joiner questions already being asked.
+;; question, and only to the two shapes with a third bulge to place --
+;; how far the hump is off centre on a Center pool, how far the corner
+;; bulge is off the right bound on a TopRight one.  The straight runs it
+;; also allows are not questions of their own but answers to the joiner
+;; questions already being asked.
+;;
+;; Where that question falls differs, because what it is checked against
+;; does: a hump is measured off the envelope and asked as soon as the
+;; hump's own radius is in, while a corner bulge may be given as the tie
+;; back to the RIGHT bulge, so it waits for that radius.
 (defun oasis:steps (ans / fam out)
   (setq fam (nth 0 ans)
         out (cond ((= fam "Cloud")
@@ -419,6 +508,8 @@
                   ((= fam "NXTcloud") '(1 2 3 4 5 6 9 13 8 7))
                   ((and (= fam "Center") (oasis:complex-p ans))
                    '(1 2 3 4 5 12 6 7 8 9))
+                  ((and (= fam "TopRight") (oasis:complex-p ans))
+                   '(1 2 3 4 5 6 12 7 8 9))
                   (t '(1 2 3 4 5 6 7 8 9))))
   (append (if (member fam '("Cloud" "Kidney")) '(0 10 11) '(0 11)) out))
 
@@ -455,7 +546,8 @@
 ;;;    shape   which family        rl / rt / rr   the three bulges
 ;;;    sub     a cloud's bottom,   ftl / ftr      the top joiners
 ;;;            a kidney's type     fbc / fbr      the bottom joiners
-;;;    detail  simple or complex   off            a hump off centre
+;;;    detail  simple or complex   off            the third bulge's
+;;;                                                shift along X
 ;;;    x / y   the envelope
 ;;;
 ;;;  The base point is not among them, and neither is the pool-bottom
@@ -1618,7 +1710,7 @@
 ;; anything inside.
 (defun oasis:preview (old ans k
                       / var base w h full arcs lt out ring n i a md txt
-                        hgt slot hi)
+                        hgt slot hi ask c5 c6 e)
   (oasis:pv-clear old)
   (setq var  (oasis:variant ans)
         base (nth 1 ans)
@@ -1644,11 +1736,18 @@
                     out  (append out ring)
                     n    (length arcs)
                     i    0)
+              ;; the placement question is not about a radius, so the
+              ;; circle it belongs to is the third bulge's -- answer slot
+              ;; 5 -- and that is the one that goes red for it
+              (setq ask (if (= k 12) 5 k))
               (while (< i n)
                 (setq a    (nth i arcs)
                       slot (nth 6 a)
-                      hi   (and slot (= slot k))
+                      hi   (and slot (= slot ask))
                       md   (oasis:arcmid a))
+                (if (nth 5 a)
+                    (cond ((= slot 5) (setq c5 (nth 1 a)))
+                          ((= slot 6) (setq c6 (nth 1 a)))))
                 (if hi (oasis:recolor (nth i ring) oasis:*hicolor*))
                 ;; a straight run has no circle behind it and no radius
                 ;; to label -- the envelope box already shows its bound
@@ -1663,7 +1762,25 @@
                                       (polar (car md) (cdr md) (* 1.7 hgt))
                                       hgt txt base hi)
                                     out)))
-                (setq i (1+ i)))))
+                (setq i (1+ i)))
+              ;; the placement question moves the third bulge along the
+              ;; one bound still holding it, so that bound is drawn red
+              ;; too -- it is what the answer is measured against, and on
+              ;; a top-right pool it is the whole of what is left holding
+              ;; the bulge once it comes off the corner
+              (if (= k 12)
+                  (progn
+                    (setq e   (oasis:pv-line (list 0.0 h) (list w h)
+                                             base "CONTINUOUS")
+                          out (cons e out))
+                    (oasis:recolor e oasis:*hicolor*)
+                    ;; and the tie the placement may be given as, drawn
+                    ;; along the two centres it is measured between
+                    (if (and (= var "TopRight") c5 c6)
+                        (progn
+                          (setq e   (oasis:pv-line c5 c6 base "CONTINUOUS")
+                                out (cons e out))
+                          (oasis:recolor e oasis:*hicolor*)))))))
         (cal:osup)))
   out)
 
@@ -1873,6 +1990,100 @@
     (setq v (oasis:askoff msg)))
   v)
 
+;; A complex TOP-RIGHT pool's placement answer: the signed shift the hump
+;; question takes, or the keyword Tie for the centre-to-centre distance
+;; back to the right bulge, which is how a drawing carries it.  Returns
+;; the number, the string "TIE", or OASIS-BACK.
+;;
+;; A form answers this one with the shift itself.  The tie is a typed
+;; convenience and nothing more -- oasis:tieoff is the whole of the
+;; arithmetic between the two, and a sheet that holds a tie can do it
+;; before it hands the answer over.
+(defun oasis:askshift (msg / v)
+  (setq v (oasis:fpull))
+  (if (numberp v)
+    v
+    (progn
+      (initget 0 "Tie Back Undo")
+      (setq v (getdist (strcat "\n" msg " [Tie/Back] <0>: ")))
+      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
+            ((= (type v) 'STR) "TIE")
+            ((null v) 0.0)
+            (t v)))))
+
+;; The tie itself, re-asked until a circle on the top wall can be that
+;; far from the right bulge's centre.  The two centres' Y separation is
+;; the floor -- at exactly it the corner bulge stands straight above the
+;; right one, and below it there is nothing to draw.
+;;
+;; The form key goes with the placement question this is a part of, and
+;; that answer has already been taken out of the store by the time the
+;; word Tie gets here, so the key is dropped: the store has nothing left
+;; to say about this question or about any re-ask after it.
+(defun oasis:asktie (msg w h rt rr / v mn)
+  (setq oasis:*fkey* nil
+        mn (abs (- (- h rt) rr))
+        v  (oasis:askdist 'REQ msg nil T))
+  (while (and (not (eq v 'OASIS-BACK))
+              (null (oasis:tieoff w h rt rr v)))
+    (princ (strcat "\n" (rtos v) " does not reach from the right bulge's"
+                   " centre to the top wall -- those two centres are "
+                   (rtos mn) " apart in Y alone."))
+    (princ (strcat "\nAt exactly " (rtos mn) " the corner bulge stands"
+                   " straight above the right one, which is as far out"
+                   " as a tie goes; further out is a shift."))
+    (setq v (oasis:askdist 'REQ msg nil T)))
+  v)
+
+;; Where a complex TOP-RIGHT pool's corner bulge sits, re-asked while the
+;; answer puts its centre off the envelope -- there is no pool on the
+;; other side of that, exactly as there is none for a hump carried off
+;; the end of the box.  Reaching PAST the right-hand bound is not
+;; refused: that is an ordinary trimmed bulge, and oasis:report-extents
+;; names it.
+;;
+;; The hump's OTHER refusal has no counterpart here, and that is not an
+;; oversight.  A hump has no size limit -- it is trimmed away long
+;; before it reaches anything -- so it can grow to swallow the left
+;; bulge, and oasis:ask-offset turns that away.  A corner bulge cannot:
+;; it is tangent to the Y-max bound and at most half the envelope
+;; across, and both side bulges are tangent to the Y-min bound and at
+;; most half the envelope across from the other side, so the gap between
+;; those centres is never smaller than the radii differ by.  Wherever
+;; along the top wall it is put, it is never inside a side bulge and
+;; never swallows one.
+;;
+;; Tie is checked the same way, because by the time it is checked it IS
+;; a shift: oasis:tieoff has already turned it into one.
+(defun oasis:ask-place (msg w h rt rr / v ct bad)
+  (setq v   (oasis:askshift msg)
+        bad T)
+  (while bad
+    (cond
+      ((eq v 'OASIS-BACK) (setq bad nil))
+      ;; the tie is the same placement given the way a drawing carries
+      ;; it, so it comes back here as the shift it means.  Back at it
+      ;; steps back one QUESTION, not one step: the tie was a way of
+      ;; answering the placement, so backing out of it puts the
+      ;; placement itself up again, and Back there leaves the step as
+      ;; Back always does.
+      ((and (= (type v) 'STR) (= v "TIE"))
+       (setq v (oasis:asktie "Top-right centre to right bulge centre"
+                             w h rt rr)
+             v (if (eq v 'OASIS-BACK)
+                   (oasis:askshift msg)
+                   (oasis:tieoff w h rt rr v))))
+      (t
+       (setq ct  (oasis:topcen w h rt "TopRight" v)
+             bad (or (< (car ct) 0.0) (> (car ct) w)))
+       (if bad
+           (progn
+             (princ (strcat "\nThat puts the corner bulge's centre at "
+                            (rtos (car ct)) ", off the " (rtos w)
+                            " envelope altogether -- it has to stay on it."))
+             (setq v (oasis:askshift msg)))))))
+  v)
+
 ;; One question of the run.  k is the answer slot it fills, ans the
 ;; answers gathered so far -- the checks that need an earlier answer read
 ;; it from there, so backing up and changing one re-checks everything
@@ -1962,7 +2173,11 @@
     ((= k 9) (if (oasis:nxt-p var)
                  (oasis:ask-tangent (oasis:sprompt var 9) ca rl cd rt runs)
                  (oasis:ask-tangent (oasis:sprompt var 9) cl rl cr rr runs)))
-    ((= k 12) (oasis:ask-offset (oasis:sprompt var 12) w h rl rt))
+    ;; the same slot, and the same shift, asked against the mark each
+    ;; shape measures it from
+    ((= k 12) (if (= var "TopRight")
+                  (oasis:ask-place (oasis:sprompt var 12) w h rt rr)
+                  (oasis:ask-offset (oasis:sprompt var 12) w h rl rt)))
     ((= k 13) (oasis:ask-tangent (oasis:sprompt var 13) cd rt cg rr runs))))
 
 ;; The lobe a NXT cloud's right one lies inside, or swallows, or nil.
@@ -2964,9 +3179,23 @@
                           (rtos h) " " (oasis:vlabel var)
                           (if (oasis:complex-p ans) " complex" "")
                           " oasis on layer " oasis:*poollayer* "."))
+           ;; the third bulge, when a complex run moved it: which way it
+           ;; went, and -- on a top-right pool, where the drawing it came
+           ;; off measures that bulge against its neighbour rather than
+           ;; against the wall -- the tie back to the right bulge
            (if (and off (/= off 0.0))
-               (princ (strcat "\n  hump " (rtos (abs off)) " off centre to the "
-                              (if (< off 0.0) "left" "right") ".")))
+               (if (= var "TopRight")
+                   (progn
+                     (princ (strcat "\n  top-right bulge " (rtos (abs off))
+                                    (if (< off 0.0)
+                                        (strcat " in from the right bound,"
+                                                " on the top wall alone,")
+                                        " out past the right bound,")))
+                     (princ (strcat "\n  " (rtos (oasis:tiedist w h rt rr off))
+                                    " from the right bulge's centre.")))
+                   (princ (strcat "\n  hump " (rtos (abs off))
+                                  " off centre to the "
+                                  (if (< off 0.0) "left" "right") "."))))
            (foreach a arcs
              (princ (strcat "\n  " (cal:pad (nth 0 a) 14)
                             (if (oasis:line-p a)
@@ -3014,6 +3243,11 @@
   ;; answer nothing asked for must not be waiting for the next run
   (oasis:fclear)
   (setq oasis:*fkey* nil)
+  ;; ...and so does the error mode pushed at the top: every quiet exit
+  ;; and the drawn one come through here, and a mode left stacked
+  ;; refuses command-s inside every later handler in the session
+  ;; (AutoLISP reference, *push-error-using-command*)
+  (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
 (defun c:OASISVER ()

@@ -158,7 +158,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "083126 REV12") ; announced on load.  The
+(setq pf:*version*      "090126 REV14") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named ABHD_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -3475,8 +3475,12 @@
   ;; one undo group around the whole fit - a U after ABHD takes back
   ;; the perimeter, the bottom and the markers in one step (the stale
   ;; purge above stays outside it, so U does not resurrect old junk)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
 
   (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
 
@@ -3955,8 +3959,12 @@
   ;; probed before the undo group opens, which would clear the set
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   (princ "\n\nADAB - draw the pool bottom over an existing perimeter.")
   (setq pf-phase "waiting for the selection")
   (if pf-pick
@@ -4373,6 +4381,12 @@
 ;; The same tutorial under the bottom command's name, for whoever
 ;; goes looking for it there.
 (defun c:TUTORIALADAB () (c:TUTORIALABHD))
+
+;; Which build is loaded - the first thing to check when a run does
+;; something the notes above say it should not.
+(defun c:ABHDVER ()
+  (princ (strcat "\nABHD " pf:*version*))
+  (princ))
 
 (princ (strcat "\nABHD " pf:*version*
                " loaded.  ABHD fits the pool perimeter through its"

@@ -50,6 +50,14 @@
 ;;;         K          ->  KEEP it exactly where you drew it (red X);
 ;;;                        the point is put back and nothing changes
 ;;;         P          ->  PICK the spot yourself
+;;;     A point TWO OR MORE DIMENSIONS measure to is an ANCHOR and is
+;;;     never questioned, even with no geometry under it: dimensioning
+;;;     twice to the same spot -- the pair of dims pinning down a
+;;;     hypotenuse corner is the everyday case -- is how you say that
+;;;     spot is the object. Anchors are read off the selection before
+;;;     the review starts, so one cannot come and go partway through,
+;;;     and a stray point nearer an anchor than any line is offered the
+;;;     anchor instead of being dragged off to the line.
 ;;;     A construction line (XLINE) is drawn through the dimension's
 ;;;     original points on layer COVERCHECK-CONSTRUCTION so you can see
 ;;;     where it used to measure -- only when a point actually moved.
@@ -213,7 +221,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.6")
+(setq *cchk-version* "v1.9")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -246,6 +254,8 @@
 (setq *cchk-zoom-margin*  0.75)    ; empty space around the zoomed item (fraction of its size)
 (setq *cchk-report-chars* 45.0)    ; report column width, in text heights
 (setq *cchk-ask-all-arc-ends* nil) ; T = confirm EVERY arc endpoint, even already-attached ones
+(setq *cchk-anchor-tol*   1.0e-4)  ; how close two dimension points must be to count as the same spot
+(setq *cchk-anchor-min*   2)       ; that many dimensions meeting there make it an anchor
 
 ;; entity types dimension points and arc ends may attach to
 (setq *cchk-curve-types*
@@ -343,7 +353,20 @@
       (setq found T)))
   found)
 
-(defun c:COVERCHECKRESCUE ( / ss i e xd n)
+(defun c:COVERCHECKRESCUE ( / *error* undo-open ss i e xd n)
+  ;; entdel/entmod over the whole drawing was N undos deep and
+  ;; had no handler at all -- now one group, closed on both exits,
+  ;; and a cancel that says nothing
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCOVERCHECKRESCUE error: " msg)))
+    (princ))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; the way out after a crash or interrupted run: puts back every
   ;; colour COVERCHECK stashed (flag colours included) and removes its
   ;; report and marker lines
@@ -364,6 +387,7 @@
   (if (> n 0)
     (princ (strcat "\nCOVERCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nCOVERCHECKRESCUE: nothing to restore - no COVERCHECK markers in the drawing."))
+  (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -504,11 +528,13 @@
   (cchk:mark-x pt 2)
   (cchk:mark-plus pt 2))
 
-(defun cchk:confirm-move (label orig sugg / ans newp)
+(defun cchk:confirm-move (label orig sugg what / ans newp)
   ;; The point has been put where COVERCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
   ;; which: a red X where you drew it, a green + where we would move
-  ;; it, joined by a line. Returns
+  ;; it, joined by a line. WHAT names what the green + sits on, so a
+  ;; move onto a shared anchor point does not claim to be an object.
+  ;; Returns
   ;;   'move - take our suggestion
   ;;   'keep - put it back exactly where you drew it
   ;;   <point> - a spot you picked yourself (current UCS)
@@ -519,7 +545,7 @@
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (cchk:ptstr orig)
                  "  (red X)"
-                 "\n    Move = onto nearest object " (cchk:ptstr sugg)
+                 "\n    Move = onto " what " " (cchk:ptstr sugg)
                  "  (green +), " (rtos (distance orig sugg) 2 4) " away"
                  "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
@@ -1471,56 +1497,126 @@
     (t                                        ; radius/diameter/ordinate
      (if (and meas (>= meas 0.0)) (rtos meas)))))
 
-(defun cchk:audit-dim-point (ent gcode label cands / ed pt near sugg ans final how)
+(defun cchk:dim-def-pts (ent / ed dtype p13 p14)
+  ;; the two definition points of a linear/aligned dimension (the ones
+  ;; the audit moves); nil for every other kind of dimension
+  (setq ed    (entget ent)
+        dtype (logand 7 (cdr (assoc 70 ed))))
+  (if (member dtype '(0 1))
+    (progn
+      (setq p13 (cdr (assoc 13 ed))
+            p14 (cdr (assoc 14 ed)))
+      (append (if p13 (list p13)) (if p14 (list p14))))))
+
+(defun cchk:shared-anchors (dims / recs r e p found out)
+  ;; Every spot where *cchk-anchor-min* or more DIMENSIONS put a
+  ;; definition point.  Dimensioning twice to the same spot is how a
+  ;; drafter says that spot matters -- the usual case is the pair of
+  ;; dims that pin down a hypotenuse corner, which is a point in space
+  ;; with no line running through it.  Such a spot counts as an
+  ;; object: it is never questioned, and a stray point beside it can
+  ;; be offered a move onto it.
+  ;; Collected once, from the drawing as selected, so a point cannot
+  ;; stop being an anchor partway through the review.
+  ;; Returns the anchor points (WCS).
+  (foreach e dims
+    (foreach p (cchk:dim-def-pts e)
+      (setq found nil)
+      (foreach r recs
+        (if (and (null found) (<= (distance p (car r)) *cchk-anchor-tol*))
+          (setq found r)))
+      (cond
+        ((null found) (setq recs (cons (list p e) recs)))
+        ;; a dimension's own two points landing together is one
+        ;; dimension, not two -- it takes two to make an anchor
+        ((not (member e (cdr found)))
+         (setq recs (subst (cons (car found) (cons e (cdr found)))
+                           found recs))))))
+  (foreach r recs
+    (if (>= (length (cdr r)) *cchk-anchor-min*)
+      (setq out (cons (car r) out))))
+  out)
+
+(defun cchk:audit-dim-point (ent gcode label cands anchors
+                             / ed pt near anch dnear danch sugg dsug what
+                               ans final how)
   ;; audits one definition point: an off-object point is put where it
   ;; looks like it belongs, then you choose - Move (take it), Keep
   ;; (put it back exactly where you drew it) or Pick your own spot.
+  ;; A point another dimension also measures to is an ANCHOR (see
+  ;; cchk:shared-anchors): it counts as an object, so it is left alone
+  ;; without a question, and a stray point nearer an anchor than any
+  ;; line is offered the anchor instead of being dragged off to the
+  ;; line.
   ;; Returns (original final how) when the point was looked at, where
-  ;; how is 'auto / 'user / 'kept; nil when the point was already fine.
+  ;; how is 'auto / 'user / 'kept / 'anchor; nil when the point was
+  ;; already fine.
   (setq ed (entget ent)
         pt (cdr (assoc gcode ed)))
   (if pt
     (progn
-      (setq near (cchk:nearest-curve pt nil cands))
-      (if (and near (> (caddr near) *cchk-tol*))
-        (progn
-          (setq sugg (cadr near))
-          ;; show the suggestion in place, but keep the original spot
-          ;; marked so both are on screen while the question is asked
-          (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
-          (entupd ent)
-          (princ (strcat "\n  " label " is not on any object - nearest one is "
-                         (rtos (caddr near) 2 4) " away."))
-          (setq ans (cchk:confirm-move label pt sugg))
-          (cond
-            ((eq ans 'move)
-             (setq final sugg
-                   how   'auto)
-             (princ (strcat "\n  " label " MOVED onto the nearest object, "
-                            (cchk:ptstr final) ".")))
-            ((eq ans 'keep)
-             (setq ed    (entget ent)
-                   final pt
-                   how   'kept)
-             (entmod (subst (cons gcode pt) (assoc gcode ed) ed))
+      (setq near  (cchk:nearest-curve pt nil cands)
+            dnear (if near (caddr near))
+            anch  (cchk:closest-of pt anchors)
+            danch (if anch (distance pt anch)))
+      (cond
+        ;; a point sitting on an object needs no defending, shared or not
+        ((and dnear (<= dnear *cchk-tol*)) nil)
+        ;; ...and one that isn't is still fine if another dimension
+        ;; measures to it too: that spot is settled, whether or not any
+        ;; geometry runs through it
+        ((and danch (<= danch *cchk-anchor-tol*))
+         (princ (strcat "\n  " label " is shared with another dimension"
+                        " - treated as an anchor point, left as drawn."))
+         (list pt pt 'anchor))
+        (t
+         ;; otherwise the nearer of the two homes it could have: a line
+         ;; to sit on, or an anchor it was very nearly snapped to
+         (cond
+           ((and danch (or (null dnear) (< danch dnear)))
+            (setq sugg anch  dsug danch  what "the shared anchor point"))
+           (near
+            (setq sugg (cadr near)  dsug dnear  what "the nearest object")))
+         (if (and sugg (> dsug *cchk-tol*))
+           (progn
+             ;; show the suggestion in place, but keep the original spot
+             ;; marked so both are on screen while the question is asked
+             (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
              (entupd ent)
-             (princ (strcat "\n  " label " KEPT where you drew it, "
-                            (cchk:ptstr final) " - nothing changed.")))
-            (t
-             (setq final (trans ans 1 0)
-                   how   'user
-                   ed    (entget ent))
-             (entmod (subst (cons gcode final) (assoc gcode ed) ed))
-             (entupd ent)
-             (princ (strcat "\n  " label " moved to the spot you picked, "
-                            (cchk:ptstr final) "."))))
-          (redraw)
-          (list pt final how))))))
+             (princ (strcat "\n  " label " is not on any object - " what
+                            " is " (rtos dsug 2 4) " away."))
+             (setq ans (cchk:confirm-move label pt sugg what))
+             (cond
+               ((eq ans 'move)
+                (setq final sugg
+                      how   'auto)
+                (princ (strcat "\n  " label " MOVED onto " what ", "
+                               (cchk:ptstr final) ".")))
+               ((eq ans 'keep)
+                (setq ed    (entget ent)
+                      final pt
+                      how   'kept)
+                (entmod (subst (cons gcode pt) (assoc gcode ed) ed))
+                (entupd ent)
+                (princ (strcat "\n  " label " KEPT where you drew it, "
+                               (cchk:ptstr final) " - nothing changed.")))
+               (t
+                (setq final (trans ans 1 0)
+                      how   'user
+                      ed    (entget ent))
+                (entmod (subst (cons gcode final) (assoc gcode ed) ed))
+                (entupd ent)
+                (princ (strcat "\n  " label " moved to the spot you picked, "
+                               (cchk:ptstr final) "."))))
+             (redraw)
+             (list pt final how))))))))
 
-(defun cchk:review-dim (ent cands num total / ed dtype h sty p13 p14 r1 r2
-                                              looked moved kept ok note meas assocnote)
+(defun cchk:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
+                                              r1 r2 looked moved kept held
+                                              ok note meas assocnote)
   ;; interactive review of one dimension.
-  ;; Returns (handle ok-flag report-note moved-point-count measurement).
+  ;; Returns (handle ok-flag report-note moved-point-count measurement
+  ;; anchor-held-point-count).
   (setq ed    (entget ent)
         h     (cdr (assoc 5 ed))
         sty   (cchk:dim-style ent)
@@ -1537,10 +1633,15 @@
         (princ "\n  Note: this dimension is object-associative - a moved point may re-anchor on its own."))
       (setq p13 (cdr (assoc 13 ed))           ; the two dimmed points
             p14 (cdr (assoc 14 ed))
-            r1  (cchk:audit-dim-point ent 13 "dimension point 1" cands)
-            r2  (cchk:audit-dim-point ent 14 "dimension point 2" cands))))
+            r1  (cchk:audit-dim-point ent 13 "dimension point 1" cands anchors)
+            r2  (cchk:audit-dim-point ent 14 "dimension point 2" cands anchors))))
+  ;; a point held at a shared anchor was looked at and deliberately not
+  ;; touched - it is neither a move nor a Keep answer, so it is counted
+  ;; on its own and kept out of both tallies
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
-        moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
+        held   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'anchor)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor)))
+                             looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   ;; only when something actually moved is there an old position worth
   ;; drawing a construction line through
@@ -1554,22 +1655,26 @@
   (redraw ent 4)
   (redraw)
   (if (member ok '(back skip))
-    (list h ok nil (length moved) meas)       ; navigation: caller handles it
+    (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
     (progn
       (setq ok (eq ok 'yes))
       (setq note (strcat
                    (if ok "OK" "FLAGGED to fix (red)")
                    (if moved
                      (strcat " - " (itoa (length moved))
-                             " point(s) moved onto the nearest object")
+                             " point(s) moved onto the nearest object/anchor")
                      "")
                    (if kept
                      (strcat " - " (itoa (length kept))
                              " point(s) kept where you drew them")
                      "")
+                   (if held
+                     (strcat " - " (itoa (length held))
+                             " point(s) held at a shared anchor")
+                     "")
                    (if assocnote assocnote "")))
       (if (not ok) (cchk:set-color ent *cchk-flag-color*))
-      (list h ok note (length moved) meas))))
+      (list h ok note (length moved) meas (length held)))))
 
 ;; --- arc review ----------------------------------------------------
 
@@ -1629,7 +1734,7 @@
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
                         (rtos (distance p target) 2 4) " away."))
-         (setq ans (cchk:confirm-move label p target))
+         (setq ans (cchk:confirm-move label p target "the object end"))
          (cond
            ((eq ans 'move)
             (setq final target
@@ -1661,7 +1766,7 @@
                         " but the arc could not be re-fitted (points collinear?)."))
          nil)))
     (*cchk-ask-all-arc-ends*                  ; optional: confirm attached ends too
-     (setq ans (cchk:confirm-move label p p))
+     (setq ans (cchk:confirm-move label p p "where it already is"))
      (redraw)
      (if (member ans '(move keep))
        nil
@@ -2616,7 +2721,8 @@
 (defun c:COVERCHECK ( / *error* oldecho vc vs undo-open ss i e et
                       cands dims arcs plns segs blks olaps e1 e2 pr
                       saved keep res n total lines
-                      ndok ndflag ndmoved naok namoved nasnap
+                      anchors anchheld
+                      ndok ndflag ndmoved ndanch naok namoved nasnap
                       nomerged noflag noleft
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
@@ -2626,11 +2732,19 @@
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
     ;; re-lock what we unlocked, clear markers, close the undo group
-    (foreach pair saved
-      (if (and (not (member (car pair) keep)) (entget (car pair)))
-        (cchk:set-color (car pair) (cdr pair))))
-    (foreach l relock (cchk:set-layer-lock l T))
-    (redraw)
+    ;; The entity work stays INSIDE the group, so one U still takes the
+    ;; whole run back -- but through the catch: an entmod that throws
+    ;; (a colour on a layer the user declined to unlock is in saved
+    ;; too) used to skip the close and the CMDECHO restore below, and
+    ;; a throw inside *error* is the one error nothing catches.
+    (vl-catch-all-apply
+      '(lambda ()
+         (foreach pair saved
+           (if (and (not (member (car pair) keep)) (entget (car pair)))
+             (cchk:set-color (car pair) (cdr pair))))
+         (foreach l relock (cchk:set-layer-lock l T))
+         (redraw))
+      nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -2650,7 +2764,7 @@
     (t
      (setq cands nil dims nil arcs nil blks nil segs nil
            saved nil keep nil lines nil i 0
-           ndok 0 ndflag 0 ndmoved 0 naok 0 namoved 0 nasnap 0
+           ndok 0 ndflag 0 ndmoved 0 ndanch 0 naok 0 namoved 0 nasnap 0
            nomerged 0 noflag 0 noleft 0)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
@@ -2678,8 +2792,12 @@
         (setvar "CMDECHO" 0)
         (setq vc (getvar "VIEWCTR")
               vs (getvar "VIEWSIZE"))
-        (command "_.UNDO" "_Begin")
-        (setq undo-open T)
+        ;; only when undo is recording - _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+          (progn
+            (command "_.UNDO" "_Begin")
+            (setq undo-open T)))
         (cal:ensure-layer *cchk-constr-layer* *cchk-constr-color*)
         (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
 
@@ -2727,6 +2845,16 @@
                        1.0))
         (setq dims (cchk:sort-dims dims rowtol))
 
+        ;; spots two or more dimensions measure to are anchors: a
+        ;; hypotenuse corner is dimmed twice precisely because there is
+        ;; no line through it, so those points are objects as far as the
+        ;; audit is concerned. Read once, off the drawing as selected.
+        (setq anchors (cchk:shared-anchors dims))
+        (if anchors
+          (princ (strcat "\n" (itoa (length anchors))
+                         " point(s) carry more than one dimension - treated"
+                         " as anchors and not questioned.")))
+
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; COVERCHECKRESCUE can recover them even after a crash
@@ -2752,9 +2880,17 @@
           (setq e   (nth n dims)
                 res nil)
           (cchk:set-color e (cdr (assoc e saved)))       ; step into the light
-          (setq res (cchk:review-dim e cands (1+ n) total))
+          (setq res (cchk:review-dim e cands anchors (1+ n) total))
           ;; points already moved count however the prompt was answered
           (setq ndmoved (+ ndmoved (cadddr res)))
+          ;; anchor holds are recorded PER DIMENSION rather than added
+          ;; up: an anchored point stays anchored, so a dimension sent
+          ;; round again by Back reports it a second time and a running
+          ;; total would count it twice. A moved point cannot do that --
+          ;; moving it is what makes it attached.
+          (if (> (nth 5 res) 0)
+            (setq anchheld (cons (cons e (nth 5 res))
+                                 (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
              (cchk:set-color e *cchk-grey-color*)
@@ -2819,6 +2955,7 @@
                                       (+ (cadddr res) cmv))
                                 dlines))))
           (setq n (1+ n)))
+        (foreach pair anchheld (setq ndanch (+ ndanch (cdr pair))))
         (if skiprest
           (setq lines (cons (strcat "Dimensions: " (itoa (- total (length dlines)))
                                     " left UNREVIEWED (skipped by user)")
@@ -2898,7 +3035,11 @@
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
                           ", flagged to fix: " (itoa ndflag)
-                          ", points adjusted: " (itoa ndmoved) ")")
+                          ", points adjusted: " (itoa ndmoved)
+                          (if (> ndanch 0)
+                            (strcat ", held at a shared anchor: " (itoa ndanch))
+                            "")
+                          ")")
                   (> ndflag 0))
             (cons (strcat "Arcs checked: " (itoa (length arcs))
                           " (OK: " (itoa naok)
@@ -2951,6 +3092,10 @@
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
+                       (if (> ndanch 0)
+                         (strcat ", " (itoa ndanch)
+                                 " point(s) held at a shared anchor")
+                         "")
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
                        (itoa nasnap) " endpoint(s), magenta)"
@@ -2984,7 +3129,7 @@
 
 (defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
                        plns segs blks lines olaps pr bb bad
-                       nd ndbad na nabad hdr dhdr l cres dimlay units datev
+                       nd ndbad na nabad ndanch anchors q dq held hdr dhdr l cres dimlay units datev
                        minx miny maxx maxy p13 p14 near s)
 
   (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
@@ -3012,7 +3157,7 @@
      ;; clear them before anything is collected, not after
      (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
      (cchk:clear-old)
-     (setq i 0 nd 0 ndbad 0 na 0 nabad 0)
+     (setq i 0 nd 0 ndbad 0 na 0 nabad 0 ndanch 0)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
              i  (1+ i)
@@ -3032,6 +3177,11 @@
            plns (reverse plns) blks (reverse blks) cands (reverse cands)
            segs (if lite nil (cchk:collect-segs plns)))
 
+     ;; a spot two or more dimensions measure to is an anchor and
+     ;; counts as an object -- the same rule the review works by, so
+     ;; the scan cannot call stray what the review will not
+     (setq anchors (cchk:shared-anchors dims))
+
      ;; --- dimensions: report stray definition points, move nothing
      ;;     (a lite scan leaves the DIMCHECK-style pass out entirely)
      (foreach e (if lite
@@ -3042,16 +3192,33 @@
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
              p14 (cdr (assoc 14 ed))
-             bad nil)
+             bad nil
+             held nil)
        (if (member (logand 7 (cdr (assoc 70 ed))) '(0 1))
          (foreach s (list (cons "point 1" p13) (cons "point 2" p14))
            (if (cdr s)
              (progn
-               (setq near (cchk:nearest-curve (cdr s) nil cands))
-               (if (and near (> (caddr near) *cchk-tol*))
-                 (setq bad (append bad (list (strcat (car s) " off by "
-                                                     (rtos (caddr near) 2 4))))))))))
+               (setq near (cchk:nearest-curve (cdr s) nil cands)
+                     q    (cchk:closest-of (cdr s) anchors)
+                     dq   (if q (distance (cdr s) q)))
+               (cond
+                 ;; another dimension measures to this spot too: it is
+                 ;; an anchor, not a stray point
+                 ((and dq (<= dq *cchk-anchor-tol*))
+                  (if (or (null near) (> (caddr near) *cchk-tol*))
+                    (setq held (append held (list (car s))))))
+                 ((and near (<= (caddr near) *cchk-tol*)) nil)   ; on an object
+                 ;; stray: name the nearer of the two homes it missed,
+                 ;; so the scan points where the review would offer
+                 ((and dq (or (null near) (< dq (caddr near))))
+                  (setq bad (append bad (list (strcat (car s)
+                                                      " off the shared anchor by "
+                                                      (rtos dq 2 4))))))
+                 (near
+                  (setq bad (append bad (list (strcat (car s) " off by "
+                                                      (rtos (caddr near) 2 4)))))))))))
        (if bad (setq ndbad (1+ ndbad)))
+       (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
                                  (if (= (cchk:dim-style e) "") ""
                                    (strcat " [" (cchk:dim-style e) "]"))
@@ -3061,6 +3228,10 @@
                                  (if bad
                                    (strcat "NOT attached - " (cchk:join bad ", "))
                                    "OK")
+                                 (if held
+                                   (strcat " - " (cchk:join held " & ")
+                                           " on a shared anchor")
+                                   "")
                                  (if (cchk:dim-assoc-p e) " (associative)" ""))
                          lines)))
 
@@ -3105,7 +3276,12 @@
                   (list
                     (cons (strcat "Dimensions scanned: " (itoa nd) " ("
                                   (itoa ndbad)
-                                  " with a stray definition point)")
+                                  " with a stray definition point"
+                                  (if (> ndanch 0)
+                                    (strcat ", " (itoa ndanch)
+                                            " point(s) on a shared anchor")
+                                    "")
+                                  ")")
                           (> ndbad 0))
                     (cons (strcat "Arcs scanned: " (itoa na) " ("
                                   (itoa nabad) " with an unattached end)")
@@ -3381,10 +3557,17 @@
   (cchk:tut-label (list (+ bx 195.0) (+ by 78.0) 0.0) 4.0 "(5) Cover Details set wrong on purpose")
   T)
 
-(defun c:TUTORIALCOVERCHECK ( / *error* oldecho undo-open bp)
+(defun c:TUTORIALCOVERCHECK ( / *error* oldecho att0 req0 fil0 undo-open bp)
   (defun *error* (msg)
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
+    ;; cchk:tut-insert-details drops ATTDIA/ATTREQ/FILEDIA round its
+    ;; -INSERT and puts them back inline; a throw inside that window
+    ;; left FILEDIA at 0, which turns every OPEN into a command-line
+    ;; prompt -- so the tutorial holds the three itself
+    (if att0 (setvar "ATTDIA" att0))
+    (if req0 (setvar "ATTREQ" req0))
+    (if fil0 (setvar "FILEDIA" fil0))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
     (princ))
@@ -3395,10 +3578,15 @@
     (progn
       (setq bp (getpoint "\nPick a base point for the demo, clear of your real geometry <0,0>: "))
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
-      (setq oldecho (getvar "CMDECHO"))
+      (setq oldecho (getvar "CMDECHO")
+            att0 (getvar "ATTDIA") req0 (getvar "ATTREQ") fil0 (getvar "FILEDIA"))
       (setvar "CMDECHO" 0)
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (princ "\n--- Building the demo scene ---")
       (cchk:tut-build bp)
       (command "_.UNDO" "_End")
@@ -3415,7 +3603,20 @@
       (princ "\nreport and markers COVERCHECK/COVERSCAN left behind on it.")))
   (princ))
 
-(defun c:TUTORIALCOVERCHECKCLEAN ( / ss i e xd n)
+(defun c:TUTORIALCOVERCHECKCLEAN ( / *error* undo-open ss i e xd n)
+  ;; entdel/entmod over the whole drawing was N undos deep and
+  ;; had no handler at all -- now one group, closed on both exits,
+  ;; and a cancel that says nothing
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nTUTORIALCOVERCHECKCLEAN error: " msg)))
+    (princ))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; erases everything TUTORIALCOVERCHECK built (tagged "TUTORIAL"),
   ;; then clears any COVERCHECK/COVERSCAN report and markers left on
   ;; it too, so a demo run leaves nothing behind
@@ -3432,6 +3633,7 @@
     (princ (strcat "\nTUTORIALCOVERCHECKCLEAN: removed " (itoa n)
                    " demo item(s), plus any report/markers left on them."))
     (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found."))
+  (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (princ))
 
 (defun c:COVERCHECKVER ()

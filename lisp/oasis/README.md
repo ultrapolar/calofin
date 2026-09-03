@@ -71,18 +71,61 @@ and the plain flow cannot express:
   both ends, because a tangent line meets each circle square to its own
   radius. Answer every joiner `Line` and an oasis comes out as three
   bulges and three straight runs.
-* **A hump off centre.** A Center pool's top bulge sits across the
-  middle of X; complex asks how far off it is, signed, **left
-  negative**. The bulge is still tangent to the Y-max bound — only its
-  X moves — so the shape stays a Center pool with the hump where the
-  drawing has it.
+* **The third bulge placed along X.** It is the one the envelope does
+  not finish pinning, and complex is where the drawing gets to say the
+  rest. One signed number does it on both shapes it applies to, **left
+  negative**, measured from where that shape's own tangencies put the
+  bulge, and the bulge stays tangent to the Y-max bound — only its X
+  moves:
+  * on a **Center** pool it is the hump off the middle of the top
+    bound, and the shape stays a Center pool with the hump where the
+    drawing has it;
+  * on a **TopRight** pool it is the corner bulge in off the X-max
+    bound. The corner is where a drawing usually puts that bulge, not a
+    law about it, and plenty of pools carry it **on the top wall
+    alone**, with the right-side reverse curve stretched across the gap
+    it leaves. `Enter` is the corner, so a complex top-right run that
+    wants the ordinary shape says nothing.
 
-Two answers are refused, because there is no pool on the other side of
-them: an offset that puts the hump's centre off either end of the
-envelope, and one that carries the hump far enough across to swallow
-the left bulge — a nesting no tangent radius can bridge, exactly as the
-centred one is refused. Reaching *past* a bound is not refused: that is
-an ordinary trimmed hump, and the extents report names it.
+  **The tie.** A drawing with that bulge off the corner rarely
+  dimensions it from the wall. What it carries is the **centre-to-centre
+  distance back to the right bulge** — the same tie OASIS's own check
+  drawing prints for every neighbouring pair. So the top-right placement
+  question takes `Tie` as an answer and asks for that distance instead:
+
+  ```
+  Top-right bulge off the right bound, left negative [Tie/Back] <0>: T
+  Top-right centre to right bulge centre [Back]: 12'-6"
+  ```
+
+  Two circles on the top wall are that far from the right bulge's
+  centre, one either side of it, and the **inboard** one is taken: a
+  bulge that has left the corner for the top wall has come inwards, so a
+  longer tie puts it further in and the answer reads the way a
+  measurement should. Below the two centres' own Y separation there is
+  no such circle at all and the question says so; at exactly that
+  separation the corner bulge stands straight above the right one, which
+  is as far out as a tie reaches — the corner itself and anything
+  outboard of it is the shift, typed. Every pool a tie can draw, that
+  tie reads back: measure it off the check drawing, type it in, and the
+  same pool comes out. `Back` at the tie steps back one *question*, to
+  the placement it was answering.
+
+Answers that put a bulge where there is no pool are refused: a hump or a
+corner bulge whose centre lands off either end of the envelope, and — on
+the hump, which has no size limit — one carried far enough across to
+swallow the left bulge, a nesting no tangent radius can bridge. A corner
+bulge cannot do that second one: it is tangent to the Y-max bound and at
+most half the envelope across, and the side bulges are tangent to the
+Y-min bound and at most half the envelope across from the other side, so
+those centres are never closer than their radii differ by. Reaching
+*past* a bound is not refused either: that is an ordinary trimmed bulge,
+and the extents report names it.
+
+While the placement is being asked the preview says what it is about:
+the bulge's own circle red, the bound still holding it red under it,
+and — on a top-right pool — the line the tie is measured along, from
+that centre to the right bulge's.
 
 One thing complex can do that simple never could is touch a bulge at a
 single point: two runs either side of a bulge that shares a tangent line
@@ -338,6 +381,7 @@ The X and Y are absolute, and that alone pins all three bulges:
 | right | the X-max and Y-min bounds | `(X - rR, rR)` |
 | top, **Center** | the Y-max bound, centred across X | `(X/2, Y - rT)` |
 | top, **TopRight** | the Y-max **and** the X-max bounds | `(X - rT, Y - rT)` |
+| top, **either of those two** | the Y-max bound alone, once a complex run has placed it | `(that X + the shift, Y - rT)` |
 | top-center, **True kidney** | the Y-max bound, centred | `(X/2, Y - rT)` |
 | top-center, **Asymmetric** | the Y-max bound **and** both sides, from inside | derived |
 | top-left, **NXTcloud** | the X-min **and** Y-max bounds | `(rA, Y - rA)` |
@@ -354,8 +398,13 @@ together — each dips down to it — the left edge by the left bulge, the
 top edge by the top bulge, and the right edge by the right bulge alone
 on a centre-bulge pool or by the right bulge *and* the corner bulge on a
 top-right one. On a centre-bulge pool the top bulge has one degree of
-freedom left and it is spent centring it (see [Tunables](#tunables));
-the corner bulge has none — two tangencies pin it.
+freedom left and a simple run spends it centring the hump (see
+[Tunables](#tunables)); on a top-right one the corner is a second
+tangency, which is where a drawing usually puts that bulge rather than
+a law about it. Either way, a **complex** run is where the drawing gets
+to say where that bulge sits along X — one signed shift, or, on a
+top-right pool, the tie back to the right bulge that a drawing actually
+carries. See [Simple or complex](#simple-or-complex).
 
 Each tangent radius is then the circle of that radius sitting
 **externally tangent to both** of its neighbouring bulges. Two such
@@ -433,10 +482,19 @@ Left-top tangent radius [Back]:
 ```
 
 Answer **Complex** and the three tangent questions read `[Line/Back]`
-instead, and a Center pool gains one more straight after the top bulge:
+instead, and the two shapes with a third bulge to place gain one more
+question. A Center pool asks it straight after the top bulge, since it
+is measured off the envelope:
 
 ```
 Top bulge off center, left negative [Back] <0>:
+```
+
+A TopRight pool asks it after the **right** bulge, because it may be
+given as the tie back to that bulge and so has to wait for its radius:
+
+```
+Top-right bulge off the right bound, left negative [Tie/Back] <0>:
 ```
 
 Then, once the pool is drawn and reported:
@@ -547,7 +605,7 @@ One slot per question, named after the answer it fills:
 | `x`, `y` | the envelope |
 | `rl`, `rt`, `rr` | the three bulges — the three lobes on a NXT cloud |
 | `ftl`, `ftr`, `fbc`, `fbr` | the joiners; a joiner may also be answered `"Line"` on a complex run |
-| `off` | how far a Center pool's hump is off centre, signed |
+| `off` | how far the third bulge is shifted along X, signed — a Center pool's hump off centre, a TopRight one's corner bulge off the right bound. The `Tie` the prompt also takes is a typed convenience: it needs a second number no sheet has a box for, so a sheet answers with the shift itself |
 
 The base point is not among them, and neither is the pool-bottom gate
 at the end: both are picked in the drawing, which is where a form has
@@ -603,7 +661,7 @@ rectangle reads at the same offset.
 
 ## What it refuses, and what it only reports
 
-Three things make the shape **impossible** rather than merely unusual,
+Four things make the shape **impossible** rather than merely unusual,
 and each is caught at the question that causes it rather than after all
 eight answers are in — the question simply comes back, with the reason:
 
@@ -620,8 +678,13 @@ eight answers are in — the question simply comes back, with the reason:
 * **a tangent radius too short to span its two bulges.** Below a
   minimum the two circles it would have to touch never meet. The
   routine names the smallest radius that will.
+* **a placement with no pool on the other side of it.** On a complex
+  run: a third bulge shifted until its centre is off either end of the
+  envelope, and a tie shorter than the two centres' own Y separation,
+  which no circle on the top wall can be that close to satisfy. Both
+  come back with the number that bounds them.
 
-A fourth refusal is not about the radii at all: a **UCS tilted out of
+One more refusal is not about the shape at all: a **UCS tilted out of
 the world plan** is turned away before the first question, because an
 `ARC` in a tilted plane needs an extrusion of its own and a flat plan
 pool has no business being drawn in one. Set the UCS back to World — or
@@ -799,6 +862,22 @@ tested for crossings exactly, segment against circle and segment against
 segment; a run already answered is still the element picked out in red
 when it is re-asked; and `Back` walks the two new questions like any
 other.
+
+Five more are the **top-right placement**: the corner bulge comes in off
+the right bound by exactly the shift given and stays tangent to the top
+wall, the question falls after the right bulge and `Enter` draws the
+corner pool arc for arc; the preview picks out that bulge, the top wall
+still holding it and the tie line between the two centres, all in red;
+a `Tie` lands the bulge exactly that far from the right bulge's centre,
+inboard of it, a longer tie further in — and the tie the check drawing
+then prints reads back as the same pool; a tie under the two centres' Y
+separation is refused with that number and `Back` at it re-asks the
+placement rather than leaving the step; and a shift that carries the
+centre off the envelope is re-asked while one that reaches out past the
+right bound is drawn and named by the extents report. Two more are in
+the form suite: the same sheet slot drives the placement with no prompt
+at all, and a sheet that answers it with the word `Tie` is a sheet that
+did not answer it.
 
 Thirteen cover the **pool bottom**: it is offered last and defaults to
 No, which leaves the perimeter untouched; a break can be said all three

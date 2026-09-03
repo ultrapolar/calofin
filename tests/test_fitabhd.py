@@ -4368,6 +4368,76 @@ def test_the_questions_run_and_step_back():
     print("  the questions run, and Back re-opens the last one")
 
 
+def test_the_command_wraps_the_fit():
+    """c:FITABHD itself, which nothing had ever run.
+
+    The fit under this command is oracled all through this file; what
+    was untested is the WRAPPER - the pickfirst probe, the stale-preview
+    sweep, the undo bracket, and putting the user's settings back.  So
+    these assertions stay at that altitude and do not re-check geometry.
+    """
+    from lispvm import VM, Sym
+
+    def newvm():
+        vm = VM()
+        vm.load(LISP_FILE)
+        vm.sysvars['CMDECHO'] = 1
+        vm.sysvars['OSMODE'] = 4133
+        return vm
+
+    SETTINGS = ["Rectangle", "Square", 1.0, 15, "Insquare", "No"]
+
+    # -- nothing selected: it says so, and still closes cleanly --------
+    vm = newvm()
+    vm.run('c:FITABHD', [None] + SETTINGS + [None])
+    said = ''.join(vm.printed)
+    assert 'Nothing usable selected' in said, said[-200:]
+    undo = [c for c in vm.commands if c and c[0] == '_.UNDO']
+    assert undo == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']], undo
+    assert vm.sysvars['CMDECHO'] == 1 and vm.sysvars['OSMODE'] == 4133
+    assert vm.globals.get('fit:*nobottom*') in (None, [], False), \
+        vm.globals.get('fit:*nobottom*')
+    print("  the wrapper opens and closes one undo group, restores sysvars")
+
+    # -- the pickfirst probe is answered before the undo group ---------
+    vm = newvm()
+    vm.run('c:FITABHD', [None] + SETTINGS + [None])
+    order = [p for p, _ in vm.prompts]
+    assert order[0] == 'ssget _I', order[:2]
+    print("  the pickfirst probe is the first thing it asks")
+
+    # -- a pre-typed selection skips step 7 entirely -------------------
+    vm = newvm()
+    vm.loads('''(entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord") '(2 . "POINTS")
+                    '(70 . 0) '(62 . 7) '(6 . "Continuous")))''')
+    for x, y in ((0.0, 0.0), (120.0, 0.0), (120.0, 60.0)):
+        vm.loads('(entmake (list \'(0 . "POINT") \'(8 . "POINTS")'
+                 ' (list 10 %r %r 0.0)))' % (x, y))
+    pts = list(vm.entities)
+    vm.pickfirst = ['<ss>'] + pts
+    vm.run('c:FITABHD', SETTINGS)
+    asked = ' '.join(p for p, _ in vm.prompts)
+    assert 'Step 7 of 7' not in ''.join(vm.printed), 'step 7 was still asked'
+    assert not any(p == 'ssget' for p, _ in vm.prompts), vm.prompts
+    print("  a pre-typed selection is taken and step 7 never asked")
+
+    # -- a stale preview from a dead run is swept before anything else -
+    vm = newvm()
+    lay = vm.loads('fit:*out-layer*')
+    vm.loads('''(entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord") (cons 2 fit:*out-layer*)
+                    '(70 . 0) '(62 . 7) '(6 . "Continuous")))''')
+    vm.loads('(entmake (list \'(0 . "LWPOLYLINE") (cons 8 fit:*out-layer*)'
+             ' \'(90 . 2) \'(70 . 0) \'(10 0.0 0.0) \'(10 10.0 0.0)))')
+    stale = vm.entities[-1]
+    vm.loads('(fit:tag-mine (entlast))')
+    vm.run('c:FITABHD', [None] + SETTINGS + [None])
+    assert 'swept' in ''.join(vm.printed), ''.join(vm.printed)[:300]
+    assert stale in vm.deleted, 'the stale preview survived'
+    print("  a leftover preview from a dead run is swept and announced")
+
+
 def test_leaving_points_out_toggles():
     """Every pick in the Redo omit loop toggles: a point in the fit
     goes out, a ringed one comes back in."""
@@ -4639,6 +4709,7 @@ def main():
     test_lisp_engine_matches_mirror()
     test_the_questions_run_and_step_back()
     test_leaving_points_out_toggles()
+    test_the_command_wraps_the_fit()
     print("\nall tests passed")
 
 

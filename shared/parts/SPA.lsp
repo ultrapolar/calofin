@@ -175,7 +175,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "082726 REV09")
+(setq spa:*version* "090126 REV12")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -223,7 +223,6 @@
 (setq spa:*dotlt*    "CONTINUOUS")   ; resolved to SPADOT per run
 (setq spa:*pvents*   nil)            ; live guide-preview entities
 (setq spa:*valnotes* nil)            ; validation problems for the report
-(setq spa:*undogrp*  nil)            ; an UNDO group of ours is open
 
 (setq spa:*perlay*   "POOL")         ; active perimeter layer
 (setq spa:*perdash*  t)              ; draw the perimeter dashed
@@ -625,16 +624,41 @@
 ;; Radius dimension read from OUTSIDE the arc: the arc is picked at its
 ;; far point and the dimension line dragged further out along the same
 ;; direction, so the leader comes in from outside.
-(defun spa:dimrad (ent tip outd doff sfx)
-  (if (and ent (entget ent)
-           (member (cdr (assoc 0 (entget ent))) '("ARC" "LWPOLYLINE")))
-      (if (and sfx (/= sfx ""))
-          (command "_.DIMRADIUS" (list ent (spa:wp tip))
-                   "_T" (strcat "<>" sfx)
-                   (spa:wp (cal:v+ tip (cal:v* outd (* 0.9 doff)))))
-          (command "_.DIMRADIUS" (list ent (spa:wp tip))
-                   (spa:wp (cal:v+ tip (cal:v* outd (* 0.9 doff))))))
-      (princ "\n(radius dim skipped -- that corner came out flat, no arc)")))
+;;
+;; The outline is ONE closed polyline and a radius corner is a bulge in
+;; it, not an entity of its own -- and DIMRADIUS will not take a bulge
+;; handed to it as an entity name, however exactly the pick point sits
+;; on it.  It answers "Object selected is not a circle or arc", and
+;; since the Typ. form feeds four arguments the three that follow are
+;; eaten as three more bad selections and the command is left stranded
+;; at a prompt the user never asked for.  So the arc it asks for is
+;; built from the corner's own three points, dimensioned, and taken
+;; away again: the drawing keeps its one bounded outline and gains a
+;; real radius dimension.  ce is the corner's (prev-end next-end mid).
+(defun spa:dimrad (ce outd doff sfx / tip loc was e od)
+  (setq tip (caddr ce)
+        loc (spa:wp (cal:v+ tip (cal:v* outd (* 0.9 doff))))
+        was (entlast))
+  (spa:arc3p (car ce) tip (cadr ce) (getvar "CLAYER") nil)
+  (setq e (entlast))
+  (if (eq e was) (setq e nil))          ; nothing was made at all
+  (cond
+    ((and e (= "ARC" (cdr (assoc 0 (entget e)))))
+     ;; born non-associative, so erasing the arc out from under the
+     ;; dimension cannot leave it pointing at something that is gone
+     (setq od (getvar "DIMASSOC"))
+     (setvar "DIMASSOC" 0)
+     (if (and sfx (/= sfx ""))
+         (command "_.DIMRADIUS" (list e (spa:wp tip))
+                  "_T" (strcat "<>" sfx) loc)
+         (command "_.DIMRADIUS" (list e (spa:wp tip)) loc))
+     (setvar "DIMASSOC" od)
+     (entdel e))
+    (t
+     ;; three collinear points: spa:arc3p drew a line instead, so take
+     ;; that away too.  The message is now literally true.
+     (if e (entdel e))
+     (princ "\n(radius dim skipped -- that corner came out flat, no arc)"))))
 
 ;;; -------------------- user input -------------------------------------
 ;;;
@@ -1627,8 +1651,11 @@
        (while (and stage (< stage 3))
          (cond
            ((= stage 0)
-            (setq loc (cal:askkw "Spillaway location" "Corner Wall"
-                                 "Corner/Wall(centred)" "Wall" t))
+            ;; the bracket carries only what a click may send, so the
+            ;; "(centred)" note lives in the question (STANDARDS 1)
+            (setq loc (cal:askkw
+                        "Spillaway location (a wall one is centred on it)"
+                        "Corner Wall" "Corner/Wall" "Wall" t))
             (setq stage (if (eq loc 'CAL-BACK) nil 1)))
            ((= stage 1)
             (if (= loc "Corner")
@@ -1928,12 +1955,11 @@
 ;; corner is tan 22.5 = 0.4142); a diagonal becomes a straight segment
 ;; between its two ends; a 90 corner is a single vertex.
 ;;
-;; Returns a per-corner list holding the polyline's entity name at each
-;; RADIUS corner and nil elsewhere, so the corner callouts still have
-;; something to hang a radius dimension on -- DIMRADIUS takes a polyline
-;; arc segment picked at a point on it just as it takes a bare arc.
-(defun spa:drawrect (q corners / ce i j tyi verts pl p pp pn uprev unext
-                                 dp ang arcs)
+;; Returns the polyline.  The corner callouts do NOT dimension it: a
+;; bulge handed to DIMRADIUS as an entity name is refused, so spa:dimrad
+;; builds an arc of its own to measure -- see there.
+(defun spa:drawrect (q corners / ce i j tyi verts p pp pn uprev unext
+                                 dp ang)
   (setq ce (spa:allends q corners) verts nil)
   (foreach i (list 0 1 2 3)
     (setq tyi (car (nth i corners)))
@@ -1958,10 +1984,7 @@
              verts (cons (cons (cadr (nth i ce)) 0.0)
                          (cons (cons (car (nth i ce)) (spa:bulge (- pi ang)))
                                verts))))))
-  (setq pl (spa:perpoly (reverse verts)) arcs nil)
-  (foreach i (list 0 1 2 3)
-    (setq arcs (cons (if (= (car (nth i corners)) "Radius") pl nil) arcs)))
-  (reverse arcs))
+  (spa:perpoly (reverse verts)))
 
 ;; How far the deepest corner treatment sets back along its walls -- an
 ;; inside dimension has to stand clear of that to land on a straight run.
@@ -2026,8 +2049,8 @@
 ;;
 ;; None of these ever carry the Water's Edge / Cover Size note: they are
 ;; corners, not overalls.  Assumes CLAYER is already DIMENSION.
-(defun spa:dimcorner1 (quad corners arcs cen doff i sfx / cc ce p pp pn ty
-                                                          outd am fm)
+(defun spa:dimcorner1 (quad corners cen doff i sfx / cc ce p pp pn ty
+                                                     outd fm)
   (setq p (nth i quad)
         pp (nth (rem (+ i 3) 4) quad)
         pn (nth (rem (+ i 1) 4) quad)
@@ -2037,8 +2060,7 @@
         outd (spa:unit (cal:v- p cen)))
   (cond
     ((= ty "Radius")
-     (setq am (caddr ce))
-     (spa:dimrad (nth i arcs) am outd doff sfx))
+     (spa:dimrad ce outd doff sfx))
     ((= ty "Cut")
      (setq fm (cal:mid (car ce) (cadr ce)))
      (spa:dimalg (car ce) (cadr ce)
@@ -2049,7 +2071,7 @@
      (spa:dim90 quad i cen doff (strcat "90%%d" sfx))))
   (princ))
 
-(defun spa:dimcorners (quad corners arcs cen doff / allsame sfx ilist i)
+(defun spa:dimcorners (quad corners cen doff / allsame sfx ilist i)
   ;; STANDARDS section 2: four identical corners get ONE callout with a
   ;; Typ. suffix at the reference corner -- all-Square included, which
   ;; used to get no note at all.  Mixed corners are called out one by
@@ -2059,7 +2081,7 @@
         sfx (if allsame " Typ." "")
         ilist (if allsame (list 1) (list 0 1 2 3)))   ; 1 = bottom-right
   (foreach i ilist
-    (spa:dimcorner1 quad corners arcs cen doff i sfx))
+    (spa:dimcorner1 quad corners cen doff i sfx))
   (princ))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
@@ -2209,9 +2231,9 @@
   pv)
 
 ;; Full guided flow for a rectangular spa.
-(defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut arcs quad
+(defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut quad
                         a b c d cen doff th allsame i j tmp lbls cc back
-                        rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2 arcs2
+                        rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2
                         xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows done)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
@@ -2305,7 +2327,7 @@
         mode1 spa:*mode*)
 
   ;; ------------------------------------------- draw the first outline
-  (setq arcs (spa:drawrect quad corners))
+  (spa:drawrect quad corners)
 
   ;; ------------------------------------------- and, if wanted, the other
   ;; Resolved BEFORE anything is dimensioned, because every dimension
@@ -2361,7 +2383,7 @@
   (if meth
       (progn
         (spa:setmode (spa:othermode))
-        (setq arcs2 (spa:drawrect q2 c2))
+        (spa:drawrect q2 c2)
         (spa:setmode mode1)))
 
   ;; -------------------------------------------------- dimensions
@@ -2394,7 +2416,7 @@
                         (spa:outoff (nth i quad) (nth j quad) cen spa:*flatoff*)
                         nil))))
   ;; corner callouts (no note -- these are corners, not overalls)
-  (spa:dimcorners quad corners arcs cen doff)
+  (spa:dimcorners quad corners cen doff)
 
   ;; the second outline, in ITS dimension style, plus one Typ. corner
   ;; callout at the top-left when its corners all match
@@ -2411,7 +2433,7 @@
             (spa:dimoveralls t (nth 3 q2) (nth 2 q2) (nth 0 q2) (nth 3 q2)
                              xlo yhi))
         (if (spa:samecorners c2)
-            (spa:dimcorner1 q2 c2 arcs2 cen2 doff 3 " Typ."))
+            (spa:dimcorner1 q2 c2 cen2 doff 3 " Typ."))
         (spa:setmode mode1)
         ;; and how far the cover laps the water's edge, at the bottom
         (spa:dimstyle spa:*ds-cover* th 1.0)
@@ -2960,18 +2982,6 @@
 
 ;;; -------------------- undo grouping ----------------------------------
 
-;; Copes with drawings where undo is limited or off, and with an error
-;; firing before the group was ever opened.
-(defun spa:undobegin ()
-  (if (= 1 (logand 1 (getvar "UNDOCTL")))
-      (progn
-        (command "_.UNDO" "_Begin")
-        (setq spa:*undogrp* t))))
-
-(defun spa:undoend ()
-  (if spa:*undogrp* (command "_.UNDO" "_End"))
-  (setq spa:*undogrp* nil))
-
 ;;; -------------------- sysvar save / restore --------------------------
 ;;; The snapshot of the user's settings lives in a GLOBAL and is taken
 ;;; only when no snapshot is already pending: if a previous run died
@@ -2985,7 +2995,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:SPA ( / *error* stype base)
+(defun c:SPA ( / *error* undo-open stype base)
 
   (defun *error* (msg)
     (if (and msg
@@ -2999,7 +3009,7 @@
     ;; both exits, this one included
     (spa:fclear)
     (spa:pvkill)
-    (spa:undoend)
+    (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (princ))
 
@@ -3016,7 +3026,7 @@
         spa:*grade* nil
         spa:*taper* nil)
   (setvar "CMDECHO" 0)
-  (spa:undobegin)
+  (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -3079,7 +3089,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (spa:undoend)
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (cal:dimstyrestore)
   (spa:fclear)

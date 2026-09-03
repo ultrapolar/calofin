@@ -194,13 +194,20 @@ When Enter means "everything", the prompt says so in parentheses.
 | `NAX` | NA accepted (returns nil)           | ` (or NA if not measured)`    | `7` + `NA` |
 | `ZER` | NA accepted, zero accepted          | ` (or NA if not measured)`    | `5` + `NA` |
 | `SUG` | suggested default, Enter takes it   | ` <n> (or NA)`                | `6` + `NA` |
+| `SUGR`| the same suggestion on a REQUIRED value | ` <n>`                    | `6`     |
 
 Offering Back never loosens what counts as a valid measurement -- a
 `REQ` prompt with Back still rejects null/zero/negative numbers.
-POINTRENAMER's band ask is the sanctioned no-NA variant of `SUG`: the
-measurement is always needed, so there is no `NA` keyword -- Enter
-takes the remembered default (shown feet-and-inches, `rtos` mode 4)
-and `initget 6` still rejects zero and negatives.
+`SUGR` is what a suggestion does to a `REQ`: it opens `Enter`, it does
+not put `NA` on the table, because the answer is still one the drawing
+cannot be made without.  A flow that computes a suggestion for a `REQ`
+question promotes the kind rather than widening it (`pool:askseqb`),
+so the offer never turns a required measurement optional.
+POINTRENAMER's band ask is the same no-NA variant, written out by
+hand before it had a name: the measurement is always needed, so there
+is no `NA` keyword -- Enter takes the remembered default (shown
+feet-and-inches, `rtos` mode 4) and `initget 6` still rejects zero and
+negatives.
 
 ## 4. Reference ask helpers
 
@@ -278,20 +285,22 @@ for the same reason.
 ;; number, nil for NA, or TOOL-BACK.
 (defun tool:askdist (kind msg dflt back / v kw)
   ;; Undo is accepted everywhere Back is, as a hidden synonym
-  (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
+  (setq kw (cond ((member kind '(REQ SUGR)) (if back "Back Undo" nil))
                  (back "NA Back Undo")
                  (t "NA")))
   ;; REQ always rejects zero - offering Back must not loosen what
   ;; counts as a valid measurement; ZER alone admits 0
   (if kw
       (initget (cond ((eq kind 'ZER) 5)
-                     ((and (eq kind 'SUG) dflt) 6)
+                     ((and (member kind '(SUG SUGR)) dflt) 6)
                      (t 7))
                kw)
       (initget 7))
   (setq v (getdist
             (strcat "\n" msg
                     (cond ((eq kind 'REQ) "")
+                          ((eq kind 'SUGR)
+                           (if dflt (strcat " <" (rtos dflt) ">") ""))
                           ((eq kind 'SUG)
                            (if dflt (strcat " <" (rtos dflt) "> (or NA)")
                                " (or NA)"))
@@ -300,7 +309,8 @@ for the same reason.
                     ": ")))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'TOOL-BACK)
         ((= (type v) 'STR) nil)               ; NA
-        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
+        ;; Enter took the suggestion
+        ((and (null v) (member kind '(SUG SUGR))) dflt)
         (t v)))
 
 ;; Typed prompts cannot take keywords, so Back is typed like a value.
@@ -428,13 +438,21 @@ drive `(command)` itself -- POOL's, which drains a pending command --
 instead declares `(if *push-error-using-command*
 (*push-error-using-command*))` after the handler and pops the mode
 with `(if *pop-error-mode* (*pop-error-mode*))` as the handler's last
-act (see `lisp/pool/POOL.LSP`). `DIMSTYLE` cannot be `setvar`'d back
+act AND on every success exit (see `lisp/pool/POOL.LSP`, which pops on
+both). The mode is stacked for the document, not the command: a clean
+run that pops only from its handler leaves it stacked for the rest of
+the session, and a stacked mode refuses `command-s` inside every later
+handler -- so the next tool's Esc leaves its undo group open.
+`check_lisp.py` fails a push with no pop outside the handler. `DIMSTYLE` cannot be `setvar`'d back
 -- restore it with
 `(vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" old))`.
 
 **Locals.** Every variable a defun sets is a parameter or declared
 after ` / ` (space each side) in the arglist -- `check_scope.py` is
-the referee. `(vl-load-com)` once at the top of the file when ActiveX
+the referee.  `*error*` is one of them: `check_lisp.py` fails a
+`(defun *error* ...)` or `(setq *error* ...)` whose enclosing command
+does not declare it, because a handler that outlives its command is
+the handler of whatever runs next. `(vl-load-com)` once at the top of the file when ActiveX
 is used, not inside command bodies.
 
 **Layers.** Output layers go through the canonical `ensure-layer` --
@@ -769,6 +787,56 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
   first tool written against `cal:` from scratch.)
 * ~~XYPLOT's missing handler and undo group~~ (post-standard miss, not
   on the old list) **DONE**.
+* ~~No suite ran a handler~~ **DONE** (2026-09-02) --
+  `tests/test_cancel_paths.py` cancels every headline command at its
+  first prompt (Cancel in the file dialog for the four that open one)
+  and asserts the handler ran once, every setting reads as before,
+  nothing said "error", and -- through the VM's own `run()` -- no undo
+  group or error mode was left behind.  `check_registry` carries a
+  test census: a command no suite invokes and no `UNTESTED` entry
+  excuses fails `make check`, and an excused command that gains a
+  suite fails it too.  The VM seeds every variable the tree touches at
+  AutoCAD's default and answers an unknown one with nil, as AutoCAD
+  does, instead of the 0 that hid a divided-by-DIMSCALE class of bug.
+* ~~Handlers that restore less than the run changed~~ **DONE**
+  (2026-09-02) -- the three step routines put CLAYER back (their dim
+  helpers swap it onto the dimension layer around DIMALIGNED, and an
+  Esc mid-dimension left the drafter drawing on DIMENSION); the check
+  family's handlers do their entity cleanup through
+  `vl-catch-all-apply` so a throw there can no longer skip the undo
+  close; DRONE/TYDRN relock through the catch; LINGUTTER lost the last
+  `(setq *error* olderr)` residue of the swap idiom; the three RESCUE
+  commands, TUTORIALCOVERCHECKCLEAN and TUTORIALPADDLE gained the
+  handler and the one undo group they never had; LAZTXT and LAZPIN
+  unload and delete their dialog from a handler, and every dialog file
+  deletes its temp `.dcl` when `load_dialog` refuses it;
+  TUTORIALCOVERCHECK holds ATTDIA/ATTREQ/FILEDIA itself.  `check_scope`
+  gained `handler-free-var`: a variable a handler reads that is neither
+  its own nor a local of its command is named, so the DRONE class
+  (`*drone-doc*`) cannot come back unnoticed.  POOL's and POOLSIDE's
+  handlers keep their bare `(command "_.-DIMSTYLE" ...)`: both push the
+  error mode, and under a push it is `command-s` that is refused, not
+  `command` -- the audit's suggestion to swap them was wrong.
+* ~~Undo-group flags held in globals~~ **DONE** (2026-09-02) --
+  `pool:*undogrp*` (shared by POOL, POOLDEMO and TUTORIALPOOL),
+  `spa:*undogrp*` (SPA, TUTORIALSPA), `psd:*undogrp*` and SPACHECK's
+  `spachk:*undo-open*` are gone: the flag is a local `undo-open` of
+  the command that opened the group, the helper pairs carry the
+  library's exact body so `mirror_shared.py` swaps them for
+  `cal:undobegin` / `cal:undoend`, `check_lisp` rule 5 wants every
+  group closed on the success path and from the handler, and the VM
+  counts `_.UNDO _Begin`/`_End` and refuses to return from a command
+  that left one open.  The push/pop asymmetry of the same commit --
+  five tools popping the error mode only from their handler -- closed
+  the day before (rule 1c).
+* ~~`drone` and `tydrn` installed their handler by swapping the global
+  `*error*`~~ **DONE** (2026-09-01) -- both use the section 5 skeleton
+  now, with the run's state in locals the handler reads through dynamic
+  scope, and `check_lisp` fails any handler that is not a local of its
+  command, so the swap idiom cannot come back.  `paddle`'s handler
+  closed an undo mark it had not necessarily opened (an Esc at the
+  perimeter prompt comes first); it tracks the mark now and closes it
+  through `vl-catch-all-apply`, the one place a second throw is fatal.
 * Uppercase `.LSP` extensions (`POOL.LSP`, `SPA.LSP`, +3 more) --
   reviewed 2026-08-27 and DEFERRED on purpose: zero functional gain
   against churn in tests/tools/startup suites; rename only with a
@@ -816,7 +884,8 @@ explicitly kept open.  What remains, each a deliberate deferral:
   (8.4) -- churn without behaviour.
 * `*error*` handlers for `abcdef`, `altabcdef`, `ccprecheck`,
   `lincheck`; restore-nothing handlers in `bpcallout`,
-  `DroneHeightGPS`, `paddle`; AUTOBEAD's unguarded undo end (8.4).
+  `DroneHeightGPS`, `paddle` (8.4).  ~~AUTOBEAD's unguarded undo
+  end~~ **DONE** -- and its drain is bounded now too.
 * ~~NORMIESTEP's Treatment question offers no Back~~ **DONE** --
   `ns-askkw`/`ns-asktreat` take the Back sentinel exactly as the
   library pair do (the last 4-arg `askkw` holdout), Back at the
@@ -825,8 +894,23 @@ explicitly kept open.  What remains, each a deliberate deferral:
 * `cal:askkw`'s signature still takes a hand-written SHOWN bracket
   where section 4's reference derives it from the keyword list.  The
   mirror pins `spa:askkw`/`pool:askkw` to it, so aligning the
-  signature is a coordinated pass of its own; until then the 8.2
-  class is closed by review, not by construction.
+  signature is a coordinated pass of its own.  The 8.2 class itself is
+  now closed by CONSTRUCTION: `check_lisp` compares every bracket
+  against the keyword list its prompt actually accepts, in both the
+  `initget`/`get*` and the ask-helper shape, so a bracket a click
+  cannot send fails `make check`.  What the signature migration would
+  still buy is that the bracket could not be WRITTEN twice at all --
+  a stricter "derives from the keyword list" rule, deliberately not
+  added here because three of its four current findings are the very
+  hidden-alias sites that migration removes.
+* Demo-cleanup confirms are asked as `Yes/No` with `<Yes>` in
+  SPACHECK, dimcheck, linfincheck and AUTOBEAD where section 2's
+  vocabulary gives `Keep Erase` with `<Keep>` (LISPLAB and both perp
+  tutorials already use it).  Reviewed 2026-09-01 and DEFERRED: the
+  divergence is the WORDING, not the safety -- what these erase is the
+  practice drawing the tutorial itself drew and tracked, never the
+  user's work -- so a "destructive confirms default No" rule would
+  enforce the wrong axis.  Worth a vocabulary pass of its own.
 * The VB palette's button catalog still lacks the newer tools --
   additions are unverifiable without a machine that can build the
   DLL, so `ui/calofin_ui/calofin.lsp`'s roster (test-pinned) carries

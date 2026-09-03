@@ -171,7 +171,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.7")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.8")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -985,8 +985,12 @@
         (t
          (setvar "CMDECHO" 0)
          (setvar "OSMODE"  0)
-         (command "_.UNDO" "_Begin")
-         (setq undo-open T)
+         ;; only when undo is recording - _Begin in a drawing with UNDO
+         ;; off (bit 1 of UNDOCTL clear) errors out of the command
+         (if (= 1 (logand 1 (getvar "UNDOCTL")))
+           (progn
+             (command "_.UNDO" "_Begin")
+             (setq undo-open T)))
          (abf:setlayer abf:*layer*)
          (setq havestyle (abf:setstyle abf:*style*))
          (if (not havestyle)

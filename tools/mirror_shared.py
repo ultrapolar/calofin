@@ -79,6 +79,8 @@ TOOLS = {
             'spa:syssave': 'cal:syssave',
             'spa:sysrestore': 'cal:sysrestore',
             'spa:askkw': 'cal:askkw',
+            'spa:undobegin': 'cal:undobegin',
+            'spa:undoend': 'cal:undoend',
         },
         'drop_globals': ['spa:*sysold*', 'spa:*odstyle*'],
         # cal:syssave takes the sysvars as an argument where spa:syssave
@@ -100,10 +102,28 @@ TOOLS = {
         # while every other check still passes.
         'symbols': {'SPA-BACK': 'CAL-BACK'},
     },
+    # Like POOLDEMO: the tutorial defines no state helpers of its own,
+    # it drives SPA's cross-file.  Two of those (syssave/sysrestore)
+    # are swapped away in the SPA entry above, so without the same swap
+    # here the grouped tutorial calls a function the grouped build no
+    # longer defines -- and dies at its first statement.  It did:
+    # nothing ran c:TUTORIALSPA until tests/test_tutorialspa.py.
     'TUTORIALSPA': {
         'src': 'lisp/spa/TUTORIALSPA.LSP',
-        'swap': {},
+        'swap': {
+            'spa:syssave': 'cal:syssave',
+            'spa:sysrestore': 'cal:sysrestore',
+            'spa:undobegin': 'cal:undobegin',
+            'spa:undoend': 'cal:undoend',
+        },
         'drop_globals': [],
+        # the same one-into-two the SPA entry does, and for the same
+        # reason: the library keeps the dimension-style pair separate
+        'expand': {
+            '(cal:syssave)': ['(cal:syssave (spa:sysvars))',
+                              '(cal:dimstysave)'],
+            '(cal:sysrestore)': ['(cal:sysrestore)', '(cal:dimstyrestore)'],
+        },
     },
     # CDCREATE keeps its own dim-style pair -- it restores a style only
     # when the style really moved, which cal:dimstyrestore does not
@@ -157,6 +177,44 @@ TOOLS = {
         # call sites need no translating -- only the sentinel travels.
         'askkw_hidden': False,
         'symbols': {'AB-BACK': 'CAL-BACK'},
+    },
+    # CONSTELLATION was written against the library from the start
+    # (STANDARDS section 6): its ask layer, sysvar pair, undo pair,
+    # ensure-layer, vector set and text maker are the CALOFIN-LIB bodies
+    # under cst:, checked byte-for-byte against them, so all of it comes
+    # back out here and the twin is a rename and nothing else.  What
+    # stays local is the solver, which is the tool.
+    'CONSTELLATION': {
+        'src': 'lisp/constellation/CONSTELLATION.lsp',
+        'swap': {
+            'cst:askkw': 'cal:askkw', 'cst:askyn': 'cal:askyn',
+            'cst:askdist': 'cal:askdist',
+            'cst:back-word-p': 'cal:back-word-p',
+            'cst:trim': 'cal:trim', 'cst:pad': 'cal:pad',
+            'cst:syssave': 'cal:syssave',
+            'cst:sysrestore': 'cal:sysrestore',
+            'cst:error-cancel-p': 'cal:error-cancel-p',
+            'cst:undobegin': 'cal:undobegin',
+            'cst:undoend': 'cal:undoend',
+            'cst:ensure-layer': 'cal:ensure-layer',
+            'cst:text': 'cal:text',
+            'cst:2d': 'cal:2d', 'cst:v-': 'cal:v-', 'cst:v+': 'cal:v+',
+            'cst:v*': 'cal:v*', 'cst:dot': 'cal:dot',
+            'cst:mid': 'cal:mid', 'cst:vlen': 'cal:vlen',
+            'cst:d2': 'cal:d2', 'cst:unit': 'cal:unit',
+            'cst:angnorm': 'cal:angnorm',
+            'cst:signed-dang': 'cal:signed-dang',
+            'cst:tan': 'cal:tan',
+            'cst:nthcdr': 'cal:nthcdr', 'cst:sublist': 'cal:sublist',
+            'cst:circumcenter': 'cal:circumcenter',
+        },
+        'drop_globals': ['cst:*sysold*'],
+        # cst:askkw already takes the SHOWN bracket third, like the
+        # library's, and cst:syssave already takes its sysvar list
+        'askkw_hidden': False,
+        # ...but the Back sentinel travels with the ask helpers, and
+        # every question in the chain tests for it by name
+        'symbols': {'CST-BACK': 'CAL-BACK'},
     },
     'XYPLOT': {
         'src': 'lisp/xyplot/XYPLOT.lsp',
@@ -358,6 +416,8 @@ TOOLS = {
             'pool:sysrestore': 'cal:sysrestore',
             'pool:askkw': 'cal:askkw', 'pool:askyn': 'cal:askyn',
             'pool:asktreat': 'cal:asktreat',
+            'pool:undobegin': 'cal:undobegin',
+            'pool:undoend': 'cal:undoend',
         },
         'drop_globals': ['pool:*sysold*'],
         # pool:askkw already takes the SHOWN bracket third, like the
@@ -393,6 +453,8 @@ TOOLS = {
             'psd:syssave': 'cal:syssave',
             'psd:sysrestore': 'cal:sysrestore',
             'psd:ensure-layer': 'cal:ensure-layer',
+            'psd:undobegin': 'cal:undobegin',
+            'psd:undoend': 'cal:undoend',
         },
         'drop_globals': ['psd:*sysold*'],
         # psd:askkw already takes the SHOWN bracket third, like the
@@ -866,6 +928,17 @@ TOOLS = {
     # takes the tag as an argument; abf:*pt-tag* stays and is passed.
     # Regenerating keeps a ;;;-block the hand twin deleted (R2).
     # [verified: matches except banner + listed residue vs the twin on disk]
+    # VSCONV's one generic helper is the output-layer gate; everything
+    # else in it (the unlock/relock pair, the BYLAYER forcing, the
+    # layer-name lookups) is either DRONE's shape or this file's own,
+    # and the library carries neither.
+    'VSCONV': {
+        'src': 'lisp/vsconv/VSCONV.lsp',
+        'swap': {
+            'vsconv:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
     'ABFIND': {
         'src': 'lisp/abfind/ABFIND.lsp',
         'swap': {
@@ -966,6 +1039,8 @@ TOOLS = {
             'pool:syssave': 'cal:syssave', 'pool:v+': 'cal:v+',
             'pool:mid': 'cal:mid', 'pool:v-': 'cal:v-',
             'pool:sysrestore': 'cal:sysrestore', 'pool:v*': 'cal:v*',
+            'pool:undobegin': 'cal:undobegin',
+            'pool:undoend': 'cal:undoend',
         },
         'drop_globals': [],
         'expand': {
@@ -983,6 +1058,8 @@ TOOLS = {
             'pool:syssave': 'cal:syssave', 'pool:v+': 'cal:v+',
             'pool:v-': 'cal:v-', 'pool:mid': 'cal:mid',
             'pool:sysrestore': 'cal:sysrestore', 'pool:v*': 'cal:v*',
+            'pool:undobegin': 'cal:undobegin',
+            'pool:undoend': 'cal:undoend',
         },
         'drop_globals': [],
         'expand': {
@@ -1005,6 +1082,15 @@ TOOLS = {
         'src': 'lisp/tydrn/tydrn.lsp',
         'swap': {
             'tydrn:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
+    # SOCONV's only generic helper is the layer creator, the same as
+    # its two cleanup siblings above.
+    'SOCONV': {
+        'src': 'lisp/soconv/SOCONV.lsp',
+        'swap': {
+            'soconv:ensure-layer': 'cal:ensure-layer',
         },
         'drop_globals': [],
     },

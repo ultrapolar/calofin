@@ -28,7 +28,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, Dot, LispError  # noqa: E402
+import lispvm  # noqa: E402
+from lispvm import VM, Dot, LispError, Sym  # noqa: E402
 
 LSP = os.path.join(os.path.dirname(__file__), '..',
                    'lisp', 'cornerstp', 'NORMIESTEP.lsp')
@@ -209,6 +210,50 @@ def test_back_leaves_the_side_on_the_tread_that_survived():
         f"the outer side must follow the surviving tread to {outer_end(ts[-1])}"
 
 
+def test_clayer_comes_back_when_a_dimension_dies():
+    """ns-dim swaps CLAYER onto the dimension layer around DIMALIGNED and
+    puts it back inline; until v3.4 the handler restored CMDECHO and
+    LUNITS only, so an Esc while a dimension was drawing left the
+    drafter's next lines landing on DIMENSION."""
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(entmake (list (cons 0 "LAYER") (cons 100 "AcDbSymbolTableRecord")'
+             ' (cons 100 "AcDbLayerTableRecord") (cons 2 "DIMENSION") (cons 70 0)'
+             ' (cons 62 2) (cons 6 "Continuous")))')
+    vm.loads('(entmake (list (cons 0 "LINE") (list 10 0.0 0.0 0.0)'
+             ' (list 11 %r %r 0.0)))' % BASE_END)
+    vm.loads('(entmake (list (cons 0 "LINE") (list 10 0.0 0.0 0.0)'
+             ' (list 11 %r %r 0.0)))' % SQUARE)
+    # the swap only happens with a dimension layer configured, and the
+    # dims only when the run says Yes to them
+    vm.loads('(setq *cs-dim-layer* "DIMENSION")')
+    vm.handle_errors = True
+    orig = lispvm.BUILTINS[Sym('command')]
+    at_death = {}
+
+    def dies_at_dimaligned(vm_, a):
+        if a and a[0] == '_.DIMALIGNED':
+            at_death['clayer'] = vm_.sysvars['CLAYER']
+            raise LispError('DIMALIGNED refused', vm_)
+        return orig(vm_, a)
+
+    lispvm.BUILTINS[Sym('command')] = dies_at_dimaligned
+    try:
+        vm.run('c:NORMIESTEP', [None, list(vm.entities), (100.0, 0.0), WID,
+                                "Square", "Yes", 12.0, 12.0, None, "No"])
+    finally:
+        lispvm.BUILTINS[Sym('command')] = orig
+    assert vm.handled_errors and 'DIMALIGNED refused' in vm.handled_errors[0], \
+        vm.handled_errors
+    assert at_death.get('clayer') == 'DIMENSION', \
+        "the dimension layer was not current when the dimension died: %r" % at_death
+    assert vm.sysvars['CLAYER'] == '0', "CLAYER left on %r" % vm.sysvars['CLAYER']
+    assert vm.sysvars['CMDECHO'] == 1 and vm.undo_groups == 0, \
+        (vm.sysvars['CMDECHO'], vm.undo_groups)
+    print("CLAYER comes back when the run dies inside a dimension")
+
+
+
 def main():
     test_every_tread_ends_on_the_outer_side()
     test_a_square_corner_is_unchanged()
@@ -216,6 +261,7 @@ def main():
     test_a_cut_corner_flares_the_mouth_outwards()
     test_a_radius_corner_flares_outwards_too()
     test_back_leaves_the_side_on_the_tread_that_survived()
+    test_clayer_comes_back_when_a_dimension_dies()
     print("all tests passed")
 
 

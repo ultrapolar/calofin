@@ -6,6 +6,254 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.5 -- 2026-09-02
+
+`SOCONV`'s sibling, written the same way: from a before/after the shop
+supplied rather than from a description. `vsconv.dxf` holds a VS survey
+export and a by-hand conversion of it side by side in one drawing,
+labelled "before" and "after", and pairing the two halves on geometry is
+what the rules below are.
+
+### Added
+
+- **`VSCONV`** (`lisp/vsconv/`, v1.0) converts a VS survey export onto
+  the shop's layers: `1 Perimeter`, `2 Coping` and `3 Features` onto
+  `POOL`, `3.1 Anchors` onto `POINTS`, `4 Dimensions` onto `DIMENSION`,
+  with color, linetype and lineweight forced BYLAYER so the moved
+  geometry takes the destination layer's appearance rather than carrying
+  the export's over. The map is a table (`*vsconv-map*`), so an export
+  that names its layers differently is retuned in one place.
+
+  **The dimensions need more than the layer move, and that is the half
+  worth having.** The export writes text height, arrow size and decimal
+  places into every dimension as an `ACAD`/`DSTYLE` xdata block, and an
+  override outranks the style it sits on -- so a dimension merely
+  renamed to `STANDARD` would still draw itself in the export's
+  2.5-unit text. The sample's after-half carries no xdata at all, which
+  is what says the overrides go with the rename. Replaying the sample's
+  55 before-entities through the routine reproduces its after-half
+  exactly: layer, dimension style and xdata, entity for entity.
+
+  Scope is the highlight, or Enter for every VS layer in the drawing;
+  only the layers in the table are touched, so a sheet already carrying
+  converted work cannot be converted twice, and a drawing with none of
+  them is told so rather than prompted over. As in `SOCONV`, the
+  emptied source layers are named in the done line rather than purged,
+  so one `U` backs the whole run out.
+
+  Where `SOCONV` is a layer remap and only a layer remap -- because that
+  is all its sample does -- this one restyles as well, because that is
+  what ITS sample does. The two exports are different tools' output and
+  the two routines say so.
+
+## v3.4 -- 2026-09-02
+
+One command, written from a before/after the shop supplied rather than
+from a description: `SOconv.dxf` holds an SO site-survey export and a
+by-hand conversion of it side by side in one drawing, and pairing the
+two halves on geometry is what the rules below are.
+
+### Added
+
+- **`SOCONV`** (`lisp/soconv/`, v1.0) puts an SO site-survey export onto
+  the shop's layers: `Pool Perimeter` and `Obstacles` onto `POOL`, the
+  Leica points and `Existing Anchorss` onto `POINTS`, and the export's
+  one `Dimensions` layer split in two -- its notes onto `TEXT`, its
+  dimensions and anything else left there onto `DIMENSION`. The rules
+  are a table read in order, first match winning, so the split is
+  ordering rather than special-casing and a shop whose export names
+  things differently retunes in one place.
+
+  **It is a layer remap and only a layer remap** -- no restyle, no
+  forced BYLAYER, no rotate, nothing erased and nothing drawn. That is
+  what the sample does: pairing its two halves matches 316 objects and
+  the only DXF group that differs on all of them is group 8. So the 161
+  Leica points keep the explicit magenta they arrive with, and the notes
+  keep their height, style and text. `*soconv-force-bylayer*` is the one
+  line that turns it into the cleanup `DRONE` and `TYDRN` do.
+
+  Two things the sample shows that are deliberately NOT in the tool: its
+  after side is one dimension short (the drafter dropped a linear dim
+  while making it -- an edit, not a rule), and the export's now-empty
+  layers are left in the drawing for `-PURGE` rather than deleted
+  behind the drafter's back. The done-line names them.
+
+## v3.3 -- 2026-09-02
+
+Two commands the trunk had never seen, brought over from the one branch
+that shares no history with it. The constellation branch was written
+against a base this tree diverged from 222 commits ago, so nothing here
+was cherry-picked: the files were taken one by one and fitted to the
+trunk's tooling, which is what the mirror map, the loader manifest, the
+panel roster and the derived counts all had to be told about.
+
+### Added
+
+- **`CONSTELLATION`** (`lisp/constellation/`, v1.3) places labelled
+  survey points when the sheet gives only the distances BETWEEN them and
+  never says where any of them is -- the one survey shape no other
+  importer here can read. Stress-majorization sweeps find the answer and
+  damped Gauss-Newton lands on it exactly, so a set of tape readings
+  that cannot all be true still gets the layout that misses by least,
+  and the report names the single dim worth re-measuring instead of
+  starring nine innocent ones. Arcs, a self-crossing warning, and a
+  fix-and-redraw loop, because a number typed wrong is invisible on the
+  chart and obvious on the drawing.
+- **`TYLERDRONESUITE`** (`lisp/tydrn/`, TYDRN v1.5) runs the whole drone
+  trace in one: `TYDRN`, then `PADDLE`, then the shop's own `CDIM`, in
+  the order the work has to happen in. One highlight is carried through
+  every stage and grows by what each stage draws; each stage keeps its
+  own undo group, so a stage that went well is not undone to get at one
+  that did not; the calofin stages are checked before any of them runs.
+
+### Fixed on the way in
+
+- **`CONSTELLATION`'s own copies of two library helpers were behind the
+  library.** `cst:syssave` skipped the whole save when a snapshot was
+  already pending -- the defect v3.1 fixed in `cal:syssave` -- and
+  `cst:undobegin` opened its group without the `UNDOCTL` guard, so a
+  `_Begin` in a drawing with UNDO off would have errored out of the
+  command. Both are the library bodies now, which is what lets the
+  mirror map swap all 28 helpers away and leave the twin a rename.
+- **`TYLERDRONESUITE` installed its handler by swapping the global
+  `*error*`** through a pair of globals, and held PICKFIRST in one of
+  them -- the class rule 1b and `handler-free-var` were added to reject
+  in v3.1 and v3.2. `*error*` and the saved PICKFIRST are locals of the
+  command now. Inside a stage the stage's own handler is still the one
+  AutoCAD calls, which is why each stage cleans up after itself; the
+  README says so where it used to promise more.
+
+### Checks and tests
+
+- `tests/test_constellation.py` (36 assertions) and
+  `tests/test_tydrn_suite.py` run at both tiers; `CONSTELLATION` joins
+  the cancel sweep by construction, and `TYLERDRONESUITE` is named in
+  its `NO_PROMPT` roster with the reason -- its pre-flight check runs
+  before its first question.
+- The VM seeds `PICKFIRST` at AutoCAD's own default of 1, so a test that
+  watches it come back has to turn it off first to prove anything.
+
+## v3.2 -- 2026-09-02
+
+The second stability pass. It reconciled the branches first, then closed
+the classes of defect that only show up in the NEXT command a drafter
+runs, and left the tree able to prove every one of them stays closed.
+
+### Branches
+
+- Four branches carried work the trunk had never seen -- LAZPANEL's Find
+  page, OASIS's top-right bulge bound to the top wall, POOL's rectangle
+  corner questions and its grecian taped-face defaults -- and each was
+  ported onto the trunk by cherry-pick with its tiers regenerated. The
+  POOLDEMO sample sheet was found calling `pool:muttend` with ten
+  arguments where the ported commit wanted twelve; only a test noticed.
+- `.claude/hooks/session-start.sh` puts a session on the trunk: a clean
+  tree elsewhere is switched, a dirty one or a branch carrying unmerged
+  commits stops the session with the commands to land them. CLAUDE.md
+  carries the real count of historical branches (some sixty) and the
+  end-of-session push that keeps the trunk in step.
+
+### Fixed
+
+- **`LAZPANEL v3.4` stopped re-installing itself on every drawing
+  open.** With the build in the Startup Suite, every drawing paid two
+  icon writes into the first support-path folder and a walk of the CUI.
+  The button work is marked done on the blackboard, the one namespace
+  every document shares, and icons already on disk are left alone.
+- **Five tools left AutoCAD's error mode stacked after every clean
+  run** -- `XFTCONV`, `PERPPTS`, `CPERPPTS`, `AUTOBEAD` (and so the
+  three step routines that bead) and `OASIS` pushed it for their handler
+  and popped it only from the handler. A stacked mode refuses `command-s`
+  inside every later handler, so the next tool's Esc left its undo group
+  open without a word. Each pops on every exit now, as POOL always did.
+- **Four tools kept their undo-group flag in a global** shared with
+  their demo and tutorial -- `POOL`, `SPA`, `POOLSIDE`, `SPACHECK` -- so
+  a run that died between its last dim and the close had the next
+  command's handler close a group it never opened. The flag is a local
+  of the command that opened the group, and the grouped build swaps the
+  helper pairs for `cal:undobegin` / `cal:undoend`.
+- **Handlers that restored less than the run changed.** The step
+  routines put CLAYER back (an Esc mid-dimension left the drafter on
+  DIMENSION); the check family's entity cleanup goes through the catch so
+  a throw can no longer skip the undo close; the three RESCUE commands,
+  TUTORIALCOVERCHECKCLEAN and TUTORIALPADDLE gained the handler and the
+  one undo group they never had; LAZTXT and LAZPIN unload their dialog
+  from a handler and every dialog file deletes its temp `.dcl` when
+  `load_dialog` refuses it; TUTORIALCOVERCHECK holds ATTDIA, ATTREQ and
+  FILEDIA itself; AUTOBEAD's command gained a cancel-aware handler.
+- **The multi-file loader asked its one-time question on every drawing**
+  on a machine whose HKCU is read-only: `vl-registry-write` answers a
+  denial with nil, not an error. The answer is kept in the profile
+  (`setenv`) as well.
+
+### The checks got stricter
+
+- `check_lisp`: a pushed error mode must be popped outside the handler
+  (rule 1c); an undo group opened in a defun is closed on its success
+  path and from its handler (rule 5).
+- `check_scope`: `handler-free-var` names a variable a handler reads
+  that is neither its own nor a local of its command.
+- `check_registry`: a test census -- every command is invoked by a suite
+  or excused in `UNTESTED` with the reason, and an excused command a
+  suite catches up with fails the check.
+- The bundle verifies every `cal:` helper the tools call against the
+  library at build time and again at load, and clears the build flag it
+  set so a later solo library load still warns. `tests/test_shared.py`
+  pins the loader's order.
+- The VM counts undo groups and the error mode, refuses to return from
+  a command that left either behind, runs `prompt` output through the
+  same log as `princ`, seeds every system variable the tree touches at
+  AutoCAD's default and answers an unknown one with nil. New suites:
+  `test_autobead.py`, `test_cancel_paths.py` (every headline command
+  cancelled at its first prompt), `test_loader.py`.
+
+## v3.1 -- 2026-09-01
+
+A stability pass over the one-file build. Nothing new to type; what was
+there fails less, and two of the ways it could have failed the NEXT tool
+in the session are closed.
+
+### Fixed
+
+- **`DRONE v1.3` / `TYDRN v1.3` no longer install their error handler by
+  swapping the global `*error*`.** Both saved the global, set their own,
+  and put it back on each exit -- so one exit missed (a throw inside the
+  handler's own `EndUndoMark`, say) left that tool's cleanup live for
+  every command run afterwards in the loaded-together build: closing an
+  undo mark it never opened, re-locking layers it never touched. The
+  handler is local to the command now, as the skeleton in STANDARDS 5
+  has always said, sees the run's state through dynamic scope rather
+  than through `*drone-doc*` / `*drone-unlocked*` globals, and closes
+  only a mark the run actually opened.
+- **`PADDLE v1.9`'s handler closed an undo mark it might never have
+  opened.** An Esc at the perimeter prompt comes before
+  `StartUndoMark`; the handler's unconditional `EndUndoMark` then threw
+  from inside `*error*`, where nothing catches it. It tracks the mark now
+  and closes it through `vl-catch-all-apply`.
+- **`CALOFIN-LIB v1.5`: the shared sysvar snapshot merges instead of
+  skipping.** Every tool in the grouped build shares `cal:*sysold*`, and
+  the tools list different variables. After a run cut short, the next
+  tool's `cal:syssave` used to save NOTHING -- so a variable the dead run
+  never listed (`CLAYER`, `CMDECHO`) was changed and never put back. A
+  variable already pending keeps its true value exactly as before; one
+  the snapshot lacks is added. `tests/test_calofin_lib.py` pins both
+  halves.
+
+### The checks got stricter
+
+- `check_lisp` fails a `(defun *error* ...)` or `(setq *error* ...)`
+  whose enclosing command does not declare `*error*` local, and a
+  handler at top level. Zero findings tree-wide once the two above were
+  fixed; the deprecated acady matcher keeps its swap idiom.
+- The VM can now run `*error*` (`vm.handle_errors = True`): a failure
+  outside `vl-catch-all-apply` reaches the handler the failing code can
+  see, with every frame still live, and the command is then aborted the
+  way AutoCAD aborts it. It also carries just enough ActiveX -- the
+  document, its undo marks, the layer collection with `Lock`, and the
+  entity properties the cleanup tools put -- for `DRONE` and `TYDRN` to
+  run under test for the first time: `tests/test_drone.py` drives the
+  happy path, an error mid-run and an Esc at the prompt, at both tiers.
+
 ## v3.0 -- 2026-08-27
 
 The release that made the whole toolset drivable from a filled-in chart,

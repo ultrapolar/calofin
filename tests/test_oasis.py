@@ -1725,12 +1725,183 @@ def test_an_impossible_offset_is_reasked():
           " re-asked")
 
 
+#: the top-right drawing again, with its three joiner radii pulled apart
+#: so that every arc can be told from its radius alone.  A complex run
+#: asks one more question than TR_MEASURE answers -- where the corner
+#: bulge sits along the top wall -- and it falls between the right bulge
+#: and the first joiner.
+TR_BULGES = [TR_X, TR_Y, 108.0, 96.0, 108.0]
+TR_JOINERS = [84.0, 90.0, 120.0]
+#: the corner bulge's own centre, and the right bulge's, on that pool
+TR_CORNER = (TR_X - 96.0, TR_Y - 96.0)
+TR_RIGHT = (TR_X - 108.0, 108.0)
+
+
+def placed(place, label='placed'):
+    """A complex top-right run whose placement question is answered with
+    PLACE -- a signed shift, or ['Tie', distance]."""
+    vm = newvm()
+    run(vm, script(variant='TopRight', detail='Complex',
+                   measure=TR_BULGES + list(place) + TR_JOINERS), label)
+    return vm
+
+
+def corner_of(vm):
+    """Where the corner bulge landed: the only 96 arc in the pool, the
+    joiners having been given radii of their own."""
+    return [a for a in arcs_of(vm) if close(a[1], 96.0)][0][0]
+
+
+def test_the_corner_bulge_can_be_bound_to_the_top_wall_alone():
+    """The second tangency a top-right bulge is drawn with is where a
+    drawing usually puts it, not a law: a complex run may bring it in off
+    the X-max bound, leaving it held by the top wall alone.  It is the
+    hump's own question and the hump's own slot -- the third bulge's
+    signed shift along X -- so it is asked the same way and answered the
+    same way, and Enter is the corner every simple run draws."""
+    vm = placed([-60.0], 'shift')
+    cx, cy = corner_of(vm)
+    # still tangent to the Y-max bound: only its X moved
+    assert close(cy + 96.0, TR_Y), (cx, cy)
+    assert close(cx, TR_CORNER[0] - 60.0), (cx, cy)
+    # and it really has come off the right-hand bound
+    assert close(TR_X - (cx + 96.0), 60.0), cx
+    asked = [q.lstrip('\n').split(' [')[0] for q, _ in vm.prompts]
+    i = asked.index('Top-right bulge off the right bound, left negative')
+    assert i == asked.index('Right bulge radius') + 1, asked
+    assert vm.prompts[i][0] == ('\nTop-right bulge off the right bound, left'
+                                ' negative [Tie/Back] <0>: '), vm.prompts[i]
+    assert vm.loads('(oasis:steps (list "TopRight" nil nil nil nil nil nil'
+                    ' nil nil nil nil "Complex" nil))') == \
+        [0, 11, 1, 2, 3, 4, 5, 6, 12, 7, 8, 9]
+    # Enter is the corner -- the shape a simple run draws, arc for arc
+    vm = newvm()
+    run(vm, script(variant='TopRight',
+                   measure=TR_BULGES + TR_JOINERS), 'simple')
+    want = arcs_of(vm)
+    got = arcs_of(placed([None], 'entered'))
+    for a, b in zip(want, got):
+        assert close(math.dist(a[0], b[0]), 0.0) and close(a[1], b[1]) \
+            and close(a[2], b[2]) and close(a[3], b[3]), (a, b)
+    print("ok  top wall    -> the corner bulge comes in off the right bound"
+          " and stays on the top wall; Enter is the corner")
+
+
+def test_the_placement_is_measured_off_the_bound_that_still_holds_it():
+    """The preview says what the question is about: the third bulge's own
+    circle in red, the bound it is still tangent to in red under it, and
+    -- on a top-right pool, where the placement may be given as the tie
+    back to the right bulge -- the line that tie is measured along."""
+    seen = {}
+
+    def probe(vm):
+        out = []
+        for e in vm.entities:
+            if e in vm.deleted:
+                continue
+            d = _alist_dict(vm.entdata[e])
+            if d.get(8) == 'POOL-GUIDE' and d.get(62) == 1:
+                out.append((d.get(0), tuple(d[10][:2]),
+                            tuple(d[11][:2]) if d.get(11) else None,
+                            d.get(40)))
+        seen['red'] = out
+        return -60.0
+
+    placed([probe], 'preview')
+    red = seen['red']
+    circ = [e for e in red if e[0] == 'CIRCLE']
+    lines = sorted(e for e in red if e[0] == 'LINE')
+    assert len(circ) == 1 and close(circ[0][3], 96.0), red
+    assert close(math.dist(circ[0][1], TR_CORNER), 0.0), red
+    assert [(e[1], e[2]) for e in lines] == \
+        [((0.0, TR_Y), (TR_X, TR_Y)), (TR_CORNER, TR_RIGHT)], lines
+    print("ok  placement pv-> the bulge, the top wall it is still held by,"
+          " and the tie it may be given as, all red")
+
+
+def test_the_placement_takes_the_tie_a_drawing_carries():
+    """A drawing with that bulge off the corner rarely dimensions it from
+    the wall: what it carries is the centre-to-centre distance back to
+    the right bulge, which is the tie the check drawing prints for that
+    pair.  Tie asks for that number instead and lands the bulge exactly
+    that far from the right bulge's centre."""
+    floor = abs((TR_Y - 96.0) - 108.0)         # the two centres' Y apart
+    last = None
+    for tie in (floor, 150.0, 200.0):
+        vm = placed(['Tie', tie], 'tie %g' % tie)
+        c = corner_of(vm)
+        assert close(c[1] + 96.0, TR_Y), c            # still on the top wall
+        assert close(math.dist(c, TR_RIGHT), tie), (tie, c)
+        # inboard of the right bulge's centre, and a longer tie is
+        # further in -- the answer reads the way a measurement should
+        assert c[0] <= TR_RIGHT[0] + TOL, (tie, c)
+        assert last is None or c[0] < last, (tie, c, last)
+        last = c[0]
+        # and it is the check drawing's own number: the bulge ties are
+        # the last three aligned dims, and this pair is one of them
+        chk = check_arcs_of(vm)
+        bul = [chk[i] for i in (0, 2, 4)]
+        assert any(close(math.dist(t[1][:2], t[2][:2]), tie)
+                   for t in cmds(vm, '_.DIMALIGNED')[-3:]), tie
+        assert close(math.dist(bul[1][0], bul[2][0]), tie), (tie, bul)
+    # so every pool a tie draws, the tie reads back: measure it off what
+    # was drawn, type it in again, and the same pool comes out
+    there = corner_of(placed(['Tie', 170.0], 'trip'))
+    back = math.dist(there, TR_RIGHT)
+    assert close(math.dist(corner_of(placed(['Tie', back], 'trip')), there),
+                 0.0), (there, back)
+    print("ok  tie         -> the centre-to-centre distance places the"
+          " bulge, and reads back off what it drew")
+
+
+def test_a_tie_no_circle_can_answer_is_asked_again():
+    """Below the two centres' own Y separation no circle on the top wall
+    is that far from the right bulge's centre -- at exactly it the corner
+    bulge stands straight above the right one, which is as far out as a
+    tie reaches.  The question says so and asks again; Back at it steps
+    back one QUESTION, to the placement it was answering."""
+    floor = abs((TR_Y - 96.0) - 108.0)
+    vm = placed(['Tie', floor - 1.0, 150.0], 'short tie')
+    said = "".join(vm.printed)
+    assert 'apart in Y alone' in said and '%.4f' % floor in said, said
+    assert close(math.dist(corner_of(vm), TR_RIGHT), 150.0), corner_of(vm)
+    vm = placed(['Tie', 'Back', -60.0], 'back at the tie')
+    asked = [q.lstrip('\n').split(' [')[0] for q, _ in vm.prompts]
+    place = 'Top-right bulge off the right bound, left negative'
+    i = asked.index(place)
+    assert asked[i:i + 3] == [place,
+                              'Top-right centre to right bulge centre',
+                              place], asked
+    assert close(corner_of(vm)[0], TR_CORNER[0] - 60.0), corner_of(vm)
+    print("ok  short tie   -> under the Y separation there is no such"
+          " circle, and Back at the tie re-asks the placement")
+
+
+def test_a_placement_off_the_envelope_is_asked_again():
+    """The hump's rule, for the hump's reason: a centre off the box is
+    not a pool.  Reaching PAST the right-hand bound is not refused --
+    that is an ordinary trimmed bulge, and the extents report names it."""
+    vm = placed([-400.0, -60.0], 'off the box')
+    said = "".join(vm.printed)
+    assert 'off the ' in said and 'has to stay on it' in said, said
+    assert close(corner_of(vm)[0], TR_CORNER[0] - 60.0), corner_of(vm)
+    # out past the bound is drawn, and reported rather than refused
+    vm = placed([48.0], 'out past')
+    assert close(corner_of(vm)[0], TR_CORNER[0] + 48.0), corner_of(vm)
+    assert 'the top-right arc goes 48.0000 past the right' in \
+        "".join(vm.printed), vm.printed
+    print("ok  bad place   -> a centre off the envelope is re-asked, out"
+          " past the bound is drawn and reported")
+
+
 def test_every_shape_takes_a_straight_run():
     """The ring does not care which shape it came from, so Line answers a
     joiner on all of them -- including the kidney, whose bottom is its
     only joiner."""
     for variant, measure, want in (
-            ('TopRight', [443.0, 344.0, 108.0, 96.0, 108.0,
+            # the None is Enter at the top-right placement a complex run
+            # asks for: the corner, which is where a simple run puts it
+            ('TopRight', [443.0, 344.0, 108.0, 96.0, 108.0, None,
                           'Line', 'Line', 120.0],
              ['ARC', 'ARC', 'ARC', 'LINE', 'ARC', 'LINE']),
             ('RoundedBottom', [360.0, 240.0, 84.0, 'Line', 'Line'],
@@ -2687,6 +2858,37 @@ def test_version_command():
     print("ok  OASISVER    -> %s" % vm.globals[Sym('*oasis-version*')])
 
 
+def test_the_error_mode_is_popped_on_every_exit():
+    """OASIS pushes AutoCAD's error mode so its handler may drain a
+    pending command.  Until v8.5 it popped that mode only from the
+    handler: every CLEAN run left it stacked for the session, and a
+    stacked mode refuses command-s inside every later handler."""
+    vm = newvm()
+    run(vm, script(), 'pop-happy')
+    assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
+        (vm.error_mode_depth, vm.error_mode_underflow)
+    # the quiet exit: a tilted UCS refuses the run before the group opens
+    vm = newvm()
+    vm.loads('(defun oasis:ucs-flat-p () nil)')
+    run(vm, [], 'pop-tilted')
+    assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
+        (vm.error_mode_depth, vm.error_mode_underflow)
+    # and the cancel path, through the handler
+    vm = newvm()
+    vm.handle_errors = True
+
+    def esc(vm):
+        raise LispError('Function cancelled', vm)
+
+    vm.run('c:OASIS', ['Center', 'Simple', esc])
+    assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+    assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
+        (vm.error_mode_depth, vm.error_mode_underflow)
+    assert vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1, \
+        vm.sysvars
+    print("ok  error mode  -> popped on the drawn, the quiet and the cancelled exit")
+
+
 def walk_forms(src):
     """(functions called in head position, defun/lambda local lists).
 
@@ -2825,6 +3027,11 @@ if __name__ == '__main__':
     test_a_run_is_the_joiner_with_no_radius_left_to_give()
     test_the_hump_moves_off_centre()
     test_an_impossible_offset_is_reasked()
+    test_the_corner_bulge_can_be_bound_to_the_top_wall_alone()
+    test_the_placement_is_measured_off_the_bound_that_still_holds_it()
+    test_the_placement_takes_the_tie_a_drawing_carries()
+    test_a_tie_no_circle_can_answer_is_asked_again()
+    test_a_placement_off_the_envelope_is_asked_again()
     test_every_shape_takes_a_straight_run()
     test_a_pinched_bulge_is_left_out_of_the_drawing()
     test_a_straight_run_is_crossed_like_any_arc()
@@ -2855,5 +3062,6 @@ if __name__ == '__main__':
     test_the_overall_dims_hook_whichever_arc_holds_each_bound()
     test_the_check_drawing_counts_a_repeated_circle_once()
     test_version_command()
+    test_the_error_mode_is_popped_on_every_exit()
     test_no_local_shadows_a_function()
     print("all OASIS tests passed")

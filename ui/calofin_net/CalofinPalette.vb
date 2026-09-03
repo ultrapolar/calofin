@@ -135,10 +135,14 @@ Public NotInheritable Class CommandCatalog
             New Entry("ABMOVE", "Move mis-taped point", "Moves a point, offering every mis-read tape it could be"),
             New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
             New Entry("CPERPPTS", "Curved perp points", "PERPPTS for a curved run"),
+            New Entry("CONSTELLATION", "Points from cross dims", "Places points from the distances between them, inside a known box"),
             New Entry("POINTRENAMER", "Renumber points in order", "Hands the survey point numbers back out in perimeter order"),
-            New Entry("XFTCONV", "Leica import cleanup", "Cleans up Leica XFT/DXF survey imports"),
+            New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
+            New Entry("SOCONV", "SO survey onto our layers", "Puts an SO site-survey export onto the shop's layers in one pass"),
+            New Entry("VSCONV", "VS export onto shop layers", "Remaps a VS survey export's numbered layers onto the shop's"),
             New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
-            New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass")
+            New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"),
+            New Entry("TYLERDRONESUITE", "Drone suite: tidy, pad, CDIM", "The whole drone trace in one - TYDRN, then PADDLE, then CDIM")
         }}
     }
 

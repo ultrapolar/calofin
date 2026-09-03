@@ -61,7 +61,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.8") ; printed on load and at command start
+(setq *paddle-version* "v1.10") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -515,10 +515,16 @@
             loops))))
 
 ;; ---------------------------- command ------------------------------
-(defun c:PADDLE (/ *error* doc space padsize blkname ss perims vts
+(defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss perims vts
                    allpads delta ndodge ncorner narc)
   (defun *error* (msg)
-    (if doc (vla-EndUndoMark doc))
+    ;; close only the mark THIS run opened: an Esc at the perimeter
+    ;; prompt comes before StartUndoMark, and closing a mark nothing
+    ;; opened throws -- from inside the handler, where nothing catches
+    ;; it.  command-s style: the close itself goes through
+    ;; vl-catch-all-apply so it can never be the second error.
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
     (princ))
@@ -550,6 +556,7 @@
       (princ "\nPADDLE: no closed perimeter loop found.")
       (progn
         (vla-StartUndoMark doc)
+        (setq mark-open T)
         (paddle--ensure-block doc blkname padsize)
         (paddle--ensure-layer *paddle-layer* 7)
         (setq delta (paddle--block-delta space blkname))
@@ -564,6 +571,7 @@
           (paddle--insert-pad space blkname (car pad) (cadr pad) delta)
           (if (= (caddr pad) "corner") (setq ncorner (1+ ncorner)) (setq narc (1+ narc))))
         (vla-EndUndoMark doc)
+        (setq mark-open nil)
         (if allpads
             (progn
               (princ (strcat "\nPADDLE: inserted " (itoa (length allpads))
@@ -613,10 +621,22 @@
                  '(40 . 6.0) (cons 1 str)))
   (entlast))
 
-(defun c:TUTORIALPADDLE (/ doc space base lay ents pl vts feats blk delta
-                           pad ncorner narc)
+(defun c:TUTORIALPADDLE (/ *error* mark-open doc space base lay ents pl vts
+                           feats blk delta pad ncorner narc)
+  ;; the demo draws a layer, a perimeter, labels and pads with pauses
+  ;; between -- an Esc at a pause used to leave all of it behind, N
+  ;; undos deep, with no handler.  One mark round the whole tour,
+  ;; closed on both exits the way c:PADDLE closes its own.
+  (defun *error* (msg)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nTUTORIALPADDLE error: " msg)))
+    (princ))
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
   (princ (strcat "\n=== PADDLE TUTORIAL " *paddle-version* " ==="))
   (princ "\nPADDLE looks at the perimeter of a drawing and inserts pad blocks")
   (princ "\nwherever the perimeter caves inward. Everything it checks:")
@@ -704,6 +724,8 @@
         (if (= (getkword "\nErase the demonstration? [Yes/No] <No>: ") "Yes")
             (foreach e ents (entdel e)))))
   (princ "\nEnd of tutorial. Type PADDLE to run it on a real drawing.")
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
   (princ))
 
 (defun c:PADDLEVER ()

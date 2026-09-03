@@ -14,7 +14,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.4")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
@@ -76,8 +76,12 @@
       (setvar "OSMODE" 0)                 ; drop osnaps while placing text
       ;; one undo group around the column - a U after LINTXTCHK takes
       ;; back all 26 lines at once instead of one entity per U
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
+        (progn
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
       (setq startx (car pt)
             y      (cadr pt)
             z      (if (caddr pt) (caddr pt) 0.0))
