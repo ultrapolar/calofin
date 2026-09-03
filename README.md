@@ -284,8 +284,8 @@ everything else releases one file per source.
 
 | | Folder | |
 | --- | --- | --- |
-| Calofin palette (VB.NET) | `ui/calofin_net/` | Dockable AutoCAD palette: one button per command, plus forms for POOL and SPA |
-| Palette LISP glue | `ui/calofin_ui/` | `calofin.lsp` - reports which commands are actually loaded this session, so the palette can grey out the rest |
+| Calofin palette (VB.NET) | `ui/calofin_net/` | Dockable AutoCAD palette: one button per command, plus forms for POOL and SPA. Its catalog is held against `LAZPANEL`'s roster by `tools/check_registry.py` - same commands, same four groups, same caption words - so the two surfaces cannot part again the way they had (the palette shipped 60 of 67) |
+| Palette LISP glue | `ui/calofin_ui/` | `calofin.lsp` - reports which commands are actually loaded this session, so the palette can grey out the rest. Checked too: a palette button with no probe-list name could never grey out, which is how five of them shipped |
 
 `ui/PLAN.md` records how the palette got here and why the wire between
 it and the routines is shaped the way it is; `ui/UI-PLAN.md` is the

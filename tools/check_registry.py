@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Every place a tool has to be registered, checked against the tree.
 
-Adding a tool means writing the tool -- and then remembering four other
+Adding a tool means writing the tool -- and then remembering six other
 files: a caption and a placement in lisp/lazpanel/LAZPANEL.lsp, a slot
-in shared/parts/CALOFIN-LOADER.lsp, and a row plus two hand-counted
-numbers in README.md.  Forget one and nothing complains until a reader
-notices, because those numbers are prose.
+in shared/parts/CALOFIN-LOADER.lsp, a row plus two hand-counted numbers
+in README.md, an entry in the VB palette's own catalog and a name in
+the glue list that greys its button out.  Forget one and nothing
+complains until a reader notices, because those numbers are prose.
 
 They rot.  README.md said the panel covered 62 headline commands while
 the panel carried 66 -- the sentence wraps mid-number, so a hand sweep
@@ -27,6 +28,11 @@ What it deliberately does NOT do:
   * choose a job page other than Rest.  Rest is *defined* as the
     complement of Pool/Cover/Spa, so appending there is arithmetic, not
     judgement; moving a tool off Rest is judgement.
+  * touch the VB palette at all.  Nothing here can compile it -- the
+    project targets net48 against the AutoCAD.NET reference assemblies
+    -- so a --fix that edited VB source would be writing code no test
+    in this repo can run.  The palette is CHECKED and reported on,
+    with the exact New Entry(...) line to paste, and left to a human.
 
 LAZPANEL.lsp stays a hand-edited lisp/ file: --fix is a codemod over
 it, the way `sed` would be, not a build step.  It has no generated
@@ -47,6 +53,18 @@ from callib import (  # noqa: E402
 )
 
 PANEL = LISP_DIR / "lazpanel" / "LAZPANEL.lsp"
+
+#: The VB palette's own catalog, and the LISP glue that tells it which
+#: commands this session has loaded.  Neither can be compiled or run
+#: here -- Calofin.vbproj targets net48 against the AutoCAD.NET
+#: reference assemblies -- but both are TEXT, and text is exactly what
+#: drifts: the palette shipped 60 of the panel's 67 and nothing said so.
+PALETTE = ROOT / "ui" / "calofin_net" / "CalofinPalette.vb"
+GLUE = ROOT / "ui" / "calofin_ui" / "calofin.lsp"
+
+#: One {"Layout", { ... }} block of CommandCatalog.Groups.
+VB_GROUP = re.compile(r'\{"(\w+)", \{(.*?)\n        \}\}', re.S)
+VB_ENTRY = re.compile(r'New Entry\("([^"]+)", "([^"]*)", "([^"]*)"\)')
 
 #: Captions are one per line, the text aligned to a fixed column so the
 #: table reads as two columns rather than a ragged list.
@@ -199,6 +217,26 @@ def count_rules(n):
 
 # ----------------------------------------------------------------- checks
 
+def palette_catalog():
+    """{group: {command: caption}} out of the VB palette's own source,
+    or None when the block cannot be found at all."""
+    src = read(PALETTE)
+    body = re.search(r"Groups As New Dictionary.*?\n\n", src, re.S)
+    if not body:
+        return None
+    out = {}
+    for m in VB_GROUP.finditer(body.group(0)):
+        out[m.group(1)] = {e.group(1): e.group(2)
+                           for e in VB_ENTRY.finditer(m.group(2))}
+    return out or None
+
+
+def glue_roster():
+    """The command names calofin.lsp probes for, as a set."""
+    m = re.search(r"calofin:\*commands\*\s*'\((.*?)\)\)", read(GLUE), re.S)
+    return set(re.findall(r'"([A-Z0-9-]+)"', m.group(1))) if m else None
+
+
 def check():
     """Problems as a list of strings, empty when the tree is in step."""
     problems = []
@@ -245,6 +283,8 @@ def check():
             "%s is on no category page - pick one of %s; --fix will not "
             "guess which" % (c, "/".join(CATEGORIES)))
 
+    problems.extend(palette_problems(caps, pg, placed))
+
     n = derived_counts()
     for path, rx, expected in count_rules(n):
         body = read(path)
@@ -260,6 +300,74 @@ def check():
                 "%s says %s where the tree gives %d (/%s/) - run "
                 "python3 tools/check_registry.py --fix"
                 % (rel, m.group(1), expected, rx))
+    return problems
+
+
+def palette_problems(caps, pg, placed):
+    """The VB palette against LAZPANEL's roster.
+
+    The two surfaces are meant to file every tool the same way -- the
+    palette's four groups ARE the panel's four category pages, and its
+    captions are lzp:*captions* text.  They were, once.  Then seven
+    tools were added to the panel and not to the palette, every caption
+    still agreed, and nothing anywhere said the catalogs had parted.
+
+    Nothing here can build the DLL, so this checks the one thing that
+    does not need a compiler: that the two rosters name the same
+    commands, in the same groups, with the same words.  A blurb is the
+    palette's own -- it has no counterpart on the panel -- so it is not
+    compared, only required to be there.
+    """
+    problems = []
+    cat = palette_catalog()
+    if cat is None:
+        return ["%s: cannot read CommandCatalog.Groups - has the table "
+                "been renamed or reshaped?" % PALETTE.relative_to(ROOT)]
+
+    rel = PALETTE.relative_to(ROOT)
+    for group in CATEGORIES:
+        if group not in cat:
+            problems.append("%s: no %s group" % (rel, group))
+            continue
+        want = {c for names in pg.get(group, {}).values() for c in names}
+        have = set(cat[group])
+        for c in sorted(want - have):
+            problems.append(
+                '%s: %s is on the panel\'s %s page and not in the palette '
+                '- add New Entry("%s", "%s", "<what it does>") to the %s '
+                'group' % (rel, c, group, c, caps.get(c, ""), group))
+        for c in sorted(have - want):
+            where = [g for g in CATEGORIES
+                     if c in {x for ns in pg.get(g, {}).values() for x in ns}]
+            problems.append(
+                "%s: %s is in the palette's %s group but the panel files "
+                "it under %s" % (rel, c, group,
+                                 "/".join(where) or "no category page"))
+        for c in sorted(have & want):
+            if cat[group][c] != caps.get(c, ""):
+                problems.append(
+                    "%s: %s reads %r in the palette and %r on the panel - "
+                    "one caption, two surfaces"
+                    % (rel, c, cat[group][c], caps.get(c, "")))
+
+    blank = sorted(c for g in cat.values() for c, _ in g.items()
+                   if not c.strip())
+    for c in blank:
+        problems.append("%s: an entry with no command name" % rel)
+
+    # the glue is what greys a button out; a command missing from it is
+    # a button that stays enabled and reports its own absence instead
+    roster = glue_roster()
+    if roster is None:
+        problems.append("%s: cannot read calofin:*commands*"
+                        % GLUE.relative_to(ROOT))
+    else:
+        listed = {c for g in cat.values() for c in g}
+        for c in sorted(listed - roster):
+            problems.append(
+                "%s: %s has a palette button but is not in "
+                "calofin:*commands* - its button can never grey out"
+                % (GLUE.relative_to(ROOT), c))
     return problems
 
 
@@ -384,9 +492,11 @@ def main():
             print("  - %s" % p)
         return 1
     n = derived_counts()
+    cat = palette_catalog() or {}
     print("check_registry: %d headline commands over %d buttons, "
-          "%d counts in step"
-          % (n["headline"], n["buttons"], len(count_rules(n))))
+          "%d counts in step, %d in the palette and its glue"
+          % (n["headline"], n["buttons"], len(count_rules(n)),
+             sum(len(g) for g in cat.values())))
     return 0
 
 

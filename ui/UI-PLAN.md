@@ -192,23 +192,54 @@ statement that these copies **are** the same code, and
 `mirror_shared.py --check` -- which `make check` runs -- fails the
 build if one of them drifts.
 
-## Phase 5 -- the palette stops drifting
+## Phase 5 -- the palette stops drifting *(done, as far as it honestly can)*
 
-The VB.NET side cannot be built or run in this environment
-(`Calofin.vbproj` targets net48 against the AutoCAD.NET reference
-assemblies), so nothing here is verifiable until someone opens AutoCAD
-with a build. What *is* verifiable here is the data both surfaces read:
+The VB side cannot be built or run here (`Calofin.vbproj` targets net48
+against the AutoCAD.NET reference assemblies), so nothing about the
+palette's *behaviour* is verifiable in this repo. What **is** verifiable
+is the thing that actually rotted: the two surfaces are text, and text
+drifts.
 
-- **The roster and captions.** `LAZPANEL` has all 67 with captions;
-  `calofin_net`'s `CommandsTab` has its original set. One table, read
-  by both -- generated for the VB side out of `lzp:*captions*` the way
-  `tools/check_registry.py` already computes every count in the prose.
+It had. The palette shipped **60** of the panel's **67** -- `LAZSPA`,
+`LAZSTEP`, `LINGUTTER`, `LINGUTTERSCAN`, `POOLSIDE`, `POINTRENAMER` and
+`ABPCHECK` were on the panel and nowhere in the palette, and five of
+those seven were missing from `calofin.lsp`'s probe list too, so their
+buttons could never have greyed out. Every caption that *was* there
+agreed, and no tool was in the wrong group -- which is exactly why
+nobody noticed: the halves that were checked looked fine.
+
+So `tools/check_registry.py` -- already the file that says "every tool
+registered everywhere it has to be" -- grew a palette section. It reads
+`CommandCatalog.Groups` out of the VB source and `calofin:*commands*`
+out of the glue, and holds three things against `LAZPANEL`'s roster:
+
+- the same commands, in the same four groups (the palette's groups
+  **are** the panel's category pages),
+- the same caption words for each one,
+- and a probe-list name for every palette button, since without one the
+  button can never grey out.
+
+The seven gaps are closed, and the tool's summary line now counts the
+palette alongside the buttons.
+
+**What it deliberately will not do is `--fix` the VB.** A codemod that
+wrote VB source would be writing code no test in this repo can run. So
+the palette is checked and reported on -- with the exact
+`New Entry(...)` line to paste, caption already filled in from
+`lzp:*captions*` -- and left to a human.
+
+Still open, and genuinely blocked on a machine with a compiler:
+
 - **The chart tables.** `assets/*/fieldmap.json` and `lzf:*charts*` are
   the same knowledge written twice, and the READMEs already admit the
   JSON positions are "seeded estimates". The Lisp tables are the ones
-  under test.
-- **Then the palette's own gaps**, in the order `ui/PLAN.md` left them:
-  the button catalog, and generalising the form hook into `cal:`.
+  under test, so the JSON should be generated from them -- but nothing
+  here can look at the result, and a generated field map that lands the
+  boxes in the wrong place is worse than seeded estimates somebody
+  nudged by eye.
+- **Everything behavioural.** Whoever next opens AutoCAD with a build
+  should run the spa form once with a `NotGiven` corner and confirm the
+  `?` mark lands, per `ui/PLAN.md`.
 
 ## The order, and why
 
@@ -221,7 +252,8 @@ with a build. What *is* verifiable here is the data both surfaces read:
 4. **The form kit** -- structural; it is what makes phase 3 cheap to
    repeat and any new form possible at all. *(done)*
 5. **The palette's data layer** -- last, because it is the only part
-   this environment cannot prove.
+   this environment cannot prove. *(done to that boundary: the rosters
+   are checked, the behaviour is not.)*
 
 Page consolidation sits outside the numbering on purpose: it is an
 editorial call about how people navigate, and it should be made from
