@@ -73,6 +73,11 @@
 ;;; it was at.  Close is the way out, and is the default button.  A
 ;;; PINNED row on every page carries the handful of tools you actually
 ;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.
+;;; A RECENT row above it carries the last five you launched, newest
+;;; first, kept without being asked -- minus anything already pinned,
+;;; since Pinned is by definition the tools you run most and showing
+;;; them twice would leave Recent saying nothing new.  It appears only
+;;; once there is something in it.
 ;;;
 ;;; The *SCAN companions are on the panel;
 ;;; satellites reachable from their headline tool (TUTORIAL*
@@ -87,7 +92,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.2")
+(setq *lazpanel-version* "v3.3")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -677,19 +682,22 @@
                                  "\"; key = \"pin_" n "\"; }"))
 
 ;; (name width) for every pinned tool, then the editor button last.
-(defun lzp:pin-items ( / out n)
-  (foreach n lzp:*pins* (setq out (cons n out)))
-  (reverse (cons "*edit*" out)))
-
-(defun lzp:pinrows ( / out row w n cw items)
-  (setq items (lzp:pin-items) row nil w 0)
+;; Greedy packing into as many rows as the names need.  `extra` is one
+;; item appended last whose button reads something other than its key --
+;; the pin editor's, which is keyed *edit* and reads "Pin..." -- or nil
+;; when there is none.  Both the pinned row and the recent row pack
+;; through here, so neither can be the one that forgets the budget.
+(defun lzp:packrow (names extra extralabel / out row w n cw items)
+  (setq items (if extra (append names (list extra)) names) row nil w 0)
   (foreach n items
-    (setq cw (+ (strlen (if (= n "*edit*") "Pin..." n)) 6))
+    (setq cw (+ (strlen (if (and extra (= n extra)) extralabel n)) 6))
     (if (and row (> (+ w cw) lzp:*pinbudget*))
       (setq out (cons (reverse row) out) row nil w 0))
     (setq row (cons n row) w (+ w cw)))
   (if row (setq out (cons (reverse row) out)))
   (reverse out))
+
+(defun lzp:pinrows ( ) (lzp:packrow lzp:*pins* "*edit*" "Pin..."))
 
 (defun lzp:pinrow ( / out rows r n first)
   (setq rows (lzp:pinrows) first t)
@@ -711,6 +719,79 @@
     (setq first nil))
   (reverse out))
 
+;;; -------------------- the recent row ----------------------------------
+;;  Pins are what you decided you use; RECENT is what you actually just
+;;  used.  It costs nothing to maintain -- no ticking, no editor -- and
+;;  it is the row that answers "what was that one called" after you have
+;;  come back from a tool and want it again.
+;;
+;;  A tool already PINNED is left out of the row.  It is stored either
+;;  way, so unpinning brings it back, but showing it twice would fill
+;;  Recent with the handful of tools Pinned already carries -- which are
+;;  by definition the ones you run most.  So Recent is what you used
+;;  that is not already on your row.
+;;
+;;  Keys are "rec_", which cannot collide with the same tool's "pin_"
+;;  button or with its own button further down the page.
+
+(setq lzp:*reclimit* 5)           ; how many are remembered
+(setq lzp:*recent* nil)           ; most recent first
+
+;; Everything remembered, minus what Pinned already shows.
+(defun lzp:recshown ( / out n)
+  (foreach n lzp:*recent*
+    (if (not (member n lzp:*pins*)) (setq out (cons n out))))
+  (reverse out))
+
+(defun lzp:recrows ( ) (lzp:packrow (lzp:recshown) nil nil))
+
+(defun lzp:recrow ( / out rows r n first)
+  (setq rows (lzp:recrows) first t)
+  (foreach r rows
+    (setq out (cons "  : boxed_row {" out))
+    ;; only the first row is labelled, for the same reason the pinned
+    ;; row labels only its first: two boxes both saying "Recent" would
+    ;; read as two different things
+    (setq out (cons (strcat "    label = \""
+                            (if first "Recent" "") "\";") out))
+    (foreach n r
+      (setq out (cons (strcat "    : button { label = \"" n
+                              "\"; key = \"rec_" n "\"; }")
+                      out)))
+    (setq out (cons "  }" out))
+    (setq first nil))
+  ;; and no row at all when there is nothing to put in it: a panel
+  ;; opened for the first time is exactly as tall as it always was, and
+  ;; DCL height is the failure mode that stops a dialog opening
+  (reverse out))
+
+;; Newest first, once each, capped.  Recorded when the tool is
+;; LAUNCHED rather than when it finishes: a tool that errors out was
+;; still the one you reached for, and a tool cancelled with Escape even
+;; more so -- you will want it again in a moment.
+(defun lzp:remember (name)
+  (setq lzp:*recent*
+        (cons name (vl-remove name lzp:*recent*)))
+  (while (> (length lzp:*recent*) lzp:*reclimit*)
+    (setq lzp:*recent* (reverse (cdr (reverse lzp:*recent*)))))
+  (lzp:recent-write)
+  lzp:*recent*)
+
+(defun lzp:recent-read ( / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Recent")))
+  (setq lzp:*recent*
+    (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
+      (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
+                        (lzp:split s ";"))))
+  lzp:*recent*)
+
+(defun lzp:recent-write ( / s n)
+  (setq s "")
+  (foreach n lzp:*recent*
+    (setq s (strcat s (if (= s "") "" ";") n)))
+  (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Recent" s))
+  lzp:*recent*)
+
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
 ;; an edit to that table and nothing else.
@@ -723,6 +804,7 @@
                           "  -  " (car g) "\";")
                   (strcat (lzp:dlgname (car g)) " : dialog {")))
   (setq out (append (reverse (lzp:tabstrip)) out))
+  (setq out (append (reverse (lzp:recrow)) out))
   (setq out (append (reverse (lzp:pinrow)) out))
   (cond
     ;; ONE COLUMN: the page has the width to spare, so every button
@@ -807,7 +889,7 @@
                           "  -  Find\";")
                   (strcat "  : text { key = \"status\"; width = 60; "
                           "alignment = centered; }")))
-  (setq out (append out (lzp:tabstrip) (lzp:pinrow)))
+  (setq out (append out (lzp:tabstrip) (lzp:recrow) (lzp:pinrow)))
   (append out
     (list (strcat "  : edit_box { key = \"filter\"; "
                   "label = \"Find\"; edit_width = 30; }")
@@ -918,6 +1000,9 @@
     ((eval fn)
      (princ (strcat "\nLAZPANEL: running " name
                     " -- LAZPANEL reopens the panel."))
+     ;; remembered BEFORE it runs: a tool that errors out, or that is
+     ;; cancelled with Escape, was still the one you reached for
+     (lzp:remember name)
      (eval (list fn)))
     (t
      (princ (strcat "\nLAZPANEL: " name
@@ -1564,6 +1649,13 @@
                       "\" lzp:*pos* (done_dialog 1))"))
             (if (not (member n have))
               (mode_tile (strcat "pin_" n) 1)))
+          ;; the recent row: the same launch again, its own keys
+          (foreach n (lzp:recshown)
+            (action_tile (strcat "rec_" n)
+              (strcat "(setq lzp:*pick* \"" n
+                      "\" lzp:*pos* (done_dialog 1))"))
+            (if (not (member n have))
+              (mode_tile (strcat "rec_" n) 1)))
           (action_tile "pin_edit" "(setq lzp:*pos* (done_dialog 5))")
           (foreach n (lzp:pages)
             (action_tile (strcat "tab_" n)
@@ -1620,6 +1712,7 @@
 ;;  in front of someone trying to read the error it just printed.
 (defun c:LAZPANEL ( / pick)
   (lzp:pins-read)
+  (lzp:recent-read)
   (while (setq pick (lzp:show))
     (if (/= pick "*pins*")
       (lzp:launch pick)))
@@ -1628,6 +1721,7 @@
 ;; Open the pin editor on its own, without going through the panel.
 (defun c:LAZPIN ( / f dcl)
   (lzp:pins-read)
+  (lzp:recent-read)
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPIN error: could not write the dialog file."))

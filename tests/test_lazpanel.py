@@ -262,7 +262,8 @@ for gname in PAGES:
     extra = set(keys) - set(mine) - {'status', 'cancel', 'pin_edit'} \
             - {'filter', 'hits', 'msg', 'run'} \
             - {'tab_' + g for g in PAGES} \
-            - {k for k in keys if k.startswith('pin_')}
+            - {k for k in keys if k.startswith('pin_')} \
+            - {k for k in keys if k.startswith('rec_')}
     assert not extra, \
         "%s: buttons for commands not in its group: %r" % (gname, sorted(extra))
     seen_keys |= set(mine)
@@ -471,6 +472,101 @@ assert alld.count('key = "pin_POOL"') == len(PAGES), (
     "the pinned tool appears on %d pages, expected %d"
     % (alld.count('key = "pin_POOL"'), len(PAGES)))
 print("   a pinned tool gets a button on all %d pages" % len(PAGES))
+
+
+print("== recent: what you just used, without being asked ==")
+rv = fresh()
+rv.loads('(defun vl-registry-write (k v s) (setq t:*wrote* (list v s)) s)')
+
+
+def recent(v):
+    v.loads('(setq t:*r* lzp:*recent*)')
+    return [str(x) for x in (v.globals['t:*r*'] or [])]
+
+
+def shown(v):
+    v.loads('(setq t:*s* (lzp:recshown))')
+    return [str(x) for x in (v.globals['t:*s*'] or [])]
+
+
+rv.loads('(setq t:*lim* lzp:*reclimit*)')
+LIMIT = int(str(rv.globals['t:*lim*']))
+ORDER = PANEL[:LIMIT + 2]
+for n in ORDER:
+    rv.loads('(lzp:remember "%s")' % n)
+# newest first, and capped
+assert recent(rv) == list(reversed(ORDER))[:LIMIT], recent(rv)
+# running one again moves it to the front rather than doubling it
+rv.loads('(lzp:remember "%s")' % ORDER[-1])
+assert recent(rv)[0] == ORDER[-1], recent(rv)
+assert len(recent(rv)) == len(set(recent(rv))), "a tool is in Recent twice"
+assert len(recent(rv)) == LIMIT, recent(rv)
+# it is stored under its own registry value, not over the pins
+rv.loads('(setq t:*v* (car t:*wrote*)) (setq t:*s* (cadr t:*wrote*))')
+assert str(rv.globals['t:*v*']) == 'Recent', rv.globals['t:*v*']
+assert str(rv.globals['t:*s*']) == ';'.join(recent(rv)), rv.globals['t:*s*']
+print("   newest first, once each, capped at %d, stored as its own value"
+      % LIMIT)
+
+# a pinned tool is stored but not SHOWN: Pinned already carries it, and
+# the tools you pin are by definition the ones you run most
+rv.loads('(setq lzp:*pins* \'("%s"))' % recent(rv)[0])
+assert recent(rv)[0] not in shown(rv), \
+    "a pinned tool is on the Recent row as well: %r" % shown(rv)
+assert shown(rv) == recent(rv)[1:], shown(rv)
+# unpinning brings it straight back, because it was never dropped
+rv.loads('(setq lzp:*pins* nil)')
+assert shown(rv) == recent(rv), shown(rv)
+print("   a pinned tool is remembered but not shown twice")
+
+# a name from an older build must not put a dead button on screen
+rv.loads('(defun vl-registry-read (k v) "%s;NOSUCHTOOL;%s")'
+         % (PANEL[0], PANEL[1]))
+rv.loads('(lzp:recent-read)')
+assert recent(rv) == [PANEL[0], PANEL[1]], \
+    "a stale name survived the read: %r" % recent(rv)
+# and no registry at all is simply no recents
+rv2 = fresh()
+rv2.loads('(defun vl-registry-read (k v) (exit))')
+rv2.loads('(lzp:recent-read)')
+assert not recent(rv2), "a failing registry read produced recents anyway"
+print("   stale names dropped against the roster; no registry = no recents")
+
+# the row itself: absent when there is nothing in it, so a panel opened
+# for the first time is exactly as tall as it always was -- and DCL
+# height is what stops a dialog opening at all
+ev = fresh()
+ev.loads('(setq lzp:*recent* nil) (setq t:*d* (lzp:dcl-lines))')
+assert not [l for l in (str(x) for x in ev.globals['t:*d*'])
+            if 'Recent' in l or 'rec_' in l], \
+    "an empty Recent row was emitted anyway"
+ev.loads('(setq lzp:*recent* \'("%s" "%s"))' % (PANEL[0], PANEL[1]))
+ev.loads('(setq t:*d* (lzp:dcl-lines))')
+alld = '\n'.join(str(x) for x in ev.globals['t:*d*'])
+assert alld.count('key = "rec_%s"' % PANEL[0]) == len(PAGES), (
+    "the recent tool is on %d pages, expected %d"
+    % (alld.count('key = "rec_%s"' % PANEL[0]), len(PAGES)))
+assert alld.count('label = "Recent";') == len(PAGES), \
+    "the Recent row is not labelled once per page"
+print("   no row until there is something in it, then one on every page")
+
+# WIDTH.  Both rows pack through lzp:packrow, so neither can be the one
+# that forgets the budget and produces a dialog too wide to open.
+wv = fresh()
+wv.loads('(setq t:*b* lzp:*pinbudget*)')
+BUDGET = int(str(wv.globals['t:*b*']))
+LONG = sorted(PANEL, key=len, reverse=True)[:LIMIT]
+wv.loads("(setq lzp:*recent* '(%s))" % ' '.join('"%s"' % n for n in LONG))
+wv.loads('(setq t:*rows* (lzp:recrows))')
+rows = [[str(x) for x in r] for r in wv.globals['t:*rows*']]
+assert [n for r in rows for n in r] == LONG, \
+    "packing lost or reordered a name: %r" % rows
+for r in rows:
+    w = sum(len(n) + 6 for n in r)
+    assert w <= BUDGET, "a recent row is %d cells, over the %d budget" % (w, BUDGET)
+print("   %d long names pack onto %d row(s), widest %d cells (budget %d)"
+      % (len(LONG), len(rows),
+         max(sum(len(n) + 6 for n in r) for r in rows), BUDGET))
 
 
 print("== end-to-end with the DCL surface stubbed ==")
@@ -812,6 +908,55 @@ run(vm, 'c:LAZPANEL', 'click-missing')
 assert not vm.globals.get('stub:*ran*')
 assert any('%s is not loaded' % MISSING in str(p) for p in vm.printed), vm.printed
 print("   click on a missing command reports it instead of erroring")
+
+
+print("== a launch is what puts a tool in Recent ==")
+lv = stubbed()
+lv.loads('(defun vl-registry-write (k v s) (setq t:*w* s) s)')
+lv.loads('(setq stub:*click* "%s")' % LIVE)
+run(lv, 'c:LAZPANEL', 'recent-launch')
+assert [str(x) for x in (lv.globals.get('lzp:*recent*') or [])] == [LIVE], \
+    "running %s did not put it in Recent: %r" % (LIVE, lv.globals.get('lzp:*recent*'))
+assert str(lv.globals.get('t:*w*')) == LIVE, \
+    "Recent was not written to the registry: %r" % lv.globals.get('t:*w*')
+# and the second cycle's DCL carries the row the first one could not
+written = [str(l) for l in reversed(lv.globals.get('stub:*written*'))]
+assert 'key = "rec_%s"' % LIVE in '\n'.join(written), \
+    "the reopened panel does not carry the tool that was just run"
+print("   %s runs, lands in Recent, and is on the row when the panel"
+      % LIVE)
+print("   comes back -- the DCL is rewritten on every reopen")
+
+# a command that is not loaded never ran, so it is not recent either
+mv = stubbed()
+mv.loads('(defun vl-registry-write (k v s) s)')
+mv.loads('(setq stub:*click* "%s")' % MISSING)
+run(mv, 'c:LAZPANEL', 'recent-missing')
+assert not (mv.globals.get('lzp:*recent*') or []), \
+    "a command that did not run reached Recent: %r" % mv.globals.get('lzp:*recent*')
+print("   a command that could not run does not count as used")
+
+# the row's buttons launch exactly like the pinned ones, and grey the
+# same way -- a recent tool unloaded since is a dead button otherwise
+cv = stubbed()
+cv.loads('(defun vl-registry-write (k v s) s)')
+cv.loads("(setq lzp:*recent* '(\"%s\" \"%s\"))" % (LIVE, MISSING))
+cv.loads('(setq stub:*rcs* \'(0)) (setq t:*p* (lzp:show))')
+wired = {str(a[0]) for a in (cv.globals.get('stub:*action*') or [])}
+assert 'rec_%s' % LIVE in wired, "the Recent button is not wired: %r" % sorted(wired)
+disabled = {str(x) for x in (cv.globals.get('stub:*disabled*') or [])}
+assert 'rec_%s' % MISSING in disabled, \
+    "an unloaded tool on the Recent row is not greyed: %r" % sorted(disabled)
+assert 'rec_%s' % LIVE not in disabled, "a loaded tool on the Recent row is greyed"
+
+cv2 = stubbed()
+cv2.loads('(defun vl-registry-write (k v s) s)')
+cv2.loads("(setq lzp:*recent* '(\"%s\"))" % LIVE)
+cv2.loads('(setq stub:*rcs* \'(0)) (setq stub:*click* "rec_%s")' % LIVE)
+cv2.loads('(setq t:*p* (lzp:show))')
+assert str(cv2.globals.get('t:*p*')) == LIVE, \
+    "the Recent button handed back %r, not %s" % (cv2.globals.get('t:*p*'), LIVE)
+print("   a Recent button launches its tool and greys when it is not loaded")
 
 
 print("== the screen button goes up as the file loads ==")

@@ -205,6 +205,30 @@ make arbitrarily wide, and a DCL dialog that is too wide does not clip
 150-cell row; packed, they are two rows of 83 or less, and the test
 holds that line.
 
+**The Recent row.** Pins are what you decided you use; Recent is what
+you actually just used. It sits above Pinned, carries the last five
+tools you launched, newest first, and costs nothing to maintain -- no
+ticking, no editor. It is the row that answers *"what was that one
+called"* after you have come back from a tool and want it again.
+
+A tool that is already **pinned** is left off the row. It is still
+remembered, so unpinning brings it straight back, but showing it in both
+places would fill Recent with the handful of tools Pinned already
+carries -- which are by definition the ones you run most. So Recent is
+what you used that is not already on your row.
+
+A tool is remembered when it is **launched**, not when it finishes: one
+that errors out, or that you cancel with Escape, was still the one you
+reached for, and you will want it again in a moment. The list is stored
+under its own `Recent` value beside `Pins` in the same registry key, and
+a name from an older build is dropped on read exactly as a stale pin is.
+
+The row is **absent until there is something in it**, so a panel opened
+for the first time is exactly as tall as it has always been -- and DCL
+height is what stops a dialog opening at all. Both rows pack through the
+same `lzp:packrow`, so neither can be the one that forgets the width
+budget.
+
 Clicking a button closes the panel and runs that command exactly as if
 its name had been typed -- the panel adds nothing in front of a tool and
 nothing behind it. A command that is not loaded in this session shows as

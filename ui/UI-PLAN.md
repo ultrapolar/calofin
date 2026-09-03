@@ -77,10 +77,16 @@ and the whole page end to end through its own `action_tile` strings.
 
 ## Phase 2 -- what the panel remembers, and how many pages it needs
 
-- **Recents.** The registry path is already proven by pins
-  (`lzp:*pinkey*`). Keep the last N launched commands and put them on a
-  `Recent` row above `Pinned`. Pins stay hand-picked; recents cost
-  nothing to maintain and are what you actually want most mornings.
+- **Recents.** *(done, v3.3.)* The last five launched, newest first,
+  on a `Recent` row above `Pinned`, stored under its own value in the
+  key pins already use. Two decisions worth keeping: a tool is
+  remembered when it is **launched**, not when it finishes -- one that
+  errored or was escaped was still the one you reached for -- and a tool
+  already **pinned** is stored but not shown, or Recent would fill up
+  with the handful of tools Pinned already carries. The row is absent
+  until there is something in it, so a first-run panel is no taller
+  than before; both rows pack through one `lzp:packrow`, so neither can
+  be the one that forgets the width budget.
 - **Consider dropping the four category pages.** They exist so a tool
   you cannot place in a job is one tab away -- which is exactly what
   Find now does, better, in one page instead of four. 8 pages become 5,
@@ -184,6 +190,7 @@ with a build. What *is* verifiable here is the data both surfaces read:
    costs real time, and the one with the highest ratio of relief to
    risk. *(done)*
 3. **Recents** -- small, and better judged once Find has been used.
+   *(done)*
 4. **The form kit** -- structural; it is what makes phase 3 cheap to
    repeat and any new form possible at all.
 5. **The palette's data layer** -- last, because it is the only part
