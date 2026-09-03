@@ -90,6 +90,21 @@ def _():
                + dim_rotated((0.0, 0.0), (100.0, 0.0), 100.0, style="STANDARD"))
 
 
+@case("dim_shared_anchor")
+def _():
+    """Two dims measuring to the same floating corner - the hypotenuse
+    case. The shared point is an anchor and must NOT be reported; the
+    third dim's point really is a stray and must be."""
+    corner = (100.0, 0.0)
+    return dxf(line((0.0, 0.0), (60.0, 0.0))              # bottom run
+               + line((100.0, 40.0), (100.0, 100.0))      # right-hand run
+               + dim_rotated((0.0, 0.0), corner, 100.0, style="STANDARD")
+               + dim_rotated((100.0, 100.0), corner, 100.0, style="STANDARD",
+                             angle=90.0)
+               + dim_rotated((10.0, 0.0), (40.0, 15.0), 30.0,
+                             style="STANDARD"))
+
+
 @case("arc_unattached")
 def _():
     """An arc whose ends attach to nothing."""
