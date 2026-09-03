@@ -143,27 +143,54 @@ Still open from this phase, deliberately:
   on screen says so. The state line is the obvious place, but it is
   carrying two jobs already; this may want the static hint instead.
 
-## Phase 4 -- one form kit, in the library
+## Phase 4 -- one form kit, in the library *(done)*
 
-`LAZFORM`, `LAZSPA` and `LAZSTEP` duplicate the stroke font, the
+`LAZFORM`, `LAZSPA` and `LAZSTEP` duplicated the stroke font, the
 vector-chart drawing, the arrow and label placement and the DCL
-emitters, and they do it *by rule*: only `CALOFIN-LIB.lsp` may define
+emitters, and they did it *by rule*: only `CALOFIN-LIB.lsp` may define
 `cal:` symbols, and a shared tool may not define a name another shared
 file defines, so borrowing `lzf:` names would make LAZSPA depend on
 LAZFORM being loaded -- which it never is at the standalone tier.
 
-The repo already has the answer to exactly this shape of problem: a
+The repo already had the answer to exactly this shape of problem: a
 `cal:` helper in the library, a local copy in each standalone file, and
-`tools/mirror_shared.py` swapping one for the other. So: a `cal:form-*`
-kit in `CALOFIN-LIB.lsp` (font, glyph, `pline`, `arrow`, `label`,
-`text`, the px/py mapping, the answer store, the three-state wire).
-Each form keeps its own charts and its own idea of what is dead -- that
-is the part that is genuinely per-tool -- and stops carrying its own
-copy of the engine.
+`tools/mirror_shared.py` swapping one for the other. So that is what
+the kit is.
 
-No visible change on its own. What it buys is the next form costing a
-chart table instead of 1,500 lines, which is the only way the remaining
-62 commands ever get one.
+**What moved** -- verified byte-identical modulo the namespace before
+a line was written, and each twin is ~150 lines shorter for it:
+
+| | |
+| --- | --- |
+| the stroke font | `cal:*imgfont*` + three `cal:*imgfont-*` metrics |
+| the tile palette | `cal:*imgcol-line/-back/-dim/-val/-hi*` |
+| the drawing | `cal:imgglyph imgtext imgtextw imgtexth imgpline imgflatten imgarcpts` |
+| the form contract | `cal:formanswer` -- STANDARDS.md's three states |
+| the state lines' strings | `cal:plural`, `cal:andjoin` |
+
+Named `img*` because that is where they draw. `cal:text` already makes
+an AutoCAD TEXT entity and means something else entirely; that
+collision is what the prefix exists to avoid.
+
+**What did not move, and why.** `lzX:px`, `lzX:py` and `lzX:pline`
+genuinely differ -- LAZSPA and LAZSTEP cut the chart into bands and
+clip to the one being drawn, LAZFORM draws it whole -- and everything
+touching `*vals*`, `*pos*`, `*chart*` or `*focus*` is per-tool STATE:
+lifting `get`/`put` would give the three forms one shared answer store,
+which is a footgun rather than a saving.
+
+**Two helpers had to be made identical first**, and both are small
+improvements in their own right: `lzX:trim` now trims tabs and is
+nil-safe (it is `cal:trim`'s body, so a pasted value with a tab stops
+being silently dropped -- which is the phase 3 complaint again), and
+`lzX:boxes` became the general `lzX:plural (n one many)`, since
+`cal:boxes` in a library that already has `cal:bbox-ent` would read as
+a bounding box.
+
+The swap map is the point as much as the saving: it is the written
+statement that these copies **are** the same code, and
+`mirror_shared.py --check` -- which `make check` runs -- fails the
+build if one of them drifts.
 
 ## Phase 5 -- the palette stops drifting
 
@@ -192,7 +219,7 @@ with a build. What *is* verifiable here is the data both surfaces read:
 3. **Recents** -- small, and better judged once Find has been used.
    *(done)*
 4. **The form kit** -- structural; it is what makes phase 3 cheap to
-   repeat and any new form possible at all.
+   repeat and any new form possible at all. *(done)*
 5. **The palette's data layer** -- last, because it is the only part
    this environment cannot prove.
 

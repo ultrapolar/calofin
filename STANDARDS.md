@@ -499,8 +499,10 @@ standalone/  generated, self-contained, dated REV-stamped twins - one
              (today: releases/ - the rename is still pending)
 shared/      BUILT - the loaded-together build: CALOFIN-LIB.lsp (the
              section-4 helpers plus ensure-layer, the vector sets,
-             circumcenter, bboxes, trim/pad/datestr, block-number and
-             more, all under cal:), CALOFIN-LOADER.lsp (APPLOAD this
+             circumcenter, bboxes, trim/pad/datestr, block-number, the
+             chart-form kit the three LAZ* forms draw with (cal:img*,
+             cal:formanswer) and more, all under cal:),
+             CALOFIN-LOADER.lsp (APPLOAD this
              one file), and one <TOOL>.lsp twin per tool with its
              embedded helper copies replaced by cal: calls.  The
              deprecated acady matcher is not carried here.  See

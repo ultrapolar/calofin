@@ -37,7 +37,7 @@
 ;;; command line, and it is exactly what the routines ask for.
 ;;;
 ;;; EACH PAGE SAYS WHAT IT IS ABOUT TO DO.  Page one carries boxes with
-;;; two different readers -- a measurement goes through lzt:answer, the
+;;; two different readers -- a measurement goes through cal:formanswer, the
 ;;; step count and the bench step through lzt:int -- and both turn what
 ;;; they cannot use into "not answered".  "3.5" is the case that
 ;;; separates them: a perfectly good measurement, and not a step number
@@ -104,7 +104,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.1")
+(setq *lazstep-version* "v1.2")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -140,66 +140,21 @@
     ((= ty "NORMIESTEP") (ns-run-with-answers form))))
 
 ;;; -------------------- the stroke font ---------------------------------
+;;;  THIS build takes the table, its metrics, the tile palette and the
+;;;  seven drawing helpers from CALOFIN-LIB.lsp -- cal:*imgfont*, the
+;;;  three cal:*imgfont-* sizes, cal:*imgcol-* and cal:img* -- shared
+;;;  with the other two chart forms, which carried the same copy.  The
+;;;  standalone file keeps its own, because it has to load alone.
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
 ;;;  line segments and that is the whole of it -- so the letters and the
-;;;  numbers on the chart are stroked out of segments here.
+;;;  numbers on the chart are stroked out of segments.
 ;;;
-;;;  One entry per character: the glyph as a list of polylines, each a
-;;;  flat list of x y x y ... in TENTHS of a font unit, on a cell 4 wide
-;;;  and 6 tall with y running DOWN the way image-tile pixels do.
-;;;  Integers, so nothing here depends on float formatting.
+;;;  One entry per character, in the library: the glyph as a list of
+;;;  polylines, each a flat list of x y x y ... in TENTHS of a font
+;;;  unit, on a cell 4 wide and 6 tall with y running DOWN the way
+;;;  image-tile pixels do.
 
-(setq lzt:*font* '(
-    ("A" (0 60 20 0 40 60) (8 40 32 40))
-    ("B" (0 0 0 60) (0 0 30 0 40 10 40 20 30 30 0 30) (30 30 40 40 40 50 30 60 0 60))
-    ("C" (40 10 30 0 10 0 0 10 0 50 10 60 30 60 40 50))
-    ("D" (0 0 0 60) (0 0 30 0 40 10 40 50 30 60 0 60))
-    ("E" (40 0 0 0 0 60 40 60) (0 30 30 30))
-    ("F" (40 0 0 0 0 60) (0 30 30 30))
-    ("G" (40 10 30 0 10 0 0 10 0 50 10 60 30 60 40 50 40 30 20 30))
-    ("H" (0 0 0 60) (40 0 40 60) (0 30 40 30))
-    ("I" (10 0 30 0) (20 0 20 60) (10 60 30 60))
-    ("J" (30 0 30 50 20 60 10 60 0 50))
-    ("K" (0 0 0 60) (40 0 0 35) (14 25 40 60))
-    ("L" (0 0 0 60 40 60))
-    ("M" (0 60 0 0 20 30 40 0 40 60))
-    ("N" (0 60 0 0 40 60 40 0))
-    ("O" (10 0 30 0 40 10 40 50 30 60 10 60 0 50 0 10 10 0))
-    ("P" (0 60 0 0 30 0 40 10 40 20 30 30 0 30))
-    ("Q" (10 0 30 0 40 10 40 50 30 60 10 60 0 50 0 10 10 0) (25 45 40 60))
-    ("R" (0 60 0 0 30 0 40 10 40 20 30 30 0 30) (20 30 40 60))
-    ("S" (40 10 30 0 10 0 0 10 0 20 10 30 30 30 40 40 40 50 30 60 10 60 0 50))
-    ("T" (0 0 40 0) (20 0 20 60))
-    ("U" (0 0 0 50 10 60 30 60 40 50 40 0))
-    ("V" (0 0 20 60 40 0))
-    ("W" (0 0 10 60 20 20 30 60 40 0))
-    ("X" (0 0 40 60) (40 0 0 60))
-    ("Y" (0 0 20 30 40 0) (20 30 20 60))
-    ("Z" (0 0 40 0 0 60 40 60))
-    ("0" (10 0 30 0 40 10 40 50 30 60 10 60 0 50 0 10 10 0) (5 55 35 5))
-    ("1" (10 10 20 0 20 60) (10 60 30 60))
-    ("2" (0 10 10 0 30 0 40 10 40 20 0 60 40 60))
-    ("3" (0 0 40 0 20 25) (20 25 40 35 40 50 30 60 10 60 0 50))
-    ("4" (30 60 30 0 0 40 40 40))
-    ("5" (40 0 0 0 0 25 30 25 40 35 40 50 30 60 10 60 0 50))
-    ("6" (40 0 20 0 0 20 0 50 10 60 30 60 40 50 40 40 30 30 10 30 0 40))
-    ("7" (0 0 40 0 15 60))
-    ("8" (10 30 0 20 0 10 10 0 30 0 40 10 40 20 30 30 10 30 0 40 0 50 10 60 30 60 40 50 40 40 30 30))
-    ("9" (0 60 20 60 40 40 40 10 30 0 10 0 0 10 0 20 10 30 30 30 40 20))
-    ("." (17 54 23 54 23 60 17 60 17 54))
-    ("-" (5 30 35 30))
-    ("'" (20 0 20 16))
-    ("\"" (13 0 13 16) (27 0 27 16))
-    ("/" (0 60 40 0))
-    (":" (20 16 20 22) (20 40 20 46))
-    ("%" (0 60 40 0) (5 5 12 5) (28 55 35 55))
-    ("#" (10 0 6 60) (30 0 26 60) (0 20 40 20) (0 40 40 40))
-    (" ")
-))
 
-(setq lzt:*font-w* 40)          ; glyph cell width, tenths
-(setq lzt:*font-h* 60)          ; glyph cell height, tenths
-(setq lzt:*font-adv* 56)        ; pen advance per character, tenths
 
 ;;; -------------------- the frame the chart is drawn in ------------------
 ;;;  Everything is in PER-MILLE of the picture, x and y, y down -- the
@@ -551,31 +506,11 @@
   (if (setq d (assoc stem (lzt:asks)))
     (if (> (setq i (lzt:sel stem)) 0) (nth i (nth 3 d)))))
 
-(defun lzt:trim (s / i n)
-  (setq i 1 n (strlen s))
-  (while (and (<= i n) (= (substr s i 1) " ")) (setq i (1+ i)))
-  (while (and (>= n i) (= (substr s n 1) " ")) (setq n (1- n)))
-  (if (> i n) "" (substr s i (1+ (- n i)))))
-
-;;  The three states, decided here.  Anything that is neither NA nor a
-;;  distance AutoCAD can read is treated as an empty box: a typo must
-;;  leave the routine asking rather than quietly feeding it a nil that
-;;  means something else entirely.  distof reads the architectural
-;;  spellings, so 2'6" and 2'-6-1/2" arrive as the numbers they look
-;;  like.
-(defun lzt:answer (v / n)
-  (cond
-    ((or (null v) (= v "")) 'SKIP)
-    ((= (strcase (lzt:trim v)) "NA") nil)
-    ((setq n (distof (lzt:trim v) 4)) n)
-    ((setq n (distof (lzt:trim v) 2)) n)
-    (t 'SKIP)))
-
 ;; A box that has to hold a whole number.  The step count and the bench
 ;; step both refuse anything else, so a typo has to read as "not
 ;; answered" rather than as a zero.
 (defun lzt:int (s / i c ok n)
-  (setq s  (lzt:trim s)
+  (setq s  (cal:trim s)
         ok (> (strlen s) 0)
         i  1)
   (while (and ok (<= i (strlen s)))
@@ -646,33 +581,17 @@
 
 ;;; -------------------- what the page still owes -------------------------
 ;;;  LAZFORM's state line, on a form that has TWO readers to fail.  A
-;;;  DIST box goes through lzt:answer and an INT box through lzt:int,
+;;;  DIST box goes through cal:formanswer and an INT box through lzt:int,
 ;;;  and both turn what they cannot use into "not answered" -- while the
 ;;;  chart goes on showing what was typed, because the chart draws the
 ;;;  STRING.  So a box that will be ignored looks exactly like one that
 ;;;  was answered.  "3.5" in "Bench ends on step number" is the sharp
 ;;;  case: it is a perfectly good measurement and not a step number at
-;;;  all, so lzt:answer would take it and lzt:int is what actually
+;;;  all, so cal:formanswer would take it and lzt:int is what actually
 ;;;  reads it.
 ;;;
 ;;;  Nothing here changes what is SENT -- lzt:form is still the only
 ;;;  thing that decides that.  It reports what lzt:form is about to do.
-
-;; "1 box" / "5 boxes".
-(defun lzt:boxes (n)
-  (strcat (itoa n) (if (= n 1) " box" " boxes")))
-
-;; "A", "A and B", "A, B and C", "A, B, C and 2 more".  The last "and"
-;; belongs to whatever ENDS the list: with an overflow count hung off
-;; it, "A, B and C and 2 more" reads as two lists rather than one.
-(defun lzt:join (l last / n i out k)
-  (setq n (length l) i 0 out "")
-  (foreach k l
-    (setq i (1+ i)
-          out (cond ((= i 1) k)
-                    ((and last (= i n)) (strcat out " and " k))
-                    (t (strcat out ", " k)))))
-  out)
 
 (defun lzt:taglist (keys / n i named k)
   (setq n (length keys) i 0)
@@ -680,8 +599,8 @@
     (if (< i 3) (setq named (cons (lzt:tagof k) named) i (1+ i))))
   (setq named (reverse named))
   (if (> n 3)
-    (strcat (lzt:join named nil) " and " (itoa (- n 3)) " more")
-    (lzt:join named t)))
+    (strcat (cal:andjoin named nil) " and " (itoa (- n 3)) " more")
+    (cal:andjoin named t)))
 
 ;; Page two's boxes are all drawn dimensions, so every one of them has
 ;; a letter on the chart -- which is the name to use: a key would send
@@ -707,12 +626,12 @@
 ;; are only ever two or three of them, and a label is a sentence.
 (defun lzt:p1bad ( / out d v)
   (foreach d (lzt:p1boxes)
-    (setq v (lzt:trim (lzt:get (car d))))
+    (setq v (cal:trim (lzt:get (car d))))
     (if (and (not out) (/= v ""))
       (cond
         ((and (= (cadr d) "INT") (null (lzt:int v)))
          (setq out (cons d "is not a whole number")))
-        ((and (= (cadr d) "DIST") (eq (lzt:answer v) 'SKIP))
+        ((and (= (cadr d) "DIST") (eq (cal:formanswer v) 'SKIP))
          (setq out (cons d "is not a measurement"))))))
   out)
 
@@ -723,7 +642,7 @@
   (cond
     ((setq why (lzt:countwhy)) why)
     ((setq bad (lzt:p1bad))
-     (strcat (caddr (car bad)) ": \"" (lzt:trim (lzt:get (car (car bad))))
+     (strcat (caddr (car bad)) ": \"" (cal:trim (lzt:get (car (car bad))))
              "\" " (cdr bad) "."))
     (t
      (setq n (lzt:int (lzt:get "steps")))
@@ -750,14 +669,14 @@
 
 (defun lzt:unreadable ( / out k v)
   (foreach k (lzt:livekeys)
-    (setq v (lzt:trim (lzt:get k)))
-    (if (and (/= v "") (eq (lzt:answer v) 'SKIP))
+    (setq v (cal:trim (lzt:get k)))
+    (if (and (/= v "") (eq (cal:formanswer v) 'SKIP))
       (setq out (cons k out))))
   (reverse out))
 
 (defun lzt:togo ( / out k)
   (foreach k (lzt:livekeys)
-    (if (= (lzt:trim (lzt:get k)) "") (setq out (cons k out))))
+    (if (= (cal:trim (lzt:get k)) "") (setq out (cons k out))))
   (reverse out))
 
 (defun lzt:p2state ( / bad togo n)
@@ -775,13 +694,14 @@
      (strcat "Nothing on this drawing is live - " lzt:*type*
              " will ask for all of it."))
     ((not togo)
-     (strcat "All " (lzt:boxes n) " filled - " lzt:*type*
+     (strcat "All " (cal:plural n "box" "boxes") " filled - " lzt:*type*
              " will ask only for the picks in the drawing."))
     ((= (length togo) n)
      (strcat "Nothing filled yet - " lzt:*type* " will ask for all "
-             (lzt:boxes n) ", plus the picks."))
+             (cal:plural n "box" "boxes") ", plus the picks."))
     (t
-     (strcat (itoa (- n (length togo))) " of " (lzt:boxes n) " filled - "
+     (strcat (itoa (- n (length togo))) " of "
+             (cal:plural n "box" "boxes") " filled - "
              lzt:*type* " will ask for " (lzt:taglist togo)
              ", plus the picks."))))
 
@@ -810,14 +730,14 @@
          (if (setq v (lzt:int (lzt:get (car k))))
            (setq out (cons (cons (read (car k)) v) out))))
         (t
-         (setq a (lzt:answer (lzt:get (car k))))
+         (setq a (cal:formanswer (lzt:get (car k))))
          (if (not (eq a 'SKIP))
            (setq out (cons (cons (read (car k)) a) out)))))))
   (foreach k (lzt:c-dims lzt:*chart*)
     (setq ck (cadr k))
     (if (and (not (member ck noask)) (not (assoc (read ck) out)))
       (progn
-        (setq a (lzt:answer (lzt:get ck)))
+        (setq a (cal:formanswer (lzt:get ck)))
         ;; NA at a tread is what ENDS the run, so it would stop the
         ;; flight short of the count that built this drawing -- it
         ;; counts as an empty box instead
@@ -838,11 +758,6 @@
 (setq lzt:*y0* 0)               ; the band being drawn, in per-mille
 (setq lzt:*y1* 1000)
 
-(setq lzt:*col-line* -16)       ; dialog foreground: the outline
-(setq lzt:*col-back* -15)       ; dialog background: the clear
-(setq lzt:*col-dim* 8)          ; grey: the dimension arrows
-(setq lzt:*col-val* 30)         ; orange: a value that has been typed
-(setq lzt:*col-hi* 5)           ; blue: the box round the active one
 
 (defun lzt:px (v) (fix (/ (* v lzt:*dx*) 1000.0)))
 (defun lzt:py (v)
@@ -866,35 +781,6 @@
          (list (+ x1 (* (- x2 x1) lo)) (+ y1 (* (- y2 y1) lo))
                (+ x1 (* (- x2 x1) hi)) (+ y1 (* (- y2 y1) hi)))))))
 
-;;  An outline element is either a POLYLINE -- a flat list of per-mille
-;;  numbers, x y x y ... -- or an ARC, written
-;;
-;;      ("A" cx cy rx ry from to)
-;;
-;;  with the centre and both radii in per-mille and the angles in
-;;  degrees, 0 due east and counting anticlockwise ON SCREEN.  Since
-;;  image-tile y runs DOWN, that is a minus on the y term and nowhere
-;;  else.  Two radii rather than one because the hemi curve wants half
-;;  of an ellipse more often than half of a circle.
-(defun lzt:arcpts (a / cx cy rx ry f to n i ang out)
-  (setq cx (nth 1 a) cy (nth 2 a) rx (nth 3 a) ry (nth 4 a)
-        f (nth 5 a) to (nth 6 a))
-  (setq n (fix (/ (abs (- to f)) 6.0)))
-  (if (< n 4) (setq n 4))
-  (setq i 0)
-  (while (<= i n)
-    ;; NB: the angle local is not called t -- a local of that name would
-    ;; shadow TRUE for the length of the call
-    (setq ang (/ (* pi (+ f (/ (* (- to f) i) (float n)))) 180.0)
-          out (cons (fix (- cy (* ry (sin ang))))
-                    (cons (fix (+ cx (* rx (cos ang)))) out))
-          i (1+ i)))
-  (reverse out))
-
-;; An outline element as a flat per-mille polyline, whichever it was.
-(defun lzt:flatten (e)
-  (if (= (type (car e)) 'STR) (lzt:arcpts e) e))
-
 ;; A polyline given as a flat per-mille list, clipped to the band.
 (defun lzt:pline (flat col / s)
   (while (and flat (cddr flat))
@@ -904,48 +790,12 @@
                       (lzt:px (caddr s)) (lzt:py (cadddr s)) col))
     (setq flat (cddr flat))))
 
-;; A polyline already in pixels, given as (x y x y ...).
-(defun lzt:plinepx (flat col)
-  (while (and flat (cddr flat))
-    (vector_image (car flat) (cadr flat) (caddr flat) (cadddr flat) col)
-    (setq flat (cddr flat))))
-
-(defun lzt:glyph (ch / p)
-  (if (setq p (assoc (strcase ch) lzt:*font*)) (cdr p)))
-
-;; The width one string will occupy, in pixels, at SC tenths per unit.
-(defun lzt:textw (s sc)
-  (if (= s "") 0
-      (fix (/ (* (- (* (strlen s) lzt:*font-adv*)
-                    (- lzt:*font-adv* lzt:*font-w*))
-                 sc)
-              100.0))))
-
-(defun lzt:texth (sc) (fix (/ (* lzt:*font-h* sc) 100.0)))
-
 ;; The size to letter the chart at.  Derived from the tile rather than
 ;; fixed: an image tile's pixel size falls out of the user's dialog font
 ;; and display DPI, and is not knowable until the dialog is up.
 (defun lzt:basesc ( / sc)
   (setq sc (/ (* lzt:*dy* 100) 1560))
   (if (< sc 12) 12 sc))
-
-;; Stroke S with its top-left corner at pixel X Y.  SC is a percentage
-;; of the font's own tenth-units, so the caller can size text to fit.
-(defun lzt:text (s x y sc col / i ch pen poly out n)
-  (setq i 1 pen x)
-  (while (<= i (strlen s))
-    (setq ch (substr s i 1))
-    (foreach poly (lzt:glyph ch)
-      (setq out nil n poly)
-      (while n
-        (setq out (cons (+ y (fix (/ (* (cadr n) sc) 100.0)))
-                        (cons (+ pen (fix (/ (* (car n) sc) 100.0))) out))
-              n (cddr n)))
-      (lzt:plinepx (reverse out) col))
-    (setq pen (+ pen (fix (/ (* lzt:*font-adv* sc) 100.0)))
-          i (1+ i)))
-  pen)
 
 ;; The dimension line with an arrowhead at each end, in per-mille,
 ;; clipped to the band.  A head is drawn only when its own end is
@@ -994,7 +844,7 @@
   (if (= txt "")
       (setq txt letter sc (lzt:basesc))
       (setq sc (/ (* (lzt:basesc) 90) 100)))
-  (setq w (lzt:textw txt sc))
+  (setq w (cal:imgtextw txt sc))
   (if (and (= side "h") (> w 0))
       (progn
         (setq span (abs (- x2 x1)))
@@ -1003,8 +853,8 @@
               (setq sc (/ (* sc span) w))
               (if (< sc (/ (* (lzt:basesc) 55) 100))
                   (setq sc (/ (* (lzt:basesc) 55) 100)))
-              (setq w (lzt:textw txt sc))))))
-  (setq h (lzt:texth sc))
+              (setq w (cal:imgtextw txt sc))))))
+  (setq h (cal:imgtexth sc))
   (if (= side "h")
       (setq lx (- mx (/ w 2)) ly (- y1 h 4))
       ;; a vertical dimension labels at the TOP of its span, centred on
@@ -1019,14 +869,14 @@
   (if (> (+ ly h) (- lzt:*dy* 2)) (setq ly (- lzt:*dy* h 2)))
   ;; blank the strip behind it so the dimension line does not run
   ;; through the characters
-  (fill_image (- lx 3) (- ly 2) (+ w 6) (+ h 4) lzt:*col-back*)
+  (fill_image (- lx 3) (- ly 2) (+ w 6) (+ h 4) cal:*imgcol-back*)
   (if (= key lzt:*focus*)
-      (lzt:plinepx (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
+      (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   lzt:*col-hi*))
-  (lzt:text txt lx ly sc
-            (if (= (lzt:get key) "") lzt:*col-line* lzt:*col-val*)))
+                   cal:*imgcol-hi*))
+  (cal:imgtext txt lx ly sc
+            (if (= (lzt:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
 
 ;; The band a dimension's TEXT belongs to.
 (defun lzt:anchor (d)
@@ -1053,13 +903,13 @@
           lzt:*dx*  (dimx_tile key)
           lzt:*dy*  (dimy_tile key))
     (start_image key)
-    (fill_image 0 0 lzt:*dx* lzt:*dy* lzt:*col-back*)
+    (fill_image 0 0 lzt:*dx* lzt:*dy* cal:*imgcol-back*)
     (foreach poly (lzt:c-outline c)
-      (lzt:pline (lzt:flatten poly) lzt:*col-line*))
+      (lzt:pline (cal:imgflatten poly) cal:*imgcol-line*))
     (foreach d (lzt:c-dims c)
       (if (not (member (cadr d) wk))
           (lzt:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d)
-                     lzt:*col-dim*)))
+                     cal:*imgcol-dim*)))
     (foreach d (lzt:c-dims c)
       (if (and (not (member (cadr d) wk))
                (lzt:inband (lzt:anchor d)))

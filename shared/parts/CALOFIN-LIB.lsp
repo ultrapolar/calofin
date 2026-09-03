@@ -23,7 +23,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.4")
+(setq cal:*version* "v1.5")
 
 (defun c:CALVER ()
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -477,6 +477,189 @@
           (cal:zeropad2 (rem dd 100)) " "
           (cal:zeropad2 (fix (+ (* tt 100) 1e-6))) ":"
           (cal:zeropad2 (rem (fix (+ (* tt 10000) 1e-4)) 100))))
+
+;;; -------------------- the chart forms ---------------------------------
+;;;  LAZFORM, LAZSPA and LAZSTEP draw their charts into a DCL IMAGE
+;;;  TILE, which can take line segments and nothing else -- no raster,
+;;;  no text, not even a font.  So the letters are stroked out of
+;;;  segments, the arcs are polygonised, and all three carried a
+;;;  byte-identical copy of the machinery for it: the font table, its
+;;;  metrics, the tile palette and seven drawing helpers, about 130
+;;;  lines apiece.
+;;;
+;;;  They still do, in lisp/ -- a standalone file has to load alone --
+;;;  but the grouped build takes them from here instead, through the
+;;;  swap map in tools/mirror_shared.py.  That map is also the written
+;;;  statement that the three copies ARE the same code: regenerate a
+;;;  twin whose local copy has drifted and --check fails.
+;;;
+;;;  Named img* because that is exactly where they draw.  cal:text
+;;;  already draws an AutoCAD TEXT entity and means something else
+;;;  entirely, which is the collision this prefix exists to avoid.
+
+;; The stroke font.  One entry per character: the glyph as a list of
+;; polylines, each a flat list of x y x y ... in TENTHS of a font unit,
+;; on a cell 4 wide and 6 tall with y running DOWN the way image-tile
+;; pixels do.  Integers, so nothing here depends on float formatting.
+(setq cal:*imgfont* '(
+    ("A" (0 60 20 0 40 60) (8 40 32 40))
+    ("B" (0 0 0 60) (0 0 30 0 40 10 40 20 30 30 0 30) (30 30 40 40 40 50 30 60 0 60))
+    ("C" (40 10 30 0 10 0 0 10 0 50 10 60 30 60 40 50))
+    ("D" (0 0 0 60) (0 0 30 0 40 10 40 50 30 60 0 60))
+    ("E" (40 0 0 0 0 60 40 60) (0 30 30 30))
+    ("F" (40 0 0 0 0 60) (0 30 30 30))
+    ("G" (40 10 30 0 10 0 0 10 0 50 10 60 30 60 40 50 40 30 20 30))
+    ("H" (0 0 0 60) (40 0 40 60) (0 30 40 30))
+    ("I" (10 0 30 0) (20 0 20 60) (10 60 30 60))
+    ("J" (30 0 30 50 20 60 10 60 0 50))
+    ("K" (0 0 0 60) (40 0 0 35) (14 25 40 60))
+    ("L" (0 0 0 60 40 60))
+    ("M" (0 60 0 0 20 30 40 0 40 60))
+    ("N" (0 60 0 0 40 60 40 0))
+    ("O" (10 0 30 0 40 10 40 50 30 60 10 60 0 50 0 10 10 0))
+    ("P" (0 60 0 0 30 0 40 10 40 20 30 30 0 30))
+    ("Q" (10 0 30 0 40 10 40 50 30 60 10 60 0 50 0 10 10 0) (25 45 40 60))
+    ("R" (0 60 0 0 30 0 40 10 40 20 30 30 0 30) (20 30 40 60))
+    ("S" (40 10 30 0 10 0 0 10 0 20 10 30 30 30 40 40 40 50 30 60 10 60 0 50))
+    ("T" (0 0 40 0) (20 0 20 60))
+    ("U" (0 0 0 50 10 60 30 60 40 50 40 0))
+    ("V" (0 0 20 60 40 0))
+    ("W" (0 0 10 60 20 20 30 60 40 0))
+    ("X" (0 0 40 60) (40 0 0 60))
+    ("Y" (0 0 20 30 40 0) (20 30 20 60))
+    ("Z" (0 0 40 0 0 60 40 60))
+    ("0" (10 0 30 0 40 10 40 50 30 60 10 60 0 50 0 10 10 0) (5 55 35 5))
+    ("1" (10 10 20 0 20 60) (10 60 30 60))
+    ("2" (0 10 10 0 30 0 40 10 40 20 0 60 40 60))
+    ("3" (0 0 40 0 20 25) (20 25 40 35 40 50 30 60 10 60 0 50))
+    ("4" (30 60 30 0 0 40 40 40))
+    ("5" (40 0 0 0 0 25 30 25 40 35 40 50 30 60 10 60 0 50))
+    ("6" (40 0 20 0 0 20 0 50 10 60 30 60 40 50 40 40 30 30 10 30 0 40))
+    ("7" (0 0 40 0 15 60))
+    ("8" (10 30 0 20 0 10 10 0 30 0 40 10 40 20 30 30 10 30 0 40 0 50 10 60 30 60 40 50 40 40 30 30))
+    ("9" (0 60 20 60 40 40 40 10 30 0 10 0 0 10 0 20 10 30 30 30 40 20))
+    ("." (17 54 23 54 23 60 17 60 17 54))
+    ("-" (5 30 35 30))
+    ("'" (20 0 20 16))
+    ("\"" (13 0 13 16) (27 0 27 16))
+    ("/" (0 60 40 0))
+    (":" (20 16 20 22) (20 40 20 46))
+    ("%" (0 60 40 0) (5 5 12 5) (28 55 35 55))
+    ("#" (10 0 6 60) (30 0 26 60) (0 20 40 20) (0 40 40 40))
+    (" ")
+))
+
+;; the cell, and how far the pen moves between characters
+(setq cal:*imgfont-w* 40)
+(setq cal:*imgfont-h* 60)
+(setq cal:*imgfont-adv* 56)
+
+;; The tile palette.  -16 and -15 are the dialog's own foreground and
+;; background, so the chart follows the user's AutoCAD theme rather
+;; than fighting it; the other three are real colour numbers.
+(setq cal:*imgcol-line* -16)
+(setq cal:*imgcol-back* -15)
+(setq cal:*imgcol-dim* 8)
+(setq cal:*imgcol-val* 30)
+(setq cal:*imgcol-hi* 5)
+
+;; one character's polylines, or nil
+(defun cal:imgglyph (ch / p)
+  (if (setq p (assoc (strcase ch) cal:*imgfont*)) (cdr p)))
+
+;; how wide / tall a string is at scale SC, in pixels
+(defun cal:imgtextw (s sc)
+  (if (= s "") 0
+      (fix (/ (* (- (* (strlen s) cal:*imgfont-adv*)
+                    (- cal:*imgfont-adv* cal:*imgfont-w*))
+                 sc)
+              100.0))))
+(defun cal:imgtexth (sc) (fix (/ (* cal:*imgfont-h* sc) 100.0)))
+
+;; a flat list of PIXEL coordinates, drawn as segments
+(defun cal:imgpline (flat col)
+  (while (and flat (cddr flat))
+    (vector_image (car flat) (cadr flat) (caddr flat) (cadddr flat) col)
+    (setq flat (cddr flat))))
+
+;; Stroke a string at (X, Y) in pixels, left edge and top, at scale SC.
+;; Returns the pen position after it, so callers can run text on.
+(defun cal:imgtext (s x y sc col / i ch pen poly out n)
+  (setq i 1 pen x)
+  (while (<= i (strlen s))
+    (setq ch (substr s i 1))
+    (foreach poly (cal:imgglyph ch)
+      (setq out nil n poly)
+      (while n
+        (setq out (cons (+ y (fix (/ (* (cadr n) sc) 100.0)))
+                        (cons (+ pen (fix (/ (* (car n) sc) 100.0))) out))
+              n (cddr n)))
+      (cal:imgpline (reverse out) col))
+    (setq pen (+ pen (fix (/ (* cal:*imgfont-adv* sc) 100.0)))
+          i (1+ i)))
+  pen)
+
+;; An arc written ("A" cx cy rx ry from to) -- centre and both radii in
+;; per-mille, angles in degrees with 0 due east and counting
+;; anticlockwise ON SCREEN -- polygonised into a flat point list.  Two
+;; radii rather than one because these charts want half of an ellipse
+;; as often as half of a circle.  Image-tile y runs DOWN, which is the
+;; minus on the y term and nowhere else.
+(defun cal:imgarcpts (a / cx cy rx ry f to n i ang out)
+  (setq cx (nth 1 a) cy (nth 2 a) rx (nth 3 a) ry (nth 4 a)
+        f (nth 5 a) to (nth 6 a))
+  (setq n (fix (/ (abs (- to f)) 6.0)))
+  (if (< n 4) (setq n 4))
+  (setq i 0)
+  (while (<= i n)
+    ;; NB: the angle local is not called t -- a local of that name would
+    ;; shadow TRUE for the length of the call
+    (setq ang (/ (* pi (+ f (/ (* (- to f) i) (float n)))) 180.0)
+          out (cons (fix (- cy (* ry (sin ang))))
+                    (cons (fix (+ cx (* rx (cos ang)))) out))
+          i (1+ i)))
+  (reverse out))
+
+;; an outline element -- a polyline already, or an arc -- as points
+(defun cal:imgflatten (e)
+  (if (= (type (car e)) 'STR) (cal:imgarcpts e) e))
+
+;;  STANDARDS.md's three-state form contract, decided here:
+;;
+;;    box left empty   the key is not sent at all -> the routine asks
+;;    NA typed in it   (key . nil) is sent        -> the routine takes NA
+;;    a measurement    (key . 84.0) is sent       -> taken, no prompt
+;;
+;;  Anything that is neither NA nor a distance AutoCAD can read comes
+;;  back SKIP and is treated as an empty box: a typo must leave the
+;;  routine asking rather than quietly feeding it a nil that means
+;;  something else entirely.  distof reads the architectural spellings,
+;;  so 25'6" and 25'-6-1/2" arrive as the numbers they look like.
+(defun cal:formanswer (v / n)
+  (cond
+    ((or (null v) (= v "")) 'SKIP)
+    ((= (strcase (cal:trim v)) "NA") nil)
+    ((setq n (distof (cal:trim v) 4)) n)
+    ((setq n (distof (cal:trim v) 2)) n)
+    (t 'SKIP)))
+
+;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as a bug
+;; in the form, whatever it is actually reporting.
+(defun cal:plural (n one many)
+  (strcat (itoa n) " " (if (= n 1) one many)))
+
+;; "A", "A and B", "A, B and C" -- or, with LAST nil, commas
+;; throughout, which is what a list with "and 2 more" hung off the end
+;; of it needs: "A, B and C and 2 more" reads as two lists rather than
+;; one.
+(defun cal:andjoin (l last / n i out k)
+  (setq n (length l) i 0 out "")
+  (foreach k l
+    (setq i (1+ i)
+          out (cond ((= i 1) k)
+                    ((and last (= i n)) (strcat out " and " k))
+                    (t (strcat out ", " k)))))
+  out)
 
 ;;; -------------------- entity creation ---------------------------------
 

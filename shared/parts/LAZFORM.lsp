@@ -29,7 +29,7 @@
 ;;; NA in a box means "not measured" and is passed through as such --
 ;;; different from leaving it blank, which just means POOL should ask.
 ;;;
-;;; THE FORM SAYS WHAT IT IS ABOUT TO DO.  lzf:answer turns anything it
+;;; THE FORM SAYS WHAT IT IS ABOUT TO DO.  cal:formanswer turns anything it
 ;;; cannot read into "not answered", so a typo used to be dropped in
 ;;; silence while the chart went on showing it -- the chart draws the
 ;;; STRING -- and POOL asked for that dimension again with no reason
@@ -87,69 +87,24 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.8")
+(setq *lazform-version* "v2.9")
 
 ;;; -------------------- the stroke font ---------------------------------
+;;;  THIS build takes the table, its metrics, the tile palette and the
+;;;  seven drawing helpers from CALOFIN-LIB.lsp -- cal:*imgfont*, the
+;;;  three cal:*imgfont-* sizes, cal:*imgcol-* and cal:img* -- shared
+;;;  with the other two chart forms, which carried the same copy.  The
+;;;  standalone file keeps its own, because it has to load alone.
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
 ;;;  line segments and that is the whole of it -- so the letters and the
-;;;  numbers on the chart are stroked out of segments here.
+;;;  numbers on the chart are stroked out of segments.
 ;;;
-;;;  One entry per character: the glyph as a list of polylines, each a
-;;;  flat list of x y x y ... in TENTHS of a font unit, on a cell 4 wide
-;;;  and 6 tall with y running DOWN the way image-tile pixels do.
-;;;  Integers, so nothing here depends on float formatting.
+;;;  One entry per character, in the library: the glyph as a list of
+;;;  polylines, each a flat list of x y x y ... in TENTHS of a font
+;;;  unit, on a cell 4 wide and 6 tall with y running DOWN the way
+;;;  image-tile pixels do.
 
-(setq lzf:*font* '(
-    ("A" (0 60 20 0 40 60) (8 40 32 40))
-    ("B" (0 0 0 60) (0 0 30 0 40 10 40 20 30 30 0 30) (30 30 40 40 40 50 30 60 0 60))
-    ("C" (40 10 30 0 10 0 0 10 0 50 10 60 30 60 40 50))
-    ("D" (0 0 0 60) (0 0 30 0 40 10 40 50 30 60 0 60))
-    ("E" (40 0 0 0 0 60 40 60) (0 30 30 30))
-    ("F" (40 0 0 0 0 60) (0 30 30 30))
-    ("G" (40 10 30 0 10 0 0 10 0 50 10 60 30 60 40 50 40 30 20 30))
-    ("H" (0 0 0 60) (40 0 40 60) (0 30 40 30))
-    ("I" (10 0 30 0) (20 0 20 60) (10 60 30 60))
-    ("J" (30 0 30 50 20 60 10 60 0 50))
-    ("K" (0 0 0 60) (40 0 0 35) (14 25 40 60))
-    ("L" (0 0 0 60 40 60))
-    ("M" (0 60 0 0 20 30 40 0 40 60))
-    ("N" (0 60 0 0 40 60 40 0))
-    ("O" (10 0 30 0 40 10 40 50 30 60 10 60 0 50 0 10 10 0))
-    ("P" (0 60 0 0 30 0 40 10 40 20 30 30 0 30))
-    ("Q" (10 0 30 0 40 10 40 50 30 60 10 60 0 50 0 10 10 0) (25 45 40 60))
-    ("R" (0 60 0 0 30 0 40 10 40 20 30 30 0 30) (20 30 40 60))
-    ("S" (40 10 30 0 10 0 0 10 0 20 10 30 30 30 40 40 40 50 30 60 10 60 0 50))
-    ("T" (0 0 40 0) (20 0 20 60))
-    ("U" (0 0 0 50 10 60 30 60 40 50 40 0))
-    ("V" (0 0 20 60 40 0))
-    ("W" (0 0 10 60 20 20 30 60 40 0))
-    ("X" (0 0 40 60) (40 0 0 60))
-    ("Y" (0 0 20 30 40 0) (20 30 20 60))
-    ("Z" (0 0 40 0 0 60 40 60))
-    ("0" (10 0 30 0 40 10 40 50 30 60 10 60 0 50 0 10 10 0) (5 55 35 5))
-    ("1" (10 10 20 0 20 60) (10 60 30 60))
-    ("2" (0 10 10 0 30 0 40 10 40 20 0 60 40 60))
-    ("3" (0 0 40 0 20 25) (20 25 40 35 40 50 30 60 10 60 0 50))
-    ("4" (30 60 30 0 0 40 40 40))
-    ("5" (40 0 0 0 0 25 30 25 40 35 40 50 30 60 10 60 0 50))
-    ("6" (40 0 20 0 0 20 0 50 10 60 30 60 40 50 40 40 30 30 10 30 0 40))
-    ("7" (0 0 40 0 15 60))
-    ("8" (10 30 0 20 0 10 10 0 30 0 40 10 40 20 30 30 10 30 0 40 0 50 10 60 30 60 40 50 40 40 30 30))
-    ("9" (0 60 20 60 40 40 40 10 30 0 10 0 0 10 0 20 10 30 30 30 40 20))
-    ("." (17 54 23 54 23 60 17 60 17 54))
-    ("-" (5 30 35 30))
-    ("'" (20 0 20 16))
-    ("\"" (13 0 13 16) (27 0 27 16))
-    ("/" (0 60 40 0))
-    (":" (20 16 20 22) (20 40 20 46))
-    ("%" (0 60 40 0) (5 5 12 5) (28 55 35 55))
-    ("#" (10 0 6 60) (30 0 26 60) (0 20 40 20) (0 40 40 40))
-    (" ")
-))
 
-(setq lzf:*font-w* 40)          ; glyph cell width, tenths
-(setq lzf:*font-h* 60)          ; glyph cell height, tenths
-(setq lzf:*font-adv* 56)        ; pen advance per character, tenths
 
 ;;; -------------------- the charts --------------------------------------
 ;;;  Everything is in PER-MILLE of the picture, x and y, y down -- the
@@ -1070,11 +1025,6 @@
 (setq lzf:*dx* 0)               ; the tile's extent this time round
 (setq lzf:*dy* 0)
 
-(setq lzf:*col-line* -16)       ; dialog foreground: the outline
-(setq lzf:*col-back* -15)       ; dialog background: the clear
-(setq lzf:*col-dim* 8)          ; grey: the dimension arrows
-(setq lzf:*col-val* 30)         ; orange: a value that has been typed
-(setq lzf:*col-hi* 5)           ; blue: the box round the active one
 
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
@@ -1095,25 +1045,6 @@
 ;;  polyline sooner or later; doing it here means the chart data can say
 ;;  what it means and say it once.
 
-(defun lzf:arcpts (a / cx cy rx ry f to n i ang out)
-  (setq cx (nth 1 a) cy (nth 2 a) rx (nth 3 a) ry (nth 4 a)
-        f (nth 5 a) to (nth 6 a))
-  (setq n (fix (/ (abs (- to f)) 6.0)))
-  (if (< n 4) (setq n 4))
-  (setq i 0)
-  (while (<= i n)
-    ;; NB: the angle local is not called t -- a local of that name would
-    ;; shadow TRUE for the length of the call
-    (setq ang (/ (* pi (+ f (/ (* (- to f) i) (float n)))) 180.0)
-          out (cons (fix (- cy (* ry (sin ang))))
-                    (cons (fix (+ cx (* rx (cos ang)))) out))
-          i (1+ i)))
-  (reverse out))
-
-;; An outline element as a flat per-mille polyline, whichever it was.
-(defun lzf:flatten (e)
-  (if (= (type (car e)) 'STR) (lzf:arcpts e) e))
-
 ;; A polyline given as a flat per-mille list, in pixels.
 (defun lzf:pline (flat col / a b)
   (while (and flat (cddr flat))
@@ -1121,25 +1052,6 @@
           b (list (lzf:px (caddr flat)) (lzf:py (cadddr flat))))
     (vector_image (car a) (cadr a) (car b) (cadr b) col)
     (setq flat (cddr flat))))
-
-;; A polyline already in pixels, given as (x y x y ...).
-(defun lzf:plinepx (flat col)
-  (while (and flat (cddr flat))
-    (vector_image (car flat) (cadr flat) (caddr flat) (cadddr flat) col)
-    (setq flat (cddr flat))))
-
-(defun lzf:glyph (ch / p out)
-  (if (setq p (assoc (strcase ch) lzf:*font*)) (cdr p)))
-
-;; The width one string will occupy, in pixels, at SC tenths per unit.
-(defun lzf:textw (s sc)
-  (if (= s "") 0
-      (fix (/ (* (- (* (strlen s) lzf:*font-adv*)
-                    (- lzf:*font-adv* lzf:*font-w*))
-                 sc)
-              100.0))))
-
-(defun lzf:texth (sc) (fix (/ (* lzf:*font-h* sc) 100.0)))
 
 ;; The size to letter the chart at.  Derived from the tile rather than
 ;; fixed: an image tile's pixel size falls out of the user's dialog font
@@ -1149,23 +1061,6 @@
 (defun lzf:basesc ( / sc)
   (setq sc (/ (* lzf:*dy* 100) 1560))
   (if (< sc 12) 12 sc))
-
-;; Stroke S with its top-left corner at pixel X Y.  SC is a percentage
-;; of the font's own tenth-units, so the caller can size text to fit.
-(defun lzf:text (s x y sc col / i ch pen poly out n)
-  (setq i 1 pen x)
-  (while (<= i (strlen s))
-    (setq ch (substr s i 1))
-    (foreach poly (lzf:glyph ch)
-      (setq out nil n poly)
-      (while n
-        (setq out (cons (+ y (fix (/ (* (cadr n) sc) 100.0)))
-                        (cons (+ pen (fix (/ (* (car n) sc) 100.0))) out))
-              n (cddr n)))
-      (lzf:plinepx (reverse out) col))
-    (setq pen (+ pen (fix (/ (* lzf:*font-adv* sc) 100.0)))
-          i (1+ i)))
-  pen)
 
 ;; The dimension line, in per-mille.  A measurement that runs along the
 ;; drawing -- "h" or "v" -- gets an arrowhead at each end; a radius
@@ -1211,7 +1106,7 @@
   (if (= txt "")
       (setq txt letter sc (lzf:basesc))
       (setq sc (/ (* (lzf:basesc) 90) 100)))
-  (setq w (lzf:textw txt sc))
+  (setq w (cal:imgtextw txt sc))
   (if (and (= side "h") (> w 0))
       (progn
         (setq span (abs (- x2 x1)))
@@ -1220,8 +1115,8 @@
               (setq sc (/ (* sc span) w))
               (if (< sc (/ (* (lzf:basesc) 55) 100))
                   (setq sc (/ (* (lzf:basesc) 55) 100)))
-              (setq w (lzf:textw txt sc))))))
-  (setq h (lzf:texth sc))
+              (setq w (cal:imgtextw txt sc))))))
+  (setq h (cal:imgtexth sc))
   (cond
     ;; a leader ends where its letter goes, and the letter is centred
     ;; on that spot -- the line runs up to it and the blanked strip
@@ -1244,14 +1139,14 @@
   (if (> (+ ly h) (- lzf:*dy* 2)) (setq ly (- lzf:*dy* h 2)))
   ;; blank the strip behind it so the dimension line does not run
   ;; through the characters
-  (fill_image (- lx 3) (- ly 2) (+ w 6) (+ h 4) lzf:*col-back*)
+  (fill_image (- lx 3) (- ly 2) (+ w 6) (+ h 4) cal:*imgcol-back*)
   (if (= key lzf:*focus*)
-      (lzf:plinepx (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
+      (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   lzf:*col-hi*))
-  (lzf:text txt lx ly sc
-            (if (= (lzf:get key) "") lzf:*col-line* lzf:*col-val*)))
+                   cal:*imgcol-hi*))
+  (cal:imgtext txt lx ly sc
+            (if (= (lzf:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
 
 ;; The whole picture, start to end.  Every vector goes between one
 ;; start_image and one end_image so the tile is painted once: the
@@ -1263,12 +1158,12 @@
         lzf:*dx* (dimx_tile "chart")
         lzf:*dy* (dimy_tile "chart"))
   (start_image "chart")
-  (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
+  (fill_image 0 0 lzf:*dx* lzf:*dy* cal:*imgcol-back*)
   (foreach poly (lzf:outline c)
-    (lzf:pline (lzf:flatten poly) lzf:*col-line*))
+    (lzf:pline (cal:imgflatten poly) cal:*imgcol-line*))
   (foreach d (lzf:dims c)
     (lzf:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d) (nth 6 d)
-               lzf:*col-dim*))
+               cal:*imgcol-dim*))
   (foreach d (lzf:dims c) (lzf:label d))
   (end_image)
   (princ))
@@ -1907,20 +1802,6 @@
 ;;;  distof reads the architectural spellings, so 25'6" and 25'-6-1/2"
 ;;;  arrive as the numbers they look like.
 
-(defun lzf:answer (v / n)
-  (cond
-    ((or (null v) (= v "")) 'SKIP)
-    ((= (strcase (lzf:trim v)) "NA") nil)
-    ((setq n (distof (lzf:trim v) 4)) n)
-    ((setq n (distof (lzf:trim v) 2)) n)
-    (t 'SKIP)))
-
-(defun lzf:trim (s / i n)
-  (setq i 1 n (strlen s))
-  (while (and (<= i n) (= (substr s i 1) " ")) (setq i (1+ i)))
-  (while (and (>= n i) (= (substr s n 1) " ")) (setq n (1- n)))
-  (if (> i n) "" (substr s i (1+ (- n i)))))
-
 ;; The alist POOL reads, built from what was typed.
 ;;; -------------------- what this page actually asks ---------------------
 ;;;  A page does not ask for every box on it, and the form used to
@@ -2037,7 +1918,7 @@
     (mode_tile k (if (member k dead) 1 0))))
 
 ;;; -------------------- what the page still owes -------------------------
-;;;  THE FAILURE THIS CLOSES.  lzf:answer turns anything it cannot read
+;;;  THE FAILURE THIS CLOSES.  cal:formanswer turns anything it cannot read
 ;;;  into SKIP, the key is then never sent, and POOL asks for it again
 ;;;  at the command line -- while the chart goes on showing what was
 ;;;  typed, because the chart draws the STRING.  So a box that will be
@@ -2098,12 +1979,12 @@
       (setq out (cons (strcat (car d) "-sz") out))))
   (reverse out))
 
-;; The live boxes holding something lzf:answer cannot read.
+;; The live boxes holding something cal:formanswer cannot read.
 (defun lzf:unreadable ( / c out k v)
   (setq c lzf:*chart*)
   (foreach k (lzf:livekeys c)
-    (setq v (lzf:trim (lzf:get k)))
-    (if (and (/= v "") (eq (lzf:answer v) 'SKIP))
+    (setq v (cal:trim (lzf:get k)))
+    (if (and (/= v "") (eq (cal:formanswer v) 'SKIP))
       (setq out (cons k out))))
   (reverse out))
 
@@ -2111,20 +1992,8 @@
 (defun lzf:togo ( / c out k)
   (setq c lzf:*chart*)
   (foreach k (lzf:livekeys c)
-    (if (= (lzf:trim (lzf:get k)) "") (setq out (cons k out))))
+    (if (= (cal:trim (lzf:get k)) "") (setq out (cons k out))))
   (reverse out))
-
-;; "B", "B and C2", "B, H and F", "B, H, F and 2 more".  A status line
-;; is read at a glance or not at all, so it names three and counts the
-;; rest rather than running off the end of the tile.
-(defun lzf:join (l last / n i out k)
-  (setq n (length l) i 0 out "")
-  (foreach k l
-    (setq i (1+ i)
-          out (cond ((= i 1) k)
-                    ((and last (= i n)) (strcat out " and " k))
-                    (t (strcat out ", " k)))))
-  out)
 
 (defun lzf:taglist (c keys / n i named k)
   (setq n (length keys) i 0)
@@ -2135,13 +2004,8 @@
   ;; overflow count hanging off it, "B, A and H and 9 more" reads as
   ;; two lists rather than one
   (if (> n 3)
-    (strcat (lzf:join named nil) " and " (itoa (- n 3)) " more")
-    (lzf:join named t)))
-
-;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as a bug
-;; in the form, whatever it is actually reporting.
-(defun lzf:boxes (n)
-  (strcat (itoa n) (if (= n 1) " box" " boxes")))
+    (strcat (cal:andjoin named nil) " and " (itoa (- n 3)) " more")
+    (cal:andjoin named t)))
 
 ;; The line itself.  An unreadable box is the urgent half and takes the
 ;; line to itself; when there is none, the line is the hand-off: how
@@ -2162,13 +2026,14 @@
     ((zerop n)
      (strcat "Nothing on this page is live - " who " will ask for all of it."))
     ((not togo)
-     (strcat "All " (lzf:boxes n) " filled - " who
+     (strcat "All " (cal:plural n "box" "boxes") " filled - " who
              " will ask only for the base point."))
     ((= (length togo) n)
-     (strcat "Nothing filled yet - " who " will ask for all " (lzf:boxes n)
-             ", plus the base point."))
+     (strcat "Nothing filled yet - " who " will ask for all "
+             (cal:plural n "box" "boxes") ", plus the base point."))
     (t
-     (strcat (itoa (- n (length togo))) " of " (lzf:boxes n) " filled - "
+     (strcat (itoa (- n (length togo))) " of "
+             (cal:plural n "box" "boxes") " filled - "
              who " will ask for " (lzf:taglist c togo)
              ", plus the base point."))))
 
@@ -2197,7 +2062,7 @@
         out  (list (cons 'shape shape)))
   (foreach k (lzf:keys lzf:*chart*)
     (setq v (lzf:get k)
-          a (lzf:answer v))
+          a (cal:formanswer v))
     (if (and (not (eq a 'SKIP)) (not (member k dead)))
         (setq out (cons (cons (read k) a) out))))
   ;; the cloud's bottom, the kidney's type and simple-or-complex: a
@@ -2220,7 +2085,7 @@
       (setq out (cons (cons 'btype btype) out)))
   (foreach k (lzf:keys lzf:*chart*)
     (setq v (lzf:get k)
-          a (lzf:answer v))
+          a (cal:formanswer v))
     (if (and (not (eq a 'SKIP)) (not (member k dead)))
         (setq out (cons (cons (read k) a) out))))
   ;; the mode dropdowns: a keyword answer in its own right, and one
@@ -2258,7 +2123,7 @@
         (progn
           (setq ty (nth i lzf:*ctreat*)
                 sz (if (lzf:csized i)
-                       (lzf:answer (lzf:get (strcat stem "-sz")))))
+                       (cal:formanswer (lzf:get (strcat stem "-sz")))))
           (foreach u targets
             (setq out (cons (cons (read (strcat u "-ty")) ty) out))
             (if (numberp sz)

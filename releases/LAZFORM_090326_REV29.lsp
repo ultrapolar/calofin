@@ -84,9 +84,14 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.8")
+(setq *lazform-version* "v2.9")
 
 ;;; -------------------- the stroke font ---------------------------------
+;;;  This file carries its own copy because a standalone file has to
+;;;  load alone.  The grouped build takes the table, its metrics, the
+;;;  tile palette and the seven drawing helpers from CALOFIN-LIB.lsp
+;;;  instead -- all three chart forms had the same copy, and the swap
+;;;  map in tools/mirror_shared.py is what says so and checks it.
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
 ;;;  line segments and that is the whole of it -- so the letters and the
 ;;;  numbers on the chart are stroked out of segments here.
@@ -1125,7 +1130,7 @@
     (vector_image (car flat) (cadr flat) (caddr flat) (cadddr flat) col)
     (setq flat (cddr flat))))
 
-(defun lzf:glyph (ch / p out)
+(defun lzf:glyph (ch / p)
   (if (setq p (assoc (strcase ch) lzf:*font*)) (cdr p)))
 
 ;; The width one string will occupy, in pixels, at SC tenths per unit.
@@ -1913,10 +1918,15 @@
     (t 'SKIP)))
 
 (defun lzf:trim (s / i n)
-  (setq i 1 n (strlen s))
-  (while (and (<= i n) (= (substr s i 1) " ")) (setq i (1+ i)))
-  (while (and (>= n i) (= (substr s n 1) " ")) (setq n (1- n)))
-  (if (> i n) "" (substr s i (1+ (- n i)))))
+  (if (null s) (setq s ""))
+  (setq n (strlen s) i 1)
+  (while (and (<= i n) (member (substr s i 1) '(" " "\t")))
+    (setq i (1+ i)))
+  (setq s (substr s i))
+  (setq n (strlen s))
+  (while (and (> n 0) (member (substr s n 1) '(" " "\t")))
+    (setq s (substr s 1 (1- n)) n (1- n)))
+  s)
 
 ;; The alist POOL reads, built from what was typed.
 ;;; -------------------- what this page actually asks ---------------------
@@ -2135,10 +2145,10 @@
     (strcat (lzf:join named nil) " and " (itoa (- n 3)) " more")
     (lzf:join named t)))
 
-;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as a bug
-;; in the form, whatever it is actually reporting.
-(defun lzf:boxes (n)
-  (strcat (itoa n) (if (= n 1) " box" " boxes")))
+;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as
+;; a bug in the form, whatever it is actually reporting.
+(defun lzf:plural (n one many)
+  (strcat (itoa n) " " (if (= n 1) one many)))
 
 ;; The line itself.  An unreadable box is the urgent half and takes the
 ;; line to itself; when there is none, the line is the hand-off: how
@@ -2159,13 +2169,14 @@
     ((zerop n)
      (strcat "Nothing on this page is live - " who " will ask for all of it."))
     ((not togo)
-     (strcat "All " (lzf:boxes n) " filled - " who
+     (strcat "All " (lzf:plural n "box" "boxes") " filled - " who
              " will ask only for the base point."))
     ((= (length togo) n)
-     (strcat "Nothing filled yet - " who " will ask for all " (lzf:boxes n)
-             ", plus the base point."))
+     (strcat "Nothing filled yet - " who " will ask for all "
+             (lzf:plural n "box" "boxes") ", plus the base point."))
     (t
-     (strcat (itoa (- n (length togo))) " of " (lzf:boxes n) " filled - "
+     (strcat (itoa (- n (length togo))) " of "
+             (lzf:plural n "box" "boxes") " filled - "
              who " will ask for " (lzf:taglist c togo)
              ", plus the base point."))))
 

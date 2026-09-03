@@ -80,9 +80,14 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.1")
+(setq *lazspa-version* "v1.2")
 
 ;;; -------------------- the stroke font ---------------------------------
+;;;  This file carries its own copy because a standalone file has to
+;;;  load alone.  The grouped build takes the table, its metrics, the
+;;;  tile palette and the seven drawing helpers from CALOFIN-LIB.lsp
+;;;  instead -- all three chart forms had the same copy, and the swap
+;;;  map in tools/mirror_shared.py is what says so and checks it.
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
 ;;;  line segments and that is the whole of it -- so the letters and the
 ;;;  numbers on the chart are stroked out of segments here.
@@ -909,10 +914,10 @@
     (strcat (lzs:join named nil) " and " (itoa (- n 3)) " more")
     (lzs:join named t)))
 
-;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as a bug
-;; in the form, whatever it is actually reporting.
-(defun lzs:boxes (n)
-  (strcat (itoa n) (if (= n 1) " box" " boxes")))
+;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as
+;; a bug in the form, whatever it is actually reporting.
+(defun lzs:plural (n one many)
+  (strcat (itoa n) " " (if (= n 1) one many)))
 
 ;; The line itself.  The two silent drops take it in turn, urgent
 ;; first; when neither is there the line is the hand-off.
@@ -937,13 +942,14 @@
     ((zerop n)
      "Nothing on this page is live - SPA will ask for all of it.")
     ((not togo)
-     (strcat "All " (lzs:boxes n) " filled - SPA will ask only for the "
-             "base point and the block."))
+     (strcat "All " (lzs:plural n "box" "boxes")
+             " filled - SPA will ask only for the base point and the block."))
     ((= (length togo) n)
-     (strcat "Nothing filled yet - SPA will ask for all " (lzs:boxes n)
-             ", plus the base point."))
+     (strcat "Nothing filled yet - SPA will ask for all "
+             (lzs:plural n "box" "boxes") ", plus the base point."))
     (t
-     (strcat (itoa (- n (length togo))) " of " (lzs:boxes n) " filled - "
+     (strcat (itoa (- n (length togo))) " of "
+             (lzs:plural n "box" "boxes") " filled - "
              "SPA will ask for " (lzs:taglist c togo)
              ", plus the base point."))))
 
@@ -1220,10 +1226,15 @@
     (t 'SKIP)))
 
 (defun lzs:trim (s / i n)
-  (setq i 1 n (strlen s))
-  (while (and (<= i n) (= (substr s i 1) " ")) (setq i (1+ i)))
-  (while (and (>= n i) (= (substr s n 1) " ")) (setq n (1- n)))
-  (if (> i n) "" (substr s i (1+ (- n i)))))
+  (if (null s) (setq s ""))
+  (setq n (strlen s) i 1)
+  (while (and (<= i n) (member (substr s i 1) '(" " "\t")))
+    (setq i (1+ i)))
+  (setq s (substr s i))
+  (setq n (strlen s))
+  (while (and (> n 0) (member (substr s n 1) '(" " "\t")))
+    (setq s (substr s 1 (1- n)) n (1- n)))
+  s)
 
 ;; One typed box, as SPA should hear it.  'SKIP means "send nothing".
 ;; An NA against a key SPA has no NA for is demoted to SKIP -- see

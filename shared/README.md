@@ -112,6 +112,30 @@ signed-dang ang-diff`), `cal:circumcenter`, `cal:bbox-ent` /
 creation (`cal:text cal:mtext`), and `cal:block-number`. Each
 helper's comment names the tool implementation it was lifted from.
 
+**The chart-form kit** is the newest of them, and the largest single
+lift so far. `LAZFORM`, `LAZSPA` and `LAZSTEP` all draw their charts
+into a DCL **image tile**, which takes line segments and nothing else
+-- no raster, no text, not even a font -- so all three carried a
+byte-identical copy of the machinery for it: the stroke font
+(`cal:*imgfont*` and the three `cal:*imgfont-*` metrics), the tile
+palette (`cal:*imgcol-line/-back/-dim/-val/-hi*`), and seven drawing
+helpers (`cal:imgglyph imgtext imgtextw imgtexth imgpline imgflatten
+imgarcpts`), plus the three-state form answer (`cal:formanswer`) and
+two string helpers the state lines use (`cal:plural`, `cal:andjoin`).
+About 130 lines apiece, three times over.
+
+They are named `img*` because that is exactly where they draw:
+`cal:text` already makes an AutoCAD TEXT entity and means something
+else entirely, which is the collision the prefix exists to avoid.
+
+`lzX:px`, `lzX:py` and `lzX:pline` are deliberately **not** in the kit:
+LAZSPA and LAZSTEP cut the chart into horizontal bands and clip to the
+band being drawn, where LAZFORM draws one whole picture, so those three
+genuinely differ and stay local. The swap map in
+`tools/mirror_shared.py` is the written statement that everything else
+in the list *is* the same code -- let one copy drift and `--check`
+fails on the next regeneration.
+
 Deliberately NOT absorbed (divergent behavior the tools rely on):
 POOL/SPA's `unit` (returns `(0.0 0.0)` on a zero vector, not nil),
 abhd/lhd's 2-element `circumcenter` and flat `bbox`, abhd's

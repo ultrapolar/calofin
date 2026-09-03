@@ -58,6 +58,21 @@ CORNERSTP = os.path.join(REPO, 'lisp', 'cornerstp', 'CORNERSTP.lsp')
 HEMISTEP = os.path.join(REPO, 'lisp', 'cornerstp', 'HEMISTEP.lsp')
 NORMIESTEP = os.path.join(REPO, 'lisp', 'cornerstp', 'NORMIESTEP.lsp')
 
+# The mirror swaps a handful of this file's helpers for CALOFIN-LIB's,
+# so a shared-tier run has to ask for the name that tier actually
+# defines.  tools/mirror_shared.py is the authority on the mapping;
+# these are the entries the tests below reach for by name.
+SHARED = bool(os.environ.get('CALOFIN_LISP_ROOT'))
+
+
+def lib(local, shared):
+    """The name this tier defines: the file's own, or the library's."""
+    return shared if SHARED else local
+
+
+FLATTEN = lib('lzt:flatten', 'cal:imgflatten')
+ANSWER = lib('lzt:answer', 'cal:formanswer')
+
 TOOLPATH = {'CORNERSTP': CORNERSTP,
             'HEMISTEP': HEMISTEP,
             'NORMIESTEP': NORMIESTEP}
@@ -257,8 +272,9 @@ for ty in TYPES:
 print("== the outline stays inside the picture, arcs included ==")
 for ty in TYPES:
     for n in COUNTS:
-        vm.loads('(setq t:*c* (lzt:chart "%s" %d))'
-                 '(setq t:*o* (mapcar \'lzt:flatten (lzt:c-outline t:*c*)))'
+        vm.loads(('(setq t:*c* (lzt:chart "%s" %d))'
+                  '(setq t:*o* (mapcar (quote ' + FLATTEN + ')'
+                  ' (lzt:c-outline t:*c*)))')
                  % (ty, n))
         for poly in vm.globals['t:*o*']:
             pts = [int(v) for v in poly]
@@ -576,7 +592,8 @@ print("   every labelled line under %d cells; the side column under %d"
 print("== the drawing lands inside the tile, in declared colours ==")
 COLS = {}
 for name in ('line', 'back', 'dim', 'val', 'hi'):
-    COLS[name] = int(vm.globals['lzt:*col-%s*' % name])
+    COLS[name] = int(vm.globals[lib('lzt:*col-%s*' % name,
+                                   'cal:*imgcol-%s*' % name)])
 for ty in TYPES:
     for n in (1, 3, 8):
         _reset()
@@ -642,7 +659,7 @@ for t, expect in (('', 'SKIP'),
                   ('24', 24.0),
                   ("2'6\"", 'NUMBER'),
                   ('not a number', 'SKIP')):
-    vm.loads('(setq t:*a* (lzt:answer "%s"))'
+    vm.loads('(setq t:*a* (' + ANSWER + ' "%s"))'
              % t.replace('\\', '\\\\').replace('"', '\\"'))
     got = vm.globals['t:*a*']
     if expect == 'SKIP':
@@ -1036,7 +1053,7 @@ sv.loads('(lzt:put "benchstep" "3.5")')
 bad = p1(sv)
 assert bad.startswith('Bench ends on step number:'), bad
 assert 'is not a whole number' in bad and '3.5' in bad, bad
-sv.loads('(setq t:*a* (lzt:answer "3.5")) (setq t:*i* (lzt:int "3.5"))')
+sv.loads('(setq t:*a* (' + ANSWER + ' "3.5")) (setq t:*i* (lzt:int "3.5"))')
 assert sv.globals['t:*a*'] is not None, "3.5 is not a distance after all"
 assert sv.globals['t:*i*'] is None, "3.5 passed the whole-number reader"
 sv.loads('(lzt:put "benchstep" "2") (lzt:put "benchoffset" "wide")')

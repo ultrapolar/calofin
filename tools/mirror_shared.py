@@ -32,6 +32,38 @@ BANNER = (";;; SHARED BUILD: requires CALOFIN-LIB.lsp "
           ";;; Generic helpers live there under cal: - see STANDARDS.md.\n"
           ";;;\n")
 
+# The stroke-font section's prose, byte-identical in all three chart
+# forms -- and false in a twin that takes the table from the library.
+FONT_PROSE = (
+    ";;;  This file carries its own copy because a standalone file has to\n"
+    ";;;  load alone.  The grouped build takes the table, its metrics, the\n"
+    ";;;  tile palette and the seven drawing helpers from CALOFIN-LIB.lsp\n"
+    ";;;  instead -- all three chart forms had the same copy, and the swap\n"
+    ";;;  map in tools/mirror_shared.py is what says so and checks it.\n"
+    ";;;  DCL has no way to draw text into an image tile -- vector_image draws\n"
+    ";;;  line segments and that is the whole of it -- so the letters and the\n"
+    ";;;  numbers on the chart are stroked out of segments here.\n"
+    ";;;\n"
+    ";;;  One entry per character: the glyph as a list of polylines, each a\n"
+    ";;;  flat list of x y x y ... in TENTHS of a font unit, on a cell 4 wide\n"
+    ";;;  and 6 tall with y running DOWN the way image-tile pixels do.\n"
+    ";;;  Integers, so nothing here depends on float formatting.\n")
+
+FONT_PROSE_SHARED = (
+    ";;;  THIS build takes the table, its metrics, the tile palette and the\n"
+    ";;;  seven drawing helpers from CALOFIN-LIB.lsp -- cal:*imgfont*, the\n"
+    ";;;  three cal:*imgfont-* sizes, cal:*imgcol-* and cal:img* -- shared\n"
+    ";;;  with the other two chart forms, which carried the same copy.  The\n"
+    ";;;  standalone file keeps its own, because it has to load alone.\n"
+    ";;;  DCL has no way to draw text into an image tile -- vector_image draws\n"
+    ";;;  line segments and that is the whole of it -- so the letters and the\n"
+    ";;;  numbers on the chart are stroked out of segments.\n"
+    ";;;\n"
+    ";;;  One entry per character, in the library: the glyph as a list of\n"
+    ";;;  polylines, each a flat list of x y x y ... in TENTHS of a font\n"
+    ";;;  unit, on a cell 4 wide and 6 tall with y running DOWN the way\n"
+    ";;;  image-tile pixels do.\n")
+
 # Per tool: where it lives, and which of its own helpers the library
 # already provides.  Only helpers whose behaviour the library reproduces
 # exactly belong in a swap map -- anything else stays local.
@@ -411,10 +443,55 @@ TOOLS = {
     # shared banner.  Listed so it can never drift.
     'LAZFORM': {
         'src': 'lisp/lazform/LAZFORM.lsp',
-        # the form asks nothing at the command line -- the tab strip
-        # replaced its keyword picker -- so it uses no library helper
-        'swap': {},
-        'drop_globals': [],
+        # THE CHART-FORM KIT.  All three forms draw into a DCL image
+        # tile, which takes line segments and nothing else, and all
+        # three carried a byte-identical copy of the machinery for it.
+        # The library has it now; these are the swaps, and the map is
+        # also the written statement that the copies are the same code
+        # -- let one drift and --check fails on the next regeneration.
+        # Verified identical modulo the namespace before it was
+        # written; lzX:px, lzX:py and lzX:pline are NOT here, because
+        # LAZSPA and LAZSTEP clip to a band where LAZFORM draws whole.
+        'swap': {
+            'lzf:glyph': 'cal:imgglyph',
+            'lzf:text': 'cal:imgtext',
+            'lzf:textw': 'cal:imgtextw',
+            'lzf:texth': 'cal:imgtexth',
+            'lzf:plinepx': 'cal:imgpline',
+            'lzf:flatten': 'cal:imgflatten',
+            'lzf:arcpts': 'cal:imgarcpts',
+            'lzf:trim': 'cal:trim',
+            'lzf:answer': 'cal:formanswer',
+            'lzf:plural': 'cal:plural',
+            'lzf:join': 'cal:andjoin',
+        },
+        # the font, its metrics and the tile palette are constants, so
+        # they move as globals: dropped here, renamed at every mention
+        # by 'symbols' below (a bare global is never "(name", so the
+        # swap map's call-site rewrite would not see it)
+        'drop_globals': ['lzf:*font*', 'lzf:*font-w*',
+                         'lzf:*font-h*', 'lzf:*font-adv*',
+                         'lzf:*col-line*', 'lzf:*col-back*',
+                         'lzf:*col-dim*', 'lzf:*col-val*',
+                         'lzf:*col-hi*'],
+        'symbols': {
+            # the prose names it too, and prose that names a helper the
+            # twin does not define is the drift this file exists to stop
+            'lzf:answer': 'cal:formanswer',
+            'lzf:*font-adv*': 'cal:*imgfont-adv*',
+            'lzf:*font-w*': 'cal:*imgfont-w*',
+            'lzf:*font-h*': 'cal:*imgfont-h*',
+            'lzf:*font*': 'cal:*imgfont*',
+            'lzf:*col-line*': 'cal:*imgcol-line*',
+            'lzf:*col-back*': 'cal:*imgcol-back*',
+            'lzf:*col-dim*': 'cal:*imgcol-dim*',
+            'lzf:*col-val*': 'cal:*imgcol-val*',
+            'lzf:*col-hi*': 'cal:*imgcol-hi*',
+        },
+        # the section header survives the drop -- top_span stops at a
+        # ;;; block -- so the prose under it would be left explaining a
+        # table the twin no longer carries
+        'replace': [(FONT_PROSE, FONT_PROSE_SHARED)],
     },
     # The launcher panel uses no library helpers at all -- it draws
     # nothing and asks nothing -- so its twin is the file plus the
@@ -431,13 +508,107 @@ TOOLS = {
     # a twin nobody generates is a twin that drifts by hand.
     'LAZSPA': {
         'src': 'lisp/lazspa/LAZSPA.lsp',
-        'swap': {},
-        'drop_globals': [],
+        # THE CHART-FORM KIT.  All three forms draw into a DCL image
+        # tile, which takes line segments and nothing else, and all
+        # three carried a byte-identical copy of the machinery for it.
+        # The library has it now; these are the swaps, and the map is
+        # also the written statement that the copies are the same code
+        # -- let one drift and --check fails on the next regeneration.
+        # Verified identical modulo the namespace before it was
+        # written; lzX:px, lzX:py and lzX:pline are NOT here, because
+        # LAZSPA and LAZSTEP clip to a band where LAZFORM draws whole.
+        'swap': {
+            'lzs:glyph': 'cal:imgglyph',
+            'lzs:text': 'cal:imgtext',
+            'lzs:textw': 'cal:imgtextw',
+            'lzs:texth': 'cal:imgtexth',
+            'lzs:plinepx': 'cal:imgpline',
+            'lzs:flatten': 'cal:imgflatten',
+            'lzs:arcpts': 'cal:imgarcpts',
+            'lzs:trim': 'cal:trim',
+            'lzs:answer': 'cal:formanswer',
+            'lzs:plural': 'cal:plural',
+            'lzs:join': 'cal:andjoin',
+        },
+        # the font, its metrics and the tile palette are constants, so
+        # they move as globals: dropped here, renamed at every mention
+        # by 'symbols' below (a bare global is never "(name", so the
+        # swap map's call-site rewrite would not see it)
+        'drop_globals': ['lzs:*font*', 'lzs:*font-w*',
+                         'lzs:*font-h*', 'lzs:*font-adv*',
+                         'lzs:*col-line*', 'lzs:*col-back*',
+                         'lzs:*col-dim*', 'lzs:*col-val*',
+                         'lzs:*col-hi*'],
+        'symbols': {
+            # the prose names it too, and prose that names a helper the
+            # twin does not define is the drift this file exists to stop
+            'lzs:answer': 'cal:formanswer',
+            'lzs:*font-adv*': 'cal:*imgfont-adv*',
+            'lzs:*font-w*': 'cal:*imgfont-w*',
+            'lzs:*font-h*': 'cal:*imgfont-h*',
+            'lzs:*font*': 'cal:*imgfont*',
+            'lzs:*col-line*': 'cal:*imgcol-line*',
+            'lzs:*col-back*': 'cal:*imgcol-back*',
+            'lzs:*col-dim*': 'cal:*imgcol-dim*',
+            'lzs:*col-val*': 'cal:*imgcol-val*',
+            'lzs:*col-hi*': 'cal:*imgcol-hi*',
+        },
+        # the section header survives the drop -- top_span stops at a
+        # ;;; block -- so the prose under it would be left explaining a
+        # table the twin no longer carries
+        'replace': [(FONT_PROSE, FONT_PROSE_SHARED)],
     },
     'LAZSTEP': {
         'src': 'lisp/lazstep/LAZSTEP.lsp',
-        'swap': {},
-        'drop_globals': [],
+        # THE CHART-FORM KIT.  All three forms draw into a DCL image
+        # tile, which takes line segments and nothing else, and all
+        # three carried a byte-identical copy of the machinery for it.
+        # The library has it now; these are the swaps, and the map is
+        # also the written statement that the copies are the same code
+        # -- let one drift and --check fails on the next regeneration.
+        # Verified identical modulo the namespace before it was
+        # written; lzX:px, lzX:py and lzX:pline are NOT here, because
+        # LAZSPA and LAZSTEP clip to a band where LAZFORM draws whole.
+        'swap': {
+            'lzt:glyph': 'cal:imgglyph',
+            'lzt:text': 'cal:imgtext',
+            'lzt:textw': 'cal:imgtextw',
+            'lzt:texth': 'cal:imgtexth',
+            'lzt:plinepx': 'cal:imgpline',
+            'lzt:flatten': 'cal:imgflatten',
+            'lzt:arcpts': 'cal:imgarcpts',
+            'lzt:trim': 'cal:trim',
+            'lzt:answer': 'cal:formanswer',
+            'lzt:plural': 'cal:plural',
+            'lzt:join': 'cal:andjoin',
+        },
+        # the font, its metrics and the tile palette are constants, so
+        # they move as globals: dropped here, renamed at every mention
+        # by 'symbols' below (a bare global is never "(name", so the
+        # swap map's call-site rewrite would not see it)
+        'drop_globals': ['lzt:*font*', 'lzt:*font-w*',
+                         'lzt:*font-h*', 'lzt:*font-adv*',
+                         'lzt:*col-line*', 'lzt:*col-back*',
+                         'lzt:*col-dim*', 'lzt:*col-val*',
+                         'lzt:*col-hi*'],
+        'symbols': {
+            # the prose names it too, and prose that names a helper the
+            # twin does not define is the drift this file exists to stop
+            'lzt:answer': 'cal:formanswer',
+            'lzt:*font-adv*': 'cal:*imgfont-adv*',
+            'lzt:*font-w*': 'cal:*imgfont-w*',
+            'lzt:*font-h*': 'cal:*imgfont-h*',
+            'lzt:*font*': 'cal:*imgfont*',
+            'lzt:*col-line*': 'cal:*imgcol-line*',
+            'lzt:*col-back*': 'cal:*imgcol-back*',
+            'lzt:*col-dim*': 'cal:*imgcol-dim*',
+            'lzt:*col-val*': 'cal:*imgcol-val*',
+            'lzt:*col-hi*': 'cal:*imgcol-hi*',
+        },
+        # the section header survives the drop -- top_span stops at a
+        # ;;; block -- so the prose under it would be left explaining a
+        # table the twin no longer carries
+        'replace': [(FONT_PROSE, FONT_PROSE_SHARED)],
     },
 
     # ---- adopted 2026-08-27 from the hand-mirrored set (the derivation
@@ -1272,6 +1443,18 @@ def generate(tool, spec):
     src = src.replace(
         ';;;  A self-contained file: it carries its own helpers.',
         ';;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.')
+
+    # Prose that stops being TRUE once a swap has emptied the section it
+    # describes -- "one entry per character" above a font table that is
+    # no longer there.  Required to match: a reworded source must fail
+    # here rather than ship a twin explaining code it does not carry.
+    for old_text, new_text in spec.get('replace', []):
+        if old_text not in src:
+            raise SystemExit(
+                "mirror_shared: %s has a replace whose text is not in "
+                "%s - the twin was NOT written; re-read the source and "
+                "update the pair:\n  %r" % (tool, spec['src'], old_text))
+        src = src.replace(old_text, new_text, 1)
 
     dropped = []
     for name in spec['swap']:

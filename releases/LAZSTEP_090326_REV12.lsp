@@ -101,7 +101,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.1")
+(setq *lazstep-version* "v1.2")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -137,6 +137,11 @@
     ((= ty "NORMIESTEP") (ns-run-with-answers form))))
 
 ;;; -------------------- the stroke font ---------------------------------
+;;;  This file carries its own copy because a standalone file has to
+;;;  load alone.  The grouped build takes the table, its metrics, the
+;;;  tile palette and the seven drawing helpers from CALOFIN-LIB.lsp
+;;;  instead -- all three chart forms had the same copy, and the swap
+;;;  map in tools/mirror_shared.py is what says so and checks it.
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
 ;;;  line segments and that is the whole of it -- so the letters and the
 ;;;  numbers on the chart are stroked out of segments here.
@@ -549,10 +554,15 @@
     (if (> (setq i (lzt:sel stem)) 0) (nth i (nth 3 d)))))
 
 (defun lzt:trim (s / i n)
-  (setq i 1 n (strlen s))
-  (while (and (<= i n) (= (substr s i 1) " ")) (setq i (1+ i)))
-  (while (and (>= n i) (= (substr s n 1) " ")) (setq n (1- n)))
-  (if (> i n) "" (substr s i (1+ (- n i)))))
+  (if (null s) (setq s ""))
+  (setq n (strlen s) i 1)
+  (while (and (<= i n) (member (substr s i 1) '(" " "\t")))
+    (setq i (1+ i)))
+  (setq s (substr s i))
+  (setq n (strlen s))
+  (while (and (> n 0) (member (substr s n 1) '(" " "\t")))
+    (setq s (substr s 1 (1- n)) n (1- n)))
+  s)
 
 ;;  The three states, decided here.  Anything that is neither NA nor a
 ;;  distance AutoCAD can read is treated as an empty box: a typo must
@@ -656,8 +666,8 @@
 ;;;  thing that decides that.  It reports what lzt:form is about to do.
 
 ;; "1 box" / "5 boxes".
-(defun lzt:boxes (n)
-  (strcat (itoa n) (if (= n 1) " box" " boxes")))
+(defun lzt:plural (n one many)
+  (strcat (itoa n) " " (if (= n 1) one many)))
 
 ;; "A", "A and B", "A, B and C", "A, B, C and 2 more".  The last "and"
 ;; belongs to whatever ENDS the list: with an overflow count hung off
@@ -772,13 +782,14 @@
      (strcat "Nothing on this drawing is live - " lzt:*type*
              " will ask for all of it."))
     ((not togo)
-     (strcat "All " (lzt:boxes n) " filled - " lzt:*type*
+     (strcat "All " (lzt:plural n "box" "boxes") " filled - " lzt:*type*
              " will ask only for the picks in the drawing."))
     ((= (length togo) n)
      (strcat "Nothing filled yet - " lzt:*type* " will ask for all "
-             (lzt:boxes n) ", plus the picks."))
+             (lzt:plural n "box" "boxes") ", plus the picks."))
     (t
-     (strcat (itoa (- n (length togo))) " of " (lzt:boxes n) " filled - "
+     (strcat (itoa (- n (length togo))) " of "
+             (lzt:plural n "box" "boxes") " filled - "
              lzt:*type* " will ask for " (lzt:taglist togo)
              ", plus the picks."))))
 

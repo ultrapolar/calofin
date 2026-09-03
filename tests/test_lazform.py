@@ -34,6 +34,17 @@ LSP = os.path.join(REPO, 'lisp', 'lazform', 'LAZFORM.lsp')
 POOL = os.path.join(REPO, 'lisp', 'pool', 'POOL.LSP')
 OASIS = os.path.join(REPO, 'lisp', 'oasis', 'OASIS.lsp')
 
+# The mirror swaps a handful of this file's helpers for CALOFIN-LIB's,
+# so a shared-tier run has to ask for the name that tier actually
+# defines.  tools/mirror_shared.py is the authority on the mapping;
+# these are the entries the tests below reach for by name.
+SHARED = bool(os.environ.get('CALOFIN_LISP_ROOT'))
+
+
+def lib(local, shared):
+    """The name this tier defines: the file's own, or the library's."""
+    return shared if SHARED else local
+
 DX, DY = 520, 376          # a plausible tile size, in pixels
 DRAW = {'vec': [], 'fill': [], 'tiles': {}, 'list': [], 'focus': []}
 
@@ -603,7 +614,8 @@ vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
 print("== the drawing lands inside the tile, in declared colours ==")
 COLS = {}
 for name in ('line', 'back', 'dim', 'val', 'hi'):
-    COLS[name] = int(vm.globals['lzf:*col-%s*' % name])
+    COLS[name] = int(vm.globals[lib('lzf:*col-%s*' % name,
+                                   'cal:*imgcol-%s*' % name)])
 for c in charts:
     name = str(c[0])
     _reset()
@@ -920,7 +932,8 @@ for typed, expect in (('', 'SKIP'),
                       ('84', 84.0),
                       ("12'6\"", 'NUMBER'),
                       ('not a number', 'SKIP')):
-    vm.loads('(setq t:*a* (lzf:answer "%s"))' % lisp_str(typed))
+    vm.loads('(setq t:*a* (%s "%s"))'
+             % (lib('lzf:answer', 'cal:formanswer'), lisp_str(typed)))
     got = vm.globals['t:*a*']
     if expect == 'SKIP':
         assert str(got).upper() == 'SKIP', \
@@ -935,6 +948,29 @@ for typed, expect in (('', 'SKIP'),
             "%r gave %r, expected %r" % (typed, got, expect)
 print("   empty and rubbish both ask; NA means NA; a feet-inch")
 print("   spelling parses rather than being dropped")
+
+
+print("== a pasted value with a tab in it is still an answer ==")
+# lzX:trim is cal:trim's body now, so the swap into the library is
+# exact -- and it trims TABS as well as spaces, which the old one did
+# not.  A value pasted out of a spreadsheet arrives tab-padded, and it
+# used to fall straight through lzf:answer into SKIP: dropped without a
+# word, which is the very failure the state line exists to end.
+ANS = lib('lzf:answer', 'cal:formanswer')
+for typed, expect in (('\t84\t', 84.0), ('\tNA\t', None), ('\t\t', 'SKIP')):
+    vm.loads('(setq t:*a* (%s "%s"))' % (ANS, typed.replace('\t', '\\t')))
+    got = vm.globals['t:*a*']
+    if expect == 'SKIP':
+        assert str(got).upper() == 'SKIP', (typed, got)
+    elif expect is None:
+        assert got is None, (typed, got)
+    else:
+        assert abs(float(got) - expect) < 1e-9, (typed, got)
+# and it no longer dies on nil, which a box that was never set can be
+vm.loads('(setq t:*a* (%s (%s nil)))'
+         % (ANS, lib('lzf:trim', 'cal:trim')))
+assert str(vm.globals['t:*a*']).upper() == 'SKIP', vm.globals['t:*a*']
+print("   tab-padded values parse, tab-only reads as empty, nil is safe")
 
 
 print("== the alist handed to POOL ==")

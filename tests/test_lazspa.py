@@ -40,6 +40,17 @@ REPO = os.path.normpath(os.path.join(HERE, '..'))
 LSP = os.path.join(REPO, 'lisp', 'lazspa', 'LAZSPA.lsp')
 SPA = os.path.join(REPO, 'lisp', 'spa', 'SPA.LSP')
 
+# The mirror swaps a handful of this file's helpers for CALOFIN-LIB's,
+# so a shared-tier run has to ask for the name that tier actually
+# defines.  tools/mirror_shared.py is the authority on the mapping;
+# these are the entries the tests below reach for by name.
+SHARED = bool(os.environ.get('CALOFIN_LISP_ROOT'))
+
+
+def lib(local, shared):
+    """The name this tier defines: the file's own, or the library's."""
+    return shared if SHARED else local
+
 DX, DY = 520, 376          # a plausible tile size, in pixels
 DRAW = {'vec': [], 'fill': [], 'list': []}
 
@@ -515,7 +526,8 @@ for c in charts:
 print("== the drawing lands inside the tile, in declared colours ==")
 COLS = {}
 for name in ('line', 'back', 'dim', 'val', 'hi'):
-    COLS[name] = int(vm.globals['lzs:*col-%s*' % name])
+    COLS[name] = int(vm.globals[lib('lzs:*col-%s*' % name,
+                                   'cal:*imgcol-%s*' % name)])
 for c in charts:
     name = str(c[0])
     _reset()
@@ -724,8 +736,9 @@ for entry, expect in (('', 'SKIP'),
                       ('84', 84.0),
                       ("6'10\"", 'NUMBER'),
                       ('not a number', 'SKIP')):
-    vm.loads('(setq t:*a* (lzs:answer "%s"))'
-             % entry.replace('\\', '\\\\').replace('"', '\\"'))
+    vm.loads('(setq t:*a* (%s "%s"))'
+             % (lib('lzs:answer', 'cal:formanswer'),
+                entry.replace('\\', '\\\\').replace('"', '\\"')))
     got = vm.globals['t:*a*']
     if expect == 'SKIP':
         assert str(got).upper() == 'SKIP', \
