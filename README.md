@@ -436,7 +436,9 @@ python3 tests/test_cancel_paths.py    # every headline command cancelled at its
 python3 tests/test_autobead.py        # AUTOBEAD - the run that finds nothing
                                       # to bead and the run that dies both put
                                       # the settings, the undo group and the
-                                      # pushed error mode back
+                                      # pushed error mode back; and what the
+                                      # run does NOT bead - a held-back step
+                                      # line, and None side walls
 python3 tests/test_drone.py           # DRONE / TYDRN - the cleanup pass on a
                                       # survey with locked layers, an error
                                       # mid-run and an Esc, both handled by

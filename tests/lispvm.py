@@ -186,7 +186,11 @@ def parse_all(src):
 
 
 def truthy(v):
-    return v is not NIL
+    """AutoLISP has exactly one false value, and '() IS it: an empty list
+    reads as nil, so (if '() ...) takes the else-branch and (null '())
+    is T.  The VM builds empty lists as Python [], which is not the NIL
+    object, so the test lives here rather than at every call site."""
+    return v is not NIL and not (isinstance(v, list) and not v)
 
 
 class VM:
@@ -734,8 +738,8 @@ def _equal(vm, a):
     return T if same(x, y) else NIL
 
 
-BUILTINS[Sym('null')] = lambda vm, a: T if a[0] is NIL else NIL
-BUILTINS[Sym('not')] = lambda vm, a: T if a[0] is NIL else NIL
+BUILTINS[Sym('null')] = lambda vm, a: T if not truthy(a[0]) else NIL
+BUILTINS[Sym('not')] = lambda vm, a: T if not truthy(a[0]) else NIL
 BUILTINS[Sym('numberp')] = lambda vm, a: (T if isinstance(a[0], (int, float))
                                           else NIL)
 BUILTINS[Sym('listp')] = lambda vm, a: (T if (a[0] is NIL or

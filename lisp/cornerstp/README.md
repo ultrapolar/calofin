@@ -35,12 +35,16 @@ Common to all three:
   linear dim climbing with the steps, the overall depth sits further
   out, the treads carry no dims.
 * **Bead the steps** (`[Yes/No] <Yes>`, then `Which steps have beaded
-  side walls? [All/Some] <All>`): every tread is beaded -- that is the
-  assumption -- and AUTOBEAD does the work on its own rules (2" toward
-  the click, onto its `Bead Track` layer), so `AUTOBEAD.lsp` has to be
-  loaded; when it is not, the run says so and finishes without
-  beading. The beads are their own undo group, so one `U` undoes the
-  beads and the next undoes the steps.
+  side walls? [All/Some/None] <All>`): every tread is beaded -- that
+  is the assumption -- **except the last one drawn**, the line that
+  closes the run: it has no riser behind it, so it goes over to
+  AUTOBEAD as a step line (it still works as a breakline) but is held
+  back there unbeaded. `None` at the side-wall question leaves the
+  walls bare and beads the step faces only. AUTOBEAD does the work on
+  its own rules (2" toward the click, onto its `Bead Track` layer), so
+  `AUTOBEAD.lsp` has to be loaded; when it is not, the run says so and
+  finishes without beading. The beads are their own undo group, so one
+  `U` undoes the beads and the next undoes the steps.
 
 Per routine:
 

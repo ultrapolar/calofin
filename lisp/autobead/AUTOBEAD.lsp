@@ -18,13 +18,17 @@
 ;;; Step lines - selected lines that cross the pool, touching walls at both
 ;;; ends - are recognized automatically and always bead full length.
 ;;;
-;;; After the direction click, AUTOBEAD asks whether the side walls are
-;;; beaded.  Answer Yes and click each step that has beaded side walls:
-;;; each click assumes its breakline - the next step line from the click
-;;; in the direction the bead is heading (toward the direction click).
-;;; The wall bead is cut flush at that line, kept on the clicked side,
-;;; and removed everywhere else.  Answer No to bead every selected wall
-;;; full length.
+;;; After the direction click, AUTOBEAD asks which steps have beaded side
+;;; walls - All, Some or None:
+;;;   All  - every selected wall beads full length.
+;;;   Some - click each step that has beaded side walls; each click
+;;;          assumes its breakline - the next step line from the click in
+;;;          the direction the bead is heading (toward the direction
+;;;          click).  The wall bead is cut flush at that line, kept on the
+;;;          clicked side, and removed everywhere else.
+;;;   None - the side walls take no bead at all; only the step faces bead.
+;;; Yes and No, the words this question took before v1.5, still work typed
+;;; in full: Yes reads as Some, No as All.
 ;;;
 ;;; The finished beads land on the "Bead Track" layer.  The original pool
 ;;; geometry is never modified, and the whole run undoes with one U.
@@ -49,7 +53,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.4"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.5"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -204,6 +208,22 @@
           (setq hit T)))))
   hit)
 
+(defun autobead-held-p (c pts / hit cp p)
+  ;; T if chain c passes through one of PTS - the points naming the step
+  ;; lines the caller asked to leave unbeaded.  A held step line is still
+  ;; a step line: it classifies, and it can still be a breakline; it just
+  ;; never gets offset.
+  (setq hit nil)
+  (foreach p pts
+    (if (and (null hit) p (entget c))
+      (progn
+        (setq cp (vl-catch-all-apply 'vlax-curve-getClosestPointTo
+                   (list c p)))
+        (if (and (not (vl-catch-all-error-p cp)) cp
+                 (< (distance cp p) 0.05))
+          (setq hit T)))))
+  hit)
+
 (defun autobead-dot (u v)
   ;; 2D dot product.
   (+ (* (car u) (car v)) (* (cadr u) (cadr v))))
@@ -300,11 +320,17 @@
 ;; ---- engine ----------------------------------------------------------------
 ;; Everything that touches the drawing lives here, so AUTOBEAD and the
 ;; tutorial exercise exactly the same code path.  sidewalls / treadpts come
-;; from the side-wall question (treadpts in WCS); pass nil nil to bead every
-;; selected wall full length.  Returns the number of bead objects created.
+;; from the side-wall question and decide what the WALL bead does:
+;;   "All"  (or nil) - every selected wall beads full length
+;;   "Some" (or T)   - wall bead kept only at the steps in treadpts
+;;   "None"          - no wall bead at all; only the step faces bead
+;; skippts names step lines to leave unbeaded - one point on each, and the
+;; step routines put the last step drawn there, since the line that closes
+;; a run has no riser to bead.  All points are WCS; nil nil nil beads
+;; everything.  Returns the number of bead objects created.
 
-(defun autobead-build (ss dirpt sidewalls treadpts
-                       / *error* beadoff layname fuzz
+(defun autobead-build (ss dirpt sidewalls treadpts skippts
+                       / *error* beadoff layname fuzz wallmode heldsteps
                          oldcmd oldos oldpa temps undo-open
                          mark copies ss2 chains mark2 news
                          beadcount failcount c e i src dup drift
@@ -315,6 +341,17 @@
   (setq beadoff *autobead-offset*
         layname *autobead-layer*
         fuzz    *autobead-fuzz*)
+
+  ;; the side-wall answer, normalised.  The question grew a third answer
+  ;; in v1.5, so the T / nil it used to be handed still reads the same
+  ;; way and a caller written against the old signature keeps working.
+  (setq wallmode
+        (cond ((null sidewalls)               "All")
+              ((eq sidewalls T)               "Some")
+              ((= (strcase sidewalls) "NONE") "None")
+              ((= (strcase sidewalls) "SOME") "Some")
+              ((= (strcase sidewalls) "YES")  "Some")
+              (T                              "All")))
 
   ;; -- error handler: cancel stuck commands, purge temp geometry,
   ;;    restore system variables, close the undo group -------------------
@@ -410,24 +447,32 @@
        (setq perimchains chains))
 
      ;; 4) offset every chain toward the click; native offset trims
-     ;;    convex corners and extends concave ones automatically
-     (setq failcount 0 gaps '() perimbeads '())
+     ;;    convex corners and extends concave ones automatically.  Two
+     ;;    kinds of chain are held back instead: a step line the caller
+     ;;    named in skippts, and every wall when the side walls are None.
+     (setq failcount 0 gaps '() perimbeads '() heldsteps 0)
      (foreach c chains
-       (setq mark2 (entlast))
-       (command "._offset" beadoff c "_non" dirpt "")
-       (autobead-flush)
-       (setq news (autobead-newents mark2))
-       (if news
-         (foreach e news
-           (entmod (subst (cons 8 layname)
-                          (assoc 8 (entget e))
-                          (entget e)))
-           ;; measure before the source chain is deleted
-           (if (setq g (autobead-gap c e)) (setq gaps (cons g gaps)))
-           (if (member c perimchains)
-             (setq perimbeads (cons e perimbeads)))
-           (setq beadcount (1+ beadcount)))
-         (setq failcount (1+ failcount))))
+       (cond
+         ((and (member c stepchains) (autobead-held-p c skippts))
+          (setq heldsteps (1+ heldsteps)))
+         ((and (= wallmode "None") (member c perimchains))
+          nil)
+         (T
+          (setq mark2 (entlast))
+          (command "._offset" beadoff c "_non" dirpt "")
+          (autobead-flush)
+          (setq news (autobead-newents mark2))
+          (if news
+            (foreach e news
+              (entmod (subst (cons 8 layname)
+                             (assoc 8 (entget e))
+                             (entget e)))
+              ;; measure before the source chain is deleted
+              (if (setq g (autobead-gap c e)) (setq gaps (cons g gaps)))
+              (if (member c perimchains)
+                (setq perimbeads (cons e perimbeads)))
+              (setq beadcount (1+ beadcount)))
+            (setq failcount (1+ failcount))))))
 
      ;; 5) side walls: each clicked step ASSUMES its breakline - the next
      ;;    step line from the click in the direction the bead is heading
@@ -436,7 +481,7 @@
      ;;    past a breakline, and every unclicked span, is removed.
      ;;    Step-face beads are never touched.
      (setq kept 0 culled 0 filtered nil misses 0 brks '())
-     (if (and sidewalls treadpts steplines perimbeads)
+     (if (and (= wallmode "Some") treadpts steplines perimbeads)
        (progn
          (setq dirw (trans dirpt 1 0))
          (foreach p treadpts
@@ -496,15 +541,17 @@
                      (itoa (length stepchains)) " step)"
                      "\n  side walls    : "
                      (cond
+                       ((= wallmode "None")
+                        "None -- the side walls take no bead")
                        (filtered
                         (strcat "beaded at " (itoa (length treadpts))
                                 " clicked step(s), " (itoa (length brks))
                                 " assumed breakline(s) -- kept "
                                 (itoa kept) " wall piece(s), removed "
                                 (itoa culled)))
-                       ((and sidewalls (null steplines))
+                       ((and (= wallmode "Some") (null steplines))
                         "requested, but no step lines were recognized")
-                       ((and sidewalls treadpts)
+                       ((and (= wallmode "Some") treadpts)
                         "requested, but no breakline was found toward the direction click")
                        (T "full length (not restricted)"))
                      "\n  offset asked  : " (rtos beadoff)
@@ -515,6 +562,9 @@
                        "n/a")
                      "\n  beads created : " (itoa beadcount)
                      " on " layname))
+     (if (> heldsteps 0)
+       (prompt (strcat "\n  " (itoa heldsteps)
+                       " step line(s) held back - not beaded, as asked.")))
      (if (> misses 0)
        (prompt (strcat "\n  " (itoa misses)
                        " clicked step(s) found no step line toward the"
@@ -579,15 +629,21 @@
           (setq done T))
          (T (setq stage 3))))
       (T
-       (initget "Yes No Back Undo")
+       ;; Yes / No are what this question took before v1.5 - kept as
+       ;; hidden keywords so an old habit still answers it
+       (initget "All Some None Yes No Back Undo")
        (setq ans (getkword
-                   "\nAre the side walls beaded? [Yes/No/Back] <No>: "))
+                   (strcat "\nWhich steps have beaded side walls?"
+                           " [All/Some/None/Back] <All>: ")))
        (cond
          ((member ans '("Back" "Undo")) (setq stage 2))
          (T
-          (setq sidewalls (= ans "Yes")
+          (setq sidewalls (cond ((null ans)     "All")
+                                ((= ans "Yes")  "Some")
+                                ((= ans "No")   "All")
+                                (T              ans))
                 treadpts  '())
-          (if sidewalls
+          (if (= sidewalls "Some")
             (progn
               (prompt (strcat "\nClick each step (tread) that has beaded"
                               " side walls."))
@@ -598,8 +654,10 @@
                 (progn
                   (prompt (strcat "\nNo steps clicked - side walls will"
                                   " be beaded full length."))
-                  (setq sidewalls nil)))))
-          (autobead-build ss dirpt sidewalls treadpts)
+                  (setq sidewalls "All")))))
+          ;; nothing is held back here: the selection is the user's own,
+          ;; so there is no "last step drawn" for AUTOBEAD to know about
+          (autobead-build ss dirpt sidewalls treadpts nil)
           (setq done T))))))
   (princ))
 
@@ -657,15 +715,17 @@
       "     text and hatch are ignored."
       "  3. Click the side you want the bead on. One click sets the"
       "     direction for everything you selected."
-      "  4. Answer: are the side walls beaded?"
-      "       No  - every selected wall beads full length."
-      "       Yes - click each step (tread) that has beaded side"
-      "             walls, then Enter. Each click assumes its"
-      "             breakline: the next step line from the click"
-      "             toward the direction click (the way the bead"
-      "             is heading). Wall bead is cut flush there,"
-      "             kept on your side, removed everywhere else."
-      "             Step-face beads always draw either way."
+      "  4. Answer: which steps have beaded side walls?"
+      "       All  - every selected wall beads full length."
+      "       Some - click each step (tread) that has beaded side"
+      "              walls, then Enter. Each click assumes its"
+      "              breakline: the next step line from the click"
+      "              toward the direction click (the way the bead"
+      "              is heading). Wall bead is cut flush there,"
+      "              kept on your side, removed everywhere else."
+      "       None - the side walls take no bead at all."
+      "       Step-face beads always draw whichever you pick."
+      "       (Yes and No still answer it: Yes is Some, No is All.)"
       ""
       "CURRENT SETTINGS"
       (strcat "  offset distance : " (rtos *autobead-offset*)
@@ -815,9 +875,9 @@
         (progn
           (autobead-pause
             (strcat "STEP 4 - the side-wall question\n"
-                    "      AUTOBEAD would now ask: are the side walls"
-                    " beaded?\n"
-                    "      For this demo the answer is Yes, with the top"
+                    "      AUTOBEAD would now ask: which steps have"
+                    " beaded side\n      walls - All, Some or None?\n"
+                    "      For this demo the answer is Some, with the top"
                     " step\n      (between the end wall and the first"
                     " step line)\n      clicked as the beaded one. That"
                     " click assumes its\n      breakline - the next step"
@@ -825,8 +885,9 @@
                     " bead survives only on the click's\n      side of"
                     " that line."))
 
-          (setq made (autobead-build ss dirpt T
-                       (list (list (+ x 267.0) (+ y 72.0) 0.0))))
+          (setq made (autobead-build ss dirpt "Some"
+                       (list (list (+ x 267.0) (+ y 72.0) 0.0))
+                       nil))
 
           (autobead-say
             (list ""

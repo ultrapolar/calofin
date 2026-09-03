@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_090226_REV39-310-34.lsp
+;;; STEPS_090326_REV40-311-35.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v3.9 -> REV39   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.10 -> REV310   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v3.4 -> REV34   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     CORNERSTP.lsp   v4.0 -> REV40   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.11 -> REV311   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v3.5 -> REV35   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v3.9) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v4.0) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -132,14 +132,16 @@
 ;;;       LEFT from there, so there is no side to pick.  See "The side
 ;;;       profile" below for what is drawn and how it is dimensioned.
 ;;;     10. Finally, BEAD THE STEPS.  Every tread is beaded - that is the
-;;;       assumption - so the only thing asked is which steps carry the
-;;;       bead along their side walls: All of them, or Some, given by
-;;;       step number.  AUTOBEAD does the work on its own rules (2"
-;;;       toward the side you click, onto its Bead Track layer), so
-;;;       AUTOBEAD.lsp has to be loaded; when it is not, the run says
-;;;       so and finishes without beading.  The beads are their own
-;;;       undo group - AutoCAD does not nest them - so one U undoes
-;;;       the beads and the next undoes the steps.
+;;;       assumption - EXCEPT the last one drawn: the line that closes
+;;;       the run has no riser behind it, so it is handed to AUTOBEAD
+;;;       and held back there unbeaded.  The only thing asked is which
+;;;       steps carry the bead along their side walls: All of them,
+;;;       Some, given by step number, or None at all.  AUTOBEAD does
+;;;       the work on its own rules (2" toward the side you click, onto
+;;;       its Bead Track layer), so AUTOBEAD.lsp has to be loaded; when
+;;;       it is not, the run says so and finishes without beading.  The
+;;;       beads are their own undo group - AutoCAD does not nest them -
+;;;       so one U undoes the beads and the next undoes the steps.
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
@@ -212,7 +214,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v3.9") ; printed on load and at command start so a
+(setq *cs-version* "v4.0") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -1481,9 +1483,10 @@
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
   ;; group - which is why this sits outside ours: AutoCAD does not nest
   ;; undo groups, so one U undoes the beads and the next undoes the
-  ;; steps.  Every tread is beaded; the only question left is which
-  ;; steps carry the bead along their side walls, and that is answered
-  ;; by step number here instead of by clicking each one.
+  ;; steps.  Every tread but the last drawn is beaded - that one closes
+  ;; the run and has no riser behind it - so the only question left is
+  ;; which steps carry the bead along their side walls, and that is
+  ;; answered by step number here instead of by clicking each one.
   (if (> drawn 0)
     (if (not (boundp 'autobead-build))
       (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
@@ -1501,11 +1504,13 @@
             (if (null btreads)
               (princ "\nNo tread lines to bead.")
               (progn
-                ;; every tread is beaded - the side walls are the question
-                (initget "All Some")
+                ;; every tread but the last is beaded - the side walls
+                ;; are the question, and None leaves them bare
+                (initget "All Some None")
                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
                                                      " beaded side walls?"
-                                                     " [All/Some] <All>: ")))
+                                                     " [All/Some/None]"
+                                                     " <All>: ")))
                                   ("All")))
                 (if (= bside "Some")
                   (progn
@@ -1540,12 +1545,16 @@
                     (autobead-ensure-layer *autobead-layer*)
                     (autobead-build
                       bss bdir
-                      (= bside "Some")
+                      bside
                       (if (= bside "Some")
                         (mapcar '(lambda (k)
                                    (cs-entmid (cdr (assoc k btreads))))
                                 bnums)
-                        nil)))))))))))
+                        nil)
+                      ;; the last step drawn still goes over as a step
+                      ;; line - it is a breakline like any other - but
+                      ;; it is named here so AUTOBEAD leaves it unbeaded
+                      (list (cs-entmid (cdr (last btreads))))))))))))))
   (cs-fclear)                       ; both exits clear the form store
   (princ))
 
@@ -1612,9 +1621,11 @@
   (princ "\n     dims climb with them.  Each depth is dimensioned beside")
   (princ "\n     its own step and the overall depth further out; the")
   (princ "\n     treads are not dimensioned.")
-  (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so the")
-  (princ "\n     only question is which steps have beaded SIDE WALLS:")
-  (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
+  (princ "\n  6. Bead the steps? [Yes/No] - every tread but the LAST is")
+  (princ "\n     beaded (the line that closes the run has no riser), so")
+  (princ "\n     the only question is which steps have beaded SIDE")
+  (princ "\n     WALLS: [All/Some/None].  Some takes the step numbers")
+  (princ "\n     (\"1 3 4\"); None leaves the side walls bare.")
   (princ "\n     Then click the side to bead toward and AUTOBEAD does the")
   (princ "\n     rest on its own rules - it has to be loaded for this.")
   (princ "\n  At any step tread prompt: Enter = done, Back = step back one")
@@ -1733,7 +1744,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.10) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.11) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -1830,14 +1841,16 @@
 ;;;       flight always runs DOWN AND TO THE LEFT from there, so there
 ;;;       is no side to pick.  See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
-;;;       assumption - so the only thing asked is which steps carry the
-;;;       bead along their side walls: All of them, or Some, given by
-;;;       step number.  AUTOBEAD does the work on its own rules (2"
-;;;       toward the side you click, onto its Bead Track layer), so
-;;;       AUTOBEAD.lsp has to be loaded; when it is not, the run says
-;;;       so and finishes without beading.  The beads are their own
-;;;       undo group - AutoCAD does not nest them - so one U undoes
-;;;       the beads and the next undoes the steps.
+;;;       assumption - EXCEPT the last one drawn: the line that closes
+;;;       the run has no riser behind it, so it is handed to AUTOBEAD
+;;;       and held back there unbeaded.  The only thing asked is which
+;;;       steps carry the bead along their side walls: All of them,
+;;;       Some, given by step number, or None at all.  AUTOBEAD does
+;;;       the work on its own rules (2" toward the side you click, onto
+;;;       its Bead Track layer), so AUTOBEAD.lsp has to be loaded; when
+;;;       it is not, the run says so and finishes without beading.  The
+;;;       beads are their own undo group - AutoCAD does not nest them -
+;;;       so one U undoes the beads and the next undoes the steps.
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
@@ -1908,7 +1921,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.10") ; printed on load and at command start so a
+(setq *hs-version* "v3.11") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -3117,9 +3130,10 @@
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
   ;; group - which is why this sits outside ours: AutoCAD does not nest
   ;; undo groups, so one U undoes the beads and the next undoes the
-  ;; steps.  Every tread is beaded; the only question left is which
-  ;; steps carry the bead along their side walls, and that is answered
-  ;; by step number here instead of by clicking each one.
+  ;; steps.  Every tread but the last drawn is beaded - that one closes
+  ;; the run and has no riser behind it - so the only question left is
+  ;; which steps carry the bead along their side walls, and that is
+  ;; answered by step number here instead of by clicking each one.
   (if (> drawn 0)
     (if (not (boundp 'autobead-build))
       (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
@@ -3136,11 +3150,13 @@
             (if (null btreads)
               (princ "\nNo tread lines to bead.")
               (progn
-                ;; every tread is beaded - the side walls are the question
-                (initget "All Some")
+                ;; every tread but the last is beaded - the side walls
+                ;; are the question, and None leaves them bare
+                (initget "All Some None")
                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
                                                      " beaded side walls?"
-                                                     " [All/Some] <All>: ")))
+                                                     " [All/Some/None]"
+                                                     " <All>: ")))
                                   ("All")))
                 (if (= bside "Some")
                   (progn
@@ -3175,12 +3191,16 @@
                     (autobead-ensure-layer *autobead-layer*)
                     (autobead-build
                       bss bdir
-                      (= bside "Some")
+                      bside
                       (if (= bside "Some")
                         (mapcar '(lambda (k)
                                    (hs-entmid (cdr (assoc k btreads))))
                                 bnums)
-                        nil)))))))))))
+                        nil)
+                      ;; the last step drawn still goes over as a step
+                      ;; line - it is a breakline like any other - but
+                      ;; it is named here so AUTOBEAD leaves it unbeaded
+                      (list (hs-entmid (cdr (last btreads))))))))))))))
   (hs-fclear)                       ; both exits clear the form store
   (princ))
 
@@ -3243,9 +3263,11 @@
   (princ "\n     to the LEFT from there, so the steps rise to the right")
   (princ "\n     and the dims climb with them - each depth beside its own")
   (princ "\n     step, the overall further out; the treads are not dimmed.")
-  (princ "\n  5. Bead the steps? [Yes/No] - every tread is beaded, so the")
-  (princ "\n     only question is which steps have beaded SIDE WALLS:")
-  (princ "\n     [All/Some], and Some takes the step numbers (\"1 3 4\").")
+  (princ "\n  5. Bead the steps? [Yes/No] - every tread but the LAST is")
+  (princ "\n     beaded (the line that closes the run has no riser), so")
+  (princ "\n     the only question is which steps have beaded SIDE")
+  (princ "\n     WALLS: [All/Some/None].  Some takes the step numbers")
+  (princ "\n     (\"1 3 4\"); None leaves the side walls bare.")
   (princ "\n     Then click the side to bead toward and AUTOBEAD does the")
   (princ "\n     rest on its own rules - it has to be loaded for this.")
   (hs-tut-pause)
@@ -3358,7 +3380,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v3.4) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v3.5) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -3463,14 +3485,16 @@
 ;;;       DOWN AND TO THE LEFT from there, so there is no side to
 ;;;       pick.  See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
-;;;       assumption - so the only thing asked is which steps carry the
-;;;       bead along their side walls: All of them, or Some, given by
-;;;       step number.  AUTOBEAD does the work on its own rules (2"
-;;;       toward the side you click, onto its Bead Track layer), so
-;;;       AUTOBEAD.lsp has to be loaded; when it is not, the run says
-;;;       so and finishes without beading.  The beads are their own
-;;;       undo group - AutoCAD does not nest them - so one U undoes
-;;;       the beads and the next undoes the steps.
+;;;       assumption - EXCEPT the last one drawn: the line that closes
+;;;       the run has no riser behind it, so it is handed to AUTOBEAD
+;;;       and held back there unbeaded.  The only thing asked is which
+;;;       steps carry the bead along their side walls: All of them,
+;;;       Some, given by step number, or None at all.  AUTOBEAD does
+;;;       the work on its own rules (2" toward the side you click, onto
+;;;       its Bead Track layer), so AUTOBEAD.lsp has to be loaded; when
+;;;       it is not, the run says so and finishes without beading.  The
+;;;       beads are their own undo group - AutoCAD does not nest them -
+;;;       so one U undoes the beads and the next undoes the steps.
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
@@ -3538,7 +3562,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.4") ; printed on load and at command start so a
+(setq *ns-version* "v3.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -4955,9 +4979,10 @@
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
   ;; group - which is why this sits outside ours: AutoCAD does not nest
   ;; undo groups, so one U undoes the beads and the next undoes the
-  ;; steps.  Every tread is beaded; the only question left is which
-  ;; steps carry the bead along their side walls, and that is answered
-  ;; by step number here instead of by clicking each one.
+  ;; steps.  Every tread but the last drawn is beaded - that one closes
+  ;; the run and has no riser behind it - so the only question left is
+  ;; which steps carry the bead along their side walls, and that is
+  ;; answered by step number here instead of by clicking each one.
   (if (> drawn 0)
     (if (not (boundp 'autobead-build))
       (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
@@ -4974,11 +4999,13 @@
             (if (null btreads)
               (princ "\nNo tread lines to bead.")
               (progn
-                ;; every tread is beaded - the side walls are the question
-                (initget "All Some")
+                ;; every tread but the last is beaded - the side walls
+                ;; are the question, and None leaves them bare
+                (initget "All Some None")
                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
                                                      " beaded side walls?"
-                                                     " [All/Some] <All>: ")))
+                                                     " [All/Some/None]"
+                                                     " <All>: ")))
                                   ("All")))
                 (if (= bside "Some")
                   (progn
@@ -5013,12 +5040,16 @@
                     (autobead-ensure-layer *autobead-layer*)
                     (autobead-build
                       bss bdir
-                      (= bside "Some")
+                      bside
                       (if (= bside "Some")
                         (mapcar '(lambda (k)
                                    (ns-entmid (cdr (assoc k btreads))))
                                 bnums)
-                        nil)))))))))))
+                        nil)
+                      ;; the last step drawn still goes over as a step
+                      ;; line - it is a breakline like any other - but
+                      ;; it is named here so AUTOBEAD leaves it unbeaded
+                      (list (ns-entmid (cdr (last btreads))))))))))))))
   (ns-fclear)                       ; both exits clear the form store
   (princ))
 
@@ -5090,12 +5121,14 @@
   (princ "\n     the LEFT from there, so the steps rise to the right")
   (princ "\n     and the dims climb with them: each depth beside its")
   (princ "\n     own step, the overall further out, treads not dimmed.")
-  (princ "\n  6. Bead the steps? [Yes/No] - every tread is beaded, so")
+  (princ "\n  6. Bead the steps? [Yes/No] - every tread but the LAST is")
+  (princ "\n     beaded (the line that closes the run has no riser), so")
   (princ "\n     the only question is which steps have beaded SIDE")
-  (princ "\n     WALLS: [All/Some], and Some takes the step numbers")
-  (princ "\n     (\"1 3 4\").  Then click the side to bead toward, and")
-  (princ "\n     AUTOBEAD does the rest on its own rules.  It has to be")
-  (princ "\n     loaded for this - the run says so if it is not.")
+  (princ "\n     WALLS: [All/Some/None].  Some takes the step numbers")
+  (princ "\n     (\"1 3 4\"), None leaves them bare.  Then click the")
+  (princ "\n     side to bead toward and AUTOBEAD does the rest on its")
+  (princ "\n     own rules.  It has to be loaded for this - the run")
+  (princ "\n     says so if it is not.")
   (ns-tut-pause)
   (princ "\nWHAT IT CHECKS AND HANDLES FOR YOU")
   (princ "\n  - warns on tilted UCS / non-flat lines / unusable layer")
