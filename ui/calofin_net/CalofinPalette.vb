@@ -129,7 +129,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("ABMOVE", "Move mis-taped point", "Moves a point, offering every mis-read tape it could be"),
             New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
             New Entry("CPERPPTS", "Curved perp points", "PERPPTS for a curved run"),
-            New Entry("XFTCONV", "Leica import cleanup", "Cleans up Leica XFT/DXF survey imports"),
+            New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
             New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
             New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass")
         }}

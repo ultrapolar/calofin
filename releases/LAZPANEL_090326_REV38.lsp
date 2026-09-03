@@ -87,7 +87,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.7")
+(setq *lazpanel-version* "v3.8")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -217,7 +217,7 @@
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
     ("VSCONV"           "VS export onto shop layers")
     ("WCALST"           "Unroll curved band")
-    ("XFTCONV"          "Leica import cleanup")
+    ("XFTCONV"          "Survey import cleanup")
     ("XYPLOT"           "X/Y offset plot")
    ))
 
