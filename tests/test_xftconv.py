@@ -86,6 +86,87 @@ def name_text(x, y, s, h=1.0):
                  '(10 {x} {y} 0.0) '(40 . {h}) '(1 . "{s}")))'''
 
 
+DOT_LAYERS = '''
+  (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                 '(100 . "AcDbLayerTableRecord")
+                 '(2 . "POOL_POINTS") '(70 . 0) '(62 . 140)
+                 '(6 . "Continuous")))
+  (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                 '(100 . "AcDbLayerTableRecord")
+                 '(2 . "BREAK_LINES") '(70 . 0) '(62 . 12)
+                 '(6 . "Continuous")))
+  (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                 '(100 . "AcDbLayerTableRecord")
+                 '(2 . "CROSS_MEASUREMENTS") '(70 . 0) '(62 . 9)
+                 '(6 . "Continuous")))
+  (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                 '(100 . "AcDbLayerTableRecord")
+                 '(2 . "TEXT") '(70 . 0) '(62 . 4)
+                 '(6 . "Continuous")))'''
+
+
+def circle(layer, cx, cy, r=0.125):
+    """The trace's point marker: a 1.5" circle on one of its three
+    point layers."""
+    return f'''
+  (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                 '(8 . "{layer}") '(410 . "Model") '(100 . "AcDbCircle")
+                 '(10 {cx} {cy} 0.0) '(40 . {r})))'''
+
+
+def dot_name(x, y, s, h=0.3333333333333333):
+    """The name text, insertion point exactly ON the circle centre and
+    unjustified -- which is how the sample export writes it."""
+    return f'''
+  (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                 '(8 . "TEXT") '(410 . "Model") '(100 . "AcDbText")
+                 '(10 {x} {y} 0.0) '(40 . {h}) '(1 . "{s}")))'''
+
+
+def caption(x, y, s, h=0.4166666666666666):
+    """A break-line or diagonal caption: same layer as the names, but
+    middle-centre justified onto the line rather than onto a point."""
+    return f'''
+  (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                 '(8 . "TEXT") '(410 . "Model") '(100 . "AcDbText")
+                 '(10 {x - 2.0} {y - 0.2} 0.0) '(11 {x} {y} 0.0)
+                 '(40 . {h}) '(72 . 1) '(73 . 2) '(1 . "{s}")))'''
+
+
+# The sample export, verbatim: a 40' x 20' rectangle in feet.  Each
+# corner is drawn TWICE -- once on POOL_POINTS, once on
+# CROSS_MEASUREMENTS where a diagonal ends -- and only the POOL_POINTS
+# copy carries the name.
+X0, X1 = 1080.483901141753, 1120.608901141753
+YB, YT = 347.3755944107107, 367.458927744044
+XS, XD = 1108.108901141753, 1094.40056780842
+
+SAMPLE_DOTS = [
+    ("POOL_POINTS", X0, YB, "C1"),
+    ("POOL_POINTS", X0, YT, "C2"),
+    ("POOL_POINTS", X1, YT, "C3"),
+    ("POOL_POINTS", X1, YB, "C4"),
+    ("CROSS_MEASUREMENTS", X0, YB, None),
+    ("CROSS_MEASUREMENTS", X1, YT, None),
+    ("CROSS_MEASUREMENTS", X0, YT, None),
+    ("CROSS_MEASUREMENTS", X1, YB, None),
+    ("BREAK_LINES", XS, YT, "S1"),
+    ("BREAK_LINES", XS, YB, "S2"),
+    ("BREAK_LINES", XD, YT, "D1"),
+    ("BREAK_LINES", XD, YB, "D2"),
+]
+
+# Captions ride the same TEXT layer.  "Deep End" and "Shallow End" sit
+# in their own break line's column, exactly where the same-column rule
+# would reward them -- only the reach keeps them out.
+SAMPLE_CAPTIONS = [
+    (XD, 360.7644832995996, "Deep End"),
+    (XS, 354.0700388551552, "Shallow End"),
+    (1110.577651141753, 362.4380944107107, "Diagonal 1"),
+    (1090.515151141753, 362.4380944107107, "Diagonal 2"),
+]
+
+
 def made(vm, src):
     before = len(vm.entities)
     vm.loads(src)
@@ -287,6 +368,85 @@ check("...which popped the mode and restored the settings",
       repr((vm.error_mode_depth, vm.sysvars)))
 check("a cancel prints no error line", not any(
     'XFTCONV error' in s for s in vm.printed))
+
+# ----------------------------------------------------------------------
+# 7. the site-trace flavour: circles for markers, the name text sitting
+#    ON the centre, and captions on the same layer that must NOT be
+#    read as point numbers.  Geometry is lifted straight off the sample
+#    export (a 40' x 20' rectangular pool, in feet).
+# ----------------------------------------------------------------------
+print("the site-trace flavour")
+
+vm = newvm([DOT_LAYERS])
+ents = []
+for lay, x, y, nm in SAMPLE_DOTS:
+    ents += made(vm, circle(lay, x, y))
+    if nm:
+        ents += made(vm, dot_name(x, y, nm))
+caps = []
+for x, y, s in SAMPLE_CAPTIONS:
+    caps += made(vm, caption(x, y, s))
+vm.run('c:XFTCONV', [None, ents + caps])
+
+got = sorted(inserts(vm), key=lambda t: (t[2], t[0]))
+check("eight blocks -- one per location, not one per circle",
+      len(got) == 8, repr(got))
+check("every point kept its whole label, family letter and all",
+      [v for _x, _y, v in got] ==
+      ["C1", "C2", "C3", "C4", "D1", "D2", "S1", "S2"], repr(got))
+check("a corner's POOL_POINTS and CROSS_MEASUREMENTS circles made ONE block",
+      len([t for t in got if t[2].startswith("C")]) == 4 and
+      sorted(t[:2] for t in got if t[2].startswith("C")) ==
+      [(1080.483901141753, 347.3755944107107),
+       (1080.483901141753, 367.458927744044),
+       (1120.608901141753, 347.3755944107107),
+       (1120.608901141753, 367.458927744044)], repr(got))
+check("no marker went in blank -- every circle found its name",
+      "had no name text nearby" not in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+check("every circle and every name text is gone",
+      all(e in vm.deleted for e in ents), repr(len(vm.deleted)))
+
+# The captions are the reason the reach is a fraction of a text height.
+# "Deep End" sits in D1's and D2's own column -- the rank rule alone
+# would hand it to one of them.
+caption_txt = [e for e in caps if e in vm.deleted]
+check("the break-line and diagonal captions were left alone",
+      caption_txt == [], repr(caption_txt))
+check("...so no point is called 'Deep End'",
+      not [t for t in got if not re.match(r'^[CSD]\d$', t[2])], repr(got))
+
+txt = ''.join(vm.printed)
+check("the report says the circle markers came off a site trace",
+      '8 point(s) replaced with "ab_pt".' in txt and
+      '8 of those were circle markers off a site trace' in txt, txt[-400:])
+check("nothing was purged -- the trace's text is not all point names",
+      'leftover text object(s) erased' not in txt, txt[-400:])
+
+# ----------------------------------------------------------------------
+# 8. a locked trace layer is named the way a locked Leica one is
+# ----------------------------------------------------------------------
+print("a locked trace layer stops the run and names itself")
+
+LOCKED_BREAK = DOT_LAYERS.replace("'(2 . \"BREAK_LINES\") '(70 . 0)",
+                                  "'(2 . \"BREAK_LINES\") '(70 . 4)")
+check("the fixture really locked BREAK_LINES", LOCKED_BREAK != DOT_LAYERS)
+
+vm = newvm([LOCKED_BREAK])
+ents = made(vm, circle("BREAK_LINES", 1.0, 2.0)) + made(vm, dot_name(1.0, 2.0, "S1"))
+vm.run('c:XFTCONV', [None, ents])
+check("the message names the locked layer, and nothing ran",
+      'Unlock BREAK_LINES' in ''.join(vm.printed) and
+      not [c for c in vm.commands if c] and
+      not inserts(vm) and not vm.deleted,
+      ''.join(vm.printed)[-200:])
+
+# a layer that is locked but carries nothing of ours is not in the way
+vm = newvm([LOCKED_BREAK])
+ents = made(vm, circle("POOL_POINTS", 1.0, 2.0)) + made(vm, dot_name(1.0, 2.0, "C1"))
+vm.run('c:XFTCONV', [None, ents])
+check("a locked layer with none of the selection on it does not stop it",
+      inserts(vm) == [(1.0, 2.0, "C1")], repr(inserts(vm)))
 
 # ----------------------------------------------------------------------
 print()
