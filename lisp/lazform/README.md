@@ -366,6 +366,49 @@ the chart's name, so a new shape never means new code:
   every oasis key against `oasis:*fkeys*`, so a key the routine does
   not ask for fails the suite instead of being typed into and dropped.
 
+## The state line
+
+Under the form, above `Insert`, one line that says what the sheet is
+about to do. It has two jobs and takes them in that order.
+
+**A box that cannot be read.** `lzf:answer` turns anything that is
+neither `NA` nor a distance AutoCAD can parse into *not answered* -- the
+key is then never sent, `POOL` asks for that dimension again at the
+command line, and no reason is ever given. Worse, the chart goes on
+showing what was typed, because the chart draws the **string**: a box
+that will be dropped looks exactly like a box that was answered. So the
+line names it, by the letter the sheet prints rather than by the POOL
+key --
+
+```
+G is not a measurement - type a number, or NA, or clear it.
+F and G are not measurements - type a number, or NA, or clear them.
+F, G, E and 1 more are not measurements - ...
+```
+
+-- and **`Insert` is greyed until it is fixed**. Greying it is the
+point: pressing `Insert` with an unreadable box in front of you is what
+used to drop it.
+
+**The hand-off.** With nothing unreadable, the line is what is left:
+
+```
+Nothing filled yet - POOL will ask for all 14 boxes, plus the base point.
+9 of 14 boxes filled - POOL will ask for C, D and C2, plus the base point.
+All 14 boxes filled - POOL will ask only for the base point.
+```
+
+Which is the difference between a finished sheet and one you only think
+is finished.
+
+Both halves count the same set: `lzf:livekeys`, the boxes that are not
+greyed. A greyed box is withheld whatever is in it, so rubbish in one is
+neither complained about nor counted as still to ask. And the line
+**reports `lzf:form` rather than second-guessing it** -- the test
+partitions every live box into sent, still-to-ask and unreadable and
+fails if any box lands in two of them or in none, so the line and the
+alist cannot drift apart.
+
 ## Notes & limitations
 
 - DCL dialogs are modal and not resizable. The form closes when you

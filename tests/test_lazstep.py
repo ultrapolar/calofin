@@ -122,7 +122,7 @@ def _newdlg(vm, a):
 
 
 STUB = '''
-(setq stub:*rc* 0 stub:*written* nil stub:*opened* nil stub:*mode* nil)
+(setq stub:*rc* 0 stub:*written* nil stub:*opened* nil stub:*mode* nil stub:*tiles* nil)
 (defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
 (defun open (f mode) f)
 (defun write-line (s fh) (setq stub:*written* (cons s stub:*written*)) s)
@@ -135,7 +135,9 @@ STUB = '''
 (defun done_dialog (status) (setq stub:*done* status) (list 120 340))
 (defun unload_dialog (id) t)
 (defun vl-file-delete (f) t)
-(defun set_tile (k v) v)
+(defun set_tile (k v)
+  (setq stub:*tiles* (cons (list k v) stub:*tiles*)) v)
+(defun stub:tile (k / p) (if (setq p (assoc k stub:*tiles*)) (cadr p)))
 (defun action_tile (k expr)
   (setq stub:*act* (cons (list k expr) stub:*act*)) t)
 (defun start_dialog ( / p k)
@@ -986,6 +988,197 @@ pv.run('c:CORNERSTP', [None, ws, None, "Yes", "No"] + [24.0, None] * 3
 assert snapshot(fv) == snapshot(pv), \
     "CORNERSTP with dims on: the form drew a different run"
 print("   CORNERSTP with the dims on: dimensions identical too")
+
+
+print("== page one states itself, and holds Next back ==")
+sv = fresh()
+
+
+def p1(v):
+    v.loads('(setq t:*s* (lzt:p1state))')
+    return str(v.globals['t:*s*'])
+
+
+sv.loads('(setq lzt:*vals* nil lzt:*sel* nil lzt:*type* "CORNERSTP")')
+sv.loads('(setq t:*max* lzt:*max-steps*)')
+MAX = int(str(sv.globals['t:*max*']))
+
+# THE COUNT.  countwhy is the one function both the live line and the
+# refusal read, so the warning and the refusal cannot disagree.
+assert 'How many steps' in p1(sv), p1(sv)
+sv.loads('(lzt:put "steps" "%d")' % (MAX + 1))
+assert 'is the ceiling' in p1(sv), p1(sv)
+sv.loads('(setq t:*ok* (lzt:count-ok)) (setq t:*m* lzt:*msg*)')
+assert sv.globals['t:*ok*'] is None, "count-ok accepted a count over the ceiling"
+assert str(sv.globals['t:*m*']) == p1(sv), (
+    "the live line and the refusal say different things:\n  live: %r\n  msg:  %r"
+    % (p1(sv), str(sv.globals['t:*m*'])))
+sv.loads('(lzt:put "steps" "notanumber")')
+sv.loads('(setq t:*ok* (lzt:count-ok)) (setq t:*m* lzt:*msg*)')
+assert sv.globals['t:*ok*'] is None
+assert str(sv.globals['t:*m*']) == p1(sv), "the two disagree on a bad count"
+sv.loads('(lzt:put "steps" "3")')
+assert p1(sv) == '3 steps - Next builds the drawing to fill in.', p1(sv)
+sv.loads('(lzt:put "steps" "1")')
+assert p1(sv).startswith('1 step -'), "a single step is not '1 steps': %r" % p1(sv)
+sv.loads('(lzt:put "steps" "3") (setq t:*ok* (lzt:count-ok)) (setq t:*n* lzt:*steps*)')
+assert sv.globals['t:*ok*'] is not None and int(str(sv.globals['t:*n*'])) == 3
+print("   the count: one rule, read live and read again at the gate")
+
+# THE TWO READERS.  A DIST box goes through lzt:answer and an INT box
+# through lzt:int, and "3.5" is the case that separates them: a fine
+# measurement, and not a step number at all.
+sv.loads('(lzt:sput "direction" 1) (lzt:sput "bench" 1)')      # Inside, Yes
+sv.loads('(setq t:*b* (lzt:p1boxes))')
+P1KEYS = [str(d[0]) for d in sv.globals['t:*b*']]
+assert 'benchstep' in P1KEYS and 'benchoffset' in P1KEYS, P1KEYS
+sv.loads('(lzt:put "benchstep" "3.5")')
+bad = p1(sv)
+assert bad.startswith('Bench ends on step number:'), bad
+assert 'is not a whole number' in bad and '3.5' in bad, bad
+sv.loads('(setq t:*a* (lzt:answer "3.5")) (setq t:*i* (lzt:int "3.5"))')
+assert sv.globals['t:*a*'] is not None, "3.5 is not a distance after all"
+assert sv.globals['t:*i*'] is None, "3.5 passed the whole-number reader"
+sv.loads('(lzt:put "benchstep" "2") (lzt:put "benchoffset" "wide")')
+bad = p1(sv)
+assert bad.startswith('Bench offset off the wall:'), bad
+assert 'is not a measurement' in bad, bad
+sv.loads('(lzt:put "benchoffset" "12")')
+assert p1(sv).endswith('Next builds the drawing to fill in.'), p1(sv)
+# a greyed question is not asked, so rubbish in it is not complained
+# about: Outside drops the bench questions entirely
+sv.loads('(lzt:sput "direction" 2) (lzt:put "benchoffset" "wide")')
+sv.loads('(setq t:*sk* (lzt:skip))')
+assert 'benchoffset' in [str(x) for x in sv.globals['t:*sk*']]
+assert p1(sv).endswith('Next builds the drawing to fill in.'), \
+    "rubbish in a greyed question is being complained about: %r" % p1(sv)
+print("   a whole-number box and a measurement box, each read its own way")
+
+
+print("== page two states itself, and holds Insert back ==")
+tv = fresh()
+tv.loads('(setq lzt:*vals* nil lzt:*sel* nil lzt:*type* "CORNERSTP")')
+tv.loads('(setq lzt:*steps* 3 lzt:*chart* (lzt:chart "CORNERSTP" 3))')
+
+
+def p2(v):
+    v.loads('(setq t:*s* (lzt:p2state))')
+    return str(v.globals['t:*s*'])
+
+
+tv.loads('(setq t:*l* (lzt:livekeys))')
+LIVE = [str(x) for x in tv.globals['t:*l*']]
+assert LIVE, "no live box on a three-step drawing"
+assert p2(tv).startswith('Nothing filled yet'), p2(tv)
+assert 'CORNERSTP' in p2(tv), "the state line does not name the routine"
+tv.loads('(lzt:put "%s" "18")' % LIVE[0])
+assert p2(tv).startswith('1 of %d boxes filled' % len(LIVE)), p2(tv)
+# a box is named by the letter the DRAWING shows, not by its key
+tv.loads('(setq t:*t* (lzt:tagof "%s"))' % LIVE[1])
+tv.loads('(setq t:*d* (lzt:c-dims lzt:*chart*))')
+letters = {str(d[1]): str(d[0]) for d in tv.globals['t:*d*']}
+assert str(tv.globals['t:*t*']) == letters[LIVE[1]], \
+    "%r is named %r, but the drawing letters it %r" \
+    % (LIVE[1], str(tv.globals['t:*t*']), letters[LIVE[1]])
+tv.loads('(lzt:put "%s" "huh")' % LIVE[1])
+assert p2(tv) == ('%s is not a measurement - type a number, or NA, or clear it.'
+                  % letters[LIVE[1]]), p2(tv)
+for k in LIVE:
+    tv.loads('(lzt:put "%s" "18")' % k)
+full = p2(tv)
+assert full.startswith('All %d boxes filled' % len(LIVE)), full
+assert 'the picks' in full, "what stays in the drawing is not mentioned: %r" % full
+print("   %d dimension boxes, named by the letters the drawing shows"
+      % len(LIVE))
+
+# the partition: every live box is sent, still to ask, or unreadable
+tv.loads('(setq lzt:*vals* nil)')
+tv.loads('(lzt:put "%s" "18") (lzt:put "%s" "huh")' % (LIVE[0], LIVE[1]))
+tv.loads('(setq t:*bad* (lzt:unreadable)) (setq t:*togo* (lzt:togo))'
+         '(setq t:*form* (lzt:form))')
+BAD = set(str(x) for x in (tv.globals['t:*bad*'] or []))
+TOGO = set(str(x) for x in (tv.globals['t:*togo*'] or []))
+SENT = {str(q.a) if isinstance(q, Dot) else str(q[0])
+        for q in tv.globals['t:*form*']} & set(LIVE)
+assert BAD == {LIVE[1]}, BAD
+assert SENT | TOGO | BAD == set(LIVE), (
+    "live boxes in none of sent/to-ask/unreadable: %r"
+    % sorted(set(LIVE) - SENT - TOGO - BAD))
+for a, b in ((SENT, TOGO), (SENT, BAD), (TOGO, BAD)):
+    assert not (a & b), "two groups claim %r" % sorted(a & b)
+assert LIVE[1] not in SENT, "an unreadable box reached the routine after all"
+print("   %d live boxes: %d sent, %d still to ask, %d unreadable, no overlap"
+      % (len(LIVE), len(SENT), len(TOGO), len(BAD)))
+
+
+print("== both pages wire their state line ==")
+rv = stubbed()
+rv.loads('(setq lzt:*vals* nil lzt:*sel* nil lzt:*type* "CORNERSTP")')
+rv.loads('(setq lzt:*steps* 3 lzt:*chart* (lzt:chart "CORNERSTP" 3))')
+
+
+def accept_mode(v):
+    modes = [(str(a[0]), int(a[1])) for a in (v.globals.get('stub:*mode*') or [])]
+    hits = [m for k, m in modes if k == 'accept']
+    assert hits, "restate never touched the button: %r" % modes
+    return hits[0]
+
+
+# page one: Next is held back until the count is usable
+rv.loads('(setq stub:*mode* nil stub:*tiles* nil) (lzt:p1restate)')
+assert accept_mode(rv) == 1, "Next was live with no count typed at all"
+rv.loads('(setq t:*m* (stub:tile "msg"))')
+assert 'How many steps' in str(rv.globals['t:*m*']), rv.globals['t:*m*']
+rv.loads('(setq stub:*mode* nil) (lzt:put "steps" "3") (lzt:p1restate)')
+assert accept_mode(rv) == 0, "a good count did not let Next through"
+rv.loads('(setq stub:*mode* nil) (lzt:sput "direction" 1) (lzt:sput "bench" 1)'
+         '(lzt:put "benchstep" "3.5") (lzt:p1restate)')
+assert accept_mode(rv) == 1, "Next stayed live with a box that would be dropped"
+
+# page two: Insert is held back the same way
+rv.loads('(setq stub:*mode* nil stub:*tiles* nil) (lzt:p2restate)')
+assert accept_mode(rv) == 0, "Insert was greyed on a drawing with nothing wrong"
+rv.loads('(setq t:*s* (stub:tile "state"))')
+assert rv.globals['t:*s*'] is not None, "the state tile was never written"
+rv.loads('(setq stub:*mode* nil) (lzt:put "tread1" "nonsense") (lzt:p2restate)')
+assert accept_mode(rv) == 1, "Insert stayed live with an unreadable box"
+print("   Next and Insert both held back, both released when it is fixed")
+
+# and the callbacks: every box on either page puts the line back
+wv = stubbed('CORNERSTP')
+wv.loads('(setq lzt:*type* "CORNERSTP") (setq t:*d* (lzt:dcl-lines))')
+wv.loads('(setq stub:*rc* 0) (lzt:page1 7)')
+acts = {str(a[0]): str(a[1]) for a in (wv.globals.get('stub:*act*') or [])}
+assert 'lzt:p1restate' in acts['steps'], "the count box does not restate"
+# EVERY typed question is wired, greyed or not: what is greyed changes
+# while the page is open, so a box wired only when it happened to be
+# live at open would go dead the moment a dropdown un-greyed it
+wv.loads('(setq t:*a* (lzt:asks))')
+typed = 0
+for d in wv.globals['t:*a*']:
+    k = str(d[0])
+    if str(d[1]) == 'LIST':
+        assert 'lzt:p1pick' in acts[k], "dropdown %r does not re-grey" % k
+    else:
+        typed += 1
+        assert 'lzt:p1restate' in acts[k], "page-one box %r does not restate" % k
+assert typed, "no typed question on page one at all"
+wv.loads('(setq t:*m* (stub:tile "msg"))')
+assert wv.globals['t:*m*'] is not None, \
+    "page one opened without ever writing its state line"
+
+wv.loads('(setq stub:*act* nil stub:*tiles* nil)')
+wv.loads('(setq lzt:*steps* 3 lzt:*chart* (lzt:chart "CORNERSTP" 3))')
+wv.loads('(setq stub:*rc* 0) (lzt:page2 7)')
+acts2 = {str(a[0]): str(a[1]) for a in (wv.globals.get('stub:*act*') or [])}
+wv.loads('(setq t:*k* (lzt:keys lzt:*chart*))')
+for k in [str(x) for x in wv.globals['t:*k*']]:
+    assert 'lzt:p2restate' in acts2[k], "page-two box %r does not restate" % k
+wv.loads('(setq t:*s* (stub:tile "state"))')
+assert wv.globals['t:*s*'] is not None, \
+    "page two opened without ever writing its state line"
+print("   %d page-one callbacks and %d page-two callbacks, both lines written"
+      % (len(acts), len(acts2)))
 
 
 print("ALL LAZSTEP TESTS PASSED")

@@ -140,6 +140,46 @@ ones that are not. `LAZSTEPVER` prints the loaded version.
 | `lzt:*wedge-ed*` | `5` | a tread box's `edit_width` |
 | `lzt:*col-line*` ... `lzt:*col-hi*` | `-16 -15 8 30 5` | outline, background, dimension, typed value, focus ring |
 
+## The state lines
+
+One on each page, and each holds its own button back.
+
+**Page one** has boxes with two different readers, which is what makes
+it worth saying out loud: a measurement goes through `lzt:answer`, and
+the step count and the bench step through `lzt:int`. `3.5` is the case
+that separates them -- a perfectly good measurement, and not a step
+number at all -- so `lzt:answer` would take it and `lzt:int` is what
+actually reads it.
+
+```
+How many steps?  A whole number from 1 to 8, please.
+8 steps is the ceiling - a taller dialog will not open.  Run the rest by hand.
+Bench ends on step number: "3.5" is not a whole number.
+Bench offset off the wall: "wide" is not a measurement.
+3 steps - Next builds the drawing to fill in.
+```
+
+`Next >` is greyed for all but the last. The count's two refusals are
+the ones `lzt:count-ok` has always printed to the command line; they are
+on the page now, live, while the number is being typed -- **and
+`lzt:countwhy` is the one function both read**, so the live warning and
+the refusal at the gate cannot come to different conclusions.
+
+**Page two** is the hand-off, named by the letters the drawing shows:
+
+```
+Nothing filled yet - CORNERSTP will ask for all 10 boxes, plus the picks.
+1 of 10 boxes filled - CORNERSTP will ask for T2, T3, W1 and 6 more, plus the picks.
+T2 is not a measurement - type a number, or NA, or clear it.
+All 10 boxes filled - CORNERSTP will ask only for the picks in the drawing.
+```
+
+Both pages count only what is live: a question `lzt:skip` names is not
+asked at all, so rubbish in one is neither complained about nor counted.
+The test partitions every live box into sent, still-to-ask and
+unreadable and fails if any lands in two groups or in none, so a line
+and the alist it describes cannot drift apart.
+
 ## Notes & limitations
 
 - **DCL height is the hard failure mode.** A dialog taller than the

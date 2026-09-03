@@ -26,6 +26,17 @@
 ;;; NA in a box means "not measured" and is passed through as such --
 ;;; different from leaving it blank, which just means POOL should ask.
 ;;;
+;;; THE FORM SAYS WHAT IT IS ABOUT TO DO.  lzf:answer turns anything it
+;;; cannot read into "not answered", so a typo used to be dropped in
+;;; silence while the chart went on showing it -- the chart draws the
+;;; STRING -- and POOL asked for that dimension again with no reason
+;;; given.  A state line under the form now names any box in that
+;;; position and Insert stays greyed until it is fixed; when none is,
+;;; the same line is the hand-off, saying how much of the sheet is
+;;; filled and which letters POOL will still ask for.  It reports what
+;;; lzf:form is about to send rather than second-guessing it, so the
+;;; line and the alist cannot say different things.
+;;;
 ;;; ZERO INSTALL, like LAZPANEL: the dialog is plain DCL written to the
 ;;; temp folder at run time, and the chart is drawn with vector_image,
 ;;; so there is no artwork file to ship and nothing to NETLOAD.
@@ -73,7 +84,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.7")
+(setq *lazform-version* "v2.8")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -989,6 +1000,9 @@
   (lzf:cput stem i)
   (mode_tile (strcat stem "-sz") (if (lzf:csized i) 0 1))
   (lzf:redraw)
+  ;; a treatment that takes a size has just added a live box, or taken
+  ;; one away -- either way the count and the still-to-ask list move
+  (lzf:restate)
   (princ))
 
 ;; A mode dropdown changed: remember it, repaint the chart the list
@@ -999,6 +1013,7 @@
   (lzf:pput key (atoi v))
   (lzf:redraw)
   (lzf:btgrey lzf:*chart*)
+  (lzf:restate)
   (princ))
 
 ;; The horizontal dims whose line IS this cut.
@@ -1511,6 +1526,10 @@
     (setq out (cons (strcat "  : text { key = \"hint2\"; width = 62; label = \""
                             (lzf:hint c) "\"; }")
                     out)))
+  ;; The state line.  It carries no label here: it is written before
+  ;; the dialog is shown and rewritten on every change, so a label in
+  ;; the file would only be the wrong answer for an instant.
+  (setq out (cons "  : text { key = \"state\"; width = 62; }" out))
   (setq out (cons "  : row {" out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\"; "
                           "is_default = true; fixed_width = true; }")
@@ -2014,6 +2033,152 @@
   (foreach k (lzf:pagekeys c)
     (mode_tile k (if (member k dead) 1 0))))
 
+;;; -------------------- what the page still owes -------------------------
+;;;  THE FAILURE THIS CLOSES.  lzf:answer turns anything it cannot read
+;;;  into SKIP, the key is then never sent, and POOL asks for it again
+;;;  at the command line -- while the chart goes on showing what was
+;;;  typed, because the chart draws the STRING.  So a box that will be
+;;;  silently dropped looks exactly like a box that was answered, and
+;;;  the drafter finds out after the form has closed, if at all.
+;;;
+;;;  The state line under the form says both halves of that out loud:
+;;;  which boxes cannot be read (and Insert stays greyed until they
+;;;  can), and, when they all can, how many are filled and what the
+;;;  routine will still have to ask for.  Nothing here changes what is
+;;;  SENT -- lzf:form is still the only thing that decides that -- it
+;;;  reports what lzf:form is about to do.
+
+;; "Corner A (bottom left)" -> "Corner A".  A label with no bracket is
+;; its own short name already.
+(defun lzf:unbracket (s / i n)
+  (setq n (strlen s) i 1)
+  (while (and (<= i n) (/= (substr s i 2) " (")) (setq i (1+ i)))
+  (if (<= i n) (substr s 1 (1- i)) s))
+
+;; "C - wall height" -> "C"; "C2 - shallow floor" -> "C2"; a label that
+;; does not open with a letter and a dash -> nil.  Only a short prefix
+;; counts, or a sentence with a dash in the middle of it would be read
+;; as a letter half a line long.
+(defun lzf:leadletter (s / i n)
+  (setq n (strlen s) i 1)
+  (while (and (<= i n) (/= (substr s i 3) " - ")) (setq i (1+ i)))
+  (if (and (<= i n) (> i 1) (<= i 4)) (substr s 1 (1- i))))
+
+;; The short name a box answers to, which has to be the name PRINTED on
+;; the sheet: naming a box by its POOL key would send the drafter
+;; hunting for a letter that is not on the paper.  A drawn dimension has
+;; its letter; a column-only field carries one at the head of its label;
+;; anything else falls back to the key, upper-cased.
+(defun lzf:tagof (c key / d out)
+  (foreach d (lzf:dims c)
+    (if (and (not out) (= (cadr d) key)) (setq out (car d))))
+  (foreach d (append (lzf:extra c) (lzf:cross c))
+    (if (and (not out) (= (car d) key))
+      (setq out (lzf:leadletter (cadr d)))))
+  (foreach d (lzf:corners c)
+    (if (and (not out) (= (strcat (car d) "-sz") key))
+      (setq out (lzf:unbracket (cadr d)))))
+  (if out out (strcase key)))
+
+;; Every box on the page that can take a measurement and is not greyed.
+;; A greyed box is withheld from the routine whatever is in it, so
+;; neither complaining about its contents nor counting it as still to
+;; ask would be true.  The corner size boxes are here too: they are not
+;; in lzf:pagekeys, so lzf:dead never names them -- what makes one live
+;; is its own dropdown taking a size.
+(defun lzf:livekeys (c / dead out d)
+  (setq dead (lzf:dead c lzf:*insq* (nth lzf:*btype* lzf:*btypes*)))
+  (foreach d (lzf:keys c)
+    (if (not (member d dead)) (setq out (cons d out))))
+  (foreach d (lzf:corners c)
+    (if (lzf:csized (lzf:cget (car d)))
+      (setq out (cons (strcat (car d) "-sz") out))))
+  (reverse out))
+
+;; The live boxes holding something lzf:answer cannot read.
+(defun lzf:unreadable ( / c out k v)
+  (setq c lzf:*chart*)
+  (foreach k (lzf:livekeys c)
+    (setq v (lzf:trim (lzf:get k)))
+    (if (and (/= v "") (eq (lzf:answer v) 'SKIP))
+      (setq out (cons k out))))
+  (reverse out))
+
+;; The live boxes still empty -- exactly what the routine will ask for.
+(defun lzf:togo ( / c out k)
+  (setq c lzf:*chart*)
+  (foreach k (lzf:livekeys c)
+    (if (= (lzf:trim (lzf:get k)) "") (setq out (cons k out))))
+  (reverse out))
+
+;; "B", "B and C2", "B, H and F", "B, H, F and 2 more".  A status line
+;; is read at a glance or not at all, so it names three and counts the
+;; rest rather than running off the end of the tile.
+(defun lzf:join (l last / n i out k)
+  (setq n (length l) i 0 out "")
+  (foreach k l
+    (setq i (1+ i)
+          out (cond ((= i 1) k)
+                    ((and last (= i n)) (strcat out " and " k))
+                    (t (strcat out ", " k)))))
+  out)
+
+(defun lzf:taglist (c keys / n i named k)
+  (setq n (length keys) i 0)
+  (foreach k keys
+    (if (< i 3) (setq named (cons (lzf:tagof c k) named) i (1+ i))))
+  (setq named (reverse named))
+  ;; the last "and" belongs to whatever ENDS the list -- with an
+  ;; overflow count hanging off it, "B, A and H and 9 more" reads as
+  ;; two lists rather than one
+  (if (> n 3)
+    (strcat (lzf:join named nil) " and " (itoa (- n 3)) " more")
+    (lzf:join named t)))
+
+;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as a bug
+;; in the form, whatever it is actually reporting.
+(defun lzf:boxes (n)
+  (strcat (itoa n) (if (= n 1) " box" " boxes")))
+
+;; The line itself.  An unreadable box is the urgent half and takes the
+;; line to itself; when there is none, the line is the hand-off: how
+;; much of the sheet is filled, and what is left for the command line.
+(defun lzf:statetext ( / c who bad togo n)
+  (setq c    lzf:*chart*
+        who  (if (lzf:oasis-p c) "OASIS" "POOL")
+        bad  (lzf:unreadable)
+        togo (lzf:togo)
+        n    (length (lzf:livekeys c)))
+  (cond
+    ((cdr bad)
+     (strcat (lzf:taglist c bad)
+             " are not measurements - type a number, or NA, or clear them."))
+    (bad
+     (strcat (lzf:taglist c bad)
+             " is not a measurement - type a number, or NA, or clear it."))
+    ((zerop n)
+     (strcat "Nothing on this page is live - " who " will ask for all of it."))
+    ((not togo)
+     (strcat "All " (lzf:boxes n) " filled - " who
+             " will ask only for the base point."))
+    ((= (length togo) n)
+     (strcat "Nothing filled yet - " who " will ask for all " (lzf:boxes n)
+             ", plus the base point."))
+    (t
+     (strcat (itoa (- n (length togo))) " of " (lzf:boxes n) " filled - "
+             who " will ask for " (lzf:taglist c togo)
+             ", plus the base point."))))
+
+;; Put the state on the page, and hold Insert back while any box holds
+;; something that cannot be read.  Greying it IS the feature: pressing
+;; Insert with an unreadable box in front of you drops that box without
+;; a word, which is the whole complaint.
+(defun lzf:restate ( / bad)
+  (setq bad (lzf:unreadable))
+  (set_tile "state" (lzf:statetext))
+  (mode_tile "accept" (if bad 1 0))
+  (princ))
+
 (defun lzf:form (shape insq btype)
   (if (lzf:oasis-p lzf:*chart*)
       (lzf:oasform shape)
@@ -2168,7 +2333,7 @@
             (action_tile (car d)
               (strcat "(lzf:cornerpick \"" (car d) "\" $value)"))
             (action_tile (strcat (car d) "-sz")
-              (strcat "(lzf:put \"" (car d) "-sz\" $value)")))
+              (strcat "(lzf:put \"" (car d) "-sz\" $value) (lzf:restate)")))
           ;; the mode dropdowns -- the cross-dim reference and the L's
           ;; mirror -- filled and put back the same way, and each
           ;; re-decides what is live as it changes
@@ -2185,7 +2350,7 @@
           (foreach d (lzf:keys c)
             (action_tile d
               (strcat "(lzf:put \"" d "\" $value) (setq lzf:*focus* \"" d "\")"
-                      " (lzf:redraw)")))
+                      " (lzf:redraw) (lzf:restate)")))
           ;; clicking a dimension's letter: caret into its box, with
           ;; the box's contents selected so the first keystroke
           ;; replaces rather than appends, and the dimension ringed on
@@ -2208,17 +2373,18 @@
             (progn
               (action_tile "btype"
                 (strcat "(setq lzf:*btype* (atoi $value)) (lzf:redraw)"
-                        " (lzf:btgrey lzf:*chart*)"))
+                        " (lzf:btgrey lzf:*chart*) (lzf:restate)"))
               ;; the toggle decides the cross dims and the second
               ;; overalls, so it re-greys the page as well as
               ;; repainting the chart
               (action_tile "insq"
                 (strcat "(setq lzf:*insq* (= $value \"1\")) (lzf:redraw)"
-                        " (lzf:btgrey lzf:*chart*)"))))
+                        " (lzf:btgrey lzf:*chart*) (lzf:restate)"))))
           (action_tile "accept" "(setq lzf:*pos* (done_dialog 1))")
           (action_tile "cancel" "(setq lzf:*pos* (done_dialog 0))")
           (lzf:redraw)
           (lzf:btgrey c)
+          (lzf:restate)
           (setq rc (start_dialog))
           (cond
             ((= rc 4) (setq go lzf:*go*))     ; a tab: go round again

@@ -94,26 +94,48 @@ and the whole page end to end through its own `action_tile` strings.
   left it, so someone who lives on Find stays there without the default
   changing under everyone else.
 
-## Phase 3 -- the forms stop finding out too late
+## Phase 3 -- the forms stop finding out too late *(done)*
 
-Everything here is inside DCL's ceiling.
+All three forms carry a **state line** now, and it holds `Insert` back.
 
-- **Validate on the way out of a box.** The chart is already redrawn
-  when a box loses focus, so the work is done: parse what was typed,
-  and if it will not do, draw that letter in the error colour, put the
-  reason on a message line and grey `Insert` until it is fixed. Today
-  the same bad number is found by `POOL` after the dialog is gone.
-- **Say what will still be asked.** `lzf:dead` and `lzf:form` already
-  know exactly which keys are being sent and which are being withheld;
-  the routines' own question lists are already pinned by the form
-  tests. So the form can end with *"POOL will still ask: 3 dimensions,
-  the base point"* -- which is the difference between a finished sheet
-  and one you only think is finished.
+The failure it closes was worse than "no validation". Each form's
+`answer` helper turns anything it cannot read into *not answered*, so
+the key is never sent and the routine asks for it again at the command
+line -- while the chart goes on showing what was typed, because the
+chart draws the **string**. A box that would be silently dropped looked
+exactly like a box that was answered.
+
+- **LAZFORM** (v2.8) names any unreadable box by the letter the sheet
+  prints -- `lzf:tagof`, not the POOL key, or the drafter hunts for a
+  letter that is not on the paper.
+- **LAZSPA** (v1.1) has a second silent drop to report: `lzs:keyanswer`
+  **demotes** an `NA` on any key SPA has no NA for. That is the sharper
+  one, because `NA` is a word the form itself tells you to type.
+- **LAZSTEP** (v1.1) has two readers to fail -- `lzt:answer` for a
+  measurement, `lzt:int` for the count and the bench step -- and `3.5`
+  is the case that separates them: a fine measurement, and not a step
+  number at all. Its page-one line is the tile the count refusal has
+  always written to, and `lzt:countwhy` is now the one rule both the
+  live warning and the refusal at the gate read.
+
+With nothing unreadable the same line is the **hand-off**: how much of
+the sheet is filled and what the routine will still ask for. Both halves
+count only live boxes -- a greyed box is withheld whatever is in it, so
+rubbish in one is neither complained about nor counted.
+
+The anti-drift property is the one that matters: the line **reports
+`lzX:form` rather than second-guessing it**, and each suite partitions
+every live box into sent / still-to-ask / unreadable (and NA-demoted, on
+SPA), failing if any box lands in two groups or in none.
+
+Still open from this phase, deliberately:
+
 - **`Recall last`, as a button and never as a default.** Per chart, in
   the registry. Pre-filling silently would put the last pool's numbers
   on this pool, which is worse than typing them.
 - **Say what a box will take.** `24` and `2'6"` both work and nothing
-  on screen says so.
+  on screen says so. The state line is the obvious place, but it is
+  carrying two jobs already; this may want the static hint instead.
 
 ## Phase 4 -- one form kit, in the library
 
@@ -159,7 +181,8 @@ with a build. What *is* verifiable here is the data both surfaces read:
 
 1. **Find** -- biggest single win, self-contained, testable end to end. *(done)*
 2. **Form validation and the hand-off preview** -- the next thing that
-   costs real time, and the one with the highest ratio of relief to risk.
+   costs real time, and the one with the highest ratio of relief to
+   risk. *(done)*
 3. **Recents** -- small, and better judged once Find has been used.
 4. **The form kit** -- structural; it is what makes phase 3 cheap to
    repeat and any new form possible at all.

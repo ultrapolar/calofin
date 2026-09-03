@@ -25,6 +25,16 @@
 ;;; NA in a box means "not measured" and is passed through as such --
 ;;; different from leaving it blank, which just means SPA should ask.
 ;;;
+;;; THE FORM SAYS WHAT IT IS ABOUT TO DO.  SPA has two ways of dropping
+;;; a box unread: lzs:answer cannot read it, or lzs:keyanswer demotes an
+;;; NA on a key SPA has no NA for -- and NA is a word this very form
+;;; tells you to type.  Either way the chart went on showing what was
+;;; typed, so the box looked answered.  A state line under the form now
+;;; names both, and Insert stays greyed until they are fixed; when
+;;; neither is there, the same line says how much is filled and what SPA
+;;; will still ask for.  It reports what lzs:form is about to send, so
+;;; the line and the alist cannot say different things.
+;;;
 ;;; ZERO INSTALL, like LAZFORM and LAZPANEL: the dialog is plain DCL
 ;;; written to the temp folder at run time, and the chart is drawn with
 ;;; vector_image, so there is no artwork file to ship and nothing to
@@ -73,7 +83,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.0")
+(setq *lazspa-version* "v1.1")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  DCL has no way to draw text into an image tile -- vector_image draws
@@ -796,6 +806,158 @@
     (mode_tile k (if (member k dead) 1 0)))
   (princ))
 
+;;; -------------------- what the page still owes -------------------------
+;;;  LAZFORM's state line, with a third thing to say.  SPA has TWO ways
+;;;  of dropping a box without a word:
+;;;
+;;;    lzs:answer   turns anything it cannot read into SKIP
+;;;    lzs:keyanswer demotes an NA to SKIP on any key SPA has no NA for
+;;;
+;;;  Both leave the chart showing what was typed -- the chart draws the
+;;;  STRING -- so a box that will be ignored looks exactly like a box
+;;;  that was answered, and the drafter finds out at the command line,
+;;;  if at all.  The demotion is the sharper of the two: NA is a word
+;;;  the form itself tells you to type, and on the wrong box it means
+;;;  nothing.
+;;;
+;;;  Nothing here changes what is SENT.  lzs:form is still the only
+;;;  thing that decides that; this reports what it is about to do.
+
+;; "Corner A (bottom left)" -> "Corner A".
+(defun lzs:unbracket (s / i n)
+  (setq n (strlen s) i 1)
+  (while (and (<= i n) (/= (substr s i 2) " (")) (setq i (1+ i)))
+  (if (<= i n) (substr s 1 (1- i)) s))
+
+;; "C - wall height" -> "C"; a label with no short letter prefix -> nil.
+(defun lzs:leadletter (s / i n)
+  (setq n (strlen s) i 1)
+  (while (and (<= i n) (/= (substr s i 3) " - ")) (setq i (1+ i)))
+  (if (and (<= i n) (> i 1) (<= i 4)) (substr s 1 (1- i))))
+
+;; The short name a box answers to, which has to be the name printed on
+;; the sheet: naming a box by its SPA key would send the drafter
+;; hunting for a letter that is not on the paper.
+(defun lzs:tagof (c key / d out)
+  (foreach d (lzs:dims c)
+    (if (and (not out) (= (cadr d) key)) (setq out (car d))))
+  (foreach d (append (lzs:extra c) (lzs:second c))
+    (if (and (not out) (= (car d) key))
+      (setq out (lzs:leadletter (cadr d)))))
+  (foreach d (lzs:corners c)
+    (if (and (not out) (= (strcat (car d) "-sz") key))
+      (setq out (lzs:unbracket (cadr d)))))
+  (cond (out out)
+        ((= key "gap") "the cover lap")
+        (t (strcase key))))
+
+;; Every typed box on the page that is not greyed.  A greyed box is
+;; withheld whatever is in it, so neither complaining about its contents
+;; nor counting it as still to ask would be true.  The corner size boxes
+;; are here too: they are not in lzs:greyable, so lzs:dead never names
+;; them -- what makes one live is its own dropdown taking a size.
+(defun lzs:livekeys (c / dead out d)
+  (setq dead (lzs:dead c))
+  (foreach d (lzs:boxkeys c)
+    (if (not (member d dead)) (setq out (cons d out))))
+  (foreach d (lzs:corners c)
+    (if (lzs:sized (lzs:pget (car d)))
+      (setq out (cons (strcat (car d) "-sz") out))))
+  (reverse out))
+
+;; Live boxes holding something lzs:answer cannot read at all.
+(defun lzs:unreadable ( / c out k v)
+  (setq c lzs:*chart*)
+  (foreach k (lzs:livekeys c)
+    (setq v (lzs:trim (lzs:get k)))
+    (if (and (/= v "") (eq (lzs:answer v) 'SKIP))
+      (setq out (cons k out))))
+  (reverse out))
+
+;; Live boxes reading NA on a key that has no NA -- the demotion, said
+;; out loud.  A corner size is one of them: SPA asks for the number.
+(defun lzs:nabad ( / c out k)
+  (setq c lzs:*chart*)
+  (foreach k (lzs:livekeys c)
+    (if (and (= (strcase (lzs:trim (lzs:get k))) "NA")
+             (not (member k (lzs:naok c))))
+      (setq out (cons k out))))
+  (reverse out))
+
+;; Live boxes still empty -- exactly what SPA will ask for.
+(defun lzs:togo ( / c out k)
+  (setq c lzs:*chart*)
+  (foreach k (lzs:livekeys c)
+    (if (= (lzs:trim (lzs:get k)) "") (setq out (cons k out))))
+  (reverse out))
+
+;; "B", "B and C2", "B, H and F", "B, H, F and 2 more".  The last "and"
+;; belongs to whatever ENDS the list: with an overflow count hung off
+;; it, "B, H and F and 2 more" reads as two lists rather than one.
+(defun lzs:join (l last / n i out k)
+  (setq n (length l) i 0 out "")
+  (foreach k l
+    (setq i (1+ i)
+          out (cond ((= i 1) k)
+                    ((and last (= i n)) (strcat out " and " k))
+                    (t (strcat out ", " k)))))
+  out)
+
+(defun lzs:taglist (c keys / n i named k)
+  (setq n (length keys) i 0)
+  (foreach k keys
+    (if (< i 3) (setq named (cons (lzs:tagof c k) named) i (1+ i))))
+  (setq named (reverse named))
+  (if (> n 3)
+    (strcat (lzs:join named nil) " and " (itoa (- n 3)) " more")
+    (lzs:join named t)))
+
+;; "1 box" / "5 boxes" -- a line that says "all 1 boxes" reads as a bug
+;; in the form, whatever it is actually reporting.
+(defun lzs:boxes (n)
+  (strcat (itoa n) (if (= n 1) " box" " boxes")))
+
+;; The line itself.  The two silent drops take it in turn, urgent
+;; first; when neither is there the line is the hand-off.
+(defun lzs:statetext ( / c bad na togo n)
+  (setq c    lzs:*chart*
+        bad  (lzs:unreadable)
+        na   (lzs:nabad)
+        togo (lzs:togo)
+        n    (length (lzs:livekeys c)))
+  (cond
+    ((cdr bad)
+     (strcat (lzs:taglist c bad)
+             " are not measurements - type a number, or NA, or clear them."))
+    (bad
+     (strcat (lzs:taglist c bad)
+             " is not a measurement - type a number, or NA, or clear it."))
+    ((cdr na)
+     (strcat (lzs:taglist c na)
+             " cannot be NA - SPA needs a number in each of them."))
+    (na
+     (strcat (lzs:taglist c na) " cannot be NA - SPA needs a number there."))
+    ((zerop n)
+     "Nothing on this page is live - SPA will ask for all of it.")
+    ((not togo)
+     (strcat "All " (lzs:boxes n) " filled - SPA will ask only for the "
+             "base point and the block."))
+    ((= (length togo) n)
+     (strcat "Nothing filled yet - SPA will ask for all " (lzs:boxes n)
+             ", plus the base point."))
+    (t
+     (strcat (itoa (- n (length togo))) " of " (lzs:boxes n) " filled - "
+             "SPA will ask for " (lzs:taglist c togo)
+             ", plus the base point."))))
+
+;; Put the state on the page, and hold Insert back while any box holds
+;; something that will be dropped.  Greying it IS the feature: pressing
+;; Insert past either of those drops the box without a word.
+(defun lzs:restate ( / )
+  (set_tile "state" (lzs:statetext))
+  (mode_tile "accept" (if (or (lzs:unreadable) (lzs:nabad)) 1 0))
+  (princ))
+
 ;;; -------------------- the dialog --------------------------------------
 ;;  Two columns: the chart on the left as a passive image cut into
 ;;  bands, the boxes on the right in the chart's own order, each
@@ -1002,6 +1164,10 @@
                           "The Spa Cover Details block pick and the "
                           "spillaway questions stay at the command line.\"; }")
                   out))
+  ;; The state line.  No label here: it is written before the dialog is
+  ;; shown and rewritten on every change, so a label in the file would
+  ;; only ever be the wrong answer for an instant.
+  (setq out (cons "  : text { key = \"state\"; width = 62; }" out))
   (setq out (cons "  : row {" out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\"; "
                           "is_default = true; fixed_width = true; }")
@@ -1121,6 +1287,9 @@
   (lzs:pput key (atoi v))
   (lzs:grey lzs:*chart*)
   (lzs:redraw)
+  ;; grade, second and method all move the dead set, so they move the
+  ;; count and the still-to-ask list with it
+  (lzs:restate)
   (princ))
 
 ;; A corner dropdown changed: remember it, grey or un-grey its size box,
@@ -1130,6 +1299,9 @@
   (lzs:pput stem i)
   (mode_tile (strcat stem "-sz") (if (lzs:sized i) 0 1))
   (lzs:redraw)
+  ;; a treatment that takes a size has just added a live box, or taken
+  ;; one away
+  (lzs:restate)
   (princ))
 
 ;; Open a page where the user last had the dialog.  done_dialog reports
@@ -1207,13 +1379,13 @@
             (action_tile (car d)
               (strcat "(lzs:cornerpick \"" (car d) "\" $value)"))
             (action_tile (strcat (car d) "-sz")
-              (strcat "(lzs:put \"" (car d) "-sz\" $value)")))
+              (strcat "(lzs:put \"" (car d) "-sz\" $value) (lzs:restate)")))
           ;; put back what was typed before this page was opened
           (foreach d (lzs:boxkeys c) (set_tile d (lzs:get d)))
           (foreach d (lzs:boxkeys c)
             (action_tile d
               (strcat "(lzs:put \"" d "\" $value) (setq lzs:*focus* \"" d "\")"
-                      " (lzs:redraw)")))
+                      " (lzs:redraw) (lzs:restate)")))
           ;; clicking a dimension's letter: caret into its box, with the
           ;; box's contents selected so the first keystroke replaces
           ;; rather than appends, and the dimension ringed on the chart.
@@ -1236,6 +1408,7 @@
           (action_tile "cancel" "(setq lzs:*pos* (done_dialog 0))")
           (lzs:redraw)
           (lzs:grey c)
+          (lzs:restate)
           (setq rc (start_dialog))
           (cond
             ((= rc 4) (setq go lzs:*go*))     ; a tab: go round again

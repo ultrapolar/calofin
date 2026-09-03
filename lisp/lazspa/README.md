@@ -175,6 +175,45 @@ after `SPA`) and on the **Layout** category page.
   key SPA does not ask for fails the suite instead of being typed into
   and dropped.
 
+## The state line
+
+Under the form, above `Insert`, one line that says what the sheet is
+about to do -- LAZFORM's, with a third thing to say, because **SPA has
+two ways of dropping a box unread**:
+
+| | |
+| --- | --- |
+| `lzs:answer` | anything that is neither `NA` nor a distance becomes *not answered* |
+| `lzs:keyanswer` | an `NA` on any key SPA has no NA for is **demoted** to the same thing |
+
+The second is the sharper one: `NA` is a word this very form tells you
+to type, and on the wrong box it means nothing at all. Either way the
+chart went on showing what was typed -- the chart draws the **string**
+-- so the box looked answered and SPA asked for it again with no reason
+given.
+
+```
+W is not a measurement - type a number, or NA, or clear it.
+W cannot be NA - SPA needs a number there.
+W and W2 cannot be NA - SPA needs a number in each of them.
+```
+
+**`Insert` is greyed for both**, and released the moment either is
+fixed. With neither there, the line is the hand-off:
+
+```
+Nothing filled yet - SPA will ask for all 5 boxes, plus the base point.
+2 of 5 boxes filled - SPA will ask for W2, L2 and the cover lap, plus the base point.
+All 5 boxes filled - SPA will ask only for the base point and the block.
+```
+
+`lzs:naok` is the authority on where `NA` is a real answer, and it is
+the same table SPA's own demotion reads. Both halves count
+`lzs:livekeys`, the boxes that are not greyed -- rubbish in a greyed box
+is neither complained about nor counted. The test partitions every live
+box into sent, still-to-ask, unreadable and NA-demoted and fails if any
+lands in two groups or in none, so the line and the alist cannot drift.
+
 ## Notes & limitations
 
 - **Two prompts stay at the command line, by design**, and the form says

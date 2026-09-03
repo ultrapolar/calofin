@@ -87,7 +87,7 @@ def _newdlg(vm, a):
 
 STUB = '''
 (setq stub:*rc* 1 stub:*written* nil stub:*rcs* nil
-      stub:*opened* nil stub:*mode* nil)
+      stub:*opened* nil stub:*mode* nil stub:*tiles* nil)
 (defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
 (defun open (f mode) f)
 (defun write-line (s fh) (setq stub:*written* (cons s stub:*written*)) s)
@@ -100,7 +100,9 @@ STUB = '''
 (defun done_dialog (status) (setq stub:*done* status) (list 120 340))
 (defun unload_dialog (id) t)
 (defun vl-file-delete (f) t)
-(defun set_tile (k v) v)
+(defun set_tile (k v)
+  (setq stub:*tiles* (cons (list k v) stub:*tiles*)) v)
+(defun stub:tile (k / p) (if (setq p (assoc k stub:*tiles*)) (cadr p)))
 (defun action_tile (k expr)
   (setq stub:*act* (cons (list k expr) stub:*act*)) t)
 (defun start_dialog ( / p k)
@@ -1027,6 +1029,170 @@ assert 'not loaded' in said, \
 assert 'SPA.LSP' in said and 'LAZPASS' in said, nv.printed
 assert not OPENED, "a dialog was opened with nothing to receive its answers"
 print("   says so plainly and opens nothing")
+
+
+print("== the state line: two silent drops, said out loud ==")
+sv = fresh()
+sv.loads('(setq lzs:*vals* nil lzs:*pvals* nil)'
+         '(setq lzs:*chart* (lzs:chart "Rectangle"))')
+
+
+def state(v):
+    v.loads('(setq t:*st* (lzs:statetext))')
+    return str(v.globals['t:*st*'])
+
+
+def livekeys(v):
+    v.loads('(setq t:*lk* (lzs:livekeys lzs:*chart*))')
+    return [str(x) for x in (v.globals['t:*lk*'] or [])]
+
+
+# a box is named the way the sheet names it
+sv.loads('(setq t:*a* (lzs:tagof lzs:*chart* "w"))'
+         '(setq t:*b* (lzs:tagof lzs:*chart* "w2"))'
+         '(setq t:*c* (lzs:tagof lzs:*chart* "gap"))'
+         '(setq t:*d* (lzs:tagof lzs:*chart* "cornera-sz"))')
+assert str(sv.globals['t:*a*']) == 'W', sv.globals['t:*a*']
+assert str(sv.globals['t:*b*']) == 'W2', sv.globals['t:*b*']
+assert str(sv.globals['t:*c*']) == 'the cover lap', sv.globals['t:*c*']
+assert str(sv.globals['t:*d*']) == 'Corner A', sv.globals['t:*d*']
+
+LIVE = livekeys(sv)
+assert state(sv).startswith('Nothing filled yet'), state(sv)
+sv.loads('(lzs:put "w" "84")')
+assert state(sv).startswith('1 of %d boxes filled' % len(LIVE)), state(sv)
+
+# THE DEMOTION, which is the one this form has and LAZFORM does not:
+# lzs:keyanswer turns an NA into SKIP on any key SPA has no NA for, so
+# NA -- a word the form itself tells you to type -- silently means
+# "ask" on the wrong box
+sv.loads('(setq t:*ok* (lzs:naok lzs:*chart*))')
+NAOK = [str(x) for x in (sv.globals['t:*ok*'] or [])]
+assert 'l' in NAOK and 'w' not in NAOK, NAOK
+sv.loads('(lzs:put "l" "NA")')
+assert 'cannot be NA' not in state(sv), \
+    "NA on a key that HAS an NA is being complained about: %r" % state(sv)
+sv.loads('(lzs:put "w" "NA")')
+na = state(sv)
+assert na == 'W cannot be NA - SPA needs a number there.', na
+sv.loads('(lzs:put "w2" "NA")')
+assert 'cannot be NA - SPA needs a number in each of them.' in state(sv), state(sv)
+# and it really would have been dropped
+sv.loads('(setq t:*ka* (lzs:keyanswer lzs:*chart* "w"))')
+assert str(sv.globals['t:*ka*']).upper() == 'SKIP', \
+    "the demotion this line reports is not happening: %r" % sv.globals['t:*ka*']
+
+# rubbish outranks it: it is the coarser failure
+sv.loads('(lzs:put "w" "wat")')
+assert state(sv).startswith('W is not a measurement'), state(sv)
+
+# a full sheet names what stays in the drawing
+sv.loads('(setq lzs:*vals* nil)')
+for k in LIVE:
+    sv.loads('(lzs:put "%s" "24")' % k)
+full = state(sv)
+assert full.startswith('All %d boxes filled' % len(LIVE)), full
+assert 'the block' in full, "the block pick is not mentioned: %r" % full
+
+# a page with one live box says "1 box", never "1 boxes"
+sv.loads('(setq lzs:*vals* nil lzs:*pvals* nil)'
+         '(setq lzs:*chart* (lzs:chart "ROUnd"))')
+assert len(livekeys(sv)) == 1, livekeys(sv)
+assert '1 box,' in state(sv), state(sv)
+print("   unreadable, NA-where-NA-is-not-an-answer, and the hand-off")
+
+
+print("== the SPA state line cannot disagree with what is SENT ==")
+iv = fresh()
+iv.loads('(setq lzs:*vals* nil lzs:*pvals* nil)'
+         '(setq lzs:*chart* (lzs:chart "Rectangle"))')
+iv.loads('(lzs:put "w" "84") (lzs:put "l" "NA") (lzs:put "w2" "rubbish")'
+         '(lzs:put "gap" "")')
+iv.loads('(setq t:*lk* (lzs:livekeys lzs:*chart*))'
+         '(setq t:*bad* (lzs:unreadable)) (setq t:*na* (lzs:nabad))'
+         '(setq t:*togo* (lzs:togo)) (setq t:*form* (lzs:form))')
+LK = set(str(x) for x in iv.globals['t:*lk*'])
+BAD = set(str(x) for x in (iv.globals['t:*bad*'] or []))
+NA = set(str(x) for x in (iv.globals['t:*na*'] or []))
+TOGO = set(str(x) for x in (iv.globals['t:*togo*'] or []))
+SENT = {str(q.a) if isinstance(q, Dot) else str(q[0])
+        for q in iv.globals['t:*form*']} & LK
+assert BAD == {'w2'}, BAD
+assert NA == set(), NA
+assert SENT | TOGO | BAD | NA == LK, (
+    "live boxes in none of sent/to-ask/unreadable/NA: %r"
+    % sorted(LK - SENT - TOGO - BAD - NA))
+for a, b in ((SENT, TOGO), (SENT, BAD), (TOGO, BAD), (SENT, NA), (TOGO, NA)):
+    assert not (a & b), "two groups claim %r" % sorted(a & b)
+assert 'w2' not in SENT, "an unreadable box reached SPA after all"
+print("   %d live boxes partitioned with no overlap and nothing left over"
+      % len(LK))
+
+# a greyed box is in none of them
+gv = fresh()
+gv.loads('(setq lzs:*vals* nil lzs:*pvals* nil)'
+         '(setq lzs:*chart* (lzs:chart "Rectangle"))')
+# "second = No" stops spa:askother2 at the Yes/No, so the lap and the
+# by-dims overalls are never asked
+gv.loads('(setq t:*sv* (lzs:lvals "second"))')
+NOAT = [str(x) for x in gv.globals['t:*sv*']].index('No')
+gv.loads('(lzs:pput "second" %d) (lzs:put "gap" "rubbish")' % NOAT)
+gv.loads('(setq t:*d* (lzs:dead lzs:*chart*))')
+assert 'gap' in [str(x) for x in gv.globals['t:*d*']], gv.globals['t:*d*']
+assert 'gap' not in livekeys(gv), "a greyed box is being counted as live"
+gv.loads('(setq t:*b* (lzs:unreadable))')
+assert not (gv.globals['t:*b*'] or []), \
+    "rubbish in a greyed box is being complained about"
+print("   rubbish in a greyed box is neither complained about nor counted")
+
+
+print("== Insert is held back while a box would be dropped ==")
+rv = stubbed()
+rv.loads('(setq lzs:*vals* nil lzs:*pvals* nil)'
+         '(setq lzs:*chart* (lzs:chart "Rectangle"))')
+
+
+def accept_mode(v):
+    modes = [(str(a[0]), int(a[1])) for a in (v.globals.get('stub:*mode*') or [])]
+    hits = [m for k, m in modes if k == 'accept']
+    assert hits, "restate never touched the Insert button: %r" % modes
+    return hits[0]
+
+
+rv.loads('(setq stub:*mode* nil stub:*tiles* nil) (lzs:restate)')
+assert accept_mode(rv) == 0, "Insert was greyed on a page with nothing wrong"
+rv.loads('(setq stub:*mode* nil) (lzs:put "w" "nonsense") (lzs:restate)')
+assert accept_mode(rv) == 1, "Insert stayed live with an unreadable box"
+# and the demotion holds it back too -- it is just as silent a drop
+rv.loads('(setq stub:*mode* nil) (lzs:put "w" "NA") (lzs:restate)')
+assert accept_mode(rv) == 1, \
+    "Insert stayed live with an NA that SPA would drop unread"
+rv.loads('(setq stub:*mode* nil) (lzs:put "w" "84") (lzs:restate)')
+assert accept_mode(rv) == 0, "fixing the box did not let Insert back"
+rv.loads('(setq t:*s* (stub:tile "state"))')
+assert rv.globals['t:*s*'] is not None, "the state tile was never written"
+print("   greyed for both drops, live again the moment either is fixed")
+
+wv = stubbed(with_spa=True)
+wv.loads('(setq stub:*rcs* \'(0)) (setq t:*f* (lzs:show "Rectangle"))')
+acts = {str(a[0]): str(a[1]) for a in (wv.globals.get('stub:*act*') or [])}
+wv.loads('(setq t:*b* (lzs:boxkeys (lzs:chart "Rectangle")))')
+for k in [str(x) for x in wv.globals['t:*b*']]:
+    assert 'lzs:restate' in acts[k], \
+        "box %r changes the page without restating it" % k
+wv.loads('(setq t:*l* (lzs:listkeys))')
+for k in [str(x) for x in wv.globals['t:*l*']]:
+    assert 'lzs:listpick' in acts[k], k
+wv.loads('(setq t:*c* (lzs:corners (lzs:chart "Rectangle")))')
+for c in wv.globals['t:*c*']:
+    stem = str(c[0])
+    assert 'lzs:restate' in acts[stem + '-sz'], stem
+    assert 'lzs:cornerpick' in acts[stem], stem
+wv.loads('(setq t:*st* (stub:tile "state"))')
+assert wv.globals['t:*st*'] is not None, \
+    "the page opened without ever writing its state line"
+print("   %d callbacks restate; the line is written before the page opens"
+      % len(acts))
 
 
 print("ALL LAZSPA TESTS PASSED")

@@ -83,7 +83,7 @@ def _newdlg(vm, a):
 
 STUB = '''
 (setq stub:*rc* 1 stub:*written* nil stub:*rcs* nil
-      stub:*opened* nil stub:*mode* nil)
+      stub:*opened* nil stub:*mode* nil stub:*tiles* nil)
 (defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
 (defun open (f mode) f)
 (defun write-line (s fh) (setq stub:*written* (cons s stub:*written*)) s)
@@ -96,7 +96,9 @@ STUB = '''
 (defun done_dialog (status) (setq stub:*done* status) (list 120 340))
 (defun unload_dialog (id) t)
 (defun vl-file-delete (f) t)
-(defun set_tile (k v) v)
+(defun set_tile (k v)
+  (setq stub:*tiles* (cons (list k v) stub:*tiles*)) v)
+(defun stub:tile (k / p) (if (setq p (assoc k stub:*tiles*)) (cadr p)))
 (defun action_tile (k expr)
   (setq stub:*act* (cons (list k expr) stub:*act*)) t)
 (defun start_dialog ( / p k)
@@ -115,7 +117,7 @@ STUB = '''
              (if stub:*done*
                (setq stub:*type* (vl-remove p stub:*type*))))))
   (if stub:*done* stub:*done* stub:*rc*))
-(setq stub:*act* nil stub:*type* nil stub:*rcs* nil)
+(setq stub:*act* nil stub:*type* nil stub:*rcs* nil stub:*tiles* nil)
 '''
 
 
@@ -957,6 +959,219 @@ assert abs(float(form['tp']) - 240.0) < 1e-9
 assert 'g' in form and form['g'] is None, "NA must be sent as (g . nil)"
 assert 'h' not in form, "an empty box must not be sent at all"
 print("   filled keys sent, NA sent as nil, empty boxes left out entirely")
+
+
+print("== the state line: what cannot be read, and what is left to ask ==")
+sv = fresh()
+
+
+def state(v):
+    v.loads('(setq t:*st* (lzf:statetext))')
+    return str(v.globals['t:*st*'])
+
+
+def livekeys(v):
+    v.loads('(setq t:*lk* (lzf:livekeys lzf:*chart*))')
+    return [str(x) for x in (v.globals['t:*lk*'] or [])]
+
+
+def call1(v, fn, arg):
+    v.loads('(setq t:*r* (%s "%s"))' % (fn, arg))
+    r = v.globals['t:*r*']
+    return None if r is None else str(r)
+
+
+# the short name a box answers to has to be the name PRINTED on the
+# sheet -- a POOL key would send the drafter hunting for a letter that
+# is not on the paper
+sv.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
+sv.loads('(setq t:*t1* (lzf:tagof lzf:*chart* "tp"))'      # a drawn dim
+         '(setq t:*t2* (lzf:tagof lzf:*chart* "c2"))'      # "C2 - ..." label
+         '(setq t:*t3* (lzf:tagof lzf:*chart* "x0"))'      # "Cross dim 1"
+         '(setq t:*t4* (lzf:tagof lzf:*chart* "cornera-sz"))'
+         '(setq t:*t5* (lzf:tagof lzf:*chart* "nosuchkey"))')
+assert str(sv.globals['t:*t1*']) == 'B', sv.globals['t:*t1*']
+assert str(sv.globals['t:*t2*']) == 'C2', sv.globals['t:*t2*']
+assert str(sv.globals['t:*t3*']) == 'X0', sv.globals['t:*t3*']
+assert str(sv.globals['t:*t4*']) == 'Corner A', sv.globals['t:*t4*']
+assert str(sv.globals['t:*t5*']) == 'NOSUCHKEY', sv.globals['t:*t5*']
+# and the two string cuts under it, including what must NOT be cut
+assert call1(sv, 'lzf:unbracket', 'Corner A (bottom left)') == 'Corner A'
+assert call1(sv, 'lzf:unbracket', 'Body corners') == 'Body corners'
+assert call1(sv, 'lzf:leadletter', 'C - wall height') == 'C'
+assert call1(sv, 'lzf:leadletter', 'C2 - shallow floor') == 'C2'
+assert call1(sv, 'lzf:leadletter', 'Cross dim 1') is None
+# a dash in the MIDDLE of a sentence is not a letter prefix, or a tag
+# would come out half a line long
+assert call1(sv, 'lzf:leadletter',
+             'overall across - bottom side, out of square') is None
+print("   a box is named by its letter, its label's letter, or its key")
+
+# every chart states itself, and names its own routine
+sv.loads('(setq t:*ck* (mapcar (quote car) lzf:*charts*))')
+CHARTKEYS = [str(x) for x in sv.globals['t:*ck*']]
+for ck in CHARTKEYS:
+    sv.loads('(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)')
+    sv.loads('(setq lzf:*chart* (lzf:chart "%s") lzf:*insq* nil lzf:*btype* 0)' % ck)
+    sv.loads('(setq t:*oa* (lzf:oasis-p lzf:*chart*))')
+    who = 'OASIS' if sv.globals['t:*oa*'] else 'POOL'
+    n = len(livekeys(sv))
+    assert n > 0, "%s: no live box at all" % ck
+    line = state(sv)
+    assert who in line, "%s: the state line names the wrong routine: %r" % (ck, line)
+    assert str(n) in line, "%s: %r does not carry the count %d" % (ck, line, n)
+print("   %d charts, each naming its own routine and its own box count"
+      % len(CHARTKEYS))
+
+# the four states of the line, on one chart
+sv.loads('(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)')
+sv.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*insq* T lzf:*btype* 0)')
+LIVE = livekeys(sv)
+empty = state(sv)
+assert empty.startswith('Nothing filled yet'), empty
+assert str(len(LIVE)) in empty
+
+sv.loads('(lzf:put "tp" "240")')
+part = state(sv)
+assert part.startswith('1 of %d boxes filled' % len(LIVE)), part
+assert 'base point' in part, part
+
+# NA and a feet-inches spelling are answers, not complaints
+FTIN = '2\'6"'                            # a real architectural spelling
+sv.loads('(lzf:put "le" "NA") (lzf:put "h" "%s")' % FTIN.replace('"', '\\"'))
+assert state(sv).startswith('3 of'), state(sv)
+
+# and rubbish IS a complaint, named by its letter
+sv.loads('(lzf:put "g" "twelvish")')
+one = state(sv)
+assert one.startswith('G is not a measurement'), one
+assert 'clear it' in one, one
+sv.loads('(lzf:put "f" "@@@")')
+two = state(sv)
+assert two.startswith('F and G are not measurements') or \
+       two.startswith('G and F are not measurements'), two
+assert 'clear them' in two, two
+# four of them name three and count the rest, and the count is not a
+# second list: "G, F, E and 1 more", never "G, F and E and 1 more"
+sv.loads('(lzf:put "e" "??") (lzf:put "m" "!!")')
+many = state(sv)
+assert 'and 1 more are not measurements' in many, many
+assert ' and ' == many[many.index('and 1 more') - 1:many.index('and 1 more') + 4], many
+assert many.count(' and ') == 1, "the overflow count reads as a second list: %r" % many
+print("   empty / partial / unreadable / overflow all read as one sentence")
+
+# every box filled leaves only the base point
+sv.loads('(setq lzf:*vals* nil)')
+for k in LIVE:
+    sv.loads('(lzf:put "%s" "10")' % k)
+full = state(sv)
+assert full == ('All %d boxes filled - POOL will ask only for the base point.'
+                % len(LIVE)), full
+print("   a full sheet says so, and says what is still picked in the drawing")
+
+
+print("== the state line cannot disagree with what is SENT ==")
+# The whole point of the line: it reports lzf:form rather than guessing.
+# So for every live box, the three sets have to partition it -- sent,
+# still to ask, or unreadable -- with nothing in two of them and
+# nothing in none.
+iv = fresh()
+iv.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*insq* T lzf:*btype* 0)')
+iv.loads('(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)')
+iv.loads('(lzf:put "tp" "240") (lzf:put "le" "NA") (lzf:put "h" "rubbish")'
+         '(lzf:put "g" "") (lzf:put "f" "%s")' % FTIN.replace('"', '\\"'))
+iv.loads('(setq t:*lk* (lzf:livekeys lzf:*chart*))'
+         '(setq t:*bad* (lzf:unreadable))'
+         '(setq t:*togo* (lzf:togo))'
+         '(setq t:*form* (lzf:form "Rectangle" T "Normal"))')
+LK = [str(x) for x in iv.globals['t:*lk*']]
+BAD = [str(x) for x in (iv.globals['t:*bad*'] or [])]
+TOGO = [str(x) for x in (iv.globals['t:*togo*'] or [])]
+SENT = {str(p.a) if isinstance(p, Dot) else str(p[0])
+        for p in iv.globals['t:*form*']}
+assert BAD == ['h'], BAD
+boxes = set(LK)
+sent_boxes = SENT & boxes
+assert sent_boxes | set(TOGO) | set(BAD) == boxes, (
+    "these live boxes are in none of sent/to-ask/unreadable: %r"
+    % sorted(boxes - sent_boxes - set(TOGO) - set(BAD)))
+for name, group in (('sent', sent_boxes), ('to ask', set(TOGO)),
+                    ('unreadable', set(BAD))):
+    for other, og in (('to ask', set(TOGO)), ('unreadable', set(BAD)),
+                      ('sent', sent_boxes)):
+        if name != other:
+            assert not (group & og), \
+                "%s and %s both claim %r" % (name, other, sorted(group & og))
+# and the unreadable one is exactly the box POOL would have re-asked
+# for without a word being said about it
+assert 'h' not in SENT, "an unreadable box reached POOL after all"
+print("   %d live boxes: %d sent, %d still to ask, %d unreadable, no overlap"
+      % (len(boxes), len(sent_boxes), len(TOGO), len(BAD)))
+
+# a greyed box is in none of them: it is withheld whatever is in it, so
+# neither complaining about it nor counting it as still to ask is true
+gv = fresh()
+gv.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*insq* T lzf:*btype* 0)')
+# "bo" is the bottom-side overall, which an in-square pool does not
+# have -- so the toggle greys it, and POOL never reads it
+gv.loads('(setq lzf:*vals* nil) (lzf:put "bo" "rubbish")')
+gv.loads('(setq t:*d* (lzf:dead lzf:*chart* T "Normal"))')
+DEAD = [str(x) for x in (gv.globals['t:*d*'] or [])]
+assert 'bo' in DEAD, "the in-square rule stopped greying the bottom overall: %r" % DEAD
+assert 'bo' not in livekeys(gv), "a greyed box is being counted as live"
+gv.loads('(setq t:*b* (lzf:unreadable))')
+assert not (gv.globals['t:*b*'] or []), \
+    "rubbish in a GREYED box is being complained about: %r" % gv.globals['t:*b*']
+print("   rubbish in a greyed box is neither complained about nor counted")
+
+
+print("== Insert is held back while a box cannot be read ==")
+rv = stubbed()
+rv.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*insq* T lzf:*btype* 0)')
+rv.loads('(setq lzf:*vals* nil stub:*mode* nil stub:*tiles* nil)')
+rv.loads('(lzf:restate)')
+
+
+def accept_mode(v):
+    modes = [(str(a[0]), int(a[1])) for a in (v.globals.get('stub:*mode*') or [])]
+    hits = [m for k, m in modes if k == 'accept']
+    assert hits, "restate never touched the Insert button: %r" % modes
+    return hits[0]                      # newest first
+
+
+assert accept_mode(rv) == 0, "Insert was greyed on a page with nothing wrong"
+rv.loads('(setq stub:*mode* nil) (lzf:put "tp" "nonsense") (lzf:restate)')
+assert accept_mode(rv) == 1, \
+    "Insert stayed live with an unreadable box -- pressing it drops that box"
+rv.loads('(setq t:*s* (stub:tile "state"))')
+assert 'not a measurement' in str(rv.globals['t:*s*']), rv.globals['t:*s*']
+rv.loads('(setq stub:*mode* nil) (lzf:put "tp" "240") (lzf:restate)')
+assert accept_mode(rv) == 0, "fixing the box did not let Insert back"
+print("   greyed while unreadable, live again the moment it is fixed")
+
+# and the page wires it: every box, both dropdowns and the toggle put
+# the line back, or it would go stale the first time anything changed
+wv = stubbed()
+wv.loads('(setq t:*f* (lzf:show "Rectangle"))')
+acts = {str(a[0]): str(a[1]) for a in (wv.globals.get('stub:*act*') or [])}
+wv.loads('(setq t:*k* (lzf:keys (lzf:chart "Rectangle")))')
+for k in [str(x) for x in wv.globals['t:*k*']]:
+    assert 'lzf:restate' in acts[k], \
+        "box %r changes the page without restating it" % k
+for k in ('btype', 'insq'):
+    assert 'lzf:restate' in acts[k], "%r does not restate" % k
+wv.loads('(setq t:*c* (lzf:corners (lzf:chart "Rectangle")))')
+for c in wv.globals['t:*c*']:
+    stem = str(c[0])
+    assert 'lzf:restate' in acts[stem + '-sz'], \
+        "corner size %r does not restate" % stem
+    # the dropdown restates through lzf:cornerpick rather than inline
+    assert 'lzf:cornerpick' in acts[stem], stem
+wv.loads('(setq t:*st* (stub:tile "state"))')
+assert wv.globals['t:*st*'] is not None, \
+    "the page opened without ever writing its state line"
+print("   %d callbacks restate; the line is written before the page opens"
+      % (len(acts)))
 
 
 print("== end to end: the form draws what the questions draw ==")
