@@ -257,6 +257,34 @@ Still open, and genuinely blocked on a machine with a compiler:
   should run the spa form once with a `NotGiven` corner and confirm the
   `?` mark lands, per `ui/PLAN.md`.
 
+## After the plan: what nothing was checking
+
+The five phases added roughly 1,240 `action_tile` callbacks across 37
+DCL pages, and **a DCL callback is a string**. Nothing checks a string.
+Rename the helper one calls and the file still loads, every other suite
+still passes, and the tile is dead until somebody clicks it -- which on
+a page with sixty tiles may be weeks. The suites that drive those pages
+only ever evaluate the handful each scenario clicks.
+
+`tests/test_dialog_actions.py` opens every page of all four tools with
+the dialog surface stubbed and **evaluates every expression
+action_tile was handed**, under each `$reason` DCL can deliver (a
+callback may read it -- LAZPANEL's list box runs a tool on a double
+click and only on a double click).
+
+It asserts nothing about what a callback *does*; that is the business
+of the tool's own suite, which knows what the click should achieve.
+This one asserts only that every expression is something the VM can run
+at all: no typo'd name, no missing paren, no helper moved out from
+under a call site. It runs at both tiers, which is where it earns most
+-- the grouped build rewrites these strings through the swap map, so a
+call site the mirror fails to translate shows up here rather than in
+somebody's AutoCAD.
+
+All 1,240 pass. The suite is the deliverable, not the result: it was
+verified to bite by renaming one helper a callback names, which failed
+13 pages at once.
+
 ## The order, and why
 
 1. **Find** -- biggest single win, self-contained, testable end to end. *(done)*

@@ -435,6 +435,10 @@ python3 tests/test_lazspa.py          # LAZSPA - the spa chart drawn and
                                       # checked, and the spa it draws
 python3 tests/test_lazstep.py         # LAZSTEP - the drawing generated for
                                       # every step count, and the steps it draws
+python3 tests/test_dialog_actions.py  # every action_tile expression on every
+                                      # DCL page, EVALUATED - a callback is a
+                                      # string, so a typo'd or moved helper is
+                                      # dead until somebody clicks that tile
 python3 tests/test_cancel_paths.py    # every headline command cancelled at its
                                       # first prompt: the handler runs, settings
                                       # come back, no group or error mode left
