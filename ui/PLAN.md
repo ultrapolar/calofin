@@ -69,6 +69,20 @@ reasons still matter:
   the VB side is verified only down to the literal it emits.  Whoever
   next opens AutoCAD with a build should run the spa form once with a
   `NotGiven` corner and confirm the `?` mark lands.
+- **The two form surfaces, held together.** *(closed 2026-09-03.)*
+  `tests/test_spa_form.py` section 15 now asserts that every question
+  `LAZSPA`'s DCL chart asks is answerable on the palette too. It reads
+  the palette's surface from BOTH files, because the field map is not
+  the whole of it: `fieldmap.json` describes what is anchored to the
+  artwork plus the second-outline overalls, while the cover block
+  (`mode`, `second`, `method`, `gap`, `autohinge`, `grade`, `taper`)
+  and the shape word live in `SpaFormView.vb`'s view model. Reading the
+  map alone says the palette cannot ask for the cover lap, which is
+  wrong -- and was the first thing this check had to be taught. The VB
+  literals are parsed, not listed, so a key it stops sending fails the
+  suite. The two surfaces were found to be fully in step: 19, 17 and 11
+  questions on the three shapes, all answerable on both.
+
 - **The button catalog.**  The palette still shows its original button
   set; the newer headline tools have no buttons.  Additions are
   unverifiable here, so the catalog expansion waits for a machine that

@@ -247,7 +247,12 @@ Still open, and genuinely blocked on a machine with a compiler:
   under test, so the JSON should be generated from them -- but nothing
   here can look at the result, and a generated field map that lands the
   boxes in the wrong place is worse than seeded estimates somebody
-  nudged by eye.
+  nudged by eye. **The half that does not need eyes is now checked**:
+  `tests/test_spa_form.py` section 15 holds `LAZSPA`'s charts against
+  the palette's whole surface -- the map AND the VB literals, since the
+  cover block never appears in the JSON -- so a question one form can
+  answer and the other cannot fails the suite. The positions still want
+  a human with the artwork in front of them; the KEYS no longer do.
 - **Everything behavioural.** Whoever next opens AutoCAD with a build
   should run the spa form once with a `NotGiven` corner and confirm the
   `?` mark lands, per `ui/PLAN.md`.

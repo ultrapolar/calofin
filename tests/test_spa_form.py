@@ -468,11 +468,95 @@ _fm = json.load(open(FIELDMAP))
 sent = _map_keys({k: v for k, v in _fm.items()
                   if k in ('shapes', '_secondOutline')}, set())
 _src = open(LSP, encoding='utf-8', errors='replace').read()
+# SPA takes a keyed answer two ways, and the check has to know both or
+# it rejects a legitimate key: the (list 'k 'REQ) tables that askseqb
+# walks, and the ask helpers that carry their own key -- askdf, askkwf
+# and friends.  Both are read off SPA.LSP rather than typed here.
 readable = set(m.group(1).lower() for m in
                _re.finditer(r"\(list\s+'([a-z][a-z0-9]*)\s+'(?:REQ|NAX|ZER|SUG)",
                             _src))
+readable |= set(m.group(1).lower() for m in
+                _re.finditer(r"\(spa:(?:askdf|askkwf|askseqb|asknum)\s+'([a-z][a-z0-9]*)",
+                             _src))
+readable |= set(m.group(1).lower() for m in
+                _re.finditer(r"\(spa:f(?:has|take)\s+'([a-z][a-z0-9]*)", _src))
 unread = sorted(sent - readable)
 assert not unread, \
     "the spa field map sends keys SPA.LSP never reads: %s" % unread
 print("   %d field-map keys, every one a keyed item in SPA.LSP" % len(sent))
+
+
+# --------------------------------------------------------------------
+# 15. The two form surfaces ask the same questions.
+#
+#     SPA has two forms in front of it: LAZSPA's DCL chart and the VB
+#     palette.  A question one can answer and the other cannot is not a
+#     bug -- SPA just asks at the command line -- but it is a gap
+#     nobody would notice, and the roster halves of these two surfaces
+#     had already parted once (the palette shipped 60 of the panel's
+#     67 commands).
+#
+#     THE FIELD MAP IS NOT THE WHOLE PALETTE.  fieldmap.json describes
+#     the fields anchored to the ARTWORK plus the second-outline
+#     overalls; the cover block -- mode, second, method, gap,
+#     autohinge, grade, taper -- and the shape itself are carried by
+#     SpaFormView.vb's own view model and never appear in the JSON.
+#     Reading the map alone therefore says the palette cannot ask for
+#     the cover lap, which is wrong.  So the palette's surface is read
+#     from BOTH files, and the VB literals are parsed rather than
+#     listed, so a key it stops sending fails here.
+# --------------------------------------------------------------------
+print("== 15. LAZSPA and the palette ask the same questions ==")
+
+LAZSPA = os.path.join(os.path.dirname(__file__), '..', 'lisp', 'lazspa',
+                      'LAZSPA.lsp')
+VBFORM = os.path.join(os.path.dirname(__file__), '..', 'ui', 'calofin_net',
+                      'SpaFormView.vb')
+
+_vb = open(VBFORM, encoding='utf-8', errors='replace').read()
+vb_literal = set(m.group(1).lower() for m in _re.finditer(
+    r'pairs\.Add\(LispBridge\.\w+\("([a-z0-9]+)"', _vb))
+assert vb_literal, "no LispBridge pairs found - has SpaFormView.vb been reshaped?"
+
+_lv = VM()
+_lv.load(LAZSPA)
+_lv.loads('(setq t:*charts* lzs:*charts*)')
+_bykey = {str(c[0]).lower(): str(c[0]) for c in _lv.globals['t:*charts*']}
+
+# the shape word is matched WITHOUT case by spa:fshape, which is why
+# the map's "ROUnd" and LAZSPA's "ROund" are both right; the pairing
+# here is case-insensitive for the same reason
+for _sid, _sh in _fm['shapes'].items():
+    _real = _bykey.get(_sh['lispShape'].lower())
+    assert _real, ("the field map's %s names lispShape %r, which is no "
+                   "LAZSPA chart: %s"
+                   % (_sid, _sh['lispShape'], sorted(_bykey.values())))
+    palette = set(vb_literal)
+    for _d in _sh.get('dimensions', []):
+        palette.add(_d['key'].lower())
+    for _c in _sh.get('corners', []):
+        palette.add(_c['typeKey'].lower())
+        palette.add(_c['sizeKey'].lower())
+    for _f in _fm['_secondOutline']['fields']:
+        if _sid in [x.lower() for x in _f.get('shapes', [])]:
+            palette.add(_f['key'].lower())
+
+    _lv.loads('(setq t:*ch* (lzs:chart "%s"))' % _real)
+    _lv.loads('(setq t:*b* (lzs:boxkeys t:*ch*))'
+              '(setq t:*co* (lzs:corners t:*ch*))'
+              '(setq t:*lk* (lzs:listkeys))')
+    chart = set(str(x).lower() for x in (_lv.globals['t:*b*'] or []))
+    chart |= set(str(x).lower() for x in (_lv.globals['t:*lk*'] or []))
+    for _c in (_lv.globals['t:*co*'] or []):
+        chart.add(str(_c[0]).lower() + '-ty')
+        chart.add(str(_c[0]).lower() + '-sz')
+
+    missing = sorted(chart - palette)
+    assert not missing, (
+        "%s: LAZSPA asks for %s and the palette has no way to answer - add "
+        "the field to fieldmap.json, or to SpaFormView.vb's cover block if "
+        "it is not anchored to the artwork" % (_sid, missing))
+    print("   %-10s %2d questions, every one answerable on both forms"
+          % (_sid, len(chart)))
+
 print("\nALL SPA FORM SCENARIOS PASSED")

@@ -29,7 +29,20 @@
     "to be nudged against the real artwork. Nothing downstream depends",
     "on them being exact.",
     "",
-    "Keys verified against the askseqb item lists in SPA.LSP."
+    "Keys verified against the askseqb item lists in SPA.LSP.",
+    "",
+    "WHAT THIS FILE DOES NOT DESCRIBE. It is not the whole of what the",
+    "palette sends. These fields are anchored to the ARTWORK (x/y on a",
+    "shape image), plus the second-outline overalls; the cover block --",
+    "mode, second, method, gap, autohinge, grade, taper -- and the shape",
+    "word itself are carried by SpaFormView.vb's own view model and never",
+    "appear here. Read the map alone and you will conclude the palette",
+    "cannot ask for the cover lap, which is wrong.",
+    "",
+    "tests/test_spa_form.py section 15 holds both files together against",
+    "LAZSPA's charts: every question the DCL form asks has to be",
+    "answerable on the palette too, from this map OR from the VB",
+    "literals, which it parses rather than lists."
   ],
 
   "shapes": {
