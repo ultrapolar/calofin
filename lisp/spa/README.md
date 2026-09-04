@@ -64,7 +64,7 @@ flow in `SPA.LSP` changes, walk `TUTORIALSPA.LSP` through with it.
 
 | Shape | What it asks for |
 | --- | --- |
-| **Rectangle** | overall width (A‑B), then the length (A‑D) — **the width is offered back**, so Enter makes it square — then each corner |
+| **Rectangle** | overall width (A‑B), then the length (A‑D) — **the width is offered back**, so Enter makes it square — then the corners, once for all four or one at a time |
 | **Octagon** | overalls **B** across and **A** up, then the cut **face S2**, then **T / S / S1 / V** (any of them may be `NA`) |
 | **Round** | **one measurement** — the diameter. Type `O` at it for an out-of-round spa and the two axes are asked instead |
 
@@ -163,21 +163,35 @@ command finishes.
 
 ## Rectangle corners
 
-Every corner is asked the repo's canonical **Treatment** question
-(STANDARDS.md section 2): `How should Corner A be treated?
-[Square/Radius/Cut/NotGiven]` — `Square` (a true 90), `Radius` (sized by
-its radius), `Cut` (a straight diagonal, sized by its face length) or
-`NotGiven` (nothing on the order sheet: drawn square and flagged). The
-pre-standard words still work typed in full — `90`, `ROUNDED`, `DIAG` /
-`DIAGONAL`, `NG` — and are normalised as they are read; the palette's
-old wire values are accepted the same way.
+The corners open with one gate:
 
-**Corner A's answer autofills B, C and D** — press Enter at each of them
-to accept it, or type a different treatment for that corner, so a cover
-with two cut corners and two square ones takes four different answers.
-Side lengths are always measured to the *true* (sharp) corner; the
-treatment cuts inward from there, and a treatment too big for its walls
-is re‑asked.
+```
+Are all four corners the same? [Yes/No] <Yes>:
+```
+
+Most covers say one thing about all four, so `Yes` is the default and it
+buys **one round of questions** — asked of `the four corners`, applied to
+every one of them. `No` walks `Corner A`, `Corner B`, `Corner C` and
+`Corner D` one at a time, which is how a cover with two cut corners and
+two square ones is given.
+
+Either way the question itself is the repo's canonical **Treatment**
+question (STANDARDS.md section 2): `How should the four corners be
+treated? [Square/Radius/Cut/NotGiven]` — `Square` (a true 90), `Radius`
+(sized by its radius), `Cut` (a straight diagonal, sized by its face
+length) or `NotGiven` (nothing on the order sheet: drawn square and
+flagged). The pre-standard words still work typed in full — `90`,
+`ROUNDED`, `DIAG` / `DIAGONAL`, `NG` — and are normalised as they are
+read; the palette's old wire values are accepted the same way.
+
+Asked one at a time, **corner A's answer autofills B, C and D** — press
+Enter at each of them to accept it, or type a different treatment for
+that corner. Side lengths are always measured to the *true* (sharp)
+corner; the treatment cuts inward from there, and a treatment too big
+for its walls is re‑asked.
+
+`Back` at the gate leaves the corner stage for the overalls; `Back` at
+the round, or at corner A, re‑asks the gate.
 
 Callouts sit outside the corner on its 45° line: a radius dimension on a
 `Radius` corner (`R12"`), an aligned dimension across a `Cut` face
@@ -246,7 +260,8 @@ The key roster:
 | `shape` | `Rectangle` / `OCtagon` / `ROund` — exact spelling |
 | `base` | insertion base point, as a plain list: `(base 0.0 0.0)` |
 | `w`, `l` | rectangle overall width / length |
-| `cornera-ty` … `cornerd-ty` | corner treatment: `Radius` / `Diagonal` / `90` (`Square` accepted as the synonym for `90`, exactly as at the prompt) |
+| `samecorners` | `Yes` / `No` — are all four corners the same? A form that names no corner but `cornera` is still asked this at the keyboard; one that fills in any of `cornerb`/`cornerc`/`cornerd` has said `No` by doing so, and is not asked unless it sent this key too — an explicit answer always wins |
+| `cornera-ty` … `cornerd-ty` | corner treatment: `Radius` / `Diagonal` / `90` (`Square` accepted as the synonym for `90`, exactly as at the prompt). With `samecorners` = `Yes`, **corner A's pair answers the one round** and B, C and D take it |
 | `cornera-sz` … `cornerd-sz` | the radius or cut face length for a sized treatment; `90` needs none |
 | `b`, `a` | octagon / round overalls. Round: a stored numeric `b` alone **is the diameter**; storing `a` as well takes the out-of-round path, exactly as typing `O` would |
 | `s2`, `tt`, `ss`, `s1`, `vv` | the octagon's cut face and flat letters (any may be an explicit nil = `NA`) |

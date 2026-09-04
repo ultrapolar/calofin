@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "090126 REV09")
+(setq tut:*version* "090126 REV10")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -95,10 +95,13 @@
     "    the width back as the length, so Enter makes it square."
     "    Any measurement may be typed in MILLIMETRES with the unit on"
     "    the number -- 600mm, 1524 MM -- and is converted to inches."
-    "6.  Rectangle corners, one at a time -- the Treatment question:"
+    "6.  Rectangle corners.  ARE ALL FOUR THE SAME? <Yes> comes first:"
+    "    Yes asks ONE round for all four, No asks A, B, C and D one at"
+    "    a time.  Either way the question is the Treatment one --"
     "    Square / Radius / Cut / NotGiven (the old words still work"
     "    typed in full: 90, ROUNDED, DIAG, NG)."
-    "    Corner A's answer autofills B, C and D -- Enter accepts."
+    "    Asked one at a time, corner A's answer autofills B, C and D"
+    "    -- Enter accepts."
     "7.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
     "    Skipped on Thermo-Light."

@@ -1010,9 +1010,12 @@ CASES = [
      [("mode", "1"), ("w", "84"), ("l", "72"),
       ("cornera", "1"), ("cornerb", "1"), ("cornerc", "1"), ("cornerd", "1"),
       ("second", "2"), ("autohinge", "2")],
+     # the chart fills in all four corner dropdowns, which answers
+     # "are all four the same?" by itself -- so the typed run says No
+     # and gives the four, and the chart run is never asked the gate
      [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
-      "90", "90", "90", "90", "No", "No"],
-     ("WIDTH", "LENGTH", "Corner")),
+      "No", "90", "90", "90", "90", "No", "No"],
+     ("WIDTH", "LENGTH", "Corner", "all four corners")),
     ("OCtagon",
      [("mode", "1"), ("b", "96"), ("a", "84"), ("s2", "24"),
       ("tt", "NA"), ("ss", "NA"), ("s1", "NA"), ("vv", "NA"),
@@ -1062,7 +1065,7 @@ print("== a filled cover block drives both outlines ==")
 # the same spa with the cover added by Offset -- second, method and the
 # lap all come off the form, and the auto-hinge gate with them
 cv_prompts = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
-              "90", "90", "90", "90", "Yes", "Offset", 3.0, "No"]
+              "No", "90", "90", "90", "90", "Yes", "Offset", 3.0, "No"]
 cv_typing = [("mode", "1"), ("w", "84"), ("l", "72"),
              ("cornera", "1"), ("cornerb", "1"), ("cornerc", "1"),
              ("cornerd", "1"),
@@ -1075,7 +1078,7 @@ print("   %d entities; both outlines from one chart" % len(ents))
 
 # and by Dims, where the second overalls are the ones that travel
 cd_prompts = [None, "Coversize", "Rectangle", (0, 0), 84.0, 72.0,
-              "90", "90", "90", "90", "Yes", "Dims", 78.0, 66.0, "No"]
+              "No", "90", "90", "90", "90", "Yes", "Dims", 78.0, 66.0, "No"]
 cd_typing = [("mode", "2"), ("w", "84"), ("l", "72"),
              ("cornera", "1"), ("cornerb", "1"), ("cornerc", "1"),
              ("cornerd", "1"),
@@ -1094,15 +1097,17 @@ print("== a half-filled chart still leaves SPA asking ==")
 b = by_chart("Rectangle",
              [("mode", "1"), ("w", "84"), ("l", "72"),
               ("second", "2"), ("autohinge", "2")],
-             [None, (0, 0), "90", "90", "90", "90"])
+             [None, (0, 0), "No", "90", "90", "90", "90"])
 a = by_prompts([None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
-                "90", "90", "90", "90", "No", "No"])
+                "No", "90", "90", "90", "90", "No", "No"])
 same(a, b, "half-filled chart")
 corners = [p for p, _ in b.prompts if 'Corner' in p]
 assert len(corners) == 4, "expected 4 corners asked, got %r" % corners
 assert not any('WIDTH' in p or 'LENGTH' in p for p, _ in b.prompts), \
     "a supplied overall was asked for anyway"
-print("   overalls taken from the chart, all 4 corners still prompted")
+assert any('all four corners the same' in p for p, _ in b.prompts), \
+    "a chart naming no corner should still meet the all-same gate"
+print("   overalls taken from the chart, the gate and all 4 corners prompted")
 
 
 print("== LAZSPA refuses to open without SPA ==")
