@@ -149,16 +149,22 @@ extents once per run and centers pads by their true footprint.
 Drawing units are assumed to be **inches** (architectural). The
 constants at the top of `PADDLE.lsp` are easy to change:
 
-```lisp
-(setq *paddle-blkname* "Pad36x36") ; the pad block
-(setq *paddle-padsize* 36.0)       ; pads are 36" x 36"
-(setq *paddle-maxrad*  54.0)       ; 4'-6" concave-radius threshold
-(setq *paddle-layer*   "PADS")     ; insertion layer
-(setq *paddle-align*   nil)        ; nil = pads parallel to X/Y axes
-(setq *paddle-fuzz*    0.05)       ; gap tolerance when chaining
-(setq *paddle-cornertol* (/ (* 30.0 pi) 180.0)) ; inside-corner cutoff
-(setq *paddle-arctol*  (/ (* 10.0 pi) 180.0)) ; semi-straight arc cutoff
-```
+| Knob | Default | What it does |
+| --- | --- | --- |
+| `*paddle-blkname*` | `"Pad36x36"` | Block inserted at every pad spot. `24inpad.dwg` ships `Pad36x36` and `Pad24x24`; if you switch, set `*paddle-padsize*` to match |
+| `*paddle-padsize*` | `36.0` | Edge of the pad in drawing units. Sets the pitch of the flush rows along arcs, the collision distance in the dodge pass, the fallback square block, and the wording of every message that quotes it |
+| `*paddle-blkfile*` | `"24inpad.dwg"` | The dwg the block definitions are imported from when the drawing lacks them (found via the support path) |
+| `*paddle-layer*` | `"PADS"` | Layer pads land on. Created when missing; thawed, unlocked and turned on when not |
+| `*paddle-layer-color*` | `7` | Colour index the layer is created with. An existing layer keeps its own |
+| `*paddle-align*` | `nil` | `nil` = pads parallel to the X/Y axes; `T` = rotated to follow the perimeter edge |
+| `*paddle-maxrad*` | `54.0` | Largest concave radius (4′-6″) that still needs pads |
+| `*paddle-cornertol*` | 30° | A joint has to bend **more than** this, into the pool, to be a sharp inside corner. Edit the `30.0` in its line; the rest converts to radians |
+| `*paddle-arctol*` | 10° | A concave arc has to bend **more than** this in total to be a feature. Judged separately from corners on purpose |
+| `*paddle-fuzz*` | `0.05` | Largest gap that still counts as touching when chaining loose lines and arcs; shorter segments are dropped as slivers |
+| `*paddle-demo-layer*` / `*paddle-demo-color*` | `"PADDLE-DEMO"` / `3` | Where `TUTORIALPADDLE` draws its sample perimeter, and in what colour |
+
+Nothing below the settings block is meant to be edited to change
+behaviour.
 
 Supported perimeter geometry: **LWPOLYLINE, 2D POLYLINE, LINE, ARC**
 in any combination — the loop just has to close. (3D/mesh polylines
