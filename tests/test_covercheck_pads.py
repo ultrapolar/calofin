@@ -91,6 +91,18 @@ def arc_wall(sweep_deg, r=50.0, concave=True):
             (150 + chord / 2.0, 168, b), (150 - chord / 2.0, 168, 0), (0, 168, 0)]
 
 
+def kink_wall(bend_deg, half=150.0):
+    """a pool whose bottom wall kinks into the interior by the given bend
+
+    The mid vertex is pushed up into the pool, so the wall's direction
+    changes by BEND_DEG at that one point - the joint PADDLE has to
+    decide is a corner or just a semi-straight kink.
+    """
+    rise = half * math.tan(math.radians(bend_deg) / 2.0)
+    return [(0, 0, 0), (half, rise, 0), (2 * half, 0, 0),
+            (2 * half, 168, 0), (0, 168, 0)]
+
+
 # outline, and what PADDLE is expected to make of it - the second value
 # pins the shared behaviour so a change that breaks BOTH files the same
 # way still fails here
@@ -101,6 +113,14 @@ SHAPES = [
     ("2-degree kink is semi-straight",
      [(0, 0, 0), (150, 3, 0), (300, 0, 0), (300, 168, 0), (0, 168, 0)],
      0),
+    # the corner rule is deliberately blunter than the arc rule: a joint
+    # has to bend more than 30 degrees before it is a sharp inside
+    # corner, so shallow drafting kinks and segmented walls are left
+    # alone (a 12-degree kink used to be padded, and should not be)
+    ("12-degree inside kink is semi-straight", kink_wall(12), 0),
+    ("29-degree inside kink is semi-straight", kink_wall(29), 0),
+    ("31-degree inside kink is a corner", kink_wall(31), 1),
+    ("40-degree inside kink is a corner", kink_wall(40), 1),
     ("8-degree concave arc is semi-straight", arc_wall(8), 0),
     ("12-degree concave arc is a feature", arc_wall(12), 1),
     # an arc bulging OUT of the wall is an alcove: the arc itself is convex
@@ -138,16 +158,25 @@ def main():
     cchk_size = float(vm.loads("*cchk-pad-size*"))
     cchk_rad = float(vm.loads("*cchk-pad-maxrad*"))
     paddle_rad = float(vm.loads("*paddle-maxrad*"))
-    cchk_ang = float(vm.loads("*cchk-pad-angtol*"))
-    paddle_ang = float(vm.loads("*paddle-angtol*"))
+    cchk_corner = float(vm.loads("*cchk-pad-cornertol*"))
+    paddle_corner = float(vm.loads("*paddle-cornertol*"))
+    cchk_arc = float(vm.loads("*cchk-pad-arctol*"))
+    paddle_arc = float(vm.loads("*paddle-arctol*"))
 
     print("tunables agree")
     check("pad size (36\")", padsize == cchk_size, f"{padsize} vs {cchk_size}")
     check("radius cap (4'-6\")", paddle_rad == cchk_rad, f"{paddle_rad} vs {cchk_rad}")
-    check("semi-straight tolerance (10 deg)",
-          abs(paddle_ang - cchk_ang) < 1e-12, f"{paddle_ang} vs {cchk_ang}")
-    check("tolerance really is 10 degrees",
-          abs(math.degrees(paddle_ang) - 10.0) < 1e-9, f"{math.degrees(paddle_ang)} deg")
+    check("corner tolerance (30 deg)",
+          abs(paddle_corner - cchk_corner) < 1e-12, f"{paddle_corner} vs {cchk_corner}")
+    check("corner tolerance really is 30 degrees",
+          abs(math.degrees(paddle_corner) - 30.0) < 1e-9,
+          f"{math.degrees(paddle_corner)} deg")
+    check("arc tolerance (10 deg)",
+          abs(paddle_arc - cchk_arc) < 1e-12, f"{paddle_arc} vs {cchk_arc}")
+    check("arc tolerance really is 10 degrees",
+          abs(math.degrees(paddle_arc) - 10.0) < 1e-9, f"{math.degrees(paddle_arc)} deg")
+    check("a corner is judged harder than an arc", paddle_corner > paddle_arc,
+          f"{math.degrees(paddle_corner)} vs {math.degrees(paddle_arc)} deg")
 
     print("COVERCHECK suggests exactly what PADDLE would")
     for label, vts, expected in SHAPES:

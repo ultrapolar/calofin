@@ -58,10 +58,10 @@ alongside.
      asks whether the drawing is a replacement when it cannot tell
      (COVERSCAN just notes the block is not there).
    - **Pads**: the outline is run through PADDLE's concave-feature
-     rules at 36" -- inside corners, concave radii of 4'-6" or less,
-     10-degree semi-straight pass-over, no overlapping suggestions --
-     and every spot with no pad already nearby is circled and
-     suggested.
+     rules at 36" -- inside corners bending more than 30 degrees,
+     concave radii of 4'-6" or less bending more than 10 degrees in
+     total, no overlapping suggestions -- and every spot with no pad
+     already nearby is circled and suggested.
 6. **The report** (MTEXT) is placed to the right of the drawing on
    layer `COVERCHECK-REPORT`, findings that need looking over in red
    at full height, everything that checked out smaller. The

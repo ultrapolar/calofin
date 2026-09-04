@@ -42685,18 +42685,19 @@
 ;;;       cover drawn on the cover layer - PADDLE pads are NOT
 ;;;       suggested.
 ;;;     - PADS. The pool outline is run through PADDLE's concave-
-;;;       feature hunt at 36" pads (PADDLE v1.2 rules): an inside
+;;;       feature hunt at 36" pads (PADDLE v1.11 rules): an inside
 ;;;       corner gets a pad centered dead on the corner, a concave
 ;;;       radius of 4'-6" or less gets a row of pads starting on the
 ;;;       middle of the radius and marching flush (36" on center)
-;;;       toward both ends, and geometry that bends 10 degrees or
-;;;       less - a semi-straight kink, a gently sweeping arc - is
-;;;       passed over. Suggested pads never overlap each other: a
-;;;       pad on a sharp point holds its spot, the ones along curves
-;;;       slide flush alongside or drop out. Every spot with no pad
-;;;       already nearby (existing pads = *cchk-pad-blocks* inserts,
-;;;       or any insert on *cchk-pads-layer*) is circled on the
-;;;       construction layer and SUGGESTED in the report.
+;;;       toward both ends, and semi-straight geometry - a kink
+;;;       bending 30 degrees or less, a whole arc bending 10 degrees
+;;;       or less - is passed over. Suggested pads never overlap
+;;;       each other: a pad on a sharp point holds its spot, the
+;;;       ones along curves slide flush alongside or drop out.
+;;;       Every spot with no pad already nearby (existing pads =
+;;;       *cchk-pad-blocks* inserts, or any insert on
+;;;       *cchk-pads-layer*) is circled on the construction layer
+;;;       and SUGGESTED in the report.
 ;;;
 ;;;  6. A COVERCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer COVERCHECK-REPORT, sized from the drawing's
@@ -42753,7 +42754,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.9")
+(setq *cchk-version* "v1.10")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -42808,7 +42809,8 @@
 (setq *cchk-pad-near*    18.0)     ; a pad center within this (Chebyshev) covers a spot
 (setq *cchk-pad-maxrad*  54.0)     ; 4'-6": largest concave radius needing pads (PADDLE)
 (setq *cchk-chain-fuzz*  0.05)     ; max gap when chaining an exploded outline
-(setq *cchk-pad-angtol*  (/ (* 10.0 pi) 180.0)) ; 10 deg: a corner - or a whole arc - bending this little is semi-straight (PADDLE)
+(setq *cchk-pad-cornertol* (/ (* 30.0 pi) 180.0)) ; 30 deg: a joint bending this little is semi-straight, not an inside corner (PADDLE)
+(setq *cchk-pad-arctol*  (/ (* 10.0 pi) 180.0)) ; 10 deg: a whole arc bending this little is semi-straight too (PADDLE)
 (setq *cchk-repl-block*  "Replacement Disclaimer") ; block demanded on replacement drawings
 (setq *cchk-dashed-pat*  "*DASH*,*HIDDEN*") ; linetype names that count as dashed
 (setq *cchk-tut-layer*   "TUTORIAL-COVERCHECK-DEMO") ; layer for TUTORIALCOVERCHECK's non-pool demo geometry
@@ -44643,7 +44645,9 @@
     (if (and din dout)
         (progn
           (setq turn (atan (cal:cross din dout) (cal:dot din dout)))
-          (if (< (* s turn) (- *cchk-pad-angtol*)) ; turns away from interior
+          (if (< (* s turn) (- *cchk-pad-cornertol*)) ; turns away from the
+                                                      ; interior by more
+                                                      ; than 30 deg
               (setq pads (cons (list (cal:2d a) (angle '(0.0 0.0) din) "corner")
                                pads)))))
     ;; --- concave arc segment with radius <= *cchk-pad-maxrad* ---
@@ -44655,7 +44659,7 @@
                 r     (cadr seg)
                 cen   (caddr seg))
           (if (and (<= r (+ *cchk-pad-maxrad* 1e-6))
-                   (> (abs theta) *cchk-pad-angtol*)) ; total bend over the
+                   (> (abs theta) *cchk-pad-arctol*)) ; total bend over the
                                      ; tolerance, else it's a semi-straight line
               (progn
                 (setq sa    (angle cen (cal:2d a))
@@ -44667,7 +44671,7 @@
   (reverse pads))
 
 ;; Keep suggested pads from colliding where features crowd together,
-;; without ever pulling a pad off a sharp point (PADDLE v1.2). Corner
+;; without ever pulling a pad off a sharp point (PADDLE v1.11). Corner
 ;; pads commit first, dead-center on their vertex -- they NEVER slide;
 ;; one that would overlap an earlier corner pad is dropped (in a notch
 ;; that tight, the neighbour carries the area). Arc pads then dodge
@@ -62710,8 +62714,12 @@
 ;;;     requires pads along the affected arc.
 ;;;   * Any CONCAVE intersection of straight segments (an inside
 ;;;     corner) requires a pad centered on the corner.
-;;;   * Semi-straight geometry is left alone: a connection point or an
-;;;     arc whose total bend is 10 degrees or less is not a feature.
+;;;   * Semi-straight geometry is left alone, and a corner is judged
+;;;     harder than a curve: a connection point counts as an inside
+;;;     corner only once it bends more than 30 degrees away from
+;;;     straight, and an arc is a feature only once its total bend is
+;;;     more than 10 degrees.  Shallow drafting kinks and segmented
+;;;     walls are not corners.
 ;;;   * Convex features and concave arcs larger than 4'-6" radius do
 ;;;     NOT require pads.
 ;;;   * Pads never overlap: where features crowd together, a pad on a
@@ -62760,7 +62768,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.10") ; printed on load and at command start
+(setq *paddle-version* "v1.11") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -62772,9 +62780,13 @@
                              ; T = rotate pads with the perimeter edge
 (setq *paddle-fuzz* 0.05)    ; max gap between segment ends when
                              ; chaining loose lines/arcs into a loop
-(setq *paddle-angtol* (/ (* 10.0 pi) 180.0)) ; a connection point or an
-                             ; arc whose total bend is 10 degrees or
-                             ; less is semi-straight - no pad
+(setq *paddle-cornertol* (/ (* 30.0 pi) 180.0)) ; a connection point
+                             ; has to bend MORE than 30 degrees away
+                             ; from straight to count as an inside
+                             ; corner; gentler joints are semi-straight
+(setq *paddle-arctol* (/ (* 10.0 pi) 180.0)) ; an arc whose total bend
+                             ; is 10 degrees or less is semi-straight
+                             ; too - no pads along it
 
 (defun paddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
 (defun paddle--rot (v a) ; rotate vector v by angle a
@@ -63000,7 +63012,9 @@
     (if (and din dout)
         (progn
           (setq turn (atan (cal:cross din dout) (cal:dot din dout)))
-          (if (< (* s turn) (- *paddle-angtol*)) ; turns away from interior
+          (if (< (* s turn) (- *paddle-cornertol*)) ; turns away from
+                                                    ; the interior by
+                                                    ; more than 30 deg
               (setq pads (cons (list (cal:2d a) (angle '(0.0 0.0) din) "corner")
                                pads)))))
 
@@ -63013,9 +63027,9 @@
                 r     (cadr seg)
                 cen   (caddr seg))
           (if (and (<= r (+ *paddle-maxrad* 1e-6))
-                   (> (abs theta) *paddle-angtol*)) ; total bend over 10
-                                                    ; deg, else it's a
-                                                    ; semi-straight line
+                   (> (abs theta) *paddle-arctol*)) ; total bend over 10
+                                                   ; deg, else it's a
+                                                   ; semi-straight line
               (progn
                 (setq sa    (angle cen (cal:2d a))
                       sgn   (if (> theta 0.0) 1.0 -1.0)
@@ -63294,7 +63308,7 @@
   (princ))
 
 ;; the sample perimeter: straight walls, a 2-degree kink (ignored),
-;; convex corners (ignored), a rectangular slot with two >10-degree
+;; convex corners (ignored), a rectangular slot with two 90-degree
 ;; inside corners (padded), a concave R4'-0" bite (padded row) and a
 ;; concave R6'-0" sweep (too big -- no pads)
 (defun paddle--demo-pline (base lay / pts absv)
@@ -63346,18 +63360,20 @@
   (princ (strcat (rtos *paddle-fuzz* 2 2) "\") are"))
   (princ "\n    chained together automatically.")
   (princ (strcat "\n 2. INSIDE CORNERS. A connection point that bends more than "
-                 (rtos (/ (* *paddle-angtol* 180.0) pi) 2 0) " degrees"))
+                 (rtos (/ (* *paddle-cornertol* 180.0) pi) 2 0) " degrees"))
   (princ "\n    away from straight gets one pad centered on the corner. Gentler")
   (princ "\n    kinks - semi-straight lines - and all convex (outside) corners")
   (princ "\n    are passed over.")
   (princ (strcat "\n 3. CONCAVE CURVES. A concave radius of " (rtos *paddle-maxrad* 4 0)
                  " or less, bending more"))
-  (princ "\n    than 10 degrees in total, gets a row of pads: the middle of the")
+  (princ (strcat "\n    than " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
+                 " degrees in total, gets a row of pads: the middle of the"))
   (princ "\n    curve is always covered, then pads march flush toward both ends")
   (princ "\n    (exactly 36\" on center, touching, never overlapping) - a blocky")
   (princ "\n    version of the curve. The extreme ends of the radius may stay")
   (princ "\n    uncovered; that is by design. Bigger concave radii, and curves")
-  (princ "\n    bending 10 degrees or less, need no pads at all.")
+  (princ (strcat "\n    bending " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
+                 " degrees or less, need no pads at all."))
   (princ "\n 4. NO COLLISIONS. Where features crowd together, a pad on a sharp")
   (princ "\n    point stays dead-center on that point - it never moves. The pads")
   (princ "\n    along curves do the dodging: they slide over to sit flush")
@@ -63383,9 +63399,9 @@
         (princ "\nThis sample perimeter (green) has one of everything. Labelling it...")
         (paddle--pause)
         (setq ents (cons (paddle--demo-text base lay '(96 14)
-                     "2-deg kink here: 10 deg or less = ignored") ents))
+                     "2-deg kink here: 30 deg or less = ignored") ents))
         (setq ents (cons (paddle--demo-text base lay '(140 100)
-                     "slot corners bend >10 deg: pad on each") ents))
+                     "slot corners bend 90 deg: pad on each") ents))
         (setq ents (cons (paddle--demo-text base lay '(166 108)
                      "concave R4'-0\" (<= R4'-6\"): row of pads") ents))
         (setq ents (cons (paddle--demo-text base lay '(30 84)

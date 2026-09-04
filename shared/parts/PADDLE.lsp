@@ -11,8 +11,12 @@
 ;;;     requires pads along the affected arc.
 ;;;   * Any CONCAVE intersection of straight segments (an inside
 ;;;     corner) requires a pad centered on the corner.
-;;;   * Semi-straight geometry is left alone: a connection point or an
-;;;     arc whose total bend is 10 degrees or less is not a feature.
+;;;   * Semi-straight geometry is left alone, and a corner is judged
+;;;     harder than a curve: a connection point counts as an inside
+;;;     corner only once it bends more than 30 degrees away from
+;;;     straight, and an arc is a feature only once its total bend is
+;;;     more than 10 degrees.  Shallow drafting kinks and segmented
+;;;     walls are not corners.
 ;;;   * Convex features and concave arcs larger than 4'-6" radius do
 ;;;     NOT require pads.
 ;;;   * Pads never overlap: where features crowd together, a pad on a
@@ -61,7 +65,7 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.10") ; printed on load and at command start
+(setq *paddle-version* "v1.11") ; printed on load and at command start
                              ; so a loaded routine and its releases/
                              ; twin can never disagree
 (setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
@@ -73,9 +77,13 @@
                              ; T = rotate pads with the perimeter edge
 (setq *paddle-fuzz* 0.05)    ; max gap between segment ends when
                              ; chaining loose lines/arcs into a loop
-(setq *paddle-angtol* (/ (* 10.0 pi) 180.0)) ; a connection point or an
-                             ; arc whose total bend is 10 degrees or
-                             ; less is semi-straight - no pad
+(setq *paddle-cornertol* (/ (* 30.0 pi) 180.0)) ; a connection point
+                             ; has to bend MORE than 30 degrees away
+                             ; from straight to count as an inside
+                             ; corner; gentler joints are semi-straight
+(setq *paddle-arctol* (/ (* 10.0 pi) 180.0)) ; an arc whose total bend
+                             ; is 10 degrees or less is semi-straight
+                             ; too - no pads along it
 
 (defun paddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
 (defun paddle--rot (v a) ; rotate vector v by angle a
@@ -301,7 +309,9 @@
     (if (and din dout)
         (progn
           (setq turn (atan (cal:cross din dout) (cal:dot din dout)))
-          (if (< (* s turn) (- *paddle-angtol*)) ; turns away from interior
+          (if (< (* s turn) (- *paddle-cornertol*)) ; turns away from
+                                                    ; the interior by
+                                                    ; more than 30 deg
               (setq pads (cons (list (cal:2d a) (angle '(0.0 0.0) din) "corner")
                                pads)))))
 
@@ -314,9 +324,9 @@
                 r     (cadr seg)
                 cen   (caddr seg))
           (if (and (<= r (+ *paddle-maxrad* 1e-6))
-                   (> (abs theta) *paddle-angtol*)) ; total bend over 10
-                                                    ; deg, else it's a
-                                                    ; semi-straight line
+                   (> (abs theta) *paddle-arctol*)) ; total bend over 10
+                                                   ; deg, else it's a
+                                                   ; semi-straight line
               (progn
                 (setq sa    (angle cen (cal:2d a))
                       sgn   (if (> theta 0.0) 1.0 -1.0)
@@ -595,7 +605,7 @@
   (princ))
 
 ;; the sample perimeter: straight walls, a 2-degree kink (ignored),
-;; convex corners (ignored), a rectangular slot with two >10-degree
+;; convex corners (ignored), a rectangular slot with two 90-degree
 ;; inside corners (padded), a concave R4'-0" bite (padded row) and a
 ;; concave R6'-0" sweep (too big -- no pads)
 (defun paddle--demo-pline (base lay / pts absv)
@@ -647,18 +657,20 @@
   (princ (strcat (rtos *paddle-fuzz* 2 2) "\") are"))
   (princ "\n    chained together automatically.")
   (princ (strcat "\n 2. INSIDE CORNERS. A connection point that bends more than "
-                 (rtos (/ (* *paddle-angtol* 180.0) pi) 2 0) " degrees"))
+                 (rtos (/ (* *paddle-cornertol* 180.0) pi) 2 0) " degrees"))
   (princ "\n    away from straight gets one pad centered on the corner. Gentler")
   (princ "\n    kinks - semi-straight lines - and all convex (outside) corners")
   (princ "\n    are passed over.")
   (princ (strcat "\n 3. CONCAVE CURVES. A concave radius of " (rtos *paddle-maxrad* 4 0)
                  " or less, bending more"))
-  (princ "\n    than 10 degrees in total, gets a row of pads: the middle of the")
+  (princ (strcat "\n    than " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
+                 " degrees in total, gets a row of pads: the middle of the"))
   (princ "\n    curve is always covered, then pads march flush toward both ends")
   (princ "\n    (exactly 36\" on center, touching, never overlapping) - a blocky")
   (princ "\n    version of the curve. The extreme ends of the radius may stay")
   (princ "\n    uncovered; that is by design. Bigger concave radii, and curves")
-  (princ "\n    bending 10 degrees or less, need no pads at all.")
+  (princ (strcat "\n    bending " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
+                 " degrees or less, need no pads at all."))
   (princ "\n 4. NO COLLISIONS. Where features crowd together, a pad on a sharp")
   (princ "\n    point stays dead-center on that point - it never moves. The pads")
   (princ "\n    along curves do the dodging: they slide over to sit flush")
@@ -684,9 +696,9 @@
         (princ "\nThis sample perimeter (green) has one of everything. Labelling it...")
         (paddle--pause)
         (setq ents (cons (paddle--demo-text base lay '(96 14)
-                     "2-deg kink here: 10 deg or less = ignored") ents))
+                     "2-deg kink here: 30 deg or less = ignored") ents))
         (setq ents (cons (paddle--demo-text base lay '(140 100)
-                     "slot corners bend >10 deg: pad on each") ents))
+                     "slot corners bend 90 deg: pad on each") ents))
         (setq ents (cons (paddle--demo-text base lay '(166 108)
                      "concave R4'-0\" (<= R4'-6\"): row of pads") ents))
         (setq ents (cons (paddle--demo-text base lay '(30 84)

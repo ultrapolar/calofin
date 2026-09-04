@@ -153,18 +153,19 @@
 ;;;       cover drawn on the cover layer - PADDLE pads are NOT
 ;;;       suggested.
 ;;;     - PADS. The pool outline is run through PADDLE's concave-
-;;;       feature hunt at 36" pads (PADDLE v1.2 rules): an inside
+;;;       feature hunt at 36" pads (PADDLE v1.11 rules): an inside
 ;;;       corner gets a pad centered dead on the corner, a concave
 ;;;       radius of 4'-6" or less gets a row of pads starting on the
 ;;;       middle of the radius and marching flush (36" on center)
-;;;       toward both ends, and geometry that bends 10 degrees or
-;;;       less - a semi-straight kink, a gently sweeping arc - is
-;;;       passed over. Suggested pads never overlap each other: a
-;;;       pad on a sharp point holds its spot, the ones along curves
-;;;       slide flush alongside or drop out. Every spot with no pad
-;;;       already nearby (existing pads = *cchk-pad-blocks* inserts,
-;;;       or any insert on *cchk-pads-layer*) is circled on the
-;;;       construction layer and SUGGESTED in the report.
+;;;       toward both ends, and semi-straight geometry - a kink
+;;;       bending 30 degrees or less, a whole arc bending 10 degrees
+;;;       or less - is passed over. Suggested pads never overlap
+;;;       each other: a pad on a sharp point holds its spot, the
+;;;       ones along curves slide flush alongside or drop out.
+;;;       Every spot with no pad already nearby (existing pads =
+;;;       *cchk-pad-blocks* inserts, or any insert on
+;;;       *cchk-pads-layer*) is circled on the construction layer
+;;;       and SUGGESTED in the report.
 ;;;
 ;;;  6. A COVERCHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;     drawing on layer COVERCHECK-REPORT, sized from the drawing's
@@ -221,7 +222,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.9")
+(setq *cchk-version* "v1.10")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -276,7 +277,8 @@
 (setq *cchk-pad-near*    18.0)     ; a pad center within this (Chebyshev) covers a spot
 (setq *cchk-pad-maxrad*  54.0)     ; 4'-6": largest concave radius needing pads (PADDLE)
 (setq *cchk-chain-fuzz*  0.05)     ; max gap when chaining an exploded outline
-(setq *cchk-pad-angtol*  (/ (* 10.0 pi) 180.0)) ; 10 deg: a corner - or a whole arc - bending this little is semi-straight (PADDLE)
+(setq *cchk-pad-cornertol* (/ (* 30.0 pi) 180.0)) ; 30 deg: a joint bending this little is semi-straight, not an inside corner (PADDLE)
+(setq *cchk-pad-arctol*  (/ (* 10.0 pi) 180.0)) ; 10 deg: a whole arc bending this little is semi-straight too (PADDLE)
 (setq *cchk-repl-block*  "Replacement Disclaimer") ; block demanded on replacement drawings
 (setq *cchk-dashed-pat*  "*DASH*,*HIDDEN*") ; linetype names that count as dashed
 (setq *cchk-tut-layer*   "TUTORIAL-COVERCHECK-DEMO") ; layer for TUTORIALCOVERCHECK's non-pool demo geometry
@@ -2111,7 +2113,9 @@
     (if (and din dout)
         (progn
           (setq turn (atan (cal:cross din dout) (cal:dot din dout)))
-          (if (< (* s turn) (- *cchk-pad-angtol*)) ; turns away from interior
+          (if (< (* s turn) (- *cchk-pad-cornertol*)) ; turns away from the
+                                                      ; interior by more
+                                                      ; than 30 deg
               (setq pads (cons (list (cal:2d a) (angle '(0.0 0.0) din) "corner")
                                pads)))))
     ;; --- concave arc segment with radius <= *cchk-pad-maxrad* ---
@@ -2123,7 +2127,7 @@
                 r     (cadr seg)
                 cen   (caddr seg))
           (if (and (<= r (+ *cchk-pad-maxrad* 1e-6))
-                   (> (abs theta) *cchk-pad-angtol*)) ; total bend over the
+                   (> (abs theta) *cchk-pad-arctol*)) ; total bend over the
                                      ; tolerance, else it's a semi-straight line
               (progn
                 (setq sa    (angle cen (cal:2d a))
@@ -2135,7 +2139,7 @@
   (reverse pads))
 
 ;; Keep suggested pads from colliding where features crowd together,
-;; without ever pulling a pad off a sharp point (PADDLE v1.2). Corner
+;; without ever pulling a pad off a sharp point (PADDLE v1.11). Corner
 ;; pads commit first, dead-center on their vertex -- they NEVER slide;
 ;; one that would overlap an earlier corner pad is dropped (in a notch
 ;; that tight, the neighbour carries the area). Arc pads then dodge
