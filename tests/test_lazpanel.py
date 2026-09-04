@@ -347,7 +347,7 @@ print("   jobs cover %d, Rest holds the other %d, %d shared across jobs"
 # exist for the tab strip in the first place.
 print("== columns: the page layout, and what it has to fit ==")
 BODY_BUDGET = 90
-EXPECT_COLUMNS = {'Pool': 4, 'Cover': 3, 'Spa': 1, 'Rest': 1,
+EXPECT_COLUMNS = {'Pool': 5, 'Cover': 3, 'Spa': 2, 'Rest': 1,
                   'Layout': 1, 'Points': 1, 'Dimensions': 1, 'Checking': 1}
 
 for gname in GROUPS:

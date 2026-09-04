@@ -19,8 +19,13 @@
 ;;;
 ;;; Four JOB pages -- Pool, Cover, Spa, Rest -- hold what you
 ;;; reach for while doing that job, in columns that follow the work:
-;;; lay the shape out, tie the points, build the steps, dimension and
-;;; check.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
+;;; read somebody's export in, lay the shape out, tie the points, build
+;;; the steps, dimension and check.  Converters lead on Pool and Spa
+;;; because that is where they fall in the work -- XFTCONV, SOCONV and
+;;; VSCONV all answer "here is a survey somebody else exported", which
+;;; happens before anything is drawn.  Two of the three were reachable
+;;; only from Rest until now, so a drafter doing a pool job never saw
+;;; them, and XFTCONV was filed under Shape, which it never was.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
 ;;; the same four names the VB.NET palette in ui/calofin_net uses --
 ;;; hold the whole roster filed by what each tool IS.  A tool that
 ;;; serves two jobs is on both, so there are more buttons than commands.
@@ -92,7 +97,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.9")
+(setq *lazpanel-version* "v3.10")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -250,6 +255,11 @@
 ;;  tool is, and the job pages are the place to go when you know.
 (setq lzp:*groups*
   '(("Pool"
+     ("Converters"
+      "XFTCONV"
+      "SOCONV"
+      "VSCONV"
+      )
      ("Shape"
       "POOL"
       "POOLSIDE"
@@ -259,7 +269,6 @@
       "ABHD"
       "ADAB"
       "FITABHD"
-      "XFTCONV"
       )
      ("Points"
       "ABFIND"
@@ -317,7 +326,12 @@
       )
     )
      ("Spa"
-     (""
+     ("Converters"
+      "XFTCONV"
+      "SOCONV"
+      "VSCONV"
+      )
+     ("Shape, dims & check"
       "SPA"
       "LAZSPA"
       "CUSTBLOCK"
@@ -356,8 +370,6 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
-      "SOCONV"
-      "VSCONV"
       )
     )
      ("Layout"

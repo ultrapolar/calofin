@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 71 of them across 156 buttons, because the pages come in two kinds
+-- 71 of them across 159 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both. (Both numbers are
 *checked*, not counted by hand: `tools/check_registry.py` computes them
 off the tree and `make check` fails when the prose disagrees.)
@@ -58,18 +58,18 @@ the points, build the steps, dimension and check. A job is not a flat
 list of two dozen tools -- it is a few short lists in the order you
 reach for them.
 
-**Pool** -- 4 columns, in the order the work runs:
+**Pool** -- 5 columns, in the order the work runs:
 
-| **Shape** | **Points** | **Steps** | **Dims & check** |
-| --- | --- | --- | --- |
-| `POOL` | `ABFIND` | `CORNERSTP` | `AUTODIM` |
-| `LAZFORM` | `ABMOVE` | `HEMISTEP` | `LINFINCHECK` |
-| `LAZTXT` | `CDCREATE` | `NORMIESTEP` | `LINFINSCAN` |
-| `OASIS` | `CDCALLOUT` | `AUTOBEAD` | `LITELINFINSCAN` |
-| `ABHD` | `BPCALLOUT` | `PERPPTS` | `DIMCHECK` |
-| `ADAB` |  | `CPERPPTS` | `DIMSCAN` |
-| `FITABHD` |  |  |  |
-| `XFTCONV` |  |  |  |
+| **Converters** | **Shape** | **Points** | **Steps** | **Dims & check** |
+| --- | --- | --- | --- | --- |
+| `XFTCONV` | `POOL` | `ABFIND` | `LAZSTEP` | `AUTODIM` |
+| `SOCONV` | `POOLSIDE` | `ABMOVE` | `CORNERSTP` | `LINFINCHECK` |
+| `VSCONV` | `LAZFORM` | `CDCREATE` | `HEMISTEP` | `LINFINSCAN` |
+|  | `LAZTXT` | `CDCALLOUT` | `NORMIESTEP` | `LITELINFINSCAN` |
+|  | `OASIS` | `BPCALLOUT` | `AUTOBEAD` | `DIMCHECK` |
+|  | `ABHD` |  | `PERPPTS` | `DIMSCAN` |
+|  | `ADAB` |  | `CPERPPTS` |  |
+|  | `FITABHD` |  |  |  |
 
 **Cover** -- 3 columns, in the order the work runs:
 
@@ -84,12 +84,50 @@ reach for them.
 | `CUSTBLOCK` |  | `DIMSCAN` |
 | `XFTCONV` |  |  |
 
-`Spa` and `Rest` are a single column each:
+**Spa** -- 2 columns:
+
+| **Converters** | **Shape, dims & check** |
+| --- | --- |
+| `XFTCONV` | `SPA` |
+| `SOCONV` | `LAZSPA` |
+| `VSCONV` | `CUSTBLOCK` |
+|  | `AUTODIM` |
+|  | `SPACHECK` |
+|  | `SPACHECKSCAN` |
+|  | `LITESPACHECKSCAN` |
+|  | `DIMCHECK` |
+|  | `DIMSCAN` |
+
+**Why converters lead.** The job pages are laid out in the order the
+work runs, and reading somebody else's export happens before anything
+is drawn -- so `XFTCONV`, `SOCONV` and `VSCONV` are the first column on
+both. It is also where they were hardest to find: `SOCONV` and `VSCONV`
+were reachable only from `Rest`, so a drafter doing a pool job never
+saw them, and `XFTCONV` sat under **Shape**, which it never was.
+(`Rest` is the complement of the three named jobs, so the two that
+moved left it automatically -- the test recomputes that and would have
+failed if they had not.)
+
+**Spa's buttons lost their captions**, and that is the column rule
+biting rather than an oversight: a page laid out in columns shows the
+command name alone, because captions abreast blow the width budget.
+Spa was single-column and captioned until it gained a second column.
+It is now consistent with Pool and Cover, and at 41 cells it has the
+room to carry captions again if the rule is ever made width-based
+rather than column-count-based -- worth doing only if the captions are
+missed.
+
+The drone tools -- `DRONE`, `TYDRN`, `TYLERDRONESUITE` -- are
+deliberately NOT here. They tidy up a trace you already have rather
+than reading somebody's export, and a column called Converters that
+holds "Drone cleanup" is a column whose name lies. They stay on `Rest`
+and on the `Points` category page.
+
+`Rest` is a single column:
 
 | Job | Buttons |
 | --- | --- |
-| Spa | `SPA`, `CUSTBLOCK`, `AUTODIM`, `SPACHECK`, `SPACHECKSCAN`, `LITESPACHECKSCAN`, `DIMCHECK`, `DIMSCAN` |
-| Rest | `POOLDEMO`, `CABHD`, `LHD`, `SMARTFILLET`, `WCALST`, `ABCDEF`, `ALTABCDEF`, `XYPLOT`, `DRONE`, `TYDRN`, `AUTODIMSIDEPOV`, `STAIRDIM`, `FLOORDIM`, `DIMCONTEND`, `CHECK`, `DIMARCCHECK`, `ABCURCHECK`, `ABCURCHECKSCAN`, `LINCHECK`, `LINTXTCHK`, `CCPRECHECK` |
+| Rest | `POOLDEMO`, `CABHD`, `LHD`, `SMARTFILLET`, `WCALST`, `ABCDEF`, `ALTABCDEF`, `XYPLOT`, `DRONE`, `TYDRN`, `AUTODIMSIDEPOV`, `STAIRDIM`, `FLOORDIM`, `DIMCONTEND`, `CHECK`, `DIMARCCHECK`, `ABCURCHECK`, `ABCURCHECKSCAN`, `ABPCHECK`, `LINCHECK`, `LINTXTCHK`, `CCPRECHECK`, `POINTRENAMER`, `CONSTELLATION`, `TYLERDRONESUITE` |
 
 **A page laid out in columns shows the command name alone**; the column
 heading carries the meaning instead of a caption on every button. That
