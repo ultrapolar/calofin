@@ -88,12 +88,17 @@
 ;;;         L          ->  LEAVE them as drawn (intentional)
 ;;;     Lines that merely touch end-to-end are fine and not reported.
 ;;;
-;;;  5. COVER CHECKS -- nothing here rewrites the drawing; every
-;;;     disagreement is only SUGGESTED against, in the report:
+;;;  5. COVER CHECKS -- apart from the date, nothing here rewrites
+;;;     the drawing; every other disagreement is only SUGGESTED
+;;;     against, in the report:
 ;;;     - TECH TITLE DATE. The Date attribute of the "Tech Title"
 ;;;       block (tune *cchk-title-block* / *cchk-date-tag*) must read
 ;;;       TODAY, written MM/DD/YYYY - a sheet going out under an old
-;;;       date is the mistake this catches. The block is looked for in
+;;;       date is the mistake this catches. COVERCHECK does not just
+;;;       report a wrong one: it WRITES TODAY'S OVER IT in that same
+;;;       form, keeping any "Date =" label in front of it, and says
+;;;       what it found and what it set. The scans write nothing and
+;;;       say NEEDS UPDATING instead. The block is looked for in
 ;;;       the selection and then across the drawing; with none in
 ;;;       reach the report says the date was not checked rather than
 ;;;       flagging it. LITECOVERSCAN keeps this one.
@@ -222,7 +227,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.10")
+(setq *cchk-version* "v1.11")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -569,7 +574,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*,*NEEDS UPDATING*,*UPDATED TO*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -801,9 +806,43 @@
        ((progn (setq now (cchk:today-mdy))
                (not (and (= mo (car now)) (= dd (cadr now))
                          (= yr (caddr now)))))
-        (strcat "'" s "' is NOT TODAY'S DATE (" (cchk:mdy-str now)
-                ") - update it"))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (cchk:mdy-str now) ")"))
        (t nil)))))
+
+(defun cchk:before-eq (s / p n)
+  ;; everything up to and including the last "=", "" when there is
+  ;; none: the label a date arrives wearing ("Date = 05/01/2024"), so
+  ;; rewriting the date keeps the wording in front of it
+  (setq n 0)
+  (while (setq p (vl-string-search "=" (substr s (1+ n))))
+    (setq n (+ n p 1)))
+  (if (> n 0) (substr s 1 n) ""))
+
+(defun cchk:date-fixed (raw / pre)
+  ;; raw with today's date, written MM/DD/YYYY, in place of whatever
+  ;; date it held; a "Date =" label in front of it is left as typed
+  (setq pre (cchk:before-eq raw))
+  (if (= pre "")
+    (cchk:mdy-str (cchk:today-mdy))
+    (strcat pre " " (cchk:mdy-str (cchk:today-mdy)))))
+
+(defun cchk:set-attrib (ent tag val / e ed done)
+  ;; write val into the INSERT's attribute with that tag; nil when the
+  ;; block carries no such attribute
+  (setq tag (strcase tag))
+  (if (= 1 (cdr (assoc 66 (entget ent))))
+    (progn
+      (setq e (entnext ent))
+      (while (and e (null done)
+                  (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
+        (if (= tag (strcase (cdr (assoc 2 ed))))
+          (progn
+            (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+            (entupd e)
+            (setq done T)))
+        (setq e (entnext e)))))
+  (if done (entupd ent))
+  done)
 
 ;; The Tech Title block: the first INSERT whose name carries it, looked
 ;; for in the selection and then across the drawing, since the title
@@ -832,7 +871,7 @@
 ;; The verdict: (sentence . needs-attention).  With no Tech Title in
 ;; reach there is nothing to read, and that is said plainly rather than
 ;; flagged -- a cover or spa sheet may well be checked on its own.
-(defun cchk:audit-date (ss / blk ed raw bad)
+(defun cchk:audit-date (ss dofix / blk ed raw bad wrote)
   (setq blk (cchk:find-title ss))
   (if (null blk)
     (cons (strcat "no '" *cchk-title-block* "' block in reach - date NOT CHECKED")
@@ -845,11 +884,25 @@
                   (cchk:date-verdict raw)
                   (strcat "is missing from the block"
                           " - expected MM/DD/YYYY")))
-      (if bad
-        (cons (strcat *cchk-date-tag* " " bad) T)
-        (cons (strcat *cchk-date-tag* " = '"
-                      (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK")
-              nil)))))
+      ;; the one cover check that writes: a wrong date is not left to be
+      ;; noticed, today's goes in over it in the same MM/DD/YYYY form
+      ;; with any label in front of it kept.  Only an attribute can be
+      ;; written, and only for COVERCHECK - the scans read.
+      (if (and bad dofix)
+        (setq wrote (cchk:set-attrib blk *cchk-date-tag*
+                                   (cchk:date-fixed (if raw raw "")))))
+      (cond
+        (wrote (cons (strcat *cchk-date-tag* " " bad " - UPDATED to "
+                           (cchk:mdy-str (cchk:today-mdy)))
+                   T))
+        ((and bad dofix)
+         (cons (strcat *cchk-date-tag* " " bad " - fix it in the block") T))
+        (bad (cons (strcat *cchk-date-tag* " " bad
+                           " - NEEDS UPDATING (run COVERCHECK)")
+                   T))
+        (t (cons (strcat *cchk-date-tag* " = '"
+                         (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK")
+                 nil))))))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
 ;; title, the date and version, a verdict line, the colour legend, a
@@ -3059,7 +3112,7 @@
                   (> noflag 0))))
         (setq dimlay (cchk:dimlayer-verdict dims)
               units  (cchk:audit-units ss)
-              datev  (cchk:audit-date ss))
+              datev  (cchk:audit-date ss T))
         (foreach l (caddr units)
           (princ (strcat "\n  " l))
           (setq lines (cons l lines)))
@@ -3295,7 +3348,7 @@
                           (> (length olaps) 0)))))
      (setq dimlay (cchk:dimlayer-verdict dims)
            units  (cchk:audit-units ss)
-           datev  (cchk:audit-date ss))
+           datev  (cchk:audit-date ss nil))
      (foreach l (caddr units)
        (princ (strcat "\n  " l))
        (setq lines (cons l lines)))

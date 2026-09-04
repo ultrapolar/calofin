@@ -150,11 +150,17 @@
 ;;;     four digits, month 01-12, and a day valid for that month (leap
 ;;;     Februaries included). Missing, blank, wrong format ("5/1/24",
 ;;;     "05-01-2024"), an out-of-range month/day, or a made-up day like
-;;;     "02/30" is reported in red with what is wrong. A well-formed
-;;;     calendar date that is NOT TODAY is reported too - a sheet going
-;;;     out under an old date is the mistake that catches. Only
+;;;     "02/30" is wrong, and so is a well-formed calendar date that is
+;;;     NOT TODAY - a sheet going out under an old date is the mistake
+;;;     that catches. LINFINCHECK does not just report a wrong date:
+;;;     it WRITES TODAY'S OVER IT in the same MM/DD/YYYY form, keeping
+;;;     any "Date =" label in front of it, and says in red what it
+;;;     found and what it set. A date that lives in the block's own
+;;;     definition rather than in an attribute belongs to every insert
+;;;     of that block, so that one is reported and left alone. Only
 ;;;     today's date, written MM/DD/YYYY, is a quiet OK; with no Tech
 ;;;     Title in reach the report says the date was not checked.
+;;;     LINFINSCAN, being read-only, says NEEDS UPDATING instead.
 ;;;
 ;;;  7. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -162,16 +168,25 @@
 ;;;     for the standalone words "NOT" and "ERROR" in its attributes
 ;;;     and text (e.g. "Not Selected", "Not Included", "#ERROR");
 ;;;     A field that carries one of those words was never really
-;;;     filled in ("Not Supplied", "#ERROR"), so LINFINCHECK WIPES IT
-;;;     BACK TO BLANK and says which fields it cleared - the pattern
-;;;     block reads clean afterwards. Only attribute VALUES are
-;;;     cleared: the block's own labels ("Pattern:", "Wall:",
-;;;     "Floor:", "Step:") live in its definition and are never
-;;;     touched, and a real pattern name is left alone. A bad word
-;;;     sitting in the block's static text cannot be cleared, so it
-;;;     is reported instead. LINFINSCAN, being read-only, reports these
-;;;     as NEEDS WIPING and changes nothing. The liner pattern must also agree with how the
-;;;     steps are built:
+;;;     filled in ("Not Supplied", "#ERROR"), so LINFINCHECK WIPES
+;;;     THAT PHRASE OUT OF IT and says which fields it cleaned and
+;;;     what each one reads now. ONLY THE BAD PHRASE GOES - the bad
+;;;     word and the words it heads, space to space, since "Not
+;;;     Supplied" is one phrase and not two. Whatever else the field
+;;;     said stays exactly as typed: a label inside the value
+;;;     ("Pattern: Not Supplied" -> "Pattern:"), a real name beside it
+;;;     ("Blue Granite - Not Supplied" -> "Blue Granite"), anything
+;;;     past a comma or a dash ("Blue, Not Supplied, Granite" ->
+;;;     "Blue, Granite"). A field that held nothing but the bad phrase
+;;;     comes back blank. Only attribute VALUES are touched: the
+;;;     block's own labels ("Pattern:", "Wall:", "Floor:", "Step:")
+;;;     live in its definition and are never written to, and a real
+;;;     pattern name is left alone. A bad word sitting in the block's
+;;;     static text cannot be cleared, so it is reported instead.
+;;;     LINFINSCAN, being read-only, reports these as NEEDS WIPING
+;;;     and changes nothing.
+;;;       The liner pattern must also agree with how the steps are
+;;;     built:
 ;;;       - a FIBERGLASS STEP anywhere in the highlighted area (as
 ;;;         text, a block, or the layer things sit on -- see
 ;;;         *lfc-fgstep-words*) is its own unit, so the liner must
@@ -257,7 +272,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.7")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.8")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -757,7 +772,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*,*NEEDS UPDATING*,*UPDATED TO*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -1603,22 +1618,123 @@
         (setq e (entnext e)))))
   (reverse tags))
 
-(defun lfc:wipe-attribs (ent tags / e ed n)
-  ;; blank the listed attribute values so the pattern reads clean:
-  ;; the label stays, whatever was written after it goes
-  (setq n 0)
+(defun lfc:space-p (c) (or (= c 32) (= c 9)))
+
+(defun lfc:alnum-p (c)
+  (or (and (>= c 48) (<= c 57))       ; 0-9
+      (and (>= c 65) (<= c 90))       ; A-Z
+      (and (>= c 97) (<= c 122))))    ; a-z
+
+(defun lfc:all-spaces-p (s / i n ok)
+  ;; T when s holds nothing but spaces and tabs (an empty string too)
+  (setq n (strlen s) i 1 ok T)
+  (while (and ok (<= i n))
+    (if (not (lfc:space-p (ascii (substr s i 1)))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+(defun lfc:field-words (s / n i c st out lim)
+  ;; ((start . length) ...), one span per word in s.  A word is a run of
+  ;; letters and digits together with the punctuation stuck to its left,
+  ;; so "#ERROR" comes back whole; the span never reaches back past a
+  ;; space or into the word before it, so a "Pattern:" label keeps its
+  ;; own colon.
+  (setq n (strlen s) i 1 st nil out nil lim 1)
+  (while (<= i (1+ n))
+    (setq c (if (<= i n) (ascii (substr s i 1)) 32))
+    (if (lfc:alnum-p c)
+      (if (null st)
+        (progn
+          (setq st i)
+          (while (and (> st lim)
+                      (not (lfc:space-p (ascii (substr s (1- st) 1)))))
+            (setq st (1- st)))))
+      (if st
+        (setq out (cons (cons st (- i st)) out)
+              lim i
+              st  nil)))
+    (setq i (1+ i)))
+  (reverse out))
+
+(defun lfc:strip-badwords (s words / spans n i p sp nxt pieces lead keep
+                                     drop swallow prev first txt)
+  ;; s with the bad word - and the words it heads, space to space, since
+  ;; "Not Supplied" is one phrase and not two - taken out, and the rest
+  ;; of the field left exactly as it was typed: the label in front of it
+  ;; ("Pattern:"), a real pattern name, anything past a comma or a dash.
+  ;; A field that has nothing but the bad phrase in it comes back blank.
+  (setq spans (lfc:field-words s))
+  (if (null spans)
+    s
+    (progn
+      ;; ((word . what-follows-it) ...), in order, so a word's own
+      ;; trailing punctuation goes with it when it goes
+      (setq n (length spans) i 0 pieces nil)
+      (while (< i n)
+        (setq sp     (nth i spans)
+              nxt    (nth (1+ i) spans)
+              pieces (cons (cons (substr s (car sp) (cdr sp))
+                                 (substr s (+ (car sp) (cdr sp))
+                                           (- (if nxt (car nxt) (1+ (strlen s)))
+                                              (+ (car sp) (cdr sp)))))
+                           pieces)
+              i      (1+ i)))
+      (setq pieces  (reverse pieces)
+            lead    (substr s 1 (1- (car (car spans))))
+            keep    nil
+            prev    nil
+            first   nil
+            swallow nil)
+      (foreach p pieces
+        (setq drop (if (or (member (lfc:squash (car p)) words)
+                           (and swallow prev (lfc:all-spaces-p (cdr prev))))
+                     T))
+        (if (null prev) (setq first (not drop)))
+        (setq swallow drop
+              prev    p)
+        (if (not drop) (setq keep (cons p keep))))
+      ;; the text before the first word introduces it, so it goes when
+      ;; that word does
+      (setq txt (if first lead ""))
+      (foreach p (reverse keep) (setq txt (strcat txt (car p) (cdr p))))
+      (setq txt (lfc:trim-edges txt))
+      (if (lfc:field-words txt) txt ""))))
+
+(defun lfc:trim-edges (s / n)
+  ;; the spaces and now-dangling separators a removal leaves at either
+  ;; end go.  A label's colon stays on the right - "Pattern:" is what
+  ;; the block should read - and inch marks are never touched.
+  (while (and (> (strlen s) 0)
+              (member (ascii (substr s 1 1)) '(32 9 44 58 59 38 47 45)))
+    (setq s (substr s 2)))
+  (while (and (> (setq n (strlen s)) 0)
+              (member (ascii (substr s n 1)) '(32 9 44 59 38 47 45)))
+    (setq s (substr s 1 (1- n))))
+  s)
+
+(defun lfc:wipe-attribs (ent tags words / e ed val new n out)
+  ;; take the bad words out of the listed attribute values.  Only the
+  ;; bad phrase goes: a label, a real pattern name, anything else the
+  ;; field said is still there afterwards.  Returns
+  ;; ((tag . what-it-reads-now) ...) for every field touched.
+  (setq n 0 out nil)
   (if (= 1 (cdr (assoc 66 (entget ent))))
     (progn
       (setq e (entnext ent))
       (while (and e (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
         (if (member (cdr (assoc 2 ed)) tags)
           (progn
-            (entmod (subst '(1 . "") (assoc 1 ed) ed))
-            (entupd e)
-            (setq n (1+ n))))
+            (setq val (cdr (assoc 1 ed))
+                  new (lfc:strip-badwords val words))
+            (if (/= new val)
+              (progn
+                (entmod (subst (cons 1 new) (assoc 1 ed) ed))
+                (entupd e)
+                (setq n (1+ n))))
+            (setq out (cons (cons (cdr (assoc 2 ed)) new) out))))
         (setq e (entnext e)))))
   (if (> n 0) (entupd ent))
-  n)
+  (reverse out))
 
 (defun lfc:ins-attrib-deep (ent tag / val s)
   ;; the tag's value on the INSERT, or on a block nested inside it
@@ -1911,9 +2027,44 @@
        ((progn (setq now (lfc:today-mdy))
                (not (and (= mo (car now)) (= dd (cadr now))
                          (= yr (caddr now)))))
-        (strcat "'" s "' is NOT TODAY'S DATE (" (lfc:mdy-str now)
-                ") - update it"))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (lfc:mdy-str now) ")"))
        (t nil)))))
+
+(defun lfc:before-eq (s / p n)
+  ;; everything up to and including the last "=", "" when there is
+  ;; none: the label a date arrives wearing ("Date = 05/01/2024"), so
+  ;; rewriting the date keeps the wording in front of it
+  (setq n 0)
+  (while (setq p (vl-string-search "=" (substr s (1+ n))))
+    (setq n (+ n p 1)))
+  (if (> n 0) (substr s 1 n) ""))
+
+(defun lfc:date-fixed (raw / pre)
+  ;; raw with today's date, written MM/DD/YYYY, in place of whatever
+  ;; date it held; a "Date =" label in front of it is left as typed
+  (setq pre (lfc:before-eq raw))
+  (if (= pre "")
+    (lfc:mdy-str (lfc:today-mdy))
+    (strcat pre " " (lfc:mdy-str (lfc:today-mdy)))))
+
+(defun lfc:set-attrib (ent tag val / e ed done)
+  ;; write val into the INSERT's attribute with that tag; nil when the
+  ;; block carries no such attribute (a date built into the block
+  ;; definition is shared by every insert, so it is never rewritten)
+  (setq tag (strcase tag))
+  (if (= 1 (cdr (assoc 66 (entget ent))))
+    (progn
+      (setq e (entnext ent))
+      (while (and e (null done)
+                  (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
+        (if (= tag (strcase (cdr (assoc 2 ed))))
+          (progn
+            (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+            (entupd e)
+            (setq done T)))
+        (setq e (entnext e)))))
+  (if done (entupd ent))
+  done)
 
 ;; --- dimension review ----------------------------------------------
 
@@ -2450,11 +2601,11 @@
                       nomerged noflag noleft
                       sgroups scand svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong attundec liners linerbadw linernostep bad w bn bh bp
-                      linerstep linerfg fgstep badtags linerwiped
+                      linerstep linerfg fgstep badtags linerwiped wiped kept
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
-                      datesum dateraw datebad
+                      datesum dateraw datebad datefix
                       svbb hdim dimht htval htbad
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
@@ -3114,7 +3265,7 @@
 
         ;; --- Tech Title Date ------------------------------------------
         ;; runs whenever a Tech Title exists, independent of steps
-        (setq datesum nil dateraw nil datebad nil)
+        (setq datesum nil dateraw nil datebad nil datefix nil)
         (if tins
           (progn
             (setq dateraw (lfc:ins-attrib-deep tins *lfc-date-tag*))
@@ -3122,10 +3273,23 @@
               (if dateraw
                 (lfc:date-verdict dateraw)
                 "is missing - expected MM/DD/YYYY"))
+            ;; a wrong date is not left for someone to notice: today's
+            ;; goes in, MM/DD/YYYY, with the label in front of it kept.
+            ;; Only an attribute can be written - a date built into the
+            ;; block definition belongs to every insert of it, so that
+            ;; one is reported and left alone.
+            (if datebad
+              (setq datefix (lfc:set-attrib tins *lfc-date-tag*
+                                            (lfc:date-fixed
+                                              (if dateraw dateraw "")))))
             (setq datesum
-              (if datebad
-                (strcat *lfc-date-tag* " " datebad)
-                (strcat *lfc-date-tag* " = '" dateraw "' - OK")))
+              (cond
+                (datefix (strcat *lfc-date-tag* " " datebad
+                                 " - UPDATED to "
+                                 (lfc:mdy-str (lfc:today-mdy))))
+                (datebad (strcat *lfc-date-tag* " " datebad
+                                 " - fix it in the " *lfc-title-block*))
+                (t (strcat *lfc-date-tag* " = '" dateraw "' - OK"))))
             (princ (strcat "\n  Date: " datesum)))
           (setq datesum (strcat "no '" *lfc-title-block*
                                 "' block in reach - date NOT CHECKED")))
@@ -3165,18 +3329,29 @@
                   (setq linerbadw (append linerbadw (list w)))))
               (cond
                 ;; a pattern field that says "Not Supplied" or carries an
-                ;; ERROR was never filled in - wipe it back to blank so
-                ;; the block reads clean, and say which fields went
+                ;; ERROR was never filled in - wipe THAT out of it and
+                ;; leave the rest of the field alone, then say which
+                ;; fields went and what each one reads now
                 (badtags
-                 (lfc:wipe-attribs b badtags)
+                 (setq wiped (lfc:wipe-attribs b badtags *lfc-badwords*)
+                       kept  (mapcar '(lambda (w)
+                                        (strcat (car w) " now reads '"
+                                                (cdr w) "'"))
+                                     (vl-remove-if
+                                       '(lambda (w) (= (cdr w) ""))
+                                       wiped)))
                  (setq linerwiped (+ linerwiped (length badtags)))
                  (princ (strcat "\n  '" bn "': wiped "
-                                (lfc:join badtags ", ") " clean."))
+                                (lfc:join bad " & ") " out of "
+                                (lfc:join badtags ", ") "."))
                  (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
                                            (lfc:ptstr bp) ": "
                                            (lfc:join badtags ", ")
                                            " carried " (lfc:join bad " & ")
-                                           " - WIPED clean")
+                                           " - WIPED"
+                                           (if kept
+                                             (strcat ", " (lfc:join kept ", "))
+                                             " clean"))
                                    lines)))
                 ;; the word sits in the block's own text, not in a field
                 ;; we can clear - report it and leave it alone
@@ -3271,7 +3446,9 @@
                  (strcat (itoa (length liners)) " block(s) found"
                          (if (> linerwiped 0)
                            (strcat "; " (itoa linerwiped)
-                                   " pattern field(s) WIPED clean")
+                                   " pattern field(s) WIPED of "
+                                   (lfc:join linerbadw " & ")
+                                   " - the rest of each field kept")
                            (if linerbadw
                              (strcat "; word " (lfc:join linerbadw " & ")
                                      " found - review")
@@ -3704,7 +3881,8 @@
              "is missing - expected MM/DD/YYYY"))
          (setq datesum
            (if datebad
-             (strcat *lfc-date-tag* " " datebad)
+             (strcat *lfc-date-tag* " " datebad
+                     " - NEEDS UPDATING (run LINFINCHECK)")
              (strcat *lfc-date-tag* " = '" dateraw "' - OK"))))
           (setq datesum (strcat "no '" *lfc-title-block*
                                 "' block in reach - date NOT CHECKED")))
@@ -3905,18 +4083,23 @@
     ""
     "6. DATE (Tech Title)"
     (strcat "   The '" *lfc-title-block* "' block's " *lfc-date-tag*
-            " must read a real calendar")
-    "     date as MM/DD/YYYY (e.g. 05/01/2024). Missing, blank, the wrong"
-    "     format, or an out-of-range month/day is reported in red with"
-    "     what is wrong; a clean date is a quiet OK."
+            " must read TODAY as")
+    "     MM/DD/YYYY (e.g. 05/01/2024). Missing, blank, the wrong format,"
+    "     an out-of-range month/day, or yesterday's date is UPDATED to"
+    "     today in that same form - the label in front of it kept - and"
+    "     the report says in red what it found and what it set. A date"
+    "     built into the block instead of an attribute is reported only."
+    "     LINFINSCAN says NEEDS UPDATING and writes nothing."
     ""
     "7. LINER MATERIAL"
     "   A 'Liner Material' / 'Liner Material with Step' block must be"
     "     present."
     (strcat "   A pattern field reading " (lfc:join *lfc-badwords* " or ")
             " (e.g. 'Not Supplied',")
-    "     '#ERROR') is WIPED back to blank - the label stays, the junk"
-    "     goes. Real names like 'Tex' are never touched."
+    "     '#ERROR') has THAT PHRASE wiped out of it and keeps the rest:"
+    "     'Pattern: Not Supplied' -> 'Pattern:', 'Blue Granite - Not"
+    "     Supplied' -> 'Blue Granite'. A field that held nothing else"
+    "     comes back blank. Real names like 'Tex' are never touched."
     "   A Fiberglass Step in the drawing -> the liner must NOT carry a"
     "     Step. Otherwise steps drawn -> the liner MUST have its Step."
     ""
