@@ -132,7 +132,7 @@ def test_rectangle_length_suggests_width():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0,            # width
               None,            # Enter -> length takes 84
-              '90', None, None, None,   # corner A, then Enter x3
+              'Yes', '90',     # all four the same: one round of questions
               'No', 'No'],
              'rect/suggest')
     vs, _ = plverts(vm, 'COVER')
@@ -145,7 +145,7 @@ def test_rectangle_length_suggests_width():
 def test_rectangle_can_decline_the_suggestion():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, 60.0,      # decline: type a different length
-              '90', None, None, None,
+              'Yes', '90',
               'No', 'No'],
              'rect/decline')
     vs, _ = plverts(vm, 'COVER')
@@ -156,13 +156,18 @@ def test_rectangle_can_decline_the_suggestion():
 # ---------------------------------------------------------------- Back
 
 def test_back_at_every_measurement():
-    """Back unwinds the measurement block without dying."""
+    """Back unwinds the measurement block without dying: out of the
+    all-same gate into the sides, and out of corner A back to the
+    gate -- each question's Back re-asks the one before it."""
     run([None, 'Coversize', 'Rectangle', None,
          84.0, 60.0,
-         'Back',            # at corner A -> back into the sides stage
+         'Back',            # at the gate -> back into the sides stage
          # a stage is re-asked from ITS first question, so both sides
          # come round again
          62.0, None,
+         'No',              # corners one at a time
+         'Back',            # at corner A -> back to the gate
+         'No',              # ... which is asked again
          '90', None, None,  # corners A, B, C
          'Back',            # at corner D -> back to corner C
          None, None,        # re-answer C, then D
@@ -174,8 +179,9 @@ def test_back_at_the_corner_size():
     """Back at a corner's size re-asks its type."""
     run([None, 'Coversize', 'Rectangle', None,
          84.0, None,
+         'Yes',              # one round for all four
          'Radius', 'Back',   # size -> back to the type
-         '90', None, None, None,
+         '90',
          'No', 'No'],
         'rect/back-corner-size')
 
@@ -186,7 +192,7 @@ def test_back_out_of_the_offset_reopens_the_offer():
     SPA-BACK symbol to (+ ...)."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              '90', None, None, None,
+              'Yes', '90',
               'Yes', 'Offset',
               'Back',              # back out of the lap
               'Yes', 'Dims',       # ... and switch method
@@ -204,7 +210,7 @@ def test_back_undo_synonym():
          # Back out of a stage re-asks that stage from ITS first
          # question, so both sides come round again
          62.0, None,
-         '90', None, None, None,
+         'Yes', '90',
          'No', 'No'],
         'rect/undo-synonym')
 
@@ -216,7 +222,7 @@ def test_each_outline_is_one_closed_entity():
     scatter of loose lines."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              '90', None, None, None,
+              'Yes', '90',
               'Yes', 'Offset', 3.0,
               'No'],
              'bounded/two-outlines')
@@ -234,9 +240,9 @@ def test_radius_corner_becomes_an_arc_segment():
     bulge of a quarter-turn fillet: tan(22.5) = 0.41421."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              # corner A: type then size; B/C/D each Enter twice to
-              # take the autofilled type AND its size
-              'Radius', 12.0, None, None, None, None, None, None,
+              # one round: the treatment then its size, taken by all
+              # four corners
+              'Yes', 'Radius', 12.0,
               'No', 'No'],
              'bounded/radius-bulge')
     vs, bs = plverts(vm, 'COVER')
@@ -284,7 +290,7 @@ def test_radius_callout_is_handed_an_arc():
     """
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              'Radius', 8.0, None, None, None, None, None, None,
+              'Yes', 'Radius', 8.0,
               'No', 'No'],
              'radius/callout-selection')
     calls = dimcalls(vm, '_.DIMRADIUS')
@@ -304,7 +310,7 @@ def test_radius_callout_on_both_outlines():
     the tree covered, and the one that fires the callout twice."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              'Radius', 8.0, None, None, None, None, None, None,
+              'Yes', 'Radius', 8.0,
               'Yes', 'Offset', 3.0,
               'No'],
              'radius/two-outlines')
@@ -320,6 +326,7 @@ def test_radius_callout_on_both_outlines():
 def test_diagonal_corner_stays_straight():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
+              'No',                  # not all the same: one at a time
               'Diagonal', 21.0,      # corner A: a 21" cut face
               '90', '90', '90',      # B, C, D square
               'No', 'No'],
@@ -336,7 +343,7 @@ def test_mm_measurement():
     vm = run([None, 'Coversize', 'Rectangle', None,
               '2134mm',        # 2134 mm = 84.0157 in
               '1524mm',        # 1524 mm = 60 in exactly
-              '90', None, None, None,
+              'Yes', '90',
               'No', 'No'],
              'mm/rectangle')
     vs, _ = plverts(vm, 'COVER')
@@ -359,7 +366,7 @@ def test_mm_at_a_typed_prompt():
     """The lap, a spa:askd prompt, takes mm too."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
-              '90', None, None, None,
+              'Yes', '90',
               'Yes', 'Offset', '76.2mm',   # 76.2 mm = 3 in
               'No'],
              'mm/lap')
@@ -375,7 +382,7 @@ def test_junk_is_re_asked_not_accepted():
               'banana',        # rejected...
               84.0,            # ...then a real answer
               None,
-              '90', None, None, None,
+              'Yes', '90',
               'No', 'No'],
              'mm/junk')
     # the width prompt came round twice: junk did not slip through
@@ -392,7 +399,7 @@ def test_five_piece_hinge_arrangement():
     """A cover wide enough for 5 pieces reads H V V H."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               230.0, 60.0,          # 230/48 -> 5 pieces
-              '90', None, None, None,
+              'Yes', '90',
               'No',                 # no second outline
               'Yes',                # auto-hinge
               'No',                 # no spillaway
@@ -406,7 +413,7 @@ def test_five_piece_hinge_arrangement():
 def test_three_piece_hinge_arrangement():
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,          # 140/48 -> 3 pieces
-              '90', None, None, None,
+              'Yes', '90',
               'No', 'Yes', 'No', None, '4-3'],
              'hinge/3-piece')
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge'], hinge_labels(vm)
@@ -416,7 +423,7 @@ def test_back_in_the_spillaway_loop():
     """Back at the top of the loop drops the spillaway just committed."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,
-              '90', None, None, None,
+              'Yes', '90',
               'No', 'Yes',
               'Yes', 'Wall', 'Top', 20.0,   # commit one
               'Back',                        # ... and take it back
@@ -445,7 +452,7 @@ def test_thermolight_style_all_velcro():
     exercised through the taper instead."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               230.0, 60.0,
-              '90', None, None, None,
+              'Yes', '90',
               'No', 'Yes', 'No', None, '1-3/8'],
              'hinge/thermolight-taper')
     assert hinge_labels(vm), "no hinges drawn"

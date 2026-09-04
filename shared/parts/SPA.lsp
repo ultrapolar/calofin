@@ -131,10 +131,21 @@
 ;;;  A corner is Radius (sized by its radius), Diagonal (a cut, sized by
 ;;;  its face length) or 90 -- the sheet's own corner legend.  Side
 ;;;  lengths are always to the TRUE (sharp) corner; the treatment cuts
-;;;  inward from there.  Corner A is asked first and its answer
-;;;  AUTOFILLS corners B, C and D -- press Enter at each to accept it, or
-;;;  type a different treatment for that corner, so a cover with two cut
-;;;  corners and two square ones takes four different answers.
+;;;  inward from there.
+;;;
+;;;  ARE ALL FOUR CORNERS THE SAME is asked first, defaulting to Yes,
+;;;  because most covers say one thing about all four:
+;;;
+;;;    Yes -- ONE round of questions ("How should the four corners be
+;;;    treated?", then its one size) and every corner takes that answer.
+;;;
+;;;    No -- corners A, B, C and D are asked one at a time; corner A's
+;;;    answer AUTOFILLS the rest, so press Enter at each to accept it or
+;;;    type a different treatment for that corner.  A cover with two cut
+;;;    corners and two square ones takes this route.
+;;;
+;;;  A form answers the gate with the samecorners key; a form that fills
+;;;  in corner B, C or D has already said No and is not asked.
 ;;;
 ;;;  Callouts sit outside the corner on its 45-degree line: a radius dim
 ;;;  on a Radius corner (R12"), an aligned dim across a Diagonal cut
@@ -175,7 +186,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "090126 REV13")
+(setq spa:*version* "090126 REV14")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -760,13 +771,37 @@
       v
       (cal:askkw msg kws shown dflt back)))
 
+;; The subject the all-same round asks about, spelled ONCE: it is the
+;; label the treatment question and its size follow-up both read
+;; ("How should the four corners be treated?", "Radius for the four
+;; corners"), and the string spa:fckey matches to hand that round
+;; corner A's form boxes.  Lower case, because spa:fckey folds first.
+(setq spa:*allcorners* "the four corners")
+
 ;; The form-key stem for a corner question, from the label every flow
-;; already passes spa:askcorner -- "Corner A" is cornera.  A label no
-;; form addresses comes back nil and the corner is asked as always.
+;; already passes spa:askcorner -- "Corner A" is cornera.  The all-same
+;; question covers the four at once and is answered by CORNER A's boxes:
+;; a form that fills in A alone has said everything the one round needs,
+;; and one that fills in more than A never reaches this question.  A
+;; label no form addresses comes back nil and the corner is asked as
+;; always.
 (defun spa:fckey (label / s)
   (setq s (strcase label t))
-  (if (and (> (strlen s) 7) (= (substr s 1 7) "corner "))
-      (strcat "corner" (substr s 8))))
+  (cond ((= s spa:*allcorners*) "cornera")
+        ((and (> (strlen s) 7) (= (substr s 1 7) "corner "))
+         (strcat "corner" (substr s 8)))))
+
+;; Has the form already answered a corner other than A?  Four boxes
+;; filled in mean the corners came in one at a time, so the all-same
+;; gate has its answer without asking.  Read-only: the corner answers
+;; themselves are consumed by spa:askcorner, where a Back can still
+;; drop each one back to the keyboard.
+(defun spa:fpercorner ( / stem any)
+  (foreach stem '("cornerb" "cornerc" "cornerd")
+    (if (or (spa:fhas (read (strcat stem "-ty")))
+            (spa:fhas (read (strcat stem "-sz"))))
+        (setq any t)))
+  any)
 
 ;; The shape, from the form when it named one the dispatch knows, else
 ;; asked.  Checked against the same list the prompt offers: an unknown
@@ -2234,7 +2269,8 @@
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut quad
                         a b c d cen doff th allsame i j tmp lbls cc back
                         rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2
-                        xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows done)
+                        xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows done
+                        same gback)
   (setq oldclay (getvar "CLAYER")
         pv (spa:rectpreview))
   (command "_.ZOOM" "_Window"
@@ -2262,29 +2298,59 @@
           l (if (spa:sq ans 'l) (spa:sq ans 'l) w))   ; NA -> square
     nil)
 
-  ;; -------- corner treatments; corner A autofills B, C and D
-  (defun rc:corners ( / )
-    (princ "\n(corner A's answer autofills B, C and D -- Enter accepts it,")
-    (princ "\n or type a different treatment for that corner)")
+  ;; -------- corner treatments: one round for all four, or one each
+  ;;
+  ;; Most covers say one thing about all four corners, so that is the
+  ;; question, and Yes buys ONE round instead of four.  No walks A, B, C
+  ;; and D with A's answer autofilling the rest, which is how every
+  ;; corner used to be asked.  Back at the round re-asks the gate; Back
+  ;; at the gate leaves the stage, since the gate is its first question.
+  (defun rc:corners ( / same done gback)
     (setq lbls (list "A" "B" "C" "D")
-          corners nil i 0 back nil)
-    (while (and (< i 4) (not back))
-      (setq cc (spa:askcorner
-                 (strcat "Corner " (nth i lbls))
-                 (if (> i 0) (car (car (reverse corners))) nil)
-                 (if (> i 0) (cadr (car (reverse corners))) nil)
-                 (spa:lbl pv (list (spa:lblkey (nth i lbls))))
-                 (* 0.5 (min w l))
-                 t))
-      (if (eq cc 'CAL-BACK)
-          (if (= i 0)
-              (setq back t)             ; back out of the whole stage
-              (setq i (1- i) corners (cdr corners)))
-          (setq corners (cons cc corners) i (1+ i))))
+          corners nil back nil done nil)
+    (while (not done)
+      ;; a form that filled in corner B, C or D has answered this by
+      ;; doing so -- four boxes are four corners, asked one at a time
+      (setq same (if (and (not (spa:fhas 'samecorners)) (spa:fpercorner))
+                     "No"
+                     (spa:askkwf 'samecorners "Are all four corners the same?"
+                                 "Yes No" "Yes/No" "Yes" t)))
+      (cond
+        ((eq same 'CAL-BACK) (setq back t done t))
+        ;; ---- one round.  Every corner letter on the guide lights up,
+        ;; so what the single answer covers can be seen.
+        ((= same "Yes")
+         (setq cc (spa:askcorner spa:*allcorners* nil nil
+                                 (spa:lbl pv (mapcar 'spa:lblkey lbls))
+                                 (* 0.5 (min w l))
+                                 t))
+         (if (not (eq cc 'CAL-BACK))
+             (setq corners (list cc cc cc cc) done t)))
+        ;; ---- one corner at a time, A autofilling B, C and D
+        (t
+         (princ "\n(corner A's answer autofills B, C and D -- Enter accepts it,")
+         (princ "\n or type a different treatment for that corner)")
+         (setq corners nil i 0 gback nil)
+         (while (and (< i 4) (not gback))
+           (setq cc (spa:askcorner
+                      (strcat "Corner " (nth i lbls))
+                      (if (> i 0) (car (car (reverse corners))) nil)
+                      (if (> i 0) (cadr (car (reverse corners))) nil)
+                      (spa:lbl pv (list (spa:lblkey (nth i lbls))))
+                      (* 0.5 (min w l))
+                      t))
+           (if (eq cc 'CAL-BACK)
+               (if (= i 0)
+                   (setq gback t)       ; back to the gate, its previous
+                   (setq i (1- i) corners (cdr corners)))
+               (setq corners (cons cc corners) i (1+ i))))
+         (if gback
+             (setq corners nil)
+             (setq corners (reverse corners) done t)))))
     (if back
         'CAL-BACK
         (progn
-          (setq corners (reverse corners) anycut nil)
+          (setq anycut nil)
           (foreach cc corners (if (spa:cutp cc) (setq anycut t)))
           ;; show the chosen treatments on the guide, scaled from the
           ;; real spa onto the 240 x 200 nominal and capped so a big

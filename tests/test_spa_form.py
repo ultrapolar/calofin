@@ -90,7 +90,8 @@ print("== 1. full form == command line ==")
 PROMPTS = [None,                       # skip the Spa Cover Details block
            "Watersedge", "Rectangle", (0, 0),
            84.0, 72.0,                 # overall width / length
-           "90", "90", "90", "90",     # corners A..D
+           "No",                       # corners not all the same...
+           "90", "90", "90", "90",     # ... so A..D, one at a time
            "No",                       # no cover size
            "No"]                       # no auto-hinge
 
@@ -117,13 +118,15 @@ print("== 2. half-filled form still prompts for what is missing ==")
 PARTIAL = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
                (w . 84.0) (l . 72.0))"""
 
-c = by_form(PARTIAL, [None, "90", "90", "90", "90", "No", "No"])
+c = by_form(PARTIAL, [None, "No", "90", "90", "90", "90", "No", "No"])
 same(a, c, "partial form")
 asked = [p for p, _ in c.prompts if 'Corner' in p]
 assert len(asked) == 4, "expected the 4 corners to be asked, got %d" % len(asked)
 assert not any('WIDTH' in p or 'LENGTH' in p for p, _ in c.prompts), \
     "a supplied overall was asked for anyway"
-print("   overalls taken from the form, all 4 corners still prompted")
+assert any('all four corners the same' in p for p, _ in c.prompts), \
+    "the all-same gate was not asked for a form that named no corner"
+print("   overalls taken from the form, the gate and all 4 corners prompted")
 
 
 # --------------------------------------------------------------------
@@ -139,11 +142,13 @@ MIXED = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
 
 d = by_form(MIXED, [None, "90", "90", "No", "No"])
 same(a, d, "mixed form")
+assert not any('all four corners the same' in p for p, _ in d.prompts), \
+    "a form that filled in corner B was asked the gate anyway"
 asked = [p for p, _ in d.prompts if 'Corner' in p]
 assert len(asked) == 2, "expected 2 corners asked, got %d" % len(asked)
 assert 'Corner C' in asked[0] and 'Corner D' in asked[1], \
     "the wrong corners were asked: %r" % asked
-print("   corners A/B taken from the form, C/D prompted")
+print("   corners A/B taken from the form, C/D prompted, gate not asked")
 
 
 # --------------------------------------------------------------------
@@ -153,6 +158,7 @@ print("   corners A/B taken from the form, C/D prompted")
 print("== 4. a treatment carrying a size ==")
 
 RAD_PROMPTS = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
+               "No",                    # one at a time, like the form
                "Radius", 12.0, "Radius", 12.0,
                "Radius", 12.0, "Radius", 12.0,
                "No", "No"]
@@ -225,7 +231,7 @@ NIL_WIRE = ("(spa:run-with-answers '("
             "))")
 i = VM()
 i.load(LSP)
-i.script = [None, (0, 0), "90", "90", "90", "90", "No", "No"]
+i.script = [None, (0, 0), "No", "90", "90", "90", "90", "No", "No"]
 i.prompts = []
 i.eval(parse_all(NIL_WIRE)[0])
 same(a, i, "explicit nil")
@@ -333,7 +339,7 @@ print("   measured letters skipped, nil letters taken as NA unasked")
 print("== 10. second / method / gap / autohinge from the form ==")
 
 CVR_PROMPTS = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
-               "90", "90", "90", "90",
+               "No", "90", "90", "90", "90",
                "Yes",                   # draw the cover as well
                "Offset",                # take it from
                3.0,                     # the lap
@@ -364,7 +370,7 @@ print("   both outlines from one form; only the block pick remained")
 print("== 11. grade/taper from the form: no taper prompt ==")
 
 GT_PROMPTS = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
-              "90", "90", "90", "90",
+              "No", "90", "90", "90", "90",
               "No",                     # no second outline
               "Yes",                    # auto-hinge
               "No",                     # no spillaway
@@ -428,7 +434,7 @@ j = by_form(BACKFORM, [None,      # skip the Spa Cover Details block
                        "Back",    # at the length: back onto the width
                        84.0,      # the width again - AT THE KEYBOARD
                        72.0,      # the length
-                       "90", "90", "90", "90", "No", "No"])
+                       "No", "90", "90", "90", "90", "No", "No"])
 same(a, j, "back over a consumed answer")
 wasked = [p for p, _ in j.prompts if 'WIDTH' in p]
 assert len(wasked) == 1, \
@@ -558,5 +564,48 @@ for _sid, _sh in _fm['shapes'].items():
         "it is not anchored to the artwork" % (_sid, missing))
     print("   %-10s %2d questions, every one answerable on both forms"
           % (_sid, len(chart)))
+
+# --------------------------------------------------------------------
+# 16. ONE ROUND FOR ALL FOUR.  "Are all four corners the same?" <Yes>
+#     asks the treatment once, of "the four corners", and hands the
+#     answer to every one of them -- so it must draw the spa that four
+#     identical answers draw, keyword and size alike.  A form reaches
+#     the same round through samecorners, and CORNER A's boxes carry
+#     it: the round is answered, and no corner is asked.
+# --------------------------------------------------------------------
+print("== 16. one round for all four == four identical answers ==")
+
+ONE_ROUND = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
+             "Yes",                     # all four the same...
+             "90",                      # ... so the treatment is asked once
+             "No", "No"]
+m = by_prompts(ONE_ROUND)
+same(a, m, "one round")
+treated = [p for p, _ in m.prompts if 'be treated' in p]
+assert len(treated) == 1, "expected ONE treatment question, got %r" % (treated,)
+assert 'the four corners' in treated[0], \
+    "the one round should ask about the four corners: %r" % treated[0]
+
+# the same round, with a size on it
+RAD_ROUND = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
+             "Yes", "Radius", 12.0,
+             "No", "No"]
+n = by_prompts(RAD_ROUND)
+same(e, n, "one round, sized")
+sized = [p for p, _ in n.prompts if 'Radius for' in p]
+assert len(sized) == 1 and 'the four corners' in sized[0], \
+    "expected one size question about the four corners, got %r" % (sized,)
+
+SAME_FORM = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
+                 (w . 84.0) (l . 72.0)
+                 (samecorners . "Yes") (cornera-ty . "90"))"""
+o = by_form(SAME_FORM, [None, "No", "No"])
+same(a, o, "one round from a form")
+assert not any('corner' in p.lower() for p, _ in o.prompts), \
+    "a corner was asked despite the form answering the round: %r" \
+    % [p for p, _ in o.prompts]
+print("   one keyword, and one size, covering all four corners")
+print("   samecorners + corner A answer the round from a form")
+
 
 print("\nALL SPA FORM SCENARIOS PASSED")
