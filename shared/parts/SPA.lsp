@@ -175,7 +175,7 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "090126 REV12")
+(setq spa:*version* "090126 REV13")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -216,7 +216,7 @@
 (setq spa:*ds-cover*  "STANDARD INCHES")
 (setq spa:*ds-water*  "STANDARD INCHES 0.5")
 (setq spa:*wefactor*  0.5)
-(setq spa:*gapdflt*   3.0)      ; suggested cover lap over the water's edge
+(setq spa:*gapdflt*   6.0)      ; suggested cover lap over the water's edge
 
 (setq spa:*base*     (list 0.0 0.0))
 (setq spa:*dashlt*   "CONTINUOUS")   ; resolved to SPADASH per run
