@@ -110,6 +110,51 @@ rather than being invented.
 Adding a tool to the palette is therefore: put it on `LAZPANEL`, write
 its blurb, run the generator.
 
+## The Pool chart tab
+
+The sheet `LAZFORM` draws, in the palette: pick one of the thirteen
+charts, fill in the boxes, press Draw.
+
+It is **drawn, not photographed**. `ChartSheet` renders
+`ChartCatalog`'s polylines onto a canvas and puts a box at the
+**midpoint of each dimension line** — so no box has a position of its
+own, and there is nothing for a human to nudge against artwork. Resize
+the palette and the chart is redrawn rather than stretched.
+
+Every key gets a row in the column beside the chart as well, including
+the ones with a box on the drawing. That is `lzf:*charts*`' own
+decision and it is kept for its reason: a sheet read as two kinds of
+thing at once — some letters answered on the drawing, the rest in a
+list — is harder to check than one column you can run your eye down.
+
+**The state line** is phase 3's feature, and it holds `Draw` back the
+same way `LAZFORM`'s holds `Insert` back:
+
+- a box that will not read as a measurement is **named, by the letter
+  the sheet prints**, and Draw is disabled — because that is the failure
+  a drafter cannot see, the chart going on showing what was typed while
+  the wire drops it;
+- otherwise the line is the **hand-off**: how much of the sheet is
+  filled and how many questions the routine will still ask.
+
+It **asks the wire** what would be dropped (`calofin:unreadable-str`)
+rather than deciding for itself. The palette does not read a
+measurement any more, and a line that named a box the wire would happily
+accept would be worse than no line at all. With the glue not loaded,
+nothing is named and the form is exactly as honest as it was before the
+line existed.
+
+**Recall last** puts the last accepted sheet for *this chart* back into
+the **empty** boxes only, so it can never overwrite a number just typed
+and pressing it twice is a no-op. It is never a default: pre-filling
+would put the last pool's numbers on this pool, and a wrong number that
+looks answered is worse than an empty box. The store is the DCL forms'
+own — same registry keys, same `key=typed;key=typed` format — so a sheet
+filled in on `LAZFORM` comes back here, and the other way round.
+
+`tests/test_chart_form.py` holds every one of those seams to the file it
+has to agree with.
+
 ## The chart geometry is generated too
 
 `Generated/ChartCatalog.g.vb` is the vector charts `LAZFORM`, `LAZSPA`

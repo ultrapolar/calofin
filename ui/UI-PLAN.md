@@ -382,6 +382,41 @@ the wire drops, since the state line prints that list and a state line
 that disagrees with the wire is a lie. It also holds the two copied
 helpers to `CALOFIN-LIB.lsp`'s, body for body.
 
+### Phase 5e -- the palette gets a real chart form *(done 2026-09-04)*
+
+`ChartFormView.vb`: `LAZFORM`'s sheet on the palette, and the first
+place the generated geometry earns its keep.
+
+- **Drawn, not photographed.** `ChartSheet` renders ChartCatalog's
+  polylines and puts a box at the midpoint of each dimension line. No
+  box has a position of its own, so there is nothing left to nudge --
+  which is what closed phase 5c's blocked item rather than solving it.
+- **The state line**, phase 3's feature, on this surface for the first
+  time: a box that will not read is named by the LETTER the sheet
+  prints and holds Draw back; otherwise the line is the hand-off. It
+  **asks the wire** (`calofin:unreadable-str`) rather than deciding, for
+  the phase 5d reason -- the palette cannot read a measurement any more,
+  and a line that named a box the wire would accept is worse than none.
+- **Recall last**, into the empty boxes only, never a default, from the
+  DCL forms' own store -- same registry keys, same format -- so a sheet
+  filled in on LAZFORM comes back here.
+
+One class serves any chart table, which is phase 4's "one form kit"
+arriving on this surface: the sheet list, the entry point and the recall
+key are constructor arguments.
+
+`tests/test_chart_form.py` holds every seam to the file it must agree
+with, and was verified to bite by sending the chart's key where the
+shape word belongs and by moving the recall key.
+
+**Not there yet**, and named rather than left to be discovered: the spa
+sheet's corner treatments and cover block are not in the generated
+catalog (`lzs:*corners*` and the listkeys are separate tables), so the
+Spa tab stays the hand-built `SpaFormView` for now; the step sheets are
+generated but have no form on them; and `lzf:dead` still lives only in
+Lisp, so the palette shows every box a sheet has and lets POOL ignore
+what this page does not ask about.
+
 Still open, and genuinely blocked on a machine with a compiler:
 
 - **The chart tables.** *(closed by phase 5c, by dropping the premise:

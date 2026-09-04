@@ -32,10 +32,15 @@ What is checked here:
 3. `calofin:unreadable` names exactly the keys the wire drops, because
    the palette's state line prints that list and a state line that
    disagrees with the wire is a lie.
-4. The two helpers copied from `CALOFIN-LIB.lsp` still match it, body
+4. The four helpers copied from `CALOFIN-LIB.lsp` still match it, body
    for body, modulo the namespace -- the same rule `mirror_shared.py
    --check` applies to every other copy in the tree.
-5. `calofin:run` reports a missing entry point instead of erroring, and
+5. `calofin:unreadable-str` answers the same question over one packed
+   string, which is how the palette asks it: marshalling an alist of
+   dotted pairs through a ResultBuffer is the fiddly half of the
+   .NET/Lisp boundary, and "key=typed;key=typed" is a format this tree
+   already uses for the recall store.
+6. `calofin:run` reports a missing entry point instead of erroring, and
    hands the routine one alist when it is there.
 
 Run: python3 tests/test_palette_wire.py
@@ -198,18 +203,56 @@ def body(src, name):
 GLUE_SRC = read(GLUE)
 LIB_SRC = read(LIB)
 for mine, theirs in (('calofin:trim', 'cal:trim'),
-                     ('calofin:answer', 'cal:formanswer')):
+                     ('calofin:answer', 'cal:formanswer'),
+                     ('calofin:kvsplit', 'cal:kvsplit'),
+                     ('calofin:kvunpack', 'cal:kvunpack')):
     got = body(GLUE_SRC, mine).replace(mine, 'X')
     want = body(LIB_SRC, theirs).replace(theirs, 'X')
     # calofin:answer calls calofin:trim where the library calls cal:trim
-    got = got.replace('calofin:trim', 'T')
-    want = want.replace('cal:trim', 'T')
+    for a, b in (('calofin:trim', 'T'), ('calofin:kvsplit', 'S')):
+        got = got.replace(a, b)
+    for a, b in (('cal:trim', 'T'), ('cal:kvsplit', 'S')):
+        want = want.replace(a, b)
     check("%s is %s's body, character for character" % (mine, theirs),
           got == want,
           "\n    mine : %s\n    lib  : %s" % (got, want))
 
 
-print("== 5. running a routine, present or absent ==")
+print("== 5. the state line asks the wire, over one string ==")
+
+# The palette cannot work out what will be dropped any more -- that is
+# the point of moving the reader here -- so it asks.  It asks with one
+# STRING because marshalling an alist of dotted pairs through a
+# ResultBuffer is the fiddly half of the .NET/Lisp boundary, and
+# "key=typed;key=typed" is a format this tree already uses.
+vm = fresh()
+vm.loads('(setq t:*s* (calofin:unreadable-str "b=84;l=;h=rubbish;g=NA"))')
+check("the packed sheet gives back the keys that will not read",
+      str(vm.globals['t:*s*']) == 'h', repr(vm.globals['t:*s*']))
+
+vm.loads('(setq t:*s2* (calofin:unreadable-str "b=84;g=NA"))')
+check("a sheet with nothing wrong gives an empty string",
+      str(vm.globals['t:*s2*']) == '', repr(vm.globals['t:*s2*']))
+
+vm.loads('(setq t:*s3* (calofin:unreadable-str ""))')
+check("so does an empty sheet", str(vm.globals['t:*s3*']) == '',
+      repr(vm.globals['t:*s3*']))
+
+vm.loads('(setq t:*s4* (calofin:unreadable-str "h=rubbish;f=no number"))')
+check("more than one is joined the way it arrived",
+      str(vm.globals['t:*s4*']) == 'h;f', repr(vm.globals['t:*s4*']))
+
+# and the two answers agree, because one calls the other
+vm.loads('(setq t:*pk* "a=84;b=NA;c=;d=zz")')
+vm.loads('(setq t:*viaalist* (calofin:unreadable (calofin:kvunpack t:*pk*)))')
+vm.loads('(setq t:*viastr* (calofin:unreadable-str t:*pk*))')
+check("the string form and the alist form say the same thing",
+      ";".join(str(x) for x in vm.globals['t:*viaalist*'] or [])
+      == str(vm.globals['t:*viastr*']),
+      "%r vs %r" % (vm.globals['t:*viaalist*'], vm.globals['t:*viastr*']))
+
+
+print("== 6. running a routine, present or absent ==")
 
 vm = fresh()
 vm.loads('(setq t:*out* nil)')

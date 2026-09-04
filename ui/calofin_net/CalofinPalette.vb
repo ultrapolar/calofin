@@ -28,6 +28,15 @@ Public Class CalofinPalette
             _ps.MinimumSize = New Drawing.Size(320, 400)
 
             _ps.AddVisual("Commands", New CommandsTab())
+            ' The plan chart, drawn from LAZFORM's own vectors -- the
+            ' sheet the palette never had.  POOL's bottom stays a tab of
+            ' its own because it is a different drawing: a section, with
+            ' the depths on it, and LAZFORM keeps them apart too.
+            _ps.AddVisual("Pool chart", New ChartFormView(
+                ChartCatalog.Pool, "pool:run-with-answers",
+                RecallStore.PoolKey,
+                "Pick the sheet, fill in what you have. Anything left " &
+                "blank is asked for at the command line."))
             _ps.AddVisual("Spa", New SpaFormView())
             _ps.AddVisual("Pool bottom", New PoolFormView())
         End If

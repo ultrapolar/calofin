@@ -132,6 +132,45 @@
         (setq out (cons (car p) out))))
   (reverse out))
 
+;;  ASKING THE WIRE WHAT IT WOULD DROP, over one string.
+;;
+;;  The palette's state line has to name the boxes that will not read,
+;;  and it cannot work that out itself any more -- which is the point.
+;;  So it asks, and it asks with ONE string rather than an alist:
+;;  marshalling a list of dotted pairs through a ResultBuffer is the
+;;  fiddly, fails-at-runtime part of the .NET/Lisp boundary that
+;;  LispBridge.vb's own header warns about, and "key=typed;key=typed"
+;;  is a format this tree already uses for the recall store.
+;;
+;;  cal:kvsplit's body, local copy, same rule as the two above.
+(defun calofin:kvsplit (s sep / i n c cur out)
+  (setq i 1 n (strlen s) cur "")
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (= c sep)
+      (progn (setq out (cons cur out)) (setq cur ""))
+      (setq cur (strcat cur c)))
+    (setq i (1+ i)))
+  (reverse (cons cur out)))
+
+;;  cal:kvunpack's body.
+(defun calofin:kvunpack (s / out p bits)
+  (if (and s (= (type s) 'STR) (/= s ""))
+    (foreach p (calofin:kvsplit s ";")
+      (setq bits (calofin:kvsplit p "="))
+      (if (and (cdr bits) (/= (car bits) ""))
+        (setq out (cons (cons (car bits) (cadr bits)) out)))))
+  (reverse out))
+
+;;  "b=84;l=zz" in, "l" out: the keys the wire would drop, joined the
+;;  same way they arrived.  An empty answer is an empty string, which is
+;;  what a sheet with nothing wrong on it gives.
+(defun calofin:unreadable-str (s / out k)
+  (setq out "")
+  (foreach k (calofin:unreadable (calofin:kvunpack s))
+    (setq out (strcat out (if (= out "") "" ";") k)))
+  out)
+
 ;;  LITERALS travel as they are; MEASURES are typed text and are read.
 ;;
 ;;  The split is the palette's to make and it is not a detail: a shape
