@@ -34,9 +34,14 @@ alongside.
    other gets `[Merge/Flag/Leave] <Merge>` (`[Flag/Leave] <Flag>` when
    they cannot be merged); end-to-end touching is fine and not
    reported.
-5. **Cover checks** -- nothing here rewrites the drawing; every
-   disagreement is only SUGGESTED against, in the report:
+5. **Cover checks** -- apart from the date, nothing here rewrites the
+   drawing; every other disagreement is only SUGGESTED against, in the
+   report:
    - Tech Title block's Date attribute must read today, MM/DD/YYYY.
+     A wrong one is **rewritten to today** in that same form, keeping
+     any `Date =` label in front of it, and the report says what was
+     found and what was set. `COVERSCAN` says NEEDS UPDATING and
+     writes nothing.
    - Feet-and-inches: every text stating feet must state inches
      (`5'` flagged; `5'-0"`, `3'-2"`, plain `40"` fine).
    - Every dimension on the `DIMENSION` layer, strays counted and the

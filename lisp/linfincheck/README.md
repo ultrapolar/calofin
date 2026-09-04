@@ -47,13 +47,21 @@ for exactly those three checks, standalone.
    flags a lone `0''` as nonsensical. A side-view height dimension
    that disagrees is marked red automatically.
 6. **Date** — the `Tech Title` block's `Date` attribute is read
-   whether or not steps are drawn, and must be a real calendar date as
+   whether or not steps are drawn, and must read **today** as
    `MM/DD/YYYY` (e.g. `05/01/2024`). Missing, blank, the wrong format,
-   or an out-of-range month/day is flagged in red with what's wrong.
+   an out-of-range month/day or an old date is **rewritten to today
+   in that same form**, keeping any `Date =` label in front of it, and
+   the report says in red what it found and what it set. A date built
+   into the block definition instead of an attribute is shared by
+   every insert of that block, so that one is reported and left alone.
+   `LINFINSCAN` says NEEDS UPDATING and writes nothing.
 7. **Liner Material** — a pattern field reading "Not Supplied" or
-   `#ERROR` is wiped back to blank (the label stays, the value goes);
-   a Fiberglass Step in the drawing means the liner must *not* carry
-   a Step, otherwise drawn steps mean it must.
+   `#ERROR` has **that phrase** wiped out of it and keeps the rest:
+   `Pattern: Not Supplied` → `Pattern:`, `Blue Granite - Not Supplied`
+   → `Blue Granite`. A field that held nothing else comes back blank,
+   and a real pattern name is never touched. A Fiberglass Step in the
+   drawing means the liner must *not* carry a Step, otherwise drawn
+   steps mean it must.
 8. **Title block border** — the outer drawing on the `border` layer
    must be 58'-8" × 45'-3 5/8" or a scaled-**up** multiple; smaller is
    flagged as "should not be SCALED DOWN for Liners".

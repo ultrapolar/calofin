@@ -71,8 +71,12 @@
 ;;;
 ;;;   7. THE TECH TITLE DATE.  The Date attribute of the "Tech Title"
 ;;;      block must read TODAY, written MM/DD/YYYY -- a sheet going
-;;;      out under an old date is the mistake this catches.  The block
-;;;      is looked for in the selection and then across the drawing;
+;;;      out under an old date is the mistake this catches.  SPACHECK
+;;;      does not just report a wrong one: it WRITES TODAY'S OVER IT
+;;;      in that same form, keeping any "Date =" label in front of it,
+;;;      and the report says what it found and what it set.  The scans
+;;;      write nothing and say NEEDS UPDATING instead.  The block is
+;;;      looked for in the selection and then across the drawing;
 ;;;      with none in reach the report says the date was not checked
 ;;;      rather than flagging it.  LITESPACHECKSCAN keeps this one.
 ;;;
@@ -106,7 +110,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.11")
+(setq *spacheck-version* "v1.12")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1224,7 +1228,10 @@
 ;;;  The sheet's Tech Title block carries a Date attribute, and it must
 ;;;  read TODAY in MM/DD/YYYY form.  A sheet going out under an old date
 ;;;  is the mistake this catches: the drawing was reworked and the title
-;;;  block never caught up.
+;;;  block never caught up -- so SPACHECK writes today's date over a
+;;;  wrong one rather than leaving it to be noticed, in the same
+;;;  MM/DD/YYYY form and with any label in front of it kept.  The scans
+;;;  are read-only and only say so.
 
 (defun spachk:pad2 (n)
   (if (< n 10) (strcat "0" (itoa n)) (itoa n)))
@@ -1314,9 +1321,41 @@
        ((progn (setq now (spachk:today-mdy))
                (not (and (= mo (car now)) (= dd (cadr now))
                          (= yr (caddr now)))))
-        (strcat "'" s "' is NOT TODAY'S DATE (" (spachk:mdy-str now)
-                ") - update it"))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (spachk:mdy-str now) ")"))
        (t nil)))))
+
+;; Everything up to and including the last "=", "" when there is none:
+;; the label a date arrives wearing ("Date = 05/01/2024"), so rewriting
+;; the date keeps the wording in front of it.
+(defun spachk:before-eq (s / p n)
+  (setq n 0)
+  (while (setq p (vl-string-search "=" (substr s (1+ n))))
+    (setq n (+ n p 1)))
+  (if (> n 0) (substr s 1 n) ""))
+
+;; raw with today's date, written MM/DD/YYYY, in place of whatever date
+;; it held; a "Date =" label in front of it is left as typed.
+(defun spachk:date-fixed (raw / pre)
+  (setq pre (spachk:before-eq raw))
+  (if (= pre "")
+    (spachk:mdy-str (spachk:today-mdy))
+    (strcat pre " " (spachk:mdy-str (spachk:today-mdy)))))
+
+;; Write val into the block reference's attribute with that tag; nil
+;; when it carries no such attribute.
+(defun spachk:set-attrib (ent tag val / e ed done)
+  (setq tag (strcase tag)
+        e   (entnext ent))
+  (while (and e (null done) (setq ed (entget e))
+              (= "ATTRIB" (cdr (assoc 0 ed))))
+    (if (= tag (strcase (cdr (assoc 2 ed))))
+      (progn
+        (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+        (entupd e)
+        (setq done T)))
+    (setq e (entnext e)))
+  (if done (entupd ent))
+  done)
 
 ;; The Tech Title block: the first INSERT whose name carries it, looked
 ;; for in the selection and then across the drawing, since the title
@@ -1343,7 +1382,7 @@
 ;; With no Tech Title in reach there is nothing to read, and that is
 ;; said plainly rather than flagged -- a spa sheet may well be checked
 ;; on its own, away from the sheet it will sit on.
-(defun spachk:audit-date (ss / blk raw bad)
+(defun spachk:audit-date (ss dofix / blk raw bad wrote)
   (setq blk (spachk:find-title ss))
   (if (null blk)
     (spachk:res
@@ -1356,12 +1395,26 @@
             bad (if raw
                   (spachk:date-verdict raw)
                   "is missing from the block - expected MM/DD/YYYY"))
+      ;; SPACHECK does not leave a wrong date for someone to notice: it
+      ;; writes today's over it in the same MM/DD/YYYY form, keeping any
+      ;; label in front of it.  Only an attribute can be written, and
+      ;; only when the caller is the fixing command -- the scans read.
+      (if (and bad dofix)
+        (setq wrote (spachk:set-attrib blk spachk:*date-tag*
+                                     (spachk:date-fixed (if raw raw "")))))
       (spachk:res
         (list (spachk:row
-                (if bad
-                  (strcat "Tech Title: " spachk:*date-tag* " " bad)
-                  (strcat "Tech Title: " spachk:*date-tag* " = '"
-                          (spachk:trim (spachk:datenorm raw)) "' - OK"))
+                (cond
+                  (wrote (strcat "Tech Title: " spachk:*date-tag* " " bad
+                               " - UPDATED to "
+                               (spachk:mdy-str (spachk:today-mdy))))
+                  ((and bad dofix)
+                   (strcat "Tech Title: " spachk:*date-tag* " " bad
+                           " - fix it in the block"))
+                  (bad (strcat "Tech Title: " spachk:*date-tag* " " bad
+                               " - NEEDS UPDATING (run SPACHECK)"))
+                  (t (strcat "Tech Title: " spachk:*date-tag* " = '"
+                             (spachk:trim (spachk:datenorm raw)) "' - OK")))
                 (if bad 1 nil)))
         nil))))
 
@@ -1374,8 +1427,8 @@
 ;; is DIMCHECK's ground, so its rows come back separately for the
 ;; report's second column - and a lite run skips it altogether.
 ;; Returns (main-rows dim-rows flagged-entities).
-(defun spachk:audit (ss lite / rows drows ents blk att g tp cov wat covo
-                             wato dims covn r)
+(defun spachk:audit (ss lite dofix / rows drows ents blk att g tp cov wat covo
+                                 wato dims covn r)
   (setq rows nil drows nil ents nil)
 
   ;; 1 -- the block
@@ -1449,7 +1502,7 @@
 
   ;; 7 -- the Tech Title date (every mode, lite too)
   (setq rows (append rows (list (spachk:row "THE TECH TITLE" 3))))
-  (setq r (spachk:audit-date ss)
+  (setq r (spachk:audit-date ss dofix)
         rows (append rows (spachk:res-rows r)))
 
   ;; 8 -- the title block
@@ -1686,7 +1739,7 @@
     (progn
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
-      (setq res   (spachk:audit ss lite)
+      (setq res   (spachk:audit ss lite nil)
             rows  (car res)
             drows (cadr res)
             ents  (caddr res)
@@ -1737,7 +1790,7 @@
         (progn
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
-      (setq res   (spachk:audit ss nil)
+      (setq res   (spachk:audit ss nil T)
             rows  (car res)
             drows (cadr res)
             ents  (caddr res)

@@ -24,6 +24,9 @@ form has to agree with something that IS testable.
    uses `lzt:recall-slot`'s per-count slot, and mirrors the ONE rule
    that cannot be left to the wire: NA at a tread is what ends a run,
    so it counts as an empty box rather than travelling.
+6. **The spa form** offers `lzs:*ctreat*`'s words without translating
+   them -- SPA normalises the legend onto the canonical set itself --
+   and withholds a corner size on a treatment that takes none.
 5. **The boxes are the chart's**: one per dimension and one per
    column-only key, invented from nothing, placed at the midpoint of
    the line each measures.  Whether a chart key is one POOL reads is
@@ -283,6 +286,68 @@ check("%d sheets, and the form can reach each of them"
       "%d sheets" % len(steps))
 check("the palette mounts the step form",
       'New StepFormView()' in PAL)
+
+
+print("== 7. the spa form, and what a spa sheet has that a pool one has not ==")
+
+SPA = code_of(read(ROOT / 'ui' / 'calofin_net' / 'SpaChartView.vb'))
+vms = VM()
+vms.load(LISP_DIR / 'lazspa' / 'LAZSPA.lsp')
+
+# the corner dropdown speaks the SHEET LEGEND and sends it as written
+want = [str(x) for x in vms.globals['lzs:*ctreat*']]
+cat = read(gen.OUT)
+check("the treatments are lzs:*ctreat*, word for word",
+      ("SpaTreatments As String() = {%s}"
+       % ", ".join('"%s"' % w for w in want)) in cat, repr(want))
+check("the form offers them without translating",
+      'For Each t In ChartCatalog.SpaTreatments' in SPA
+      and 'Square' not in SPA and 'NotGiven' not in SPA,
+      "the palette has started renaming what SPA normalises itself")
+
+# a size travels only when the treatment takes one -- lzs:cornerpairs
+sized = []
+for i, w in enumerate(want):
+    vms.loads('(setq t:*s* (lzs:sized %d))' % i)
+    if vms.globals['t:*s*']:
+        sized.append(w)
+check("lzs:sized names %s" % (" and ".join(sized) or "nothing"),
+      ("SpaSizedTreatments As String() = {%s}"
+       % ", ".join('"%s"' % w for w in sized)) in cat, repr(sized))
+check("and a size on any other treatment is withheld",
+      'If Sized(ty) Then sizedStems.Add' in SPA
+      and 'Not sizedStems.Contains(b.Key) Then Continue For' in SPA)
+
+# a dropdown left on "(ask)" sends nothing
+check("the first option is always (ask)",
+      all(str(d[2][0]) == '(ask)' for d in vms.globals['lzs:*lists*']))
+check("and choosing it sends nothing at all",
+      'If combo.SelectedIndex <= 0 Then Return ""' in SPA)
+
+# every table the form reads is one the generator writes
+for table in ('SpaLists', 'SpaTreatments', 'SpaSizedTreatments',
+              'SpaCoverLap', 'SpaSheetFor'):
+    check("SpaChartView reads ChartCatalog.%s" % table,
+          ('ChartCatalog.' + table) in SPA)
+
+# and the spa form is the one the palette mounts
+check("the palette mounts the drawn spa sheet, not a photograph",
+      'New SpaChartView()' in PAL and 'SpaFormView' not in PAL)
+check("the shape art it used to need is gone",
+      not (ROOT / 'ui' / 'calofin_net' / 'assets' / 'shapes').exists(),
+      "assets/shapes is still there and nothing reads it")
+check("the vbproj no longer copies it",
+      'assets\\shapes' not in read(ROOT / 'ui' / 'calofin_net' /
+                                   'Calofin.vbproj'))
+# the bottom tab IS still a photograph, and says so
+check("the bottom art stays, because that tab still needs it",
+      (ROOT / 'ui' / 'calofin_net' / 'assets' / 'bottoms').exists()
+      and 'assets\\bottoms' in read(ROOT / 'ui' / 'calofin_net' /
+                                    'Calofin.vbproj'))
+
+check("the spa form shares the state line too",
+      'FormWire.Line(_boxes)' in SPA)
+check("and does not read a measurement itself", 'TryParse' not in SPA)
 
 
 print()

@@ -24,10 +24,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Shape art travels with the assembly; ShapeCatalog.ImagePath
-         resolves it relative to the loaded DLL. -->
-    <None Include="assets\shapes\*.png" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="assets\shapes\fieldmap.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The BOTTOM sections travel with the assembly; BottomCatalog
+         .ImagePath resolves them relative to the loaded DLL.  The plan
+         shapes used to be here too, as PNGs with a field map of nudged
+         fractions; the chart forms draw from ChartCatalog's vectors
+         instead and there is nothing left for them to photograph. -->
     <None Include="assets\bottoms\*.png" CopyToOutputDirectory="PreserveNewest" />
     <None Include="assets\bottoms\fieldmap.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

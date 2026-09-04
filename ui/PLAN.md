@@ -19,7 +19,7 @@ record of how the palette got here; that one is where it goes.
 | Availability glue — `ui/calofin_ui/calofin.lsp` | **done.** `calofin:loaded` reports which `C:` names exist; the roster now mirrors LAZPANEL's 60 headline commands and is pinned by `tests/test_shared.py` |
 | Wire format — `LispBridge.vb` | **done.** Alist literal, invariant-culture numbers, three-state nil handling |
 | Shape art + field maps — `assets/` | **done.** 12 shapes, 12 bottoms, fractional field positions |
-| Form views — `SpaFormView.vb`, `PoolFormView.vb` | **done.** Collect answers, build the call; spa corners offer the canonical `Square/Radius/Cut/NotGiven` |
+| Form views | **done, and since replaced.** `SpaFormView.vb` and `PoolFormView.vb` collected answers over cropped artwork; the spa half is now `SpaChartView.vb`, drawn from `ChartCatalog`'s vectors, and `PoolFormView.vb` keeps the bottom section because that tab is still a photograph. `ui/UI-PLAN.md` phases 5c-5g |
 | **The receiving end in Lisp** | **done, five tools.** `pool:*form*` / `pool:run-with-answers`, `spa:*form*` / `spa:run-with-answers`, and `*cs-form*` / `*hs-form*` / `*ns-form*` for the three step routines - hooks in the ask helpers, consume-once, cleared on both exits |
 | Zero-install charts — `LAZFORM`, `LAZSPA`, `LAZSTEP` | **done.** The same argument as this palette, in plain DCL with no DLL to `NETLOAD`: a chart is filled in and the routine runs from it. They drive the stores below through the same three-state contract the wire uses |
 
@@ -90,8 +90,12 @@ reasons still matter:
   5. Press Draw, let POOL run, reopen the tab and press **Recall last**:
      the numbers should come back into the empty boxes only.
   6. On **Steps**, pick 5 steps and confirm the drawing has five treads.
-  7. On **Spa**, run the form once with a `NotGiven` corner and confirm
-     the `?` mark lands.
+  7. On **Spa**, set a corner to `Diagonal` and give it a size; the size
+     should travel.  Set another to `90` and type a size anyway -- that
+     one should NOT, because 90 asks for no number.  Then run the form
+     once leaving a corner on `(ask)` and confirm SPA asks for it, and
+     once answering it `NotGiven` at the command line to confirm the `?`
+     mark still lands.
 - **The two form surfaces, held together.** *(closed 2026-09-03.)*
   `tests/test_spa_form.py` section 15 now asserts that every question
   `LAZSPA`'s DCL chart asks is answerable on the palette too. It reads
@@ -101,10 +105,16 @@ reasons still matter:
   (`mode`, `second`, `method`, `gap`, `autohinge`, `grade`, `taper`)
   and the shape word live in `SpaFormView.vb`'s view model. Reading the
   map alone says the palette cannot ask for the cover lap, which is
-  wrong -- and was the first thing this check had to be taught. The VB
-  literals are parsed, not listed, so a key it stops sending fails the
-  suite. The two surfaces were found to be fully in step: 19, 17 and 11
-  questions on the three shapes, all answerable on both.
+  wrong -- and was the first thing this check had to be taught. The two
+  surfaces were found to be fully in step: 19, 17 and 11 questions on
+  the three shapes, all answerable on both.
+
+  *(2026-09-04: there are no longer two copies to compare. The map and
+  the view model are gone; `ChartCatalog.g.vb` is generated from
+  LAZSPA's own tables and `SpaChartView.vb` draws from it. The section
+  still runs, and still reports 19, 17 and 11 -- it asks whether the
+  GENERATOR carried every table rather than whether two hand-kept
+  copies agree, which is the way that surface can still go wrong.)*
 
 - **The button catalog.**  *(closed 2026-09-04.)*  It is generated:
   `tools/gen_ui_data.py` writes `Generated/CommandCatalog.g.vb` from

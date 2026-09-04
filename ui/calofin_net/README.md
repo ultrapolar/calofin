@@ -1,9 +1,9 @@
 # Calofin palette
 
 A dockable AutoCAD palette for the routines in this repository: find a
-tool by name or by what it does, reach for the ones you use, and fill
-in a form for `SPA` with the measurements you have, leaving the rest
-blank.
+tool by name or by what it does, reach for the ones you use, and fill in
+the pool, spa and step sheets with the measurements you have, leaving
+the rest blank.
 
 ## Why VB.NET and not VBA
 
@@ -233,39 +233,60 @@ stopped checking fails the suite.
    its own absence.
 3. Type `CALOFIN`.
 
-`assets/shapes/*.png` must sit next to the DLL; the project copies them
-on build.
+`assets/bottoms/*.png` must sit next to the DLL; the project copies them
+on build. (The plan shapes used to need the same treatment; the chart
+forms draw from vectors now and there is nothing to copy.)
 
 For a permanent install put the DLL, the assets folder and
 `calofin.lsp` in a bundle under `%APPDATA%\Autodesk\ApplicationPlugins\`
 so it autoloads, and add the folder to the trusted paths.
 
-## The shape diagrams
+## The Spa tab
 
-`assets/shapes/` holds twelve pool shapes cropped from the shape chart.
-`fieldmap.json` records where each dimension letter sits — as a
-**fraction** of the image, so boxes track their letters as the palette is
-resized — and which Lisp key it feeds.
+`LAZSPA`'s sheet, drawn, with everything SPA asks around it: the chart's
+dimensions on the drawing, then the four corners, the other outline and
+the cover.
 
-Three things the map has to translate rather than assume:
+All of it comes from `ChartCatalog`, which is generated from LAZSPA's
+own tables — `lzs:*charts*` for the geometry, `lzs:*corners*` for the
+corner rows, `lzs:*second*` for the other outline's overalls (keys that
+are **per shape**: the rectangle's pair is `w2`/`l2`, the octagon's is
+`b2`/`a2` plus the cut face `f2`), `lzs:*lists*` for the six dropdowns
+and `lzs:*ctreat*` for the corner treatments.
 
-- **Chart letters are not always the Lisp keys.** Octagon and Round line
-  up 1:1 (their prompts literally read `B - overall size ACROSS`), but
-  the Rectangle flow calls the same two overalls `w` and `l`.
-- **`SPA.LSP` reuses A–D for corner positions** (A bottom-left, B
-  bottom-right, C top-right, D top-left), which collides with the chart's
-  A/B *dimension* letters. Corner fields are keyed `cornera-ty` /
-  `cornera-sz` and kept separate so the two senses never merge.
-- **These are pool charts.** Every shape carries letters SPA never asks
-  for — H, G, F, E, M, K, L are hopper, step and depth dimensions
-  belonging to `POOL.LSP`. They are listed as `inactive`.
+**The corner dropdown speaks the sheet legend** — `90` / `Radius` /
+`Diagonal` — and the palette sends those words as written. SPA
+normalises them onto the canonical `Square` / `Radius` / `Cut` /
+`NotGiven` set itself, and a palette that translated helpfully would be
+a second opinion about a rename the routine already handles. A size
+travels only when the treatment takes one, which is `lzs:cornerpairs`'
+rule.
 
-Positions are seeded estimates read off the crops, meant to be nudged
-against the real artwork. Nothing depends on them being exact.
+A dropdown left on `(ask)` sends nothing at all: the key stays absent
+and SPA asks at the command line, which is the same answer as an empty
+box.
 
-Nine of the twelve shapes are POOL shapes awaiting phase 3.
+### What used to be here
+
+`assets/shapes/` held twelve cropped PNGs and a `fieldmap.json` giving
+each box a **fraction** of the image to sit at — positions the README
+called "seeded estimates read off the crops, meant to be nudged against
+the real artwork". The chart is drawn from its own vectors now, so a box
+needs no fraction: it belongs at the midpoint of the line it measures.
+The art and the map are gone, and `tests/test_spa_form.py` sections 14
+and 15 read the generated catalog where they used to read the JSON.
+
+The one thing the map had to translate is worth keeping written down,
+because the catalog still carries it: **a chart letter is not always the
+Lisp key.** Octagon and Round line up 1:1 — their prompts literally read
+`B - overall size ACROSS` — but the Rectangle flow calls the same two
+overalls `w` and `l`, and `SPA.LSP` reuses A–D for corner *positions*,
+which collides with the chart's A/B *dimension* letters. That is why a
+`ChartDim` carries the letter and the key as two separate fields, and
+why a corner's answers are keyed `cornera-ty` / `cornera-sz` off a stem.
 
 ## Pool bottoms
+
 
 `assets/bottoms/` holds the twelve side-view bottom types from the Bottom
 Types chart. **POOL draws six of them** — `pool:*btypes*` is the

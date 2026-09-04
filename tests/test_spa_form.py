@@ -446,33 +446,54 @@ print("   width form-answered, backed onto, and re-asked at the keyboard")
 # --------------------------------------------------------------------
 # 14. Every key the palette CAN send is one the routine reads.  The
 #     alignment audit in ui/PLAN.md was true the day it was written;
-#     this keeps it true: a key added to the field map that SPA never
-#     consumes fails here instead of vanishing silently.
+#     this keeps it true: a key the palette starts offering that SPA
+#     never consumes fails here instead of vanishing silently.
+#
+#     THE PALETTE'S SURFACE IS A GENERATED TABLE NOW.  It used to be
+#     assets/shapes/fieldmap.json -- a photograph of each chart with a
+#     hand-nudged fraction per box -- plus the cover block typed into
+#     SpaFormView.vb.  Both are gone: ChartCatalog.g.vb is written from
+#     lzs:*charts*, lzs:*corners*, lzs:*second* and lzs:*lists* by
+#     tools/gen_ui_charts.py, and SpaChartView.vb draws from it.  So the
+#     surface is read from the catalog, and there is no second copy of
+#     these keys anywhere to drift.
 # --------------------------------------------------------------------
-print("== 14. the field map sends no key the routine cannot read ==")
+print("== 14. the palette sends no key the routine cannot read ==")
 
-import json
 import re as _re
 
-FIELDMAP = os.path.join(os.path.dirname(__file__), '..', 'ui',
-                        'calofin_net', 'assets', 'shapes', 'fieldmap.json')
+CATALOG = os.path.join(os.path.dirname(__file__), '..', 'ui',
+                       'calofin_net', 'Generated', 'ChartCatalog.g.vb')
+_cat = open(CATALOG, encoding='utf-8', errors='replace').read()
 
 
-def _map_keys(node, out):
-    if isinstance(node, dict):
-        if isinstance(node.get('key'), str):
-            out.add(node['key'].lower())
-        for v in node.values():
-            _map_keys(v, out)
-    elif isinstance(node, list):
-        for v in node:
-            _map_keys(v, out)
-    return out
+def _catalog_section(opener):
+    i = _cat.index(opener)
+    return _cat[i:_cat.index("\n    }", i)]
 
 
-_fm = json.load(open(FIELDMAP))
-sent = _map_keys({k: v for k, v in _fm.items()
-                  if k in ('shapes', '_secondOutline')}, set())
+# every measurement key on a spa sheet: the chart's own dimensions, its
+# column-only keys, and the other outline's overalls
+sent = set(m.group(1).lower() for m in _re.finditer(
+    r'New ChartDim\("[^"]*", "([a-z0-9]+)"',
+    _catalog_section("ReadOnly Spa As Chart() = {")))
+sent |= set(m.group(1).lower() for m in _re.finditer(
+    r'New ListKey\("([a-z0-9]+)"',
+    _catalog_section("ReadOnly Spa As Chart() = {")))
+_spa_sheets = _catalog_section("ReadOnly SpaSheets As SpaSheet() = {")
+sent |= set(m.group(1).lower() for m in _re.finditer(
+    r'New ListKey\("([a-z0-9]+)"', _spa_sheets))
+# the corner stems become two keys apiece
+for _m in _re.finditer(r'New SpaCornerRow\("([a-z]+)"', _spa_sheets):
+    sent.add(_m.group(1).lower() + '-ty')
+    sent.add(_m.group(1).lower() + '-sz')
+# the list questions, and the cover lap
+sent |= set(m.group(1).lower() for m in _re.finditer(
+    r'New Choice\("([a-z0-9]+)"', _cat))
+sent |= set(m.group(1).lower() for m in _re.finditer(
+    r'SpaCoverLap As ListKey = New ListKey\("([a-z0-9]+)"', _cat))
+assert len(sent) > 15, "the spa surface came back too small: %r" % sorted(sent)
+
 _src = open(LSP, encoding='utf-8', errors='replace').read()
 # SPA takes a keyed answer two ways, and the check has to know both or
 # it rejects a legitimate key: the (list 'k 'REQ) tables that askseqb
@@ -486,10 +507,23 @@ readable |= set(m.group(1).lower() for m in
                              _src))
 readable |= set(m.group(1).lower() for m in
                 _re.finditer(r"\(spa:f(?:has|take)\s+'([a-z][a-z0-9]*)", _src))
+# A CORNER's two keys are BUILT at run time -- (strcat stem "-ty") off
+# whatever spa:fckey folds the question's label to -- so no literal
+# "cornera-ty" appears in SPA.LSP and a plain scan calls them invented.
+# spa:fckey is the rule: "Corner A" folds to cornera, and the all-same
+# round is answered by corner A's boxes.  Read that rather than listing
+# the four, so a fifth corner on some future shape needs no edit here.
+_fckey = _re.search(r'\(defun spa:fckey .*?\n\n', _src, _re.S)
+assert _fckey, "spa:fckey has moved or changed shape"
+assert '(strcat "corner" (substr s 8))' in _fckey.group(0), \
+    "spa:fckey no longer builds a corner stem as corner<letters>"
+for _stem in _re.findall(r'New SpaCornerRow\("([a-z]+)"', _spa_sheets):
+    readable.add(_stem + '-ty')
+    readable.add(_stem + '-sz')
 unread = sorted(sent - readable)
 assert not unread, \
-    "the spa field map sends keys SPA.LSP never reads: %s" % unread
-print("   %d field-map keys, every one a keyed item in SPA.LSP" % len(sent))
+    "the spa palette sends keys SPA.LSP never reads: %s" % unread
+print("   %d palette keys, every one a keyed item in SPA.LSP" % len(sent))
 
 
 # --------------------------------------------------------------------
@@ -502,54 +536,62 @@ print("   %d field-map keys, every one a keyed item in SPA.LSP" % len(sent))
 #     had already parted once (the palette shipped 60 of the panel's
 #     67 commands).
 #
-#     THE FIELD MAP IS NOT THE WHOLE PALETTE.  fieldmap.json describes
-#     the fields anchored to the ARTWORK plus the second-outline
-#     overalls; the cover block -- mode, second, method, gap,
-#     autohinge, grade, taper -- and the shape itself are carried by
-#     SpaFormView.vb's own view model and never appear in the JSON.
-#     Reading the map alone therefore says the palette cannot ask for
-#     the cover lap, which is wrong.  So the palette's surface is read
-#     from BOTH files, and the VB literals are parsed rather than
-#     listed, so a key it stops sending fails here.
+#     IT IS ONE TABLE NOW.  The palette used to keep its own copy of
+#     this surface -- a photograph per shape with a nudged fraction per
+#     box in fieldmap.json, plus a cover block typed into
+#     SpaFormView.vb -- and this section had to read both files to see
+#     the whole of it.  ChartCatalog.g.vb is generated from LAZSPA's
+#     own tables now and SpaChartView.vb draws from it, so the check is
+#     no longer "do two copies agree" but "did the generator carry
+#     everything the chart asks".  That can still go wrong: a table the
+#     generator forgets is a question the palette silently stops
+#     offering.
 # --------------------------------------------------------------------
 print("== 15. LAZSPA and the palette ask the same questions ==")
 
 LAZSPA = os.path.join(os.path.dirname(__file__), '..', 'lisp', 'lazspa',
                       'LAZSPA.lsp')
-VBFORM = os.path.join(os.path.dirname(__file__), '..', 'ui', 'calofin_net',
-                      'SpaFormView.vb')
-
-_vb = open(VBFORM, encoding='utf-8', errors='replace').read()
-# ANY list, not just one called "pairs".  The form now builds two --
-# literals, which travel as written, and measures, which are read on the
-# Lisp side by the same reader the DCL charts use -- and reading only
-# the first would quietly stop checking every measurement on the sheet.
-vb_literal = set(m.group(1).lower() for m in _re.finditer(
-    r'\w+\.Add\(LispBridge\.\w+\("([a-z0-9]+)"', _vb))
-assert vb_literal, "no LispBridge pairs found - has SpaFormView.vb been reshaped?"
 
 _lv = VM()
 _lv.load(LAZSPA)
 _lv.loads('(setq t:*charts* lzs:*charts*)')
-_bykey = {str(c[0]).lower(): str(c[0]) for c in _lv.globals['t:*charts*']}
+
+# the palette's surface, per sheet, read out of the generated catalog
+_spa_charts = _catalog_section("ReadOnly Spa As Chart() = {")
+_per_sheet = {}
+for _blk in _spa_charts.split("\n        New Chart(")[1:]:
+    _key = _re.match(r'"([^"]+)"', _blk).group(1)
+    _per_sheet[_key.lower()] = set(
+        m.group(1).lower() for m in
+        _re.finditer(r'New ChartDim\("[^"]*", "([a-z0-9]+)"', _blk))
+    _per_sheet[_key.lower()] |= set(
+        m.group(1).lower() for m in
+        _re.finditer(r'New ListKey\("([a-z0-9]+)"', _blk))
+
+# what every sheet carries: the list questions and the cover lap
+_everywhere = set(m.group(1).lower() for m in
+                  _re.finditer(r'New Choice\("([a-z0-9]+)"', _cat))
+_everywhere |= set(m.group(1).lower() for m in _re.finditer(
+    r'SpaCoverLap As ListKey = New ListKey\("([a-z0-9]+)"', _cat))
+
+# and the per-sheet extras: corners, and the other outline's overalls
+for _blk in _spa_sheets.split("\n        New SpaSheet(")[1:]:
+    _key = _re.match(r'"([^"]+)"', _blk).group(1).lower()
+    _extra = set(m.group(1).lower() for m in
+                 _re.finditer(r'New ListKey\("([a-z0-9]+)"', _blk))
+    for _m in _re.finditer(r'New SpaCornerRow\("([a-z]+)"', _blk):
+        _extra.add(_m.group(1).lower() + '-ty')
+        _extra.add(_m.group(1).lower() + '-sz')
+    _per_sheet.setdefault(_key, set())
+    _per_sheet[_key] |= _extra
 
 # the shape word is matched WITHOUT case by spa:fshape, which is why
-# the map's "ROUnd" and LAZSPA's "ROund" are both right; the pairing
-# here is case-insensitive for the same reason
-for _sid, _sh in _fm['shapes'].items():
-    _real = _bykey.get(_sh['lispShape'].lower())
-    assert _real, ("the field map's %s names lispShape %r, which is no "
-                   "LAZSPA chart: %s"
-                   % (_sid, _sh['lispShape'], sorted(_bykey.values())))
-    palette = set(vb_literal)
-    for _d in _sh.get('dimensions', []):
-        palette.add(_d['key'].lower())
-    for _c in _sh.get('corners', []):
-        palette.add(_c['typeKey'].lower())
-        palette.add(_c['sizeKey'].lower())
-    for _f in _fm['_secondOutline']['fields']:
-        if _sid in [x.lower() for x in _f.get('shapes', [])]:
-            palette.add(_f['key'].lower())
+# the catalog's key and LAZSPA's are paired case-insensitively here
+for _c in _lv.globals['t:*charts*']:
+    _real = str(_c[0])
+    palette = set(_per_sheet.get(_real.lower(), set())) | _everywhere
+    assert palette, ("the catalog has no sheet for LAZSPA's %s - has "
+                     "gen_ui_charts.py stopped carrying it?" % _real)
 
     _lv.loads('(setq t:*ch* (lzs:chart "%s"))' % _real)
     _lv.loads('(setq t:*b* (lzs:boxkeys t:*ch*))'
@@ -557,17 +599,31 @@ for _sid, _sh in _fm['shapes'].items():
               '(setq t:*lk* (lzs:listkeys))')
     chart = set(str(x).lower() for x in (_lv.globals['t:*b*'] or []))
     chart |= set(str(x).lower() for x in (_lv.globals['t:*lk*'] or []))
-    for _c in (_lv.globals['t:*co*'] or []):
-        chart.add(str(_c[0]).lower() + '-ty')
-        chart.add(str(_c[0]).lower() + '-sz')
+    for _cr in (_lv.globals['t:*co*'] or []):
+        chart.add(str(_cr[0]).lower() + '-ty')
+        chart.add(str(_cr[0]).lower() + '-sz')
 
     missing = sorted(chart - palette)
     assert not missing, (
-        "%s: LAZSPA asks for %s and the palette has no way to answer - add "
-        "the field to fieldmap.json, or to SpaFormView.vb's cover block if "
-        "it is not anchored to the artwork" % (_sid, missing))
+        "%s: LAZSPA asks for %s and the palette has no way to answer - "
+        "the generator is not carrying that table: python3 "
+        "tools/gen_ui_charts.py" % (_real, missing))
     print("   %-10s %2d questions, every one answerable on both forms"
-          % (_sid, len(chart)))
+          % (_real.lower(), len(chart)))
+
+# and the form really does read those tables rather than keeping a
+# fourth copy of the questions
+_vb = open(os.path.join(os.path.dirname(__file__), '..', 'ui',
+                        'calofin_net', 'SpaChartView.vb'),
+           encoding='utf-8', errors='replace').read()
+for _needs in ('ChartCatalog.SpaLists', 'ChartCatalog.SpaTreatments',
+               'ChartCatalog.SpaSizedTreatments', 'ChartCatalog.SpaCoverLap',
+               'ChartCatalog.SpaSheetFor'):
+    assert _needs in _vb, \
+        "SpaChartView.vb no longer reads %s - has it started typing its " \
+        "own copy of the spa questions?" % _needs
+print("   the form reads all five spa tables rather than copying them")
+
 
 # --------------------------------------------------------------------
 # 16. ONE ROUND FOR ALL FOUR.  "Are all four corners the same?" <Yes>

@@ -429,14 +429,45 @@ to `lzt:treadkey` and to `lzt:form`'s own statement of why.
 It also puts the last of the generated geometry to work: before this,
 24 step sheets sat in `ChartCatalog` that nothing read.
 
-**Not there yet**, and named rather than left to be discovered: the spa
-sheet's corner treatments and cover block are not in the generated
-catalog (`lzs:*corners*` and the listkeys are separate tables), so the
-Spa tab stays the hand-built `SpaFormView` for now; the step form offers
-the chart's boxes but not `lzt:asks`' dropdowns and counters, which are
-answered at the command line; and `lzf:dead` still lives only in Lisp,
-so the palette shows every box a sheet has and lets the routine ignore
-what this page does not ask about.
+### Phase 5g -- the spa sheet, and the last photograph *(done 2026-09-04)*
+
+`SpaChartView.vb` replaces `SpaFormView.vb`, and the generator carries
+the four LAZSPA tables that are not the chart: `lzs:*corners*` for the
+corner rows, `lzs:*second*` for the other outline's overalls (keys that
+are per shape), `lzs:*lists*` for the six dropdowns and `lzs:*ctreat*`
+for the treatments, plus the cover lap lifted out of the dialog builder
+where it is a box rather than a table row.
+
+They are kept BESIDE `Chart` rather than folded into it. LAZFORM has a
+corner table too and it is a different shape -- four slots, with
+collective questions covering several corners at once -- so one
+structure for both would be a lie about one of them.
+
+**The corner dropdown speaks the sheet legend** (`90` / `Radius` /
+`Diagonal`) and sends those words as written; SPA normalises them onto
+the canonical set itself, and a palette that translated would be a
+second opinion about a rename the routine already handles. A size
+travels only when the treatment takes one -- `lzs:cornerpairs`' rule.
+
+**The last photograph on this surface is the pool bottom.**
+`assets/shapes/` and its `fieldmap.json` -- twelve crops and the
+"seeded estimates" the README admitted to -- are deleted, because the
+sheet is drawn now and a box needs no fraction. `assets/bottoms/` stays,
+because `PoolFormView` is still a picture of a section.
+
+`tests/test_spa_form.py` sections 14 and 15 read the generated catalog
+where they read the JSON and the view model, and section 15's question
+changed with them: not "do two copies agree" but "did the generator
+carry every table". Same three counts as before -- 19, 17 and 11 -- which
+is the point.
+
+**Not there yet**, and named rather than left to be discovered: the
+step form offers the chart's boxes but not `lzt:asks`' dropdowns and
+counters, which stay command-line questions; the pool bottom tab is
+still artwork with a field map; the pool chart form does not offer
+`lzf:*corners*`, its cross-dim modes or its picks; and `lzf:dead`
+lives only in Lisp, so a form shows every box its sheet has and lets
+the routine ignore what this page does not ask about.
 
 Still open, and genuinely blocked on a machine with a compiler:
 

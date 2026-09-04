@@ -44,6 +44,7 @@ the routine ask for the rest, which is the wire's contract already.
 import argparse
 import os
 import pathlib
+import re
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -195,6 +196,55 @@ def read_steps():
     return top, routines, out
 
 
+def read_spa_extras():
+    """LAZSPA's tables that are not the chart: the list questions, the
+    corner rows, the other outline's overalls, the per-sheet hint.
+
+    Kept SEPARATE from Chart rather than folded into it.  LAZFORM has a
+    corner table too and it is a different shape -- four slots, with
+    collective questions covering several corners at once -- so one
+    structure for both would be a lie about one of them.  These are
+    LAZSPA's, and they are spelled as such.
+    """
+    vm = vm_for(LISP_DIR / "lazspa" / "LAZSPA.lsp")
+    src = read(LISP_DIR / "lazspa" / "LAZSPA.lsp")
+
+    lists = []
+    for d in vm.globals["lzs:*lists*"]:
+        lists.append((str(d[0]), str(d[1]),
+                      [str(v) for v in d[2]]))
+
+    treatments = [str(v) for v in vm.globals["lzs:*ctreat*"]]
+    #: which treatment words carry a size, asked of lzs:sized rather
+    #: than read off its body -- 2 and 3 are indices into the list above
+    sized = []
+    for i, word in enumerate(treatments):
+        vm.loads("(setq t:*s* (lzs:sized %d))" % i)
+        if vm.globals["t:*s*"]:
+            sized.append(word)
+
+    #: the cover lap is a box the dialog builds rather than a table row
+    m = re.search(r'\(lzs:box "gap" "([^"]+)"', src)
+    gap = ("gap", m.group(1) if m else "How far the cover laps")
+
+    sheets = []
+    for c in vm.globals["lzs:*charts*"]:
+        key = str(c[0])
+        vm.loads('(setq t:*c* (lzs:chart "%s"))' % key)
+        vm.loads("(setq t:*co* (lzs:corners t:*c*))")
+        vm.loads("(setq t:*se* (lzs:second t:*c*))")
+        vm.loads("(setq t:*hi* (lzs:hint t:*c*))")
+        sheets.append({
+            "key": key,
+            "hint": str(vm.globals["t:*hi*"] or ""),
+            "corners": [(str(d[0]), str(d[1]))
+                        for d in (vm.globals["t:*co*"] or [])],
+            "second": [(str(d[0]), str(d[1]))
+                       for d in (vm.globals["t:*se*"] or [])],
+        })
+    return lists, treatments, sized, gap, sheets
+
+
 # ------------------------------------------------------------ emitting
 
 def vbstr(s):
@@ -283,6 +333,75 @@ def step_block(c, indent):
     L[-1] += ","
     L.append("%sNew Double() {%s})"
              % (inner, ", ".join(num(y) for y in c["cuts"])))
+    return L
+
+
+def spa_block(lists, treatments, sized, gap, sheets):
+    """The LAZSPA-only tables."""
+    L = []
+    add = L.append
+    add("")
+    add("    ''' <summary>The spa questions answered from a LIST rather than")
+    add("    ''' typed - lzs:*lists*. The first option is always \"(ask)\",")
+    add("    ''' and choosing it sends nothing at all: the key stays absent")
+    add("    ''' and SPA asks at the command line.</summary>")
+    add("    Public Shared ReadOnly SpaLists As Choice() = {")
+    for i, (key, label, options) in enumerate(lists):
+        add("        New Choice(%s, %s, New String() {%s})%s"
+            % (vbstr(key), vbstr(label),
+               ", ".join(vbstr(o) for o in options),
+               "," if i < len(lists) - 1 else ""))
+    add("    }")
+    add("")
+    add("    ''' <summary>lzs:*ctreat*: the words the corner dropdown")
+    add("    ''' offers. They are the SHEET LEGEND's -- 90 / Radius /")
+    add("    ''' Diagonal -- and SPA normalises them onto the canonical")
+    add("    ''' Square / Radius / Cut / NotGiven set itself, which is why")
+    add("    ''' the palette must send them as written and not")
+    add("    ''' helpfully translate.</summary>")
+    add("    Public Shared ReadOnly SpaTreatments As String() = {%s}"
+        % ", ".join(vbstr(t) for t in treatments))
+    add("")
+    add("    ''' <summary>The treatments that carry a size, asked of")
+    add("    ''' lzs:sized rather than read off it. 90 sets back nothing")
+    add("    ''' and asks for no number.</summary>")
+    add("    Public Shared ReadOnly SpaSizedTreatments As String() = {%s}"
+        % ", ".join(vbstr(t) for t in sized))
+    add("")
+    add("    ''' <summary>The cover lap. A box the dialog builds rather")
+    add("    ''' than a table row, so it is lifted out of the source.")
+    add("    ''' </summary>")
+    add("    Public Shared ReadOnly SpaCoverLap As ListKey = "
+        "New ListKey(%s, %s)" % (vbstr(gap[0]), vbstr(gap[1])))
+    add("")
+    add("    ''' <summary>What a spa sheet has that a pool sheet has not:")
+    add("    ''' its corner rows, the other outline's overalls under keys")
+    add("    ''' that are PER SHAPE, and the line the page prints.")
+    add("    '''")
+    add("    ''' <para>Kept beside Chart rather than inside it. LAZFORM has")
+    add("    ''' a corner table too and it is a different shape -- four")
+    add("    ''' slots, with collective questions covering several corners")
+    add("    ''' at once -- so one structure for both would be a lie about")
+    add("    ''' one of them.</para></summary>")
+    add("    Public Shared ReadOnly SpaSheets As SpaSheet() = {")
+    for i, sh in enumerate(sheets):
+        add("        New SpaSheet(%s, %s," % (vbstr(sh["key"]),
+                                              vbstr(sh["hint"])))
+        L.extend(array("SpaCornerRow",
+                       ["            New SpaCornerRow(%s, %s)%s"
+                        % (vbstr(k), vbstr(lb),
+                           "," if j < len(sh["corners"]) - 1 else "")
+                        for j, (k, lb) in enumerate(sh["corners"])],
+                       "            "))
+        L[-1] += ","
+        L.extend(array("ListKey",
+                       ["            New ListKey(%s, %s)%s"
+                        % (vbstr(k), vbstr(lb),
+                           "," if j < len(sh["second"]) - 1 else "")
+                        for j, (k, lb) in enumerate(sh["second"])],
+                       "            "))
+        L[-1] += ")" + ("," if i < len(sheets) - 1 else "")
+    add("    }")
     return L
 
 
@@ -450,6 +569,54 @@ Public NotInheritable Class ChartCatalog
         End Sub
     End Structure
 
+    ''' <summary>A question answered from a list rather than typed. The
+    ''' first option is "(ask)": choosing it sends nothing and the
+    ''' routine asks at the command line.</summary>
+    Public Structure Choice
+        Public ReadOnly Key As String
+        Public ReadOnly Label As String
+        Public ReadOnly Options As String()
+
+        Public Sub New(key As String, label As String, options As String())
+            Me.Key = key
+            Me.Label = label
+            Me.Options = options
+        End Sub
+    End Structure
+
+    ''' <summary>One corner of a spa sheet. Its two answers are keyed off
+    ''' the stem: cornera-ty for the treatment, cornera-sz for the size
+    ''' the treatment carries.</summary>
+    Public Structure SpaCornerRow
+        Public ReadOnly Stem As String
+        Public ReadOnly Label As String
+
+        Public Sub New(stem As String, label As String)
+            Me.Stem = stem
+            Me.Label = label
+        End Sub
+    End Structure
+
+    ''' <summary>What a spa sheet has that a pool sheet has not.</summary>
+    Public Structure SpaSheet
+        ''' <summary>The chart this belongs to.</summary>
+        Public ReadOnly Key As String
+        Public ReadOnly Hint As String
+        Public ReadOnly Corners As SpaCornerRow()
+        ''' <summary>The other outline's overalls, under keys that are
+        ''' PER SHAPE: the rectangle's pair is w2/l2, the octagon's is
+        ''' b2/a2 plus the cut face f2.</summary>
+        Public ReadOnly Second As ListKey()
+
+        Public Sub New(key As String, hint As String,
+                       corners As SpaCornerRow(), second As ListKey())
+            Me.Key = key
+            Me.Hint = hint
+            Me.Corners = corners
+            Me.Second = second
+        End Sub
+    End Structure
+
     ''' <summary>One step routine: the command a drafter knows it by,
     ''' its title, and the entry point a form hands its answers to.
     ''' All three come from lzt:*types*.</summary>
@@ -506,6 +673,17 @@ TAIL = """
         For Each c In charts
             If String.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase) Then
                 Return c
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>The spa extras for a sheet, or one with a Nothing Key
+    ''' when there are none.</summary>
+    Public Shared Function SpaSheetFor(key As String) As SpaSheet
+        For Each s In SpaSheets
+            If String.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase) Then
+                Return s
             End If
         Next
         Return Nothing
@@ -576,6 +754,8 @@ def build():
             block[-1] += ","
         L.extend(block)
     add("    }")
+
+    L.extend(spa_block(*read_spa_extras()))
     add(TAIL)
     return "\n".join(L)
 
