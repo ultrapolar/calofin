@@ -180,9 +180,9 @@ check("CommandCatalog declares what the palette reads",
 # name Generated\CommandCatalog.g.vb, and a regex over the source reads
 # that filename as a member called "g"
 used = set()
-for _, _line, _ in check_vb.logical_lines(
+for _row in check_vb.logical_lines(
         read(cr.ROOT / 'ui' / 'calofin_net' / 'CalofinPalette.vb')):
-    used |= set(re.findall(r'CommandCatalog\.(\w+)', _line))
+    used |= set(re.findall(r'CommandCatalog\.(\w+)', _row[1]))
 check("every CommandCatalog member the palette uses exists",
       used <= types['CommandCatalog']['members'],
       repr(sorted(used - types['CommandCatalog']['members'])))

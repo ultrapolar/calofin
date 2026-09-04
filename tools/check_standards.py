@@ -28,6 +28,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import build_shared_bundle
 import check_registry
+import gen_ui_charts
 import gen_ui_data
 import mirror_shared
 import release_lisp
@@ -331,12 +332,13 @@ def check_generated(problems):
     """The generated files, checked by REGENERATION rather than by
     proxy: a hand-edited generated twin, a stale dated release, a
     bundle whose markers survive while its bodies drift, and the
-    palette's catalog left behind by a roster change all fail here and
-    nowhere else."""
+    palette's catalog or chart geometry left behind by a change to the
+    tables they come from all fail here and nowhere else."""
     problems.extend(mirror_shared.check())
     problems.extend(release_lisp.check())
     problems.extend(build_shared_bundle.check())
     problems.extend(gen_ui_data.check())
+    problems.extend(gen_ui_charts.check())
 
 
 def check_registrations(problems):

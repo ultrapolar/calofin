@@ -311,15 +311,51 @@ drawing a dead button, and **every message the Find page can print** --
 lifted out of `LAZPANEL.lsp` rather than typed, so re-wording one
 surface fails until the other follows.
 
+### Phase 5c -- the chart tables stop being written twice *(done 2026-09-04)*
+
+The open item below said the JSON field maps and `lzf:*charts*` are the
+same knowledge written twice, that the JSON positions are seeded
+estimates, and that generating them was blocked because nothing here
+could look at the result.
+
+The premise was the photograph. While the palette drew a **picture** of
+a chart, every box needed a fraction of that picture to sit at, and no
+generator can check by eye whether a fraction lands on a letter. Draw
+the chart from the **vectors** instead and the question disappears: a
+box belongs at the midpoint of the dimension line, in the chart's own
+co-ordinates, and there is nothing left to nudge.
+
+So `tools/gen_ui_charts.py` writes `Generated/ChartCatalog.g.vb` from
+`lzf:*charts*`, `lzs:*charts*` and `lzt:chart` -- read through
+`tests/lispvm.py`, so what is emitted is what the routine itself reads.
+13 pool sheets, 3 spa sheets, and 24 step sheets, because LAZSTEP builds
+its chart from the count rather than keeping a table and the generator
+asked it for every count the dialog accepts.
+
+**Arcs are flattened by the Lisp's own `lzX:flatten`** before they are
+written. The palette therefore has no arc arithmetic at all and cannot
+round an oval a different way from the panel -- and
+`tests/test_ui_charts.py` compares every point of every outline, which
+is the check that would catch a re-implementation creeping back in.
+
+What is NOT generated is as deliberate: `lzf:dead`, the cross-dim mode
+dropdowns, `lzf:picks` and the corner tables are RULES, and a second
+copy of a rule is the drift being closed. A palette form sends what was
+typed and lets the routine ask for the rest -- which is what the wire
+has always promised.
+
 Still open, and genuinely blocked on a machine with a compiler:
 
-- **The chart tables.** `assets/*/fieldmap.json` and `lzf:*charts*` are
-  the same knowledge written twice, and the READMEs already admit the
-  JSON positions are "seeded estimates". The Lisp tables are the ones
-  under test, so the JSON should be generated from them -- but nothing
-  here can look at the result, and a generated field map that lands the
-  boxes in the wrong place is worse than seeded estimates somebody
-  nudged by eye. **The half that does not need eyes is now checked**:
+- **The chart tables.** *(closed by phase 5c, by dropping the premise:
+  the geometry is generated and the palette draws it, so there are no
+  fractions left to land wrongly.* The paragraph below is kept because
+  it is the argument that had to be answered.) `assets/*/fieldmap.json`
+  and `lzf:*charts*` are the same knowledge written twice, and the
+  READMEs already admit the JSON positions are "seeded estimates". The
+  Lisp tables are the ones under test, so the JSON should be generated
+  from them -- but nothing here can look at the result, and a generated
+  field map that lands the boxes in the wrong place is worse than seeded
+  estimates somebody nudged by eye. **The half that does not need eyes is now checked**:
   `tests/test_spa_form.py` section 15 holds `LAZSPA`'s charts against
   the palette's whole surface -- the map AND the VB literals, since the
   cover block never appears in the JSON -- so a question one form can

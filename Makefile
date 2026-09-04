@@ -28,6 +28,7 @@ verify:
 	$(PY) tools/release_lisp.py --check
 	$(PY) tools/build_shared_bundle.py --check
 	$(PY) tools/gen_ui_data.py --check
+	$(PY) tools/gen_ui_charts.py --check
 
 lint:
 	$(PY) tools/check_lisp.py

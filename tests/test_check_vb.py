@@ -24,6 +24,9 @@ The awkward ones, all of which it got wrong first time round:
 * ``CommandCatalog.Entry`` -- a nested type IS a member of the type
   around it, and reading it as a missing one fails every call site that
   names it properly.
+* ``New Stroke() {...}`` -- an array CREATION, not a no-argument
+  constructor call; reading it as one failed every generated chart table
+  at once.
 
 Run: python3 tests/test_check_vb.py
 """
@@ -174,6 +177,31 @@ clean("a nested type named through the type around it", WRAP % '''
     End Function
 ''')
 
+clean("an array creation spelled with its type", WRAP % '''
+    Public Structure Entry
+        Public ReadOnly Command As String
+
+        Public Sub New(command As String)
+            Me.Command = command
+        End Sub
+    End Structure
+
+    Public Structure Sheet
+        Public ReadOnly Rows As Entry()
+
+        Public Sub New(rows As Entry())
+            Me.Rows = rows
+        End Sub
+    End Structure
+
+    Public Shared ReadOnly One As Sheet = New Sheet(New Entry() {
+        New Entry("POOL"),
+        New Entry("SPA")
+    })
+
+    Public Shared ReadOnly None As Sheet = New Sheet(New Entry() {})
+''')
+
 clean("For Each / Try / Select / With / Using", WRAP % '''
     Public Shared Sub Go(items As Object)
         For Each i In CType(items, System.Collections.IEnumerable)
@@ -275,6 +303,32 @@ bites("a Function closed by End Sub", WRAP % '''
         Return 1
     End Sub
 ''', "closes a Sub")
+
+
+print("== a problem inside a long table is reported where it is ==")
+
+# One statement, many lines.  Reported at the `= {` above it, the line
+# number would be useless on a generated table of seven hundred.
+LONG = WRAP % ("""
+    Public Structure Entry
+        Public ReadOnly Command As String
+
+        Public Sub New(command As String)
+            Me.Command = command
+        End Sub
+    End Structure
+
+    Public Shared ReadOnly All As Entry() = {
+        New Entry("A"),
+        New Entry("B"),
+        New Entry("C"),
+        New Entry("D", "and this one is wrong")
+    }
+""")
+problems = lint(LONG)
+check("the wrong row is named by ITS line, not the table's",
+      any(":17:" in p and "passes 2 arguments" in p for p in problems),
+      repr(problems))
 
 
 print("== it reads the real palette, and the palette is clean ==")

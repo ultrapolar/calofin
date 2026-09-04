@@ -196,7 +196,10 @@ pass.
 that list: `ui/calofin_net/Generated/CommandCatalog.g.vb` is written
 from `lzp:*captions*` and `lzp:*groups*` by `tools/gen_ui_data.py`, so
 a tool that is on the panel is in the palette by construction. Never
-hand-edit it. The only palette content still typed is the tooltip, and
+hand-edit it — and the same goes for `ChartCatalog.g.vb`, which
+`tools/gen_ui_charts.py` writes from the three chart tables. Change a
+chart in `LAZFORM`/`LAZSPA`/`LAZSTEP` and re-run that generator in the
+same commit, exactly as you would `mirror_shared.py`. The only palette content still typed is the tooltip, and
 it is typed in `blurbs.txt` — where the generator reads it, and where
 a missing one is reported rather than invented.
 
@@ -221,8 +224,9 @@ build drew loose lines where the standalone one drew a bounded polyline.
 ```
 python3 tools/check_standards.py # tiers in step, cal: clean, AND every
                                  # generated file byte-identical to a fresh
-                                 # regeneration (the four --check modes:
-                                 # mirror, releases, bundle, palette catalog)
+                                 # regeneration (five --check modes:
+                                 # mirror, releases, bundle, and the
+                                 # palette's catalog and charts)
 python3 tools/check_lisp.py [f]  # parens, arity, stray top-level atoms,
                                  # undefined/quoted-undefined functions;
                                  # no argument = every .lsp in both tiers
@@ -244,6 +248,9 @@ python3 tools/gen_ui_data.py     # rewrites the palette's catalog from
                         [--check]# LAZPANEL's tables; --check is the
                                  # staleness half, and check_standards
                                  # runs it
+python3 tools/gen_ui_charts.py   # the same for the palette's chart
+                        [--check]# geometry, out of lzf:/lzs:/lzt:'s own
+                                 # chart tables
 make check                       # all of the above in one go
 ```
 

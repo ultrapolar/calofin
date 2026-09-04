@@ -158,33 +158,51 @@ def strip_line(line):
 
 
 def logical_lines(src):
-    """(line number, joined code, quote count) per logical line.
+    """(first line, joined code, quote count, marks) per logical line.
 
     Continuations are joined so a table written across forty lines is
     balanced as the one statement it is.  Both spellings count: the
     explicit `` _`` and the implicit trailing comma or open bracket
     this source actually uses.
+
+    MARKS is [(offset into the joined code, source line)], which is what
+    lets a problem inside a generated table -- one statement, seven
+    hundred lines -- be reported at the line it is really on rather than
+    at the `= {` seven hundred lines above it.
     """
-    out, buf, start, depth, quotes = [], [], None, 0, 0
+    out, parts, marks, start, depth, quotes = [], [], [], None, 0, 0
     for n, raw in enumerate(src.splitlines(), 1):
         code, q = strip_line(raw)
-        if not code.strip() and not buf:
+        piece = code.strip()
+        if not piece and not parts:
             continue
         if start is None:
             start = n
-        buf.append(code.strip())
+        if piece:
+            marks.append((sum(len(p) + 1 for p in parts), n))
+            parts.append(piece)
         quotes += q
         depth += code.count("(") - code.count(")")
         depth += code.count("{") - code.count("}")
         depth += code.count("[") - code.count("]")
-        joined = " ".join(x for x in buf if x)
         if depth > 0 or CONTINUES.search(code.rstrip()):
             continue
-        out.append((start, re.sub(r"\s+_$", "", joined).strip(), quotes))
-        buf, start, quotes = [], None, 0
-    if buf:
-        out.append((start, " ".join(buf).strip(), quotes))
+        out.append((start, re.sub(r"\s+_$", "", " ".join(parts)).strip(),
+                    quotes, marks))
+        parts, marks, start, quotes = [], [], None, 0
+    if parts:
+        out.append((start, " ".join(parts).strip(), quotes, marks))
     return out
+
+
+def line_at(marks, offset):
+    """The source line an offset into a joined logical line came from."""
+    found = marks[0][1] if marks else 0
+    for off, n in marks:
+        if off > offset:
+            break
+        found = n
+    return found
 
 
 # ------------------------------------------------------------- checks
@@ -219,7 +237,7 @@ def opens(line):
 def structure_problems(rel, lines):
     """Blocks opened and closed, in order."""
     problems, stack = [], []
-    for i, (n, line, quotes) in enumerate(lines):
+    for i, (n, line, quotes, _marks) in enumerate(lines):
         if quotes % 2:
             problems.append("%s:%d: odd number of quote marks - an "
                             "unterminated string literal" % (rel, n))
@@ -268,7 +286,7 @@ def structure_problems(rel, lines):
 
 def paren_problems(rel, lines):
     out = []
-    for n, line, _ in lines:
+    for n, line, _, _marks in lines:
         for opener, closer, what in (("(", ")", "paren"),
                                      ("{", "}", "brace")):
             d = line.count(opener) - line.count(closer)
@@ -309,7 +327,7 @@ def declared(files):
     for path in files:
         rel = rel_to_root(path)
         stack = []
-        for n, line, _ in logical_lines(read(path)):
+        for n, line, _, marks in logical_lines(read(path)):
             low = line.lower()
             if low.startswith("end ") and low.split()[1] in (
                     TYPE_KINDS + ("namespace", "sub", "function",
@@ -387,28 +405,36 @@ def reference_problems(files, types):
     names = set(types)
     for path in files:
         rel = rel_to_root(path)
-        for n, line, _ in logical_lines(read(path)):
+        for _n, line, _q, marks in logical_lines(read(path)):
             for m in re.finditer(r"(?<![\w.])([A-Z]\w*)\s*\.\s*(\w+)", line):
                 t, member = m.group(1), m.group(2)
-                if t not in names or types[t]["enum"] and False:
+                if t not in names:
                     continue
                 if member not in types[t]["members"]:
                     problems.append(
                         "%s:%d: %s has no member %s (it declares %s)"
-                        % (rel, n, t, member,
+                        % (rel, line_at(marks, m.start()), t, member,
                            ", ".join(sorted(types[t]["members"])) or "none"))
             for m in re.finditer(r"\bNew\s+([A-Z]\w*)\s*\(", line):
                 t = m.group(1)
                 if t not in names:
                     continue
-                arity = _args(_balanced(line, m.end() - 1))
+                inside = _balanced(line, m.end() - 1)
+                # `New Stroke() {...}` CREATES AN ARRAY of Stroke; it is
+                # not a no-argument constructor call, and reading it as
+                # one fails every generated table at once.  The `{` after
+                # the bracket is what tells them apart.
+                after = line[m.end() - 1 + len(inside) + 2:].lstrip()
+                if after.startswith("{"):
+                    continue
+                arity = _args(inside)
                 ctors = types[t]["ctors"] or {0}
                 if arity not in ctors:
                     problems.append(
                         "%s:%d: New %s(...) passes %d argument%s; %s takes "
-                        "%s" % (rel, n, t, arity, "" if arity == 1 else "s",
-                                t, " or ".join(str(c)
-                                               for c in sorted(ctors))))
+                        "%s" % (rel, line_at(marks, m.start()), t, arity,
+                                "" if arity == 1 else "s", t,
+                                " or ".join(str(c) for c in sorted(ctors))))
     return problems
 
 
@@ -431,7 +457,7 @@ def _balanced(line, open_at):
 def imports_problems(rel, lines):
     """Imports must precede every declaration; VB rejects a late one."""
     out, seen = [], False
-    for n, line, _ in lines:
+    for n, line, _, _marks in lines:
         if re.match(r"^Imports\b", line):
             if seen:
                 out.append("%s:%d: Imports after a declaration - VB wants "

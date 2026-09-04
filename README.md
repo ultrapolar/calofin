@@ -344,6 +344,7 @@ design it records (D1-D6) is what got built.
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns, and special forms given the wrong number of arguments (a four-argument `(if ...)` parses fine and dies at the command line) |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
 | `gen_ui_data.py` | Writes the palette's `Generated/CommandCatalog.g.vb` from `lzp:*captions*` / `lzp:*groups*` plus `ui/calofin_net/blurbs.txt`. `--check` fails when the file on disk is not what a fresh run would write, the same contract `releases/` is held to |
+| `gen_ui_charts.py` | Writes the palette's `Generated/ChartCatalog.g.vb` - the vector charts `LAZFORM`, `LAZSPA` and `LAZSTEP` draw - out of `lzf:*charts*`, `lzs:*charts*` and `lzt:chart`, read through `tests/lispvm.py`. Arcs are flattened by the Lisp's own helper, so the palette draws the same oval the panel does with no arc arithmetic of its own |
 | `check_vb.py` | Static check over the VB palette, for a tree with no VB compiler: blocks opened and closed by the right closer, quotes and parens balanced per logical line, and every member and constructor arity of the assembly's OWN types resolved - which is what holds the hand-written palette to the generated catalog |
 | `check_registry.py` | Every place a tool has to be registered - panel caption and placement, loader slot, README counts, the palette catalog and its probe list - with every count computed rather than typed; `--fix` repairs what is not editorial |
 
@@ -454,6 +455,10 @@ python3 tests/test_palette_shell.py   # the palette's Find/Recent/Pinned against
                                       # LAZPANEL's: one registry key, one cap,
                                       # and every Find message lifted out of the
                                       # Lisp rather than typed
+python3 tests/test_ui_charts.py       # the palette's generated chart geometry
+                                      # read back and held to lzf:/lzs:/lzt:'s
+                                      # own tables - every dimension, every
+                                      # outline point, arcs included
 python3 tests/test_cancel_paths.py    # every headline command cancelled at its
                                       # first prompt: the handler runs, settings
                                       # come back, no group or error mode left

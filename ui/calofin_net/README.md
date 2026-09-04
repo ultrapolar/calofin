@@ -110,6 +110,36 @@ rather than being invented.
 Adding a tool to the palette is therefore: put it on `LAZPANEL`, write
 its blurb, run the generator.
 
+## The chart geometry is generated too
+
+`Generated/ChartCatalog.g.vb` is the vector charts `LAZFORM`, `LAZSPA`
+and `LAZSTEP` draw, written from `lzf:*charts*`, `lzs:*charts*` and
+`lzt:chart` by `tools/gen_ui_charts.py`. It carries, per sheet: the
+outline as flat polylines, every dimension with the two ends of the line
+it measures, the column-only keys, the corner letters, and the answers
+the sheet implies.
+
+**Arcs arrive flattened**, by the Lisp's own `lzX:flatten`, so the
+palette needs no arc arithmetic and cannot round an oval a different way
+from the panel.
+
+That is what makes a real form possible here. While the palette drew a
+photograph of a chart, every box needed a hand-nudged fraction in
+`fieldmap.json` and the READMEs had to admit those were "seeded
+estimates". Drawn from the vectors, a box needs no position at all: it
+belongs at the **midpoint of its dimension line**, in the chart's own
+0..1000 co-ordinates.
+
+What the catalog deliberately does **not** carry is `lzf:dead`, the
+cross-dim mode dropdowns, `lzf:picks` and the corner tables. Those are
+rules -- what a page asks about given the bottom type and the in-square
+toggle -- and a second copy of a rule in VB is the drift all of this
+exists to end. A form sends what was typed; the routine asks for the
+rest, which is the wire's contract already.
+
+`tests/test_ui_charts.py` reads the VB back and holds every sheet,
+dimension and outline point to the Lisp table it came from.
+
 ## Nothing here can be compiled, so it is checked instead
 
 `tools/check_vb.py` reads every `.vb` in this folder the way
