@@ -254,6 +254,16 @@ check("the recall slot is lzt:recall-slot's TYPE-count",
 check("and it uses the step store, not the pool one",
       'RecallStore.StepKey' in STEP and 'RecallStore.PoolKey' not in STEP)
 
+# A binding fires TextChanged as it first fills an editor, and both the
+# sheet and the column rebuild their editors -- the sheet on every
+# resize.  Unguarded, dragging the palette's edge asks Lisp what the
+# sheet cannot read once per box per frame.
+for _name, _src in (('ChartFormView', CODE), ('StepFormView', STEP)):
+    check("%s does not restate while it is building rows" % _name,
+          '_building = True' in _src and 'If _building Then Return' in _src)
+check("the sheet does not raise a change while it is repainting",
+      '_painting = True' in CODE and 'If _painting Then Return' in CODE)
+
 check("the step form shares the state line rather than copying it",
       'FormWire.Line(_boxes)' in STEP
       and 'FormWire.Line(_boxes)' in CODE)

@@ -160,9 +160,14 @@ Public Class StepFormView
         For Each d In _current.Dims
             _boxes.Add(New ChartBox(d))
         Next
-        For Each b In _boxes
-            _rows.Children.Add(MakeRow(b))
-        Next
+        _building = True
+        Try
+            For Each b In _boxes
+                _rows.Children.Add(MakeRow(b))
+            Next
+        Finally
+            _building = False
+        End Try
         _sheet.Show(_current.Strokes, New ChartCatalog.Mark() {}, _boxes)
         Restate()
     End Sub
@@ -185,7 +190,14 @@ Public Class StepFormView
         Return row
     End Function
 
+    ''' <summary>True while the rows are being built. Each binding
+    ''' fires TextChanged as it first fills its editor, and restating on
+    ''' every one of those asks Lisp about a sheet nobody has typed in
+    ''' yet.</summary>
+    Private _building As Boolean
+
     Private Sub Restate()
+        If _building Then Return
         If _current.Routine Is Nothing Then Return
         Dim state = FormWire.Line(_boxes)
         _state.Text = state.Text

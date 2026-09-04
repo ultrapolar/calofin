@@ -314,6 +314,15 @@ Public Class ChartSheet
     Private _marks As ChartCatalog.Mark() = New ChartCatalog.Mark() {}
     Private ReadOnly _boxes As New List(Of ChartBox)
 
+    ''' <summary>True while Paint is rebuilding.
+    '''
+    ''' A binding fires TextChanged when it first sets a box's text, and
+    ''' Paint rebuilds every editor on every resize -- so without this,
+    ''' dragging the palette's edge would raise BoxChanged once per box
+    ''' per frame, and each one of those asks Lisp what the sheet cannot
+    ''' read. A resize changes nothing the drafter typed.</summary>
+    Private _painting As Boolean
+
     Public Event BoxChanged As EventHandler
 
     Public Sub New()
@@ -323,6 +332,7 @@ Public Class ChartSheet
     End Sub
 
     Private Sub Changed()
+        If _painting Then Return
         RaiseEvent BoxChanged(Me, EventArgs.Empty)
     End Sub
 
@@ -350,7 +360,17 @@ Public Class ChartSheet
         _canvas.Children.Clear()
         Dim w = ActualWidth, h = ActualHeight
         If w <= 0 OrElse h <= 0 Then Return
+        _painting = True
+        Try
+            Repaint(w, h)
+        Finally
+            _painting = False
+        End Try
+    End Sub
 
+    ''' <summary>The drawing itself, once Paint has the size and has
+    ''' hushed the change notifications.</summary>
+    Private Sub Repaint(w As Double, h As Double)
         Dim scale = Math.Min(w, h) / ChartCatalog.Span
         If scale <= 0 Then Return
         Dim ox = (w - ChartCatalog.Span * scale) / 2
@@ -548,9 +568,14 @@ Public Class ChartFormView
         Next
 
         _rows.Children.Clear()
-        For Each b In _boxes
-            _rows.Children.Add(MakeRow(b))
-        Next
+        _building = True
+        Try
+            For Each b In _boxes
+                _rows.Children.Add(MakeRow(b))
+            Next
+        Finally
+            _building = False
+        End Try
 
         _sheet.Show(_current.Strokes, _current.Marks, _boxes)
         Restate()
@@ -584,7 +609,14 @@ Public Class ChartFormView
 
     ''' <summary>Refresh the line and the Draw button from what is in the
     ''' boxes. The kit decides what it says; this only shows it.</summary>
+    ''' <summary>True while the rows are being built. Each binding
+    ''' fires TextChanged as it first fills its editor, and restating on
+    ''' every one of those asks Lisp about a sheet nobody has typed in
+    ''' yet.</summary>
+    Private _building As Boolean
+
     Private Sub Restate()
+        If _building Then Return
         If _current.Key Is Nothing Then Return
         Dim state = FormWire.Line(_boxes)
         _state.Text = state.Text
