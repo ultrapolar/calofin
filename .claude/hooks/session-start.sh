@@ -91,16 +91,21 @@ echo "  - only shared/parts/CALOFIN-LIB.lsp defines cal: symbols"
 echo "  - some tools are HELD BACK from LAZPASS.lsp on purpose - the list"
 echo "    and the reasons are cal:*held-back* in parts/CALOFIN-LOADER.lsp"
 echo "  - corner treatments are Square/Radius/Cut/NotGiven, nothing else"
+echo "  - the VB palette's tables are GENERATED from the Lisp - never hand-edit"
+echo "    ui/calofin_net/Generated/; re-run gen_ui_data.py / gen_ui_charts.py"
 echo "  - branch is '$BRANCH' - the trunk; push it at the end of the session, and"
 echo "    if the setup named another branch, push that too (same commit)"
 echo
-echo "Checks:  make check      (tiers in step + generated tiers current + lint)"
+echo "Checks:  make check      (tiers in step + generated files current + lint,"
+echo "                          check_vb reads the palette as code)"
 echo "Tests:   make test       (full suite, lisp/ tier - tools/run_tests.py)"
 echo "         make parity     (both tiers - the standalone-vs-grouped drift check)"
 echo "Known failing on a clean checkout: none - EXPECTED_FAILURES in"
 echo "  tools/run_tests.py is the authoritative (empty) list"
 echo "Forms:   POOL, SPA and the step routines all take an answer store;"
 echo "         a prompt edit shows up in test_*_form.py and the LAZ* suites"
+echo "Palette: the VB sends a box's TEXT and calofin.lsp reads it - there is"
+echo "         no measurement parser in the VB, and that is deliberate"
 echo
 
 # ---- the guardrail --------------------------------------------------
