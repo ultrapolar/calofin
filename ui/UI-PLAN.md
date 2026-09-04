@@ -281,6 +281,36 @@ panel -- deliberately not by calling the generator, which would only
 agree with itself -- and `tests/test_check_vb.py` drives the linter
 against VB that is wrong on purpose.
 
+### Phase 5b -- the palette catches up on phases 1 to 3 *(done 2026-09-04)*
+
+The panel had gained Find, Recents and Pins; the palette was still the
+flat list of grouped buttons it shipped as. It now carries all of it,
+and the tab strip it never had:
+
+- **Find** over names *and* captions, literal (`String.Contains`, for
+  `lzp:instr`'s reason), top hit selected as you type, Enter runs it.
+  A tool this session has not loaded is **listed** and refused with the
+  reason, while a tool on a page is **greyed** -- the same deliberate
+  opposition, and the same words, as the panel.
+- **Recent and Pinned rows**, pinned from any button's right click, a
+  row drawn only when it has something in it.
+- **Every page of the strip**, job pages included, as real tabs. This
+  is the one place the palette is plainly better than what it mirrors:
+  DCL has no tab tile, so LAZPANEL's strip closes the page and reopens
+  the next, and it blinks.
+
+**They share one store.** `PaletteMemory` writes `lzp:*pinkey*` --
+LAZPANEL's own registry key, values, `;`-joined format and cap of five
+-- so a drafter has one set of pins and cannot tell which surface they
+pinned from. That is the phase 5 thesis (*both surfaces, sharing a data
+layer*) applied to the half that is state rather than tables.
+
+`tests/test_palette_shell.py` holds the seam: the key, the value names,
+the cap, the newest-first rule, the roster filter that stops a stale pin
+drawing a dead button, and **every message the Find page can print** --
+lifted out of `LAZPANEL.lsp` rather than typed, so re-wording one
+surface fails until the other follows.
+
 Still open, and genuinely blocked on a machine with a compiler:
 
 - **The chart tables.** `assets/*/fieldmap.json` and `lzf:*charts*` are

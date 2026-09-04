@@ -21,6 +21,9 @@ The awkward ones, all of which it got wrong first time round:
   ``Get`` that follows.
 * ``AddHandler b.Click, Sub() Run()`` versus the same thing with the
   lambda's body on later lines -- one opens a block and one does not.
+* ``CommandCatalog.Entry`` -- a nested type IS a member of the type
+  around it, and reading it as a missing one fails every call site that
+  names it properly.
 
 Run: python3 tests/test_check_vb.py
 """
@@ -154,6 +157,21 @@ clean("a table written across many lines", WRAP % '''
         New Entry("POOL", "Pool layout"),
         New Entry("SPA", "Spa template")
     }
+''')
+
+clean("a nested type named through the type around it", WRAP % '''
+    Public Structure Entry
+        Public ReadOnly Command As String
+
+        Public Sub New(command As String)
+            Me.Command = command
+        End Sub
+    End Structure
+
+    Public Shared Function Make() As Fixture.Entry
+        Dim e As Fixture.Entry = New Entry("POOL")
+        Return e
+    End Function
 ''')
 
 clean("For Each / Try / Select / With / Using", WRAP % '''

@@ -90,6 +90,10 @@ reasons still matter:
   with it.  The one thing still typed is the tooltip, in `blurbs.txt`.
   See `ui/UI-PLAN.md` phase 5a for why generating VB is allowed when
   `check_registry --fix` refuses to.
+- **The shell.**  *(closed 2026-09-04.)*  Find, Recent, Pinned and the
+  panel's whole tab strip, sharing LAZPANEL's own registry key so the
+  pins are one set rather than two.  `ui/UI-PLAN.md` phase 5b.
+
 - **Generalising the hook into `cal:`.**  Putting the form store into
   the library would make every grouped tool form-drivable.  Real
   payoff, real design risk; the POOL/SPA pattern is now proven twice,

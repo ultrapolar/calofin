@@ -323,6 +323,11 @@ def declared(files):
                 types.setdefault(name, {"members": set(), "ctors": set(),
                                         "at": (rel, n), "enum": False})
                 types[name]["enum"] = m.group(1).lower() == "enum"
+                # a NESTED type is a member of the one around it:
+                # CommandCatalog.Entry is how a caller names it, and
+                # without this every such reference reads as missing
+                if stack and stack[-1][0] in TYPE_KINDS:
+                    types[stack[-1][1]]["members"].add(name)
                 stack.append((m.group(1).lower(), name))
                 continue
             #: only a declaration sitting straight inside a type counts

@@ -1,8 +1,9 @@
 # Calofin palette
 
-A dockable AutoCAD palette for the routines in this repository: a button
-for every command, and a form for `SPA` that lets you enter the
-measurements you have and leave the rest blank.
+A dockable AutoCAD palette for the routines in this repository: find a
+tool by name or by what it does, reach for the ones you use, and fill
+in a form for `SPA` with the measurements you have, leaving the rest
+blank.
 
 ## Why VB.NET and not VBA
 
@@ -43,6 +44,44 @@ dotnet build ui/calofin_net/Calofin.vbproj -c Release
 Shipping `acmgd.dll` / `acdbmgd.dll` beside the output makes AutoCAD load
 a second copy of its own API and fail in ways that look unrelated to this
 project.
+
+## The Commands tab
+
+Everything `LAZPANEL` does, on plumbing that does not blink:
+
+- **Find.** Type any part of a command name *or of its caption* and the
+  list narrows; the top hit is selected as you type, so a search and
+  Enter runs it. The needle is taken **literally** -- `lzp:instr` is
+  written out rather than handed to `wcmatch` for exactly this reason,
+  and `String.Contains` is the same promise: a `*` you type is a star.
+  Searching captions is the point rather than a bonus, because `survey`
+  finds `ABHD`, `ABPCHECK` and `ABHDCOVER`, none of which say so in
+  their names.
+- **Recent and Pinned.** The last five launched, newest first, and
+  whatever you pinned -- right-click any button to pin it. A tool
+  already pinned is remembered but not *shown* on Recent, or Recent
+  fills up with the handful Pinned is already carrying. A row with
+  nothing in it is not drawn.
+- **Every page of the panel's tab strip**, job pages included:
+  `Pool`, `Cover`, `Spa`, `Rest` and the four categories, with their
+  columns. The palette used to offer the four categories alone, which
+  are the pages answering "what is this tool" rather than "what am I
+  doing this hour". It reopens on the page you left it on.
+
+**Pins and recents are LAZPANEL's, not a second set.** `PaletteMemory`
+reads and writes `lzp:*pinkey*` -- the same registry key, the same
+`Pins` / `Recent` values, the same `;`-joined format, the same cap of
+five. Pin `CORNERSTP` on the DCL panel and it is pinned here.
+`tests/test_palette_shell.py` holds that seam, and the wording of every
+Find message, against `LAZPANEL.lsp` itself.
+
+One behaviour is deliberately opposite on the two halves of this tab,
+and both halves are the panel's. On a **page**, a routine this session
+has not loaded is greyed -- a dead spot in a grid is visible, and
+reaching for it tells you why. On the **Find list** it is listed
+instead, marked `(not loaded)`, and Run refuses it with that reason:
+a search that silently omits what you searched for reads as the tool
+not existing.
 
 ## The command catalog is generated
 

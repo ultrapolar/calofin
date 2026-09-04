@@ -291,7 +291,7 @@ everything else releases one file per source.
 
 | | Folder | |
 | --- | --- | --- |
-| Calofin palette (VB.NET) | `ui/calofin_net/` | Dockable AutoCAD palette: one button per command, plus forms for POOL and SPA. Its catalog is no longer typed - `Generated/CommandCatalog.g.vb` is written from `LAZPANEL`'s own tables by `tools/gen_ui_data.py`, so the two surfaces cannot part again the way they had (the palette shipped 60 of 67). The tooltips are the palette's own words and stay hand-written, in `blurbs.txt` |
+| Calofin palette (VB.NET) | `ui/calofin_net/` | Dockable AutoCAD palette: Find over names and captions, Recent and Pinned rows sharing `LAZPANEL`'s own registry key, the panel's whole tab strip as real tabs, plus forms for POOL and SPA. Its catalog is no longer typed - `Generated/CommandCatalog.g.vb` is written from `LAZPANEL`'s own tables by `tools/gen_ui_data.py`, so the two surfaces cannot part again the way they had (the palette shipped 60 of 67). The tooltips are the palette's own words and stay hand-written, in `blurbs.txt` |
 | Palette LISP glue | `ui/calofin_ui/` | `calofin.lsp` - reports which commands are actually loaded this session, so the palette can grey out the rest. Checked too: a palette button with no probe-list name could never grey out, which is how five of them shipped |
 
 `ui/PLAN.md` records how the palette got here and why the wire between
@@ -450,6 +450,10 @@ python3 tests/test_check_vb.py        # the VB linter itself, driven against VB
                                       # that is wrong on purpose: a checker
                                       # that has stopped checking is worse
                                       # than none
+python3 tests/test_palette_shell.py   # the palette's Find/Recent/Pinned against
+                                      # LAZPANEL's: one registry key, one cap,
+                                      # and every Find message lifted out of the
+                                      # Lisp rather than typed
 python3 tests/test_cancel_paths.py    # every headline command cancelled at its
                                       # first prompt: the handler runs, settings
                                       # come back, no group or error mode left
