@@ -65,10 +65,33 @@ reasons still matter:
 
 - **The DLL itself.**  Nothing VB can be compiled or run in this
   environment (`Calofin.vbproj` targets net48 against AutoCAD.NET
-  reference assemblies).  The Lisp side of the wire is fully tested;
-  the VB side is verified only down to the literal it emits.  Whoever
-  next opens AutoCAD with a build should run the spa form once with a
-  `NotGiven` corner and confirm the `?` mark lands.
+  reference assemblies).  The Lisp side of the wire is fully tested,
+  `tools/check_vb.py` reads the VB as code -- blocks, quotes, parens,
+  its own members and their arities -- and the suites hold every seam
+  it has to text that IS testable.  None of that is a compiler.
+
+  **What to do with the first real build**, in order, because each
+  answers something nothing here can:
+
+  1. `NETLOAD` and type `CALOFIN`.  Five tabs should open.
+  2. On **Commands**, type `survey` into the box: `ABHD`, `ABPCHECK`
+     and `ABHDCOVER` should be listed, none of which say so in their
+     names.  Enter runs the top hit.  Right-click a button to pin it,
+     then open `LAZPANEL` and confirm the pin is there too -- the two
+     surfaces share one registry key, and this is the only way to see
+     that they really do.
+  3. On **Pool chart**, pick Rectangle.  The chart should be DRAWN, with
+     a box sitting on each dimension line; resize the palette and it
+     should redraw sharp rather than stretch.
+  4. Type `6'-3"` into a box.  The state line should count it as filled
+     and Draw should stay live -- that spelling used to travel as an NA
+     nobody meant.  Then type `rubbish` into another: the line should
+     name it BY ITS LETTER and grey Draw out.
+  5. Press Draw, let POOL run, reopen the tab and press **Recall last**:
+     the numbers should come back into the empty boxes only.
+  6. On **Steps**, pick 5 steps and confirm the drawing has five treads.
+  7. On **Spa**, run the form once with a `NotGiven` corner and confirm
+     the `?` mark lands.
 - **The two form surfaces, held together.** *(closed 2026-09-03.)*
   `tests/test_spa_form.py` section 15 now asserts that every question
   `LAZSPA`'s DCL chart asks is answerable on the palette too. It reads
