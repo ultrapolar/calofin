@@ -18,8 +18,8 @@ a polyline.
 | Perimeter feature | Pads? |
 | --- | --- |
 | Concave arc / inside fillet with radius **4′-6″ (54″) or less**, bending more than 10° in total — all the way down to a sharp corner | **Yes** — a flush row of pads along the arc |
-| Concave intersection of straight segments bending **more than 10°** | **Yes** — one pad centered on the corner |
-| Semi-straight geometry — connection points or arcs whose total bend is 10° or less | No |
+| Concave intersection of straight segments bending **more than 30°** | **Yes** — one pad centered on the corner |
+| Semi-straight geometry — a connection point bending 30° or less, or an arc whose total bend is 10° or less | No |
 | Concave arc with radius **greater than 4′-6″** | No |
 | Convex corners and convex arcs | No |
 
@@ -41,15 +41,14 @@ bulges or ARC entities.
 ## New users: TUTORIALPADDLE
 
 Type `TUTORIALPADDLE` for a guided tour. It first lists everything
-PADDLE checks (perimeter input and chaining, the >10° semi-straight
-rule, the 4′-6″ radius rule, the no-collision rule, where pads land).
-Then it offers a **live demonstration**: it draws a labelled sample
-perimeter that has one of everything — a 2° kink (ignored), convex
-corners (ignored), a slot with two inside corners (padded), a concave
-4′-0″ radius (padded row) and a concave 6′-0″ radius (too big —
-exempt) — and then runs
-the real pad-placing pipeline on it step by step, pausing so you can
-watch each rule fire. At the end it offers to erase the demo again.
+PADDLE checks (perimeter input and chaining, the >30° corner rule and
+the >10° arc rule, the 4′-6″ radius rule, the no-collision rule, where
+pads land). Then it offers a **live demonstration**: it draws a
+labelled sample perimeter that has one of everything — a 2° kink
+(ignored), convex corners (ignored), a slot with two inside corners
+(padded), a concave 4′-0″ radius (padded row) and a concave 6′-0″
+radius (too big — exempt) — and then runs the real pad-placing
+pipeline on it step by step, pausing so you can watch each rule fire. At the end it offers to erase the demo again.
 
 ## Revisions
 
@@ -90,11 +89,14 @@ Everything inserted in one run is a single undo step.
   `*paddle-align*` to `T` at the top of the lisp if you ever want
   them rotated to follow the perimeter edge instead.)
 * Pads land on layer **PADS** (created if missing).
-* A feature only counts when its total direction change is **more
-  than 10°** (`*paddle-angtol*`) — that applies to connection points
-  and to arcs alike. Anything sufficiently close to a straight line —
-  segmented walls, slight drafting kinks, shallow sweeping curves,
-  the tangent joints of a fillet — is passed over without a pad.
+* A feature only counts when its total direction change clears its
+  tolerance, and a corner is judged harder than a curve: a connection
+  point has to bend **more than 30°** (`*paddle-cornertol*`) to be an
+  inside corner, while an arc is a feature once its total bend is
+  **more than 10°** (`*paddle-arctol*`). Anything sufficiently close
+  to a straight line — segmented walls, slight drafting kinks,
+  shallow sweeping curves, the tangent joints of a fillet — is passed
+  over without a pad.
 
 A **pickfirst** selection is taken as-is: highlight the perimeter
 before typing `PADDLE` and it never asks. `LINGUTTER` hands its
@@ -154,7 +156,8 @@ constants at the top of `PADDLE.lsp` are easy to change:
 (setq *paddle-layer*   "PADS")     ; insertion layer
 (setq *paddle-align*   nil)        ; nil = pads parallel to X/Y axes
 (setq *paddle-fuzz*    0.05)       ; gap tolerance when chaining
-(setq *paddle-angtol* (/ (* 10.0 pi) 180.0)) ; semi-straight cutoff
+(setq *paddle-cornertol* (/ (* 30.0 pi) 180.0)) ; inside-corner cutoff
+(setq *paddle-arctol*  (/ (* 10.0 pi) 180.0)) ; semi-straight arc cutoff
 ```
 
 Supported perimeter geometry: **LWPOLYLINE, 2D POLYLINE, LINE, ARC**

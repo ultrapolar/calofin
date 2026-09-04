@@ -715,6 +715,35 @@ def test_no_tech_title_says_so_without_crying_wolf():
     assert not any('NOT CHECKED' in p for p in problems(txt)), problems(txt)
 
 
+def _date_attrib(vm):
+    """What the Tech Title's Date attribute reads right now."""
+    return vm.loads('(spachk:ins-attrib (spachk:find-title (ssget "_X"))'
+                    ' spachk:*date-tag*)')
+
+
+def test_a_stale_date_is_rewritten_by_the_fixing_command():
+    """SPACHECK does not leave a wrong date to be noticed: it writes
+    today's over it, MM/DD/YYYY, and says what it found and what it
+    set."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, 'Yes', '90', 'No', 'No'])
+    _add_title(vm, 'Date = 01/02/2020')
+    txt = report_of(vm, cmd='c:SPACHECK')
+    assert _date_attrib(vm) == 'Date = %s' % _today(), _date_attrib(vm)
+    bad = problems(txt)
+    assert any("NOT TODAY'S DATE" in p and 'UPDATED to %s' % _today() in p
+               for p in bad), bad
+
+
+def test_a_scan_reports_the_stale_date_and_writes_nothing():
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, 'Yes', '90', 'No', 'No'])
+    _add_title(vm, '01/02/2020')
+    bad = problems(report_of(vm, cmd='c:SPACHECKSCAN'))
+    assert any('NEEDS UPDATING (run SPACHECK)' in p for p in bad), bad
+    assert _date_attrib(vm) == '01/02/2020', _date_attrib(vm)
+
+
 def test_the_lite_scan_keeps_the_date_check():
     vm = build([None, 'Coversize', 'Rectangle', None,
                 84.0, None, 'Yes', '90', 'No', 'No'])

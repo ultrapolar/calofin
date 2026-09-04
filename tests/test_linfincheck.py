@@ -18,7 +18,11 @@ Covers:
                      [Yes/No/Back/Skip] navigation (Back and Skip),
                      the Step Attachment confirmation flagging the
                      block red, and the liner pattern field WIPED
-                     clean.
+                     clean;
+  * the cleanup     - only the bad phrase leaves a pattern field
+                     ("Pattern: Not Supplied" -> "Pattern:"), and a
+                     wrong Date is REWRITTEN to today as MM/DD/YYYY
+                     by LINFINCHECK while LINFINSCAN only reports it.
 
 The VM has no vlax-curve-* surface, so this file shims the handful
 linfincheck leans on over the VM's own entity store - the same
@@ -524,7 +528,7 @@ assert ("Wall height: steps rise 36.0000 = WallHt 'Finished Wall Ht ="
 assert ('Liner Material (Liner Material with Step) %s at (500.0000,'
         ' 200.0000): PATTERN carried NOT - WIPED clean'
         % ents['liner'].handle) in txt, txt
-assert '1 pattern field(s) WIPED clean' in txt, txt
+assert '1 pattern field(s) WIPED of NOT - the rest of each field kept' in txt, txt
 assert 'Title block border: 704.0000 x 543.6250 - nominal size, OK' in txt
 assert 'Dimensions: 1 left UNREVIEWED (skipped by user)' in txt, txt
 assert ('Dimensions checked: 3 (correct: 2, flagged to fix: 0,'
@@ -534,6 +538,71 @@ assert 'point(s) moved before you stepped back' in txt, txt
 assert 'Dim %s [STANDARD] = 110.0000: OK' % ents['d1'].handle in txt, txt
 assert 'Dim %s [STANDARD] = 120.0000: OK' % ents['d2'].handle in txt, txt
 print("   report: side view found, MATCHES, WIPED, WRONG ONE, Skip noted")
+
+
+# ------------------------------------------------------------------
+print("== LINFINCHECK: the bad phrase goes, the rest of the field stays ==")
+# Three pattern fields and a stale date.  Only the "Not Supplied" and
+# the "#ERROR" come out - the label typed into the value, the real
+# pattern name beside it and the clean field are all still there
+# afterwards - and the Date is rewritten to today in MM/DD/YYYY with
+# its "Date =" label kept.
+vm = VM()
+vm.load(CHK)
+staircase(vm)
+poly(vm, [(0.0, 0.0), (704.0, 0.0), (704.0, 543.625), (0.0, 543.625)],
+     'border')
+title = block(vm, 'Tech Title', (600.0, 50.0),
+              [('WallHt', "Finished Wall Ht = 36''"),
+               ('Date', 'Date = 05/01/2024')])
+liner = block(vm, 'Liner Material with Step', (500.0, 200.0),
+              [('PATTERN', 'Pattern: Not Supplied'),
+               ('WALL', 'Blue Granite - #ERROR'),
+               ('FLOOR', 'Bluestone')])
+vm.run('c:LINFINCHECK', [None, selectable(vm)])   # nothing to walk: no dims
+
+assert attrib_value(vm, liner, 'PATTERN') == 'Pattern:', \
+    attrib_value(vm, liner, 'PATTERN')
+assert attrib_value(vm, liner, 'WALL') == 'Blue Granite', \
+    attrib_value(vm, liner, 'WALL')
+assert attrib_value(vm, liner, 'FLOOR') == 'Bluestone', \
+    attrib_value(vm, liner, 'FLOOR')
+print("   'Pattern: Not Supplied' -> 'Pattern:', the real name kept")
+
+# the date was not just reported - it was written
+assert attrib_value(vm, title, 'Date') == 'Date = %s' % today(vm), \
+    attrib_value(vm, title, 'Date')
+print("   the stale date is today's now, MM/DD/YYYY, label and all")
+
+txt = '\n'.join(report_texts(vm))
+assert ("Date '05/01/2024' is NOT TODAY'S DATE (%s) - UPDATED to %s"
+        % (today(vm), today(vm))) in txt, txt
+assert ("PATTERN, WALL carried NOT & ERROR - WIPED, PATTERN now reads"
+        " 'Pattern:', WALL now reads 'Blue Granite'") in txt, txt
+assert '2 pattern field(s) WIPED of NOT & ERROR' in txt, txt
+# and both of those lines are red, so neither goes unnoticed
+bad = '\n'.join(problems(report_texts(vm)[0]))
+assert 'UPDATED to' in bad, bad
+assert 'WIPED' in bad, bad
+print("   report names what it took out, what is left, and what it set")
+
+
+# ------------------------------------------------------------------
+print("== LINFINSCAN: a wrong date is reported, never written ==")
+vm = VM()
+vm.load(CHK)
+staircase(vm)
+poly(vm, [(0.0, 0.0), (704.0, 0.0), (704.0, 543.625), (0.0, 543.625)],
+     'border')
+title = block(vm, 'Tech Title', (600.0, 50.0),
+              [('WallHt', "Finished Wall Ht = 36''"),
+               ('Date', '05/01/2024')])
+vm.run('c:LINFINSCAN', [None, None])
+assert attrib_value(vm, title, 'Date') == '05/01/2024', \
+    attrib_value(vm, title, 'Date')
+txt = '\n'.join(report_texts(vm))
+assert 'NEEDS UPDATING (run LINFINCHECK)' in txt, txt
+print("   read-only: NEEDS UPDATING said, the attribute untouched")
 
 
 # ------------------------------------------------------------------

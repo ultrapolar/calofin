@@ -340,14 +340,14 @@ POOL_PTS = [(0.0, 0.0), (240.0, 0.0), (240.0, 120.0),
             (120.0, 120.0), (120.0, 240.0), (0.0, 240.0)]
 
 
-def build_fixture(vm, with_text=True):
+def build_fixture(vm, with_text=True, date=None):
     ents = {}
     ents['pool'] = poly(vm, POOL_PTS, 'POOL')
     # Overlap/Spacing seeded WRONG for this pool: 15" / 3x3
     ents['details'] = block(vm, 'Cover Details', (400.0, 50.0),
                             [('OVERLAP', "15''"), ('SPACING', '3x3')])
     ents['title'] = block(vm, 'Tech Title', (400.0, 150.0),
-                          [('Date', today(vm))])
+                          [('Date', date if date else today(vm))])
     ents['dok'] = dim(vm, (0.0, 0.0), (240.0, 0.0), (120.0, -30.0))
     # the stray point, AND parked on the wrong layer for the CDIM check
     ents['dbad'] = dim(vm, (0.0, 0.0), (230.0, 6.0), (115.0, 30.0),
@@ -358,10 +358,10 @@ def build_fixture(vm, with_text=True):
     return ents
 
 
-def build_vm(with_text=True):
+def build_vm(with_text=True, date=None):
     vm = VM()
     vm.load(CHK)
-    return vm, build_fixture(vm, with_text)
+    return vm, build_fixture(vm, with_text, date)
 
 
 # ------------------------------------------------------------------
@@ -498,6 +498,34 @@ assert 'point(s) moved before you stepped back' in txt, txt
 assert 'Dim %s [STANDARD] = 230.0000: OK' % ents['dbad'].handle in txt, txt
 assert 'Dim %s [STANDARD] = 240.0000: OK' % ents['dok'].handle in txt, txt
 print("   report: SUGGEST lines, the circled pad and the reviewed dims")
+
+
+# ------------------------------------------------------------------
+print("== the Tech Title date: COVERCHECK writes it, COVERSCAN says it ==")
+# The one cover check that rewrites the drawing: a stale date gets
+# today's written over it in the same MM/DD/YYYY form, with the label
+# it arrived wearing left alone.
+vm, ents = build_vm(with_text=False, date='Date = 01/02/2020')
+vm.run('c:COVERCHECK', [
+    None, selectable(vm),
+    'Move', 'Yes',      # dbad: take the suggested point
+    'Yes',              # dok: correct
+    'No',               # not a replacement
+])
+assert attrib_value(vm, ents['title'], 'Date') == 'Date = %s' % today(vm), \
+    attrib_value(vm, ents['title'], 'Date')
+txt = '\n'.join(report_texts(vm))
+assert ("Tech Title date: Date '01/02/2020' is NOT TODAY'S DATE (%s)"
+        " - UPDATED to %s" % (today(vm), today(vm))) in txt, txt
+print("   COVERCHECK set it to today, MM/DD/YYYY, label and all")
+
+vm, ents = build_vm(with_text=False, date='01/02/2020')
+vm.run('c:COVERSCAN', [None, selectable(vm)])
+assert attrib_value(vm, ents['title'], 'Date') == '01/02/2020', \
+    attrib_value(vm, ents['title'], 'Date')
+txt = '\n'.join(report_texts(vm))
+assert 'NEEDS UPDATING (run COVERCHECK)' in txt, txt
+print("   read-only: NEEDS UPDATING said, the attribute untouched")
 
 
 # ------------------------------------------------------------------
