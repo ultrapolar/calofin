@@ -161,6 +161,54 @@ Public NotInheritable Class ChartCatalog
         End Sub
     End Structure
 
+    ''' <summary>A question answered from a list rather than typed. The
+    ''' first option is "(ask)": choosing it sends nothing and the
+    ''' routine asks at the command line.</summary>
+    Public Structure Choice
+        Public ReadOnly Key As String
+        Public ReadOnly Label As String
+        Public ReadOnly Options As String()
+
+        Public Sub New(key As String, label As String, options As String())
+            Me.Key = key
+            Me.Label = label
+            Me.Options = options
+        End Sub
+    End Structure
+
+    ''' <summary>One corner of a spa sheet. Its two answers are keyed off
+    ''' the stem: cornera-ty for the treatment, cornera-sz for the size
+    ''' the treatment carries.</summary>
+    Public Structure SpaCornerRow
+        Public ReadOnly Stem As String
+        Public ReadOnly Label As String
+
+        Public Sub New(stem As String, label As String)
+            Me.Stem = stem
+            Me.Label = label
+        End Sub
+    End Structure
+
+    ''' <summary>What a spa sheet has that a pool sheet has not.</summary>
+    Public Structure SpaSheet
+        ''' <summary>The chart this belongs to.</summary>
+        Public ReadOnly Key As String
+        Public ReadOnly Hint As String
+        Public ReadOnly Corners As SpaCornerRow()
+        ''' <summary>The other outline's overalls, under keys that are
+        ''' PER SHAPE: the rectangle's pair is w2/l2, the octagon's is
+        ''' b2/a2 plus the cut face f2.</summary>
+        Public ReadOnly Second As ListKey()
+
+        Public Sub New(key As String, hint As String,
+                       corners As SpaCornerRow(), second As ListKey())
+            Me.Key = key
+            Me.Hint = hint
+            Me.Corners = corners
+            Me.Second = second
+        End Sub
+    End Structure
+
     ''' <summary>One step routine: the command a drafter knows it by,
     ''' its title, and the entry point a form hands its answers to.
     ''' All three come from lzt:*types*.</summary>
@@ -1610,6 +1658,73 @@ Public NotInheritable Class ChartCatalog
             New Double() {385, 445})
     }
 
+    ''' <summary>The spa questions answered from a LIST rather than
+    ''' typed - lzs:*lists*. The first option is always "(ask)",
+    ''' and choosing it sends nothing at all: the key stays absent
+    ''' and SPA asks at the command line.</summary>
+    Public Shared ReadOnly SpaLists As Choice() = {
+        New Choice("mode", "Water's edge or cover size", New String() {"(ask)", "Watersedge", "Coversize"}),
+        New Choice("second", "Draw the other outline as well", New String() {"(ask)", "Yes", "No"}),
+        New Choice("method", "Take the other outline from", New String() {"(ask)", "Offset", "Dims"}),
+        New Choice("autohinge", "Auto-hinge the cover", New String() {"(ask)", "Yes", "No"}),
+        New Choice("grade", "Cover grade", New String() {"(ask)", "STANDARD", "THERMOLIGHT"}),
+        New Choice("taper", "Taper", New String() {"(ask)", "3-2", "4-2", "4-3", "5-3", "5-4", "3-3", "1-3/8"})
+    }
+
+    ''' <summary>lzs:*ctreat*: the words the corner dropdown
+    ''' offers. They are the SHEET LEGEND's -- 90 / Radius /
+    ''' Diagonal -- and SPA normalises them onto the canonical
+    ''' Square / Radius / Cut / NotGiven set itself, which is why
+    ''' the palette must send them as written and not
+    ''' helpfully translate.</summary>
+    Public Shared ReadOnly SpaTreatments As String() = {"(ask)", "90", "Radius", "Diagonal"}
+
+    ''' <summary>The treatments that carry a size, asked of
+    ''' lzs:sized rather than read off it. 90 sets back nothing
+    ''' and asks for no number.</summary>
+    Public Shared ReadOnly SpaSizedTreatments As String() = {"Radius", "Diagonal"}
+
+    ''' <summary>The cover lap. A box the dialog builds rather
+    ''' than a table row, so it is lifted out of the source.
+    ''' </summary>
+    Public Shared ReadOnly SpaCoverLap As ListKey = New ListKey("gap", "How far the cover laps the water's edge")
+
+    ''' <summary>What a spa sheet has that a pool sheet has not:
+    ''' its corner rows, the other outline's overalls under keys
+    ''' that are PER SHAPE, and the line the page prints.
+    '''
+    ''' <para>Kept beside Chart rather than inside it. LAZFORM has
+    ''' a corner table too and it is a different shape -- four
+    ''' slots, with collective questions covering several corners
+    ''' at once -- so one structure for both would be a lie about
+    ''' one of them.</para></summary>
+    Public Shared ReadOnly SpaSheets As SpaSheet() = {
+        New SpaSheet("Rectangle", "A B C D run from the bottom left, the way SPA numbers them.",
+            New SpaCornerRow() {
+            New SpaCornerRow("cornera", "Corner A (bottom left)"),
+            New SpaCornerRow("cornerb", "Corner B (bottom right)"),
+            New SpaCornerRow("cornerc", "Corner C (top right)"),
+            New SpaCornerRow("cornerd", "Corner D (top left)")
+            },
+            New ListKey() {
+            New ListKey("w2", "Other outline ACROSS"),
+            New ListKey("l2", "Other outline UP")
+            }),
+        New SpaSheet("OCtagon", "B and A alone draw a true square octagon -- NA the cut letters.",
+            New SpaCornerRow() {},
+            New ListKey() {
+            New ListKey("b2", "Other outline ACROSS"),
+            New ListKey("a2", "Other outline UP"),
+            New ListKey("f2", "Other outline cut FACE")
+            }),
+        New SpaSheet("ROund", "Leave A empty for a circle; fill it in and the spa is out of round.",
+            New SpaCornerRow() {},
+            New ListKey() {
+            New ListKey("b2", "Other outline ACROSS"),
+            New ListKey("a2", "Other outline UP")
+            })
+    }
+
     ''' <summary>The POOL or OASIS sheet of that name, or one with a
     ''' Nothing Key when there is none.</summary>
     Public Shared Function PoolChart(key As String) As Chart
@@ -1625,6 +1740,17 @@ Public NotInheritable Class ChartCatalog
         For Each c In charts
             If String.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase) Then
                 Return c
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>The spa extras for a sheet, or one with a Nothing Key
+    ''' when there are none.</summary>
+    Public Shared Function SpaSheetFor(key As String) As SpaSheet
+        For Each s In SpaSheets
+            If String.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase) Then
+                Return s
             End If
         Next
         Return Nothing
