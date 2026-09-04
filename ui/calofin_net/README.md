@@ -44,6 +44,48 @@ Shipping `acmgd.dll` / `acdbmgd.dll` beside the output makes AutoCAD load
 a second copy of its own API and fail in ways that look unrelated to this
 project.
 
+## The command catalog is generated
+
+`Generated/CommandCatalog.g.vb` is **not hand-edited**. It is written by
+`tools/gen_ui_data.py` from `LAZPANEL`'s own tables --
+`lzp:*captions*` for the words on a button, `lzp:*groups*` for which
+group and which page a tool belongs to -- so the palette and the
+zero-install DCL panel offer the same routines under the same captions
+by construction rather than by anybody remembering.
+
+That is a fix for a real failure. The catalog used to be typed here,
+and the palette shipped **60 of the panel's 67** commands; every
+caption it did carry still agreed, and no tool was in the wrong group,
+which is exactly why nobody noticed.
+
+```
+python3 tools/gen_ui_data.py           # rewrite it
+python3 tools/gen_ui_data.py --check   # is it current?  make check runs this
+```
+
+The one thing still typed is the tooltip, in `blurbs.txt`, because a
+blurb is words somebody chose and no table here holds them. A command
+with no blurb line is **reported**, and falls back to its caption
+rather than being invented.
+
+Adding a tool to the palette is therefore: put it on `LAZPANEL`, write
+its blurb, run the generator.
+
+## Nothing here can be compiled, so it is checked instead
+
+`tools/check_vb.py` reads every `.vb` in this folder the way
+`check_lisp.py` reads a `.lsp`: blocks opened and closed by the right
+closer, quotes and parens balanced per logical line, and every member
+and constructor arity of this assembly's **own** types resolved. That
+last one is what holds the hand-written palette to the generated
+catalog -- rename `CommandCatalog.Groups` and the call site fails here
+rather than in somebody's AutoCAD.
+
+It is not a compiler and does not type-check; `Option Strict On` will
+still have opinions this cannot have. `tests/test_check_vb.py` drives
+it against VB that is wrong on purpose, so a checker that has quietly
+stopped checking fails the suite.
+
 ## Loading
 
 1. `NETLOAD` the built `Calofin.dll`.

@@ -48,6 +48,7 @@ lisp/       AutoLISP tools, one self-contained file each (the source of truth)
 releases/   Dated REV-stamped twins of the lisp/ files, flat, GENERATED
 shared/     The loaded-together build on CALOFIN-LIB.lsp (bundle GENERATED)
 ui/         The Calofin AutoCAD palette (VB.NET) and its LISP glue
+            (ui/calofin_net/Generated/ is GENERATED from LAZPANEL)
 tools/      Dev tooling (release stamping, bundle building, static checks)
 tests/      Python test suite - stdlib only, no AutoCAD or Blender needed
 ```
@@ -172,30 +173,38 @@ regenerated and your edit will vanish.
 A tool is not finished when it draws. It has to be *registered*: a
 caption and a placement in `lisp/lazpanel/LAZPANEL.lsp`, a slot in
 `shared/parts/CALOFIN-LOADER.lsp`, a row in `README.md`, four numbers
-in prose that all change when the roster does, an entry in the VB
-palette's `CommandCatalog` and a name in `ui/calofin_ui/calofin.lsp`'s
+in prose that all change when the roster does, a tooltip in
+`ui/calofin_net/blurbs.txt` and a name in `ui/calofin_ui/calofin.lsp`'s
 probe list.
 
 Do not do that by hand. Run:
 
 ```
 python3 tools/check_registry.py --fix
+python3 tools/gen_ui_data.py            # the palette's catalog
 ```
 
-It inserts the caption row and a `Rest`-page placement, rewrites every
-derived count, bumps LAZPANEL's banner, and then **names the three
-things it will not decide for you**: the caption text, which category
-page (`Layout`/`Points`/`Dimensions`/`Checking`) the tool belongs on,
-and the palette entry — it reports the exact `New Entry(...)` line to
-paste, caption already filled in, but writes no VB, because nothing
-here can compile it. Write those and re-run it. `make check` runs the
-same check, so a half-registered tool cannot pass.
+`--fix` inserts the caption row and a `Rest`-page placement, rewrites
+every derived count, bumps LAZPANEL's banner, and then **names the
+three things it will not decide for you**: the caption text, which
+category page (`Layout`/`Points`/`Dimensions`/`Checking`) the tool
+belongs on, and the tooltip blurb. Write those and re-run it.
+`make check` runs the same check, so a half-registered tool cannot
+pass.
 
-The palette half is new and it was not theoretical either: the palette
-shipped 60 of the panel's 67 commands, and five of the seven missing
-ones were absent from the probe list too, so their buttons could never
-have greyed out. Every caption that was present agreed and no tool was
-in the wrong group — which is exactly why nobody noticed.
+**The palette's catalog is generated now**, which is why it is not on
+that list: `ui/calofin_net/Generated/CommandCatalog.g.vb` is written
+from `lzp:*captions*` and `lzp:*groups*` by `tools/gen_ui_data.py`, so
+a tool that is on the panel is in the palette by construction. Never
+hand-edit it. The only palette content still typed is the tooltip, and
+it is typed in `blurbs.txt` — where the generator reads it, and where
+a missing one is reported rather than invented.
+
+That was not a theoretical gap: the palette shipped 60 of the panel's
+67 commands, and five of the seven missing ones were absent from the
+probe list too, so their buttons could never have greyed out. Every
+caption that was present agreed and no tool was in the wrong group —
+which is exactly why nobody noticed.
 
 `LAZPANEL.lsp` stays a hand-edited `lisp/` file — `--fix` is a codemod
 over it, not a build step, and it prints the regeneration commands
@@ -211,8 +220,9 @@ build drew loose lines where the standalone one drew a bounded polyline.
 
 ```
 python3 tools/check_standards.py # tiers in step, cal: clean, AND every
-                                 # generated tier byte-identical to a fresh
-                                 # regeneration (the three --check modes)
+                                 # generated file byte-identical to a fresh
+                                 # regeneration (the four --check modes:
+                                 # mirror, releases, bundle, palette catalog)
 python3 tools/check_lisp.py [f]  # parens, arity, stray top-level atoms,
                                  # undefined/quoted-undefined functions;
                                  # no argument = every .lsp in both tiers
@@ -224,7 +234,16 @@ python3 tools/check_registry.py  # every tool registered everywhere it has
                                  # the VB palette catalog and its probe
                                  # list -- with every count computed
                                  # rather than typed; --fix repairs what
-                                 # is not editorial, and never the VB
+                                 # is not editorial
+python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
+                                 # VB compiler: blocks closed by the right
+                                 # closer, quotes and parens balanced, and
+                                 # every member and constructor arity of
+                                 # the assembly's own types resolved
+python3 tools/gen_ui_data.py     # rewrites the palette's catalog from
+                        [--check]# LAZPANEL's tables; --check is the
+                                 # staleness half, and check_standards
+                                 # runs it
 make check                       # all of the above in one go
 ```
 

@@ -10,8 +10,8 @@ all: check test
 
 help:
 	@echo "make check        tiers in step + generated tiers current + static checks"
-	@echo "make verify       just the three generated-tier checks (mirror/releases/bundle)"
-	@echo "make lint         check_lisp + check_scope over every .lsp"
+	@echo "make verify       just the generated-file checks (mirror/releases/bundle/palette)"
+	@echo "make lint         check_lisp + check_scope over every .lsp, check_vb over the palette"
 	@echo "make test         full suite, standalone tier (lisp/)"
 	@echo "make test-shared  full suite, grouped tier (shared/)"
 	@echo "make parity       full suite at BOTH tiers - the drift check"
@@ -21,15 +21,18 @@ check:
 	$(PY) tools/check_standards.py
 	$(PY) tools/check_lisp.py
 	$(PY) tools/check_scope.py
+	$(PY) tools/check_vb.py
 
 verify:
 	$(PY) tools/mirror_shared.py --check
 	$(PY) tools/release_lisp.py --check
 	$(PY) tools/build_shared_bundle.py --check
+	$(PY) tools/gen_ui_data.py --check
 
 lint:
 	$(PY) tools/check_lisp.py
 	$(PY) tools/check_scope.py
+	$(PY) tools/check_vb.py
 
 test:
 	$(PY) tools/run_tests.py

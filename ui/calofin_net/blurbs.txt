@@ -1,0 +1,82 @@
+# The palette's tooltips: one line per command, COMMAND then the
+# blurb.  Editorial text, hand-written, and the ONLY palette content
+# that is not computed -- the caption beside it on a button comes from
+# lzp:*captions* in lisp/lazpanel/LAZPANEL.lsp, so the panel and the
+# palette cannot read differently.  A blurb says what the caption has
+# no room to.
+#
+# Read by tools/gen_ui_data.py, which writes
+# ui/calofin_net/Generated/CommandCatalog.g.vb.  A command with no
+# line here is reported rather than guessed at.
+
+ABCDEF            Plot rectangle points
+ABCURCHECK        Grades how continuous a drawn perimeter is
+ABCURCHECKSCAN    ABCURCHECK without marking the drawing
+ABFIND            Ties Pt.## back to the A and B survey stakes
+ABHD              Fits a pool perimeter and bottom through surveyed points
+ABHDCOVER         ABHD for a cover sheet that stops at the perimeter
+ABMOVE            Moves a point, offering every mis-read tape it could be
+ABPCHECK          ABHD's measuring half as a checker - how far each point is off the line
+ADAB              Freeform perimeter through surveyed points
+ALTABCDEF         ABCDEF with the clockwise corner order
+AUTOBEAD          Offsets selected pool lines toward a clicked side
+AUTODIM           Automatic dimensioning
+AUTODIMSIDEPOV    Dimensions a side-view flight of steps
+BPCALLOUT         Rings clicked bad points and writes the callout
+CABHD             ABHD's perimeter half, for a survey that runs past the pool
+CCPRECHECK        Walks the Tech Flow Chart decision tree
+CDCALLOUT         Cross-dimensions from Pt.## to Pt.## by typed number
+CDCREATE          Turns every highlighted line into a cross dimension
+CHECK             General drawing check
+CONSTELLATION     Places points from the distances between them, inside a known box
+CORNERSTP         Corner step layout
+COVERCHECK        Cover check
+COVERSCAN         Scan drawing for covers
+CPERPPTS          PERPPTS for a curved run
+CUSTBLOCK         Custom block in pictorial view from three typed sizes
+DIMARCCHECK       Dim arc endpoint check
+DIMCHECK          Guided, one-at-a-time dimension review
+DIMCONTEND        Chains a seed dimension out to every feature point
+DIMSCAN           Scan drawing for dimensions
+DRONE             Drone cleanup routine
+FITABHD           Fits a typed pool template through surveyed points
+FITABHDCOVER      FITABHD for a cover sheet - skips the bottom question
+FLOORDIM          Floor dimensioning
+HEMISTEP          Hemi step layout
+LAZFORM           Fill the dimension chart in and draw the pool from it
+LAZFORMCOVER      LAZFORM for a cover sheet - the pool-bottom gate closed
+LAZSPA            LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn
+LAZSTEP           Say how many steps, then fill in the drawing built for that count
+LAZTXT            LAZFORM's chart built from DCL tiles instead of vectors
+LHD               Laser-point outline fit, open or closed
+LINCHECK          Line / text check
+LINFINCHECK       Full liner-finish drawing QA, guided
+LINFINSCAN        The liner-finish QA as one scan
+LINGUTTER         Guts a highlighted area back to the pool, walking the outer face
+LINGUTTERSCAN     LINGUTTER's report only - reads the drawing, changes nothing
+LINTXTCHK         Places the vinyl-liner QA checklist as drawing text
+LITECOVERSCAN     Cover rules only - skips the dimension audit
+LITELINFINSCAN    Liner rules only - skips the dimension audit
+LITESPACHECKSCAN  Spa rules only - skips the dimension audit
+NORMIESTEP        Normie step layout
+OASIS             Continuous-tangent pool drawn live from envelope and radii
+PADDLE            Paddle perimeter pads
+PERPPTS           Perpendicular offset points along a line or curve
+POINTRENAMER      Hands the survey point numbers back out in perimeter order
+POOL              Full pool layout tool
+POOLCOVER         POOL for a cover sheet - the bottom question pre-answered No
+POOLDEMO          Draws a worked example pool end to end
+POOLSIDE          POOL's longitudinal section on its own, from the floor run chain
+SMARTFILLET       Fillet a corner after previewing every radius that fits
+SOCONV            Puts an SO site-survey export onto the shop's layers in one pass
+SPA               Spa / hot-tub template layout
+SPACHECK          Audits a spa sheet against what SPA draws
+SPACHECKSCAN      The spa sheet review as one scan
+STAIRDIM          Stair dimensioning
+STOCKCOVER        Replaces a highlighted perimeter with a stock cover drawing
+TYDRN             Text, pool-point and anchor cleanup in one pass
+TYLERDRONESUITE   The whole drone trace in one - TYDRN, then PADDLE, then CDIM
+VSCONV            Remaps a VS survey export's numbered layers onto the shop's
+WCALST            Unrolls a curved constant-width band flat, with darts
+XFTCONV           Cleans up a Leica XFT/DXF import or a site trace
+XYPLOT            Plot an X/Y sheet, twice: points, and dimensioned

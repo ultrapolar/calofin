@@ -83,12 +83,13 @@ reasons still matter:
   suite. The two surfaces were found to be fully in step: 19, 17 and 11
   questions on the three shapes, all answerable on both.
 
-- **The button catalog.**  The palette still shows its original button
-  set; the newer headline tools have no buttons.  Additions are
-  unverifiable here, so the catalog expansion waits for a machine that
-  can build the DLL.  `LAZPANEL` (pure AutoLISP, ships inside
-  `LAZPASS.lsp`) remains the zero-install surface that already covers
-  all 60.
+- **The button catalog.**  *(closed 2026-09-04.)*  It is generated:
+  `tools/gen_ui_data.py` writes `Generated/CommandCatalog.g.vb` from
+  `lzp:*captions*` and `lzp:*groups*`, so every command on `LAZPANEL`
+  has a button here by construction, and the tab strip's job pages come
+  with it.  The one thing still typed is the tooltip, in `blurbs.txt`.
+  See `ui/UI-PLAN.md` phase 5a for why generating VB is allowed when
+  `check_registry --fix` refuses to.
 - **Generalising the hook into `cal:`.**  Putting the form store into
   the library would make every grouped tool form-drivable.  Real
   payoff, real design risk; the POOL/SPA pattern is now proven twice,

@@ -28,6 +28,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import build_shared_bundle
 import check_registry
+import gen_ui_data
 import mirror_shared
 import release_lisp
 from callib import (COMMAND, NOT_A_TOOL, ROOT, decomment,
@@ -327,13 +328,15 @@ def check_bundle_current(problems):
 
 
 def check_generated(problems):
-    """The three generated tiers, checked by REGENERATION rather than by
-    proxy: a hand-edited generated twin, a stale dated release, or a
-    bundle whose markers survive while its bodies drift all fail here
-    and nowhere else."""
+    """The generated files, checked by REGENERATION rather than by
+    proxy: a hand-edited generated twin, a stale dated release, a
+    bundle whose markers survive while its bodies drift, and the
+    palette's catalog left behind by a roster change all fail here and
+    nowhere else."""
     problems.extend(mirror_shared.check())
     problems.extend(release_lisp.check())
     problems.extend(build_shared_bundle.check())
+    problems.extend(gen_ui_data.check())
 
 
 def check_registrations(problems):

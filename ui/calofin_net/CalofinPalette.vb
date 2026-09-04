@@ -38,115 +38,21 @@ End Class
 
 
 ''' <summary>
-''' The catalog of routines the palette offers.
+''' The catalog lives in Generated\CommandCatalog.g.vb.
 '''
-''' The four groups mirror LAZPANEL's category pages -- lzp:*groups* in
-''' lisp/lazpanel/LAZPANEL.lsp is the source of truth for what belongs
-''' where, and the captions are its lzp:*captions* text, so the palette
-''' and the DCL panel file every tool the same way. Off the list on
-''' purpose: LAZPANEL itself (a panel launcher inside a palette is
-''' noise), everything held back from the shared build (cal:*held-back*
-''' in CALOFIN-LOADER.lsp -- LISPLAB), the satellites LAZPANEL already
-''' leaves off, and the deprecated acady matcher. Adding a routine is a
-''' line here -- and a matching line in calofin.lsp's probe list.
+''' It used to be typed here, and that is exactly how the palette came
+''' to ship 60 of the panel's 67 commands with every caption it DID
+''' carry still agreeing -- two copies of one roster, and only the
+''' halves anybody checked looked fine.  The table is now written from
+''' LAZPANEL's own lzp:*captions* and lzp:*groups* by
+''' tools/gen_ui_data.py, so the panel and the palette cannot read
+''' differently.  The one piece of editorial text, the tooltip blurb,
+''' is hand-written in ui/calofin_net/blurbs.txt and read by the
+''' generator; nothing is invented.
+'''
+''' Adding a tool to the palette is therefore: put it on LAZPANEL,
+''' write its blurb, run the generator.
 ''' </summary>
-Public NotInheritable Class CommandCatalog
-
-    Public Structure Entry
-        Public ReadOnly Command As String
-        Public ReadOnly Caption As String
-        Public ReadOnly Blurb As String
-
-        Public Sub New(command As String, caption As String, blurb As String)
-            Me.Command = command
-            Me.Caption = caption
-            Me.Blurb = blurb
-        End Sub
-    End Structure
-
-    Public Shared ReadOnly Groups As New Dictionary(Of String, Entry()) From {
-        {"Layout", {
-            New Entry("LAZFORM", "Pool from a filled-in chart", "Fill the dimension chart in and draw the pool from it"),
-            New Entry("LAZTXT", "The same form, drawn in tiles", "LAZFORM's chart built from DCL tiles instead of vectors"),
-            New Entry("LAZFORMCOVER", "Chart to pool, no bottom", "LAZFORM for a cover sheet - the pool-bottom gate closed"),
-            New Entry("LAZSPA", "Spa from a filled-in chart", "LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn"),
-            New Entry("LAZSTEP", "Steps from a filled-in drawing", "Say how many steps, then fill in the drawing built for that count"),
-            New Entry("SPA", "Spa template", "Spa / hot-tub template layout"),
-            New Entry("POOL", "Pool layout", "Full pool layout tool"),
-            New Entry("POOLCOVER", "Pool layout, no bottom", "POOL for a cover sheet - the bottom question pre-answered No"),
-            New Entry("POOLSIDE", "Pool side view", "POOL's longitudinal section on its own, from the floor run chain"),
-            New Entry("POOLDEMO", "Worked pool example", "Draws a worked example pool end to end"),
-            New Entry("OASIS", "Freeform pool", "Continuous-tangent pool drawn live from envelope and radii"),
-            New Entry("FITABHD", "Typed template fit", "Fits a typed pool template through surveyed points"),
-            New Entry("FITABHDCOVER", "Typed template fit, no bottom", "FITABHD for a cover sheet - skips the bottom question"),
-            New Entry("ABHD", "Survey perimeter + bottom", "Fits a pool perimeter and bottom through surveyed points"),
-            New Entry("ABHDCOVER", "Survey perimeter, no bottom", "ABHD for a cover sheet that stops at the perimeter"),
-            New Entry("ADAB", "Organic shape points", "Freeform perimeter through surveyed points"),
-            New Entry("CABHD", "Perimeter-only fit", "ABHD's perimeter half, for a survey that runs past the pool"),
-            New Entry("LHD", "Laser outline fit", "Laser-point outline fit, open or closed"),
-            New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
-            New Entry("LINGUTTER", "Gut to perimeter, then pads", "Guts a highlighted area back to the pool, walking the outer face"),
-            New Entry("LINGUTTERSCAN", "Gut scan, changes nothing", "LINGUTTER's report only - reads the drawing, changes nothing"),
-            New Entry("AUTOBEAD", "Bead offsets", "Offsets selected pool lines toward a clicked side"),
-            New Entry("CORNERSTP", "Corner step", "Corner step layout"),
-            New Entry("HEMISTEP", "Hemi step", "Hemi step layout"),
-            New Entry("NORMIESTEP", "Normie step", "Normie step layout"),
-            New Entry("SMARTFILLET", "Corner radius, previewed", "Fillet a corner after previewing every radius that fits"),
-            New Entry("STOCKCOVER", "Stock cover placement", "Replaces a highlighted perimeter with a stock cover drawing"),
-            New Entry("WCALST", "Unroll curved band", "Unrolls a curved constant-width band flat, with darts"),
-            New Entry("CUSTBLOCK", "Block from L/W/H", "Custom block in pictorial view from three typed sizes")
-        }},
-        {"Checking", {
-            New Entry("CHECK", "Drawing check", "General drawing check"),
-            New Entry("DIMARCCHECK", "Arc endpoint check", "Dim arc endpoint check"),
-            New Entry("DIMCHECK", "Dimension review", "Guided, one-at-a-time dimension review"),
-            New Entry("DIMSCAN", "Dimension scan", "Scan drawing for dimensions"),
-            New Entry("ABCURCHECK", "Perimeter continuity", "Grades how continuous a drawn perimeter is"),
-            New Entry("ABCURCHECKSCAN", "Perimeter continuity, no marks", "ABCURCHECK without marking the drawing"),
-            New Entry("ABPCHECK", "Survey point offsets", "ABHD's measuring half as a checker - how far each point is off the line"),
-            New Entry("LINCHECK", "Line checklist", "Line / text check"),
-            New Entry("LINFINCHECK", "Liner finish review", "Full liner-finish drawing QA, guided"),
-            New Entry("LINFINSCAN", "Liner finish scan", "The liner-finish QA as one scan"),
-            New Entry("LITELINFINSCAN", "Liner scan, no dims", "Liner rules only - skips the dimension audit"),
-            New Entry("COVERCHECK", "Cover review", "Cover check"),
-            New Entry("COVERSCAN", "Cover scan", "Scan drawing for covers"),
-            New Entry("LITECOVERSCAN", "Cover scan, no dims", "Cover rules only - skips the dimension audit"),
-            New Entry("SPACHECK", "Spa sheet review", "Audits a spa sheet against what SPA draws"),
-            New Entry("SPACHECKSCAN", "Spa sheet scan", "The spa sheet review as one scan"),
-            New Entry("LITESPACHECKSCAN", "Spa scan, no dims", "Spa rules only - skips the dimension audit"),
-            New Entry("LINTXTCHK", "Liner checklist text", "Places the vinyl-liner QA checklist as drawing text"),
-            New Entry("CCPRECHECK", "Tech flow chart", "Walks the Tech Flow Chart decision tree")
-        }},
-        {"Dimensions", {
-            New Entry("AUTODIM", "Auto dimension", "Automatic dimensioning"),
-            New Entry("AUTODIMSIDEPOV", "Side-view dims", "Dimensions a side-view flight of steps"),
-            New Entry("STAIRDIM", "Stair dims", "Stair dimensioning"),
-            New Entry("FLOORDIM", "Floor dims", "Floor dimensioning"),
-            New Entry("DIMCONTEND", "Continue dim chains", "Chains a seed dimension out to every feature point"),
-            New Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"),
-            New Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"),
-            New Entry("BPCALLOUT", "Bad point callout", "Rings clicked bad points and writes the callout")
-        }},
-        {"Points", {
-            New Entry("ABCDEF", "Rectangle plot", "Plot rectangle points"),
-            New Entry("ALTABCDEF", "Clockwise rectangle plot", "ABCDEF with the clockwise corner order"),
-            New Entry("XYPLOT", "X/Y offset plot", "Plot an X/Y sheet, twice: points, and dimensioned"),
-            New Entry("ABFIND", "A/B stake ties", "Ties Pt.## back to the A and B survey stakes"),
-            New Entry("ABMOVE", "Move mis-taped point", "Moves a point, offering every mis-read tape it could be"),
-            New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
-            New Entry("CPERPPTS", "Curved perp points", "PERPPTS for a curved run"),
-            New Entry("CONSTELLATION", "Points from cross dims", "Places points from the distances between them, inside a known box"),
-            New Entry("POINTRENAMER", "Renumber points in order", "Hands the survey point numbers back out in perimeter order"),
-            New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
-            New Entry("SOCONV", "SO survey onto our layers", "Puts an SO site-survey export onto the shop's layers in one pass"),
-            New Entry("VSCONV", "VS export onto shop layers", "Remaps a VS survey export's numbered layers onto the shop's"),
-            New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
-            New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"),
-            New Entry("TYLERDRONESUITE", "Drone suite: tidy, pad, CDIM", "The whole drone trace in one - TYDRN, then PADDLE, then CDIM")
-        }}
-    }
-
-End Class
 
 
 ''' <summary>

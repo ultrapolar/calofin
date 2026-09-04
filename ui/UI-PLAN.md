@@ -27,7 +27,7 @@ These are the things that cost the drafter time:
 | **The forms find out too late** | A number that will not do is discovered by `POOL` at the command line, after the dialog has closed and the form is gone |
 | **The hand-off is invisible** | Press Insert and the routine asks for the gaps; the form never says which gaps, so you cannot tell a finished sheet from a half one |
 | **Three of everything** | `LAZFORM`, `LAZSPA` and `LAZSTEP` carry three stroke fonts, three vector-chart engines and three DCL emitters, ~270 near-identical lines apiece, duplicated *by rule* |
-| **The palette has drifted** | `calofin_net/` still shows its original button set; `LAZPANEL` covers all 67 |
+| **The palette has drifted** | *(closed, phase 5a)* `calofin_net/` carried its own typed copy of the roster; the catalog is generated from `LAZPANEL`'s tables now |
 
 ## What DCL can and cannot be argued out of
 
@@ -238,6 +238,48 @@ wrote VB source would be writing code no test in this repo can run. So
 the palette is checked and reported on -- with the exact
 `New Entry(...)` line to paste, caption already filled in from
 `lzp:*captions*` -- and left to a human.
+
+### Phase 5a -- the catalog stops being typed *(done 2026-09-04)*
+
+Checking the two rosters against each other closed the gap; it did not
+close the *class* of gap, because the palette still carried its own
+copy of the roster and a copy can always be forgotten. So it stopped
+carrying one. `tools/gen_ui_data.py` writes
+`ui/calofin_net/Generated/CommandCatalog.g.vb` from `lzp:*captions*`
+and `lzp:*groups*`, `--check` fails when the file on disk is not what a
+fresh run would write, and `check_standards.py` runs that check
+alongside the mirror, the releases and the bundle -- the same contract
+every other generated file in this repo is held to.
+
+**Why this is allowed when `check_registry --fix` refuses to write VB.**
+That refusal is about *decisions*: a caption is words somebody chose, a
+category is a judgement about what a tool IS, and a codemod inventing
+either would be writing code no test here can run. Nothing the
+generator emits is a decision. Every command, caption, group and page
+is transcribed from a table `test_lazpanel.py` already holds to the
+tree, and the one piece of editorial text -- the tooltip -- is READ
+from `ui/calofin_net/blurbs.txt`, never invented: a command with no
+blurb is reported, and falls back to its caption.
+
+Two things came with it:
+
+- **The palette gained the job pages.** `Pages` carries the whole tab
+  strip -- `Pool`, `Cover`, `Spa`, `Rest` and the four categories, with
+  their columns -- because once the table is generated there is no cost
+  to carrying all of it. The palette has only ever had the four
+  category groups; the panel's job pages are the ones a drafter
+  actually navigates by.
+- **The VB is checked as code.** `tools/check_vb.py` -- blocks, quotes,
+  parens, and every member and constructor arity of the assembly's own
+  types. It is what makes the generated/hand-written seam safe: rename
+  `CommandCatalog.Groups` and the call site in `CalofinPalette.vb`
+  fails a check rather than somebody's AutoCAD. It is not a compiler
+  and does not type-check, and saying so is part of the deal.
+
+`tests/test_ui_data.py` reads the generated VB back and holds it to the
+panel -- deliberately not by calling the generator, which would only
+agree with itself -- and `tests/test_check_vb.py` drives the linter
+against VB that is wrong on purpose.
 
 Still open, and genuinely blocked on a machine with a compiler:
 

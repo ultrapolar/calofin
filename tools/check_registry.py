@@ -28,11 +28,13 @@ What it deliberately does NOT do:
   * choose a job page other than Rest.  Rest is *defined* as the
     complement of Pool/Cover/Spa, so appending there is arithmetic, not
     judgement; moving a tool off Rest is judgement.
-  * touch the VB palette at all.  Nothing here can compile it -- the
-    project targets net48 against the AutoCAD.NET reference assemblies
-    -- so a --fix that edited VB source would be writing code no test
-    in this repo can run.  The palette is CHECKED and reported on,
-    with the exact New Entry(...) line to paste, and left to a human.
+  * write VB.  Nothing here can compile it -- the project targets
+    net48 against the AutoCAD.NET reference assemblies -- so a --fix
+    that edited VB source by hand would be writing code no test in
+    this repo can run.  It no longer has to: the palette's catalog is
+    generated from these same tables by tools/gen_ui_data.py, so a
+    tool missing from the palette is a regeneration, not an edit, and
+    that is what the report says.
 
 LAZPANEL.lsp stays a hand-edited lisp/ file: --fix is a codemod over
 it, the way `sed` would be, not a build step.  It has no generated
@@ -54,12 +56,19 @@ from callib import (  # noqa: E402
 
 PANEL = LISP_DIR / "lazpanel" / "LAZPANEL.lsp"
 
-#: The VB palette's own catalog, and the LISP glue that tells it which
+#: The VB palette's catalog, and the LISP glue that tells it which
 #: commands this session has loaded.  Neither can be compiled or run
 #: here -- Calofin.vbproj targets net48 against the AutoCAD.NET
 #: reference assemblies -- but both are TEXT, and text is exactly what
 #: drifts: the palette shipped 60 of the panel's 67 and nothing said so.
-PALETTE = ROOT / "ui" / "calofin_net" / "CalofinPalette.vb"
+#:
+#: The catalog is now GENERATED from LAZPANEL's own tables by
+#: tools/gen_ui_data.py, which is what closed that gap for good.  It is
+#: still read and checked here rather than assumed: the generator's
+#: own --check proves the file is current, and this proves the tables
+#: it holds say what the panel says.  Two different questions, and the
+#: cheap one to skip is the one that catches a generator bug.
+PALETTE = ROOT / "ui" / "calofin_net" / "Generated" / "CommandCatalog.g.vb"
 GLUE = ROOT / "ui" / "calofin_ui" / "calofin.lsp"
 
 #: One {"Layout", { ... }} block of CommandCatalog.Groups.
@@ -386,12 +395,20 @@ def palette_problems(caps, pg, placed):
     commands, in the same groups, with the same words.  A blurb is the
     palette's own -- it has no counterpart on the panel -- so it is not
     compared, only required to be there.
+
+    The catalog is generated now, so the way it goes wrong has changed:
+    it is no longer a forgotten hand-edit but a forgotten regeneration,
+    and every message below says so.  Checking it anyway is deliberate.
+    tools/gen_ui_data.py --check proves the file is what the generator
+    would write; this proves what the generator wrote says what the
+    panel says, which is the half a generator bug would break.
     """
     problems = []
     cat = palette_catalog()
     if cat is None:
         return ["%s: cannot read CommandCatalog.Groups - has the table "
-                "been renamed or reshaped?" % PALETTE.relative_to(ROOT)]
+                "been renamed or reshaped?  It is generated: "
+                "python3 tools/gen_ui_data.py" % PALETTE.relative_to(ROOT)]
 
     rel = PALETTE.relative_to(ROOT)
     for group in CATEGORIES:
@@ -402,21 +419,23 @@ def palette_problems(caps, pg, placed):
         have = set(cat[group])
         for c in sorted(want - have):
             problems.append(
-                '%s: %s is on the panel\'s %s page and not in the palette '
-                '- add New Entry("%s", "%s", "<what it does>") to the %s '
-                'group' % (rel, c, group, c, caps.get(c, ""), group))
+                "%s: %s is on the panel's %s page and not in the palette "
+                "- regenerate the catalog: python3 tools/gen_ui_data.py "
+                "(and give it a blurb in ui/calofin_net/blurbs.txt)"
+                % (rel, c, group))
         for c in sorted(have - want):
             where = [g for g in CATEGORIES
                      if c in {x for ns in pg.get(g, {}).values() for x in ns}]
             problems.append(
                 "%s: %s is in the palette's %s group but the panel files "
-                "it under %s" % (rel, c, group,
-                                 "/".join(where) or "no category page"))
+                "it under %s - regenerate: python3 tools/gen_ui_data.py"
+                % (rel, c, group, "/".join(where) or "no category page"))
         for c in sorted(have & want):
             if cat[group][c] != caps.get(c, ""):
                 problems.append(
                     "%s: %s reads %r in the palette and %r on the panel - "
-                    "one caption, two surfaces"
+                    "one caption, two surfaces; regenerate: python3 "
+                    "tools/gen_ui_data.py"
                     % (rel, c, cat[group][c], caps.get(c, "")))
 
     blank = sorted(c for g in cat.values() for c, _ in g.items()

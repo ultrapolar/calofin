@@ -291,7 +291,7 @@ everything else releases one file per source.
 
 | | Folder | |
 | --- | --- | --- |
-| Calofin palette (VB.NET) | `ui/calofin_net/` | Dockable AutoCAD palette: one button per command, plus forms for POOL and SPA. Its catalog is held against `LAZPANEL`'s roster by `tools/check_registry.py` - same commands, same four groups, same caption words - so the two surfaces cannot part again the way they had (the palette shipped 60 of 67) |
+| Calofin palette (VB.NET) | `ui/calofin_net/` | Dockable AutoCAD palette: one button per command, plus forms for POOL and SPA. Its catalog is no longer typed - `Generated/CommandCatalog.g.vb` is written from `LAZPANEL`'s own tables by `tools/gen_ui_data.py`, so the two surfaces cannot part again the way they had (the palette shipped 60 of 67). The tooltips are the palette's own words and stay hand-written, in `blurbs.txt` |
 | Palette LISP glue | `ui/calofin_ui/` | `calofin.lsp` - reports which commands are actually loaded this session, so the palette can grey out the rest. Checked too: a palette button with no probe-list name could never grey out, which is how five of them shipped |
 
 `ui/PLAN.md` records how the palette got here and why the wire between
@@ -343,6 +343,9 @@ design it records (D1-D6) is what got built.
 | `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin **and that twin carries the same version banner**, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns, and special forms given the wrong number of arguments (a four-argument `(if ...)` parses fine and dies at the command line) |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
+| `gen_ui_data.py` | Writes the palette's `Generated/CommandCatalog.g.vb` from `lzp:*captions*` / `lzp:*groups*` plus `ui/calofin_net/blurbs.txt`. `--check` fails when the file on disk is not what a fresh run would write, the same contract `releases/` is held to |
+| `check_vb.py` | Static check over the VB palette, for a tree with no VB compiler: blocks opened and closed by the right closer, quotes and parens balanced per logical line, and every member and constructor arity of the assembly's OWN types resolved - which is what holds the hand-written palette to the generated catalog |
+| `check_registry.py` | Every place a tool has to be registered - panel caption and placement, loader slot, README counts, the palette catalog and its probe list - with every count computed rather than typed; `--fix` repairs what is not editorial |
 
 `tests/test_pool_runtime.py` and `tests/test_spa_runtime.py` load the
 real `POOL.LSP` / `SPA.LSP` into the AutoLISP VM in `tests/lispvm.py`
@@ -439,6 +442,14 @@ python3 tests/test_dialog_actions.py  # every action_tile expression on every
                                       # DCL page, EVALUATED - a callback is a
                                       # string, so a typo'd or moved helper is
                                       # dead until somebody clicks that tile
+python3 tests/test_ui_data.py         # the palette's generated catalog read
+                                      # back and held to LAZPANEL's roster -
+                                      # captions, categories, the whole tab
+                                      # strip, and the blurbs it must not invent
+python3 tests/test_check_vb.py        # the VB linter itself, driven against VB
+                                      # that is wrong on purpose: a checker
+                                      # that has stopped checking is worse
+                                      # than none
 python3 tests/test_cancel_paths.py    # every headline command cancelled at its
                                       # first prompt: the handler runs, settings
                                       # come back, no group or error mode left
