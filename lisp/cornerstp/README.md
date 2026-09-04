@@ -30,7 +30,12 @@ Common to all three:
 * **Optional side profile** (`Add a side profile? [Yes/No] <Yes>`):
   you give the step depths (vertical drops), top step first -- one per
   step plus one more for the drop after the last tread, so 3 steps
-  take 4 depths -- then pick the top of the first tread. The flight
+  take 4 depths -- then pick the top of the first tread. HEMISTEP's
+  flight reads FROM THE WALL: the pick is the top of the wall (the
+  curve, in its curve modes), the first depth it asks is the drop AT
+  THE WALL, and the first tread it draws is the flat between the wall
+  and the first chord, so the flight covers the same distances the
+  plan's tread chain does. The flight
   always runs down and to the left; every depth gets its own vertical
   linear dim climbing with the steps, the overall depth sits further
   out, the treads carry no dims.
@@ -63,7 +68,14 @@ Per routine:
   one polyline of arcs through every step end; in the curve modes the
   span over the first step carries the selected curve's own bulge.
 * **NORMIESTEP** -- one line (steps centered on it), two lines (a
-  corner; you pick the line the steps run off of), or a drawn "U"
+  corner; you pick the line the steps run off of, and the run sits in
+  a recess OUTSIDE the corner -- the two lines run away from it into
+  the pool, so the water is the side they span and the steps go the
+  other way, out through the wall they come off. Both sides of the
+  recess are drawn: the inner one carries the line the treads butt
+  against past the corner, the outer one is that line offset by the
+  width, and only the outer one takes the back-corner flare), or a
+  drawn "U"
   (treads filled in, no width asked -- the arms give it). The
   width is given once. Back corners take the canonical **Treatment**
   question -- `How should ... be treated?
@@ -137,7 +149,8 @@ override):
 * `python3 tests/test_cornerstp_profile.py` -- the side profile all
   three draw, in the VM.
 * `python3 tests/test_normiestep_corner.py` -- NORMIESTEP's corner
-  mode and its outer side line, in the VM.
+  mode -- the recess outside the corner and both of its sides -- in
+  the VM.
 
 Each VM-driven one reruns against the grouped build with
 `CALOFIN_LISP_ROOT=shared`.

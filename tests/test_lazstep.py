@@ -1036,7 +1036,8 @@ for tool, pair_of_walls, p1, p2, picks, prompts in CASES:
     assert not [p for p in asked if 'step tread' in p], \
         "%s: a tread was asked for anyway: %r" % (tool, asked)
     assert not [p for p in asked
-                if 'step depth' in p or 'Depth after' in p], \
+                if 'step depth' in p or 'Depth after' in p
+                or 'Depth at' in p], \
         "%s: a depth was asked for anyway: %r" % (tool, asked)
     assert not [p for p in asked if 'Step 4' in p], \
         "%s: the count did not end the tread loop: %r" % (tool, asked)

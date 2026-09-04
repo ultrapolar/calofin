@@ -101,7 +101,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.4")
+(setq *lazstep-version* "v1.5")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -325,8 +325,11 @@
 
 ;; N+1 depth dimensions: depth1..depthN against each drop, depthafter
 ;; against the drop after the last tread.  Each stands a fixed gap off
-;; its own step, so they climb with the flight.
-(defun lzt:depthdims (n / i out x ya yb ltr key lbl)
+;; its own step, so they climb with the flight.  FLBL renames the FIRST
+;; drop where the routine does: HEMISTEP's flight reads from the wall,
+;; so its depth1 is the drop AT THE WALL, not step 1's.  nil keeps the
+;; plain numbering.
+(defun lzt:depthdims (n flbl / i out x ya yb ltr key lbl)
   (setq i 1)
   (while (<= i (1+ n))
     (setq x   (+ (lzt:profx i n) lzt:*prof-gap*)
@@ -334,8 +337,9 @@
           yb  (lzt:profy i n)
           ltr (if (> i n) "DA" (strcat "D" (itoa i)))
           key (if (> i n) "depthafter" (strcat "depth" (itoa i)))
-          lbl (if (> i n) "after the last tread"
-                          (strcat "Step " (itoa i) " drop"))
+          lbl (cond ((> i n) "after the last tread")
+                    ((and flbl (= i 1)) flbl)
+                    ((strcat "Step " (itoa i) " drop")))
           out (cons (list ltr key x ya x yb "v" lbl) out)
           i   (1+ i)))
   (reverse out))
@@ -365,7 +369,7 @@
         (append out (lzt:profile n))
         (append (lzt:treaddims n lzt:*plan-x1*)
                 (reverse dims)
-                (lzt:depthdims n))
+                (lzt:depthdims n nil))
         (lzt:cutlist n)))
 
 ;; ---- HEMISTEP: a curve with N chords across it ----------------------
@@ -392,7 +396,7 @@
         (append out (lzt:profile n))
         (append (lzt:treaddims n lzt:*chord-x1*)
                 (reverse dims)
-                (lzt:depthdims n))
+                (lzt:depthdims n "Drop at the wall"))
         (lzt:cutlist n)))
 
 ;; ---- NORMIESTEP: a straight run, ONE width for the whole of it ------
@@ -412,7 +416,7 @@
                 (list (list "W" "width" lzt:*width-x* ytop
                             lzt:*width-x* ybot "v"
                             "One width, the whole run"))
-                (lzt:depthdims n))
+                (lzt:depthdims n nil))
         (lzt:cutlist n)))
 
 ;; The chart for a type and a count.  This is the whole of the "drawing

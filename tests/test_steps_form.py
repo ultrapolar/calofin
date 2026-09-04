@@ -135,8 +135,11 @@ def tread_asked(vm):
 
 
 def depth_asked(vm):
+    # 'Depth at' catches HEMISTEP's first one, which reads from the
+    # wall rather than by step number
     return [p for p, _ in vm.prompts
-            if 'step depth' in p or 'Depth after' in p]
+            if 'step depth' in p or 'Depth after' in p
+            or 'Depth at' in p]
 
 
 # the prompt-side scripts, verbatim from test_cornerstp_profile.py

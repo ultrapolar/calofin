@@ -37663,9 +37663,13 @@
 ;;;       give the step depths (the vertical drops), top step first -
 ;;;       one per step PLUS one more for the drop after the last
 ;;;       tread, so 3 steps take 4 depths - with Back to re-ask the
-;;;       previous one; then pick the top of the first tread.  The
-;;;       flight always runs DOWN AND TO THE LEFT from there, so there
-;;;       is no side to pick.  See "The side profile" below.
+;;;       previous one; then pick the top of the wall (the curve, in
+;;;       the curve modes).  The flight READS FROM THE WALL: the first
+;;;       depth asked is the drop AT THE WALL and the first tread it
+;;;       draws is the flat against it - the one the plan measured
+;;;       from the wall to the first chord.  It always runs DOWN AND
+;;;       TO THE LEFT from the pick, so there is no side to pick.
+;;;       See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - EXCEPT the last one drawn: the line that closes
 ;;;       the run has no riser behind it, so it is handed to AUTOBEAD
@@ -37681,8 +37685,14 @@
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
 ;;;   world X/Y, always descending to the LEFT of the picked top of the
-;;;   first tread and ending on the last depth - so the steps rise to
-;;;   the right, the way the shop's own elevations read.
+;;;   WALL and ending on the last depth - so the steps rise to the
+;;;   right, the way the shop's own elevations read.  It starts where
+;;;   the run starts: the pick is the top of the wall, the first drop
+;;;   is the drop at the wall, and the first tread is the flat between
+;;;   the wall and the first chord.  Every tread after that is the gap
+;;;   between two chords, so the flight covers the same distances the
+;;;   plan's tread chain does, in the same order.  (In the curve modes
+;;;   the run starts at the curve instead, and the flight says so.)
 ;;;   The dims climb with them, up and to the right, on the high side:
 ;;;     * every depth is a dim of its own, standing the same distance
 ;;;       right of the corner its drop lands on, so they step out with
@@ -37751,7 +37761,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.11") ; printed on load and at command start so a
+(setq *hs-version* "v3.12") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -38322,7 +38332,8 @@
                       bmark bsides btreads bnums bside bdir bss pr be
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
-                      px py totrun totdrop td cnrs pfo pgap fsteps fkey)
+                      px py totrun totdrop td cnrs pfo pgap fsteps fkey
+                      wnoun)
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
@@ -38802,6 +38813,9 @@
   ;; *cs-depth-dimstyle* too.
   (if (> drawn 0)
     (progn
+      ;; what the run starts at, and so what the flight starts at: the
+      ;; wall in base-line mode, the curve itself in the curve modes
+      (setq wnoun (if cmode "the curve" "the wall"))
       (if (null (setq fkey (hs-fkw 'profile "Yes No" "Yes")))
         (progn
           (initget "Yes No")
@@ -38840,7 +38854,13 @@
                   (initget 6 "Back Undo"))
                 (setq dd (getdist
                            (cond
-                             ((= jx 1) "\nStep 1 - step depth (the drop): ")
+                             ;; the flight starts where the run does, so
+                             ;; the first drop is the one AT THE WALL -
+                             ;; not step 1's, which is the drop off the
+                             ;; tread the wall already gave
+                             ((= jx 1)
+                              (strcat "\nDepth at " wnoun
+                                      " - the drop onto the first tread: "))
                              ((> jx tcount)
                               (strcat "\nDepth after the last tread [Back] <"
                                       (rtos (car drops)) ">: "))
@@ -38861,7 +38881,7 @@
           (setq drops (reverse drops))
           ;; Placement.  The profile always runs DOWN AND TO THE LEFT
           ;; from the pick, so there is no side to ask about.
-          (setq ptop (getpoint (strcat "\nPick the top of the first tread"
+          (setq ptop (getpoint (strcat "\nPick the top of " wnoun
                                        " for the side profile: ")))
           (if (null ptop)
             (princ "\nNo point picked - side profile skipped.")
@@ -38923,7 +38943,8 @@
                   (hs-dimv *cs-depth-dimstyle* (car cnrs) (last cnrs)
                            (list (+ (car ptop) pfo pgap)
                                  (- (cadr ptop) (* 0.5 totdrop)) 0.0))))
-              (princ (strcat "\nSide profile drawn: " (itoa tcount)
+              (princ (strcat "\nSide profile drawn from " wnoun ": "
+                             (itoa tcount)
                              " step(s), " (itoa (length drops))
                              " depths, down to the left; total run "
                              (rtos totrun) ", overall depth "
@@ -39072,10 +39093,13 @@
   (princ "\n     or repeats the previous width (line mode).")
   (princ "\n  3. One last distance to the back of the curve places the crown,")
   (princ "\n     and the boundary polyline is drawn through the step ends.")
-  (princ "\n  4. Finally you may add a SIDE PROFILE: give the step depths")
+  (princ "\n  4. Finally you may add a SIDE PROFILE, read FROM THE WALL:")
+  (princ "\n     the first depth is the drop AT THE WALL and the first")
+  (princ "\n     tread the flat between the wall and the first chord.")
+  (princ "\n     Give the step depths")
   (princ "\n     (top step first, plus the drop after the last tread, so")
   (princ "\n     3 steps take 4 depths; Back supported), then pick the")
-  (princ "\n     top of the first tread.  The flight always runs down and")
+  (princ "\n     top of the WALL.  The flight always runs down and")
   (princ "\n     to the LEFT from there, so the steps rise to the right")
   (princ "\n     and the dims climb with them - each depth beside its own")
   (princ "\n     step, the overall further out; the treads are not dimmed.")
@@ -39220,11 +39244,16 @@
 ;;;                      square and run to the last tread; the corner
 ;;;                      treatment sits on the last step.
 ;;;   TWO LINES (a corner)
-;;;                      the steps sit against the corner and always run
-;;;                      OUTWARD from it.  You are asked which of the two
-;;;                      lines the steps run off of - the same line the
-;;;                      back-corner offset is measured on; the treads run
-;;;                      parallel to it and butt against the other one.
+;;;                      the steps sit in a recess OUTSIDE the corner.
+;;;                      The corner itself says which way that is: both
+;;;                      lines run away from it into the pool, so the
+;;;                      run goes the other way - out through the wall
+;;;                      it comes off, never into the water between
+;;;                      them.  You are asked which of the two lines
+;;;                      the steps run off of - the same line the
+;;;                      back-corner offset is measured on; the treads
+;;;                      run parallel to it and butt against the other
+;;;                      one, carried on past the corner.
 ;;;   A "U" ............ the outline the steps sit in is already drawn,
 ;;;                      so the treads are just filled in.  The BASE of
 ;;;                      the U - its closed end - is the wall the steps
@@ -39284,13 +39313,16 @@
 ;;;       off the base wall, running from the wall to the last tread -
 ;;;       the treatment sits on the last step's corners, so a Radius or
 ;;;       Cut one stops the walls an offset short and the corner
-;;;       piece finishes the trip.  In corner mode only the outer side
-;;;       is drawn - with its back corner flare at the wall - since the
-;;;       steps run outward from the corner and the line they sit
-;;;       against closes the inner side.  That outer side runs OUTWARD
-;;;       with the treads: it is the line they sit against offset by
-;;;       the step width, not a line square to the base, so it still
-;;;       meets every tread end where the corner is not a true 90.
+;;;       piece finishes the trip.  Corner mode draws BOTH sides of
+;;;       the recess, because the line the treads sit against stops at
+;;;       the corner and the run is on the far side of it: the inner
+;;;       side carries that line on past the corner, and the outer one
+;;;       is the same line offset by the step width.  Neither is square
+;;;       to the base - the treads all start on the leaning line and
+;;;       run out from it - so both still meet every tread end where
+;;;       the corner is not a true 90.  Only the outer side takes the
+;;;       back-corner flare: the inner one runs straight on out of the
+;;;       wall it continues, so there is no corner there to treat.
 ;;;       The U already has its arms, so only a back corner asked for
 ;;;       there is drawn.
 ;;;   7.  Optional dimensions: the step treads chained along the run,
@@ -39384,7 +39416,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.5") ; printed on load and at command start so a
+(setq *ns-version* "v3.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -39980,7 +40012,7 @@
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e coff tent te1 te2
-                        rsubj ngp ngv
+                        rsubj ngp ngv outv
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
@@ -40126,19 +40158,23 @@
          (progn (princ "\nNothing picked - nothing drawn.") (exit)))
        (setq base (ns-nearseg segs (trans pt 1 0))
              side (if (equal base d1) d2 d1)))
-     ;; U runs along the base, away from the corner; DIR heads away from
-     ;; the base on the side the other line goes
-     (setq u   (ns-unit (ns-vec corner (ns-far base corner)))
-           dir (ns-unit (ns-vec corner (ns-far side corner))))
-     (if (or (null u) (null dir))
+     ;; U runs along the base, away from the corner.  Which way the run
+     ;; goes is not asked and not guessed: the corner says it.  Both
+     ;; lines run away from the corner into the pool, so the water is
+     ;; the side they span and OUTSIDE is the other one - the run heads
+     ;; away from the line it butts against, out through the wall it
+     ;; comes off, into the recess it sits in.
+     (setq u    (ns-unit (ns-vec corner (ns-far base corner)))
+           outv (ns-unit (ns-vec corner (ns-far side corner))))
+     (if (or (null u) (null outv))
        (progn (princ "\nA selected line has zero length.") (exit)))
      ;; keep DIR square to the treads so step treads measure true
      (setq dir (ns-unit (ns-scl (ns-perp u)
-                                (if (< (cal:dot (ns-perp u) dir) 0.0)
-                                  -1.0 1.0)))
-           sp  corner)
-     (princ (strcat "\nSteps against the corner, running OUTWARD from it"
-                    " off the picked line.")))
+                                (if (< (cal:dot (ns-perp u) outv) 0.0)
+                                  1.0 -1.0)))
+           sp   corner)
+     (princ (strcat "\nSteps against the corner, running OUT through the"
+                    " picked line - the two lines say which way that is.")))
 
     ;; ---------- a U: the outline is drawn, fill in the treads ----------
     ;; The parts - arms, an optional back corner on each side (diagonal
@@ -40420,15 +40456,18 @@
       ((= mode "LINE")
        (setq e1 (ns-add p (ns-scl u (* 0.5 wid)))
              e2 (ns-add p (ns-scl u (* -0.5 wid)))))
-      ;; from the side line outward by the width
+      ;; from the side line outward by the width.  The run sits on the
+      ;; far side of the corner, so every tread meets that line past
+      ;; the end of the drawn segment - which is the recess's inner
+      ;; wall, not a line that had to be stretched to reach.  BEY stays
+      ;; nil: there is nothing to report.
       ((= mode "CORNER")
        (setq inn (inters p (ns-add p u) (car side) (cadr side) nil))
        (if (null inn)
          (princ (strcat "\n  Step " (itoa n)
                         ": cannot reach the side line - step skipped."))
-         (setq e1  inn
-               e2  (ns-add inn (ns-scl u wid))
-               bey (ns-beyond inn (car side) (cadr side)))))
+         (setq e1 inn
+               e2 (ns-add inn (ns-scl u wid)))))
       ;; trimmed to the sides of the U - arm, diagonal or fillet,
       ;; whichever the tread actually lands on
       (T
@@ -40544,26 +40583,32 @@
          (ns-mkline e (ns-add e (ns-scl dir (- cum coff))))
          (if (> coff 0.0)
            (ns-outer e u dir cum rtype coff)))
-        ;; The outer side only - the steps run outward from the
-        ;; corner, so the line they sit against closes the inner side
-        ;; already.  That outer side is the line they sit against
-        ;; OFFSET by the step width, NOT a line square to the base:
-        ;; the treads all start on the leaning line and run outward
-        ;; from it, so a square side wall would lean into the run and
-        ;; miss every tread end but the first.  PPREV is the last
-        ;; tread that actually landed, so a step taken Back cannot
-        ;; leave this pointing at one that was undone.
+        ;; BOTH sides of the recess.  The run is on the far side of
+        ;; the corner from the water, so the line the treads sit
+        ;; against stops dead at the wall: its inner side has to be
+        ;; drawn, carrying that line on past the corner.  The outer
+        ;; side is the same line OFFSET by the step width, NOT a line
+        ;; square to the base - the treads all start on the leaning
+        ;; line and run out from it, so a square side wall would lean
+        ;; into the run and miss every tread end but the first.  Only
+        ;; the outer side takes the back-corner flare; the inner one
+        ;; runs straight on out of the wall it continues, so there is
+        ;; no corner there to treat.  PPREV is the last tread that
+        ;; actually landed, so a step taken Back cannot leave these
+        ;; pointing at one that was undone.
         ((= mode "CORNER")
          (setq lastinn (inters pprev (ns-add pprev u)
                                (car side) (cadr side) nil))
          (if (null lastinn)
            (princ (strcat "\n  Note: the run does not reach the line it"
-                          " sits against - no outer side drawn."))
-           (ns-side (ns-add corner (ns-scl u wid))
-                    u
-                    (ns-unit (ns-vec corner lastinn))
-                    (distance corner lastinn)
-                    rtype roff rrad)))
+                          " sits against - no sides drawn."))
+           (progn
+             (ns-mkline corner lastinn)
+             (ns-side (ns-add corner (ns-scl u wid))
+                      u
+                      (ns-unit (ns-vec corner lastinn))
+                      (distance corner lastinn)
+                      rtype roff rrad))))
         ;; a U has its arms drawn already - only a back corner asked for
         ;; here is new geometry
         ((and (= mode "U") bc1 bc2)
@@ -40860,8 +40905,9 @@
   (ns-tut-pause)
   (princ "\nWHAT YOU SELECT DECIDES THE MODE")
   (princ "\n  ONE LINE ........ steps centered on it, on the side you pick")
-  (princ "\n  TWO LINES ....... a corner: the steps sit against it and run")
-  (princ "\n                    OUTWARD, off the line you pick")
+  (princ "\n  TWO LINES ....... a corner: the steps sit in a recess OUTSIDE")
+  (princ "\n                    it, off the line you pick - the two lines")
+  (princ "\n                    themselves say which way out is")
   (princ "\n  A U ............. the outline is drawn; treads fill in,")
   (princ "\n                    trimmed to its arms.  The BASE of the U is")
   (princ "\n                    the wall: the run starts there and marches")
@@ -40908,7 +40954,9 @@
   (princ "\n  - warns on tilted UCS / non-flat lines / unusable layer")
   (princ "\n  - bare numbers read as inches; 1'4 style works anywhere")
   (princ "\n  - corner mode keeps step treads square to the picked line,")
-  (princ "\n    so a skewed corner still measures true")
+  (princ "\n    so a skewed corner still measures true, and draws both")
+  (princ "\n    sides of the recess - the line the treads sit against")
+  (princ "\n    carried past the corner, and that line offset by the width")
   (princ "\n  - U treads trim to whatever the side is at that distance -")
   (princ "\n    arm, diagonal or arc - and the run stops at the open end")
   (princ "\n  - a corner deeper than the run - or two that would meet")
@@ -41125,7 +41173,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.4")
+(setq *lazstep-version* "v1.5")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -41299,8 +41347,11 @@
 
 ;; N+1 depth dimensions: depth1..depthN against each drop, depthafter
 ;; against the drop after the last tread.  Each stands a fixed gap off
-;; its own step, so they climb with the flight.
-(defun lzt:depthdims (n / i out x ya yb ltr key lbl)
+;; its own step, so they climb with the flight.  FLBL renames the FIRST
+;; drop where the routine does: HEMISTEP's flight reads from the wall,
+;; so its depth1 is the drop AT THE WALL, not step 1's.  nil keeps the
+;; plain numbering.
+(defun lzt:depthdims (n flbl / i out x ya yb ltr key lbl)
   (setq i 1)
   (while (<= i (1+ n))
     (setq x   (+ (lzt:profx i n) lzt:*prof-gap*)
@@ -41308,8 +41359,9 @@
           yb  (lzt:profy i n)
           ltr (if (> i n) "DA" (strcat "D" (itoa i)))
           key (if (> i n) "depthafter" (strcat "depth" (itoa i)))
-          lbl (if (> i n) "after the last tread"
-                          (strcat "Step " (itoa i) " drop"))
+          lbl (cond ((> i n) "after the last tread")
+                    ((and flbl (= i 1)) flbl)
+                    ((strcat "Step " (itoa i) " drop")))
           out (cons (list ltr key x ya x yb "v" lbl) out)
           i   (1+ i)))
   (reverse out))
@@ -41339,7 +41391,7 @@
         (append out (lzt:profile n))
         (append (lzt:treaddims n lzt:*plan-x1*)
                 (reverse dims)
-                (lzt:depthdims n))
+                (lzt:depthdims n nil))
         (lzt:cutlist n)))
 
 ;; ---- HEMISTEP: a curve with N chords across it ----------------------
@@ -41366,7 +41418,7 @@
         (append out (lzt:profile n))
         (append (lzt:treaddims n lzt:*chord-x1*)
                 (reverse dims)
-                (lzt:depthdims n))
+                (lzt:depthdims n "Drop at the wall"))
         (lzt:cutlist n)))
 
 ;; ---- NORMIESTEP: a straight run, ONE width for the whole of it ------
@@ -41386,7 +41438,7 @@
                 (list (list "W" "width" lzt:*width-x* ytop
                             lzt:*width-x* ybot "v"
                             "One width, the whole run"))
-                (lzt:depthdims n))
+                (lzt:depthdims n nil))
         (lzt:cutlist n)))
 
 ;; The chart for a type and a count.  This is the whole of the "drawing
