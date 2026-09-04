@@ -461,13 +461,42 @@ changed with them: not "do two copies agree" but "did the generator
 carry every table". Same three counts as before -- 19, 17 and 11 -- which
 is the point.
 
+### Phase 5h -- the pool sheet's other questions *(done 2026-09-04)*
+
+The pool chart form asked for measurements and nothing else. It now
+asks what `LAZFORM` asks: the in-square toggle (a KEYWORD to POOL, not
+a yes/no), the bottom type from `lzf:*btypes*`, the mode dropdowns from
+`lzf:*picks*` -- placed by that table's own `section` word -- the cross
+dims from `lzf:*cross*`, and the corner rows from `lzf:*corners*`.
+
+Two rules came with them, and both are data rather than logic once the
+table is carried properly:
+
+- **The cross dims are not asked in square.** A cross dim is a tape run
+  corner to corner and it is what tells POOL how far OUT of square the
+  pool is. `lzf:*picks*` says so itself by tying the mode dropdown to
+  that section.
+- **A corner row is not always one corner.** In square one row answers
+  a collective key covering all four and its siblings answer nothing;
+  out of square each is asked for itself. So the row carries TWO target
+  lists, the toggle picks which, the answer is fanned out to every
+  target, and a size rides under the TARGET's key rather than the row's
+  -- `lzf:cornerpairs`, transcribed rather than re-derived.
+
+That last one is why the pool corner table is kept apart from the spa
+one in `ChartCatalog`: a spa corner row is one corner and nothing else,
+and a single structure for both would be a lie about the pool.
+
 **Not there yet**, and named rather than left to be discovered: the
 step form offers the chart's boxes but not `lzt:asks`' dropdowns and
-counters, which stay command-line questions; the pool bottom tab is
-still artwork with a field map; the pool chart form does not offer
-`lzf:*corners*`, its cross-dim modes or its picks; and `lzf:dead`
-lives only in Lisp, so a form shows every box its sheet has and lets
-the routine ignore what this page does not ask about.
+counters, which stay command-line questions; `lzf:*oaslive*` is not
+carried, so an OASIS sheet shows every box it has rather than the ones
+its `sub` dropdown makes live; and `lzf:dead` lives only in Lisp, so a
+form shows every box its sheet has and lets the routine ignore what
+this page does not ask about. **The pool-bottom tab stays a
+photograph on purpose** -- the chart tab asks for the same depths and
+the same `btype`, but it cannot show you a SECTION, and choosing a
+bottom is the moment you want to look at one.
 
 Still open, and genuinely blocked on a machine with a compiler:
 

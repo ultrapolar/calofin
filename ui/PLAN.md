@@ -87,10 +87,15 @@ reasons still matter:
      and Draw should stay live -- that spelling used to travel as an NA
      nobody meant.  Then type `rubbish` into another: the line should
      name it BY ITS LETTER and grey Draw out.
-  5. Press Draw, let POOL run, reopen the tab and press **Recall last**:
+  5. Untick **In square** on a Rectangle: four corner rows and four
+     cross-dim boxes should appear.  Tick it again and the cross dims
+     should go -- in square there are none to take.  Set corner A to
+     `Radius`, give it a size, and confirm POOL puts that radius on all
+     four; untick, set each corner separately, and confirm they differ.
+  6. Press Draw, let POOL run, reopen the tab and press **Recall last**:
      the numbers should come back into the empty boxes only.
-  6. On **Steps**, pick 5 steps and confirm the drawing has five treads.
-  7. On **Spa**, set a corner to `Diagonal` and give it a size; the size
+  7. On **Steps**, pick 5 steps and confirm the drawing has five treads.
+  8. On **Spa**, set a corner to `Diagonal` and give it a size; the size
      should travel.  Set another to `90` and type a size anyway -- that
      one should NOT, because 90 asks for no number.  Then run the form
      once leaving a corner on `(ask)` and confirm SPA asks for it, and
