@@ -70,9 +70,24 @@ STEPS = LISP_DIR / "lazstep" / "LAZSTEP.lsp"
 # ------------------------------------------------------------- reading
 
 def vm_for(path):
-    vm = VM()
-    vm.load(path)
-    return vm
+    """A VM with PATH loaded -- from lisp/, whatever tier is being run.
+
+    tests/lispvm.py remaps a lisp/ path to shared/parts/ whenever
+    CALOFIN_LISP_ROOT is set, so that every suite can be re-run against
+    the grouped build.  This is not a suite.  It reads the DEVELOPMENT
+    HOME, always, because that is where a chart is edited and what the
+    generated file is checked against -- and the grouped twin swaps
+    lzf:flatten for cal:imgflatten, so a run under the other tier does
+    not even find the helper.  `make parity` is how that was found.
+    """
+    keep = os.environ.pop("CALOFIN_LISP_ROOT", None)
+    try:
+        vm = VM()
+        vm.load(path)
+        return vm
+    finally:
+        if keep is not None:
+            os.environ["CALOFIN_LISP_ROOT"] = keep
 
 
 def num(v):

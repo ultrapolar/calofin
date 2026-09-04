@@ -253,6 +253,23 @@ check("every co-ordinate is on the 0..1000 sheet", not off, repr(off[:4]))
 print("== 6. the file is current, and it is well-formed VB ==")
 
 check("gen_ui_charts --check is happy", not gen.check(), repr(gen.check()))
+
+# The generator reads the DEVELOPMENT HOME whatever tier a suite is
+# running under.  lispvm remaps a lisp/ path to shared/parts/ when
+# CALOFIN_LISP_ROOT is set -- which is how every suite gets re-run
+# against the grouped build -- and the grouped twin swaps lzf:flatten
+# for cal:imgflatten, so a generator that let itself be remapped died
+# outright at the other tier.  make parity is what found it.
+_keep = os.environ.pop('CALOFIN_LISP_ROOT', None)
+_plain = gen.build()
+os.environ['CALOFIN_LISP_ROOT'] = 'shared'
+_grouped = gen.build()
+if _keep is None:
+    os.environ.pop('CALOFIN_LISP_ROOT', None)
+else:
+    os.environ['CALOFIN_LISP_ROOT'] = _keep
+check("it writes the same file at either tier", _plain == _grouped,
+      "the tier a test happens to run under is changing the palette")
 _, vb_problems = check_vb.check()
 check("check_vb passes over the whole palette", not vb_problems,
       repr(vb_problems[:3]))
