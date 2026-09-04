@@ -891,11 +891,18 @@ def normie_line_mode(base, side_point, width, depths):
 
 
 def normie_corner_mode(base, side, width, depths, corner=(0.0, 0.0)):
-    """Two lines: treads parallel to BASE, butting against SIDE."""
+    """Two lines: treads parallel to BASE, butting against SIDE.
+
+    The run sits in a recess OUTSIDE the corner.  Both lines run away
+    from the corner into the pool, so the water is the side they span
+    and the steps go the other way - away from SIDE, out through the
+    wall they come off.  The treads meet SIDE past its end, on the
+    stretch of it that closes the recess.
+    """
     u = unit(vec(corner, base[1]))
     toward = unit(vec(corner, side[1]))
     pd = perp90(u)
-    direction = unit(scl(pd, 1.0 if dot(pd, toward) > 0 else -1.0))
+    direction = unit(scl(pd, -1.0 if dot(pd, toward) > 0 else 1.0))
     prev, out = corner, []
     for depth in depths:
         p = add(prev, scl(direction, depth))
@@ -985,6 +992,10 @@ def test_normie_corner_mode_butts_the_side_line():
                 "depth measured square to the base line"
             assert abs(abs(dot(unit(vec(inner, outer)), u)) - 1.0) < 1e-12, \
                 "tread runs parallel to the base line"
+            # ...and the run is OUTSIDE the corner: the side line runs
+            # one way from it, every tread the other
+            assert dot(vec(corner, inner), vec(corner, side[1])) < 0.0, \
+                f"{deg}: the run must sit outside the corner, not in it"
 
 
 def test_normie_u_mode_trims_to_the_arms():
