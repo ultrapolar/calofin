@@ -13,12 +13,17 @@
 ;;; exactly where CDCREATE puts its (nudge cdo:*offset* to push it
 ;;; off) -- in the "CROSS DIMENSIONS" dimension style, on the
 ;;; "DIMENSION" layer, ByLayer, the same convention CDCREATE and POOL
-;;; use.  Rinse and repeat: a drawn dimension CHAINS - its TO point
-;;; anchors the next tie, so consecutive ties cost one number each;
-;;; Enter at the TO prompt ends the chain and asks for a fresh FROM,
-;;; Enter at the FROM prompt finishes.  The chain's end is remembered
-;;; for the session, so a later CDCALLOUT resumes from it (Enter at
-;;; the TO prompt drops to a fresh FROM).  Nothing is ever clicked.
+;;; use.  Rinse and repeat: EVERY TIE IS ITS OWN PAIR -- a drawn
+;;; dimension returns to the FROM prompt, so the next tie names both
+;;; of its own points.  Enter at the TO prompt skips that one and
+;;; re-asks FROM; Enter at the FROM prompt finishes.  Nothing is ever
+;;; clicked.
+;;;
+;;; v1.7 chained instead, anchoring the next tie on the last TO point
+;;; so a run round the pool cost one number per tie.  That is not what
+;;; cross dims are: they are whichever two points the drafter wants
+;;; tied, in whatever order the sheet needs them, and guessing the
+;;; next FROM was wrong more often than it was convenient.
 ;;;
 ;;; Point numbers are typed the way they read in the drawing: "35",
 ;;; "Pt.35", "pt 35", "#35" and "035" all name the same point -- the
@@ -28,9 +33,8 @@
 ;;; layer, or a plain POINT on the POINTS layer).
 ;;;
 ;;; A number that names no point in the drawing is reported and the
-;;; prompt re-asks -- nothing is drawn from a typo.  Enter at the TO
-;;; prompt ends just that chain.  The whole run is one undo group:
-;;; a single U takes every dimension away.
+;;; prompt re-asks -- nothing is drawn from a typo.  The whole run is
+;;; one undo group: a single U takes every dimension away.
 ;;;
 ;;; Going back a step follows the shared Back convention (see the root
 ;;; README): B/BACK/U/UNDO at the TO prompt re-asks FROM, and Back at
@@ -48,7 +52,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.8")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
@@ -58,11 +62,6 @@
                                     ; drawing units (0.0 = right
                                     ; inbetween, on the tie itself --
                                     ; CDCREATE's convention)
-(setq cdo:*last-pt*     nil)        ; the last dimensioned TO point's
-                                    ; NAME - session memory: a later
-                                    ; run resumes the chain from it
-                                    ; (Enter at the To prompt drops to
-                                    ; a fresh From point)
 (setq *CDO-POINT-BLOCK* "ab_pt")    ; block name whose INSERTs mark
                                     ; points wherever they sit
 (setq *CDO-POINT-LAYER* "POINTS")   ; layer whose POINTs/INSERTs are
@@ -240,7 +239,7 @@
 ;; the whole call (the BPCALLOUT v1.0 lesson).
 (defun c:CDCALLOUT (/ *error* olderr oce ocl oos odim grouped havestyle
                       cands s1 s2 a b pre new made d dimlist stage
-                      done inchain)
+                      done)
 
   ;; -- restore drawing state on error / Esc.  A dimension command may
   ;;    still be open, so talk to AutoCAD through command-s -- and close
@@ -293,21 +292,16 @@
       ;;    the previous question: FROM -> TO, per the shared Back
       ;;    convention.  B/BACK/U/UNDO at TO re-asks FROM; Back at
       ;;    FROM (offered once something is drawn) un-draws the last
-      ;;    dimension.  A drawn dimension CHAINS: its TO point becomes
-      ;;    the next FROM, so consecutive ties are one number each;
-      ;;    Enter at the TO prompt ends the chain and drops back to a
-      ;;    fresh From point.  The dimension line goes right inbetween
-      ;;    the two points -- nothing to pick.
-      (setq made 0 dimlist nil done nil inchain nil)
-      ;; a later run resumes where the last one stopped - the anchor
-      ;; is remembered for the session; a name that no longer resolves
-      ;; (points erased, another drawing) silently starts at FROM
-      (if (and cdo:*last-pt* (setq a (cdo:find-point cdo:*last-pt* cands)))
-        (progn
-          (princ (strcat "\n  Continuing from Pt." (cdr a) " - Enter at"
-                         " the To prompt to pick a new From point."))
-          (setq stage 2))
-        (setq stage 1))
+      ;;    dimension.
+      ;;
+      ;;    EVERY TIE IS ITS OWN PAIR.  A drawn dimension returns to
+      ;;    the FROM prompt rather than anchoring the next tie on its
+      ;;    TO point: cross dims are not a chain round the pool, they
+      ;;    are whichever two points the drafter wants tied, and
+      ;;    guessing the next FROM was wrong more often than it was
+      ;;    convenient.  Both numbers, every time.  The dimension line
+      ;;    goes right inbetween the two points -- nothing to pick.
+      (setq made 0 dimlist nil stage 1 done nil)
       (while (not done)
         (cond
           ;; -- FROM: the loop head
@@ -331,18 +325,15 @@
                              "\" in the drawing -- nothing drawn.")))
              (t (setq stage 2))))
           ;; -- TO: a good answer draws the dimension right away and
-          ;;    the chain stays open on the new point
+          ;;    the loop goes back to FROM for the next pair
           (t
            (setq s2 (getstring (strcat "\nTo point number (from Pt."
                                        (cdr a) ") [Back]: ")))
            (cond
              ((= s2 "")
-              (if inchain
-                (princ "\n  Chain ended.")
-                (princ "\n  No second point -- this one skipped."))
-              (setq inchain nil)
+              (princ "\n  No second point -- this one skipped.")
               (setq stage 1))
-             ((cdo:backp s2) (setq inchain nil) (setq stage 1))
+             ((cdo:backp s2) (setq stage 1))
              ((null (setq b (cdo:find-point s2 cands)))
               (princ (strcat "\n  No point numbered \"" s2
                              "\" in the drawing -- nothing drawn.")))
@@ -366,11 +357,9 @@
                         d       (distance (car a) (car b)))
                   (princ (strcat "\n  Pt." (cdr a) " - Pt." (cdr b)
                                  " dimensioned (" (rtos d 4 4) ")."))))
-              ;; chain on: the TO point anchors the next tie, and is
-              ;; remembered as the session's resume point
-              (setq a b
-                    inchain T
-                    cdo:*last-pt* (cdr b)))))))
+              ;; and back to the FROM prompt: the next tie names both
+              ;; its own points
+              (setq stage 1))))))
 
       ;; -- put the drawing back the way it was
       (if (and odim (not (equal odim (getvar "DIMSTYLE"))))

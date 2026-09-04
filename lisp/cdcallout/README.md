@@ -5,12 +5,19 @@ clicking points, you **name** them: type the FROM point number and
 the TO point number — and an aligned dimension is drawn between
 those two survey points, the dimension line placed automatically
 **right inbetween**, on the tie itself (CDCREATE's convention;
-nudge `cdo:*offset*` to push it off). Nothing is ever clicked. A
-drawn dimension **chains**: its TO point anchors the next tie, so
-consecutive ties cost one number each; **Enter** at the TO prompt
-ends the chain, **Enter** at the FROM prompt finishes. The chain's
-end is remembered for the session, so a later `CDCALLOUT` resumes
-from it (Enter at the TO prompt drops to a fresh FROM point).
+nudge `cdo:*offset*` to push it off). Nothing is ever clicked.
+
+**Every tie is its own pair.** A drawn dimension returns to the FROM
+prompt, so the next tie names both of its own points; **Enter** at the
+TO prompt skips that one and re-asks FROM, **Enter** at the FROM
+prompt finishes. Nothing carries over between runs.
+
+v1.7 chained instead — the last TO point anchored the next tie, so a
+run round the pool cost one number each, and the chain's end was
+remembered for the session. That is not what cross dims are: they are
+whichever two points the drafter wants tied, in whatever order the
+sheet needs them, and guessing the next FROM was wrong more often than
+it was convenient.
 
 Every dimension lands the way `CDCREATE` and `POOL` make cross dims:
 
@@ -63,13 +70,12 @@ The shared Back convention (see the root README) applies:
 2. Type `CDCALLOUT`.
 3. `From point number:` — type it (e.g. `35`).
 4. `To point number:` — type it (e.g. `40`). The dimension draws
-   immediately, its line right inbetween the two points — and `40`
-   becomes the next FROM, so the chain keeps going one number per
-   tie.
-5. Press **Enter** at the TO prompt to end the chain and pick a new
-   FROM point; press **Enter** at the FROM prompt when done.
+   immediately, its line right inbetween the two points, and the
+   prompt goes back to `From point number:` for the next pair.
+5. Press **Enter** at the TO prompt to skip a tie you have changed
+   your mind about; press **Enter** at the FROM prompt when done.
 
-Each round reports what it drew, and the run ends with a summary:
+Each tie reports what it drew, and the run ends with a summary:
 
 ```
   Pt.35 - Pt.40 dimensioned (10'-0").

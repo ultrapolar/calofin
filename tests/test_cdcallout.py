@@ -3,11 +3,11 @@ drive c:CDCALLOUT with scripted typing.  AutoLISP cannot run outside
 AutoCAD, so this is where a wrong arity, an unbound function or a nil
 reaching (distance ...) has to die.
 
-Script values answer the interactive calls in order: a FROM number,
-then TO numbers for as long as the chain runs (each drawn TO becomes
-the next FROM) -- the dimension line is placed automatically, right
-inbetween, so nothing is ever picked.  None at the TO prompt ends the
-chain, None at the FROM prompt is the Enter that ends the command.
+Script values answer the interactive calls in order, and EVERY TIE IS
+ITS OWN PAIR: a FROM number then a TO number, then FROM and TO again
+for the next one -- the dimension line is placed automatically, right
+inbetween, so nothing is ever picked.  None at the TO prompt skips that
+tie and re-asks FROM; None at the FROM prompt ends the command.
 Typed 'b'/'undo' answers
 exercise the shared Back convention.  The "_X" point sweep takes no
 scripted answer: ssget "_X" reads the drawing and never prompts, so the
@@ -95,7 +95,7 @@ def dim_ents(vm):
 def test_one_dim():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 35), ab_pt(vm, 120, 0, 40)]
-    run(vm, ['35', '40', None, None], 'one dim')
+    run(vm, ['35', '40', None], 'one dim')
     ds = dims(vm)
     assert len(ds) == 1, ds
     d = ds[0]
@@ -119,15 +119,19 @@ def test_rinse_repeat():
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2),
            ab_pt(vm, 100, 100, 3)]
     run(vm, [
-             '1', '2',
-             '3',
-             '1',
-             None, None], 'rinse repeat')
+             '1', '2',                # every tie names both its points
+             '2', '3',
+             '3', '1',
+             None], 'rinse repeat')
     ds = dims(vm)
     assert len(ds) == 3, ds
     assert ds[1][13] == [100.0, 0.0, 0.0] and \
         ds[1][14] == [100.0, 100.0, 0.0], ds[1]
-    print("ok  one chain    -> three dims from four numbers, ended by Enter")
+    # the third names 3 -> 1, which a chain could never have produced
+    # from those numbers
+    assert ds[2][13] == [100.0, 100.0, 0.0] and \
+        ds[2][14] == [0.0, 0.0, 0.0], ds[2]
+    print("ok  three pairs  -> three dims from six numbers, ended by Enter")
 
 
 def test_number_spellings():
@@ -135,8 +139,8 @@ def test_number_spellings():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 35), ab_pt(vm, 100, 0, 40)]
     run(vm, [
-             'Pt.35', 'PT40', None,
-             '#035', '40.0', None,
+             'Pt.35', 'PT40',
+             '#035', '40.0',
              None], 'spellings')
     assert len(dims(vm)) == 2, dims(vm)
     print("ok  Pt.35 / PT40 / #035 / 40.0 all resolve")
@@ -147,7 +151,7 @@ def test_decimal_point_name():
     genuinely named 40.5 read as 405 and could never be asked for."""
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, '40.5'), ab_pt(vm, 100, 0, 41)]
-    run(vm, ['Pt.40.5', '41', None, None], 'decimal name')
+    run(vm, ['Pt.40.5', '41', None], 'decimal name')
     assert len(dims(vm)) == 1, dims(vm)
     print("ok  Pt.40.5      -> a decimal point name keeps its decimal")
 
@@ -157,7 +161,7 @@ def test_unknown_number():
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
     # '99' names nothing: the round dies at the FROM prompt and nothing
     # is asked for or drawn; the next round still works
-    run(vm, ['99', '1', '2', None, None], 'unknown')
+    run(vm, ['99', '1', '2', None], 'unknown')
     assert len(dims(vm)) == 1, dims(vm)
     print("ok  unknown number -> reported, nothing drawn, loop goes on")
 
@@ -166,7 +170,7 @@ def test_cancelled_rounds():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
     run(vm, [
-             '1', None,               # Enter at TO: round skipped
+             '1', None,               # Enter at TO: tie skipped
              '1', '1',                # same point both ends: TO re-asked
              None,                    # Enter at the re-asked TO: skipped
              None], 'cancels')
@@ -180,7 +184,7 @@ def test_offset_pushes_dim_line():
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 120, 0, 2)]
     vm.loads('(setq cdo:*offset* 6.0)')
-    run(vm, ['1', '2', None, None], 'offset')
+    run(vm, ['1', '2', None], 'offset')
     assert dims(vm)[0][10] == [60.0, 6.0, 0.0], dims(vm)
     print("ok  offset 6     -> dim line pushed 6 off the tie")
 
@@ -188,7 +192,7 @@ def test_offset_pushes_dim_line():
 def test_missing_style():
     vm = newvm(styles=())
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
-    run(vm, ['1', '2', None, None], 'missing style')
+    run(vm, ['1', '2', None], 'missing style')
     ds = dims(vm)
     assert len(ds) == 1, ds
     # the style is NOT invented: the dim stays in the current style,
@@ -205,14 +209,13 @@ def test_back_undraws_last_dim():
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2),
            ab_pt(vm, 100, 100, 3)]
     run(vm, [
-             '1', '2',
-             '3',                      # the chain: 1-2 then 2-3
-             None,                     # Enter ends the chain
+             '1', '2',                 # two ties, both numbers each
+             '2', '3',
              'b',                      # un-draw the 2-3 dim
              'undo',                   # un-draw the 1-2 dim
              'B',                      # nothing left: "Already at..."
              '1', '3',
-             None, None], 'back at FROM')
+             None], 'back at FROM')
     live = [d for d, e in zip(dims(vm), dim_ents(vm))
             if e not in vm.deleted]
     assert len(live) == 1, live
@@ -228,8 +231,8 @@ def test_back_reasks_previous_prompt():
            ab_pt(vm, 100, 100, 3)]
     run(vm, [
              '1', 'back',              # B at TO: back to FROM
-             '2', '1',                 # ...and the round runs 2 -> 1
-             None, None], 'back mid-round')
+             '2', '1',                 # ...and the tie runs 2 -> 1
+             None], 'back mid-round')
     ds = [d for d, e in zip(dims(vm), dim_ents(vm))
           if e not in vm.deleted]
     assert len(ds) == 1, ds
@@ -246,23 +249,24 @@ def test_no_points():
     print("ok  no named points -> nothing asked, nothing drawn")
 
 
-def test_chain_resumes_across_runs():
-    """The chain's end is session memory: a later run starts at the TO
-    prompt anchored on it, so a job interrupted mid-chain picks back up
-    with one number.  Enter there drops to a fresh FROM point."""
+def test_no_carry_over_between_runs():
+    """v1.7 remembered the last TO point and reopened a later run at the
+    TO prompt anchored on it.  Nothing carries over now: a fresh run
+    starts at FROM, like the first one did, so the numbers a scenario
+    types mean the same thing whenever it is run."""
     vm = newvm()
     pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2),
            ab_pt(vm, 100, 100, 3)]
-    run(vm, ['1', '2', None, None], 'first chain')
-    run(vm, ['3', None, None], 'resumed chain')
+    run(vm, ['1', '2', None], 'first run')
+    run(vm, ['2', '3', None], 'second run')
     ds = [d for d, e in zip(dims(vm), dim_ents(vm))
           if e not in vm.deleted]
     assert len(ds) == 2, ds
     assert ds[1][13] == [100.0, 0.0, 0.0] and \
         ds[1][14] == [100.0, 100.0, 0.0], ds[1]
-    assert vm.prompts[0][0].startswith('\nTo point number (from Pt.2)'), \
-        vm.prompts[0]
-    print("ok  session memory -> a later run resumes from the chain's end")
+    # the second run opened at FROM, not anchored on the first run's TO
+    assert vm.prompts[0][0].startswith('\nFrom point number'), vm.prompts[0]
+    print("ok  no carry-over -> a later run opens at FROM, not anchored")
 
 
 def test_no_local_shadows_a_function():
@@ -296,6 +300,6 @@ if __name__ == '__main__':
     test_back_undraws_last_dim()
     test_back_reasks_previous_prompt()
     test_no_points()
-    test_chain_resumes_across_runs()
+    test_no_carry_over_between_runs()
     test_no_local_shadows_a_function()
     print("all CDCALLOUT tests passed")
