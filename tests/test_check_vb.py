@@ -28,6 +28,11 @@ The awkward ones, all of which it got wrong first time round:
   constructor call; reading it as one failed every generated chart table
   at once.
 
+And one rule that exists because an edit in THIS repo produced it: a
+patch spliced a block in twice, ``PointPair`` was declared two times in
+``LispBridge``, VB would have rejected the file outright, and every
+other rule here was happy with it.
+
 Run: python3 tests/test_check_vb.py
 """
 
@@ -289,6 +294,16 @@ bites("a constructor called with the wrong arity", WRAP % '''
         New Entry("POOL", "Pool layout")
     }
 ''', "passes 2 arguments")
+
+bites("a member declared twice", WRAP % '''
+    Public Shared Function Num(v As Double) As String
+        Return "x"
+    End Function
+
+    Public Shared Function Num(v As Double) As String
+        Return "y"
+    End Function
+''', "declares num again")
 
 bites("Imports below a declaration", '''Imports System
 

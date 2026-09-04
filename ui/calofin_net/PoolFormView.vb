@@ -1,6 +1,5 @@
 Imports System.Collections.Generic
 Imports System.Collections.ObjectModel
-Imports System.Globalization
 Imports System.IO
 Imports System.Reflection
 Imports System.Windows
@@ -350,16 +349,21 @@ Public Class PoolFormView
     Private Sub Run()
         If _current Is Nothing OrElse Not _current.Supported Then Return
 
-        Dim pairs As New List(Of String)
-        pairs.Add(LispBridge.StrPair("btype", _current.BType))
+        ' The bottom type is a KEYWORD and travels as written; every
+        ' depth and run is a measurement and travels as typed, to be
+        ' read on the Lisp side by the reader the DCL charts use.
+        Dim literals As New List(Of String)
+        Dim measures As New List(Of String)
+        literals.Add(LispBridge.StrPair("btype", _current.BType))
         For Each f In _current.Fields
             If f.IsFilled Then
-                pairs.Add(LispBridge.NumPair(f.Key, f.AsNumber()))
+                measures.Add(LispBridge.MeasurePair(f.Key, f.Value))
             End If
         Next
 
         LispBridge.Send(AcadApp.DocumentManager.MdiActiveDocument,
-                        LispBridge.BuildCall("pool:run-with-answers", pairs))
+                        LispBridge.BuildFormCall("pool:run-with-answers",
+                                                 literals, measures))
     End Sub
 
 End Class

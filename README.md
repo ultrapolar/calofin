@@ -292,7 +292,7 @@ everything else releases one file per source.
 | | Folder | |
 | --- | --- | --- |
 | Calofin palette (VB.NET) | `ui/calofin_net/` | Dockable AutoCAD palette: Find over names and captions, Recent and Pinned rows sharing `LAZPANEL`'s own registry key, the panel's whole tab strip as real tabs, plus forms for POOL and SPA. Its catalog is no longer typed - `Generated/CommandCatalog.g.vb` is written from `LAZPANEL`'s own tables by `tools/gen_ui_data.py`, so the two surfaces cannot part again the way they had (the palette shipped 60 of 67). The tooltips are the palette's own words and stay hand-written, in `blurbs.txt` |
-| Palette LISP glue | `ui/calofin_ui/` | `calofin.lsp` - reports which commands are actually loaded this session, so the palette can grey out the rest. Checked too: a palette button with no probe-list name could never grey out, which is how five of them shipped |
+| Palette LISP glue | `ui/calofin_ui/` | `calofin.lsp` - reports which commands are actually loaded this session, so the palette can grey out the rest, and carries the **form wire**: the palette sends a box's text as typed and this reads it, through the same three-state contract the DCL charts use. Checked too: a palette button with no probe-list name could never grey out, which is how five of them shipped |
 
 `ui/PLAN.md` records how the palette got here and why the wire between
 it and the routines is shaped the way it is; `ui/UI-PLAN.md` is the
@@ -459,6 +459,10 @@ python3 tests/test_ui_charts.py       # the palette's generated chart geometry
                                       # read back and held to lzf:/lzs:/lzt:'s
                                       # own tables - every dimension, every
                                       # outline point, arcs included
+python3 tests/test_palette_wire.py    # calofin.lsp's form wire in the VM: the
+                                      # three states plus the fourth - text
+                                      # nobody can read is NOT NA, it is a
+                                      # question the routine still has to ask
 python3 tests/test_cancel_paths.py    # every headline command cancelled at its
                                       # first prompt: the handler runs, settings
                                       # come back, no group or error mode left

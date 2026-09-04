@@ -29,6 +29,9 @@ without a build:
 4. **Constructor arity** for those same types, so a generator emitting
    ``New Entry(a, b)`` against a three-argument ``Entry`` fails at
    generation time rather than in somebody's AutoCAD.
+5. **A member declared twice** in one type, which VB rejects outright
+   and which is what an edit spliced into the wrong place leaves
+   behind.
 
 What it deliberately does NOT do is type-check.  ``Option Strict On``
 rejects a narrowing conversion and nothing here can tell ``Double``
@@ -357,7 +360,7 @@ def declared(files):
                     if r.group(2) == "New":
                         types[inside[1]]["ctors"].add(_arity(line))
                     else:
-                        types[inside[1]]["members"].add(r.group(2))
+                        _note(types[inside[1]], r.group(2), rel, n)
                 if r.group(1).lower() in ("sub", "function"):
                     stack.append((r.group(1).lower(),
                                   inside[1] if inside else ""))
@@ -368,12 +371,39 @@ def declared(files):
             if owner["enum"]:
                 em = re.match(r"^([A-Za-z_]\w*)", line)
                 if em:
-                    owner["members"].add(em.group(1))
+                    _note(owner, em.group(1), rel, n)
                 continue
             fm = re.match(MODS + r"([A-Za-z_]\w*)\s+As\b", line)
             if fm and not low.startswith(("dim ", "imports ")):
-                owner["members"].add(fm.group(1))
+                _note(owner, fm.group(1), rel, n)
     return types
+
+
+def _note(owner, member, rel, n):
+    """Record a member, and where it was declared.
+
+    The WHERE is what turns a second declaration of the same name into a
+    reportable problem.  VB rejects one outright, and a duplicate is
+    what an edit that splices a block into the wrong place leaves
+    behind -- which is exactly how this check came to exist: a patch put
+    PointPair in twice and every other rule here was happy.
+    """
+    owner["members"].add(member)
+    owner.setdefault("where", {}).setdefault(member.lower(), []).append(
+        (rel, n))
+
+
+def duplicate_problems(types):
+    """A member declared twice in one type - VB will not compile it."""
+    out = []
+    for name in sorted(types):
+        for member, places in sorted(types[name].get("where", {}).items()):
+            if len(places) > 1:
+                out.append(
+                    "%s:%d: %s declares %s again - it is already declared "
+                    "at line %d" % (places[1][0], places[1][1], name,
+                                    member, places[0][1]))
+    return out
 
 
 def _arity(line):
@@ -495,7 +525,9 @@ def check(paths=None):
         problems += structure_problems(rel, lines)
         problems += paren_problems(rel, lines)
         problems += imports_problems(rel, lines)
-    problems += reference_problems(files, declared(files))
+    types = declared(files)
+    problems += duplicate_problems(types)
+    problems += reference_problems(files, types)
     return files, problems
 
 

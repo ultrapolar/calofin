@@ -59,9 +59,26 @@ Public NotInheritable Class LispBridge
         Return "(" & key & " " & Num(x) & " " & Num(y) & ")"
     End Function
 
-    Public Shared Function NumPair(key As String, value As Double?) As String
-        If Not value.HasValue Then Return Pair(key, "nil")
-        Return Pair(key, Num(value.Value))
+    ''' <summary>
+    ''' One (key . "typed") pair: a measurement box's text, exactly as it
+    ''' was typed.
+    '''
+    ''' <para>THIS ASSEMBLY DOES NOT READ A MEASUREMENT.  It used to, with
+    ''' Double.TryParse, and that accepted a plain decimal and nothing
+    ''' else -- so a feet-and-inches spelling, which the DCL charts read
+    ''' perfectly and tell the drafter to use, produced no number and the
+    ''' palette sent (key . nil).  That is not "ask me": nil is NA, the
+    ''' measurement travelled as NOT TAKEN, and the routine never
+    ''' asked.</para>
+    '''
+    ''' <para>calofin.lsp reads it now, through AutoCAD's own distof,
+    ''' which knows every feet-and-inches spelling there is.  There is
+    ''' deliberately no numeric pair helper left here: a second way to
+    ''' send a measurement is a second parser to keep in step, and that
+    ''' is the bug above.</para>
+    ''' </summary>
+    Public Shared Function MeasurePair(key As String, typed As String) As String
+        Return Pair(key, Str(If(typed, "")))
     End Function
 
     Public Shared Function StrPair(key As String, value As String) As String
@@ -75,6 +92,26 @@ Public NotInheritable Class LispBridge
     ''' </summary>
     Public Shared Function BuildCall(fn As String, pairs As IEnumerable(Of String)) As String
         Return "(" & fn & " '(" & String.Join(" ", pairs) & "))"
+    End Function
+
+    ''' <summary>
+    ''' A form, through calofin.lsp's wire:
+    ''' (calofin:run "fn" '(literals) '(measures)).
+    '''
+    ''' <para>Two lists, and the split is this assembly's to make. A
+    ''' LITERAL travels as it is written -- a shape word, a keyword
+    ''' answer, an insertion point -- while a MEASURE is typed text and
+    ''' is read on the other side. Run a "Rectangle" through a
+    ''' measurement reader and it comes back unreadable, and the shape
+    ''' stops travelling; that is why the palette says which is
+    ''' which.</para>
+    ''' </summary>
+    Public Shared Function BuildFormCall(fn As String,
+                                         literals As IEnumerable(Of String),
+                                         measures As IEnumerable(Of String)) As String
+        Return "(calofin:run " & Str(fn) &
+               " '(" & String.Join(" ", literals) & ")" &
+               " '(" & String.Join(" ", measures) & "))"
     End Function
 
     ''' <summary>

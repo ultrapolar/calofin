@@ -344,6 +344,44 @@ copy of a rule is the drift being closed. A palette form sends what was
 typed and lets the routine ask for the rest -- which is what the wire
 has always promised.
 
+### Phase 5d -- the palette stops reading measurements *(done 2026-09-04)*
+
+Found while building the form kit, and worse than a missing feature.
+
+The palette parsed a box itself, in VB, with `Double.TryParse`. That
+takes a plain decimal and nothing else -- so `6'-3"`, a spelling the DCL
+charts read perfectly and whose hint tells the drafter to use it,
+produced no number. The pair then went out as `(key . nil)`.
+
+**That is not "ask me".** `nil` is NA. The measurement travelled as *not
+taken*, the routine never asked, and the sheet looked answered. It is
+phase 3's own failure -- a box silently dropped while the form shows
+what was typed -- reappearing on the other surface, where phase 3 never
+reached.
+
+So the reading moved to Lisp. `ui/calofin_ui/calofin.lsp`, until now
+only a probe list, carries the wire:
+
+```
+(calofin:run "spa:run-with-answers" '(literals) '(measures))
+```
+
+A **literal** travels as written -- a shape word, a keyword answer, a
+point -- and a **measure** is typed text, read by `calofin:answer`,
+which is `cal:formanswer`'s body: the same reader, and therefore the
+same four states, as the charts. `distof` is AutoCAD's own and knows
+every feet-and-inches spelling there is; nothing should be re-deriving
+that in another language, which is exactly what the palette was doing.
+
+`LispBridge` has no numeric pair helper left, on purpose: a second way
+to send a measurement is a second parser to keep in step.
+
+`tests/test_palette_wire.py` drives it in the VM -- all four states, the
+literal/measure split, and `calofin:unreadable` naming exactly the keys
+the wire drops, since the state line prints that list and a state line
+that disagrees with the wire is a lie. It also holds the two copied
+helpers to `CALOFIN-LIB.lsp`'s, body for body.
+
 Still open, and genuinely blocked on a machine with a compiler:
 
 - **The chart tables.** *(closed by phase 5c, by dropping the premise:
@@ -363,7 +401,8 @@ Still open, and genuinely blocked on a machine with a compiler:
   a human with the artwork in front of them; the KEYS no longer do.
 - **Everything behavioural.** Whoever next opens AutoCAD with a build
   should run the spa form once with a `NotGiven` corner and confirm the
-  `?` mark lands, per `ui/PLAN.md`.
+  `?` mark lands, per `ui/PLAN.md` -- and now also type `6'-3"` into a
+  box, which the palette could not read until phase 5d and can.
 
 ## After the plan: what nothing was checking
 

@@ -1,7 +1,6 @@
 Imports System.Collections.Generic
 Imports System.Collections.ObjectModel
 Imports System.ComponentModel
-Imports System.Globalization
 Imports System.IO
 Imports System.Reflection
 Imports System.Windows
@@ -57,23 +56,17 @@ Public Class SpaField
     End Property
 
     ''' <summary>
-    ''' Parsed for the Lisp call. Nothing when blank, which the bridge
-    ''' emits as nil and SPA.LSP reads as NA.
+    ''' There is deliberately NO AsNumber here any more.
+    '''
+    ''' It used to parse the box with Double.TryParse and hand the
+    ''' result to the wire, which accepted a plain decimal and nothing
+    ''' else: a feet-and-inches spelling produced no number, the pair
+    ''' went out as (key . nil), and nil is NA -- the measurement
+    ''' travelled as NOT TAKEN and SPA never asked for it.  The text
+    ''' goes to calofin.lsp as typed now, and AutoCAD's own distof
+    ''' reads it.  A box holds text, and only Lisp turns text into a
+    ''' measurement.
     ''' </summary>
-    Public Function AsNumber() As Double?
-        If Not IsFilled Then Return Nothing
-        Dim d As Double
-        If Double.TryParse(_value.Trim(), NumberStyles.Float,
-                           CultureInfo.InvariantCulture, d) Then
-            Return d
-        End If
-        ' also accept the operator's own locale, since they typed it
-        If Double.TryParse(_value.Trim(), NumberStyles.Float,
-                           CultureInfo.CurrentCulture, d) Then
-            Return d
-        End If
-        Return Nothing
-    End Function
 
 End Class
 
@@ -284,30 +277,38 @@ Public Class SpaViewModel
     ''' asked for at the command line, which is what makes a half-filled
     ''' form legitimate rather than an error.
     ''' </summary>
+    ''' <summary>
+    ''' What SPA is handed, through calofin.lsp's wire.
+    '''
+    ''' <para>Two lists. A LITERAL travels as written: the mode, the
+    ''' shape word, every keyword answer. A MEASURE is the text of a box
+    ''' and is read on the Lisp side, by the same reader the DCL charts
+    ''' use -- so a feet-and-inches spelling works here exactly as it
+    ''' works there, and text nobody can read is not sent at all, which
+    ''' makes SPA ask rather than recording an NA nobody meant.</para>
+    '''
+    ''' <para>The insertion point is deliberately NOT sent: SPA picks it
+    ''' in the drawing, where the user's own object snaps are live.</para>
+    ''' </summary>
     Public Function BuildCall() As String
         If Current Is Nothing Then Return String.Empty
 
-        Dim pairs As New List(Of String)
-        pairs.Add(LispBridge.StrPair("mode", Mode))
-        pairs.Add(LispBridge.StrPair("shape", Current.LispShape))
+        Dim literals As New List(Of String)
+        Dim measures As New List(Of String)
+        literals.Add(LispBridge.StrPair("mode", Mode))
+        literals.Add(LispBridge.StrPair("shape", Current.LispShape))
 
         For Each f In Current.Fields
             If f.IsFilled Then
-                pairs.Add(LispBridge.NumPair(f.Key, f.AsNumber()))
+                measures.Add(LispBridge.MeasurePair(f.Key, f.Value))
             End If
         Next
 
         For Each c In Current.Corners
             If Not String.IsNullOrWhiteSpace(c.Treatment) Then
-                pairs.Add(LispBridge.StrPair(c.TypeKey, c.Treatment))
+                literals.Add(LispBridge.StrPair(c.TypeKey, c.Treatment))
                 If c.NeedsSize AndAlso Not String.IsNullOrWhiteSpace(c.Size) Then
-                    Dim d As Double
-                    If Double.TryParse(c.Size.Trim(), NumberStyles.Float,
-                                       CultureInfo.InvariantCulture, d) OrElse
-                       Double.TryParse(c.Size.Trim(), NumberStyles.Float,
-                                       CultureInfo.CurrentCulture, d) Then
-                        pairs.Add(LispBridge.NumPair(c.SizeKey, d))
-                    End If
+                    measures.Add(LispBridge.MeasurePair(c.SizeKey, c.Size))
                 End If
             End If
         Next
@@ -316,35 +317,35 @@ Public Class SpaViewModel
         ' keyword row left on its blank row sends nothing at all -- the
         ' key stays absent and SPA asks -- while a chosen answer goes
         ' out spelled exactly as the prompt would spell it.  Only the
-        ' lap and the by-dims overalls are numbers, under the same
-        ' filled-or-omitted rule as the fields above.
+        ' lap and the by-dims overalls are measurements.
         If Not String.IsNullOrWhiteSpace(Cover.Second) Then
-            pairs.Add(LispBridge.StrPair("second", Cover.Second))
+            literals.Add(LispBridge.StrPair("second", Cover.Second))
         End If
         If Not String.IsNullOrWhiteSpace(Cover.Method) Then
-            pairs.Add(LispBridge.StrPair("method", Cover.Method))
+            literals.Add(LispBridge.StrPair("method", Cover.Method))
         End If
         If Cover.Gap.IsFilled Then
-            pairs.Add(LispBridge.NumPair("gap", Cover.Gap.AsNumber()))
+            measures.Add(LispBridge.MeasurePair("gap", Cover.Gap.Value))
         End If
 
         For Each f In Current.SecondOutline
             If f.IsFilled Then
-                pairs.Add(LispBridge.NumPair(f.Key, f.AsNumber()))
+                measures.Add(LispBridge.MeasurePair(f.Key, f.Value))
             End If
         Next
 
         If Not String.IsNullOrWhiteSpace(Cover.Autohinge) Then
-            pairs.Add(LispBridge.StrPair("autohinge", Cover.Autohinge))
+            literals.Add(LispBridge.StrPair("autohinge", Cover.Autohinge))
         End If
         If Not String.IsNullOrWhiteSpace(Cover.Grade) Then
-            pairs.Add(LispBridge.StrPair("grade", Cover.Grade))
+            literals.Add(LispBridge.StrPair("grade", Cover.Grade))
         End If
         If Not String.IsNullOrWhiteSpace(Cover.Taper) Then
-            pairs.Add(LispBridge.StrPair("taper", Cover.Taper))
+            literals.Add(LispBridge.StrPair("taper", Cover.Taper))
         End If
 
-        Return LispBridge.BuildCall("spa:run-with-answers", pairs)
+        Return LispBridge.BuildFormCall("spa:run-with-answers",
+                                        literals, measures)
     End Function
 
     Public Sub Run()

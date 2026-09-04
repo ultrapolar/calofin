@@ -520,8 +520,12 @@ VBFORM = os.path.join(os.path.dirname(__file__), '..', 'ui', 'calofin_net',
                       'SpaFormView.vb')
 
 _vb = open(VBFORM, encoding='utf-8', errors='replace').read()
+# ANY list, not just one called "pairs".  The form now builds two --
+# literals, which travel as written, and measures, which are read on the
+# Lisp side by the same reader the DCL charts use -- and reading only
+# the first would quietly stop checking every measurement on the sheet.
 vb_literal = set(m.group(1).lower() for m in _re.finditer(
-    r'pairs\.Add\(LispBridge\.\w+\("([a-z0-9]+)"', _vb))
+    r'\w+\.Add\(LispBridge\.\w+\("([a-z0-9]+)"', _vb))
 assert vb_literal, "no LispBridge pairs found - has SpaFormView.vb been reshaped?"
 
 _lv = VM()

@@ -242,16 +242,42 @@ are still answered at the command line.
 
 ## Blank versus missing
 
-The distinction the whole feature rests on:
+The distinction the whole feature rests on, and how a box says which:
 
-| In the form | On the wire | `SPA.LSP` reads it as |
+| In the form | On the wire | The routine reads it as |
 | --- | --- | --- |
-| field left empty | key omitted | not supplied — **ask at the command line** |
-| field explicitly cleared | `(key . nil)` | **blank**, the same answer as `NA` |
-| field filled | `(key . 84.0)` | that value, no prompt |
+| box left empty | key omitted | not supplied — **ask at the command line** |
+| `NA` typed in it | `(key . nil)` | **blank**, the measurement was not taken |
+| a measurement | `(key . 84.0)` | that value, no prompt |
+| anything else | key omitted | not supplied — **ask**, and the state line says which box was dropped |
 
-`tests/test_spa_form.py` pins all three, and checks the exact literal
-this assembly emits against the real `SPA.LSP`.
+**The palette does not read the measurement.** It sends the box's text
+as typed, through `calofin.lsp`:
+
+```
+(calofin:run "spa:run-with-answers"
+             '((mode . "Watersedge") (shape . "Rectangle"))
+             '((w . "84") (l . "6'-3\"")))
+```
+
+Two lists, and the split is the palette's to make: a **literal** — a
+shape word, a keyword answer, a point — travels as written, while a
+**measure** is typed text and is read on the other side by
+`calofin:answer`, which is `cal:formanswer`'s body and therefore the
+same reader the DCL charts use.
+
+That was a bug fix, not tidiness. The palette used to parse the box
+itself with `Double.TryParse`, which takes a plain decimal and nothing
+else — so `6'-3"`, a spelling the charts read perfectly and tell the
+drafter to use, produced no number and the palette sent `(key . nil)`.
+That is not "ask me". `nil` is NA: the measurement travelled as **not
+taken**, and the routine never asked for it. A wrong answer that looks
+answered.
+
+`tests/test_palette_wire.py` drives the wire in the VM over all four
+states and pins the two copied helpers to `CALOFIN-LIB.lsp`'s;
+`tests/test_spa_form.py` checks the exact literal this assembly emits
+against the real `SPA.LSP`.
 
 The insertion point is deliberately **not** sent — it is still picked in
 the drawing, where the user's own object snaps are live.
