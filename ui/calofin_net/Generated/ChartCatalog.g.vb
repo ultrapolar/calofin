@@ -161,6 +161,22 @@ Public NotInheritable Class ChartCatalog
         End Sub
     End Structure
 
+    ''' <summary>One step routine: the command a drafter knows it by,
+    ''' its title, and the entry point a form hands its answers to.
+    ''' All three come from lzt:*types*.</summary>
+    Public Structure StepRoutine
+        Public ReadOnly Command As String
+        Public ReadOnly Title As String
+        Public ReadOnly EntryPoint As String
+
+        Public Sub New(command As String, title As String,
+                       entryPoint As String)
+            Me.Command = command
+            Me.Title = title
+            Me.EntryPoint = entryPoint
+        End Sub
+    End Structure
+
     ''' <summary>A step sheet, which depends on the count as well as the
     ''' routine.</summary>
     Public Structure StepChart
@@ -713,10 +729,10 @@ Public NotInheritable Class ChartCatalog
     ''' <summary>The three step routines, as lzt:*types* names
     ''' them: the command, its title, and the entry point a form
     ''' hands its answers to.</summary>
-    Public Shared ReadOnly StepRoutines As ListKey() = {
-        New ListKey("CORNERSTP", "Corner steps"),
-        New ListKey("HEMISTEP", "Hemi steps"),
-        New ListKey("NORMIESTEP", "Straight steps")
+    Public Shared ReadOnly StepRoutines As StepRoutine() = {
+        New StepRoutine("CORNERSTP", "Corner steps", "cs-run-with-answers"),
+        New StepRoutine("HEMISTEP", "Hemi steps", "hs-run-with-answers"),
+        New StepRoutine("NORMIESTEP", "Straight steps", "ns-run-with-answers")
     }
 
     ''' <summary>Every step sheet: one per routine per count.

@@ -37,6 +37,7 @@ Public Class CalofinPalette
                 RecallStore.PoolKey,
                 "Pick the sheet, fill in what you have. Anything left " &
                 "blank is asked for at the command line."))
+            _ps.AddVisual("Steps", New StepFormView())
             _ps.AddVisual("Spa", New SpaFormView())
             _ps.AddVisual("Pool bottom", New PoolFormView())
         End If

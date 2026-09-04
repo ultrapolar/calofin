@@ -409,12 +409,33 @@ key are constructor arguments.
 with, and was verified to bite by sending the chart's key where the
 shape word belongs and by moving the recall key.
 
+### Phase 5f -- the step sheet, and the one rule worth mirroring *(done)*
+
+`StepFormView.vb`. A flight has no fixed chart -- the sheet IS the count
+-- so the catalog carries one per routine per count and the palette
+offers exactly those counts, because past `lzt:*max-steps*` LAZSTEP
+will not draw at all. State line, Recall and the wire come from the
+shared `FormWire` kit; the recall slot carries the count as well as the
+routine, which is `lzt:recall-slot`'s own rule.
+
+The rule that could NOT be left to the wire, and the only one mirrored
+into the palette: **`NA` at a tread counts as an empty box.** `NA` ends
+a run, so a tread answered `NA` would stop the flight short of the count
+that built the drawing in front of you -- the sheet showing four steps
+and the routine drawing three. It is mirrored rather than generated
+because it is a rule, and `tests/test_chart_form.py` holds both halves
+to `lzt:treadkey` and to `lzt:form`'s own statement of why.
+
+It also puts the last of the generated geometry to work: before this,
+24 step sheets sat in `ChartCatalog` that nothing read.
+
 **Not there yet**, and named rather than left to be discovered: the spa
 sheet's corner treatments and cover block are not in the generated
 catalog (`lzs:*corners*` and the listkeys are separate tables), so the
-Spa tab stays the hand-built `SpaFormView` for now; the step sheets are
-generated but have no form on them; and `lzf:dead` still lives only in
-Lisp, so the palette shows every box a sheet has and lets POOL ignore
+Spa tab stays the hand-built `SpaFormView` for now; the step form offers
+the chart's boxes but not `lzt:asks`' dropdowns and counters, which are
+answered at the command line; and `lzf:dead` still lives only in Lisp,
+so the palette shows every box a sheet has and lets the routine ignore
 what this page does not ask about.
 
 Still open, and genuinely blocked on a machine with a compiler:

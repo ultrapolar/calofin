@@ -435,6 +435,22 @@ Public NotInheritable Class ChartCatalog
         End Sub
     End Structure
 
+    ''' <summary>One step routine: the command a drafter knows it by,
+    ''' its title, and the entry point a form hands its answers to.
+    ''' All three come from lzt:*types*.</summary>
+    Public Structure StepRoutine
+        Public ReadOnly Command As String
+        Public ReadOnly Title As String
+        Public ReadOnly EntryPoint As String
+
+        Public Sub New(command As String, title As String,
+                       entryPoint As String)
+            Me.Command = command
+            Me.Title = title
+            Me.EntryPoint = entryPoint
+        End Sub
+    End Structure
+
     ''' <summary>A step sheet, which depends on the count as well as the
     ''' routine.</summary>
     Public Structure StepChart
@@ -527,10 +543,10 @@ def build():
     add("    ''' <summary>The three step routines, as lzt:*types* names")
     add("    ''' them: the command, its title, and the entry point a form")
     add("    ''' hands its answers to.</summary>")
-    add("    Public Shared ReadOnly StepRoutines As ListKey() = {")
-    for i, (name, title, _runner) in enumerate(routines):
-        add("        New ListKey(%s, %s)%s"
-            % (vbstr(name), vbstr(title),
+    add("    Public Shared ReadOnly StepRoutines As StepRoutine() = {")
+    for i, (name, title, runner) in enumerate(routines):
+        add("        New StepRoutine(%s, %s, %s)%s"
+            % (vbstr(name), vbstr(title), vbstr(runner),
                "," if i < len(routines) - 1 else ""))
     add("    }")
     add("")

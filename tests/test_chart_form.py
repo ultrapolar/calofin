@@ -20,6 +20,10 @@ form has to agree with something that IS testable.
 4. **The form sends the shape word, not the chart key** -- six of the
    sixteen sheets differ, and sending the key would draw the wrong pool.
    And it sends the gates the sheet implies.
+5a. **The step form** offers exactly the counts a sheet exists for,
+   uses `lzt:recall-slot`'s per-count slot, and mirrors the ONE rule
+   that cannot be left to the wire: NA at a tread is what ends a run,
+   so it counts as an empty box rather than travelling.
 5. **The boxes are the chart's**: one per dimension and one per
    column-only key, invented from nothing, placed at the midpoint of
    the line each measures.  Whether a chart key is one POOL reads is
@@ -128,7 +132,8 @@ check("it calls calofin:unreadable-str",
 check("it packs the sheet the same way the store does",
       'RecallStore.Pack(filled)' in CODE)
 check("a box that will not read holds Draw back",
-      '_draw.IsEnabled = False' in CODE)
+      '_draw.IsEnabled = state.Ready' in CODE
+      and 'Return New State(' in CODE and ', False)' in CODE)
 check("and is named by the LETTER the sheet prints, not the key",
       'b.Letter.Length > 0, b.Letter, b.Key' in CODE)
 check("when the glue is missing nothing is reported",
@@ -203,6 +208,71 @@ check("%d sheets to pick from, %d boxes between them"
 gated = [c['key'] for c in charts if c['gates']]
 check("the sheets that imply an answer still do", gated == [
     'Grecian', 'GRSquare', 'OCtagon'], repr(gated))
+
+
+print("== 6. the step form, and the one rule it mirrors ==")
+
+STEP = code_of(read(ROOT / 'ui' / 'calofin_net' / 'StepFormView.vb'))
+
+# LAZSTEP has no chart table: the sheet IS the count.  The palette must
+# offer exactly the counts a sheet was generated for, because past
+# lzt:*max-steps* LAZSTEP refuses to draw at all.
+vmt = VM()
+vmt.load(LISP_DIR / 'lazstep' / 'LAZSTEP.lsp')
+top = int(vmt.globals['lzt:*max-steps*'])
+check("the count list runs to lzt:*max-steps* and stops",
+      'For n = 1 To ChartCatalog.MaxSteps' in STEP, str(top))
+check("and MaxSteps really is that number",
+      ('Public Const MaxSteps As Integer = %d' % top) in read(gen.OUT))
+
+# THE one mirrored rule, and the reason it is worth mirroring
+check("lzt:treadkey recognises a tread by its stem",
+      '(defun lzt:treadkey (k) (= (substr k 1 5) "tread"))'
+      in read(LISP_DIR / 'lazstep' / 'LAZSTEP.lsp'))
+check("so does the palette", 'key.StartsWith("tread"' in STEP)
+check("NA on a tread is withheld, not sent",
+      'If IsTread(b.Key) AndAlso' in STEP
+      and 'b.Text.Trim().ToUpperInvariant() = "NA" Then Continue For'
+          in STEP)
+# the Lisp's own statement of why, so the two cannot part on the reason
+check("because NA is what ends a run - lzt:form says so",
+      'NA at a tread is what ENDS the run'
+      in read(LISP_DIR / 'lazstep' / 'LAZSTEP.lsp'))
+
+check("the step count itself always travels, as a literal",
+      'LispBridge.Pair("steps", Steps.ToString())' in STEP)
+check("the entry point comes from lzt:*types*, not from a name typed here",
+      'Routine.EntryPoint' in STEP)
+
+runners = [str(t[2]) for t in vmt.globals['lzt:*types*']]
+cat = read(gen.OUT)
+for r in runners:
+    check("%s is in the catalog" % r, ('"%s"' % r) in cat)
+
+check("the recall slot is lzt:recall-slot's TYPE-count",
+      'Routine.Command & "-" & Steps.ToString()' in STEP)
+check("and it uses the step store, not the pool one",
+      'RecallStore.StepKey' in STEP and 'RecallStore.PoolKey' not in STEP)
+
+check("the step form shares the state line rather than copying it",
+      'FormWire.Line(_boxes)' in STEP
+      and 'FormWire.Line(_boxes)' in CODE)
+# the wording lives in FormWire and nowhere else.  FormWire shares
+# ChartFormView.vb's file, so counting per FILE would pass on the wrong
+# reason; count across the whole assembly instead.
+saidin = [str(f) for f in check_vb.vb_files()
+          if 'cannot be read as a measurement' in read(f)]
+check("the state line's words are written once, in the kit",
+      len(saidin) == 1 and saidin[0].endswith('ChartFormView.vb'),
+      repr(saidin))
+
+# every generated step sheet is reachable: 3 routines x every count
+_top, _routines, steps = gen.read_steps()
+check("%d sheets, and the form can reach each of them"
+      % len(steps), len(steps) == len(_routines) * _top,
+      "%d sheets" % len(steps))
+check("the palette mounts the step form",
+      'New StepFormView()' in PAL)
 
 
 print()

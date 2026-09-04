@@ -158,6 +158,139 @@ End Class
 
 
 ''' <summary>
+''' The state line, and the one question the palette cannot answer.
+'''
+''' <para>Shared by every chart form, which is phase 4 of ui/UI-PLAN.md
+''' ("one form kit") arriving on this surface. The DCL forms had three
+''' copies of this reasoning and the mirror's swap map is what made them
+''' one; here it is one class two forms call.</para>
+''' </summary>
+Friend NotInheritable Class FormWire
+
+    Private Sub New()
+    End Sub
+
+    ''' <summary>What the line says, and whether the form may run.</summary>
+    Friend Structure State
+        Friend ReadOnly Text As String
+        Friend ReadOnly Ready As Boolean
+
+        Friend Sub New(text As String, ready As Boolean)
+            Me.Text = text
+            Me.Ready = ready
+        End Sub
+    End Structure
+
+    ''' <summary>
+    ''' The keys the wire will drop, asked of calofin.lsp.
+    '''
+    ''' The palette cannot answer this itself -- it does not read a
+    ''' measurement any more, which is the point -- and it must not
+    ''' guess: the line NAMES boxes, and a line that named a box the wire
+    ''' would happily accept is worse than no line. When the glue is not
+    ''' loaded nothing is reported, which leaves a form exactly as honest
+    ''' as it was before the state line existed.
+    '''
+    ''' The sheet travels as one packed string rather than an alist:
+    ''' marshalling dotted pairs through a ResultBuffer is the fiddly,
+    ''' fails-at-runtime half of this boundary, and "key=typed;key=typed"
+    ''' is a format the recall store already uses.
+    ''' </summary>
+    Friend Shared Function Unreadable(
+            filled As IEnumerable(Of ChartBox)) As HashSet(Of String)
+        Dim out As New HashSet(Of String)
+        Dim packed = RecallStore.Pack(filled)
+        If packed.Length = 0 Then Return out
+        Try
+            Dim args As New ResultBuffer(
+                New TypedValue(CInt(LispDataType.Text),
+                               "calofin:unreadable-str"),
+                New TypedValue(CInt(LispDataType.Text), packed))
+            Dim res = AcadApp.Invoke(args)
+            If res Is Nothing Then Return out
+            For Each tv As TypedValue In res
+                If tv.TypeCode <> CInt(LispDataType.Text) Then Continue For
+                Dim s = TryCast(tv.Value, String)
+                If String.IsNullOrEmpty(s) Then Continue For
+                For Each k In s.Split(";"c)
+                    If k.Length > 0 Then out.Add(k)
+                Next
+            Next
+        Catch
+            out.Clear()
+        End Try
+        Return out
+    End Function
+
+    ''' <summary>
+    ''' The line, for a sheet of boxes.
+    '''
+    ''' Three states in the order they matter. A box that will not read
+    ''' is named FIRST and stops the form, because that is the failure
+    ''' the drafter cannot see: the chart goes on showing what was typed
+    ''' while the wire drops it. Otherwise the line is the hand-off --
+    ''' how much of the sheet is filled and what the routine will still
+    ''' ask for.
+    ''' </summary>
+    Friend Shared Function Line(boxes As IEnumerable(Of ChartBox)) As State
+        Dim all As New List(Of ChartBox)
+        Dim filled As New List(Of ChartBox)
+        For Each b In boxes
+            all.Add(b)
+            If b.IsFilled Then filled.Add(b)
+        Next
+
+        Dim bad = Unreadable(filled)
+        If bad.Count > 0 Then
+            Dim letters As New List(Of String)
+            For Each b In all
+                If bad.Contains(b.Key) Then
+                    ' the LETTER the sheet prints, never the key: a
+                    ' complaint about "c2" sends the drafter hunting the
+                    ' paper for something that is not on it
+                    letters.Add(If(b.Letter.Length > 0, b.Letter, b.Key))
+                End If
+            Next
+            Return New State(
+                Plural(letters.Count, "Box ", "Boxes ") & AndJoin(letters) &
+                " cannot be read as a measurement. Fix or clear " &
+                Plural(letters.Count, "it", "them") &
+                " - as typed, the answer would be dropped and the " &
+                "question asked again at the command line.", False)
+        End If
+
+        Dim asking = all.Count - filled.Count
+        If all.Count = 0 Then Return New State("", False)
+        If asking = 0 Then
+            Return New State(
+                "All " & all.Count.ToString() & " boxes filled in. " &
+                "Nothing left to ask but the insertion point.", True)
+        End If
+        Return New State(
+            filled.Count.ToString() & " of " & all.Count.ToString() &
+            " filled in. The routine will ask at the command line for " &
+            "the other " & asking.ToString() & ".", True)
+    End Function
+
+    ''' <summary>cal:plural: a line reading "all 1 boxes" is a bug in the
+    ''' form, whatever it is reporting.</summary>
+    Friend Shared Function Plural(n As Integer, one As String,
+                                  many As String) As String
+        Return If(n = 1, one, many)
+    End Function
+
+    ''' <summary>cal:andjoin: "B", "B and L", "B, L and H".</summary>
+    Friend Shared Function AndJoin(items As List(Of String)) As String
+        If items.Count = 0 Then Return ""
+        If items.Count = 1 Then Return items(0)
+        Dim head = String.Join(", ", items.GetRange(0, items.Count - 1))
+        Return head & " and " & items(items.Count - 1)
+    End Function
+
+End Class
+
+
+''' <summary>
 ''' A chart, drawn from its own vectors, with a box on every dimension.
 '''
 ''' <para>This is what replaces the photograph. The palette used to show
@@ -449,108 +582,17 @@ Public Class ChartFormView
 
     ' ------------------------------------------------------- the state line
 
-    ''' <summary>
-    ''' What the sheet says, and whether Draw is allowed to run.
-    '''
-    ''' Three states, in the order they matter. A box that will not read
-    ''' is named FIRST and holds Draw back, because that is the failure
-    ''' the drafter cannot see: the chart goes on showing what was typed
-    ''' while the wire drops it. Otherwise the line is the hand-off --
-    ''' how much of the sheet is filled and what the routine will still
-    ''' ask for.
-    ''' </summary>
+    ''' <summary>Refresh the line and the Draw button from what is in the
+    ''' boxes. The kit decides what it says; this only shows it.</summary>
     Private Sub Restate()
         If _current.Key Is Nothing Then Return
-
-        Dim filled As New List(Of ChartBox)
-        For Each b In _boxes
-            If b.IsFilled Then filled.Add(b)
-        Next
-
-        Dim bad = Unreadable(filled)
-        If bad.Count > 0 Then
-            Dim letters As New List(Of String)
-            For Each b In _boxes
-                If bad.Contains(b.Key) Then
-                    letters.Add(If(b.Letter.Length > 0, b.Letter, b.Key))
-                End If
-            Next
-            _state.Text = Plural(letters.Count, "Box", "Boxes") & " " &
-                          AndJoin(letters) & " cannot be read as a " &
-                          "measurement. Fix or clear " &
-                          If(letters.Count = 1, "it", "them") &
-                          " - as typed, the answer would be dropped and " &
-                          "the question asked again at the command line."
-            _state.Foreground = Brushes.OrangeRed
-            _draw.IsEnabled = False
-            _recall.IsEnabled = HasStored()
-            Return
-        End If
-
-        Dim asking = _boxes.Count - filled.Count
-        _state.Foreground = SystemColors.GrayTextBrush
-        If asking = 0 Then
-            _state.Text = "All " & _boxes.Count.ToString() &
-                          " boxes filled in. Draw asks for nothing but the " &
-                          "insertion point."
-        Else
-            _state.Text = filled.Count.ToString() & " of " &
-                          _boxes.Count.ToString() & " filled in. Draw will " &
-                          "ask at the command line for the other " &
-                          asking.ToString() & "."
-        End If
-        _draw.IsEnabled = True
+        Dim state = FormWire.Line(_boxes)
+        _state.Text = state.Text
+        _state.Foreground = If(state.Ready, SystemColors.GrayTextBrush,
+                               Brushes.OrangeRed)
+        _draw.IsEnabled = state.Ready
         _recall.IsEnabled = HasStored()
     End Sub
-
-    ''' <summary>
-    ''' The keys the wire will drop, asked of calofin.lsp.
-    '''
-    ''' The palette cannot answer this itself -- it does not read a
-    ''' measurement any more, which is the point -- and it must not
-    ''' guess: the line names boxes, and a line that named a box the wire
-    ''' would happily accept is worse than no line. When the glue is not
-    ''' loaded nothing is reported, which leaves the form exactly as
-    ''' honest as it was before the state line existed.
-    ''' </summary>
-    Private Function Unreadable(filled As List(Of ChartBox)) As HashSet(Of String)
-        Dim out As New HashSet(Of String)
-        Dim packed = RecallStore.Pack(filled)
-        If packed.Length = 0 Then Return out
-        Try
-            Dim args As New ResultBuffer(
-                New TypedValue(CInt(LispDataType.Text), "calofin:unreadable-str"),
-                New TypedValue(CInt(LispDataType.Text), packed))
-            Dim res = AcadApp.Invoke(args)
-            If res Is Nothing Then Return out
-            For Each tv As TypedValue In res
-                If tv.TypeCode <> CInt(LispDataType.Text) Then Continue For
-                Dim s = TryCast(tv.Value, String)
-                If String.IsNullOrEmpty(s) Then Continue For
-                For Each k In s.Split(";"c)
-                    If k.Length > 0 Then out.Add(k)
-                Next
-            Next
-        Catch
-            out.Clear()
-        End Try
-        Return out
-    End Function
-
-    ''' <summary>cal:plural: a line reading "all 1 boxes" is a bug in the
-    ''' form, whatever it is reporting.</summary>
-    Private Shared Function Plural(n As Integer, one As String,
-                                   many As String) As String
-        Return If(n = 1, one, many)
-    End Function
-
-    ''' <summary>cal:andjoin: "B", "B and L", "B, L and H".</summary>
-    Private Shared Function AndJoin(items As List(Of String)) As String
-        If items.Count = 0 Then Return ""
-        If items.Count = 1 Then Return items(0)
-        Dim head = String.Join(", ", items.GetRange(0, items.Count - 1))
-        Return head & " and " & items(items.Count - 1)
-    End Function
 
     ' ------------------------------------------------------------- actions
 
