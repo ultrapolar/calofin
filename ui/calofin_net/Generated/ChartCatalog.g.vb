@@ -161,6 +161,54 @@ Public NotInheritable Class ChartCatalog
         End Sub
     End Structure
 
+    ''' <summary>A question answered from a list rather than typed. The
+    ''' first option is "(ask)": choosing it sends nothing and the
+    ''' routine asks at the command line.</summary>
+    Public Structure Choice
+        Public ReadOnly Key As String
+        Public ReadOnly Label As String
+        Public ReadOnly Options As String()
+
+        Public Sub New(key As String, label As String, options As String())
+            Me.Key = key
+            Me.Label = label
+            Me.Options = options
+        End Sub
+    End Structure
+
+    ''' <summary>One corner of a spa sheet. Its two answers are keyed off
+    ''' the stem: cornera-ty for the treatment, cornera-sz for the size
+    ''' the treatment carries.</summary>
+    Public Structure SpaCornerRow
+        Public ReadOnly Stem As String
+        Public ReadOnly Label As String
+
+        Public Sub New(stem As String, label As String)
+            Me.Stem = stem
+            Me.Label = label
+        End Sub
+    End Structure
+
+    ''' <summary>What a spa sheet has that a pool sheet has not.</summary>
+    Public Structure SpaSheet
+        ''' <summary>The chart this belongs to.</summary>
+        Public ReadOnly Key As String
+        Public ReadOnly Hint As String
+        Public ReadOnly Corners As SpaCornerRow()
+        ''' <summary>The other outline's overalls, under keys that are
+        ''' PER SHAPE: the rectangle's pair is w2/l2, the octagon's is
+        ''' b2/a2 plus the cut face f2.</summary>
+        Public ReadOnly Second As ListKey()
+
+        Public Sub New(key As String, hint As String,
+                       corners As SpaCornerRow(), second As ListKey())
+            Me.Key = key
+            Me.Hint = hint
+            Me.Corners = corners
+            Me.Second = second
+        End Sub
+    End Structure
+
     ''' <summary>One step routine: the command a drafter knows it by,
     ''' its title, and the entry point a form hands its answers to.
     ''' All three come from lzt:*types*.</summary>
@@ -1048,7 +1096,7 @@ Public NotInheritable Class ChartCatalog
             New ChartDim() {
                 New ChartDim("T1", "tread1", 100, 385, 860, 385, True, "Step 1 tread"),
                 New ChartDim("W1", "width1", 860, 129, 860, 231, False, "Step 1 width"),
-                New ChartDim("D1", "depth1", 900, 540, 900, 765, False, "Step 1 drop"),
+                New ChartDim("D1", "depth1", 900, 540, 900, 765, False, "Drop at the wall"),
                 New ChartDim("DA", "depthafter", 140, 765, 140, 990, False, "after the last tread")
             },
             New Double() {385}),
@@ -1069,7 +1117,7 @@ Public NotInheritable Class ChartCatalog
                 New ChartDim("T2", "tread2", 480, 385, 860, 385, True, "Step 2 tread"),
                 New ChartDim("W1", "width1", 480, 73, 480, 287, False, "Step 1 width"),
                 New ChartDim("W2", "width2", 860, 129, 860, 231, False, "Step 2 width"),
-                New ChartDim("D1", "depth1", 900, 540, 900, 690, False, "Step 1 drop"),
+                New ChartDim("D1", "depth1", 900, 540, 900, 690, False, "Drop at the wall"),
                 New ChartDim("D2", "depth2", 520, 690, 520, 840, False, "Step 2 drop"),
                 New ChartDim("DA", "depthafter", 140, 840, 140, 990, False, "after the last tread")
             },
@@ -1096,7 +1144,7 @@ Public NotInheritable Class ChartCatalog
                 New ChartDim("W1", "width1", 353, 66, 353, 294, False, "Step 1 width"),
                 New ChartDim("W2", "width2", 606, 85, 606, 275, False, "Step 2 width"),
                 New ChartDim("W3", "width3", 860, 129, 860, 231, False, "Step 3 width"),
-                New ChartDim("D1", "depth1", 900, 540, 900, 652, False, "Step 1 drop"),
+                New ChartDim("D1", "depth1", 900, 540, 900, 652, False, "Drop at the wall"),
                 New ChartDim("D2", "depth2", 647, 652, 647, 765, False, "Step 2 drop"),
                 New ChartDim("D3", "depth3", 394, 765, 394, 877, False, "Step 3 drop"),
                 New ChartDim("DA", "depthafter", 140, 877, 140, 990, False, "after the last tread")
@@ -1129,7 +1177,7 @@ Public NotInheritable Class ChartCatalog
                 New ChartDim("W2", "width2", 480, 73, 480, 287, False, "Step 2 width"),
                 New ChartDim("W3", "width3", 670, 92, 670, 268, False, "Step 3 width"),
                 New ChartDim("W4", "width4", 860, 129, 860, 231, False, "Step 4 width"),
-                New ChartDim("D1", "depth1", 900, 540, 900, 630, False, "Step 1 drop"),
+                New ChartDim("D1", "depth1", 900, 540, 900, 630, False, "Drop at the wall"),
                 New ChartDim("D2", "depth2", 710, 630, 710, 720, False, "Step 2 drop"),
                 New ChartDim("D3", "depth3", 520, 720, 520, 810, False, "Step 3 drop"),
                 New ChartDim("D4", "depth4", 330, 810, 330, 900, False, "Step 4 drop"),
@@ -1168,7 +1216,7 @@ Public NotInheritable Class ChartCatalog
                 New ChartDim("W3", "width3", 556, 80, 556, 280, False, "Step 3 width"),
                 New ChartDim("W4", "width4", 708, 98, 708, 262, False, "Step 4 width"),
                 New ChartDim("W5", "width5", 860, 129, 860, 231, False, "Step 5 width"),
-                New ChartDim("D1", "depth1", 900, 540, 900, 615, False, "Step 1 drop"),
+                New ChartDim("D1", "depth1", 900, 540, 900, 615, False, "Drop at the wall"),
                 New ChartDim("D2", "depth2", 748, 615, 748, 690, False, "Step 2 drop"),
                 New ChartDim("D3", "depth3", 596, 690, 596, 765, False, "Step 3 drop"),
                 New ChartDim("D4", "depth4", 444, 765, 444, 840, False, "Step 4 drop"),
@@ -1213,7 +1261,7 @@ Public NotInheritable Class ChartCatalog
                 New ChartDim("W4", "width4", 606, 85, 606, 275, False, "Step 4 width"),
                 New ChartDim("W5", "width5", 733, 102, 733, 258, False, "Step 5 width"),
                 New ChartDim("W6", "width6", 860, 129, 860, 231, False, "Step 6 width"),
-                New ChartDim("D1", "depth1", 900, 540, 900, 604, False, "Step 1 drop"),
+                New ChartDim("D1", "depth1", 900, 540, 900, 604, False, "Drop at the wall"),
                 New ChartDim("D2", "depth2", 774, 604, 774, 668, False, "Step 2 drop"),
                 New ChartDim("D3", "depth3", 647, 668, 647, 732, False, "Step 3 drop"),
                 New ChartDim("D4", "depth4", 520, 732, 520, 797, False, "Step 4 drop"),
@@ -1264,7 +1312,7 @@ Public NotInheritable Class ChartCatalog
                 New ChartDim("W5", "width5", 642, 89, 642, 271, False, "Step 5 width"),
                 New ChartDim("W6", "width6", 751, 105, 751, 255, False, "Step 6 width"),
                 New ChartDim("W7", "width7", 860, 129, 860, 231, False, "Step 7 width"),
-                New ChartDim("D1", "depth1", 900, 540, 900, 596, False, "Step 1 drop"),
+                New ChartDim("D1", "depth1", 900, 540, 900, 596, False, "Drop at the wall"),
                 New ChartDim("D2", "depth2", 792, 596, 792, 652, False, "Step 2 drop"),
                 New ChartDim("D3", "depth3", 683, 652, 683, 708, False, "Step 3 drop"),
                 New ChartDim("D4", "depth4", 575, 708, 575, 765, False, "Step 4 drop"),
@@ -1321,7 +1369,7 @@ Public NotInheritable Class ChartCatalog
                 New ChartDim("W6", "width6", 670, 92, 670, 268, False, "Step 6 width"),
                 New ChartDim("W7", "width7", 765, 107, 765, 253, False, "Step 7 width"),
                 New ChartDim("W8", "width8", 860, 129, 860, 231, False, "Step 8 width"),
-                New ChartDim("D1", "depth1", 900, 540, 900, 590, False, "Step 1 drop"),
+                New ChartDim("D1", "depth1", 900, 540, 900, 590, False, "Drop at the wall"),
                 New ChartDim("D2", "depth2", 805, 590, 805, 640, False, "Step 2 drop"),
                 New ChartDim("D3", "depth3", 710, 640, 710, 690, False, "Step 3 drop"),
                 New ChartDim("D4", "depth4", 615, 690, 615, 740, False, "Step 4 drop"),
@@ -1610,6 +1658,308 @@ Public NotInheritable Class ChartCatalog
             New Double() {385, 445})
     }
 
+    ''' <summary>lzf:*ctreat*: what a pool corner can be. This
+    ''' one IS the canonical set -- STANDARDS.md section 2 --
+    ''' unlike the spa sheet, which offers the drawing legend and
+    ''' lets SPA normalise it.</summary>
+    Public Shared ReadOnly PoolTreatments As String() = {"(ask)", "Square", "Radius", "Cut", "NotGiven"}
+
+    ''' <summary>The pool treatments that carry a size, asked of
+    ''' lzf:csized.</summary>
+    Public Shared ReadOnly PoolSizedTreatments As String() = {"Radius", "Cut"}
+
+    ''' <summary>lzf:*btypes*: the six bottoms POOL draws. The
+    ''' shape chart shows twelve; the other six have no keyword
+    ''' and are not offered.</summary>
+    Public Shared ReadOnly PoolBottomTypes As String() = {"Normal", "Sport", "Wedge", "SLope", "MOdflat", "SHallow"}
+
+    ''' <summary>The two words the in-square toggle sends. It is
+    ''' not a yes/no: POOL reads a keyword.</summary>
+    Public Const InSquare As String = "Insquare"
+    Public Const OutOfSquare As String = "Outofsquare"
+
+    ''' <summary>One keyword dropdown on a pool sheet. SECTION is
+    ''' lzf:*picks*' own: "cross" ties the dropdown to the cross
+    ''' dims -- in square there are none, so there is no mode to
+    ''' pick either -- and "run" is a question in its own
+    ''' right.</summary>
+    Public Structure PoolPick
+        Public ReadOnly Key As String
+        Public ReadOnly Label As String
+        Public ReadOnly Section As String
+        Public ReadOnly Options As String()
+
+        Public Sub New(key As String, label As String,
+                       section As String, options As String())
+            Me.Key = key
+            Me.Label = label
+            Me.Section = section
+            Me.Options = options
+        End Sub
+    End Structure
+
+    ''' <summary>One corner ROW on a pool sheet, which is not
+    ''' always one corner.
+    '''
+    ''' <para>The answer is fanned out to every target: each gets
+    ''' &lt;target&gt;-ty and, when the treatment carries one,
+    ''' &lt;target&gt;-sz. WHICH targets depends on the in-square
+    ''' toggle, because in square one answer covers all four
+    ''' corners and out of square each is asked for itself -- so a
+    ''' row can have targets in one state and NONE in the other,
+    ''' and a row with none sends nothing at all.</para></summary>
+    Public Structure PoolCornerRow
+        Public ReadOnly Stem As String
+        Public ReadOnly Label As String
+        Public ReadOnly InSquareTargets As String()
+        Public ReadOnly OutOfSquareTargets As String()
+
+        Public Sub New(stem As String, label As String,
+                       inSquare As String(),
+                       outOfSquare As String())
+            Me.Stem = stem
+            Me.Label = label
+            Me.InSquareTargets = inSquare
+            Me.OutOfSquareTargets = outOfSquare
+        End Sub
+
+        ''' <summary>The targets for the toggle as it stands.
+        ''' </summary>
+        Public Function Targets(insquare As Boolean) As String()
+            Return If(insquare, InSquareTargets, OutOfSquareTargets)
+        End Function
+    End Structure
+
+    ''' <summary>What a pool sheet has beyond its geometry.
+    ''' </summary>
+    Public Structure PoolSheet
+        Public ReadOnly Key As String
+        ''' <summary>The diagonals. They have no line on a chart
+        ''' drawn square -- a cross dim runs corner to corner --
+        ''' so every one of them is a column box.</summary>
+        Public ReadOnly Cross As ListKey()
+        Public ReadOnly Picks As PoolPick()
+        Public ReadOnly Corners As PoolCornerRow()
+
+        Public Sub New(key As String, cross As ListKey(),
+                       picks As PoolPick(),
+                       corners As PoolCornerRow())
+            Me.Key = key
+            Me.Cross = cross
+            Me.Picks = picks
+            Me.Corners = corners
+        End Sub
+    End Structure
+
+    Public Shared ReadOnly PoolSheets As PoolSheet() = {
+        New PoolSheet("Rectangle",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2"),
+            New ListKey("x2", "Cross dim 3"),
+            New ListKey("x3", "Cross dim 4")
+            },
+            New PoolPick() {
+            New PoolPick("cmode", "Cross dims measured from", "cross", New String() {"(ask)", "Corner", "Middle", "Ends"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("cornera", "Corner A (bottom left)", New String() {"corners"}, New String() {"cornera"}),
+            New PoolCornerRow("cornerb", "Corner B (bottom right)", New String() {}, New String() {"cornerb"}),
+            New PoolCornerRow("cornerc", "Corner C (top right)", New String() {}, New String() {"cornerc"}),
+            New PoolCornerRow("cornerd", "Corner D (top left)", New String() {}, New String() {"cornerd"})
+            }),
+        New PoolSheet("Oval",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2"),
+            New ListKey("x2", "Cross dim 3"),
+            New ListKey("x3", "Cross dim 4")
+            },
+            New PoolPick() {
+            New PoolPick("cmode", "Cross dims measured from", "cross", New String() {"(ask)", "Corner", "Middle", "Ends"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("ROman",
+            New ListKey() {
+            New ListKey("ac", "Cross dim body A-C"),
+            New ListKey("bd", "Cross dim body B-D")
+            },
+            New PoolPick() {},
+            New PoolCornerRow() {
+            New PoolCornerRow("cornera", "Corner A (bottom left)", New String() {"corners"}, New String() {"cornera"}),
+            New PoolCornerRow("cornerb", "Corner B (bottom right)", New String() {}, New String() {"cornerb"}),
+            New PoolCornerRow("cornerc", "Corner C (top right)", New String() {}, New String() {"cornerc"}),
+            New PoolCornerRow("cornerd", "Corner D (top left)", New String() {}, New String() {"cornerd"})
+            }),
+        New PoolSheet("Grecian",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2")
+            },
+            New PoolPick() {
+            New PoolPick("gcross", "Cross-dim detail", "cross", New String() {"(ask)", "Simple", "Center", "Complex"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("bodycorners", "Body corners (all four)", New String() {"bodycorners"}, New String() {"cornera", "cornerb", "cornerc", "cornerd"}),
+            New PoolCornerRow("endcorners", "End-tip corners (LT LB RT RB)", New String() {"endcorners"}, New String() {"cornerlt", "cornerlb", "cornerrt", "cornerrb"})
+            }),
+        New PoolSheet("GRSquare",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2")
+            },
+            New PoolPick() {
+            New PoolPick("gcross", "Cross-dim detail", "cross", New String() {"(ask)", "Simple", "Center", "Complex"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("bodycorners", "Body corners (all four)", New String() {"bodycorners"}, New String() {"cornera", "cornerb", "cornerc", "cornerd"}),
+            New PoolCornerRow("endcorners", "End-tip corners (LT LB RT RB)", New String() {"endcorners"}, New String() {"cornerlt", "cornerlb", "cornerrt", "cornerrb"})
+            }),
+        New PoolSheet("L",
+            New ListKey() {
+            New ListKey("ac", "Cross dim A-C"),
+            New ListKey("bd", "Cross dim B-D"),
+            New ListKey("ce", "Cross dim C-E"),
+            New ListKey("df", "Cross dim D-F"),
+            New ListKey("ae", "Cross dim A-E"),
+            New ListKey("bf", "Cross dim B-F"),
+            New ListKey("ad", "Cross dim A-D"),
+            New ListKey("be", "Cross dim B-E"),
+            New ListKey("cf", "Cross dim C-F")
+            },
+            New PoolPick() {
+            New PoolPick("mirror", "Mirror the pool (wing swaps sides)", "run", New String() {"(ask)", "Yes", "No"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("outercorners", "Outer corners (all five)", New String() {"outercorners"}, New String() {"outercorners"}),
+            New PoolCornerRow("innercorner", "Reverse corner E", New String() {"innercorner"}, New String() {"innercorner"})
+            }),
+        New PoolSheet("ROUnd",
+            New ListKey() {},
+            New PoolPick() {},
+            New PoolCornerRow() {}),
+        New PoolSheet("OCtagon",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2")
+            },
+            New PoolPick() {
+            New PoolPick("gcross", "Cross-dim detail", "cross", New String() {"(ask)", "Simple", "Center", "Complex"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("bodycorners", "Body corners (all four)", New String() {"bodycorners"}, New String() {"cornera", "cornerb", "cornerc", "cornerd"}),
+            New PoolCornerRow("endcorners", "End-tip corners (LT LB RT RB)", New String() {"endcorners"}, New String() {"cornerlt", "cornerlb", "cornerrt", "cornerrb"})
+            }),
+        New PoolSheet("OACenter",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("OATopRight",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("OACloud",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("sub", "Cloud bottom", "run", New String() {"(ask)", "Straight", "Rounded"}),
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("OAKidney",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("sub", "Kidney type", "run", New String() {"(ask)", "True", "Asymmetric"}),
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("OANXT",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {})
+    }
+
+    ''' <summary>The pool extras for a sheet, or one with a
+    ''' Nothing Key when there are none.</summary>
+    Public Shared Function PoolSheetFor(key As String) As PoolSheet
+        For Each s In PoolSheets
+            If String.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase) Then Return s
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>The spa questions answered from a LIST rather than
+    ''' typed - lzs:*lists*. The first option is always "(ask)",
+    ''' and choosing it sends nothing at all: the key stays absent
+    ''' and SPA asks at the command line.</summary>
+    Public Shared ReadOnly SpaLists As Choice() = {
+        New Choice("mode", "Water's edge or cover size", New String() {"(ask)", "Watersedge", "Coversize"}),
+        New Choice("second", "Draw the other outline as well", New String() {"(ask)", "Yes", "No"}),
+        New Choice("method", "Take the other outline from", New String() {"(ask)", "Offset", "Dims"}),
+        New Choice("autohinge", "Auto-hinge the cover", New String() {"(ask)", "Yes", "No"}),
+        New Choice("grade", "Cover grade", New String() {"(ask)", "STANDARD", "THERMOLIGHT"}),
+        New Choice("taper", "Taper", New String() {"(ask)", "3-2", "4-2", "4-3", "5-3", "5-4", "3-3", "1-3/8"})
+    }
+
+    ''' <summary>lzs:*ctreat*: the words the corner dropdown
+    ''' offers. They are the SHEET LEGEND's -- 90 / Radius /
+    ''' Diagonal -- and SPA normalises them onto the canonical
+    ''' Square / Radius / Cut / NotGiven set itself, which is why
+    ''' the palette must send them as written and not
+    ''' helpfully translate.</summary>
+    Public Shared ReadOnly SpaTreatments As String() = {"(ask)", "90", "Radius", "Diagonal"}
+
+    ''' <summary>The treatments that carry a size, asked of
+    ''' lzs:sized rather than read off it. 90 sets back nothing
+    ''' and asks for no number.</summary>
+    Public Shared ReadOnly SpaSizedTreatments As String() = {"Radius", "Diagonal"}
+
+    ''' <summary>The cover lap. A box the dialog builds rather
+    ''' than a table row, so it is lifted out of the source.
+    ''' </summary>
+    Public Shared ReadOnly SpaCoverLap As ListKey = New ListKey("gap", "How far the cover laps the water's edge")
+
+    ''' <summary>What a spa sheet has that a pool sheet has not:
+    ''' its corner rows, the other outline's overalls under keys
+    ''' that are PER SHAPE, and the line the page prints.
+    '''
+    ''' <para>Kept beside Chart rather than inside it. LAZFORM has
+    ''' a corner table too and it is a different shape -- four
+    ''' slots, with collective questions covering several corners
+    ''' at once -- so one structure for both would be a lie about
+    ''' one of them.</para></summary>
+    Public Shared ReadOnly SpaSheets As SpaSheet() = {
+        New SpaSheet("Rectangle", "A B C D run from the bottom left, the way SPA numbers them.",
+            New SpaCornerRow() {
+            New SpaCornerRow("cornera", "Corner A (bottom left)"),
+            New SpaCornerRow("cornerb", "Corner B (bottom right)"),
+            New SpaCornerRow("cornerc", "Corner C (top right)"),
+            New SpaCornerRow("cornerd", "Corner D (top left)")
+            },
+            New ListKey() {
+            New ListKey("w2", "Other outline ACROSS"),
+            New ListKey("l2", "Other outline UP")
+            }),
+        New SpaSheet("OCtagon", "B and A alone draw a true square octagon -- NA the cut letters.",
+            New SpaCornerRow() {},
+            New ListKey() {
+            New ListKey("b2", "Other outline ACROSS"),
+            New ListKey("a2", "Other outline UP"),
+            New ListKey("f2", "Other outline cut FACE")
+            }),
+        New SpaSheet("ROund", "Leave A empty for a circle; fill it in and the spa is out of round.",
+            New SpaCornerRow() {},
+            New ListKey() {
+            New ListKey("b2", "Other outline ACROSS"),
+            New ListKey("a2", "Other outline UP")
+            })
+    }
+
     ''' <summary>The POOL or OASIS sheet of that name, or one with a
     ''' Nothing Key when there is none.</summary>
     Public Shared Function PoolChart(key As String) As Chart
@@ -1625,6 +1975,17 @@ Public NotInheritable Class ChartCatalog
         For Each c In charts
             If String.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase) Then
                 Return c
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>The spa extras for a sheet, or one with a Nothing Key
+    ''' when there are none.</summary>
+    Public Shared Function SpaSheetFor(key As String) As SpaSheet
+        For Each s In SpaSheets
+            If String.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase) Then
+                Return s
             End If
         Next
         Return Nothing

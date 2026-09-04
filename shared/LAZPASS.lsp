@@ -37663,9 +37663,13 @@
 ;;;       give the step depths (the vertical drops), top step first -
 ;;;       one per step PLUS one more for the drop after the last
 ;;;       tread, so 3 steps take 4 depths - with Back to re-ask the
-;;;       previous one; then pick the top of the first tread.  The
-;;;       flight always runs DOWN AND TO THE LEFT from there, so there
-;;;       is no side to pick.  See "The side profile" below.
+;;;       previous one; then pick the top of the wall (the curve, in
+;;;       the curve modes).  The flight READS FROM THE WALL: the first
+;;;       depth asked is the drop AT THE WALL and the first tread it
+;;;       draws is the flat against it - the one the plan measured
+;;;       from the wall to the first chord.  It always runs DOWN AND
+;;;       TO THE LEFT from the pick, so there is no side to pick.
+;;;       See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - EXCEPT the last one drawn: the line that closes
 ;;;       the run has no riser behind it, so it is handed to AUTOBEAD
@@ -37681,8 +37685,14 @@
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
 ;;;   world X/Y, always descending to the LEFT of the picked top of the
-;;;   first tread and ending on the last depth - so the steps rise to
-;;;   the right, the way the shop's own elevations read.
+;;;   WALL and ending on the last depth - so the steps rise to the
+;;;   right, the way the shop's own elevations read.  It starts where
+;;;   the run starts: the pick is the top of the wall, the first drop
+;;;   is the drop at the wall, and the first tread is the flat between
+;;;   the wall and the first chord.  Every tread after that is the gap
+;;;   between two chords, so the flight covers the same distances the
+;;;   plan's tread chain does, in the same order.  (In the curve modes
+;;;   the run starts at the curve instead, and the flight says so.)
 ;;;   The dims climb with them, up and to the right, on the high side:
 ;;;     * every depth is a dim of its own, standing the same distance
 ;;;       right of the corner its drop lands on, so they step out with
@@ -37751,7 +37761,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.11") ; printed on load and at command start so a
+(setq *hs-version* "v3.12") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -38322,7 +38332,8 @@
                       bmark bsides btreads bnums bside bdir bss pr be
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
-                      px py totrun totdrop td cnrs pfo pgap fsteps fkey)
+                      px py totrun totdrop td cnrs pfo pgap fsteps fkey
+                      wnoun)
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
@@ -38802,6 +38813,9 @@
   ;; *cs-depth-dimstyle* too.
   (if (> drawn 0)
     (progn
+      ;; what the run starts at, and so what the flight starts at: the
+      ;; wall in base-line mode, the curve itself in the curve modes
+      (setq wnoun (if cmode "the curve" "the wall"))
       (if (null (setq fkey (hs-fkw 'profile "Yes No" "Yes")))
         (progn
           (initget "Yes No")
@@ -38840,7 +38854,13 @@
                   (initget 6 "Back Undo"))
                 (setq dd (getdist
                            (cond
-                             ((= jx 1) "\nStep 1 - step depth (the drop): ")
+                             ;; the flight starts where the run does, so
+                             ;; the first drop is the one AT THE WALL -
+                             ;; not step 1's, which is the drop off the
+                             ;; tread the wall already gave
+                             ((= jx 1)
+                              (strcat "\nDepth at " wnoun
+                                      " - the drop onto the first tread: "))
                              ((> jx tcount)
                               (strcat "\nDepth after the last tread [Back] <"
                                       (rtos (car drops)) ">: "))
@@ -38861,7 +38881,7 @@
           (setq drops (reverse drops))
           ;; Placement.  The profile always runs DOWN AND TO THE LEFT
           ;; from the pick, so there is no side to ask about.
-          (setq ptop (getpoint (strcat "\nPick the top of the first tread"
+          (setq ptop (getpoint (strcat "\nPick the top of " wnoun
                                        " for the side profile: ")))
           (if (null ptop)
             (princ "\nNo point picked - side profile skipped.")
@@ -38923,7 +38943,8 @@
                   (hs-dimv *cs-depth-dimstyle* (car cnrs) (last cnrs)
                            (list (+ (car ptop) pfo pgap)
                                  (- (cadr ptop) (* 0.5 totdrop)) 0.0))))
-              (princ (strcat "\nSide profile drawn: " (itoa tcount)
+              (princ (strcat "\nSide profile drawn from " wnoun ": "
+                             (itoa tcount)
                              " step(s), " (itoa (length drops))
                              " depths, down to the left; total run "
                              (rtos totrun) ", overall depth "
@@ -39072,10 +39093,13 @@
   (princ "\n     or repeats the previous width (line mode).")
   (princ "\n  3. One last distance to the back of the curve places the crown,")
   (princ "\n     and the boundary polyline is drawn through the step ends.")
-  (princ "\n  4. Finally you may add a SIDE PROFILE: give the step depths")
+  (princ "\n  4. Finally you may add a SIDE PROFILE, read FROM THE WALL:")
+  (princ "\n     the first depth is the drop AT THE WALL and the first")
+  (princ "\n     tread the flat between the wall and the first chord.")
+  (princ "\n     Give the step depths")
   (princ "\n     (top step first, plus the drop after the last tread, so")
   (princ "\n     3 steps take 4 depths; Back supported), then pick the")
-  (princ "\n     top of the first tread.  The flight always runs down and")
+  (princ "\n     top of the WALL.  The flight always runs down and")
   (princ "\n     to the LEFT from there, so the steps rise to the right")
   (princ "\n     and the dims climb with them - each depth beside its own")
   (princ "\n     step, the overall further out; the treads are not dimmed.")
@@ -39220,11 +39244,16 @@
 ;;;                      square and run to the last tread; the corner
 ;;;                      treatment sits on the last step.
 ;;;   TWO LINES (a corner)
-;;;                      the steps sit against the corner and always run
-;;;                      OUTWARD from it.  You are asked which of the two
-;;;                      lines the steps run off of - the same line the
-;;;                      back-corner offset is measured on; the treads run
-;;;                      parallel to it and butt against the other one.
+;;;                      the steps sit in a recess OUTSIDE the corner.
+;;;                      The corner itself says which way that is: both
+;;;                      lines run away from it into the pool, so the
+;;;                      run goes the other way - out through the wall
+;;;                      it comes off, never into the water between
+;;;                      them.  You are asked which of the two lines
+;;;                      the steps run off of - the same line the
+;;;                      back-corner offset is measured on; the treads
+;;;                      run parallel to it and butt against the other
+;;;                      one, carried on past the corner.
 ;;;   A "U" ............ the outline the steps sit in is already drawn,
 ;;;                      so the treads are just filled in.  The BASE of
 ;;;                      the U - its closed end - is the wall the steps
@@ -39284,13 +39313,16 @@
 ;;;       off the base wall, running from the wall to the last tread -
 ;;;       the treatment sits on the last step's corners, so a Radius or
 ;;;       Cut one stops the walls an offset short and the corner
-;;;       piece finishes the trip.  In corner mode only the outer side
-;;;       is drawn - with its back corner flare at the wall - since the
-;;;       steps run outward from the corner and the line they sit
-;;;       against closes the inner side.  That outer side runs OUTWARD
-;;;       with the treads: it is the line they sit against offset by
-;;;       the step width, not a line square to the base, so it still
-;;;       meets every tread end where the corner is not a true 90.
+;;;       piece finishes the trip.  Corner mode draws BOTH sides of
+;;;       the recess, because the line the treads sit against stops at
+;;;       the corner and the run is on the far side of it: the inner
+;;;       side carries that line on past the corner, and the outer one
+;;;       is the same line offset by the step width.  Neither is square
+;;;       to the base - the treads all start on the leaning line and
+;;;       run out from it - so both still meet every tread end where
+;;;       the corner is not a true 90.  Only the outer side takes the
+;;;       back-corner flare: the inner one runs straight on out of the
+;;;       wall it continues, so there is no corner there to treat.
 ;;;       The U already has its arms, so only a back corner asked for
 ;;;       there is drawn.
 ;;;   7.  Optional dimensions: the step treads chained along the run,
@@ -39384,7 +39416,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.5") ; printed on load and at command start so a
+(setq *ns-version* "v3.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -39980,7 +40012,7 @@
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e coff tent te1 te2
-                        rsubj ngp ngv
+                        rsubj ngp ngv outv
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
@@ -40126,19 +40158,23 @@
          (progn (princ "\nNothing picked - nothing drawn.") (exit)))
        (setq base (ns-nearseg segs (trans pt 1 0))
              side (if (equal base d1) d2 d1)))
-     ;; U runs along the base, away from the corner; DIR heads away from
-     ;; the base on the side the other line goes
-     (setq u   (ns-unit (ns-vec corner (ns-far base corner)))
-           dir (ns-unit (ns-vec corner (ns-far side corner))))
-     (if (or (null u) (null dir))
+     ;; U runs along the base, away from the corner.  Which way the run
+     ;; goes is not asked and not guessed: the corner says it.  Both
+     ;; lines run away from the corner into the pool, so the water is
+     ;; the side they span and OUTSIDE is the other one - the run heads
+     ;; away from the line it butts against, out through the wall it
+     ;; comes off, into the recess it sits in.
+     (setq u    (ns-unit (ns-vec corner (ns-far base corner)))
+           outv (ns-unit (ns-vec corner (ns-far side corner))))
+     (if (or (null u) (null outv))
        (progn (princ "\nA selected line has zero length.") (exit)))
      ;; keep DIR square to the treads so step treads measure true
      (setq dir (ns-unit (ns-scl (ns-perp u)
-                                (if (< (cal:dot (ns-perp u) dir) 0.0)
-                                  -1.0 1.0)))
-           sp  corner)
-     (princ (strcat "\nSteps against the corner, running OUTWARD from it"
-                    " off the picked line.")))
+                                (if (< (cal:dot (ns-perp u) outv) 0.0)
+                                  1.0 -1.0)))
+           sp   corner)
+     (princ (strcat "\nSteps against the corner, running OUT through the"
+                    " picked line - the two lines say which way that is.")))
 
     ;; ---------- a U: the outline is drawn, fill in the treads ----------
     ;; The parts - arms, an optional back corner on each side (diagonal
@@ -40420,15 +40456,18 @@
       ((= mode "LINE")
        (setq e1 (ns-add p (ns-scl u (* 0.5 wid)))
              e2 (ns-add p (ns-scl u (* -0.5 wid)))))
-      ;; from the side line outward by the width
+      ;; from the side line outward by the width.  The run sits on the
+      ;; far side of the corner, so every tread meets that line past
+      ;; the end of the drawn segment - which is the recess's inner
+      ;; wall, not a line that had to be stretched to reach.  BEY stays
+      ;; nil: there is nothing to report.
       ((= mode "CORNER")
        (setq inn (inters p (ns-add p u) (car side) (cadr side) nil))
        (if (null inn)
          (princ (strcat "\n  Step " (itoa n)
                         ": cannot reach the side line - step skipped."))
-         (setq e1  inn
-               e2  (ns-add inn (ns-scl u wid))
-               bey (ns-beyond inn (car side) (cadr side)))))
+         (setq e1 inn
+               e2 (ns-add inn (ns-scl u wid)))))
       ;; trimmed to the sides of the U - arm, diagonal or fillet,
       ;; whichever the tread actually lands on
       (T
@@ -40544,26 +40583,32 @@
          (ns-mkline e (ns-add e (ns-scl dir (- cum coff))))
          (if (> coff 0.0)
            (ns-outer e u dir cum rtype coff)))
-        ;; The outer side only - the steps run outward from the
-        ;; corner, so the line they sit against closes the inner side
-        ;; already.  That outer side is the line they sit against
-        ;; OFFSET by the step width, NOT a line square to the base:
-        ;; the treads all start on the leaning line and run outward
-        ;; from it, so a square side wall would lean into the run and
-        ;; miss every tread end but the first.  PPREV is the last
-        ;; tread that actually landed, so a step taken Back cannot
-        ;; leave this pointing at one that was undone.
+        ;; BOTH sides of the recess.  The run is on the far side of
+        ;; the corner from the water, so the line the treads sit
+        ;; against stops dead at the wall: its inner side has to be
+        ;; drawn, carrying that line on past the corner.  The outer
+        ;; side is the same line OFFSET by the step width, NOT a line
+        ;; square to the base - the treads all start on the leaning
+        ;; line and run out from it, so a square side wall would lean
+        ;; into the run and miss every tread end but the first.  Only
+        ;; the outer side takes the back-corner flare; the inner one
+        ;; runs straight on out of the wall it continues, so there is
+        ;; no corner there to treat.  PPREV is the last tread that
+        ;; actually landed, so a step taken Back cannot leave these
+        ;; pointing at one that was undone.
         ((= mode "CORNER")
          (setq lastinn (inters pprev (ns-add pprev u)
                                (car side) (cadr side) nil))
          (if (null lastinn)
            (princ (strcat "\n  Note: the run does not reach the line it"
-                          " sits against - no outer side drawn."))
-           (ns-side (ns-add corner (ns-scl u wid))
-                    u
-                    (ns-unit (ns-vec corner lastinn))
-                    (distance corner lastinn)
-                    rtype roff rrad)))
+                          " sits against - no sides drawn."))
+           (progn
+             (ns-mkline corner lastinn)
+             (ns-side (ns-add corner (ns-scl u wid))
+                      u
+                      (ns-unit (ns-vec corner lastinn))
+                      (distance corner lastinn)
+                      rtype roff rrad))))
         ;; a U has its arms drawn already - only a back corner asked for
         ;; here is new geometry
         ((and (= mode "U") bc1 bc2)
@@ -40860,8 +40905,9 @@
   (ns-tut-pause)
   (princ "\nWHAT YOU SELECT DECIDES THE MODE")
   (princ "\n  ONE LINE ........ steps centered on it, on the side you pick")
-  (princ "\n  TWO LINES ....... a corner: the steps sit against it and run")
-  (princ "\n                    OUTWARD, off the line you pick")
+  (princ "\n  TWO LINES ....... a corner: the steps sit in a recess OUTSIDE")
+  (princ "\n                    it, off the line you pick - the two lines")
+  (princ "\n                    themselves say which way out is")
   (princ "\n  A U ............. the outline is drawn; treads fill in,")
   (princ "\n                    trimmed to its arms.  The BASE of the U is")
   (princ "\n                    the wall: the run starts there and marches")
@@ -40908,7 +40954,9 @@
   (princ "\n  - warns on tilted UCS / non-flat lines / unusable layer")
   (princ "\n  - bare numbers read as inches; 1'4 style works anywhere")
   (princ "\n  - corner mode keeps step treads square to the picked line,")
-  (princ "\n    so a skewed corner still measures true")
+  (princ "\n    so a skewed corner still measures true, and draws both")
+  (princ "\n    sides of the recess - the line the treads sit against")
+  (princ "\n    carried past the corner, and that line offset by the width")
   (princ "\n  - U treads trim to whatever the side is at that distance -")
   (princ "\n    arm, diagonal or arc - and the run stops at the open end")
   (princ "\n  - a corner deeper than the run - or two that would meet")
@@ -41125,7 +41173,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.4")
+(setq *lazstep-version* "v1.5")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -41299,8 +41347,11 @@
 
 ;; N+1 depth dimensions: depth1..depthN against each drop, depthafter
 ;; against the drop after the last tread.  Each stands a fixed gap off
-;; its own step, so they climb with the flight.
-(defun lzt:depthdims (n / i out x ya yb ltr key lbl)
+;; its own step, so they climb with the flight.  FLBL renames the FIRST
+;; drop where the routine does: HEMISTEP's flight reads from the wall,
+;; so its depth1 is the drop AT THE WALL, not step 1's.  nil keeps the
+;; plain numbering.
+(defun lzt:depthdims (n flbl / i out x ya yb ltr key lbl)
   (setq i 1)
   (while (<= i (1+ n))
     (setq x   (+ (lzt:profx i n) lzt:*prof-gap*)
@@ -41308,8 +41359,9 @@
           yb  (lzt:profy i n)
           ltr (if (> i n) "DA" (strcat "D" (itoa i)))
           key (if (> i n) "depthafter" (strcat "depth" (itoa i)))
-          lbl (if (> i n) "after the last tread"
-                          (strcat "Step " (itoa i) " drop"))
+          lbl (cond ((> i n) "after the last tread")
+                    ((and flbl (= i 1)) flbl)
+                    ((strcat "Step " (itoa i) " drop")))
           out (cons (list ltr key x ya x yb "v" lbl) out)
           i   (1+ i)))
   (reverse out))
@@ -41339,7 +41391,7 @@
         (append out (lzt:profile n))
         (append (lzt:treaddims n lzt:*plan-x1*)
                 (reverse dims)
-                (lzt:depthdims n))
+                (lzt:depthdims n nil))
         (lzt:cutlist n)))
 
 ;; ---- HEMISTEP: a curve with N chords across it ----------------------
@@ -41366,7 +41418,7 @@
         (append out (lzt:profile n))
         (append (lzt:treaddims n lzt:*chord-x1*)
                 (reverse dims)
-                (lzt:depthdims n))
+                (lzt:depthdims n "Drop at the wall"))
         (lzt:cutlist n)))
 
 ;; ---- NORMIESTEP: a straight run, ONE width for the whole of it ------
@@ -41386,7 +41438,7 @@
                 (list (list "W" "width" lzt:*width-x* ytop
                             lzt:*width-x* ybot "v"
                             "One width, the whole run"))
-                (lzt:depthdims n))
+                (lzt:depthdims n nil))
         (lzt:cutlist n)))
 
 ;; The chart for a type and a count.  This is the whole of the "drawing
@@ -42620,12 +42672,17 @@
 ;;;         L          ->  LEAVE them as drawn (intentional)
 ;;;     Lines that merely touch end-to-end are fine and not reported.
 ;;;
-;;;  5. COVER CHECKS -- nothing here rewrites the drawing; every
-;;;     disagreement is only SUGGESTED against, in the report:
+;;;  5. COVER CHECKS -- apart from the date, nothing here rewrites
+;;;     the drawing; every other disagreement is only SUGGESTED
+;;;     against, in the report:
 ;;;     - TECH TITLE DATE. The Date attribute of the "Tech Title"
 ;;;       block (tune *cchk-title-block* / *cchk-date-tag*) must read
 ;;;       TODAY, written MM/DD/YYYY - a sheet going out under an old
-;;;       date is the mistake this catches. The block is looked for in
+;;;       date is the mistake this catches. COVERCHECK does not just
+;;;       report a wrong one: it WRITES TODAY'S OVER IT in that same
+;;;       form, keeping any "Date =" label in front of it, and says
+;;;       what it found and what it set. The scans write nothing and
+;;;       say NEEDS UPDATING instead. The block is looked for in
 ;;;       the selection and then across the drawing; with none in
 ;;;       reach the report says the date was not checked rather than
 ;;;       flagging it. LITECOVERSCAN keeps this one.
@@ -42754,7 +42811,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.10")
+(setq *cchk-version* "v1.11")
 
 ;; --- tunables ------------------------------------------------------
 (setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
@@ -43101,7 +43158,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*,*NEEDS UPDATING*,*UPDATED TO*"))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -43333,9 +43390,43 @@
        ((progn (setq now (cchk:today-mdy))
                (not (and (= mo (car now)) (= dd (cadr now))
                          (= yr (caddr now)))))
-        (strcat "'" s "' is NOT TODAY'S DATE (" (cchk:mdy-str now)
-                ") - update it"))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (cchk:mdy-str now) ")"))
        (t nil)))))
+
+(defun cchk:before-eq (s / p n)
+  ;; everything up to and including the last "=", "" when there is
+  ;; none: the label a date arrives wearing ("Date = 05/01/2024"), so
+  ;; rewriting the date keeps the wording in front of it
+  (setq n 0)
+  (while (setq p (vl-string-search "=" (substr s (1+ n))))
+    (setq n (+ n p 1)))
+  (if (> n 0) (substr s 1 n) ""))
+
+(defun cchk:date-fixed (raw / pre)
+  ;; raw with today's date, written MM/DD/YYYY, in place of whatever
+  ;; date it held; a "Date =" label in front of it is left as typed
+  (setq pre (cchk:before-eq raw))
+  (if (= pre "")
+    (cchk:mdy-str (cchk:today-mdy))
+    (strcat pre " " (cchk:mdy-str (cchk:today-mdy)))))
+
+(defun cchk:set-attrib (ent tag val / e ed done)
+  ;; write val into the INSERT's attribute with that tag; nil when the
+  ;; block carries no such attribute
+  (setq tag (strcase tag))
+  (if (= 1 (cdr (assoc 66 (entget ent))))
+    (progn
+      (setq e (entnext ent))
+      (while (and e (null done)
+                  (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
+        (if (= tag (strcase (cdr (assoc 2 ed))))
+          (progn
+            (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+            (entupd e)
+            (setq done T)))
+        (setq e (entnext e)))))
+  (if done (entupd ent))
+  done)
 
 ;; The Tech Title block: the first INSERT whose name carries it, looked
 ;; for in the selection and then across the drawing, since the title
@@ -43364,7 +43455,7 @@
 ;; The verdict: (sentence . needs-attention).  With no Tech Title in
 ;; reach there is nothing to read, and that is said plainly rather than
 ;; flagged -- a cover or spa sheet may well be checked on its own.
-(defun cchk:audit-date (ss / blk ed raw bad)
+(defun cchk:audit-date (ss dofix / blk ed raw bad wrote)
   (setq blk (cchk:find-title ss))
   (if (null blk)
     (cons (strcat "no '" *cchk-title-block* "' block in reach - date NOT CHECKED")
@@ -43377,11 +43468,25 @@
                   (cchk:date-verdict raw)
                   (strcat "is missing from the block"
                           " - expected MM/DD/YYYY")))
-      (if bad
-        (cons (strcat *cchk-date-tag* " " bad) T)
-        (cons (strcat *cchk-date-tag* " = '"
-                      (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK")
-              nil)))))
+      ;; the one cover check that writes: a wrong date is not left to be
+      ;; noticed, today's goes in over it in the same MM/DD/YYYY form
+      ;; with any label in front of it kept.  Only an attribute can be
+      ;; written, and only for COVERCHECK - the scans read.
+      (if (and bad dofix)
+        (setq wrote (cchk:set-attrib blk *cchk-date-tag*
+                                   (cchk:date-fixed (if raw raw "")))))
+      (cond
+        (wrote (cons (strcat *cchk-date-tag* " " bad " - UPDATED to "
+                           (cchk:mdy-str (cchk:today-mdy)))
+                   T))
+        ((and bad dofix)
+         (cons (strcat *cchk-date-tag* " " bad " - fix it in the block") T))
+        (bad (cons (strcat *cchk-date-tag* " " bad
+                           " - NEEDS UPDATING (run COVERCHECK)")
+                   T))
+        (t (cons (strcat *cchk-date-tag* " = '"
+                         (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK")
+                 nil))))))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
 ;; title, the date and version, a verdict line, the colour legend, a
@@ -45591,7 +45696,7 @@
                   (> noflag 0))))
         (setq dimlay (cchk:dimlayer-verdict dims)
               units  (cchk:audit-units ss)
-              datev  (cchk:audit-date ss))
+              datev  (cchk:audit-date ss T))
         (foreach l (caddr units)
           (princ (strcat "\n  " l))
           (setq lines (cons l lines)))
@@ -45827,7 +45932,7 @@
                           (> (length olaps) 0)))))
      (setq dimlay (cchk:dimlayer-verdict dims)
            units  (cchk:audit-units ss)
-           datev  (cchk:audit-date ss))
+           datev  (cchk:audit-date ss nil))
      (foreach l (caddr units)
        (princ (strcat "\n  " l))
        (setq lines (cons l lines)))
@@ -58683,11 +58788,17 @@
 ;;;     four digits, month 01-12, and a day valid for that month (leap
 ;;;     Februaries included). Missing, blank, wrong format ("5/1/24",
 ;;;     "05-01-2024"), an out-of-range month/day, or a made-up day like
-;;;     "02/30" is reported in red with what is wrong. A well-formed
-;;;     calendar date that is NOT TODAY is reported too - a sheet going
-;;;     out under an old date is the mistake that catches. Only
+;;;     "02/30" is wrong, and so is a well-formed calendar date that is
+;;;     NOT TODAY - a sheet going out under an old date is the mistake
+;;;     that catches. LINFINCHECK does not just report a wrong date:
+;;;     it WRITES TODAY'S OVER IT in the same MM/DD/YYYY form, keeping
+;;;     any "Date =" label in front of it, and says in red what it
+;;;     found and what it set. A date that lives in the block's own
+;;;     definition rather than in an attribute belongs to every insert
+;;;     of that block, so that one is reported and left alone. Only
 ;;;     today's date, written MM/DD/YYYY, is a quiet OK; with no Tech
 ;;;     Title in reach the report says the date was not checked.
+;;;     LINFINSCAN, being read-only, says NEEDS UPDATING instead.
 ;;;
 ;;;  7. LINER MATERIAL check. The selection must hold a block named
 ;;;     (or containing the words) "Liner Material" / "Liner Material
@@ -58695,16 +58806,25 @@
 ;;;     for the standalone words "NOT" and "ERROR" in its attributes
 ;;;     and text (e.g. "Not Selected", "Not Included", "#ERROR");
 ;;;     A field that carries one of those words was never really
-;;;     filled in ("Not Supplied", "#ERROR"), so LINFINCHECK WIPES IT
-;;;     BACK TO BLANK and says which fields it cleared - the pattern
-;;;     block reads clean afterwards. Only attribute VALUES are
-;;;     cleared: the block's own labels ("Pattern:", "Wall:",
-;;;     "Floor:", "Step:") live in its definition and are never
-;;;     touched, and a real pattern name is left alone. A bad word
-;;;     sitting in the block's static text cannot be cleared, so it
-;;;     is reported instead. LINFINSCAN, being read-only, reports these
-;;;     as NEEDS WIPING and changes nothing. The liner pattern must also agree with how the
-;;;     steps are built:
+;;;     filled in ("Not Supplied", "#ERROR"), so LINFINCHECK WIPES
+;;;     THAT PHRASE OUT OF IT and says which fields it cleaned and
+;;;     what each one reads now. ONLY THE BAD PHRASE GOES - the bad
+;;;     word and the words it heads, space to space, since "Not
+;;;     Supplied" is one phrase and not two. Whatever else the field
+;;;     said stays exactly as typed: a label inside the value
+;;;     ("Pattern: Not Supplied" -> "Pattern:"), a real name beside it
+;;;     ("Blue Granite - Not Supplied" -> "Blue Granite"), anything
+;;;     past a comma or a dash ("Blue, Not Supplied, Granite" ->
+;;;     "Blue, Granite"). A field that held nothing but the bad phrase
+;;;     comes back blank. Only attribute VALUES are touched: the
+;;;     block's own labels ("Pattern:", "Wall:", "Floor:", "Step:")
+;;;     live in its definition and are never written to, and a real
+;;;     pattern name is left alone. A bad word sitting in the block's
+;;;     static text cannot be cleared, so it is reported instead.
+;;;     LINFINSCAN, being read-only, reports these as NEEDS WIPING
+;;;     and changes nothing.
+;;;       The liner pattern must also agree with how the steps are
+;;;     built:
 ;;;       - a FIBERGLASS STEP anywhere in the highlighted area (as
 ;;;         text, a block, or the layer things sit on -- see
 ;;;         *lfc-fgstep-words*) is its own unit, so the liner must
@@ -58794,7 +58914,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.7")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.8")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -59206,7 +59326,7 @@
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
   (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*"))
+    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*,*NEEDS UPDATING*,*UPDATED TO*"))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -60005,22 +60125,123 @@
         (setq e (entnext e)))))
   (reverse tags))
 
-(defun lfc:wipe-attribs (ent tags / e ed n)
-  ;; blank the listed attribute values so the pattern reads clean:
-  ;; the label stays, whatever was written after it goes
-  (setq n 0)
+(defun lfc:space-p (c) (or (= c 32) (= c 9)))
+
+(defun lfc:alnum-p (c)
+  (or (and (>= c 48) (<= c 57))       ; 0-9
+      (and (>= c 65) (<= c 90))       ; A-Z
+      (and (>= c 97) (<= c 122))))    ; a-z
+
+(defun lfc:all-spaces-p (s / i n ok)
+  ;; T when s holds nothing but spaces and tabs (an empty string too)
+  (setq n (strlen s) i 1 ok T)
+  (while (and ok (<= i n))
+    (if (not (lfc:space-p (ascii (substr s i 1)))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+(defun lfc:field-words (s / n i c st out lim)
+  ;; ((start . length) ...), one span per word in s.  A word is a run of
+  ;; letters and digits together with the punctuation stuck to its left,
+  ;; so "#ERROR" comes back whole; the span never reaches back past a
+  ;; space or into the word before it, so a "Pattern:" label keeps its
+  ;; own colon.
+  (setq n (strlen s) i 1 st nil out nil lim 1)
+  (while (<= i (1+ n))
+    (setq c (if (<= i n) (ascii (substr s i 1)) 32))
+    (if (lfc:alnum-p c)
+      (if (null st)
+        (progn
+          (setq st i)
+          (while (and (> st lim)
+                      (not (lfc:space-p (ascii (substr s (1- st) 1)))))
+            (setq st (1- st)))))
+      (if st
+        (setq out (cons (cons st (- i st)) out)
+              lim i
+              st  nil)))
+    (setq i (1+ i)))
+  (reverse out))
+
+(defun lfc:strip-badwords (s words / spans n i p sp nxt pieces lead keep
+                                     drop swallow prev first txt)
+  ;; s with the bad word - and the words it heads, space to space, since
+  ;; "Not Supplied" is one phrase and not two - taken out, and the rest
+  ;; of the field left exactly as it was typed: the label in front of it
+  ;; ("Pattern:"), a real pattern name, anything past a comma or a dash.
+  ;; A field that has nothing but the bad phrase in it comes back blank.
+  (setq spans (lfc:field-words s))
+  (if (null spans)
+    s
+    (progn
+      ;; ((word . what-follows-it) ...), in order, so a word's own
+      ;; trailing punctuation goes with it when it goes
+      (setq n (length spans) i 0 pieces nil)
+      (while (< i n)
+        (setq sp     (nth i spans)
+              nxt    (nth (1+ i) spans)
+              pieces (cons (cons (substr s (car sp) (cdr sp))
+                                 (substr s (+ (car sp) (cdr sp))
+                                           (- (if nxt (car nxt) (1+ (strlen s)))
+                                              (+ (car sp) (cdr sp)))))
+                           pieces)
+              i      (1+ i)))
+      (setq pieces  (reverse pieces)
+            lead    (substr s 1 (1- (car (car spans))))
+            keep    nil
+            prev    nil
+            first   nil
+            swallow nil)
+      (foreach p pieces
+        (setq drop (if (or (member (lfc:squash (car p)) words)
+                           (and swallow prev (lfc:all-spaces-p (cdr prev))))
+                     T))
+        (if (null prev) (setq first (not drop)))
+        (setq swallow drop
+              prev    p)
+        (if (not drop) (setq keep (cons p keep))))
+      ;; the text before the first word introduces it, so it goes when
+      ;; that word does
+      (setq txt (if first lead ""))
+      (foreach p (reverse keep) (setq txt (strcat txt (car p) (cdr p))))
+      (setq txt (lfc:trim-edges txt))
+      (if (lfc:field-words txt) txt ""))))
+
+(defun lfc:trim-edges (s / n)
+  ;; the spaces and now-dangling separators a removal leaves at either
+  ;; end go.  A label's colon stays on the right - "Pattern:" is what
+  ;; the block should read - and inch marks are never touched.
+  (while (and (> (strlen s) 0)
+              (member (ascii (substr s 1 1)) '(32 9 44 58 59 38 47 45)))
+    (setq s (substr s 2)))
+  (while (and (> (setq n (strlen s)) 0)
+              (member (ascii (substr s n 1)) '(32 9 44 59 38 47 45)))
+    (setq s (substr s 1 (1- n))))
+  s)
+
+(defun lfc:wipe-attribs (ent tags words / e ed val new n out)
+  ;; take the bad words out of the listed attribute values.  Only the
+  ;; bad phrase goes: a label, a real pattern name, anything else the
+  ;; field said is still there afterwards.  Returns
+  ;; ((tag . what-it-reads-now) ...) for every field touched.
+  (setq n 0 out nil)
   (if (= 1 (cdr (assoc 66 (entget ent))))
     (progn
       (setq e (entnext ent))
       (while (and e (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
         (if (member (cdr (assoc 2 ed)) tags)
           (progn
-            (entmod (subst '(1 . "") (assoc 1 ed) ed))
-            (entupd e)
-            (setq n (1+ n))))
+            (setq val (cdr (assoc 1 ed))
+                  new (lfc:strip-badwords val words))
+            (if (/= new val)
+              (progn
+                (entmod (subst (cons 1 new) (assoc 1 ed) ed))
+                (entupd e)
+                (setq n (1+ n))))
+            (setq out (cons (cons (cdr (assoc 2 ed)) new) out))))
         (setq e (entnext e)))))
   (if (> n 0) (entupd ent))
-  n)
+  (reverse out))
 
 (defun lfc:ins-attrib-deep (ent tag / val s)
   ;; the tag's value on the INSERT, or on a block nested inside it
@@ -60313,9 +60534,44 @@
        ((progn (setq now (lfc:today-mdy))
                (not (and (= mo (car now)) (= dd (cadr now))
                          (= yr (caddr now)))))
-        (strcat "'" s "' is NOT TODAY'S DATE (" (lfc:mdy-str now)
-                ") - update it"))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (lfc:mdy-str now) ")"))
        (t nil)))))
+
+(defun lfc:before-eq (s / p n)
+  ;; everything up to and including the last "=", "" when there is
+  ;; none: the label a date arrives wearing ("Date = 05/01/2024"), so
+  ;; rewriting the date keeps the wording in front of it
+  (setq n 0)
+  (while (setq p (vl-string-search "=" (substr s (1+ n))))
+    (setq n (+ n p 1)))
+  (if (> n 0) (substr s 1 n) ""))
+
+(defun lfc:date-fixed (raw / pre)
+  ;; raw with today's date, written MM/DD/YYYY, in place of whatever
+  ;; date it held; a "Date =" label in front of it is left as typed
+  (setq pre (lfc:before-eq raw))
+  (if (= pre "")
+    (lfc:mdy-str (lfc:today-mdy))
+    (strcat pre " " (lfc:mdy-str (lfc:today-mdy)))))
+
+(defun lfc:set-attrib (ent tag val / e ed done)
+  ;; write val into the INSERT's attribute with that tag; nil when the
+  ;; block carries no such attribute (a date built into the block
+  ;; definition is shared by every insert, so it is never rewritten)
+  (setq tag (strcase tag))
+  (if (= 1 (cdr (assoc 66 (entget ent))))
+    (progn
+      (setq e (entnext ent))
+      (while (and e (null done)
+                  (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
+        (if (= tag (strcase (cdr (assoc 2 ed))))
+          (progn
+            (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+            (entupd e)
+            (setq done T)))
+        (setq e (entnext e)))))
+  (if done (entupd ent))
+  done)
 
 ;; --- dimension review ----------------------------------------------
 
@@ -60852,11 +61108,11 @@
                       nomerged noflag noleft
                       sgroups scand svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong attundec liners linerbadw linernostep bad w bn bh bp
-                      linerstep linerfg fgstep badtags linerwiped
+                      linerstep linerfg fgstep badtags linerwiped wiped kept
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
-                      datesum dateraw datebad
+                      datesum dateraw datebad datefix
                       svbb hdim dimht htval htbad
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
@@ -61518,7 +61774,7 @@
 
         ;; --- Tech Title Date ------------------------------------------
         ;; runs whenever a Tech Title exists, independent of steps
-        (setq datesum nil dateraw nil datebad nil)
+        (setq datesum nil dateraw nil datebad nil datefix nil)
         (if tins
           (progn
             (setq dateraw (lfc:ins-attrib-deep tins *lfc-date-tag*))
@@ -61526,10 +61782,23 @@
               (if dateraw
                 (lfc:date-verdict dateraw)
                 "is missing - expected MM/DD/YYYY"))
+            ;; a wrong date is not left for someone to notice: today's
+            ;; goes in, MM/DD/YYYY, with the label in front of it kept.
+            ;; Only an attribute can be written - a date built into the
+            ;; block definition belongs to every insert of it, so that
+            ;; one is reported and left alone.
+            (if datebad
+              (setq datefix (lfc:set-attrib tins *lfc-date-tag*
+                                            (lfc:date-fixed
+                                              (if dateraw dateraw "")))))
             (setq datesum
-              (if datebad
-                (strcat *lfc-date-tag* " " datebad)
-                (strcat *lfc-date-tag* " = '" dateraw "' - OK")))
+              (cond
+                (datefix (strcat *lfc-date-tag* " " datebad
+                                 " - UPDATED to "
+                                 (lfc:mdy-str (lfc:today-mdy))))
+                (datebad (strcat *lfc-date-tag* " " datebad
+                                 " - fix it in the " *lfc-title-block*))
+                (t (strcat *lfc-date-tag* " = '" dateraw "' - OK"))))
             (princ (strcat "\n  Date: " datesum)))
           (setq datesum (strcat "no '" *lfc-title-block*
                                 "' block in reach - date NOT CHECKED")))
@@ -61569,18 +61838,29 @@
                   (setq linerbadw (append linerbadw (list w)))))
               (cond
                 ;; a pattern field that says "Not Supplied" or carries an
-                ;; ERROR was never filled in - wipe it back to blank so
-                ;; the block reads clean, and say which fields went
+                ;; ERROR was never filled in - wipe THAT out of it and
+                ;; leave the rest of the field alone, then say which
+                ;; fields went and what each one reads now
                 (badtags
-                 (lfc:wipe-attribs b badtags)
+                 (setq wiped (lfc:wipe-attribs b badtags *lfc-badwords*)
+                       kept  (mapcar '(lambda (w)
+                                        (strcat (car w) " now reads '"
+                                                (cdr w) "'"))
+                                     (vl-remove-if
+                                       '(lambda (w) (= (cdr w) ""))
+                                       wiped)))
                  (setq linerwiped (+ linerwiped (length badtags)))
                  (princ (strcat "\n  '" bn "': wiped "
-                                (lfc:join badtags ", ") " clean."))
+                                (lfc:join bad " & ") " out of "
+                                (lfc:join badtags ", ") "."))
                  (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
                                            (lfc:ptstr bp) ": "
                                            (lfc:join badtags ", ")
                                            " carried " (lfc:join bad " & ")
-                                           " - WIPED clean")
+                                           " - WIPED"
+                                           (if kept
+                                             (strcat ", " (lfc:join kept ", "))
+                                             " clean"))
                                    lines)))
                 ;; the word sits in the block's own text, not in a field
                 ;; we can clear - report it and leave it alone
@@ -61675,7 +61955,9 @@
                  (strcat (itoa (length liners)) " block(s) found"
                          (if (> linerwiped 0)
                            (strcat "; " (itoa linerwiped)
-                                   " pattern field(s) WIPED clean")
+                                   " pattern field(s) WIPED of "
+                                   (lfc:join linerbadw " & ")
+                                   " - the rest of each field kept")
                            (if linerbadw
                              (strcat "; word " (lfc:join linerbadw " & ")
                                      " found - review")
@@ -62108,7 +62390,8 @@
              "is missing - expected MM/DD/YYYY"))
          (setq datesum
            (if datebad
-             (strcat *lfc-date-tag* " " datebad)
+             (strcat *lfc-date-tag* " " datebad
+                     " - NEEDS UPDATING (run LINFINCHECK)")
              (strcat *lfc-date-tag* " = '" dateraw "' - OK"))))
           (setq datesum (strcat "no '" *lfc-title-block*
                                 "' block in reach - date NOT CHECKED")))
@@ -62309,18 +62592,23 @@
     ""
     "6. DATE (Tech Title)"
     (strcat "   The '" *lfc-title-block* "' block's " *lfc-date-tag*
-            " must read a real calendar")
-    "     date as MM/DD/YYYY (e.g. 05/01/2024). Missing, blank, the wrong"
-    "     format, or an out-of-range month/day is reported in red with"
-    "     what is wrong; a clean date is a quiet OK."
+            " must read TODAY as")
+    "     MM/DD/YYYY (e.g. 05/01/2024). Missing, blank, the wrong format,"
+    "     an out-of-range month/day, or yesterday's date is UPDATED to"
+    "     today in that same form - the label in front of it kept - and"
+    "     the report says in red what it found and what it set. A date"
+    "     built into the block instead of an attribute is reported only."
+    "     LINFINSCAN says NEEDS UPDATING and writes nothing."
     ""
     "7. LINER MATERIAL"
     "   A 'Liner Material' / 'Liner Material with Step' block must be"
     "     present."
     (strcat "   A pattern field reading " (lfc:join *lfc-badwords* " or ")
             " (e.g. 'Not Supplied',")
-    "     '#ERROR') is WIPED back to blank - the label stays, the junk"
-    "     goes. Real names like 'Tex' are never touched."
+    "     '#ERROR') has THAT PHRASE wiped out of it and keeps the rest:"
+    "     'Pattern: Not Supplied' -> 'Pattern:', 'Blue Granite - Not"
+    "     Supplied' -> 'Blue Granite'. A field that held nothing else"
+    "     comes back blank. Real names like 'Tex' are never touched."
     "   A Fiberglass Step in the drawing -> the liner must NOT carry a"
     "     Step. Otherwise steps drawn -> the liner MUST have its Step."
     ""
@@ -67714,8 +68002,12 @@
 ;;;
 ;;;   7. THE TECH TITLE DATE.  The Date attribute of the "Tech Title"
 ;;;      block must read TODAY, written MM/DD/YYYY -- a sheet going
-;;;      out under an old date is the mistake this catches.  The block
-;;;      is looked for in the selection and then across the drawing;
+;;;      out under an old date is the mistake this catches.  SPACHECK
+;;;      does not just report a wrong one: it WRITES TODAY'S OVER IT
+;;;      in that same form, keeping any "Date =" label in front of it,
+;;;      and the report says what it found and what it set.  The scans
+;;;      write nothing and say NEEDS UPDATING instead.  The block is
+;;;      looked for in the selection and then across the drawing;
 ;;;      with none in reach the report says the date was not checked
 ;;;      rather than flagging it.  LITESPACHECKSCAN keeps this one.
 ;;;
@@ -67749,7 +68041,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.11")
+(setq *spacheck-version* "v1.12")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -68803,7 +69095,10 @@
 ;;;  The sheet's Tech Title block carries a Date attribute, and it must
 ;;;  read TODAY in MM/DD/YYYY form.  A sheet going out under an old date
 ;;;  is the mistake this catches: the drawing was reworked and the title
-;;;  block never caught up.
+;;;  block never caught up -- so SPACHECK writes today's date over a
+;;;  wrong one rather than leaving it to be noticed, in the same
+;;;  MM/DD/YYYY form and with any label in front of it kept.  The scans
+;;;  are read-only and only say so.
 
 (defun spachk:pad2 (n)
   (if (< n 10) (strcat "0" (itoa n)) (itoa n)))
@@ -68893,9 +69188,41 @@
        ((progn (setq now (spachk:today-mdy))
                (not (and (= mo (car now)) (= dd (cadr now))
                          (= yr (caddr now)))))
-        (strcat "'" s "' is NOT TODAY'S DATE (" (spachk:mdy-str now)
-                ") - update it"))
+        (strcat "'" s "' is NOT TODAY'S DATE (" (spachk:mdy-str now) ")"))
        (t nil)))))
+
+;; Everything up to and including the last "=", "" when there is none:
+;; the label a date arrives wearing ("Date = 05/01/2024"), so rewriting
+;; the date keeps the wording in front of it.
+(defun spachk:before-eq (s / p n)
+  (setq n 0)
+  (while (setq p (vl-string-search "=" (substr s (1+ n))))
+    (setq n (+ n p 1)))
+  (if (> n 0) (substr s 1 n) ""))
+
+;; raw with today's date, written MM/DD/YYYY, in place of whatever date
+;; it held; a "Date =" label in front of it is left as typed.
+(defun spachk:date-fixed (raw / pre)
+  (setq pre (spachk:before-eq raw))
+  (if (= pre "")
+    (spachk:mdy-str (spachk:today-mdy))
+    (strcat pre " " (spachk:mdy-str (spachk:today-mdy)))))
+
+;; Write val into the block reference's attribute with that tag; nil
+;; when it carries no such attribute.
+(defun spachk:set-attrib (ent tag val / e ed done)
+  (setq tag (strcase tag)
+        e   (entnext ent))
+  (while (and e (null done) (setq ed (entget e))
+              (= "ATTRIB" (cdr (assoc 0 ed))))
+    (if (= tag (strcase (cdr (assoc 2 ed))))
+      (progn
+        (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+        (entupd e)
+        (setq done T)))
+    (setq e (entnext e)))
+  (if done (entupd ent))
+  done)
 
 ;; The Tech Title block: the first INSERT whose name carries it, looked
 ;; for in the selection and then across the drawing, since the title
@@ -68922,7 +69249,7 @@
 ;; With no Tech Title in reach there is nothing to read, and that is
 ;; said plainly rather than flagged -- a spa sheet may well be checked
 ;; on its own, away from the sheet it will sit on.
-(defun spachk:audit-date (ss / blk raw bad)
+(defun spachk:audit-date (ss dofix / blk raw bad wrote)
   (setq blk (spachk:find-title ss))
   (if (null blk)
     (spachk:res
@@ -68935,12 +69262,26 @@
             bad (if raw
                   (spachk:date-verdict raw)
                   "is missing from the block - expected MM/DD/YYYY"))
+      ;; SPACHECK does not leave a wrong date for someone to notice: it
+      ;; writes today's over it in the same MM/DD/YYYY form, keeping any
+      ;; label in front of it.  Only an attribute can be written, and
+      ;; only when the caller is the fixing command -- the scans read.
+      (if (and bad dofix)
+        (setq wrote (spachk:set-attrib blk spachk:*date-tag*
+                                     (spachk:date-fixed (if raw raw "")))))
       (spachk:res
         (list (spachk:row
-                (if bad
-                  (strcat "Tech Title: " spachk:*date-tag* " " bad)
-                  (strcat "Tech Title: " spachk:*date-tag* " = '"
-                          (cal:trim (spachk:datenorm raw)) "' - OK"))
+                (cond
+                  (wrote (strcat "Tech Title: " spachk:*date-tag* " " bad
+                               " - UPDATED to "
+                               (spachk:mdy-str (spachk:today-mdy))))
+                  ((and bad dofix)
+                   (strcat "Tech Title: " spachk:*date-tag* " " bad
+                           " - fix it in the block"))
+                  (bad (strcat "Tech Title: " spachk:*date-tag* " " bad
+                               " - NEEDS UPDATING (run SPACHECK)"))
+                  (t (strcat "Tech Title: " spachk:*date-tag* " = '"
+                             (cal:trim (spachk:datenorm raw)) "' - OK")))
                 (if bad 1 nil)))
         nil))))
 
@@ -68953,8 +69294,8 @@
 ;; is DIMCHECK's ground, so its rows come back separately for the
 ;; report's second column - and a lite run skips it altogether.
 ;; Returns (main-rows dim-rows flagged-entities).
-(defun spachk:audit (ss lite / rows drows ents blk att g tp cov wat covo
-                             wato dims covn r)
+(defun spachk:audit (ss lite dofix / rows drows ents blk att g tp cov wat covo
+                                 wato dims covn r)
   (setq rows nil drows nil ents nil)
 
   ;; 1 -- the block
@@ -69028,7 +69369,7 @@
 
   ;; 7 -- the Tech Title date (every mode, lite too)
   (setq rows (append rows (list (spachk:row "THE TECH TITLE" 3))))
-  (setq r (spachk:audit-date ss)
+  (setq r (spachk:audit-date ss dofix)
         rows (append rows (spachk:res-rows r)))
 
   ;; 8 -- the title block
@@ -69238,7 +69579,7 @@
     (progn
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
-      (setq res   (spachk:audit ss lite)
+      (setq res   (spachk:audit ss lite nil)
             rows  (car res)
             drows (cadr res)
             ents  (caddr res)
@@ -69289,7 +69630,7 @@
         (progn
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
-      (setq res   (spachk:audit ss nil)
+      (setq res   (spachk:audit ss nil T)
             rows  (car res)
             drows (cadr res)
             ents  (caddr res)

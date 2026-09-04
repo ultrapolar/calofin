@@ -1,5 +1,6 @@
 Imports System.Collections.Generic
 Imports System.Collections.ObjectModel
+Imports System.ComponentModel
 Imports System.IO
 Imports System.Reflection
 Imports System.Windows
@@ -7,6 +8,63 @@ Imports System.Windows.Controls
 Imports System.Windows.Media
 Imports System.Windows.Media.Imaging
 Imports AcadApp = Autodesk.AutoCAD.ApplicationServices.Application
+
+''' <summary>
+''' One measurement on a bottom section.
+'''
+''' <para>The table cell and the box on the diagram are two views of this
+''' same object, so typing in either updates the other with no wiring
+''' between them -- which is the whole reason this form is built around a
+''' field list rather than around controls.</para>
+'''
+''' <para>It holds TEXT, never a number. There is deliberately no parse
+''' here: the text goes to calofin.lsp as typed and AutoCAD's own distof
+''' reads it, because a parser in VB accepted a plain decimal and nothing
+''' else and turned a feet-and-inches spelling into an NA nobody
+''' meant.</para>
+'''
+''' <para>The chart forms use ChartBox instead, which carries a position
+''' in the CHART's own 0..1000 space. This one's X and Y are fractions of
+''' an IMAGE, which is a different thing and is why the two have not been
+''' merged: the bottom tab is still a photograph with a field map, and
+''' the day it is drawn from vectors this type goes with it.</para>
+''' </summary>
+Public Class BottomField
+    Implements INotifyPropertyChanged
+
+    Public Event PropertyChanged As PropertyChangedEventHandler _
+        Implements INotifyPropertyChanged.PropertyChanged
+
+    Public Property Key As String
+    Public Property Letter As String
+    Public Property Label As String
+    ''' <summary>Where the box sits, as a FRACTION of the image, so the
+    ''' boxes track their letters as the palette is resized.</summary>
+    Public Property X As Double
+    Public Property Y As Double
+
+    Private _value As String = ""
+
+    Public Property Value As String
+        Get
+            Return _value
+        End Get
+        Set(v As String)
+            If _value = v Then Return
+            _value = If(v, "")
+            RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs("Value"))
+            RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs("IsFilled"))
+        End Set
+    End Property
+
+    Public ReadOnly Property IsFilled As Boolean
+        Get
+            Return Not String.IsNullOrWhiteSpace(_value)
+        End Get
+    End Property
+
+End Class
+
 
 ''' <summary>
 ''' A bottom type from the shape chart.
@@ -22,7 +80,7 @@ Public Class PoolBottom
     ''' <summary>The pool:*btypes* keyword, or Nothing when unimplemented.</summary>
     Public Property BType As String
     Public Property Why As String
-    Public Property Fields As New ObservableCollection(Of SpaField)
+    Public Property Fields As New ObservableCollection(Of BottomField)
 
     Public ReadOnly Property Supported As Boolean
         Get
@@ -50,8 +108,8 @@ Public NotInheritable Class BottomCatalog
     End Sub
 
     Private Shared Function F(key As String, letter As String, label As String,
-                              x As Double, y As Double) As SpaField
-        Return New SpaField() With {
+                              x As Double, y As Double) As BottomField
+        Return New BottomField() With {
             .Key = key, .Letter = letter, .Label = label, .X = x, .Y = y}
     End Function
 
@@ -316,7 +374,7 @@ Public Class PoolFormView
         PlaceOverlay()
     End Sub
 
-    Private Shared Sub BindTo(box As TextBox, f As SpaField)
+    Private Shared Sub BindTo(box As TextBox, f As BottomField)
         Dim b As New Data.Binding("Value") With {
             .Source = f, .Mode = Data.BindingMode.TwoWay,
             .UpdateSourceTrigger = Data.UpdateSourceTrigger.PropertyChanged}
@@ -336,7 +394,7 @@ Public Class PoolFormView
         Dim ox = (hostW - dw) / 2, oy = (hostH - dh) / 2
 
         For Each el In _overlay
-            Dim f = TryCast(el.Tag, SpaField)
+            Dim f = TryCast(el.Tag, BottomField)
             If f Is Nothing Then Continue For
             el.Measure(New Size(Double.PositiveInfinity, Double.PositiveInfinity))
             Dim w = If(el.DesiredSize.Width > 0, el.DesiredSize.Width, 46)

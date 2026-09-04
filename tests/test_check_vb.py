@@ -355,7 +355,8 @@ check("no problems in the tree", not problems, repr(problems[:3]))
 
 types = check_vb.declared(files)
 check("the palette's own types are found",
-      {'CommandCatalog', 'LispBridge', 'SpaField'} <= set(types),
+      {'CommandCatalog', 'ChartCatalog', 'LispBridge', 'ChartBox'}
+      <= set(types),
       repr(sorted(types)[:10]))
 
 

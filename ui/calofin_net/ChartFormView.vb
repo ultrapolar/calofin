@@ -491,7 +491,30 @@ Public Class ChartFormView
                    "the EMPTY boxes"}
 
     Private ReadOnly _boxes As New List(Of ChartBox)
+
+    ''' <summary>The keyword dropdowns, by the key each answers under,
+    ''' and the corner dropdowns by their row's stem. Two dictionaries
+    ''' because a corner's answer is fanned out to targets and a pick's
+    ''' is not.</summary>
+    Private ReadOnly _picks As New Dictionary(Of String, ComboBox)
+    Private ReadOnly _corners As New Dictionary(Of String, ComboBox)
+
+    ''' <summary>POOL reads a KEYWORD here, not a yes/no, and the toggle
+    ''' also decides which corner rows answer anything and whether the
+    ''' cross dims are asked at all.</summary>
+    Private ReadOnly _insquare As New CheckBox() With {
+        .Content = "In square", .IsChecked = False,
+        .VerticalAlignment = VerticalAlignment.Center,
+        .Margin = New Thickness(0, 0, 12, 0),
+        .ToolTip = "A pool taped square. Out of square, POOL asks for " &
+                   "the diagonals and each corner in turn."}
+
+    ''' <summary>The bottom, from lzf:*btypes*. Left on its blank row it
+    ''' sends nothing and POOL asks.</summary>
+    Private ReadOnly _btype As New ComboBox() With {.Width = 120}
+
     Private _current As ChartCatalog.Chart
+    Private _pool As ChartCatalog.PoolSheet
 
     Public Sub New(charts As ChartCatalog.Chart(), entryPoint As String,
                    recallKey As String, hint As String)
@@ -515,6 +538,26 @@ Public Class ChartFormView
         Next
         AddHandler _picker.SelectionChanged, Sub() ShowChart(_picker.SelectedIndex)
         head.Children.Add(_picker)
+
+        ' the two questions that are about the whole sheet rather than
+        ' any one box, and which change what the rest of it asks
+        Dim gates As New StackPanel() With {
+            .Orientation = Orientation.Horizontal,
+            .Margin = New Thickness(0, 6, 0, 0)}
+        AddHandler _insquare.Checked, Sub() ShowChart(_picker.SelectedIndex)
+        AddHandler _insquare.Unchecked, Sub() ShowChart(_picker.SelectedIndex)
+        gates.Children.Add(_insquare)
+        _btype.Items.Add("")
+        For Each b In ChartCatalog.PoolBottomTypes
+            _btype.Items.Add(b)
+        Next
+        _btype.SelectedIndex = 0
+        AddHandler _btype.SelectionChanged, Sub() Restate()
+        gates.Children.Add(New TextBlock() With {
+            .Text = "Bottom", .VerticalAlignment = VerticalAlignment.Center,
+            .Margin = New Thickness(0, 0, 6, 0)})
+        gates.Children.Add(_btype)
+        head.Children.Add(gates)
         DockPanel.SetDock(head, Dock.Top)
         root.Children.Add(head)
 
@@ -559,26 +602,141 @@ Public Class ChartFormView
     Private Sub ShowChart(index As Integer)
         If index < 0 OrElse index >= _charts.Length Then Return
         _current = _charts(index)
+        _pool = ChartCatalog.PoolSheetFor(_current.Key)
         _boxes.Clear()
-        For Each d In _current.Dims
-            _boxes.Add(New ChartBox(d))
-        Next
-        For Each e In _current.Extra
-            _boxes.Add(New ChartBox(e))
-        Next
-
+        _picks.Clear()
+        _corners.Clear()
         _rows.Children.Clear()
+
         _building = True
         Try
+            For Each d In _current.Dims
+                _boxes.Add(New ChartBox(d))
+            Next
+            For Each e In _current.Extra
+                _boxes.Add(New ChartBox(e))
+            Next
             For Each b In _boxes
                 _rows.Children.Add(MakeRow(b))
             Next
+
+            ' The questions that are not measurements.  A sheet with none
+            ' of a given kind gets no heading either: an empty box headed
+            ' "Corners" reads as a form that has lost them.
+            AddPicks("run")
+            If HasCross() Then
+                AddGroup("Cross dims (corner to corner)")
+                AddPicks("cross")
+                For Each k In Cross()
+                    AddBoxRow(New ChartBox(k))
+                Next
+            End If
+            If CornerRows().Length > 0 Then
+                AddGroup("Corners")
+                For Each row In CornerRows()
+                    AddCorner(row)
+                Next
+            End If
         Finally
             _building = False
         End Try
 
         _sheet.Show(_current.Strokes, _current.Marks, _boxes)
         Restate()
+    End Sub
+
+    Private Function PoolExtras() As Boolean
+        Return _pool.Key IsNot Nothing
+    End Function
+
+    Private Function Cross() As ChartCatalog.ListKey()
+        If Not PoolExtras() OrElse _pool.Cross Is Nothing Then
+            Return New ChartCatalog.ListKey() {}
+        End If
+        Return _pool.Cross
+    End Function
+
+    ''' <summary>
+    ''' Are the cross dims asked for at all?
+    '''
+    ''' They are not, in square: a cross dim is a tape run corner to
+    ''' corner and it is what tells POOL how far OUT of square the pool
+    ''' is. lzf:*picks* says the same thing by tying the mode dropdown to
+    ''' this section -- in square there are no cross dims, so there is no
+    ''' mode to pick either.
+    ''' </summary>
+    Private Function HasCross() As Boolean
+        Return Cross().Length > 0 AndAlso Not _insquare.IsChecked.GetValueOrDefault()
+    End Function
+
+    Private Function CornerRows() As ChartCatalog.PoolCornerRow()
+        If Not PoolExtras() OrElse _pool.Corners Is Nothing Then
+            Return New ChartCatalog.PoolCornerRow() {}
+        End If
+        Return _pool.Corners
+    End Function
+
+    Private Sub AddGroup(title As String)
+        _rows.Children.Add(New TextBlock() With {
+            .Text = title, .FontWeight = FontWeights.Bold,
+            .Margin = New Thickness(0, 10, 0, 4)})
+    End Sub
+
+    ''' <summary>A row for a box, adding it to the sheet as well.</summary>
+    Private Sub AddBoxRow(box As ChartBox)
+        _boxes.Add(box)
+        _rows.Children.Add(MakeRow(box))
+    End Sub
+
+    ''' <summary>The keyword dropdowns of one section - lzf:*picks*'
+    ''' own word for where each belongs.</summary>
+    Private Sub AddPicks(section As String)
+        If Not PoolExtras() OrElse _pool.Picks Is Nothing Then Return
+        For Each p In _pool.Picks
+            If p.Section <> section Then Continue For
+            Dim combo As New ComboBox() With {.Width = 120, .SelectedIndex = 0}
+            For Each o In p.Options
+                combo.Items.Add(o)
+            Next
+            AddHandler combo.SelectionChanged, Sub() Restate()
+            _picks(p.Key) = combo
+            _rows.Children.Add(PickRow(p.Label, combo))
+        Next
+    End Sub
+
+    Private Function PickRow(label As String,
+                             combo As ComboBox) As FrameworkElement
+        Dim row As New DockPanel() With {.Margin = New Thickness(0, 2, 0, 2)}
+        DockPanel.SetDock(combo, Dock.Right)
+        row.Children.Add(combo)
+        row.Children.Add(New TextBlock() With {
+            .Text = label, .ToolTip = label,
+            .TextTrimming = TextTrimming.CharacterEllipsis,
+            .VerticalAlignment = VerticalAlignment.Center,
+            .Margin = New Thickness(34, 0, 8, 0)})
+        Return row
+    End Function
+
+    ''' <summary>
+    ''' One corner ROW, which is not always one corner.
+    '''
+    ''' What it answers depends on the in-square toggle: in square a
+    ''' single row covers all four and its siblings answer nothing, out
+    ''' of square each is asked for itself. The rows are all shown either
+    ''' way -- which one is live is the wire's decision at Draw, and a row
+    ''' that vanished as a toggle moved would take whatever was typed in
+    ''' it with it.
+    ''' </summary>
+    Private Sub AddCorner(row As ChartCatalog.PoolCornerRow)
+        Dim combo As New ComboBox() With {.Width = 120, .SelectedIndex = 0}
+        For Each t In ChartCatalog.PoolTreatments
+            combo.Items.Add(t)
+        Next
+        AddHandler combo.SelectionChanged, Sub() Restate()
+        _corners(row.Stem) = combo
+        _rows.Children.Add(PickRow(row.Label, combo))
+        AddBoxRow(New ChartBox(New ChartCatalog.ListKey(
+            row.Stem & "-sz", row.Label & " - size")))
     End Sub
 
     ''' <summary>One row of the column: the letter, what it measures, and
@@ -632,6 +790,13 @@ Public Class ChartFormView
         For Each b In _boxes
             b.Text = ""
         Next
+        For Each combo In _picks.Values
+            combo.SelectedIndex = 0
+        Next
+        For Each combo In _corners.Values
+            combo.SelectedIndex = 0
+        Next
+        _btype.SelectedIndex = 0
         Restate()
     End Sub
 
@@ -654,28 +819,113 @@ Public Class ChartFormView
         Restate()
     End Sub
 
+    ''' <summary>What is chosen on a dropdown, or "" while it is on its
+    ''' blank first row -- which sends nothing, so the routine asks.
+    ''' </summary>
+    Private Shared Function Chosen(combo As ComboBox) As String
+        If combo Is Nothing OrElse combo.SelectedIndex <= 0 Then Return ""
+        Return CStr(combo.SelectedItem)
+    End Function
+
+    ''' <summary>What a corner ROW is set to, or "" when it has no
+    ''' dropdown -- which cannot happen while the rows and the
+    ''' dictionary are built together, and is still not worth throwing
+    ''' over.</summary>
+    Private Function CornerPick(stem As String) As String
+        Dim combo As ComboBox = Nothing
+        If Not _corners.TryGetValue(stem, combo) Then Return ""
+        Return Chosen(combo)
+    End Function
+
+    ''' <summary>Does this treatment carry a size? lzf:csized, as
+    ''' words.</summary>
+    Private Shared Function Sized(treatment As String) As Boolean
+        For Each t In ChartCatalog.PoolSizedTreatments
+            If String.Equals(t, treatment, StringComparison.Ordinal) Then
+                Return True
+            End If
+        Next
+        Return False
+    End Function
+
     ''' <summary>
     ''' Hand the sheet to the routine, through calofin.lsp's wire.
     '''
     ''' The shape word is a LITERAL and travels as written -- it is not
     ''' always the chart's key, so sending the key would draw the wrong
     ''' pool on six of the sixteen sheets -- and so is every gate the
-    ''' chart implies. Everything typed is a MEASURE and is read on the
-    ''' other side.
+    ''' chart implies, the in-square keyword, the bottom type and every
+    ''' dropdown. Everything typed is a MEASURE and is read on the other
+    ''' side.
     ''' </summary>
     Private Sub Run()
         If _current.Key Is Nothing Then Return
 
+        Dim insquare = _insquare.IsChecked.GetValueOrDefault()
         Dim literals As New List(Of String)
         Dim measures As New List(Of String)
         literals.Add(LispBridge.StrPair("shape", _current.Shape))
+        literals.Add(LispBridge.StrPair(
+            "insq", If(insquare, ChartCatalog.InSquare,
+                       ChartCatalog.OutOfSquare)))
         For Each g In _current.Gates
             literals.Add(LispBridge.StrPair(g.Key, g.Value))
         Next
+        Dim bottom = Chosen(_btype)
+        If bottom.Length > 0 Then
+            literals.Add(LispBridge.StrPair("btype", bottom))
+        End If
+        For Each key In _picks.Keys
+            Dim v = Chosen(_picks(key))
+            If v.Length > 0 Then literals.Add(LispBridge.StrPair(key, v))
+        Next
+
+        ' A CORNER ROW IS NOT ALWAYS ONE CORNER.  The answer is fanned
+        ' out to every target the row names for the toggle as it stands
+        ' -- in square one row covers all four and its siblings name
+        ' nothing, out of square each corner is asked for itself -- and
+        ' a row with no targets in this state sends nothing at all.
+        ' lzf:cornerpairs' rule, and the reason the table carries two
+        ' target lists rather than one.
+        Dim sizedKeys As New HashSet(Of String)
+        For Each row In CornerRows()
+            Dim ty = CornerPick(row.Stem)
+            If ty.Length = 0 Then Continue For
+            Dim targets = row.Targets(insquare)
+            If targets Is Nothing Then Continue For
+            For Each target In targets
+                literals.Add(LispBridge.StrPair(target & "-ty", ty))
+                If Sized(ty) Then sizedKeys.Add(target & "-sz")
+            Next
+        Next
+
+        ' the size a row was given rides out under the TARGET's key, not
+        ' the row's: the row is where it was typed, the target is what
+        ' POOL asks about
+        Dim sizeOf As New Dictionary(Of String, String)
         For Each b In _boxes
-            If b.IsFilled Then
-                measures.Add(LispBridge.MeasurePair(b.Key, b.Text))
+            If b.Key.EndsWith("-sz", StringComparison.Ordinal) Then
+                sizeOf(b.Key) = b.Text
             End If
+        Next
+        For Each row In CornerRows()
+            Dim ty = CornerPick(row.Stem)
+            If ty.Length = 0 OrElse Not Sized(ty) Then Continue For
+            Dim typed As String = Nothing
+            If Not sizeOf.TryGetValue(row.Stem & "-sz", typed) Then Continue For
+            If String.IsNullOrWhiteSpace(typed) Then Continue For
+            Dim targets = row.Targets(insquare)
+            If targets Is Nothing Then Continue For
+            For Each target In targets
+                measures.Add(LispBridge.MeasurePair(target & "-sz", typed))
+            Next
+        Next
+
+        For Each b In _boxes
+            If Not b.IsFilled Then Continue For
+            ' a corner size has already travelled, under its targets
+            If b.Key.EndsWith("-sz", StringComparison.Ordinal) Then Continue For
+            measures.Add(LispBridge.MeasurePair(b.Key, b.Text))
         Next
 
         RecallStore.Save(_recallKey, _current.Key, _boxes)

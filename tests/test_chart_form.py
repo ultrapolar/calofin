@@ -24,6 +24,15 @@ form has to agree with something that IS testable.
    uses `lzt:recall-slot`'s per-count slot, and mirrors the ONE rule
    that cannot be left to the wire: NA at a tread is what ends a run,
    so it counts as an empty box rather than travelling.
+7. **The pool sheet's other questions**: the in-square keyword, the
+   bottom type, the cross dims (not asked in square, because a cross
+   dim IS what tells POOL how far out of square it is), the mode
+   dropdowns, and the corner rows -- where a row is not always one
+   corner, and which targets its answer is fanned out to depends on
+   the toggle.
+6. **The spa form** offers `lzs:*ctreat*`'s words without translating
+   them -- SPA normalises the legend onto the canonical set itself --
+   and withholds a corner size on a treatment that takes none.
 5. **The boxes are the chart's**: one per dimension and one per
    column-only key, invented from nothing, placed at the midpoint of
    the line each measures.  Whether a chart key is one POOL reads is
@@ -283,6 +292,144 @@ check("%d sheets, and the form can reach each of them"
       "%d sheets" % len(steps))
 check("the palette mounts the step form",
       'New StepFormView()' in PAL)
+
+
+print("== 7. the spa form, and what a spa sheet has that a pool one has not ==")
+
+SPA = code_of(read(ROOT / 'ui' / 'calofin_net' / 'SpaChartView.vb'))
+vms = VM()
+vms.load(LISP_DIR / 'lazspa' / 'LAZSPA.lsp')
+
+# the corner dropdown speaks the SHEET LEGEND and sends it as written
+want = [str(x) for x in vms.globals['lzs:*ctreat*']]
+cat = read(gen.OUT)
+check("the treatments are lzs:*ctreat*, word for word",
+      ("SpaTreatments As String() = {%s}"
+       % ", ".join('"%s"' % w for w in want)) in cat, repr(want))
+check("the form offers them without translating",
+      'For Each t In ChartCatalog.SpaTreatments' in SPA
+      and 'Square' not in SPA and 'NotGiven' not in SPA,
+      "the palette has started renaming what SPA normalises itself")
+
+# a size travels only when the treatment takes one -- lzs:cornerpairs
+sized = []
+for i, w in enumerate(want):
+    vms.loads('(setq t:*s* (lzs:sized %d))' % i)
+    if vms.globals['t:*s*']:
+        sized.append(w)
+check("lzs:sized names %s" % (" and ".join(sized) or "nothing"),
+      ("SpaSizedTreatments As String() = {%s}"
+       % ", ".join('"%s"' % w for w in sized)) in cat, repr(sized))
+check("and a size on any other treatment is withheld",
+      'If Sized(ty) Then sizedStems.Add' in SPA
+      and 'Not sizedStems.Contains(b.Key) Then Continue For' in SPA)
+
+# a dropdown left on "(ask)" sends nothing
+check("the first option is always (ask)",
+      all(str(d[2][0]) == '(ask)' for d in vms.globals['lzs:*lists*']))
+check("and choosing it sends nothing at all",
+      'If combo.SelectedIndex <= 0 Then Return ""' in SPA)
+
+# every table the form reads is one the generator writes
+for table in ('SpaLists', 'SpaTreatments', 'SpaSizedTreatments',
+              'SpaCoverLap', 'SpaSheetFor'):
+    check("SpaChartView reads ChartCatalog.%s" % table,
+          ('ChartCatalog.' + table) in SPA)
+
+# and the spa form is the one the palette mounts
+check("the palette mounts the drawn spa sheet, not a photograph",
+      'New SpaChartView()' in PAL and 'SpaFormView' not in PAL)
+check("the shape art it used to need is gone",
+      not (ROOT / 'ui' / 'calofin_net' / 'assets' / 'shapes').exists(),
+      "assets/shapes is still there and nothing reads it")
+check("the vbproj no longer copies it",
+      'assets\\shapes' not in read(ROOT / 'ui' / 'calofin_net' /
+                                   'Calofin.vbproj'))
+# the bottom tab IS still a photograph, and says so
+check("the bottom art stays, because that tab still needs it",
+      (ROOT / 'ui' / 'calofin_net' / 'assets' / 'bottoms').exists()
+      and 'assets\\bottoms' in read(ROOT / 'ui' / 'calofin_net' /
+                                    'Calofin.vbproj'))
+
+check("the spa form shares the state line too",
+      'FormWire.Line(_boxes)' in SPA)
+check("and does not read a measurement itself", 'TryParse' not in SPA)
+
+
+print("== 8. the pool sheet's questions that are not measurements ==")
+
+vmf = VM()
+vmf.load(LISP_DIR / 'lazform' / 'LAZFORM.lsp')
+_cat = read(gen.OUT)
+
+# the treatments, and which carry a size
+_treat = [str(x) for x in vmf.globals['lzf:*ctreat*']]
+check("the pool treatments are lzf:*ctreat*, and ARE the canonical set",
+      ("PoolTreatments As String() = {%s}"
+       % ", ".join('"%s"' % w for w in _treat)) in _cat
+      and 'Square' in _treat and 'NotGiven' in _treat, repr(_treat))
+_sized = []
+for _i, _w in enumerate(_treat):
+    vmf.loads('(setq t:*s* (lzf:csized %d))' % _i)
+    if vmf.globals['t:*s*']:
+        _sized.append(_w)
+check("lzf:csized names %s" % " and ".join(_sized),
+      ("PoolSizedTreatments As String() = {%s}"
+       % ", ".join('"%s"' % w for w in _sized)) in _cat, repr(_sized))
+
+# the six bottoms POOL draws, and the two in-square words
+_bt = [str(x) for x in vmf.globals['lzf:*btypes*']]
+check("the bottoms are lzf:*btypes*, all %d" % len(_bt),
+      ("PoolBottomTypes As String() = {%s}"
+       % ", ".join('"%s"' % w for w in _bt)) in _cat, repr(_bt))
+check("the toggle sends a KEYWORD, not a yes/no",
+      'InSquare As String = "Insquare"' in _cat
+      and 'OutOfSquare As String = "Outofsquare"' in _cat)
+check("and the form sends one of them every time",
+      'LispBridge.StrPair( "insq", If(insquare, ChartCatalog.InSquare, '
+      'ChartCatalog.OutOfSquare))'
+      in " ".join(CODE.split()))
+
+# THE RULE: a corner row is not always one corner, and which targets it
+# answers depends on the toggle
+_rows = {}
+for _c in vmf.globals['lzf:*corners*']:
+    _rows[str(_c[0])] = [(str(r[0]), [str(x) for x in (r[2] or [])],
+                          [str(x) for x in (r[3] or [])]) for r in _c[1:]]
+check("a rectangle's corner A answers the COLLECTIVE key in square",
+      _rows['Rectangle'][0][1] == ['corners'], repr(_rows['Rectangle'][0]))
+check("and its B, C and D answer nothing in square",
+      all(r[1] == [] for r in _rows['Rectangle'][1:]),
+      repr([r[1] for r in _rows['Rectangle'][1:]]))
+check("a Grecian's body row covers all four corners at once",
+      _rows['Grecian'][0][2] == ['cornera', 'cornerb', 'cornerc', 'cornerd'],
+      repr(_rows['Grecian'][0]))
+check("the catalog carries BOTH target lists per row",
+      'InSquareTargets As String()' in _cat
+      and 'OutOfSquareTargets As String()' in _cat)
+check("the form fans the answer out to every target",
+      'For Each target In targets' in CODE
+      and 'LispBridge.StrPair(target & "-ty", ty)' in CODE)
+check("and a row with no targets in this state sends nothing",
+      'If targets Is Nothing Then Continue For' in CODE)
+check("a corner SIZE rides under the target's key, not the row's",
+      'LispBridge.MeasurePair(target & "-sz", typed)' in CODE)
+check("so a size is never also sent under the row's own key",
+      'If b.Key.EndsWith("-sz", StringComparison.Ordinal) Then Continue For'
+      in CODE)
+
+# the cross dims, and why they are not asked in square
+check("the cross dims are lzf:*cross*, in the catalog",
+      'New ListKey("x0", "Cross dim 1")' in _cat)
+check("they are not asked in square - a cross dim IS the out-of-square",
+      'Not _insquare.IsChecked.GetValueOrDefault()' in CODE)
+_picks_src = read(LISP_DIR / 'lazform' / 'LAZFORM.lsp')
+check("which is what lzf:*picks* says by tying the mode to that section",
+      'section "cross" puts the dropdown at the head of the cross-dim box'
+      in _picks_src and 'in square there are no cross dims' in _picks_src)
+check("the form places a pick by lzf:*picks*' own section word",
+      'If p.Section <> section Then Continue For' in CODE
+      and 'AddPicks("run")' in CODE and 'AddPicks("cross")' in CODE)
 
 
 print()

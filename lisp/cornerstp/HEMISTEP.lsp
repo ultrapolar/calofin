@@ -89,9 +89,13 @@
 ;;;       give the step depths (the vertical drops), top step first -
 ;;;       one per step PLUS one more for the drop after the last
 ;;;       tread, so 3 steps take 4 depths - with Back to re-ask the
-;;;       previous one; then pick the top of the first tread.  The
-;;;       flight always runs DOWN AND TO THE LEFT from there, so there
-;;;       is no side to pick.  See "The side profile" below.
+;;;       previous one; then pick the top of the wall (the curve, in
+;;;       the curve modes).  The flight READS FROM THE WALL: the first
+;;;       depth asked is the drop AT THE WALL and the first tread it
+;;;       draws is the flat against it - the one the plan measured
+;;;       from the wall to the first chord.  It always runs DOWN AND
+;;;       TO THE LEFT from the pick, so there is no side to pick.
+;;;       See "The side profile" below.
 ;;;   9.  Finally, BEAD THE STEPS.  Every tread is beaded - that is the
 ;;;       assumption - EXCEPT the last one drawn: the line that closes
 ;;;       the run has no riser behind it, so it is handed to AUTOBEAD
@@ -107,8 +111,14 @@
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
 ;;;   world X/Y, always descending to the LEFT of the picked top of the
-;;;   first tread and ending on the last depth - so the steps rise to
-;;;   the right, the way the shop's own elevations read.
+;;;   WALL and ending on the last depth - so the steps rise to the
+;;;   right, the way the shop's own elevations read.  It starts where
+;;;   the run starts: the pick is the top of the wall, the first drop
+;;;   is the drop at the wall, and the first tread is the flat between
+;;;   the wall and the first chord.  Every tread after that is the gap
+;;;   between two chords, so the flight covers the same distances the
+;;;   plan's tread chain does, in the same order.  (In the curve modes
+;;;   the run starts at the curve instead, and the flight says so.)
 ;;;   The dims climb with them, up and to the right, on the high side:
 ;;;     * every depth is a dim of its own, standing the same distance
 ;;;       right of the corner its drop lands on, so they step out with
@@ -173,7 +183,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.11") ; printed on load and at command start so a
+(setq *hs-version* "v3.12") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -758,7 +768,8 @@
                       bmark bsides btreads bnums bside bdir bss pr be
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
-                      px py totrun totdrop td cnrs pfo pgap fsteps fkey)
+                      px py totrun totdrop td cnrs pfo pgap fsteps fkey
+                      wnoun)
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
@@ -1238,6 +1249,9 @@
   ;; *cs-depth-dimstyle* too.
   (if (> drawn 0)
     (progn
+      ;; what the run starts at, and so what the flight starts at: the
+      ;; wall in base-line mode, the curve itself in the curve modes
+      (setq wnoun (if cmode "the curve" "the wall"))
       (if (null (setq fkey (hs-fkw 'profile "Yes No" "Yes")))
         (progn
           (initget "Yes No")
@@ -1276,7 +1290,13 @@
                   (initget 6 "Back Undo"))
                 (setq dd (getdist
                            (cond
-                             ((= jx 1) "\nStep 1 - step depth (the drop): ")
+                             ;; the flight starts where the run does, so
+                             ;; the first drop is the one AT THE WALL -
+                             ;; not step 1's, which is the drop off the
+                             ;; tread the wall already gave
+                             ((= jx 1)
+                              (strcat "\nDepth at " wnoun
+                                      " - the drop onto the first tread: "))
                              ((> jx tcount)
                               (strcat "\nDepth after the last tread [Back] <"
                                       (rtos (car drops)) ">: "))
@@ -1297,7 +1317,7 @@
           (setq drops (reverse drops))
           ;; Placement.  The profile always runs DOWN AND TO THE LEFT
           ;; from the pick, so there is no side to ask about.
-          (setq ptop (getpoint (strcat "\nPick the top of the first tread"
+          (setq ptop (getpoint (strcat "\nPick the top of " wnoun
                                        " for the side profile: ")))
           (if (null ptop)
             (princ "\nNo point picked - side profile skipped.")
@@ -1359,7 +1379,8 @@
                   (hs-dimv *cs-depth-dimstyle* (car cnrs) (last cnrs)
                            (list (+ (car ptop) pfo pgap)
                                  (- (cadr ptop) (* 0.5 totdrop)) 0.0))))
-              (princ (strcat "\nSide profile drawn: " (itoa tcount)
+              (princ (strcat "\nSide profile drawn from " wnoun ": "
+                             (itoa tcount)
                              " step(s), " (itoa (length drops))
                              " depths, down to the left; total run "
                              (rtos totrun) ", overall depth "
@@ -1508,10 +1529,13 @@
   (princ "\n     or repeats the previous width (line mode).")
   (princ "\n  3. One last distance to the back of the curve places the crown,")
   (princ "\n     and the boundary polyline is drawn through the step ends.")
-  (princ "\n  4. Finally you may add a SIDE PROFILE: give the step depths")
+  (princ "\n  4. Finally you may add a SIDE PROFILE, read FROM THE WALL:")
+  (princ "\n     the first depth is the drop AT THE WALL and the first")
+  (princ "\n     tread the flat between the wall and the first chord.")
+  (princ "\n     Give the step depths")
   (princ "\n     (top step first, plus the drop after the last tread, so")
   (princ "\n     3 steps take 4 depths; Back supported), then pick the")
-  (princ "\n     top of the first tread.  The flight always runs down and")
+  (princ "\n     top of the WALL.  The flight always runs down and")
   (princ "\n     to the LEFT from there, so the steps rise to the right")
   (princ "\n     and the dims climb with them - each depth beside its own")
   (princ "\n     step, the overall further out; the treads are not dimmed.")
