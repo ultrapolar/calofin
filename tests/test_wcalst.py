@@ -422,6 +422,10 @@ check("the darts were still cut", 'dart(s)' in ''.join(vm.printed))
 # ----------------------------------------------------------------------
 # 11. the tunables are the tunables: retune one, the drawing moves
 # ----------------------------------------------------------------------
+# tests/test_tunables.py holds the block itself -- every knob at the
+# top, explained, and in the README table with the default it really
+# has.  What it cannot see is whether the run READS them, which is the
+# half that would let a knob quietly become decoration.
 print("the tunables")
 
 vm = newvm()
@@ -449,23 +453,6 @@ asked = [p for p, _ in vm.prompts]
 check("wc:*maxfeat* is the cap prompt's default, and the cap it applies",
       any('Maximum darts + inserts [Back] <5>' in p for p in asked) and
       '(max 5)' in ''.join(vm.printed), repr(asked))
-
-# ----------------------------------------------------------------------
-# 12. every tunable is declared at the top, and says what it is for
-# ----------------------------------------------------------------------
-print("the tunables block")
-
-head = SRC.split('(defun ')[0]
-declared = set(re.findall(r'\(setq (wc:\*[\w*-]+\*)', head))
-used = set(re.findall(r'(wc:\*[\w*-]+\*)', SRC))
-check("no tunable is set below the first defun",
-      not (used - declared), repr(sorted(used - declared)))
-check("the block carries them all", len(declared) >= 30, str(len(declared)))
-undocumented = [g for g in declared
-                if not re.search(r'\(setq ' + re.escape(g) + r'\s+\S+\s*;',
-                                 head)]
-check("and every one of them is commented on its own line",
-      not undocumented, repr(sorted(undocumented)))
 
 # ----------------------------------------------------------------------
 print()

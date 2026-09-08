@@ -150,30 +150,99 @@ of piece).
 
 ## Tunables
 
-Every number the routine works to is a named global in one commented
-block at the top of `wcalst.lsp` — layers and their creation colours,
-the angles the tracing works to, what still counts as a band, the cut
-sizes, where the two drawings land, and how the figures are written.
-Each carries a one-line note saying what it does and what moving it
-costs, so retuning is done there rather than by hunting through the
-body. `setq` any of them after loading (from a startup file, say) and
-the next run uses the new value.
+Every threshold, layer name, colour, angle, size and text height is a
+named `(setq wc:*name* ...)` in one **tunables block** at the top of
+`wcalst.lsp`, between the version banner and the first `defun`, each
+with a sentence saying what changing it does. Nothing below that block
+carries a bare number, so retuning the tool never means reading the
+developer.
 
-The ones most worth knowing:
+Edit the file and `APPLOAD` it again, or `(setq wc:*name* value)` at
+the command line for one session. Distances are in inches; a name
+ending in `-F` is a fraction of the band width, so it scales with the
+piece.
 
-| Global | Default | What it sets |
+`tests/test_tunables.py` checks this table against the file itself --
+every knob present, with the default it really has -- and
+`tests/test_wcalst.py` drives three of them through a run.
+
+### Output layers
+
+| Knob | Default | What changing it does |
 | --- | --- | --- |
-| `wc:*cut-layer*` / `wc:*cut-color*` | `"AIR-B"` / 1 | where the straight edge, band ends, dart legs, slits and slivers are drawn (the colour only if the layer has to be created) |
-| `wc:*dim-layer*` / `wc:*dim-color*` | `"DIMENSION"` / 3 | end height dims, the variant labels and the summary |
-| `wc:*maxfeat*` | 20 | default answer to the darts+inserts cap |
-| `wc:*dart-cap*` | 4.0 | widest mouth one dart may open |
-| `wc:*target*` | 0.01 | the residual the refining variant aims under, and what `** OVER TARGET **` is measured against |
-| `wc:*tile-clear*` | 1.0 | how far a cut clears the tile, and the far edge |
-| `wc:*apex-f*` / `wc:*apex-min-f*` | 0.42 / 0.20 | where a cut stops with no tile height given, and the closest it may ever come to the straightened edge |
-| `wc:*trace-turn*` | 1.0472 (60°) | sharpest turn the trace of a long side will follow |
-| `wc:*rung-turn*` | 0.7854 (45°) | how steeply a segment must leave the chain to be a rung |
-| `wc:*near-f*` | 1.75 | how far off the chain (× band width) a point may sit and still belong to this band |
-| `wc:*drop-f*` / `wc:*stack-f*` | 1.5 / 5.0 | where the first drawing lands below the selection, and the second below it |
+| `wc:*cut-layer*` | `"AIR-B"` | moves the straight edge, band ends, dart legs, slits and slivers to another layer |
+| `wc:*cut-color*` | `1` | recolours that layer where WCALST is the one creating it (1 = red) |
+| `wc:*dim-layer*` | `"DIMENSION"` | moves the end height dims, the variant labels and the length summary |
+| `wc:*dim-color*` | `3` | recolours that one on creation (3 = green) |
+
+### Reading the band off the drawing
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `wc:*node-fuzz*` | `3` | decimals kept when two endpoints are merged into one node: fewer welds points that are genuinely apart, more leaves ends the drafter meant to touch unjoined |
+| `wc:*seg-min*` | `1.0e-6` | shorter than this is a repeated point rather than a segment, and is dropped |
+| `wc:*trace-turn*` | `1.0472` | sharpest turn (radians, 60 deg) the trace of a long side will follow: raise it for a band with genuinely sharp corners along a side, lower it when tracing runs off into scenery |
+| `wc:*trace-max*` | `5000` | hard stop on one walk - the backstop behind the revisited-node test, and only reachable by geometry that is neither open nor a ring |
+| `wc:*rung-turn*` | `0.7854` | how steeply (radians, 45 deg) a segment must leave the chain to count as a rung: lower it and gentle diagonals join in, raise it and only square rungs do |
+
+### What still counts as a band
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `wc:*min-segs*` | `6` | fewest segments a selection may hold before it is sent back to be re-picked |
+| `wc:*min-chain*` | `3` | fewest segments a traced side may have before the pick is sent back |
+| `wc:*min-rungs*` | `2` | fewest rungs to find between the two sides, below which there is no width to measure |
+
+### How many cuts, and how wide
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `wc:*maxfeat*` | `20` | the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to |
+| `wc:*dart-cap*` | `4.0` | widest mouth ONE dart may open: lower it and a big correction splits across more rungs, raise it for fewer, wider Vs |
+| `wc:*wmin-f*` | `0.04` | smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutting hair-width darts |
+| `wc:*target*` | `0.01` | the after-cuts residual the refining variant aims under, as a share of the bottom line, and what OVER TARGET is measured against |
+| `wc:*refine*` | `0.6` | how far each refining pass drops the threshold: nearer 1 refines in smaller steps and uses more of the passes below |
+| `wc:*passes*` | `10` | how many refining passes before it settles for what it has and says so |
+
+### Where a cut stops
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `wc:*tile-clear*` | `1.0` | how far a cut clears the tile along the straight edge, and how far it stops short of the far edge |
+| `wc:*apex-f*` | `0.42` | how far down the local depth a cut stops when no tile height is given: lower it for a deeper hinge along the straight side |
+| `wc:*apex-min-f*` | `0.20` | closest a cut may ever come to the straightened edge, as a share of the local depth - what a band too shallow to hold the tile clearance falls back to |
+| `wc:*depth-min-f*` | `0.2` | floor under the local depth, as a share of the band width, so a dip in the far edge cannot collapse a cut |
+| `wc:*sliver-top*` | `1.0` | width at the top of an insert sliver, and the narrowest one that is drawn |
+| `wc:*sliver-extra*` | `1.0` | how much longer a sliver's sides are than the slit they fill - stock to trim on fitting |
+| `wc:*sliver-gap-f*` | `0.2` | how far below the band a sliver is drawn, as a share of the width |
+
+### Which points belong to this band
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `wc:*near-f*` | `1.75` | how far off the chain (x band width) a point may sit and still be taken as part of this band, or carried along as a mark |
+| `wc:*over-f*` | `0.05` | how far above the straight edge (x width) a developed point may land before it is read as an end-clamp artefact and dropped |
+| `wc:*past-f*` | `0.25` | how far beyond either end of the band (x width) a point may sit and still be kept |
+
+### Placement and lettering of the two drawings
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `wc:*drop-f*` | `1.5` | how far below the lowest point of the selection (x width) the first straight edge lands |
+| `wc:*stack-f*` | `5.0` | the gap (x width) between the two drawings: raise it when the summaries of one run into the next |
+| `wc:*label-f*` | `0.6` | how far above its straight edge (x width) a variant label sits |
+| `wc:*label-h-f*` | `0.4` | text height of that label, as a share of the band width |
+| `wc:*sum-x-f*` | `2.0` | how far right of the band end (x width) the length summary is written |
+| `wc:*sum-h-f*` | `0.35` | text height of the summary, as a share of the band width |
+| `wc:*sum-step-f*` | `0.55` | line spacing within the summary, as a share of the band width |
+| `wc:*dim-off-f*` | `1.2` | how far out past each end (x width) the height dimension lines are placed |
+
+### How the numbers are written
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `wc:*dec-places*` | `2` | decimals in every decimal-inch figure the report and the summary print |
+| `wc:*arch-frac*` | `8` | smallest fraction in the feet-and-inches twin printed beside it (8 = eighths, 16 = sixteenths) |
 
 ## How it works
 
@@ -219,3 +288,18 @@ The ones most worth knowing:
 * If the two ends of the band are joined to other geometry included in
   the selection, tracing may run past the band end; select just the
   ladder for best results.
+
+## Tests
+
+```
+python3 tests/test_wcalst.py                          # standalone tier
+CALOFIN_LISP_ROOT=shared python3 tests/test_wcalst.py # grouped tier
+python3 tests/test_tunables.py                        # the block above
+```
+
+`test_wcalst.py` develops an oracle band -- 120 degrees of arc walked in
+15-degree chords, nine radial rungs of exactly 24 -- and pins every
+figure it reports. Beside it the contingencies: a drawing with undo
+switched off, a band that closes on itself, a datum line touching a
+long side, a band flared at one end, and a half-inch-deep band under a
+6" tile. Each of those five was a defect before it was a test.

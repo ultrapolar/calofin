@@ -78,6 +78,11 @@ FILES = [
      ROOT / 'lisp' / 'abcdef' / 'README.md'),
     ('ALTABCDEF', ROOT / 'lisp' / 'altabcdef' / 'ALTABCDEF.lsp', 'altabcdef',
      ROOT / 'lisp' / 'altabcdef' / 'README.md'),
+    # the band unroller, whose numbers were spread down 1,240 lines: the
+    # dart cap in the emitter, the stop line in the drawing loop, the
+    # layer names at the entmake, the 1% target written out four times
+    ('wcalst', ROOT / 'lisp' / 'wcalst' / 'wcalst.lsp', 'wc',
+     ROOT / 'lisp' / 'wcalst' / 'README.md'),
 ]
 
 HEADER = ';;; -------------------- tunables '

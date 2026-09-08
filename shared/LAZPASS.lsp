@@ -73414,146 +73414,95 @@
 (setq *wcalst-version* "v1.8")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
-;;; ======================================================================
-;;;  Tunables -- every number this routine works to
-;;; ----------------------------------------------------------------------
-;;; Nothing below this block is a magic number: each one is named here,
-;;; with what it does and what moving it costs.  setq any of them after
-;;; loading (from a startup file, say) and the next run uses the new
-;;; value -- no editing of the body.
-;;;
-;;; Lengths are drawing units, and one unit is one inch.  A name ending
-;;; in -F is a FRACTION OF THE BAND WIDTH, so it scales with the piece;
-;;; a plain length is absolute inches, because it describes something
-;;; physical -- a tile, a hand's clearance, the stock a sliver is cut
-;;; from.  The 1e-9-sized guards inside the maths are not tunables and
-;;; stay where they are: they only keep a divisor off zero.
+;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafter might reasonably want different is set HERE and
+;; nowhere else: the code below reads these names and carries no bare
+;; numbers of its own.  Each knob says what CHANGING it does and which
+;; way to move it.  Edit a value, save, APPLOAD again - or
+;; (setq wc:*name* value) at the command line for one session.  Every
+;; one of them is a row in README.md's Tunables table, and
+;; tests/test_tunables.py holds the two together.
+;;
+;; Distances are in inches throughout (1 drawing unit = 1 inch).  A name
+;; ending in -F is a FRACTION OF THE BAND WIDTH, so it scales with the
+;; piece; a plain length is absolute, because it describes something
+;; physical - a tile, a hand's clearance, the stock a sliver is cut
+;; from.  The 1e-9-sized guards inside the maths are not tunables: they
+;; only keep a divisor off zero, and moving one changes nothing a
+;; drafter can see.
 
 ;; ---- output layers ---------------------------------------------------
 ;; The colour is used ONLY when the layer has to be created; an existing
-;; layer keeps the colour the drawing gave it (and is thawed, unlocked
-;; and switched on so the result cannot land somewhere invisible).
-(setq wc:*cut-layer* "AIR-B")       ; straight edge, band ends, dart legs,
-                                    ; insert slits and insert slivers
-(setq wc:*cut-color* 1)             ; red
-(setq wc:*dim-layer* "DIMENSION")   ; end height dims, the variant labels
-                                    ; and the length summary (as AUTODIM)
-(setq wc:*dim-color* 3)             ; green
+;; layer keeps whatever colour the drawing gave it (and is thawed,
+;; unlocked and switched on, so a result cannot land somewhere unseen).
+
+(setq wc:*cut-layer* "AIR-B")       ; moves the straight edge, band ends, dart legs, slits and slivers to another layer
+(setq wc:*cut-color* 1)             ; recolours that layer where WCALST is the one creating it (1 = red)
+(setq wc:*dim-layer* "DIMENSION")   ; moves the end height dims, the variant labels and the length summary
+(setq wc:*dim-color* 3)             ; recolours that one on creation (3 = green)
 
 ;; ---- reading the band off the drawing --------------------------------
-(setq wc:*node-fuzz* 3)             ; decimals kept when two endpoints are
-                                    ; matched into one node.  3 = a
-                                    ; thousandth of an inch: loose enough
-                                    ; to join ends the drafter meant to
-                                    ; touch, tight enough not to weld two
-                                    ; points that are genuinely apart
-(setq wc:*seg-min* 1.0e-6)          ; anything shorter is a repeated point,
-                                    ; not a segment, and is dropped
-(setq wc:*trace-turn* 1.0472)       ; 60 deg.  A long side is traced by
-                                    ; always taking the straightest
-                                    ; continuation; the walk gives up when
-                                    ; even the best turn is sharper than
-                                    ; this -- that is the end of the band.
-                                    ; Raise it for a band with genuinely
-                                    ; sharp corners along a side, lower it
-                                    ; if tracing runs off into scenery
-(setq wc:*trace-max* 5000)          ; hard stop on one walk.  A side that
-                                    ; closes on itself is caught before
-                                    ; this by the revisited-node test; this
-                                    ; is the backstop for anything else
-(setq wc:*rung-turn* 0.7854)        ; 45 deg.  A segment that leaves the
-                                    ; chain by more than this AND ends off
-                                    ; it is a rung: the two long sides run
-                                    ; ALONG the chain, the rungs cross it
+
+(setq wc:*node-fuzz* 3)             ; decimals kept when two endpoints are merged into one node: fewer welds points that are genuinely apart, more leaves ends the drafter meant to touch unjoined
+(setq wc:*seg-min* 1.0e-6)          ; shorter than this is a repeated point rather than a segment, and is dropped
+(setq wc:*trace-turn* 1.0472)       ; sharpest turn (radians, 60 deg) the trace of a long side will follow: raise it for a band with genuinely sharp corners along a side, lower it when tracing runs off into scenery
+(setq wc:*trace-max* 5000)          ; hard stop on one walk - the backstop behind the revisited-node test, and only reachable by geometry that is neither open nor a ring
+(setq wc:*rung-turn* 0.7854)        ; how steeply (radians, 45 deg) a segment must leave the chain to count as a rung: lower it and gentle diagonals join in, raise it and only square rungs do
 
 ;; ---- what still counts as a band -------------------------------------
 ;; Each of these re-asks rather than failing, so a wrong pick costs a
-;; click, not the command.
-(setq wc:*min-segs* 6)              ; segments in the selection: two sides
-                                    ; and a rung cannot be fewer
-(setq wc:*min-chain* 3)             ; segments in a traced side
-(setq wc:*min-rungs* 2)             ; rungs found between the two sides,
-                                    ; or there is no width to measure
+;; click and not the command.
+
+(setq wc:*min-segs* 6)              ; fewest segments a selection may hold before it is sent back to be re-picked
+(setq wc:*min-chain* 3)             ; fewest segments a traced side may have before the pick is sent back
+(setq wc:*min-rungs* 2)             ; fewest rungs to find between the two sides, below which there is no width to measure
 
 ;; ---- how many cuts, and how wide -------------------------------------
-(setq wc:*maxfeat* 20)              ; default answer to "Maximum darts +
-                                    ; inserts", and what an out-of-range
-                                    ; answer falls back to
-(setq wc:*dart-cap* 4.0)            ; widest mouth ONE dart may open on the
-                                    ; bottom line.  A bigger correction is
-                                    ; split across consecutive rungs rather
-                                    ; than cut as one gaping V
-(setq wc:*wmin-f* 0.04)             ; release threshold floor: correction
-                                    ; is accumulated along the band and
-                                    ; only released as a cut once it is
-                                    ; worth this much of the band width.
-                                    ; The floor is what stops the refining
-                                    ; pass below from cutting hair-width
-                                    ; darts
-(setq wc:*target* 0.01)             ; 1% of the original bottom length is
-                                    ; the residual the refining variant
-                                    ; aims under, and the figure the
-                                    ; summary flags OVER TARGET against
-(setq wc:*refine* 0.6)              ; each refining pass drops the
-                                    ; threshold to this share of the last:
-                                    ; more cuts, each smaller
-(setq wc:*passes* 10)               ; and it gives up after this many, so
-                                    ; a band that cannot reach the target
-                                    ; still finishes and says so
+
+(setq wc:*maxfeat* 20)              ; the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to
+(setq wc:*dart-cap* 4.0)            ; widest mouth ONE dart may open: lower it and a big correction splits across more rungs, raise it for fewer, wider Vs
+(setq wc:*wmin-f* 0.04)             ; smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutting hair-width darts
+(setq wc:*target* 0.01)             ; the after-cuts residual the refining variant aims under, as a share of the bottom line, and what OVER TARGET is measured against
+(setq wc:*refine* 0.6)              ; how far each refining pass drops the threshold: nearer 1 refines in smaller steps and uses more of the passes below
+(setq wc:*passes* 10)               ; how many refining passes before it settles for what it has and says so
 
 ;; ---- where a cut stops ------------------------------------------------
-;; Depths are measured DOWN from the straightened edge.  A dart apex or a
-;; slit head that reached the straight edge would cut the strip in two,
-;; so every rule here ends in a clamp that keeps it inside the band.
-(setq wc:*tile-clear* 1.0)          ; with a tile height given, a cut may
-                                    ; come up to tile + this, and stops
-                                    ; this far short of the far edge --
-                                    ; the tile sits along the straight
-                                    ; edge and the cut has to clear it
-(setq wc:*apex-f* 0.42)             ; with no tile height, the apex sits
-                                    ; this far down the local depth,
-                                    ; leaving a solid hinge along the
-                                    ; straight side (shop practice)
-(setq wc:*apex-min-f* 0.20)         ; and however shallow the band gets
-                                    ; locally, the apex never comes closer
-                                    ; to the straight edge than this share
-                                    ; of the local depth
-(setq wc:*depth-min-f* 0.2)         ; local depth itself is floored at this
-                                    ; share of the band width, so a dip in
-                                    ; the far edge cannot collapse a cut
-(setq wc:*sliver-top* 1.0)          ; insert sliver: width at the top ...
-(setq wc:*sliver-extra* 1.0)        ; ... how much longer its sides are
-                                    ; than the slit they fill (trimmed on
-                                    ; fitting) ...
-(setq wc:*sliver-gap-f* 0.2)        ; ... and how far below the band it is
-                                    ; drawn, as a share of the width
+;; Depths are measured DOWN from the straightened edge.  An apex that
+;; reached that edge would cut the strip in two, so each rule here ends
+;; in a clamp holding the cut inside the band.
+
+(setq wc:*tile-clear* 1.0)          ; how far a cut clears the tile along the straight edge, and how far it stops short of the far edge
+(setq wc:*apex-f* 0.42)             ; how far down the local depth a cut stops when no tile height is given: lower it for a deeper hinge along the straight side
+(setq wc:*apex-min-f* 0.20)         ; closest a cut may ever come to the straightened edge, as a share of the local depth - what a band too shallow to hold the tile clearance falls back to
+(setq wc:*depth-min-f* 0.2)         ; floor under the local depth, as a share of the band width, so a dip in the far edge cannot collapse a cut
+(setq wc:*sliver-top* 1.0)          ; width at the top of an insert sliver, and the narrowest one that is drawn
+(setq wc:*sliver-extra* 1.0)        ; how much longer a sliver's sides are than the slit they fill - stock to trim on fitting
+(setq wc:*sliver-gap-f* 0.2)        ; how far below the band a sliver is drawn, as a share of the width
 
 ;; ---- which points belong to this band ---------------------------------
 ;; The selection is a window, so it catches end blocks, callouts and
-;; whatever else was nearby.  These three drop what cannot be the band.
-(setq wc:*near-f* 1.75)             ; a point further than this (x width)
-                                    ; from the chain is not on this band
-(setq wc:*over-f* 0.05)             ; nor is one developing this far ABOVE
-                                    ; the straight edge -- the far side is
-                                    ; always below it (end-clamp artefact)
-(setq wc:*past-f* 0.25)             ; nor one this far beyond either end
+;; whatever else stood nearby.  These three drop what cannot be band.
+
+(setq wc:*near-f* 1.75)             ; how far off the chain (x band width) a point may sit and still be taken as part of this band, or carried along as a mark
+(setq wc:*over-f* 0.05)             ; how far above the straight edge (x width) a developed point may land before it is read as an end-clamp artefact and dropped
+(setq wc:*past-f* 0.25)             ; how far beyond either end of the band (x width) a point may sit and still be kept
 
 ;; ---- placement and lettering of the two drawings ----------------------
-(setq wc:*drop-f* 1.5)              ; first straight edge, below the lowest
-                                    ; point of the selection (x width)
-(setq wc:*stack-f* 5.0)             ; and the second variant below that
-(setq wc:*label-f* 0.6)             ; variant label, above its straight
-                                    ; edge ...
-(setq wc:*label-h-f* 0.4)           ; ... at this text height
-(setq wc:*sum-x-f* 2.0)             ; length summary, right of the band end
-(setq wc:*sum-h-f* 0.35)            ; ... at this text height ...
-(setq wc:*sum-step-f* 0.55)         ; ... and this line spacing
-(setq wc:*dim-off-f* 1.2)           ; end height dims, out past each end
+
+(setq wc:*drop-f* 1.5)              ; how far below the lowest point of the selection (x width) the first straight edge lands
+(setq wc:*stack-f* 5.0)             ; the gap (x width) between the two drawings: raise it when the summaries of one run into the next
+(setq wc:*label-f* 0.6)             ; how far above its straight edge (x width) a variant label sits
+(setq wc:*label-h-f* 0.4)           ; text height of that label, as a share of the band width
+(setq wc:*sum-x-f* 2.0)             ; how far right of the band end (x width) the length summary is written
+(setq wc:*sum-h-f* 0.35)            ; text height of the summary, as a share of the band width
+(setq wc:*sum-step-f* 0.55)         ; line spacing within the summary, as a share of the band width
+(setq wc:*dim-off-f* 1.2)           ; how far out past each end (x width) the height dimension lines are placed
 
 ;; ---- how the numbers are written --------------------------------------
-(setq wc:*dec-places* 2)            ; decimals in the decimal-inch figure
-(setq wc:*arch-frac* 8)             ; smallest fraction in the feet-inches
-                                    ; twin beside it (8 = eighths)
+
+(setq wc:*dec-places* 2)            ; decimals in every decimal-inch figure the report and the summary print
+(setq wc:*arch-frac* 8)             ; smallest fraction in the feet-and-inches twin printed beside it (8 = eighths, 16 = sixteenths)
 
 ;;; ------------------------ small math helpers ----------------------
 
