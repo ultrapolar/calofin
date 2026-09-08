@@ -423,6 +423,14 @@ python3 tests/test_cornerstp_geometry.py
 python3 tests/test_cornerstp_bench.py   # CORNERSTP's bench, run in lispvm
 python3 tests/test_cornerstp_profile.py # the side profile all three draw
 python3 tests/test_normiestep_corner.py # NORMIESTEP corner mode, run in lispvm
+python3 tests/test_steps_settings.py  # the step routines' tunables - every
+                                      # knob wired up and moving the drawing,
+                                      # each reader falling back to the value
+                                      # its settings block sets - and the
+                                      # contingencies: UNDO off, no dim
+                                      # styles, an undrawable dim layer, a
+                                      # frozen layer, AUTOBEAD absent, and a
+                                      # selection that cannot be a run
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter
 python3 tests/test_cloud_mesher.py    # point cloud mesher
@@ -467,6 +475,11 @@ python3 tests/test_chart_form.py      # the palette's chart form against what it
                                       # must agree with: the DCL forms' recall
                                       # store, the wire it asks about a bad box,
                                       # and the sheet it draws
+python3 tests/test_tunables.py        # the four GUI files' knobs: all in the
+                                      # block at the top, each saying what
+                                      # changing it does, each a row in the
+                                      # README, and the ones the palette shares
+                                      # spelled the same on both surfaces
 python3 tests/test_cancel_paths.py    # every headline command cancelled at its
                                       # first prompt: the handler runs, settings
                                       # come back, no group or error mode left
