@@ -163,6 +163,25 @@ could only fail. `LAZSPAVER` prints the loaded version.
 `LAZSPA` also has a button on the LazPanel's **Spa** job page (right
 after `SPA`) and on the **Layout** category page.
 
+## Tunables
+
+Every one is a plain literal in the **tunables block at the top of
+`LAZSPA.lsp`**. The sheets, the corner rows, the other outline's keys,
+the dropdowns and `lzs:*naok*` are editable too, but each lives beside
+the rule that reads it.
+
+**Not tunable here, deliberately:** the stroke font and the image
+tile's colours -- the grouped build takes `CALOFIN-LIB.lsp`'s instead.
+
+| Global | Default | What it sets |
+| --- | --- | --- |
+| `lzs:*ctreat*` | `'("(ask)" "90" "Radius" "Diagonal")` | what a corner can be, in the SHEET LEGEND's words. SPA normalises these onto the canonical `Square/Radius/Cut/NotGiven` set itself, which is why they are not spelled canonically here. **Order matters** -- `lzs:sized` names the sized treatments by index |
+| `lzs:*tabbudget*` | `84` | how wide the row of chart tabs may be, in DCL character cells. Three charts run about 39, so this never wraps today; it is here because a fourth shape must cost a row rather than the whole form |
+| `lzs:*chart-w*` | `52` | the chart column's width, in character cells |
+| `lzs:*chart-h*` | `19` | its total height in rows, spread over the bands the chart is cut into |
+| `lzs:*poskey*` | `"LazSpa_Pos"` | where the dialog remembers its position between restarts (the AutoCAD profile) |
+| `lzs:*recallkey*` | `"HKEY_CURRENT_USER\\Software\\Calofin\\LazSpa"` | where a sheet's last accepted answers are kept for Recall, one value per chart. **The VB palette reads the same key** (`RecallStore.SpaKey`) |
+
 ## Assumptions
 
 - SPA is loaded, and its answer store (`spa:*form*`,
