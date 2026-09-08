@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.5, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.6, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -74904,70 +74904,174 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.3")
+(setq *constellation-version* "v1.4")
 
 ;;; ----------------------------------------------------------------------
-;;;  Tunables
+;;;  Tunables  --  every knob this file has, in one place
+;;;
+;;;  Nothing below this section is meant to be edited to retune the tool:
+;;;  the code reads these globals and only these.  Set one AFTER the file
+;;;  has loaded (a startup .lsp, or straight at the command line) rather
+;;;  than editing the value here, so the released file stays as shipped:
+;;;
+;;;      (setq cst:*flag* 0.5)
+;;;
+;;;  Each knob says what it is measured in and what moving it does.  The
+;;;  groups run in the order the command meets them: what it draws on,
+;;;  the survey block, the point count, a prompt default, the solve, the
+;;;  turn-to-fit, the report, the drawing sizes -- and then the things
+;;;  that LOOK like knobs and are not, with the reason each stays put.
 ;;; ----------------------------------------------------------------------
 
+;; ---- Layers, and the colour each is given ------------------------------
+;; Where each part of the result goes, and the ACI colour the layer gets
+;; IF THIS COMMAND HAS TO CREATE IT.  A layer the drawing already has
+;; keeps its own colour -- it is only switched on, thawed and unlocked if
+;; it needs to be, so the result is never drawn where nobody can see it.
+;; ACI: 1 red, 2 yellow, 3 green, 4 cyan, 5 blue, 6 magenta, 7 white,
+;; 8 grey.  Grey for the frame and cyan for the legend, so neither
+;; competes with the result; the result itself lands in the point and
+;; dimension colours the rest of the toolkit uses.
 (setq cst:*space-layer*   "CONSTELLATION-SPACE")   ; the rectangle asked for
+(setq cst:*space-color*   8)                       ; grey
 (setq cst:*guide-layer*   "CONSTELLATION-GUIDE")   ; the starting oval, erased
+(setq cst:*guide-color*   4)                       ; cyan
 (setq cst:*outline-layer* "CONSTELLATION")         ; the ring through A B C ...
+(setq cst:*outline-color* 3)                       ; green
 (setq cst:*dim-layer*     "DIMENSION")             ; as AUTODIM and WCALST
+(setq cst:*dim-color*     2)                       ; yellow
 (setq cst:*point-layer*   "POINTS")                ; as ABCDEF and XYPLOT
+(setq cst:*point-color*   2)                       ; yellow
 
-;; ABCDEF's survey block, so ABHD / CABHD / ABFIND / LHD / BPCALLOUT
-;; read this import the same as any other.
+;; ---- The survey block --------------------------------------------------
+;; ABCDEF's survey block and its attribute tag, so ABHD / CABHD / ABFIND /
+;; LHD / BPCALLOUT read this import the same as any other.  Change these
+;; only together with ABCDEF and XYPLOT, or those readers stop seeing the
+;; points.  The block's own geometry -- an attribute one unit right and
+;; two down -- is ABCDEF's definition and is NOT a knob (see the end of
+;; this section).
 (setq cst:*point-block* "ab_pt")
 (setq cst:*point-tag*   "number")
 
-;; Single-letter labels, so 26 is the ceiling.  3 is the floor: two
-;; points share one dim and neither of them has the two that a
-;; placement needs.
+;; ---- How many points ---------------------------------------------------
+;; The labels, in the order they are handed out clockwise.  The CEILING
+;; is derived from that string rather than typed as a second number, so
+;; the shipped pair cannot disagree -- it is read HERE, at load, so a
+;; shorter alphabet set afterwards has to set *maxpts* with it or
+;; cst:letter is asked for a letter that is not there.  The FLOOR is 3,
+;; because two points share one dim and neither of them then has the
+;; two a placement needs.  *defcount* is what Enter
+;; takes at the count prompt, and is clamped into [*minpts* *maxpts*] at
+;; the ask -- a default nobody can take is not a default.
 (setq cst:*letters*  "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 (setq cst:*minpts*   3)
-(setq cst:*maxpts*   26)
-(setq cst:*defcount* 4)
+(setq cst:*maxpts*   (strlen cst:*letters*))       ; 26: single letters
+(setq cst:*defcount* 4)                            ; a pool's four corners
 
-;; The solve runs in two stages (see "The solve" below).  Sweeps only
-;; have to get the layout into the right BASIN now, which they do in a
-;; few dozen; the fit itself is finished by Levenberg-Marquardt.
+;; ---- A prompt default --------------------------------------------------
+;; What Enter takes at "Draw the outline through the points in order?":
+;; "Yes" or "No" (anything else reads as "Yes").  The run's other
+;; defaults are not knobs: the base point defaults to the origin because
+;; that is AutoCAD's own convention, and "does it look right" defaults
+;; to Yes because a run that went well is the common one -- the whole
+;; point of that question is that the drawing be looked at.
+(setq cst:*def-outline* "Yes")
+
+;; ---- The solve, stage 1: sweeps ----------------------------------------
+;; Stress-majorization sweeps only have to get the layout into the right
+;; BASIN, which they do in a few dozen; the fit is finished by stage 2.
+;; *sweeps* caps one settle.  *tol* is how far the furthest point moved
+;; in a sweep, in drawing units, below which the settle stops early.
+;; Raising *sweeps* costs time on every start and buys almost nothing.
 (setq cst:*sweeps* 120)
-(setq cst:*tol*    1.0e-6)      ; drawing units of movement, per sweep
+(setq cst:*tol*    1.0e-6)
 
-;; The fit.  Iterations are the outer Levenberg-Marquardt steps and
-;; tries the damping retries inside one of them; *lm-done* is the sum
-;; of squared misses below which there is nothing left to gain (about a
-;; ten-millionth of an inch, RMS).
+;; ---- The solve, stage 2: Levenberg-Marquardt ---------------------------
+;; Up to *lm-iters* outer steps, each allowed *lm-tries* damping retries
+;; before the fit is called finished.  *lm-lam* is the damping to start
+;; with; a step that reduces the miss multiplies it by *lm-down* (never
+;; below *lm-lammin*), a step that does not multiplies it by *lm-up* and
+;; is retried.  *lm-done* is the sum of squared misses below which there
+;; is nothing left to gain -- about a ten-millionth of an inch, RMS.  Of
+;; these only *lm-done* is worth touching, and only to LOOSEN it on a
+;; machine where a 26-point job is too slow.
 (setq cst:*lm-iters*  40)
 (setq cst:*lm-tries*   8)
-(setq cst:*lm-lam*  1.0e-3)     ; starting damping
+(setq cst:*lm-lam*    1.0e-3)
 (setq cst:*lm-lammin* 1.0e-12)
-(setq cst:*lm-done* 1.0e-14)
+(setq cst:*lm-down*   0.1)
+(setq cst:*lm-up*     10.0)
+(setq cst:*lm-done*   1.0e-14)
 
-;; Starts tried, best kept.  A stress minimum is LOCAL, and a
-;; constellation that starts folded can stay folded, so the oval is not
-;; the only thing tried.
-(setq cst:*squash* 0.35)        ; second start: the oval flattened
-(setq cst:*shake*  0.30)        ; third start: the oval scattered, as a
-                                ; share of the smaller space dimension
+;; ---- The starts tried --------------------------------------------------
+;; A stress minimum is LOCAL, and a constellation that starts folded can
+;; stay folded, so three starts are run and the best kept: the oval, the
+;; oval flattened to *squash* of its height, and the oval scattered by
+;; *shake* of the smaller space dimension.  Arcs double the count: every
+;; start is run once with the arcs in from the off and once with them
+;; joining a shape the dims have already settled, because neither order
+;; wins every job.
+(setq cst:*squash* 0.35)
+(setq cst:*shake*  0.30)
 
-;; The turn-to-fit sweep: whole circle at cst:*rot-coarse* steps, then
-;; cst:*rot-passes* refining passes, each one grid spacing either side
-;; of the last winner.
+;; ---- Turn-to-fit -------------------------------------------------------
+;; The solved shape is spun to sit in the space: the whole circle sampled
+;; *rot-coarse* ways, then *rot-passes* refining passes of *rot-fine*
+;; samples each, one grid spacing either side of the last winner.  A long
+;; thin constellation in a tight space can have a window of angles that
+;; fit only a fraction of a degree wide, which is what the passes buy.
 (setq cst:*rot-coarse* 360)
 (setq cst:*rot-fine*   40)
 (setq cst:*rot-passes* 3)
 
-;; A dim that ends up further than this from what was given is starred
-;; in the report -- at a sixteenth of an inch nobody re-measures, at a
-;; quarter of an inch something is wrong with the sheet.
-(setq cst:*flag* 0.25)
+;; ---- The report --------------------------------------------------------
+;; *flag*: a dim, or an arc radius, that ends up further than this from
+;; what was given is starred, and the leave-one-out test runs to name
+;; the culprit.  Drawing units: at a sixteenth of an inch nobody
+;; re-measures, at a quarter something is wrong with the sheet.
+;; *over-tol*: how far the points may reach past the space, the two axes
+;; added, before the report says so.  A millionth of an inch means any
+;; real overhang is mentioned; a sixteenth would stop it mentioning
+;; overhang nobody can see.
+(setq cst:*flag*     0.25)
+(setq cst:*over-tol* 1.0e-6)
 
-;; Drawing sizes, as shares of the smaller side of the space.
-(setq cst:*texth*   0.025)      ; label / attribute height
-(setq cst:*dotr*    0.008)      ; preview marker radius
-(setq cst:*dimoff*  0.060)      ; how far a perimeter dim stands off
+;; ---- Drawing sizes -----------------------------------------------------
+;; As shares of the smaller side of the space, so a spa and a pool both
+;; get labels in proportion -- with two FLOORS in drawing units, so a
+;; tiny space still gets a label that can be read and a marker that can
+;; be seen.
+(setq cst:*texth*     0.025)    ; label / attribute height
+(setq cst:*texth-min* 0.5)      ; ...never below half an inch
+(setq cst:*dotr*      0.008)    ; preview marker radius
+(setq cst:*dotr-min*  0.1)      ; ...never below a tenth of an inch
+(setq cst:*dimoff*    0.060)    ; how far a perimeter dim stands off
+
+;; ---- Deliberately NOT knobs --------------------------------------------
+;; Numbers further down that look tunable and are left where they are,
+;; because each is tied to something that would have to move with it:
+;;
+;;   WHERE A SITS AND WHICH WAY THE LETTERS RUN (cst:oval: 135 degrees,
+;;     stepping clockwise).  Top left, clockwise, is the order a pool's
+;;     corners are called out in; the preview's message, the arc help,
+;;     the wrap rule Z-B = Z A B, the mirror test and the bow question
+;;     all assume it.
+;;   THE ab_pt GEOMETRY (cst:ensure-block, cst:insert-pt).  ABCDEF's
+;;     definition, repeated so a drawing can hold both imports.
+;;   THE GOLDEN ANGLE (cst:*golden*, just below).  What makes the
+;;     scattered start and the coincident-point push-apart deterministic
+;;     and evenly spread.  A constant of mathematics, named once so its
+;;     two users cannot disagree.
+;;   THE FLOATING-POINT GUARDS (1e-9 and 1e-12 in the solver).  Where
+;;     two points count as coincident, or a pivot as zero; they keep
+;;     divisions finite and carry no measurement meaning.
+;;   THE LIBRARY HELPERS (the Ask, Settings and Vector sections below).
+;;     Their bodies are CALOFIN-LIB's byte for byte, and the grouped
+;;     build swaps them for the library's own -- a change made here
+;;     would be lost there.
+
+;; The golden angle, in radians.  Not a knob: see the list above.
+(setq cst:*golden* 2.399963229728653)
 
 ;;; ----------------------------------------------------------------------
 ;;;  Ask layer  --  the STANDARDS section 4 helpers
@@ -75264,7 +75368,7 @@
 (defun cst:shake (pts amt / out i p a)
   (setq out nil i 0)
   (foreach p pts
-    (setq a   (* 2.399963229728653 (1+ i))
+    (setq a   (* cst:*golden* (1+ i))
           out (cons (list (+ (car p) (* amt (cos a)))
                           (+ (cadr p) (* amt (sin a))))
                     out)
@@ -75377,7 +75481,7 @@
 ;; apart.  Any direction will do, but it has to be the SAME direction
 ;; every run, so it comes off the indices rather than a random number.
 (defun cst:spread (i j / a)
-  (setq a (* 2.399963229728653 (+ 1.0 (float i) (* 31.0 (float j)))))
+  (setq a (* cst:*golden* (+ 1.0 (float i) (* 31.0 (float j)))))
   (list (cos a) (sin a)))
 
 ;; One sweep.  PTS in, PTS out; nothing is changed in place, so every
@@ -75620,10 +75724,10 @@
           (if (< s2 s)
             (setq pts   trial
                   s     s2
-                  lam   (max (* lam 0.1) cst:*lm-lammin*)
+                  lam   (max (* lam cst:*lm-down*) cst:*lm-lammin*)
                   taken T)
-            (setq lam (* lam 10.0))))
-        (setq lam (* lam 10.0)))
+            (setq lam (* lam cst:*lm-up*))))
+        (setq lam (* lam cst:*lm-up*)))
       (setq pass (1+ pass)))
     ;; nothing left to win: more damping is only shrinking the step
     (setq it (if taken (1+ it) cst:*lm-iters*)))
@@ -75808,8 +75912,10 @@
 ;;;  Drawing
 ;;; ----------------------------------------------------------------------
 
-(defun cst:texth (w h) (max 0.5 (* cst:*texth* (min w h))))
-(defun cst:dotr  (w h) (max 0.1 (* cst:*dotr*  (min w h))))
+;; Sizes for a W x H space: the tunable share of its smaller side,
+;; never below the tunable floor.
+(defun cst:texth (w h) (max cst:*texth-min* (* cst:*texth* (min w h))))
+(defun cst:dotr  (w h) (max cst:*dotr-min*  (* cst:*dotr*  (min w h))))
 (defun cst:dimoff (w h) (* cst:*dimoff* (min w h)))
 
 ;; entmake and hand back the ename, so the preview can erase what it
@@ -75952,8 +76058,8 @@
 
 (defun cst:preview (n w h base / pts i p r th lab)
   (cst:unpreview)
-  (cal:ensure-layer cst:*space-layer* 8)
-  (cal:ensure-layer cst:*guide-layer* 4)
+  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
+  (cal:ensure-layer cst:*guide-layer* cst:*guide-color*)
   (setq r   (cst:dotr w h)
         th  (cst:texth w h)
         i   0
@@ -76010,13 +76116,16 @@
 
 ;; How many points.  Three is the floor: two points share one dim and
 ;; neither of them then has the two a placement needs.  Twenty-six is
-;; the ceiling because the labels are single letters.
-(defun cst:askcount ( / v)
+;; the ceiling because the labels are single letters.  The default is
+;; clamped into that range HERE, at the ask: the tunables are meant to
+;; be set after loading, and a cst:*defcount* set outside the range must
+;; not offer a count the next line would refuse.
+(defun cst:askcount ( / v dflt)
+  (setq dflt (fix (max cst:*minpts* (min cst:*maxpts* cst:*defcount*))))
   (initget 6 "Back Undo")
-  (setq v (getint (strcat "\nHow many points? [Back] <"
-                          (itoa cst:*defcount*) ">: ")))
+  (setq v (getint (strcat "\nHow many points? [Back] <" (itoa dflt) ">: ")))
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
-        ((null v) cst:*defcount*)
+        ((null v) dflt)
         ((or (< v cst:*minpts*) (> v cst:*maxpts*))
          (princ (strcat "\n  Between " (itoa cst:*minpts*) " and "
                         (itoa cst:*maxpts*) " points - they are labelled A to "
@@ -76203,12 +76312,22 @@
 ;; re-entered from "does it look right": there is no earlier question to
 ;; reach, and a full chart must NOT close itself or there would be no
 ;; way in to change the number that was wrong.
-(defun cst:askchart (n chart arcs top / order done nxt pr v k short cut)
-  (setq order (cst:pairs n) done nil)
+;;
+;; The same holds for a chart that is already full on the way IN: that
+;; is the operator pressing Back at the arcs to change a dim, and a
+;; chart that closed itself the moment it was re-entered bounced them
+;; straight back to the arcs (it did).  So only a chart that fills up
+;; UNDER the operator closes itself; one they came back to waits for D,
+;; exactly as a fix pass does.
+(defun cst:askchart (n chart arcs top / order done nxt pr v k short cut
+                                        wasfull)
+  (setq order   (cst:pairs n)
+        done    nil
+        wasfull (null (cst:nextpair order chart)))
   (cst:charthelp n order top)
   (while (not done)
     (setq nxt (cst:nextpair order chart))
-    (if (and (null nxt) top)
+    (if (and (null nxt) top (not wasfull))
       (progn (princ "\n  Every pair is given.")
              (setq pr 'CST-DONE))
       (setq pr (cst:askpair n (if nxt nxt (cst:key 0 1)))))
@@ -76272,7 +76391,7 @@
        (if (eq v 'CAL-BACK) (setq step 5) (setq arcs v step 7)))
       ((= step 7)
        (setq v (cal:askyn "Draw the outline through the points in order?"
-                          "Yes" T))
+                          (if (= cst:*def-outline* "No") "No" "Yes") T))
        (if (eq v 'CAL-BACK) (setq step 6) (setq outline v step 8)))))
   (list w h n base chart arcs outline))
 
@@ -76310,10 +76429,10 @@
 ;; they are not part of the drawing to be swept and a redraw must not
 ;; keep re-announcing them.
 (defun cst:draw (pts n w h base chart arcs outline / mark th i p)
-  (cal:ensure-layer cst:*space-layer* 8)
-  (cal:ensure-layer cst:*point-layer* 2)
-  (cal:ensure-layer cst:*dim-layer* 2)
-  (if outline (cal:ensure-layer cst:*outline-layer* 3))
+  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
+  (cal:ensure-layer cst:*point-layer* cst:*point-color*)
+  (cal:ensure-layer cst:*dim-layer* cst:*dim-color*)
+  (if outline (cal:ensure-layer cst:*outline-layer* cst:*outline-color*))
   (cst:ensure-block)
   (setq mark (entlast)
         th   (cst:texth w h)
@@ -76470,14 +76589,23 @@
 
 (defun c:CONSTELLATION ( / *error* undo-open q w h n base chart arcs
                            outline sol ref ang pts wd worst blame rms
-                           over cross happy fix v)
+                           over cross happy tofix v)
+  ;; TOFIX, not "fix": a local named fix would shadow the AutoLISP
+  ;; builtin of that name for everything this command calls, dynamic
+  ;; scope being what it is -- and cst:askcount calls (fix ...) to clamp
+  ;; its default.
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
     ;; and the legend goes with them: a cancel part way through the
     ;; chart must not leave the starting oval in the drawing
     (cst:unpreview)
-    (if undo-open (setq undo-open (cal:undoend)))
+    ;; command-s, never plain command: 2015+ engines reject (command)
+    ;; inside *error* unless the error mode was pushed beforehand
+    ;; (STANDARDS section 5), and a rejected _End leaves the group open
+    (if undo-open
+      (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+             (setq undo-open nil)))
     (if (and msg (not (cal:error-cancel-p msg)))
       (princ (strcat "\nCONSTELLATION error: " msg)))
     (princ))
@@ -76555,7 +76683,7 @@
             (princ "\n  ** dims meant.  More cross dims settle either."))))
       (princ (strcat "\n  Nothing missed by more than " (rtos cst:*flag*)
                      " - nothing here needs re-measuring.")))
-    (if (> over 1.0e-6)
+    (if (> over cst:*over-tol*)
       (progn
         (princ (strcat "\n  ** The constellation runs " (rtos over)
                        " past the space across its two axes."))
@@ -76577,17 +76705,19 @@
       (setq happy T)
       (progn
         (cst:undraw)
-        (setq fix (cal:askkw "What needs changing?" "Dims Arcs Both"
-                             "Dims/Arcs/Both" "Dims" nil))
-        (if (member fix '("Dims" "Both"))
+        (setq tofix (cal:askkw "What needs changing?" "Dims Arcs Both"
+                               "Dims/Arcs/Both" "Dims" nil))
+        (if (member tofix '("Dims" "Both"))
           (progn
             (setq v (cst:askchart n chart arcs nil))
             (if (not (eq v 'CAL-BACK)) (setq chart v))))
-        (if (member fix '("Arcs" "Both"))
+        (if (member tofix '("Arcs" "Both"))
           (progn
             (setq v (cst:askarcs n arcs nil))
             (if (not (eq v 'CAL-BACK)) (setq arcs v)))))))
-  (setq undo-open (cal:undoend))
+  ;; only a group this run opened: with UNDO off none was opened, and an
+  ;; _End then would be closing a group that is not there
+  (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (princ))
 
@@ -82520,7 +82650,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.5 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.6 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

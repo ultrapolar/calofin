@@ -6,6 +6,68 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.6 -- 2026-09-08
+
+A validation pass over `CONSTELLATION`: every knob gathered at the top of
+the file and explained, the paths a clean run never takes driven under
+test, and the four defects that turned up on the way closed.
+
+### Changed
+
+- **`CONSTELLATION` v1.4: every knob is at the top, and says what it
+  does.** The Tunables section now carries the five layer colours (they
+  were literals in `cst:preview` and `cst:draw`), the label and marker
+  floors, the Levenberg-Marquardt damping factors, the outline default
+  and the overhang threshold, each with its unit and what moving it
+  does. `cst:*maxpts*` is derived from the label string instead of being
+  a second number to keep in step with it; `cst:*defcount*` is clamped
+  into range at the ask, since the README invites setting it after
+  loading; the golden angle is named once instead of typed twice. The
+  section closes with what looks tunable and is deliberately not, and
+  why -- where `A` sits, the `ab_pt` geometry, the float guards, the
+  library helpers the grouped build swaps away.
+
+### Fixed
+
+- **`CONSTELLATION` closed an undo group it never opened.** With UNDO
+  off (`UNDOCTL` bit 1 clear) `cst:undobegin` rightly opens nothing, but
+  the success path called `cst:undoend` unconditionally, so every run in
+  such a drawing ended in the error handler. Guarded on `undo-open`, the
+  way the handler already was.
+- **`CONSTELLATION`'s handler closed the group with plain `command`.**
+  STANDARDS section 5: AutoCAD 2015+ rejects `(command)` inside `*error*`
+  unless the error mode was pushed, so an Esc could leave the group open.
+  The handler now closes it through `command-s` under
+  `vl-catch-all-apply`, as SMARTFILLET and CUSTBLOCK do. (The VM treats
+  the two alike, so the cancel sweep passed either way; the library's
+  own `cal:undoend` idiom still carries the plain form.)
+- **Back from the arcs into a full chart bounced straight back out.** A
+  full chart closes itself so the walk needs no final `D` -- and did so
+  on re-entry too, so the one reason to Back into it (a dim to change)
+  was unreachable. A chart that is already full on the way in now waits
+  for `D`, like a fix pass; one that fills up under the operator still
+  closes itself.
+- **A local named `fix` shadowed the AutoLISP builtin of that name.**
+  `c:CONSTELLATION` held the answer to "What needs changing?" in a local
+  called `fix`; AutoLISP locals are dynamically scoped, so for the whole
+  of that command -- and everything it calls -- `(fix ...)` found a
+  string where the function should be. Harmless while nothing called it,
+  and found the moment something did: the clamp added to `cst:askcount`
+  above. The local is `tofix` now, with a comment saying why.
+
+### Checks and tests
+
+- `tests/test_constellation.py` grows fifteen contingency tests -- 73
+  assertions on top of the 113 already there, 186 in all: Esc mid-chart
+  and at the last question, Back at every question in the chain and back
+  into a full chart, the count floor and ceiling and a clamped default,
+  zero and negative measurements at every distance prompt, pair and run
+  names that are not ones, a pair given twice, the three-point floor,
+  the layer colours and an existing layer keeping its own, a frozen and
+  switched-off layer restored, the block made once, UNDO off, an arc
+  named out of ring order and one with an impossible radius, and each
+  knob at the top moved and shown to move what it says. Both tiers.
+
 ## v3.5 -- 2026-09-02
 
 `SOCONV`'s sibling, written the same way: from a before/after the shop

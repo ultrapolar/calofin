@@ -38,6 +38,10 @@ has to work the positions out.
    What **is** required is two dims on every point, and a chain of dims
    that reaches all of them. Answering `D` short of that is refused by
    name, not solved into a plausible-looking wrong answer.
+
+   A chart that fills up under you closes itself, so the walk needs no
+   final `D`. One you come *back* into — `B` at the arc prompt — waits
+   for `D` instead, so the dim you came back for can be changed.
 5. **Takes the arcs.** If a run of points lies on one radius, say so.
    Cross dims say how far apart things are and nothing about how the
    wall between them curves, so a radius end can be measured perfectly
@@ -224,27 +228,47 @@ perimeter through it.
 
 ## Tunables
 
-`setq` these after loading (in a startup file, say) when a drawing works
-at a different size:
+Every knob the file has is in one place: the **Tunables** section at the
+top of `CONSTELLATION.lsp`, grouped in the order the run meets them, each
+with its unit and what moving it does. Nothing below that section is
+meant to be edited to retune the tool. `setq` a knob after loading (in a
+startup file, say) rather than editing the shipped value:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `cst:*minpts*` / `cst:*maxpts*` | `3` / `26` | Points allowed. Three is the floor — two points share one dim and neither then has the two a placement needs. Twenty-six is the ceiling because the labels are single letters |
-| `cst:*defcount*` | `4` | What Enter takes at the count prompt |
+| `cst:*space-layer*` / `cst:*space-color*` | `"CONSTELLATION-SPACE"` / `8` | The rectangle asked for, and the ACI colour the layer gets **if this command has to create it**. A layer the drawing already has keeps its own colour — it is only switched on, thawed and unlocked if it needs to be, so the result is never drawn where nobody can see it |
+| `cst:*guide-layer*` / `cst:*guide-color*` | `"CONSTELLATION-GUIDE"` / `4` | The starting oval — erased on the way out |
+| `cst:*outline-layer*` / `cst:*outline-color*` | `"CONSTELLATION"` / `3` | The ring through `A B C` … |
+| `cst:*dim-layer*` / `cst:*dim-color*` | `"DIMENSION"` / `2` | As `AUTODIM` and `WCALST` use it |
+| `cst:*point-layer*` / `cst:*point-color*` | `"POINTS"` / `2` | As `ABCDEF` and `XYPLOT` use it |
+| `cst:*point-block*` / `cst:*point-tag*` | `"ab_pt"` / `"number"` | `ABCDEF`'s survey block and attribute tag, so `ABHD`, `CABHD`, `ABFIND`, `LHD` and `BPCALLOUT` read the result. Change only together with `ABCDEF` and `XYPLOT`, or those readers stop seeing the points |
+| `cst:*letters*` | `"ABCDEFGHIJKLMNOPQRSTUVWXYZ"` | The labels, in the order they are handed out clockwise |
+| `cst:*minpts*` / `cst:*maxpts*` | `3` / `(strlen cst:*letters*)` = 26 | Points allowed. Three is the floor — two points share one dim and neither then has the two a placement needs. The ceiling is **derived** from the label string rather than typed as a second number, so the shipped pair cannot disagree. It is read at load, so a shorter alphabet set afterwards has to set `cst:*maxpts*` with it |
+| `cst:*defcount*` | `4` | What Enter takes at the count prompt. Clamped into the range above at the ask, so a default set out of range cannot offer a count the next line would refuse |
+| `cst:*def-outline*` | `"Yes"` | What Enter takes at *Draw the outline through the points in order?* — `"Yes"` or `"No"` |
 | `cst:*sweeps*` | `120` | Cap on stage-1 sweeps. They only have to reach the right *basin* now, which takes a few dozen; stage 2 finishes the fit |
-| `cst:*tol*` | `1.0e-6` | Movement per sweep, in drawing units, below which stage 1 stops early |
+| `cst:*tol*` | `1.0e-6` | Movement of the furthest point in one sweep, in drawing units, below which stage 1 stops early |
 | `cst:*lm-iters*` / `cst:*lm-tries*` | `40` / `8` | Stage-2 iterations, and the damping retries inside one of them |
 | `cst:*lm-lam*` / `cst:*lm-lammin*` | `1.0e-3` / `1.0e-12` | Starting damping, and the floor it may fall to |
-| `cst:*lm-done*` | `1.0e-14` | Sum of squared misses below which there is nothing left to gain (about a ten-millionth of an inch, RMS) |
-| `cst:*squash*` / `cst:*shake*` | `0.35` / `0.30` | The second and third starting layouts — the oval flattened, and the oval scattered. A stress minimum is *local*, and a constellation that starts folded can stay folded, so the oval is not the only thing tried. With arcs declared each start is run twice more, once with the arcs in from the beginning and once with the dims settled alone first, because neither order wins every job; the closest of all of them is kept |
+| `cst:*lm-down*` / `cst:*lm-up*` | `0.1` / `10.0` | What the damping is multiplied by after a step that reduced the miss, and after one that did not (which is then retried) |
+| `cst:*lm-done*` | `1.0e-14` | Sum of squared misses below which there is nothing left to gain (about a ten-millionth of an inch, RMS). The one stage-2 knob worth touching, and only to *loosen* it on a machine where a 26-point job is too slow |
+| `cst:*squash*` / `cst:*shake*` | `0.35` / `0.30` | The second and third starting layouts — the oval flattened to this share of its height, and the oval scattered by this share of the smaller space dimension. A stress minimum is *local*, and a constellation that starts folded can stay folded, so the oval is not the only thing tried. With arcs declared each start is run twice, once with the arcs in from the beginning and once with the dims settled alone first, because neither order wins every job; the closest of all of them is kept |
 | `cst:*rot-coarse*` | `360` | Steps in the whole-circle turn-to-fit sweep |
 | `cst:*rot-fine*` / `cst:*rot-passes*` | `40` / `3` | The refining passes after it, each sampling one grid spacing either side of the last winner |
-| `cst:*flag*` | `0.25` | A dim missing by more than this is starred. At a sixteenth of an inch nobody re-measures; at a quarter something is wrong with the sheet |
+| `cst:*flag*` | `0.25` | A dim, or an arc radius, missing by more than this is starred and the leave-one-out test runs. At a sixteenth of an inch nobody re-measures; at a quarter something is wrong with the sheet |
+| `cst:*over-tol*` | `1.0e-6` | How far the points may reach past the space, the two axes added, before the report says so. A millionth of an inch means any real overhang is mentioned; a sixteenth would stop it mentioning overhang nobody can see |
 | `cst:*texth*` / `cst:*dotr*` / `cst:*dimoff*` | `0.025` / `0.008` / `0.060` | Label height, preview marker radius and perimeter-dim stand-off, as shares of the smaller side of the space |
-| `cst:*space-layer*` | `"CONSTELLATION-SPACE"` | The rectangle asked for |
-| `cst:*guide-layer*` | `"CONSTELLATION-GUIDE"` | The starting oval — erased on the way out |
-| `cst:*outline-layer*` | `"CONSTELLATION"` | The ring through `A B C` … |
-| `cst:*dim-layer*` / `cst:*point-layer*` | `"DIMENSION"` / `"POINTS"` | As `AUTODIM` and `XYPLOT` use them |
+| `cst:*texth-min*` / `cst:*dotr-min*` | `0.5` / `0.1` | Floors on the first two, in drawing units, so a tiny space still gets a label that can be read and a marker that can be seen |
+
+The section ends with what **looks** tunable and is deliberately not,
+and why: where `A` sits and which way the letters run (the preview's
+message, the arc help, the wrap rule and the mirror test all assume top
+left, clockwise); the `ab_pt` block's geometry (`ABCDEF`'s, repeated so
+a drawing can hold both imports); the golden angle (`cst:*golden*`, a
+constant named once so the scattered start and the coincident-point
+push-apart cannot disagree); the floating-point guards in the solver;
+and the library helpers, whose bodies the grouped build swaps for
+`CALOFIN-LIB`'s own.
 
 ## Notes & limitations
 
@@ -325,3 +349,13 @@ rather than smeared, that an arc pins what the dims leave loose and
 bends the outline where it should, that `No` at the end reopens the
 questions and redraws over nothing, and that the preview leaves nothing
 behind.
+
+Then the paths a clean run never takes: Esc part way through the chart
+and at the last question, Back at every question in the chain (and back
+*into* a full chart, which waits for `D`), a count out of range and a
+default clamped into it, zero and negative measurements, pair and run
+names that are not ones, a pair given twice, the three-point floor, the
+layer colours (and an existing layer keeping its own), a frozen and
+switched-off layer restored, the block made once, UNDO switched off, an
+arc named out of ring order and one with an impossible radius — and
+every knob at the top of the file moved and shown to move what it says.

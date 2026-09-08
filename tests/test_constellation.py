@@ -35,6 +35,12 @@ whether the answer is right:
   * THE PREVIEW LEAVES NOTHING BEHIND.  The starting oval is a legend,
     not geometry, and a run must not leave it in the drawing.
 
+  * THE CONTINGENCIES.  Esc part way through and at the last question,
+    Back at every question, input that has to be refused, a drawing
+    that already carries the layers and the block, UNDO switched off,
+    and every knob at the top of the file moved and shown to move
+    what it says it moves.
+
 Usage:  python3 tests/test_constellation.py
         CALOFIN_LISP_ROOT=shared python3 tests/test_constellation.py
 """
@@ -805,6 +811,408 @@ def test_the_run_leaves_the_drawing_as_it_found_it():
           vm.commands[-1] == ['_.UNDO', '_End'])
 
 
+# ---------------------------------------------------------------- contingencies
+#
+# The paths a clean run never takes: Esc part way through, Back at every
+# question, input that has to be refused, a drawing that already carries
+# the layers and the block, UNDO switched off -- and the knobs at the
+# top of the file, each one moved and shown to move what it says it
+# moves.
+
+
+def esc(vm):
+    """A scripted Esc: the cancel the VM's *error* dispatch hands the
+    handler, exactly as tests/test_cancel_paths.py raises it."""
+    raise LispError('Function cancelled', vm)
+
+
+def chain(have, n=4, w=360.0, h=240.0, base=(0.0, 0.0, 0.0)):
+    """The questions up to and including the chart, as a script."""
+    return [w, h, n, list(base)] + feed(have, n)
+
+
+def test_esc_part_way_through_the_chart_leaves_nothing_behind():
+    print("\nEsc in the middle of the chart: legend gone, settings back")
+    vm = VM()
+    vm.load(LSP)
+    vm.handle_errors = True
+    have = truth(RECT)
+    vm.run('c:CONSTELLATION', [360.0, 240.0, 4, [0.0, 0.0, 0.0],
+                               "", have[(0, 1)],      # one dim given...
+                               esc])                  # ...then Esc
+    check("the cancel went through the handler, once",
+          vm.handled_errors == ['Function cancelled'])
+    circles = [e for e in vm.entities if dxf(vm, e, 0) == 'CIRCLE']
+    check("the preview was drawn and then swept away",
+          len(circles) == 4 and all(e in vm.deleted for e in circles))
+    check("the space rectangle went with it -- nothing permanent yet",
+          not live(vm))
+    check("CMDECHO is back", vm.sysvars['CMDECHO'] == 1)
+    check("the undo group was closed, through command-s",
+          vm.undo_groups == 0
+          and vm.commands.count(['_.UNDO', '_End']) == 1)
+    check("nothing was said about an error",
+          not [s for s in vm.printed if 'error' in str(s).lower()])
+    check("the preview list is empty for the next run",
+          not vm.get('cst:*preview*'))
+
+
+def test_esc_at_the_last_question_keeps_the_drawing():
+    print("\nEsc at 'does it look right' keeps the result; one U removes it")
+    vm = VM()
+    vm.load(LSP)
+    vm.handle_errors = True
+    vm.run('c:CONSTELLATION', chain(truth(RECT)) + ["", "Yes", esc])
+    check("the points stay -- the drawing is the result",
+          len(placed(vm)) == 4)
+    check("in a closed undo group", vm.undo_groups == 0)
+    check("the legend is still gone",
+          not [e for e in live(vm)
+               if vm.layer_of(e) == 'CONSTELLATION-GUIDE'])
+    check("settings back, one handled cancel",
+          vm.sysvars['CMDECHO'] == 1
+          and vm.handled_errors == ['Function cancelled'])
+
+
+def test_back_reaches_every_question_in_the_chain():
+    print("\nBack walks the chain: height, count, base, chart, arcs, outline")
+    have = truth(RECT)
+    vm = VM()
+    vm.load(LSP)
+    script = [360.0,                      # width: the first question
+              "Back", 360.0,              # height: Back re-asks the width
+              240.0,
+              "Back", 240.0,              # count: Back re-asks the height
+              4,
+              "Back", 4,                  # base: Back re-asks the count
+              [0.0, 0.0, 0.0],
+              "B",                        # first pair, chart empty: to base
+              [10.0, 20.0, 0.0]]          # a different base this time
+    script += feed(have, 4)               # a full chart closes itself...
+    script += ["B",                       # first arc, none yet: to the chart
+               "D",                       # ...which waits for D on the way back
+               "",                        # no arcs
+               "Back",                    # outline: Back re-asks the arcs
+               "",                        # no arcs, again
+               "No",                      # no outline
+               "Yes"]                     # looks right
+    vm.run('c:CONSTELLATION', script)
+    q = asked(vm)
+    # width, height, count, base, height, count, base, count, base ... --
+    # each Back re-asks the question before it, so the questions in the
+    # middle of the chain come round once per Back that lands on them
+    check("the width was asked twice", q.count("Space width (X)") == 2)
+    check("the height was asked three times",
+          q.count("Space height (Y)") == 3)
+    check("the count was asked three times",
+          q.count("How many points?") == 3)
+    check("the base was asked three times -- the last from the chart",
+          q.count("Insertion base point") == 3)
+    check("the arcs were asked three times",
+          q.count("Points on the arc") == 3)
+    check("the outline was asked twice", q.count("Draw the outline") == 2)
+    # every visit to the chart draws the legend afresh, at the base then
+    # current, and none of the three is left behind
+    circles = [e for e in vm.entities if dxf(vm, e, 0) == 'CIRCLE']
+    check("the legend was drawn three times and swept three times",
+          len(circles) == 12 and all(e in vm.deleted for e in circles))
+    box = [e for e in live(vm, 'LWPOLYLINE')
+           if vm.layer_of(e) == 'CONSTELLATION-SPACE'][0]
+    check("and the space sits at the second base point",
+          tuple(dxf(vm, box, 10)[:2]) == (10.0, 20.0))
+    check("the run finished with four points", len(placed(vm)) == 4)
+
+
+def test_back_from_the_arcs_into_a_full_chart_waits_for_done():
+    print("\nBack from the arcs into a full chart lets a dim be changed")
+    # before v1.4 a full chart closed itself the moment it was re-entered,
+    # so Back at the arcs bounced straight back to the arcs and the one
+    # reason to press it -- a dim to change -- was unreachable
+    have = truth(RECT)
+    wrong = dict(have)
+    wrong[(0, 1)] = 300.0                 # A-B typed wrong on the way through
+    vm = VM()
+    vm.load(LSP)
+    vm.run('c:CONSTELLATION', chain(wrong)
+           + ["B",                        # at the arcs: back into the chart
+              "A-B", have[(0, 1)],        # put A-B right
+              "D",                        # close it by hand
+              "", "No", "Yes"])
+    out = said(vm)
+    check("the chart closed itself once, when it filled up",
+          out.count("Every pair is given.") == 1)
+    after = asked(vm).split("Points on the arc", 1)[1]
+    check("the pair prompt came back after the arcs",
+          "Pair to dimension" in after)
+    check("the corrected A-B is what was drawn",
+          abs(math.dist(as_ring(vm, 4)[0], as_ring(vm, 4)[1]) - 240.0)
+          < 0.01)
+    check("and nothing is starred", "**" not in out)
+
+
+def test_the_count_is_kept_between_the_floor_and_the_ceiling():
+    print("\n2 and 27 points are refused; a default set out of range is clamped")
+    vm = VM()
+    vm.load(LSP)
+    vm.run('c:CONSTELLATION', [360.0, 240.0, 2, 27, 4, [0.0, 0.0, 0.0]]
+           + feed(truth(RECT), 4) + ["", "No", "Yes"])
+    out = said(vm)
+    check("both were refused, with the range",
+          out.count("Between 3 and 26 points") == 2)
+    check("and the run went on with 4", len(placed(vm)) == 4)
+    # the ceiling is the alphabet, not a second number to keep in step
+    check("the ceiling is derived from the label string",
+          vm.get('cst:*maxpts*') == 26)
+    # a default nobody can take is no default: it is clamped at the ask
+    tri = [(0.0, 400.0), (300.0, 400.0), (0.0, 0.0)]
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(setq cst:*defcount* 1)')
+    vm.run('c:CONSTELLATION', [500.0, 500.0, None, [0.0, 0.0, 0.0]]
+           + feed(truth(tri), 3) + ["", "No", "Yes"])
+    check("Enter took the floor, 3, not the 1 that was set",
+          "<3>" in asked(vm) and len(placed(vm)) == 3)
+
+
+def test_a_zero_or_negative_measurement_never_gets_past_the_prompt():
+    print("\nzero and negative distances are refused by initget itself")
+    have = truth(RECT)
+    for bad, word in ((0.0, "zero"), (-24.0, "negative")):
+        for where, script in (
+                ("the width", [bad]),
+                ("a dim", [360.0, 240.0, 4, [0.0, 0.0, 0.0], "", bad]),
+                ("a radius", chain(have) + ["A-B", bad])):
+            vm = VM()
+            vm.load(LSP)
+            try:
+                vm.run('c:CONSTELLATION', script)
+                check("%s of %s is refused" % (where, bad), False)
+            except LispError as e:
+                check("%s of %s is refused (%s)" % (where, bad, word),
+                      "%s not allowed" % word in str(e))
+
+
+def test_a_pair_that_is_not_one_is_explained_and_asked_again():
+    print("\nAZ, AA, A, ABC and 12 are not pairs of a four-point job")
+    have = truth(RECT)
+    vm = VM()
+    vm.load(LSP)
+    vm.run('c:CONSTELLATION', [360.0, 240.0, 4, [0.0, 0.0, 0.0],
+                               "AZ", "AA", "A", "ABC", "12"]  # five wrong
+           + feed(have, 4) + ["", "No", "Yes"])
+    out = said(vm)
+    check("each was refused with the reason",
+          out.count("is not a pair of these points") == 5)
+    check("naming the range and an example",
+          out.count("between A and D, like A-B.") == 5)
+    check("and the run then completed", len(placed(vm)) == 4)
+    # the same at the arc prompt: two or more of this job's points
+    vm = VM()
+    vm.load(LSP)
+    vm.run('c:CONSTELLATION', chain(have)
+           + ["A", "AE", "AA", ""] + ["No", "Yes"])
+    check("a run that is not one is refused too, three times",
+          said(vm).count("is not a run of these points") == 3)
+
+
+def test_a_pair_given_twice_keeps_the_second_answer():
+    print("\na pair given twice keeps the second answer, and Back takes that")
+    have = truth(RECT)
+    vm = VM()
+    vm.load(LSP)
+    script = [360.0, 240.0, 4, [0.0, 0.0, 0.0],
+              "", 100.0,                  # A-B, wrong
+              "", have[(0, 2)],           # A-C
+              "A-B", have[(0, 1)],        # A-B again, right
+              "B",                        # Back takes A-B off: the newest
+              "A-B", have[(0, 1)]]        # given a third time
+    for pr in ((0, 3), (1, 2), (1, 3), (2, 3)):
+        script += ["", have[pr]]
+    script += ["", "No", "Yes"]
+    vm.run('c:CONSTELLATION', script)
+    out = said(vm)
+    check("the second answer replaced the first, not joined it",
+          "(2 of 6 given)" in out and "(3 of 6 given)" in out
+          and out.count("A-B = ") == 3)
+    check("Back blanked A-B, the newest, not A-C",
+          "Stepping back one dimension - A-B is blank again" in out
+          and "A-C is blank again" not in out)
+    check("the drawing carries the right A-B",
+          abs(math.dist(as_ring(vm, 4)[0], as_ring(vm, 4)[1]) - 240.0)
+          < 0.01)
+    check("six dims given, six dimensions drawn",
+          "6 given of 6 possible" in out
+          and len(live(vm, 'DIMENSION')) == 6)
+
+
+def test_three_points_is_the_floor_and_a_triangle_comes_back():
+    print("\nthree points, three dims: the smallest job there is")
+    tri = [(0.0, 400.0), (300.0, 400.0), (0.0, 0.0)]   # 3-4-5, times 100
+    vm = run(shape=tri, w=500.0, h=500.0)
+    ring = as_ring(vm, 3)
+    worst = max(abs(math.dist(ring[i], ring[j]) - d)
+                for (i, j), d in truth(tri).items())
+    check("all three dims come back (worst %.5f)" % worst, worst < 0.01)
+    check("named A, B, and C", "Points  A, B, and C" in said(vm))
+    check("three dims, all perimeter, three dimensions",
+          len(live(vm, 'DIMENSION')) == 3)
+    check("the ring is drawn and reads clockwise",
+          shoelace(ring) < 0 and len(live(vm, 'LWPOLYLINE')) == 2)
+
+
+def layer_group(vm, name, code):
+    rec = vm.tablerecs['LAYER'][name]
+    return [g.b for g in vm.recdata[rec]
+            if isinstance(g, Dot) and g.a == code][0]
+
+
+def test_layers_take_the_colours_set_at_the_top_when_made_here():
+    print("\nthe layer colours are knobs, and apply only to layers made here")
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(setq cst:*point-color* 6 cst:*outline-color* 1 '
+             'cst:*dim-color* 5 cst:*space-color* 9 cst:*guide-color* 30)')
+    # DIMENSION already exists, in the drawing's own colour, and keeps it
+    vm.loads('(entmakex (list (cons 0 "LAYER")'
+             ' (cons 100 "AcDbSymbolTableRecord")'
+             ' (cons 100 "AcDbLayerTableRecord") (cons 2 "DIMENSION")'
+             ' (cons 70 0) (cons 62 141) (cons 6 "Continuous")))')
+    vm.run('c:CONSTELLATION', chain(truth(RECT)) + ["", "Yes", "Yes"])
+    check("POINTS was made magenta", layer_group(vm, 'POINTS', 62) == 6)
+    check("CONSTELLATION was made red",
+          layer_group(vm, 'CONSTELLATION', 62) == 1)
+    check("CONSTELLATION-SPACE took 9",
+          layer_group(vm, 'CONSTELLATION-SPACE', 62) == 9)
+    check("CONSTELLATION-GUIDE took 30",
+          layer_group(vm, 'CONSTELLATION-GUIDE', 62) == 30)
+    check("DIMENSION kept the colour it already had",
+          layer_group(vm, 'DIMENSION', 62) == 141)
+    check("and the dims went onto it regardless",
+          all(vm.layer_of(e) == 'DIMENSION' for e in live(vm, 'DIMENSION')))
+
+
+def test_a_frozen_or_switched_off_layer_is_restored_before_drawing():
+    print("\nPOINTS frozen and off is thawed and switched on, and it is said")
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(entmakex (list (cons 0 "LAYER")'
+             ' (cons 100 "AcDbSymbolTableRecord")'
+             ' (cons 100 "AcDbLayerTableRecord") (cons 2 "POINTS")'
+             ' (cons 70 1) (cons 62 -2) (cons 6 "Continuous")))')
+    vm.run('c:CONSTELLATION', chain(truth(RECT)) + ["", "No", "Yes"])
+    check("thawed", layer_group(vm, 'POINTS', 70) == 0)
+    check("switched on, its own colour kept",
+          layer_group(vm, 'POINTS', 62) == 2)
+    check("and the operator was told",
+          "Layer POINTS was off, frozen or locked - restored" in said(vm))
+    check("the points went down on it",
+          len(placed(vm)) == 4
+          and all(vm.layer_of(e) == 'POINTS' for e in live(vm, 'INSERT')))
+
+
+def test_the_block_is_made_once_and_reused_on_a_redraw():
+    print("\nab_pt is created once; a redraw and a second run reuse it")
+    have = dict(truth(RECT))
+    have[(0, 1)] = 300.0
+    vm = run(given=have, confirm="No",
+             after=["Dims", "A-B", 240.0, "D", "Yes"])
+    check("the block was announced once, on the first draw, not the redraw",
+          said(vm).count("was not in this drawing - created it") == 1)
+    vm.run('c:CONSTELLATION', [360.0, 240.0, 4, [100.0, 300.0, 0.0]]
+           + feed(truth(RECT), 4) + ["", "No", "Yes"])
+    check("a second run in the same drawing does not announce it again",
+          said(vm).count("was not in this drawing - created it") == 1)
+    check("eight points stand, four per run", len(live(vm, 'INSERT')) == 8)
+
+
+def test_undo_switched_off_means_no_group_and_no_error():
+    print("\nwith UNDO off no group is opened, none is closed, the run completes")
+    # before v1.4 the success path closed the group unconditionally, so a
+    # drawing with UNDO off ended every run in the error handler
+    vm = VM()
+    vm.load(LSP)
+    vm.sysvars['UNDOCTL'] = 0
+    vm.run('c:CONSTELLATION', chain(truth(RECT)) + ["", "No", "Yes"])
+    check("no _.UNDO command was issued at all",
+          not [c for c in vm.commands if c and c[0] == '_.UNDO'])
+    check("and the points were drawn", len(placed(vm)) == 4)
+    check("with the settings put back", vm.sysvars['CMDECHO'] == 1)
+
+
+def test_an_arc_out_of_ring_order_constrains_but_bends_nothing():
+    print("\nA-C-B is the same circle as A-B-C, with no outline segment to bend")
+    # every corner of the rectangle sits on its circumscribed circle
+    r = math.dist((120.0, 60.0), RECT[0])
+    vm = run(arcs=[("ACB", r)])
+    out = said(vm)
+    check("no star: the dims and the arc agree", "**" not in out)
+    check("the arc is reported under the run as typed", "A-C-B" in out)
+    ring = [e for e in live(vm, 'LWPOLYLINE')
+            if vm.layer_of(e) == 'CONSTELLATION'][0]
+    check("the outline carries no bulge anywhere",
+          not [g for g in vm.entdata[ring]
+               if isinstance(g, Dot) and g.a == 42])
+    # a radius shorter than half its chord has no arc at all: the centre
+    # settles on the chord and the report shows the R it had to take
+    vm = run(arcs=[("A-B", 50.0, True)])
+    out = said(vm)
+    check("an impossible radius is starred, not absorbed",
+          "**" in out and "A-B" in out.split("R given", 1)[1])
+    check("and the run still finishes with the shape drawn",
+          len(placed(vm)) == 4)
+
+
+def test_the_knobs_at_the_top_move_what_they_say_they_move():
+    print("\neach knob at the top is honoured by the code below it")
+    bad = dict(truth(BLOB))
+    bad[(0, 2)] += 3.5
+    # *flag*: the miss that earns a star
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(setq cst:*flag* 100.0)')
+    vm.run('c:CONSTELLATION', chain(bad, n=5) + ["", "No", "Yes"])
+    check("*flag* 100: the bad tape earns no star and no blame",
+          "**" not in said(vm) and "more than 100.0000" in said(vm))
+    # *def-outline*: what Enter takes at the outline question
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(setq cst:*def-outline* "No")')
+    vm.run('c:CONSTELLATION', chain(truth(RECT)) + ["", None, "Yes"])
+    check("*def-outline* No: Enter drew no ring",
+          "<No>" in asked(vm) and len(live(vm, 'LWPOLYLINE')) == 1)
+    # *texth-min*: the label floor, in drawing units
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(setq cst:*texth-min* 12.0)')
+    vm.run('c:CONSTELLATION', chain(truth(RECT)) + ["", "No", "Yes"])
+    check("*texth-min* 12: every label is 12 high, not the 6 the share gives",
+          {dxf(vm, e, 40) for e in live(vm, 'ATTRIB')} == {12.0})
+    # *dotr-min*: the marker floor
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(setq cst:*dotr-min* 9.0)')
+    vm.loads('(cst:preview 4 360.0 240.0 (list 0.0 0.0))')
+    check("*dotr-min* 9: every preview marker is 9 across, not 1.92",
+          {dxf(vm, e, 40) for e in live(vm, 'CIRCLE')} == {9.0})
+    # *over-tol*: overhang worth mentioning
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(setq cst:*over-tol* 500.0)')
+    vm.run('c:CONSTELLATION', chain(truth(RECT), w=120.0, h=120.0)
+           + ["", "No", "Yes"])
+    check("*over-tol* 500: a 240 shape in a 120 space is not called out",
+          "past the space" not in said(vm)
+          and "Every point landed inside the space" in said(vm))
+    # *point-block*: the survey block's name
+    vm = VM()
+    vm.load(LSP)
+    vm.loads('(setq cst:*point-block* "survey_pt")')
+    vm.run('c:CONSTELLATION', chain(truth(RECT)) + ["", "No", "Yes"])
+    check("*point-block*: the inserts carry the name that was set",
+          {dxf(vm, e, 2) for e in live(vm, 'INSERT')} == {'survey_pt'}
+          and 'block "survey_pt" was not in this drawing' in said(vm))
+
+
 def main():
     tier = os.environ.get('CALOFIN_LISP_ROOT') or 'lisp/ (standalone)'
     print("CONSTELLATION.lsp runtime tests -- tier: %s" % tier)
@@ -838,7 +1246,22 @@ def main():
                test_the_outline_is_optional,
                test_an_outline_that_crosses_itself_is_reported,
                test_the_space_rectangle_is_drawn_where_it_was_asked_for,
-               test_the_run_leaves_the_drawing_as_it_found_it):
+               test_the_run_leaves_the_drawing_as_it_found_it,
+               test_esc_part_way_through_the_chart_leaves_nothing_behind,
+               test_esc_at_the_last_question_keeps_the_drawing,
+               test_back_reaches_every_question_in_the_chain,
+               test_back_from_the_arcs_into_a_full_chart_waits_for_done,
+               test_the_count_is_kept_between_the_floor_and_the_ceiling,
+               test_a_zero_or_negative_measurement_never_gets_past_the_prompt,
+               test_a_pair_that_is_not_one_is_explained_and_asked_again,
+               test_a_pair_given_twice_keeps_the_second_answer,
+               test_three_points_is_the_floor_and_a_triangle_comes_back,
+               test_layers_take_the_colours_set_at_the_top_when_made_here,
+               test_a_frozen_or_switched_off_layer_is_restored_before_drawing,
+               test_the_block_is_made_once_and_reused_on_a_redraw,
+               test_undo_switched_off_means_no_group_and_no_error,
+               test_an_arc_out_of_ring_order_constrains_but_bends_nothing,
+               test_the_knobs_at_the_top_move_what_they_say_they_move):
         try:
             fn()
         except LispError as e:
