@@ -193,30 +193,70 @@ current release.
 ## Tunables
 
 Every threshold, layer name, colour, size and tolerance is a named
-`(setq altabcdef:*name* ...)` at the top of `ALTABCDEF.lsp`, under a
-`Tunables` banner, each with a note on what it does, what unit it is in
-and which way to move it. Nothing below that block carries a bare
-number.
+`(setq altabcdef:*name* ...)` in one **tunables block** at the top of
+`ALTABCDEF.lsp`, between the version banner and the first `defun`, each
+with a sentence saying what changing it does. Nothing below that block
+carries a bare number.
 
 Edit the file and `APPLOAD` it again, or `(setq altabcdef:*name* value)`
-at the command line for one session.
+at the command line for one session. Distances are in inches.
 
-| Group | What is in it |
-| --- | --- |
-| what it draws | `*frame-layer*`, `*point-layer*`, `*label-layer*` and their colours; the text sizing `*text-div*` / `*text-min*`, the marker `*marker-scale*`, the label offset `*label-off*`, the corner letters `*tag-scale*` / `*tag-gap*` / `*tag-drop*` |
-| the sheet | `*file-types*`, `*hdr-dist*`, `*hdr-name*`, `*min-tapes*` |
-| reading dirty values | `*apos-over*`, `*impossible*`, `*fractions*`, `*log-denom*` |
-| numerical | `*fuzz*`, `*solve-iters*`, `*solve-step*`, `*solve-singular*`, `*seed-singular*`, `*frame-tol*`, `*mirror-min*` |
+The layer names are this command's own on purpose: `ABCDEF` plots onto the
+shared `POINTS` layer as `ab_pt` blocks that `ABHD` and the other fitters
+read, while this one draws plain markers, so pointing it at `POINTS` would
+leave entities there that those tools would try to fit a pool through.
 
-The layer names are this command's own on purpose: `ABCDEF` plots onto
-the shared `POINTS` layer as `ab_pt` blocks that `ABHD` and the other
-fitters read, while this one draws plain markers, so pointing it at
-`POINTS` would leave entities there that those tools would try to fit a
-pool through.
+`tests/test_tunables.py` checks this table against the file itself -- every
+knob present, with the default it really has -- and
+`tests/test_altabcdef.py` asserts each one is live.
 
-`tests/test_altabcdef.py` asserts each knob is live — that changing it
-changes the drawing or the report — so one cannot quietly stop being
-wired to anything.
+### What it draws
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `altabcdef:*frame-layer*` | `"ALTABCDEF-FRAME"` | the rectangle and its corner letters |
+| `altabcdef:*frame-color*` | `1` | ...the colour it is created with (an existing layer keeps its own) |
+| `altabcdef:*point-layer*` | `"ALTABCDEF-POINTS"` | the point node and its marker circle |
+| `altabcdef:*point-color*` | `2` | ...the colour it is created with |
+| `altabcdef:*label-layer*` | `"ALTABCDEF-LABELS"` | the point names |
+| `altabcdef:*label-color*` | `3` | ...the colour it is created with |
+| `altabcdef:*text-div*` | `120.0` | text height is the longer rectangle side divided by this |
+| `altabcdef:*text-min*` | `0.5` | ...but never under this many inches |
+| `altabcdef:*marker-scale*` | `0.4` | marker circle radius, in text heights |
+| `altabcdef:*label-off*` | `1.4` | how far up and right of a point its name sits, in marker radii |
+| `altabcdef:*tag-scale*` | `1.4` | corner letters are this many text heights tall |
+| `altabcdef:*tag-gap*` | `1.0` | how far a corner letter sits out from its corner, in text heights |
+| `altabcdef:*tag-drop*` | `1.6` | ...how far below a bottom corner, which has to clear the letter height |
+
+### The sheet
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `altabcdef:*file-types*` | `"xlsx;xls;xlsm;csv"` | what the file dialog offers |
+| `altabcdef:*hdr-dist*` | `'("FROM A" "FROM B" "FROM C" "FROM D")` | header words naming the distance columns, in corner order A B C D |
+| `altabcdef:*hdr-name*` | `'("NAME" "POINT" "LABEL")` | ...and the point-name column; the first header matching any of them wins |
+| `altabcdef:*min-tapes*` | `2` | how many distances a row needs before it is plotted at all |
+
+### Reading dirty values
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `altabcdef:*apos-over*` | `1.05` | a mark-less reading over this many times the diagonal had its foot mark scanned as a digit |
+| `altabcdef:*impossible*` | `1.1` | ...and one still over this many times the diagonal is left blank as unreadable |
+| `altabcdef:*fractions*` | `'(2 4 8 16 32)` | the denominators an inch fraction may have; one not listed is never invented |
+| `altabcdef:*log-denom*` | `32` | the correction log rounds to 1/this of an inch |
+
+### Numerical
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `altabcdef:*fuzz*` | `1e-9` | two lengths closer than this are the same length |
+| `altabcdef:*solve-iters*` | `60` | most Gauss-Newton steps the fit will take (three or more distances) |
+| `altabcdef:*solve-step*` | `1e-7` | ...and the step size under which it is done |
+| `altabcdef:*solve-singular*` | `1e-12` | a normal-matrix determinant under this means the distances do not constrain the point |
+| `altabcdef:*seed-singular*` | `1e-9` | ...the same for the linear seed |
+| `altabcdef:*frame-tol*` | `0.001` | inches a side or diagonal may be out before the corner self-check aborts the run |
+| `altabcdef:*mirror-min*` | `1.0` | how far the mirror answer must sit from the one taken to count as a real second possibility |
 
 ## Tests
 

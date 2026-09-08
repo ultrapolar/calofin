@@ -45,17 +45,17 @@
 
 (vl-load-com)
 
-;;; --------------------------------------------------------------------------
-;;;  Tunables
-;;;
-;;;  Everything a drafter might reasonably want different is set HERE and
-;;;  nowhere else: the code below reads these names and carries no bare
-;;;  numbers of its own.  Each knob says what it does, what unit it is in,
-;;;  and which way to move it.  Change a value, save, APPLOAD again - or
-;;;  (setq altabcdef:*name* value) at the command line for one session.
-;;;
-;;;  Distances are in inches throughout (1 drawing unit = 1 inch).
-;;; --------------------------------------------------------------------------
+;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafter might reasonably want different is set HERE and
+;; nowhere else: the code below reads these names and carries no bare
+;; numbers of its own.  Each knob says what CHANGING it does, what unit
+;; it is in, and which way to move it.  Change a value, save, APPLOAD
+;; again - or (setq altabcdef:*name* value) at the command line for one
+;; session.  Every one of them is a row in README.md's Tunables table,
+;; and tests/test_tunables.py holds the two together.
+;;
+;; Distances are in inches throughout (1 drawing unit = 1 inch).
 
 ;; ---- what it draws ---------------------------------------------------------
 
