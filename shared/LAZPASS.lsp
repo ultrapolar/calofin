@@ -63815,6 +63815,8 @@
 ;;;  No.  LINGUTTERSCAN prints the same report and stops without
 ;;;  touching the drawing; run it first on a sheet you care about.  The
 ;;;  whole run is one undo group: a single U puts the drawing back.
+;;;  (In a drawing with undo control off there is no group to open, so
+;;;  the gut still happens but a U will not take it back in one step.)
 ;;;
 ;;;  Usage
 ;;;    Command: LINGUTTER       highlight the area before typing it and
@@ -63838,7 +63840,9 @@
 ;;;    lg:*ontol*        how far a dimension's attachment point may sit
 ;;;                      off the perimeter and still count as on it
 ;;;    lg:*snaps*        the snap ladder: how far apart two ends may be
-;;;                      and still count as one point, tried in order
+;;;                      and still count as one point, tried tightest
+;;;                      first -- sorted for you, so the order it is
+;;;                      typed in cannot change what the report claims
 ;;;    lg:*cover*        how much of the highlight's extent a traced
 ;;;                      exterior must span before it is believed
 ;;;    lg:*runpaddle*    T to run PADDLE at the end, nil to stop after
@@ -63878,24 +63882,76 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.2")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.3")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
-(setq lg:*poollayer*   "POOL")
-(setq lg:*poolcolor*   4)          ; ACI 4 = cyan, POOL's own colour
+;;; -------------------- the knobs ---------------------------------------
+;;; Everything a drawing might want changed, all in one block; nothing
+;;; settable lives anywhere else in this file.  setq any of them after
+;;; loading -- in a startup file, say.  Each is read fresh when a
+;;; command runs, so a value changed between two runs takes effect on
+;;; the second without reloading the file.  WHAT each does is here;
+;;; WHY, and what it costs to move it, is in the Notes at the head of
+;;; this file and in lisp/lingutter/README.md.
+;;;
+;;; The two STYLE lists are wildcard patterns matched against the
+;;; dimension's style name -- "CROSS DIM*" is what catches both a
+;;; drawing spelled "CROSS DIM" and this repo's "CROSS DIMENSIONS".
+;;; The two LAYER lists are whole names, no wildcards.  Both kinds are
+;;; matched with case folded, because wcmatch and member do not.
+
+(setq lg:*poollayer*   "POOL")     ; layer the traced perimeter is drawn
+                                   ; on; made if missing, and thawed /
+                                   ; switched on / unlocked if it exists
+                                   ; but cannot be drawn on
+(setq lg:*poolcolor*   4)          ; its colour when the layer has to be
+                                   ; created -- ACI 4 = cyan, POOL's own.
+                                   ; Ignored when the layer already exists
 (setq lg:*anystyles*   '("CROSS DIM*"))
+                                   ; dim styles kept WHEREVER they sit: a
+                                   ; cross dim spans the pool, so most of
+                                   ; it is nowhere near the edge
 (setq lg:*perimstyles* '("STANDARD" "SIDE STANDARD"))
-(setq lg:*keeplayers*  nil)        ; e.g. '("TITLEBLOCK") to spare one
+                                   ; dim styles kept only ON the
+                                   ; perimeter -- every attachment point
+                                   ; within lg:*ontol* of the loop.  The
+                                   ; same style on a hopper or step goes
+(setq lg:*keeplayers*  nil)        ; layers left alone entirely, even
+                                   ; inside the highlight; nil = none,
+                                   ; e.g. '("TITLEBLOCK") to spare one
 (setq lg:*skiplayers*  '("DEFPOINTS" "DIMENSION"))
-(setq lg:*ontol*       1.0)        ; drawing units; inches by default
-(setq lg:*snaps*  '(0.05 6.0 24.0)) ; snap ladder: how far apart two ends
-                                   ; may be and still be treated as one
-                                   ; node, tried tightest first
+                                   ; layers the perimeter is never traced
+                                   ; FROM.  They are still swept: this
+                                   ; keeps dimension geometry out of the
+                                   ; walk, it does not spare it
+(setq lg:*ontol*       1.0)        ; how far a dimension's attachment
+                                   ; point may sit off the perimeter and
+                                   ; still count as on it.  Drawing
+                                   ; units, so inches on these sheets
+(setq lg:*snaps*  '(0.05 6.0 24.0)) ; the snap ladder: how far apart two
+                                   ; ends may be and still be treated as
+                                   ; one node.  Tried TIGHTEST FIRST, a
+                                   ; rung at a time, and only climbed
+                                   ; when the rung below could not
+                                   ; produce an exterior covering
+                                   ; lg:*cover* of the highlight.
+                                   ; Order and junk are not yours to get
+                                   ; right -- lg:ladder sorts the list
+                                   ; and drops anything that is not a
+                                   ; tolerance above zero.  Snapping
+                                   ; MOVES a corner by up to the rung
+                                   ; that healed it, which is why the
+                                   ; report always names that rung
 (setq lg:*cover*       0.8)        ; how much of the highlight's extent a
-                                   ; traced exterior has to span to be
-                                   ; believed as the perimeter
-(setq lg:*runpaddle*   t)
+                                   ; traced exterior has to span, both
+                                   ; ways, to be believed as the
+                                   ; perimeter: a fraction, 0.8 = 80%.
+                                   ; Falling short is a warning, never a
+                                   ; veto -- see the Notes
+(setq lg:*runpaddle*   t)          ; T to hand the new perimeter to
+                                   ; PADDLE and pad it; nil to stop after
+                                   ; the gut and leave it unpadded
 
 ;;; -------------------- ask layer ---------------------------------------
 ;;; STANDARDS.md section 4, copied from the library so this file loads
@@ -63906,6 +63962,10 @@
 ;;; The sysvars this tool moves, saved in restore order -- OSMODE first,
 ;;; because object snaps are the setting the user misses most if a run is
 ;;; ever cut short partway.
+
+                                   ; Working state, NOT a knob -- it is
+                                   ; down here so the block above is
+                                   ; only ever things meant to be set
 
 ;; Unlock every named layer that is locked, and hand back the list of
 ;; those that were -- entdel refuses an entity on a locked layer, so a
@@ -63941,11 +64001,16 @@
 ;;; A segment is (p1 p2 bulge) with 2-D points, and a loop is a list of
 ;;; (x y bulge) vertices whose bulge belongs to the segment LEAVING it --
 ;;; PADDLE's shapes exactly, so a loop traced here can be handed to it.
-;;; The four readers below and lg:chain are ports of paddle--arcdata,
-;;; --lwverts, --plverts, --vts->segs, --ent-segs and --chain
-;;; (lisp/paddle/PADDLE.lsp).  LINGUTTER is a standalone file and cannot
-;;; call into PADDLE's, so tests/test_lingutter.py runs the two side by
-;;; side on the same geometry and fails when they part company.
+;;; The readers below are ports of paddle--arcdata, --area, --lwverts,
+;;; --plverts, --vts->segs and --ent-segs (lisp/paddle/PADDLE.lsp).
+;;; LINGUTTER is a standalone file and cannot call into PADDLE's, so
+;;; tests/test_lingutter.py runs the two side by side on the same
+;;; geometry and fails when they part company.
+;;;
+;;; PADDLE's --chain is NOT among them, and deliberately: chaining
+;;; segments end to end finds a loop, which is the guess this tool
+;;; exists to stop making.  What reads these segments here is the
+;;; outer-face walk below.
 
 ;; Segment data for vertex A -> B with bulge b (b /= 0):
 ;; returns (theta radius center start-tangent end-tangent)
@@ -64344,6 +64409,25 @@
   (if (> (length out) 2)
     (mapcar '(lambda (q) (list (car q) (cadr q) 0.0)) out)))
 
+;; The snap ladder as the walk needs it: numbers above zero, tightest
+;; first.  The ORDER is not the drafter's to choose -- lg:perimeter
+;; climbs a rung at a time and reports the rung that worked, and it
+;; calls the first rung "nothing had to be moved".  A ladder typed
+;; loosest-first would therefore heal a 24" gap and report that nothing
+;; moved, which is the one thing this tool promises never to be quiet
+;; about.  Sorting here makes "tightest first" true however it was
+;; typed, and drops anything that is not a usable tolerance.
+;;
+;; Nothing usable left means no snapping at all rather than no walk at
+;; all: a hairline rung still traces an outline that was drawn closed,
+;; where an empty ladder would send even a clean pool to the hull.
+(defun lg:ladder ( / out)
+  (setq out (vl-sort (vl-remove-if-not
+                       '(lambda (x) (and (numberp x) (> x 0.0)))
+                       lg:*snaps*)
+                     '<))
+  (if out out (list 1e-6)))
+
 ;; The perimeter of the highlighted geometry, and how it was arrived at.
 ;; Returns (vts (tol short)), where tol is
 ;;   nil     the exterior was walked with nothing moved,
@@ -64357,11 +64441,13 @@
 ;; no fault of its own, and answering that with a convex hull would be
 ;; worse than answering it with the pool and a word of warning.
 ;; nil when there is not enough geometry to draw a perimeter round.
-(defun lg:perimeter (segs / pts tol vts a out fall falla falltol tight)
+(defun lg:perimeter (segs / pts tol vts a out fall falla falltol tight
+                            rungs)
   (setq pts   (lg:segs-pts segs)
         falla 0.0
-        tight (car lg:*snaps*))
-  (foreach tol lg:*snaps*
+        rungs (lg:ladder)
+        tight (car rungs))
+  (foreach tol rungs
     (if (null out)
       (progn
         (setq vts (lg:exterior segs tol))
@@ -64624,7 +64710,7 @@
       (cond
         ((eq (car how) 'HULL)
          (princ (strcat "\n** No exterior could be walked at any tolerance"
-                        " up to " (rtos (last lg:*snaps*) 2 2) " - the"
+                        " up to " (rtos (last (lg:ladder)) 2 2) " - the"
                         " highlight is wrapped in its convex hull instead."
                         "  That straightens out every concave feature, so"
                         " PADDLE will find nothing to pad: close the"
@@ -64747,8 +64833,14 @@
           (setq perim (lg:draw-perim vts lg:*poollayer*))
           (lg:relock locked)
           (setq locked nil)
-          (command "_.UNDO" "_End")
-          (setq undo-open nil)
+          ;; closed only if one was opened: with undo control off there
+          ;; is no group of this command's to end, and closing one it
+          ;; never opened is an error out of the command -- the same
+          ;; guard the handler above already makes
+          (if undo-open
+            (progn
+              (command "_.UNDO" "_End")
+              (setq undo-open nil)))
           (princ (strcat "\nLINGUTTER: " (itoa (length kill))
                          " highlighted object" (lg:s (length kill))
                          " erased; the perimeter is one closed polyline"
