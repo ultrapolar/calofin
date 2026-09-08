@@ -62,25 +62,85 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.11") ; printed on load and at command start
-                             ; so a loaded routine and its releases/
-                             ; twin can never disagree
-(setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
-(setq *paddle-padsize* 36.0) ; pads are 36" x 36"
-(setq *paddle-blkfile* "24inpad.dwg") ; dwg holding the pad blocks
-(setq *paddle-maxrad* 54.0)  ; 4'-6" : largest concave radius needing pads
-(setq *paddle-layer* "PADS") ; layer pads are inserted on
-(setq *paddle-align* nil)    ; nil = pads stay parallel to the X/Y axes,
-                             ; T = rotate pads with the perimeter edge
-(setq *paddle-fuzz* 0.05)    ; max gap between segment ends when
-                             ; chaining loose lines/arcs into a loop
-(setq *paddle-cornertol* (/ (* 30.0 pi) 180.0)) ; a connection point
-                             ; has to bend MORE than 30 degrees away
-                             ; from straight to count as an inside
-                             ; corner; gentler joints are semi-straight
-(setq *paddle-arctol* (/ (* 10.0 pi) 180.0)) ; an arc whose total bend
-                             ; is 10 degrees or less is semi-straight
-                             ; too - no pads along it
+;; Every knob PADDLE has lives in this block: change a value here,
+;; save, and APPLOAD the file again.  Distances are drawing units
+;; (inches on an architectural drawing); the two angles are typed in
+;; degrees and converted to radians on the same line.  Nothing below
+;; this block is meant to be edited to change behaviour.
+
+;; Version banner.  Bump it on every change to this file: it is
+;; printed on load and at command start, and tools/release_lisp.py
+;; reads it to stamp the dated twin in releases/, so a loaded routine
+;; and its release can never disagree.
+(setq *paddle-version* "v1.12")
+
+;; --- the pad itself ---
+;; Name of the block inserted at every pad spot.  *paddle-blkfile*
+;; ships two, Pad36x36 and Pad24x24; if you switch, set
+;; *paddle-padsize* to match or the rows along arcs are spaced for
+;; the wrong pad.
+(setq *paddle-blkname* "Pad36x36")
+;; Edge of the pad in drawing units (a 36" x 36" square).  This one
+;; number sets the pitch of the flush rows along concave arcs, the
+;; collision distance in the dodge pass, the size of the fallback
+;; square block, and the wording of every message that quotes it.
+(setq *paddle-padsize* 36.0)
+;; The dwg the block definitions are imported from when the drawing
+;; does not already hold them.  Looked up with findfile, so put its
+;; folder on the AutoCAD support path or drop the dwg beside the
+;; drawing.  If it cannot be found a plain square block is made.
+(setq *paddle-blkfile* "24inpad.dwg")
+;; Layer the pads land on.  Created when missing; an existing one is
+;; thawed, unlocked and turned on so the result is visible.
+(setq *paddle-layer* "PADS")
+;; AutoCAD colour index the layer is created with.  An existing layer
+;; keeps whatever colour it already has.
+(setq *paddle-layer-color* 7)
+;; nil = every pad stays parallel to the X/Y axes (the shop standard).
+;; T   = each pad rotates to follow its stretch of perimeter instead.
+(setq *paddle-align* nil)
+
+;; --- what counts as a feature ---
+;; Largest concave radius that still needs pads, 4'-6".  Concave arcs
+;; this tight or tighter get a flush row of pads; bigger sweeps get
+;; none.
+(setq *paddle-maxrad* 54.0)
+;; A connection point (line meets line, line meets arc, a polyline
+;; vertex) counts as a sharp inside corner only when the perimeter
+;; bends MORE than this many degrees away from straight, into the
+;; pool, at that one point.  Gentler joints - drafting kinks, a wall
+;; drawn as several nearly-collinear pieces, the mouth of a shallow
+;; alcove - are semi-straight and get no pad.  Edit the 30.0; the
+;; rest of the line converts it to radians.
+(setq *paddle-cornertol* (/ (* 30.0 pi) 180.0))
+;; A concave arc counts as a feature only when its total bend is MORE
+;; than this many degrees; a gentler sweep is a semi-straight line
+;; however tight its radius.  Judged separately from corners on
+;; purpose: a curve earns its row of pads more easily than a joint
+;; earns one pad.  Edit the 10.0.
+(setq *paddle-arctol* (/ (* 10.0 pi) 180.0))
+
+;; --- reading the perimeter ---
+;; Largest gap between the end of one loose line/arc and the start of
+;; the next that still counts as touching when PADDLE chains them into
+;; a loop.  Segments shorter than this are dropped as slivers (a
+;; doubled polyline vertex, a zero-length line), which is also what
+;; keeps a corner drawn with a duplicate vertex from being missed.
+(setq *paddle-fuzz* 0.05)
+
+;; --- TUTORIALPADDLE ---
+;; Layer the tutorial draws its labelled sample perimeter on, and the
+;; colour index it is given.  Created if missing, recoloured either
+;; way, and left behind unless the demo is erased at the end.
+(setq *paddle-demo-layer* "PADDLE-DEMO")
+(setq *paddle-demo-color* 3)
+
+;; -------------------------- text helper ----------------------------
+;; A length as inches with the mark, 36.0 -> 36" -- every message that
+;; quotes the pad size goes through this so *paddle-padsize* is the
+;; only place it is written.
+(defun paddle--in (n)
+  (strcat (rtos n 2 (if (equal n (float (fix n)) 1e-9) 0 2)) "\""))
 
 ;; ------------------------ 2D vector helpers ------------------------
 (defun paddle--sub (a b) (list (- (car a) (car b)) (- (cadr a) (cadr b))))
@@ -495,11 +555,22 @@
   (vla-put-Layer obj *paddle-layer*)
   obj)
 
+;; Loops that enclose no area - two lines lying on top of each other,
+;; a polyline that doubles straight back on itself - have no inside
+;; for anything to be concave toward, and the sign of their zero area
+;; is float noise, so the 180-degree reversal at each end could be
+;; called an inside corner on the strength of a -0.0.  Returns LOOPS
+;; without them.  (Auto-detect never picks one, since it keeps the
+;; largest area; an explicit selection would have padded it.)
+(defun paddle--solid-loops (loops)
+  (vl-remove-if '(lambda (l) (< (abs (paddle--area l)) 1e-6)) loops))
+
 ;; --------------------------- selection -----------------------------
 ;; Turns a selection set (or the whole current tab when SS is nil) into
 ;; a list of closed perimeter loops (vertex lists). Auto-detect keeps
 ;; only the largest loop.
-(defun paddle--perimeters (ss / auto i segs res loops nopen best bestarea a)
+(defun paddle--perimeters (ss / auto i segs res loops nopen nflat best
+                              bestarea a)
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
@@ -511,13 +582,18 @@
           (setq segs (append segs (paddle--ent-segs (ssname ss i)))
                 i    (1+ i)))
         (setq res   (paddle--chain segs)
-              loops (car res)
+              loops (paddle--solid-loops (car res))
+              nflat (- (length (car res)) (length loops))
               nopen (cdr res))
         (if (> nopen 0)
             (princ (strcat "\nPADDLE: ignored " (itoa nopen)
                            " open chain(s) that never close back on themselves"
                            " (check for gaps; chaining tolerance is "
                            (rtos *paddle-fuzz* 2 2) ").")))
+        (if (> nflat 0)
+            (princ (strcat "\nPADDLE: ignored " (itoa nflat)
+                           " closed loop(s) that enclose no area"
+                           " (lines doubling back on themselves).")))
         (if auto
             (progn ; keep only the biggest closed loop
               (setq bestarea 0.0)
@@ -549,7 +625,8 @@
         space (vla-get-Block (vla-get-ActiveLayout doc)))
 
   (princ (strcat "\nPADDLE " *paddle-version*))
-  (princ (strcat "\nPADDLE - 36\" pads at concave perimeter features (R <= "
+  (princ (strcat "\nPADDLE - " (paddle--in *paddle-padsize*)
+                 " pads at concave perimeter features (R <= "
                  (rtos *paddle-maxrad* 4 0) " and inside corners)."))
 
   (setq padsize *paddle-padsize*
@@ -574,7 +651,7 @@
         (vla-StartUndoMark doc)
         (setq mark-open T)
         (paddle--ensure-block doc blkname padsize)
-        (paddle--ensure-layer *paddle-layer* 7)
+        (paddle--ensure-layer *paddle-layer* *paddle-layer-color*)
         (setq delta (paddle--block-delta space blkname))
         (foreach vts perims
           (if (> (length vts) 1)
@@ -591,7 +668,8 @@
         (if allpads
             (progn
               (princ (strcat "\nPADDLE: inserted " (itoa (length allpads))
-                             " 36\" pad(s) on layer \"" *paddle-layer* "\" ("
+                             " " (paddle--in padsize) " pad(s) on layer \""
+                             *paddle-layer* "\" ("
                              (itoa ncorner) " at inside corners, "
                              (itoa narc) " along concave arcs)."))
               (if (> ndodge 0)
@@ -672,7 +750,8 @@
   (princ (strcat "\n    than " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
                  " degrees in total, gets a row of pads: the middle of the"))
   (princ "\n    curve is always covered, then pads march flush toward both ends")
-  (princ "\n    (exactly 36\" on center, touching, never overlapping) - a blocky")
+  (princ (strcat "\n    (exactly " (paddle--in *paddle-padsize*)
+                 " on center, touching, never overlapping) - a blocky"))
   (princ "\n    version of the curve. The extreme ends of the radius may stay")
   (princ "\n    uncovered; that is by design. Bigger concave radii, and curves")
   (princ (strcat "\n    bending " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
@@ -681,7 +760,8 @@
   (princ "\n    point stays dead-center on that point - it never moves. The pads")
   (princ "\n    along curves do the dodging: they slide over to sit flush")
   (princ "\n    alongside, or drop out when a neighbour already covers their spot.")
-  (princ (strcat "\n 5. RESULT. 36\" x 36\" pads (block " *paddle-blkname*
+  (princ (strcat "\n 5. RESULT. " (paddle--in *paddle-padsize*) " x "
+                 (paddle--in *paddle-padsize*) " pads (block " *paddle-blkname*
                  ", imported from"))
   (princ (strcat "\n    " *paddle-blkfile* " if needed), always square to the"
                  " X/Y axes, on layer"))
@@ -690,8 +770,8 @@
   (initget "Yes No")
   (if (/= (getkword "\nDraw a live demonstration in this drawing? [Yes/No] <Yes>: ") "No")
       (progn
-        (setq lay "PADDLE-DEMO")
-        (vla-put-Color (vla-Add (vla-get-Layers doc) lay) 3)
+        (setq lay *paddle-demo-layer*)
+        (vla-put-Color (vla-Add (vla-get-Layers doc) lay) *paddle-demo-color*)
         (setq base (getpoint "\nPick a clear spot for the demo <0,0>: "))
         (if (not base) (setq base '(0.0 0.0 0.0)))
         (setq pl   (paddle--demo-pline base lay)
@@ -719,7 +799,7 @@
                                    *paddle-padsize*)
               blk   *paddle-blkname*)
         (paddle--ensure-block doc blk *paddle-padsize*)
-        (paddle--ensure-layer *paddle-layer* 7)
+        (paddle--ensure-layer *paddle-layer* *paddle-layer-color*)
         (setq delta (paddle--block-delta space blk)
               ncorner 0 narc 0)
         (princ "\nStep 1 - inside corners: one pad centered on each corner of the slot.")
@@ -729,7 +809,8 @@
                      (setq ents (cons (entlast) ents) ncorner (1+ ncorner)))))
         (paddle--pause)
         (princ "\nStep 2 - the R4'-0\" curve: first pad centered on the middle of the")
-        (princ "\nradius, the rest flush at 36\" on center, stair-stepping the curve.")
+        (princ (strcat "\nradius, the rest flush at " (paddle--in *paddle-padsize*)
+                       " on center, stair-stepping the curve."))
         (princ "\nNote the R6'-0\" curve and the kink get nothing.")
         (foreach pad feats
           (if (= (caddr pad) "arc")

@@ -121,6 +121,32 @@ It is **drawn, not photographed**. `ChartSheet` renders
 own, and there is nothing for a human to nudge against artwork. Resize
 the palette and the chart is redrawn rather than stretched.
 
+Beyond the measurements it asks the questions that are not
+measurements, from `LAZFORM`'s own tables: the **in-square** toggle
+(a keyword to POOL, not a yes/no), the **bottom type** from
+`lzf:*btypes*`, the mode dropdowns from `lzf:*picks*` — each placed by
+that table's own `section` word — the **cross dims**, and the **corner
+rows**.
+
+Two of those carry rules worth knowing:
+
+- **The cross dims are not asked in square.** A cross dim is a tape run
+  corner to corner, and it is what tells POOL how far *out* of square
+  the pool is. `lzf:*picks*` says the same thing by tying the mode
+  dropdown to that section: in square there are no cross dims, so there
+  is no mode to pick either.
+- **A corner row is not always one corner.** In square, one row answers
+  a collective key covering all four and its siblings answer nothing;
+  out of square, each corner is asked for itself. The catalog carries
+  both target lists per row, the toggle picks which, and the answer is
+  fanned out to every target — with a size riding under the *target's*
+  key, not the row's. That is `lzf:cornerpairs`' rule, and it is why
+  the table has two lists rather than one.
+
+All the rows are shown either way. Which one is live is settled at Draw;
+a row that vanished as a toggle moved would take whatever was typed in
+it with it.
+
 Every key gets a row in the column beside the chart as well, including
 the ones with a box on the drawing. That is `lzf:*charts*`' own
 decision and it is kept for its reason: a sheet read as two kinds of
@@ -327,8 +353,16 @@ appear only on bottoms POOL cannot draw. `B` is on every section but is
 never an input here — the overall length is settled by the plan view
 before a bottom is asked for.
 
-The Pool tab covers the **bottom only**. Shape, corners and cross dims
-are still answered at the command line.
+**This tab stays a photograph on purpose.** The Pool chart tab asks for
+every one of these depths too — they are the chart's column keys — and
+it asks for the bottom type as a dropdown. What it cannot do is show
+you the **section**, and choosing a bottom is exactly the moment you
+want to look at one. The twelve panels are the paper's twelve, with the
+six POOL cannot draw shown disabled and the reason in a tooltip, so the
+screen matches the chart on the wall.
+
+So: pick a bottom here by eye, or set it on the chart tab if you already
+know which one it is. Either sends the same `btype` keyword.
 
 ## Blank versus missing
 

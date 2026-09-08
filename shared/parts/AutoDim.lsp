@@ -99,6 +99,20 @@
 ;;;    * Steps in side view      -> "STANDARD INCHES", depths and the
 ;;;                                 overall alike, in AUTODIM and in
 ;;;                                 AUTODIMSIDEPOV
+;;;    Those are the defaults: the names, and the cut-off under which a
+;;;    dim drops into inches, are settings (ad:*style-plan* and the
+;;;    rest, ad:*short-feet*).
+;;;
+;;;  Settings:
+;;;    Everything a drafter might want different - the style names, the
+;;;    layer, how far out the dims sit, what counts as the same place or
+;;;    the same size, the Typ. counts and wording, the side-view test's
+;;;    thresholds, which entity types are selected - is a global in the
+;;;    SETTINGS block straight after the version banner, each with its
+;;;    default and a note on what changing it does.  Nothing below that
+;;;    block repeats a value from it.  (setq ...) one after this file
+;;;    has loaded - in acaddoc.lsp, say - to change it for one machine
+;;;    without editing the file.
 ;;;
 ;;;  One dim per size - the "Typ." rule:
 ;;;    A measurement that repeats around the perimeter is called out
@@ -111,28 +125,35 @@
 ;;;        of matching curves reads better dimensioned where each one
 ;;;        is, so those are left alone
 ;;;    Two lengths, or two radii, within a sixteenth of an inch count
-;;;    as the same measurement.  The counts and the wording are
-;;;    ad:*typ-lines*, ad:*typ-curves* and ad:*typ-note* at the top of
-;;;    the file.
+;;;    as the same measurement (ad:*same-inches*).  The counts and the
+;;;    wording are ad:*typ-lines*, ad:*typ-curves* and ad:*typ-note* in
+;;;    the SETTINGS block.
 ;;;
 ;;;  One dimension per place:
 ;;;    Before placing anything the tool reads every linear, aligned and
 ;;;    radius dimension already in model space.  A dim is skipped when
 ;;;    one is already there for that place - same two extension line
-;;;    origins (either way round) and a dimension line within a foot of
-;;;    where the new one would sit, or for a radius dim, the same
-;;;    centre and the same radius.  So a second run over a plan that has
-;;;    grown dimensions the new geometry only, while the overall dims,
-;;;    two feet further out, are still placed even when a side of the
-;;;    plan happens to measure the same thing.
+;;;    origins (either way round) and a dimension line within
+;;;    ad:*band-feet* of where the new one would sit, or for a radius
+;;;    dim, the same centre and the same radius.  So a second run over a
+;;;    plan that has grown dimensions the new geometry only.
+;;;    The two overall dims are recognised differently, because they are
+;;;    not placed where the run before placed them - they stand clear of
+;;;    whatever dims are around the plan, so the second run's would sit
+;;;    ad:*over-feet* further out again.  What is looked for there is a
+;;;    LINEAR dim across the same two corners on the same side, at any
+;;;    distance: that is the overall dim, and the perimeter dim of a
+;;;    rectangular side spanning the same two corners is an ALIGNED one,
+;;;    so it is still dimensioned as well.
 ;;;
 ;;;  Notes:
-;;;    * All dims go on the current layer.
+;;;    * All dims go on the current layer unless ad:*layer* names one;
+;;;      AUTODIMSIDEPOV's go on ad:*steps-layer* ("DIMENSION").
 ;;;    * Ellipses and splines have no one radius to call out, so the
 ;;;      perimeter step passes over them.
 ;;;    * Perimeter dims are placed at least one foot away from the
 ;;;      perimeter, heading outwards (or 2 x DIMTXT x DIMSCALE when
-;;;      that is larger).
+;;;      that is larger) - ad:*perim-feet* and ad:*text-offsets*.
 ;;;    * Equal step widths are dimensioned once instead of once per
 ;;;      tread; a width dim is repeated only when the width changes.
 ;;;    * A dim chain breaks where a span is already dimensioned, and
@@ -142,18 +163,216 @@
 ;;;      are erased once their dimension chain has been created.
 ;;;    * Answering No to the floor dims question skips straight to the
 ;;;      overall dims; Back at it re-opens the stairs.
-;;;    * Break points closer together than 0.0001 drawing units are
-;;;      merged so no zero-length dimensions are created.
+;;;    * Break points closer together than 0.0001 drawing units
+;;;      (ad:*merge-tol*) are merged so no zero-length dimensions are
+;;;      created.
+;;;    * With undo recording switched off (UNDOCTL bit 1 clear) no undo
+;;;      group is opened or closed; the run goes ahead without one.
 ;;; ======================================================================
 
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.8")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
+
+;;; ======================================================================
+;;;  SETTINGS
+;;;
+;;;  Everything about this tool a drafter might want to change is set
+;;;  here and nowhere else: the code below reads these globals and never
+;;;  repeats their values.  To change one for a drawing or a machine,
+;;;  (setq ...) it after this file has loaded - in acaddoc.lsp, or at
+;;;  the command line - rather than editing the file; to change it for
+;;;  everyone, edit the value here and bump the version banner.
+;;;
+;;;  Every distance is given in FEET and converted through INSUNITS, so
+;;;  a millimetre drawing gets the same foot as an inch one.  The one
+;;;  tolerance given in inches says so in its name; the two given in
+;;;  drawing units are the tiny ones.  Numbers that are NOT here - the
+;;;  1e-8 zero-length guards, the 1e-6 ray offset - are numerical
+;;;  epsilons, not settings.
+;;; ======================================================================
+
+;; ---- units -----------------------------------------------------------
+
+(setq ad:*foot-when-unitless* 12.0)  ; drawing units in one foot when
+                                     ; INSUNITS is 0 (unitless) or a
+                                     ; unit ad:onefoot does not know: 12
+                                     ; for a drawing in inches, 304.8 for
+                                     ; one in millimetres.  A drawing
+                                     ; whose INSUNITS is set is read
+                                     ; from that instead
+
+;; ---- dimension styles ------------------------------------------------
+;; Each dimension picks its style by what it measures, not by which step
+;; placed it.  A style the drawing does not have falls back to the one
+;; that was current when the command started, and that one is restored
+;; when the command finishes.
+
+(setq ad:*style-plan*  "SIDE STANDARD")    ; perimeter sides, arc radii
+                                           ; and the stairs (AUTODIM
+                                           ; steps 2 and 3, STAIRDIM)
+(setq ad:*style-floor* "STANDARD")         ; the floor dims chains
+                                           ; (step 4, FLOORDIM)
+(setq ad:*style-over*  "STANDARD")         ; the two overall dims
+                                           ; (step 5)
+(setq ad:*style-short* "STANDARD INCHES")  ; anything measuring under
+                                           ; ad:*short-feet*, whichever
+                                           ; of the three above it would
+                                           ; otherwise have been
+(setq ad:*style-steps* "STANDARD INCHES")  ; steps drawn in side view:
+                                           ; the depth of every step and
+                                           ; the overall, in AUTODIM's
+                                           ; side-view route and in
+                                           ; AUTODIMSIDEPOV alike (a
+                                           ; depth under ad:*short-feet*
+                                           ; still drops to the short
+                                           ; style, which is the same
+                                           ; one by default)
+(setq ad:*short-feet*  1.0)                ; the cut-off for the short
+                                           ; style, in feet: a dim
+                                           ; measuring LESS than this
+                                           ; goes in ad:*style-short*.
+                                           ; Exactly this much does not.
+                                           ; The stairs prompt quotes it
+                                           ; in whole inches
+
+;; ---- layers ----------------------------------------------------------
+
+(setq ad:*layer*       nil)          ; layer AUTODIM, STAIRDIM and
+                                     ; FLOORDIM put their dims on: nil =
+                                     ; whatever layer is current when the
+                                     ; command runs (DIMLAYER still wins
+                                     ; when the drawing sets it), or a
+                                     ; name - created, or thawed, unlocked
+                                     ; and switched on, on the way in, and
+                                     ; the user's layer put back after
+(setq ad:*steps-layer* "DIMENSION")  ; the same for AUTODIMSIDEPOV, whose
+                                     ; reference drawing keeps its step
+                                     ; dims on a layer of their own; nil
+                                     ; = the current layer here too
+(setq ad:*layer-color* 7)            ; ACI colour a layer gets when it has
+                                     ; to be created (7 = white/black)
+
+;; ---- where the dims sit ----------------------------------------------
+;; The text offset is ad:*text-offsets* x DIMTXT x DIMSCALE.  The feet
+;; figures below are floors under it: at a scale where the text offset
+;; comes out larger, the text offset is what is used, so a small-scale
+;; drawing never has its dims crammed against the plan.
+
+(setq ad:*text-offsets* 2.0)   ; how many text heights a dim stands off
+                               ; its geometry.  The stair dims use
+                               ; exactly this; every other dim uses the
+                               ; larger of this and its feet figure
+(setq ad:*perim-feet*   1.0)   ; perimeter dims sit at least this far
+                               ; outside the plan, heading outwards
+(setq ad:*over-feet*    2.0)   ; the overall width sits this far above
+                               ; the topmost dim around the plan, the
+                               ; overall height this far left of the
+                               ; left-most one
+(setq ad:*near-feet*    4.0)   ; how far from the plan a dimension may
+                               ; sit and still count as one of the plan's
+                               ; own when the overall dims look for the
+                               ; outermost: further out it is another
+                               ; plan's, or the title block's, and is
+                               ; ignored.  In feet, or in text offsets
+                               ; when those are bigger
+(setq ad:*steps-feet*   2.0)   ; side-view step dims sit this far clear
+                               ; of the flight, and the overall the same
+                               ; again further out
+
+;; ---- what counts as the same -----------------------------------------
+
+(setq ad:*same-inches* 0.0625) ; INCHES: two points this close (a
+                               ; sixteenth) are the same place and two
+                               ; measurements this close are the same
+                               ; size.  The "dimensioned already" test
+                               ; reads it on extension line origins,
+                               ; centres and radii; the Typ. rule groups
+                               ; sides and radii by it
+(setq ad:*band-feet*   1.0)    ; two dims across the same two points are
+                               ; the same dim when their dimension lines
+                               ; are within this of each other.  A foot:
+                               ; a re-run, or a dim nudged by hand, is
+                               ; still recognised, while the overall
+                               ; dims, ad:*over-feet* further out, are
+                               ; dims of their own.  Keep it under
+                               ; ad:*over-feet* or the overall dims of a
+                               ; rectangle will be taken for its sides
+(setq ad:*angle-tol*   1e-3)   ; RADIANS: two lines within this of
+                               ; parallel are parallel (finding the
+                               ; treads), and a line within this of
+                               ; horizontal or vertical is square (the
+                               ; side-view test, and which lines are
+                               ; risers)
+(setq ad:*merge-tol*   1e-4)   ; DRAWING UNITS: two points closer than
+                               ; this are one.  Break points on a floor
+                               ; dims line are merged by it so no
+                               ; zero-length dim is made, a pick this
+                               ; close to an object is on the object,
+                               ; treads this close together are one
+                               ; tread, and step widths within it are
+                               ; equal
+
+;; ---- one dim per size: the Typ. rule ---------------------------------
+;; A measurement that repeats around the perimeter is called out once,
+;; on the first one found, and the rest are left to that note.
+
+(setq ad:*typ-note*   " Typ.")  ; appended to the one dim that stands
+                                ; for its group - the wording POOL.LSP
+                                ; already uses for the same job
+(setq ad:*typ-lines*  2)        ; equal straight sides it takes before
+                                ; one is noted and the rest left to it;
+                                ; below this count every one is
+                                ; dimensioned where it is
+(setq ad:*typ-curves* 4)        ; the same for equal radii.  Higher than
+                                ; the sides on purpose: a pair or a trio
+                                ; of matching curves reads better
+                                ; dimensioned where each one is
+
+;; ---- recognising steps drawn in side view ----------------------------
+;; AUTODIM takes its side-view route only when the step-1 selection
+;; passes every test here; anything failing one is dimensioned as a
+;; plan, so loosening these is what could make a plan read as steps.
+
+(setq ad:*square-share* 0.75)  ; at least this share of the straight
+                               ; segments must run square - horizontal
+                               ; or vertical - so a sloping pool floor
+                               ; at the foot of the flight still passes
+(setq ad:*min-risers*   2)     ; risers it takes to be a flight.  1
+                               ; would let a single riser and tread
+                               ; pass - and with it a plan that has one
+                               ; short vertical in it
+(setq ad:*wall-share*   0.9)   ; a vertical at least this share of the
+                               ; profile's full height is the back wall,
+                               ; not a riser - which is also what stops
+                               ; a rectangular plan reading as a
+                               ; two-step flight
+(setq ad:*join-share*   0.01)  ; how far apart, as a share of the
+                               ; profile's height (never less than
+                               ; ad:*same-inches*), the foot of one riser
+                               ; and the top of the next may be and
+                               ; still join up into one staircase
+
+;; ---- what the highlights keep ----------------------------------------
+;; DXF entity-type lists, comma-separated as ssget takes them.
+
+(setq ad:*geom-types*  "LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE,INSERT")
+                               ; what makes up a plan: the step-1
+                               ; highlight keeps these, only these block
+                               ; a perimeter ray, and these are what a
+                               ; floor dims chain breaks at
+(setq ad:*stair-types* "LINE,LWPOLYLINE")
+                               ; what the stairs highlight (step 3,
+                               ; STAIRDIM) and the side-view highlight
+                               ; (AUTODIMSIDEPOV) keep - the tool reads
+                               ; straight segments off these alone
+
+;;; ================================================== end of SETTINGS
 
 ;; ---------------------------------------------------------------- helpers
 
@@ -167,22 +386,36 @@
   (setq d (abs (- a b)))
   (min d (abs (- pi d))))
 
-;; perpendicular offset used for the automatic dims
+;; perpendicular offset used for the automatic dims: ad:*text-offsets*
+;; text heights at DIMSCALE (a DIMSCALE of 0 - paper-space scaling -
+;; reads as 1)
 (defun ad:dimoff ()
-  (* 2.0
+  (* ad:*text-offsets*
      (getvar "DIMTXT")
      (if (zerop (getvar "DIMSCALE")) 1.0 (getvar "DIMSCALE"))))
 
-;; one foot expressed in the current drawing units (INSUNITS),
-;; assuming inches when unitless or unknown
+;; one foot expressed in the current drawing units (INSUNITS), falling
+;; back on ad:*foot-when-unitless* when unitless or unknown
 (defun ad:onefoot (/ u)
   (setq u (getvar "INSUNITS"))
-  (cond ((= u 2) 1.0)                   ; feet
+  (cond ((= u 1) 12.0)                  ; inches
+        ((= u 2) 1.0)                   ; feet
         ((= u 4) 304.8)                 ; millimetres
         ((= u 5) 30.48)                 ; centimetres
         ((= u 6) 0.3048)                ; metres
         ((= u 10) (/ 1.0 3.0))          ; yards
-        (t 12.0)))                      ; inches / unitless
+        (t ad:*foot-when-unitless*)))   ; unitless / unknown
+
+;; a distance given in feet, or in inches, in the drawing's own units
+(defun ad:feet (n) (* n (ad:onefoot)))
+(defun ad:inches (n) (* n (/ (ad:onefoot) 12.0)))
+
+;; a setting's number for a prompt: whole numbers without a decimal
+;; point, anything else to one place
+(defun ad:numstr (n)
+  (if (equal n (float (fix n)) 1e-9)
+    (itoa (fix n))
+    (rtos n 2 1)))
 
 ;; ------------------------------------------------------------- asking
 
@@ -224,33 +457,26 @@
 
 ;; make that layer current, creating or repairing it on the way
 (defun ad:setlayer (name)
-  (setvar "CLAYER" (ad:ensure-layer name 7)))
+  (setvar "CLAYER" (ad:ensure-layer name ad:*layer-color*)))
+
+;; make the layer a setting names current, and return the layer that
+;; was current so the caller can put it back - nil when the setting is
+;; nil and the dims go on whatever layer is current
+(defun ad:enterlayer (name / old)
+  (if name
+    (progn
+      (setq old (getvar "CLAYER"))
+      (ad:setlayer name)
+      old)))
 
 ;; ------------------------------------------------ dimension styles
 
-;; The styles the tool asks for.  The perimeter and the stairs go in
-;; ad:*style-plan*, the floor dims chains in ad:*style-floor* and the
-;; two overall dims in ad:*style-over*; whichever of those it is,
-;; anything measuring less than a foot goes in ad:*style-short*
-;; instead, a sub-foot dim reading better in inches.
-(setq ad:*style-plan*  "SIDE STANDARD"
-      ad:*style-floor* "STANDARD"
-      ad:*style-short* "STANDARD INCHES"
-      ad:*style-over*  "STANDARD")
+;; The style names are settings - ad:*style-plan*, ad:*style-floor*,
+;; ad:*style-over*, ad:*style-short* and ad:*style-steps* in the
+;; SETTINGS block at the top of the file - and so is the cut-off under
+;; which a dim drops into ad:*style-short*, ad:*short-feet*.
 
-;; Repeated measurements are called out once and noted, rather than
-;; dimensioned over and over.  ad:*typ-note* is the suffix the one dim
-;; that stands for its group carries - the wording POOL.LSP already
-;; uses for the same job.  The two counts are how many equal ones it
-;; takes before that happens: two equal straight sides are enough,
-;; while equal radii are left alone until there are more than three of
-;; them, a pair or a trio of matching curves reading better dimensioned
-;; where they are.
-(setq ad:*typ-note*   " Typ."
-      ad:*typ-lines*  2
-      ad:*typ-curves* 4)
-
-;; per-run state, all reset by ad:begin
+;; per-run state, all reset by ad:begin - not settings
 (setq ad:*dims*      nil    ; the places that already carry a dimension
       ad:*rads*      nil    ; the arcs that already carry a radius dim
       ad:*skipped*   0      ; how many dims this run left to what was there
@@ -272,42 +498,53 @@
       (ad:setdimstyle want)
       (setq ad:*curstyle* want))))
 
+;; the length under which a dim drops into ad:*style-short*
+(defun ad:shortlimit () (ad:feet ad:*short-feet*))
+
 ;; the style a dimension of this measured length belongs in
 (defun ad:styfor (len base)
-  (if (< len (ad:onefoot)) ad:*style-short* base))
+  (if (< len (ad:shortlimit)) ad:*style-short* base))
 
 ;; ---------------------------------------- dimensions already in place
 
 ;; how close two extension line origins have to be before they count as
-;; the same place - a sixteenth of an inch, in the drawing's own units
-(defun ad:dupetol () (/ (ad:onefoot) 192.0))
+;; the same place - ad:*same-inches*, in the drawing's own units
+(defun ad:dupetol () (ad:inches ad:*same-inches*))
 
 ;; how close two dimension lines have to be before dims across the same
-;; two points count as the same dim.  A foot: enough that a re-run, or
-;; a dim nudged by hand, is recognised, and small enough that the
-;; overall dims - two feet further out - are still their own dims.
-(defun ad:bandtol () (ad:onefoot))
+;; two points count as the same dim - ad:*band-feet*, in the drawing's
+;; own units
+(defun ad:bandtol () (ad:feet ad:*band-feet*))
 
 ;; every dimension in model space
 (defun ad:dimss ()
   (ssget "_X" '((0 . "DIMENSION") (410 . "Model"))))
 
 ;; a linear / aligned dimension as (origin1 origin2 dimline-point) -
-;; nil for any other kind (radial, angular, ordinate), which has no
-;; pair of extension line origins to compare
+;; nil for any other kind.  The kind is read off group 70's low three
+;; bits (0 rotated, 1 aligned): an angular or ordinate dim writes
+;; groups 13 and 14 too, but not the pair of extension line origins
+;; this tool places, so it must not block a place
 (defun ad:dimpts (en / el)
   (setq el (entget en))
   (if (and el
            (= "DIMENSION" (cdr (assoc 0 el)))
+           (assoc 70 el)
+           (member (logand 7 (cdr (assoc 70 el))) '(0 1))
            (assoc 13 el)
            (assoc 14 el)
            (assoc 10 el))
-    (list (cdr (assoc 13 el)) (cdr (assoc 14 el)) (cdr (assoc 10 el)))))
+    (list (cdr (assoc 13 el)) (cdr (assoc 14 el)) (cdr (assoc 10 el))
+          (logand 7 (cdr (assoc 70 el))))))
 
-;; note that p1-p2 now carries a dimension whose dim line runs through
-;; loc, so nothing later in the same run doubles up on it
-(defun ad:remember (p1 p2 loc)
-  (setq ad:*dims* (cons (list p1 p2 loc) ad:*dims*)))
+;; note that p1-p2 now carries a dimension of this kind whose dim line
+;; runs through loc, so nothing later in the same run doubles up on it.
+;; The kind is DXF 70's low bits, as ad:dimpts reads them back off the
+;; drawing: 0 for the rotated / linear dims ad:lindim places, 1 for the
+;; aligned ones - which is how the overall dims are told apart from a
+;; perimeter dim across the same two corners.
+(defun ad:remember (p1 p2 loc kind)
+  (setq ad:*dims* (cons (list p1 p2 loc kind) ad:*dims*)))
 
 ;; a radius dimension as (centre radius), nil for anything else.  Only
 ;; radius dims are read: a diameter dim writes two points on the circle
@@ -403,6 +640,33 @@
       (setq hit t)))
   hit)
 
+;; T when p1-p2 already carries a LINEAR dimension standing off the
+;; same side as loc - the "is the overall dim already there" test.
+;; ad:dimmed-p's band cannot serve here: an overall dim is placed clear
+;; of the dims already around the plan, so a second run would put its
+;; own ad:*over-feet* further out again and never recognise the first,
+;; leaving a fresh pair stacked outside the old one every time.  What
+;; the test must NOT match is the perimeter dim of a rectangular side,
+;; which spans the very same two corners - and that one is ALIGNED,
+;; which is the difference read here.  A linear dim of the same span
+;; the drafter placed themselves counts too, and is meant to: it is
+;; the overall dim, however far out they put it.
+(defun ad:overdimmed-p (p1 p2 loc / tol sgn lst q hit)
+  (setq tol (ad:dupetol)
+        sgn (if (< (ad:lineoff p1 p2 loc) 0.0) -1.0 1.0)
+        lst ad:*dims*)
+  (while (and lst (not hit))
+    (setq q   (car lst)
+          lst (cdr lst))
+    (if (and (equal 0 (cadddr q))
+             (or (and (ad:samept (car q) p1 tol)
+                      (ad:samept (cadr q) p2 tol))
+                 (and (ad:samept (car q) p2 tol)
+                      (ad:samept (cadr q) p1 tol)))
+             (> (* sgn (ad:lineoff p1 p2 (caddr q))) 0.0))
+      (setq hit t)))
+  hit)
+
 ;; Split records whose car is the measurement into groups of equal
 ;; measurement, within tol.  Order is kept both ways: a group sits
 ;; where its first member was found, and its members keep the order
@@ -469,22 +733,40 @@
     ((ad:dimmed-p p1 p2 loc) (ad:skip))
     (t (ad:usestyle (ad:styfor len base))
        (ad:aligned p1 p2 loc note)
-       (ad:remember p1 p2 loc)
+       (ad:remember p1 p2 loc 1)
        1)))
 
-;; the same for a horizontal ("_H") or vertical ("_V") linear dim - the
-;; length that picks the style is the one the dim reads out, not the
-;; distance between the two points
+;; the length a linear dim reads out - its span along the dimension
+;; line's own axis, not the distance between the two points
+(defun ad:linlen (p1 p2 dir)
+  (if (= dir "_V")
+    (abs (- (cadr p1) (cadr p2)))
+    (abs (- (car p1) (car p2)))))
+
+;; the same as ad:putaligned for a horizontal ("_H") or vertical ("_V")
+;; linear dim, the style picked by the length the dim reads out
 (defun ad:putlinear (p1 p2 loc dir base / len)
-  (setq len (if (= dir "_V")
-              (abs (- (cadr p1) (cadr p2)))
-              (abs (- (car p1) (car p2)))))
+  (setq len (ad:linlen p1 p2 dir))
   (cond
     ((<= len 1e-8) 0)
     ((ad:dimmed-p p1 p2 loc) (ad:skip))
     (t (ad:usestyle (ad:styfor len base))
        (ad:lindim p1 p2 loc dir)
-       (ad:remember p1 p2 loc)
+       (ad:remember p1 p2 loc 0)
+       1)))
+
+;; and the same again for one of the two overall dims, which is "already
+;; there" on the strength of ad:overdimmed-p rather than the band: it is
+;; not placed where the last run placed it, so only the span, the side
+;; and the kind can recognise it.
+(defun ad:putoverdim (p1 p2 loc dir base / len)
+  (setq len (ad:linlen p1 p2 dir))
+  (cond
+    ((<= len 1e-8) 0)
+    ((ad:overdimmed-p p1 p2 loc) (ad:skip))
+    (t (ad:usestyle (ad:styfor len base))
+       (ad:lindim p1 p2 loc dir)
+       (ad:remember p1 p2 loc 0)
        1)))
 
 ;; place one radius dimension on the arc en, its leader reaching from
@@ -513,14 +795,14 @@
 (defun ad:putrun (pts loc sty / p prev)
   (ad:usestyle sty)
   (ad:aligned (car pts) (cadr pts) loc "")
-  (ad:remember (car pts) (cadr pts) loc)
+  (ad:remember (car pts) (cadr pts) loc 1)
   (if (cddr pts)
     (progn
       (command "_.DIMCONTINUE")
       (setq prev (cadr pts))
       (foreach p (cddr pts)
         (command "_non" (trans p 0 1))
-        (ad:remember prev p loc)
+        (ad:remember prev p loc 1)
         (setq prev p))
       (command "" "")))
   (1- (length pts)))
@@ -695,9 +977,13 @@
   n)
 
 ;; dxf filter for geometry that can be dimensioned / block a ray /
-;; break a dim chain
+;; break a dim chain - ad:*geom-types*
 (defun ad:geomfilter ()
-  '((0 . "LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE,INSERT")))
+  (list (cons 0 ad:*geom-types*)))
+
+;; dxf filter for a stairs or side-view highlight - ad:*stair-types*
+(defun ad:stairfilter ()
+  (list (cons 0 ad:*stair-types*)))
 
 ;; everything in model space matching the geometry filter
 (defun ad:geomss ()
@@ -778,8 +1064,9 @@
     (progn
       (setq diag (* 2.0 (distance (car box) (cadr box)))
             eps  (* 1e-6 diag)
-            ;; at least a foot away from the perimeter, heading outwards
-            off  (max (ad:dimoff) (ad:onefoot)))
+            ;; at least ad:*perim-feet* away from the perimeter,
+            ;; heading outwards
+            off  (max (ad:dimoff) (ad:feet ad:*perim-feet*)))
       ;; the straight sides
       (foreach g (ad:groupsame (ad:perimsegs ss diag eps off) (ad:dupetol))
         (if (>= (length g) ad:*typ-lines*)
@@ -818,10 +1105,11 @@
     (prompt (strcat "\nHighlight the stairs (window or pick the tread"
                     " lines), then press Enter."
                     "\nStep widths and the distances between steps both"
-                    " get dimensioned - anything under 12\" in"
-                    " \"STANDARD INCHES\"."
+                    " get dimensioned - anything under "
+                    (ad:numstr (* 12.0 ad:*short-feet*)) "\" in \""
+                    ad:*style-short* "\"."
                     "  Press Enter without selecting to skip.")))
-  (setq ss  (if ss0 ss0 (ssget '((0 . "LINE,LWPOLYLINE"))))
+  (setq ss  (if ss0 ss0 (ssget (ad:stairfilter)))
         cnt 0)
   (if ss
     (progn
@@ -834,7 +1122,7 @@
               hit nil
               out '())
         (foreach g groups
-          (if (and (not hit) (< (ad:angdiff a (car g)) 1e-3))
+          (if (and (not hit) (< (ad:angdiff a (car g)) ad:*angle-tol*))
             (setq g   (cons (car g) (cons s (cdr g)))
                   hit t))
           (setq out (cons g out)))
@@ -864,7 +1152,7 @@
           (setq lastw nil)
           (foreach td tds
             (setq w (distance (cadr td) (caddr td)))
-            (if (or (null lastw) (> (abs (- w lastw)) 1e-4))
+            (if (or (null lastw) (> (abs (- w lastw)) ad:*merge-tol*))
               (progn
                 (setq mid (cal:midn (cadr td) (caddr td))
                       loc (mapcar '(lambda (m vv) (- m (* off vv))) mid v))
@@ -875,7 +1163,7 @@
           (setq ts   '()
                 prev nil)
           (foreach td tds
-            (if (or (null prev) (> (- (car td) prev) 1e-4))
+            (if (or (null prev) (> (- (car td) prev) ad:*merge-tol*))
               (setq ts   (cons (car td) ts)
                     prev (car td))))
           (setq ts (reverse ts))
@@ -921,56 +1209,60 @@
 ;; every dim runs object to object.
 ;; Returns the number of dimensions placed.
 (defun ad:floorchain (p1 p2 loc obstacles / ssx lin lobj len dir ds d x
-                                            starton endon chain prev)
+                                            tol starton endon chain prev)
   ;; as in ad:sideclear: entlast is ours only when the entmake worked.
   ;; Here it matters twice over - the entity is pulled OUT of the
   ;; caller's selection set below and then erased, so a failed entmake
   ;; would have quietly taken one of the user's objects with it.
   (setq ssx (if obstacles obstacles (ad:geomss))
         lin (if (entmake (list '(0 . "LINE") (cons 10 p1) (cons 11 p2)))
-              (entlast)))
+              (entlast))
+        tol ad:*merge-tol*)
   (if (null lin)
-    (progn (prompt "\nCould not draw the measuring line - floor dims skipped.")
-           (setq ds nil)))
-  (if lin
+    (progn
+      (prompt "\nCould not draw the measuring line - floor dims skipped.")
+      0)
     (progn
       (setq lobj (vlax-ename->vla-object lin))
-      (if (and ssx (ssmemb lin ssx)) (ssdel lin ssx))))
-  (setq len (distance p1 p2)
-        dir (mapcar '(lambda (b c) (/ (- c b) len)) p1 p2)
-        ds  '())
-  ;; distance of every crossing object along the line, noting crossings
-  ;; sitting right on the picked start / end points
-  (foreach x (if lin (ad:xpoints lobj ssx))
-    (setq d (apply '+ (mapcar '* dir (mapcar '- x p1))))
-    (cond ((< (abs d) 1e-4)           (setq starton t))
-          ((< (abs (- d len)) 1e-4)   (setq endon t))
-          ((and (> d 1e-4) (< d (- len 1e-4))) (setq ds (cons d ds)))))
-  (if lin (entdel lin))
-  ;; sorted break points, near-coincident ones merged
-  (setq chain (list p1)
-        prev  0.0)
-  (foreach d (vl-sort ds '<)
-    (if (> (- d prev) 1e-4)
-      (setq chain (cons (mapcar '(lambda (b v) (+ b (* d v))) p1 dir) chain)
-            prev  d)))
-  (setq chain (reverse (cons p2 chain)))
-  ;; an end the user did not land on an object is pulled back to the
-  ;; last object before it, so every dim in the chain runs object to
-  ;; object and none hangs off the end into open drawing
-  (if (not starton)
-    (progn
-      (setq chain (cdr chain))
-      (prompt (strcat "\n  (start point was not on an object - the chain"
-                      " starts at the first one the line crosses)"))))
-  (if (and (cdr chain) (not endon))
-    (progn
-      (setq chain (reverse (cdr (reverse chain))))
-      (prompt (strcat "\n  (end point was not on an object - the chain"
-                      " stops at the last one the line crosses)"))))
-  (if (cdr chain)
-    (ad:dimchain chain loc ad:*style-floor*)
-    0))
+      (if (and ssx (ssmemb lin ssx)) (ssdel lin ssx))
+      (setq len (distance p1 p2)
+            dir (mapcar '(lambda (b c) (/ (- c b) len)) p1 p2)
+            ds  '())
+      ;; distance of every crossing object along the line, noting
+      ;; crossings sitting right on the picked start / end points
+      (foreach x (ad:xpoints lobj ssx)
+        (setq d (apply '+ (mapcar '* dir (mapcar '- x p1))))
+        (cond ((< (abs d) tol)                   (setq starton t))
+              ((< (abs (- d len)) tol)           (setq endon t))
+              ((and (> d tol) (< d (- len tol))) (setq ds (cons d ds)))))
+      (entdel lin)
+      ;; sorted break points, near-coincident ones merged
+      (setq chain (list p1)
+            prev  0.0)
+      (foreach d (vl-sort ds '<)
+        (if (> (- d prev) tol)
+          (setq chain (cons (mapcar '(lambda (b v) (+ b (* d v))) p1 dir)
+                            chain)
+                prev  d)))
+      (setq chain (reverse (cons p2 chain)))
+      ;; an end the user did not land on an object is pulled back to
+      ;; the last object before it, so every dim in the chain runs
+      ;; object to object and none hangs off the end into open drawing
+      (if (not starton)
+        (progn
+          (setq chain (cdr chain))
+          (prompt (strcat "\n  (start point was not on an object - the"
+                          " chain starts at the first one the line"
+                          " crosses)"))))
+      (if (and (cdr chain) (not endon))
+        (progn
+          (setq chain (reverse (cdr (reverse chain))))
+          (prompt (strcat "\n  (end point was not on an object - the"
+                          " chain stops at the last one the line"
+                          " crosses)"))))
+      (if (cdr chain)
+        (ad:dimchain chain loc ad:*style-floor*)
+        0))))
 
 ;; erase everything drawn after entity MARK (nil = an empty drawing) -
 ;; the rollback when a Back re-opens an earlier dimensioning step.  The
@@ -1052,7 +1344,7 @@
   (setq box (cal:bbox-ss plan))
   (if box
     (progn
-      (setq mrg  (max (* 4.0 (ad:onefoot)) (* 4.0 (ad:dimoff)))
+      (setq mrg  (* ad:*near-feet* (max (ad:onefoot) (ad:dimoff)))
             near (list (mapcar '(lambda (v) (- v mrg)) (car box))
                        (mapcar '(lambda (v) (+ v mrg)) (cadr box)))
             mn   (car box)
@@ -1069,32 +1361,32 @@
                   mx (mapcar 'max mx (cadr b))))))
       (list mn mx))))
 
-;; the two overall dims, both in the "STANDARD" style: the plan's full
-;; width about two feet above the topmost dimension around it, and its
-;; full height about two feet to the left of the left-most one.  Both
+;; the two overall dims, both in ad:*style-over*: the plan's full width
+;; ad:*over-feet* above the topmost dimension around it, and its full
+;; height ad:*over-feet* to the left of the left-most one.  Both
 ;; extents are read before either dim goes in, so the first one placed
 ;; cannot push the second further out.
 ;; Returns how many were placed (0, 1 or 2 - one already there is not
-;; repeated).
+;; repeated, however far out the run that placed it put it).
 (defun ad:overall (plan / box out gap x0 y0 x1 y1 cnt)
   (setq cnt 0
         box (cal:bbox-ss plan))
   (if box
     (progn
       (setq out (ad:dimextents plan)
-            gap (* 2.0 (ad:onefoot))
+            gap (ad:feet ad:*over-feet*)
             x0  (car  (car box))
             y0  (cadr (car box))
             x1  (car  (cadr box))
             y1  (cadr (cadr box)))
-      ;; overall width, sitting two feet above the topmost dim
-      (setq cnt (+ cnt (ad:putlinear
+      ;; overall width, sitting ad:*over-feet* above the topmost dim
+      (setq cnt (+ cnt (ad:putoverdim
                          (list x0 y1 0.0)
                          (list x1 y1 0.0)
                          (list (* 0.5 (+ x0 x1)) (+ (cadr (cadr out)) gap) 0.0)
                          "_H" ad:*style-over*)))
-      ;; overall height, sitting two feet left of the left-most dim
-      (setq cnt (+ cnt (ad:putlinear
+      ;; overall height, sitting ad:*over-feet* left of the left-most dim
+      (setq cnt (+ cnt (ad:putoverdim
                          (list x0 y0 0.0)
                          (list x0 y1 0.0)
                          (list (- (car (car out)) gap) (* 0.5 (+ y0 y1)) 0.0)
@@ -1108,8 +1400,8 @@
 (defun ad:risers (ss / s out)
   (setq out '())
   (foreach s (ad:allsegs ss)
-    (if (and (< (ad:angdiff (ad:segang s) (* 0.5 pi)) 1e-3)
-             (> (abs (- (cadr (car s)) (cadr (cadr s)))) 1e-4))
+    (if (and (< (ad:angdiff (ad:segang s) (* 0.5 pi)) ad:*angle-tol*)
+             (> (abs (- (cadr (car s)) (cadr (cadr s)))) ad:*merge-tol*))
       (setq out (cons (if (> (cadr (car s)) (cadr (cadr s)))
                         s
                         (list (cadr s) (car s)))
@@ -1142,15 +1434,18 @@
 ;; side view rather than a plan?  It does when
 ;;   * nothing in it is curved - no arc, circle, ellipse, spline,
 ;;     polyline bulge or block;
-;;   * three quarters or more of its straight segments run square, so a
-;;     sloping pool floor at the foot of the flight is still allowed;
-;;   * it has two or more risers and at least one tread per gap
-;;     between them;
+;;   * ad:*square-share* (three quarters) or more of its straight
+;;     segments run square, so a sloping pool floor at the foot of the
+;;     flight is still allowed;
+;;   * it has ad:*min-risers* (two) or more risers and at least one
+;;     tread per gap between them;
 ;;   * and the risers form a connected staircase across the drawing,
-;;     each starting where the one before it finished.
-;; A vertical as tall as the whole profile is the back wall, not a
-;; step, and is left out of that reckoning - which is also what stops a
-;; rectangular plan reading as a two-step flight.
+;;     each starting where the one before it finished, within
+;;     ad:*join-share* of the profile's height.
+;; A vertical ad:*wall-share* of the whole profile's height or taller
+;; is the back wall, not a step, and is left out of that reckoning -
+;; which is also what stops a rectangular plan reading as a two-step
+;; flight.
 ;; Returns the risers, top down, or nil.
 (defun ad:stepprofile-p (ss / segs s pp vert horz nsq ymin ymax hgt
                               tol risers r)
@@ -1160,9 +1455,9 @@
         ymin nil
         ymax nil)
   (foreach s segs
-    (cond ((< (ad:angdiff (ad:segang s) (* 0.5 pi)) 1e-3)
+    (cond ((< (ad:angdiff (ad:segang s) (* 0.5 pi)) ad:*angle-tol*)
            (setq vert (cons s vert)))
-          ((< (ad:angdiff (ad:segang s) 0.0) 1e-3)
+          ((< (ad:angdiff (ad:segang s) 0.0) ad:*angle-tol*)
            (setq horz (cons s horz))))
     (foreach pp s
       (setq ymin (if ymin (min ymin (cadr pp)) (cadr pp))
@@ -1171,22 +1466,22 @@
         hgt (if ymin (- ymax ymin) 0.0))
   (if (and (> hgt 1e-8)
            (zerop (ad:curves ss))
-           (>= (length vert) 2)
+           (>= (length vert) ad:*min-risers*)
            (>= (length horz) 1)
-           (>= (* 4 nsq) (* 3 (length segs))))
+           (>= nsq (* ad:*square-share* (length segs))))
     (progn
       ;; the risers, a full-height back wall left out
-      (setq tol    (max (ad:dupetol) (* 0.01 hgt))
+      (setq tol    (max (ad:dupetol) (* ad:*join-share* hgt))
             risers '())
       (foreach s vert
         (setq r (if (> (cadr (car s)) (cadr (cadr s)))
                   s
                   (list (cadr s) (car s))))
-        (if (< (- (cadr (car r)) (cadr (cadr r))) (* 0.9 hgt))
+        (if (< (- (cadr (car r)) (cadr (cadr r))) (* ad:*wall-share* hgt))
           (setq risers (cons r risers))))
       (setq risers (vl-sort risers
                             '(lambda (a b) (< (car (car a)) (car (car b))))))
-      (if (and (cdr risers)
+      (if (and (>= (length risers) ad:*min-risers*)
                (>= (length horz) (1- (length risers)))
                (or (ad:stairlike-p risers tol)
                    (ad:stairlike-p (reverse risers) tol)))
@@ -1201,7 +1496,7 @@
 ;; Returns the number of dimensions placed.
 (defun ad:dimsteps (chain side stack base / clear xs xdim edge loc
                                             cnt nris prev pb)
-  (setq clear (max (ad:dimoff) (* 2.0 (ad:onefoot)))
+  (setq clear (max (ad:dimoff) (ad:feet ad:*steps-feet*))
         cnt   0
         nris  0
         edge  nil
@@ -1212,7 +1507,7 @@
                   (if (> side 0.0) (apply 'max xs) (apply 'min xs)))
           edge xdim))
   (foreach pb (cdr chain)
-    (if (> (abs (- (cadr prev) (cadr pb))) 1e-4)
+    (if (> (abs (- (cadr prev) (cadr pb))) ad:*merge-tol*)
       (progn
         (if (not stack)
           (setq xdim (+ (* side clear)
@@ -1300,10 +1595,11 @@
            (setq nf2 (if (numberp v) v 0))
            (setq stage 7))))))
   (prompt (strcat "\n=== AUTODIM step 5 of 5: overall dims ==="
-                  "\nPlacing the overall width about 2ft above the"
-                  " topmost dim and the overall height about 2ft to"
-                  " the left of the left-most one - no input"
-                  " needed..."))
+                  "\nPlacing the overall width about "
+                  (ad:numstr ad:*over-feet*) "ft above the topmost dim"
+                  " and the overall height about "
+                  (ad:numstr ad:*over-feet*) "ft to the left of the"
+                  " left-most one - no input needed..."))
   (setq nover (ad:overall plan))
   (prompt (strcat "\n" (itoa nover) " overall dimension(s) placed."))
   ;; the run's total, for AUTODIM's sign-off line
@@ -1317,15 +1613,15 @@
 (defun ad:runsteps (risers / n)
   (prompt (strcat "\n=== AUTODIM: that is a side view of steps ==="
                   "\nDimensioning the depth of every step, to the right"
-                  " of the flight in \"" ad:*style-short* "\", and the"
+                  " of the flight in \"" ad:*style-steps* "\", and the"
                   " overall depth further right again - no input"
                   " needed..."))
-  (setq n (ad:dimsteps (ad:stepchain risers) 1.0 T ad:*style-short*))
+  (setq n (ad:dimsteps (ad:stepchain risers) 1.0 T ad:*style-steps*))
   (prompt (strcat "\n" (itoa n) " step dimension(s) placed."))
   ;; the run's total, for AUTODIM's sign-off line
   n)
 
-(defun c:AUTODIM (/ *error* oldcmd olddim plan risers n undo-open)
+(defun c:AUTODIM (/ *error* oldcmd olddim oldlay plan risers n undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -1333,6 +1629,7 @@
     (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
@@ -1362,12 +1659,16 @@
         (progn
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
+      (setq oldlay (ad:enterlayer ad:*layer*))
       (setq n (if (setq risers (ad:stepprofile-p plan))
                 (ad:runsteps risers)
                 (ad:runplan plan)))
       (ad:skipreport)
       (ad:usestyle olddim)
-      (command "_.UNDO" "_End")
+      (if oldlay (setvar "CLAYER" oldlay))
+      ;; only close the group that was opened - with undo off there is
+      ;; none, and an _End then errors out of the command
+      (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
       (setvar "CMDECHO" oldcmd)
       (prompt (strcat "\nAUTODIM finished - "
@@ -1375,7 +1676,7 @@
                       " dimension(s) placed."))))
   (princ))
 
-(defun c:STAIRDIM (/ *error* oldcmd olddim n ss0 undo-open)
+(defun c:STAIRDIM (/ *error* oldcmd olddim oldlay n ss0 undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -1383,6 +1684,7 @@
     (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
@@ -1391,7 +1693,7 @@
         olddim (getvar "DIMSTYLE"))
   ;; a pickfirst selection if there is one, grabbed before the undo
   ;; group's command clears it - nil makes ad:dimstairs ask
-  (setq ss0 (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
+  (setq ss0 (ssget "_I" (ad:stairfilter)))
   (setvar "CMDECHO" 0)
   (ad:begin)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1400,16 +1702,18 @@
     (progn
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
+  (setq oldlay (ad:enterlayer ad:*layer*))
   (setq n (ad:dimstairs ss0))
   (prompt (strcat "\n" (itoa n) " stair dimension(s) placed."))
   (ad:skipreport)
   (ad:usestyle olddim)
-  (command "_.UNDO" "_End")
+  (if oldlay (setvar "CLAYER" oldlay))
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   (princ))
 
-(defun c:FLOORDIM (/ *error* oldcmd olddim n undo-open)
+(defun c:FLOORDIM (/ *error* oldcmd olddim oldlay n undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -1417,6 +1721,7 @@
     (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
@@ -1431,12 +1736,14 @@
     (progn
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
+  (setq oldlay (ad:enterlayer ad:*layer*))
   (setq n (ad:getfloor "Floor dims" nil nil))
   (prompt (strcat "\n" (if (numberp n) (itoa n) "0")
                   " floor dimension(s) placed."))
   (ad:skipreport)
   (ad:usestyle olddim)
-  (command "_.UNDO" "_End")
+  (if oldlay (setvar "CLAYER" oldlay))
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   (princ))
@@ -1445,10 +1752,11 @@
 ;; every riser gets a vertical dimension placed beside its step,
 ;; stepping down the flight with the nosing corners as extension line
 ;; origins, plus one overall height dimension further out.  The dims
-;; are created on layer "DIMENSION" in the "STANDARD INCHES" style to
-;; match the reference drawing - a riser is under a foot anyway, so
-;; that is the style the length rule asks for too.  A riser that is
-;; dimensioned already is left alone, as everywhere else.
+;; are created on layer ad:*steps-layer* ("DIMENSION") in the
+;; ad:*style-steps* style ("STANDARD INCHES") to match the reference
+;; drawing - a riser is under a foot anyway, so that is the style the
+;; length rule asks for too.  A riser that is dimensioned already is
+;; left alone, as everywhere else.
 (defun c:AUTODIMSIDEPOV (/ *error* oldcmd olddim oldlay ss risers chain
                             sx cnt undo-open)
   (defun *error* (msg)
@@ -1464,7 +1772,7 @@
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
+  (setq ss (ssget "_I" (ad:stairfilter)))
   (if (null ss)
     (progn
       (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side"
@@ -1472,13 +1780,12 @@
                       " step, plus the overall height."
                       "\nHighlight the side view of the steps, then press"
                       " Enter."))
-      (setq ss (ssget '((0 . "LINE,LWPOLYLINE"))))))
+      (setq ss (ssget (ad:stairfilter)))))
   (if (null ss)
     (prompt "\nNothing highlighted - AUTODIMSIDEPOV cancelled.")
     (progn
       (setq oldcmd (getvar "CMDECHO")
-            olddim (getvar "DIMSTYLE")
-            oldlay (getvar "CLAYER"))
+            olddim (getvar "DIMSTYLE"))
       (setvar "CMDECHO" 0)
       (ad:begin)
       ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1487,7 +1794,7 @@
         (progn
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
-      (ad:setlayer "DIMENSION")
+      (setq oldlay (ad:enterlayer ad:*steps-layer*))
       ;; told these are steps, so every vertical is taken as a riser -
       ;; no staircase test here, unlike AUTODIM's own side-view branch
       (setq risers (ad:risers ss))
@@ -1498,12 +1805,12 @@
           (setq chain (ad:stepchain risers)
                 ;; dims go on the high side of the steps
                 sx    (if (>= (car (car chain)) (car (last chain))) 1.0 -1.0)
-                cnt   (ad:dimsteps chain sx nil ad:*style-short*))
+                cnt   (ad:dimsteps chain sx nil ad:*style-steps*))
           (prompt (strcat "\n" (itoa cnt) " step dimension(s) placed."))
           (ad:skipreport)))
       (ad:usestyle olddim)
-      (setvar "CLAYER" oldlay)
-      (command "_.UNDO" "_End")
+      (if oldlay (setvar "CLAYER" oldlay))
+      (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
       (setvar "CMDECHO" oldcmd)))
   (princ))

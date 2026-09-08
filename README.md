@@ -344,7 +344,7 @@ design it records (D1-D6) is what got built.
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns, and special forms given the wrong number of arguments (a four-argument `(if ...)` parses fine and dies at the command line) |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
 | `gen_ui_data.py` | Writes the palette's `Generated/CommandCatalog.g.vb` from `lzp:*captions*` / `lzp:*groups*` plus `ui/calofin_net/blurbs.txt`. `--check` fails when the file on disk is not what a fresh run would write, the same contract `releases/` is held to |
-| `gen_ui_charts.py` | Writes the palette's `Generated/ChartCatalog.g.vb` - the vector charts `LAZFORM`, `LAZSPA` and `LAZSTEP` draw, plus LAZSPA's corner rows, second-outline keys, dropdowns and treatments - out of `lzf:*charts*`, `lzs:*charts*`, `lzt:chart` and the four `lzs:*` tables, read through `tests/lispvm.py`. Arcs are flattened by the Lisp's own helper, so the palette draws the same oval the panel does with no arc arithmetic of its own |
+| `gen_ui_charts.py` | Writes the palette's `Generated/ChartCatalog.g.vb` - the vector charts `LAZFORM`, `LAZSPA` and `LAZSTEP` draw, plus the tables that are not geometry: LAZFORM's cross dims, mode dropdowns, corner rows, bottom types and in-square keywords, and LAZSPA's corner rows, second-outline keys, dropdowns and treatments - out of `lzf:*charts*`, `lzs:*charts*`, `lzt:chart` and the four `lzs:*` tables, read through `tests/lispvm.py`. Arcs are flattened by the Lisp's own helper, so the palette draws the same oval the panel does with no arc arithmetic of its own |
 | `check_vb.py` | Static check over the VB palette, for a tree with no VB compiler: blocks opened and closed by the right closer, quotes and parens balanced per logical line, and every member and constructor arity of the assembly's OWN types resolved - which is what holds the hand-written palette to the generated catalog |
 | `check_registry.py` | Every place a tool has to be registered - panel caption and placement, loader slot, README counts, the palette catalog and its probe list - with every count computed rather than typed; `--fix` repairs what is not editorial |
 
@@ -423,6 +423,14 @@ python3 tests/test_cornerstp_geometry.py
 python3 tests/test_cornerstp_bench.py   # CORNERSTP's bench, run in lispvm
 python3 tests/test_cornerstp_profile.py # the side profile all three draw
 python3 tests/test_normiestep_corner.py # NORMIESTEP corner mode, run in lispvm
+python3 tests/test_steps_settings.py  # the step routines' tunables - every
+                                      # knob wired up and moving the drawing,
+                                      # each reader falling back to the value
+                                      # its settings block sets - and the
+                                      # contingencies: UNDO off, no dim
+                                      # styles, an undrawable dim layer, a
+                                      # frozen layer, AUTOBEAD absent, and a
+                                      # selection that cannot be a run
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter
 python3 tests/test_cloud_mesher.py    # point cloud mesher
@@ -467,6 +475,11 @@ python3 tests/test_chart_form.py      # the palette's chart form against what it
                                       # must agree with: the DCL forms' recall
                                       # store, the wire it asks about a bad box,
                                       # and the sheet it draws
+python3 tests/test_tunables.py        # the four GUI files' knobs: all in the
+                                      # block at the top, each saying what
+                                      # changing it does, each a row in the
+                                      # README, and the ones the palette shares
+                                      # spelled the same on both surfaces
 python3 tests/test_cancel_paths.py    # every headline command cancelled at its
                                       # first prompt: the handler runs, settings
                                       # come back, no group or error mode left

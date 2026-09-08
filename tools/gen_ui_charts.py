@@ -245,6 +245,54 @@ def read_spa_extras():
     return lists, treatments, sized, gap, sheets
 
 
+def read_pool_extras():
+    """LAZFORM's tables that are not the chart: the cross dims, the
+    keyword dropdowns, the corner rows, the bottom types.
+
+    Kept separate from Chart for the same reason LAZSPA's are -- these
+    tables are per ROUTINE, and the two routines do not agree on their
+    shape.  A pool corner row carries TWO target lists, one for in
+    square and one for out, because in square a single answer covers
+    four corners; a spa corner row is one corner and nothing else.
+    """
+    vm = vm_for(LISP_DIR / "lazform" / "LAZFORM.lsp")
+    src = read(LISP_DIR / "lazform" / "LAZFORM.lsp")
+
+    treatments = [str(v) for v in vm.globals["lzf:*ctreat*"]]
+    sized = []
+    for i, word in enumerate(treatments):
+        vm.loads("(setq t:*s* (lzf:csized %d))" % i)
+        if vm.globals["t:*s*"]:
+            sized.append(word)
+
+    btypes = [str(v) for v in vm.globals["lzf:*btypes*"]]
+
+    #: the two words the in-square toggle sends, from lzf:poolform
+    m = re.search(r"\(cons 'insq \(if insq \"(\w+)\" \"(\w+)\"\)\)", src)
+    insq = (m.group(1), m.group(2)) if m else ("Insquare", "Outofsquare")
+
+    sheets = []
+    for c in vm.globals["lzf:*charts*"]:
+        key = str(c[0])
+        vm.loads('(setq t:*c* (lzf:chart "%s"))' % key)
+        vm.loads("(setq t:*x* (lzf:cross t:*c*))")
+        vm.loads("(setq t:*p* (lzf:picks t:*c*))")
+        vm.loads("(setq t:*co* (lzf:corners t:*c*))")
+        sheets.append({
+            "key": key,
+            "cross": [(str(d[0]), str(d[1]))
+                      for d in (vm.globals["t:*x*"] or [])],
+            "picks": [(str(d[0]), str(d[1]), str(d[2]),
+                       [str(v) for v in d[3]])
+                      for d in (vm.globals["t:*p*"] or [])],
+            "corners": [(str(d[0]), str(d[1]),
+                         [str(x) for x in (d[2] or [])],
+                         [str(x) for x in (d[3] or [])])
+                        for d in (vm.globals["t:*co*"] or [])],
+        })
+    return treatments, sized, btypes, insq, sheets
+
+
 # ------------------------------------------------------------ emitting
 
 def vbstr(s):
@@ -402,6 +450,149 @@ def spa_block(lists, treatments, sized, gap, sheets):
                        "            "))
         L[-1] += ")" + ("," if i < len(sheets) - 1 else "")
     add("    }")
+    return L
+
+
+def pool_block(treatments, sized, btypes, insq, sheets):
+    """The LAZFORM-only tables."""
+    L = []
+    add = L.append
+    add("")
+    add("    ''' <summary>lzf:*ctreat*: what a pool corner can be. This")
+    add("    ''' one IS the canonical set -- STANDARDS.md section 2 --")
+    add("    ''' unlike the spa sheet, which offers the drawing legend and")
+    add("    ''' lets SPA normalise it.</summary>")
+    add("    Public Shared ReadOnly PoolTreatments As String() = {%s}"
+        % ", ".join(vbstr(t) for t in treatments))
+    add("")
+    add("    ''' <summary>The pool treatments that carry a size, asked of")
+    add("    ''' lzf:csized.</summary>")
+    add("    Public Shared ReadOnly PoolSizedTreatments As String() = {%s}"
+        % ", ".join(vbstr(t) for t in sized))
+    add("")
+    add("    ''' <summary>lzf:*btypes*: the six bottoms POOL draws. The")
+    add("    ''' shape chart shows twelve; the other six have no keyword")
+    add("    ''' and are not offered.</summary>")
+    add("    Public Shared ReadOnly PoolBottomTypes As String() = {%s}"
+        % ", ".join(vbstr(t) for t in btypes))
+    add("")
+    add("    ''' <summary>The two words the in-square toggle sends. It is")
+    add("    ''' not a yes/no: POOL reads a keyword.</summary>")
+    add("    Public Const InSquare As String = %s" % vbstr(insq[0]))
+    add("    Public Const OutOfSquare As String = %s" % vbstr(insq[1]))
+    add("")
+    add("    ''' <summary>One keyword dropdown on a pool sheet. SECTION is")
+    add("    ''' lzf:*picks*' own: \"cross\" ties the dropdown to the cross")
+    add("    ''' dims -- in square there are none, so there is no mode to")
+    add("    ''' pick either -- and \"run\" is a question in its own")
+    add("    ''' right.</summary>")
+    add("    Public Structure PoolPick")
+    add("        Public ReadOnly Key As String")
+    add("        Public ReadOnly Label As String")
+    add("        Public ReadOnly Section As String")
+    add("        Public ReadOnly Options As String()")
+    add("")
+    add("        Public Sub New(key As String, label As String,")
+    add("                       section As String, options As String())")
+    add("            Me.Key = key")
+    add("            Me.Label = label")
+    add("            Me.Section = section")
+    add("            Me.Options = options")
+    add("        End Sub")
+    add("    End Structure")
+    add("")
+    add("    ''' <summary>One corner ROW on a pool sheet, which is not")
+    add("    ''' always one corner.")
+    add("    '''")
+    add("    ''' <para>The answer is fanned out to every target: each gets")
+    add("    ''' &lt;target&gt;-ty and, when the treatment carries one,")
+    add("    ''' &lt;target&gt;-sz. WHICH targets depends on the in-square")
+    add("    ''' toggle, because in square one answer covers all four")
+    add("    ''' corners and out of square each is asked for itself -- so a")
+    add("    ''' row can have targets in one state and NONE in the other,")
+    add("    ''' and a row with none sends nothing at all.</para></summary>")
+    add("    Public Structure PoolCornerRow")
+    add("        Public ReadOnly Stem As String")
+    add("        Public ReadOnly Label As String")
+    add("        Public ReadOnly InSquareTargets As String()")
+    add("        Public ReadOnly OutOfSquareTargets As String()")
+    add("")
+    add("        Public Sub New(stem As String, label As String,")
+    add("                       inSquare As String(),")
+    add("                       outOfSquare As String())")
+    add("            Me.Stem = stem")
+    add("            Me.Label = label")
+    add("            Me.InSquareTargets = inSquare")
+    add("            Me.OutOfSquareTargets = outOfSquare")
+    add("        End Sub")
+    add("")
+    add("        ''' <summary>The targets for the toggle as it stands.")
+    add("        ''' </summary>")
+    add("        Public Function Targets(insquare As Boolean) As String()")
+    add("            Return If(insquare, InSquareTargets, OutOfSquareTargets)")
+    add("        End Function")
+    add("    End Structure")
+    add("")
+    add("    ''' <summary>What a pool sheet has beyond its geometry.")
+    add("    ''' </summary>")
+    add("    Public Structure PoolSheet")
+    add("        Public ReadOnly Key As String")
+    add("        ''' <summary>The diagonals. They have no line on a chart")
+    add("        ''' drawn square -- a cross dim runs corner to corner --")
+    add("        ''' so every one of them is a column box.</summary>")
+    add("        Public ReadOnly Cross As ListKey()")
+    add("        Public ReadOnly Picks As PoolPick()")
+    add("        Public ReadOnly Corners As PoolCornerRow()")
+    add("")
+    add("        Public Sub New(key As String, cross As ListKey(),")
+    add("                       picks As PoolPick(),")
+    add("                       corners As PoolCornerRow())")
+    add("            Me.Key = key")
+    add("            Me.Cross = cross")
+    add("            Me.Picks = picks")
+    add("            Me.Corners = corners")
+    add("        End Sub")
+    add("    End Structure")
+    add("")
+    add("    Public Shared ReadOnly PoolSheets As PoolSheet() = {")
+    for i, sh in enumerate(sheets):
+        add("        New PoolSheet(%s," % vbstr(sh["key"]))
+        L.extend(array("ListKey",
+                       ["            New ListKey(%s, %s)%s"
+                        % (vbstr(k), vbstr(lb),
+                           "," if j < len(sh["cross"]) - 1 else "")
+                        for j, (k, lb) in enumerate(sh["cross"])],
+                       "            "))
+        L[-1] += ","
+        L.extend(array("PoolPick",
+                       ["            New PoolPick(%s, %s, %s, New String() {%s})%s"
+                        % (vbstr(k), vbstr(lb), vbstr(sec),
+                           ", ".join(vbstr(o) for o in opts),
+                           "," if j < len(sh["picks"]) - 1 else "")
+                        for j, (k, lb, sec, opts) in enumerate(sh["picks"])],
+                       "            "))
+        L[-1] += ","
+        L.extend(array("PoolCornerRow",
+                       ["            New PoolCornerRow(%s, %s, New String() {%s}, New String() {%s})%s"
+                        % (vbstr(k), vbstr(lb),
+                           ", ".join(vbstr(t) for t in ins),
+                           ", ".join(vbstr(t) for t in outs),
+                           "," if j < len(sh["corners"]) - 1 else "")
+                        for j, (k, lb, ins, outs)
+                        in enumerate(sh["corners"])],
+                       "            "))
+        L[-1] += ")" + ("," if i < len(sheets) - 1 else "")
+    add("    }")
+    add("")
+    add("    ''' <summary>The pool extras for a sheet, or one with a")
+    add("    ''' Nothing Key when there are none.</summary>")
+    add("    Public Shared Function PoolSheetFor(key As String) As PoolSheet")
+    add("        For Each s In PoolSheets")
+    add("            If String.Equals(s.Key, key, "
+        "StringComparison.OrdinalIgnoreCase) Then Return s")
+    add("        Next")
+    add("        Return Nothing")
+    add("    End Function")
     return L
 
 
@@ -755,6 +946,7 @@ def build():
         L.extend(block)
     add("    }")
 
+    L.extend(pool_block(*read_pool_extras()))
     L.extend(spa_block(*read_spa_extras()))
     add(TAIL)
     return "\n".join(L)

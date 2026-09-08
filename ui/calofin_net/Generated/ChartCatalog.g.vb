@@ -1658,6 +1658,241 @@ Public NotInheritable Class ChartCatalog
             New Double() {385, 445})
     }
 
+    ''' <summary>lzf:*ctreat*: what a pool corner can be. This
+    ''' one IS the canonical set -- STANDARDS.md section 2 --
+    ''' unlike the spa sheet, which offers the drawing legend and
+    ''' lets SPA normalise it.</summary>
+    Public Shared ReadOnly PoolTreatments As String() = {"(ask)", "Square", "Radius", "Cut", "NotGiven"}
+
+    ''' <summary>The pool treatments that carry a size, asked of
+    ''' lzf:csized.</summary>
+    Public Shared ReadOnly PoolSizedTreatments As String() = {"Radius", "Cut"}
+
+    ''' <summary>lzf:*btypes*: the six bottoms POOL draws. The
+    ''' shape chart shows twelve; the other six have no keyword
+    ''' and are not offered.</summary>
+    Public Shared ReadOnly PoolBottomTypes As String() = {"Normal", "Sport", "Wedge", "SLope", "MOdflat", "SHallow"}
+
+    ''' <summary>The two words the in-square toggle sends. It is
+    ''' not a yes/no: POOL reads a keyword.</summary>
+    Public Const InSquare As String = "Insquare"
+    Public Const OutOfSquare As String = "Outofsquare"
+
+    ''' <summary>One keyword dropdown on a pool sheet. SECTION is
+    ''' lzf:*picks*' own: "cross" ties the dropdown to the cross
+    ''' dims -- in square there are none, so there is no mode to
+    ''' pick either -- and "run" is a question in its own
+    ''' right.</summary>
+    Public Structure PoolPick
+        Public ReadOnly Key As String
+        Public ReadOnly Label As String
+        Public ReadOnly Section As String
+        Public ReadOnly Options As String()
+
+        Public Sub New(key As String, label As String,
+                       section As String, options As String())
+            Me.Key = key
+            Me.Label = label
+            Me.Section = section
+            Me.Options = options
+        End Sub
+    End Structure
+
+    ''' <summary>One corner ROW on a pool sheet, which is not
+    ''' always one corner.
+    '''
+    ''' <para>The answer is fanned out to every target: each gets
+    ''' &lt;target&gt;-ty and, when the treatment carries one,
+    ''' &lt;target&gt;-sz. WHICH targets depends on the in-square
+    ''' toggle, because in square one answer covers all four
+    ''' corners and out of square each is asked for itself -- so a
+    ''' row can have targets in one state and NONE in the other,
+    ''' and a row with none sends nothing at all.</para></summary>
+    Public Structure PoolCornerRow
+        Public ReadOnly Stem As String
+        Public ReadOnly Label As String
+        Public ReadOnly InSquareTargets As String()
+        Public ReadOnly OutOfSquareTargets As String()
+
+        Public Sub New(stem As String, label As String,
+                       inSquare As String(),
+                       outOfSquare As String())
+            Me.Stem = stem
+            Me.Label = label
+            Me.InSquareTargets = inSquare
+            Me.OutOfSquareTargets = outOfSquare
+        End Sub
+
+        ''' <summary>The targets for the toggle as it stands.
+        ''' </summary>
+        Public Function Targets(insquare As Boolean) As String()
+            Return If(insquare, InSquareTargets, OutOfSquareTargets)
+        End Function
+    End Structure
+
+    ''' <summary>What a pool sheet has beyond its geometry.
+    ''' </summary>
+    Public Structure PoolSheet
+        Public ReadOnly Key As String
+        ''' <summary>The diagonals. They have no line on a chart
+        ''' drawn square -- a cross dim runs corner to corner --
+        ''' so every one of them is a column box.</summary>
+        Public ReadOnly Cross As ListKey()
+        Public ReadOnly Picks As PoolPick()
+        Public ReadOnly Corners As PoolCornerRow()
+
+        Public Sub New(key As String, cross As ListKey(),
+                       picks As PoolPick(),
+                       corners As PoolCornerRow())
+            Me.Key = key
+            Me.Cross = cross
+            Me.Picks = picks
+            Me.Corners = corners
+        End Sub
+    End Structure
+
+    Public Shared ReadOnly PoolSheets As PoolSheet() = {
+        New PoolSheet("Rectangle",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2"),
+            New ListKey("x2", "Cross dim 3"),
+            New ListKey("x3", "Cross dim 4")
+            },
+            New PoolPick() {
+            New PoolPick("cmode", "Cross dims measured from", "cross", New String() {"(ask)", "Corner", "Middle", "Ends"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("cornera", "Corner A (bottom left)", New String() {"corners"}, New String() {"cornera"}),
+            New PoolCornerRow("cornerb", "Corner B (bottom right)", New String() {}, New String() {"cornerb"}),
+            New PoolCornerRow("cornerc", "Corner C (top right)", New String() {}, New String() {"cornerc"}),
+            New PoolCornerRow("cornerd", "Corner D (top left)", New String() {}, New String() {"cornerd"})
+            }),
+        New PoolSheet("Oval",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2"),
+            New ListKey("x2", "Cross dim 3"),
+            New ListKey("x3", "Cross dim 4")
+            },
+            New PoolPick() {
+            New PoolPick("cmode", "Cross dims measured from", "cross", New String() {"(ask)", "Corner", "Middle", "Ends"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("ROman",
+            New ListKey() {
+            New ListKey("ac", "Cross dim body A-C"),
+            New ListKey("bd", "Cross dim body B-D")
+            },
+            New PoolPick() {},
+            New PoolCornerRow() {
+            New PoolCornerRow("cornera", "Corner A (bottom left)", New String() {"corners"}, New String() {"cornera"}),
+            New PoolCornerRow("cornerb", "Corner B (bottom right)", New String() {}, New String() {"cornerb"}),
+            New PoolCornerRow("cornerc", "Corner C (top right)", New String() {}, New String() {"cornerc"}),
+            New PoolCornerRow("cornerd", "Corner D (top left)", New String() {}, New String() {"cornerd"})
+            }),
+        New PoolSheet("Grecian",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2")
+            },
+            New PoolPick() {
+            New PoolPick("gcross", "Cross-dim detail", "cross", New String() {"(ask)", "Simple", "Center", "Complex"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("bodycorners", "Body corners (all four)", New String() {"bodycorners"}, New String() {"cornera", "cornerb", "cornerc", "cornerd"}),
+            New PoolCornerRow("endcorners", "End-tip corners (LT LB RT RB)", New String() {"endcorners"}, New String() {"cornerlt", "cornerlb", "cornerrt", "cornerrb"})
+            }),
+        New PoolSheet("GRSquare",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2")
+            },
+            New PoolPick() {
+            New PoolPick("gcross", "Cross-dim detail", "cross", New String() {"(ask)", "Simple", "Center", "Complex"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("bodycorners", "Body corners (all four)", New String() {"bodycorners"}, New String() {"cornera", "cornerb", "cornerc", "cornerd"}),
+            New PoolCornerRow("endcorners", "End-tip corners (LT LB RT RB)", New String() {"endcorners"}, New String() {"cornerlt", "cornerlb", "cornerrt", "cornerrb"})
+            }),
+        New PoolSheet("L",
+            New ListKey() {
+            New ListKey("ac", "Cross dim A-C"),
+            New ListKey("bd", "Cross dim B-D"),
+            New ListKey("ce", "Cross dim C-E"),
+            New ListKey("df", "Cross dim D-F"),
+            New ListKey("ae", "Cross dim A-E"),
+            New ListKey("bf", "Cross dim B-F"),
+            New ListKey("ad", "Cross dim A-D"),
+            New ListKey("be", "Cross dim B-E"),
+            New ListKey("cf", "Cross dim C-F")
+            },
+            New PoolPick() {
+            New PoolPick("mirror", "Mirror the pool (wing swaps sides)", "run", New String() {"(ask)", "Yes", "No"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("outercorners", "Outer corners (all five)", New String() {"outercorners"}, New String() {"outercorners"}),
+            New PoolCornerRow("innercorner", "Reverse corner E", New String() {"innercorner"}, New String() {"innercorner"})
+            }),
+        New PoolSheet("ROUnd",
+            New ListKey() {},
+            New PoolPick() {},
+            New PoolCornerRow() {}),
+        New PoolSheet("OCtagon",
+            New ListKey() {
+            New ListKey("x0", "Cross dim 1"),
+            New ListKey("x1", "Cross dim 2")
+            },
+            New PoolPick() {
+            New PoolPick("gcross", "Cross-dim detail", "cross", New String() {"(ask)", "Simple", "Center", "Complex"})
+            },
+            New PoolCornerRow() {
+            New PoolCornerRow("bodycorners", "Body corners (all four)", New String() {"bodycorners"}, New String() {"cornera", "cornerb", "cornerc", "cornerd"}),
+            New PoolCornerRow("endcorners", "End-tip corners (LT LB RT RB)", New String() {"endcorners"}, New String() {"cornerlt", "cornerlb", "cornerrt", "cornerrb"})
+            }),
+        New PoolSheet("OACenter",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("OATopRight",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("OACloud",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("sub", "Cloud bottom", "run", New String() {"(ask)", "Straight", "Rounded"}),
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("OAKidney",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("sub", "Kidney type", "run", New String() {"(ask)", "True", "Asymmetric"}),
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {}),
+        New PoolSheet("OANXT",
+            New ListKey() {},
+            New PoolPick() {
+            New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
+            },
+            New PoolCornerRow() {})
+    }
+
+    ''' <summary>The pool extras for a sheet, or one with a
+    ''' Nothing Key when there are none.</summary>
+    Public Shared Function PoolSheetFor(key As String) As PoolSheet
+        For Each s In PoolSheets
+            If String.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase) Then Return s
+        Next
+        Return Nothing
+    End Function
+
     ''' <summary>The spa questions answered from a LIST rather than
     ''' typed - lzs:*lists*. The first option is always "(ask)",
     ''' and choosing it sends nothing at all: the key stays absent
