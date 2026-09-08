@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.5, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.6, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 58 files, 167 commands:
+;;; 58 files, 170 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABMOVE
@@ -31,13 +31,14 @@
 ;;;   OASISVER  PADDLE  PADDLEVER  PERPPTS  PERPPTSVER  POINTRENAMER
 ;;;   POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE
 ;;;   POOLSIDEVER  POOLVER  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER
-;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER
-;;;   STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD
-;;;   TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS
-;;;   TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP
-;;;   TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN
-;;;   TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER  WCALST  WCALSTVER
-;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XYPLOT  XYPLOTVER
+;;;   SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
+;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST
+;;;   TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN
+;;;   TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN
+;;;   TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK
+;;;   TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV
+;;;   WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV
+;;;   XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -71306,6 +71307,8 @@
 ;;;
 ;;; Commands:  SOCONV     move the import onto POOL / POINTS / TEXT /
 ;;;                       DIMENSION
+;;;            SORECONV   put a converted import back on the export's
+;;;                       own layers
 ;;;            SOCONVVER  print the loaded version
 ;;; ======================================================================
 ;;;
@@ -71352,9 +71355,31 @@
 ;;; re-locked afterwards, on the error path too; the destination layers
 ;;; are created if the drawing does not have them, and thawed and
 ;;; switched on if it does.  The whole run is one undo group.
+;;;
+;;; SORECONV MOVES IT ALL BACK.  U undoes a run still in the session;
+;;; SORECONV undoes one that was saved and reopened, which is when a
+;;; drawing turns out to have been converted by mistake or to need
+;;; sending back to whoever exported it.  Every object SOCONV moves
+;;; carries a RECORD in its own xdata -- the layer it came off, that
+;;; layer's colour, and (only when *soconv-force-bylayer* was on) the
+;;; colour, linetype and lineweight the forcing overwrote.  SORECONV
+;;; reads it, puts the object back, re-creates a source layer that has
+;;; been PURGED in the meantime, and takes the record off again.
+;;;
+;;; The record is xdata under "SOCONV" and nothing else about the
+;;; object changes, so a converted drawing still looks and plots
+;;; exactly as it did before the record existed.
+;;;
+;;; ONE THING THE REVERT SPELLS OUT rather than restores: with the
+;;; forcing on, an object that arrived carrying NO colour, linetype or
+;;; lineweight of its own comes back carrying an explicit ByLayer --
+;;; 256, "ByLayer", -1 -- where it had the absent group that means the
+;;; same thing.  It draws and plots identically, and a DXF diff of the
+;;; before and after says so; nothing else about the round trip is
+;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.1")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -71408,6 +71433,12 @@
 ;; appearance and nothing overrides it later.
 (setq *soconv-force-bylayer* nil)
 
+;; The record SORECONV reads back, and the application it lives under.
+;; nil converts exactly as before and writes nothing down, so the run
+;; can only be undone by U; the tests drive both ways.
+(setq *soconv-record*     t
+      *soconv-xdata-app*  "SOCONV")
+
 ;; ---------------------------------------------------------------
 ;; Helpers
 ;; ---------------------------------------------------------------
@@ -71442,6 +71473,10 @@
   (if (member (strcase name) (mapcar 'strcase lst))
     lst
     (append lst (list name))))
+
+;; The layer ENT is on right now.
+(defun soconv:layer-of (ent)
+  (cdr (assoc 8 (entget ent))))
 
 ;; The destination for an entity of type TYP on layer LAY, or nil when
 ;; no rule claims it.  Rows are tried in order and the first wins.
@@ -71512,6 +71547,137 @@
   (list (reverse jobs) srcs dests tally))
 
 ;; ---------------------------------------------------------------
+;; The record
+;; ---------------------------------------------------------------
+;; Eight xdata items in a fixed order, which is why there is no
+;; grammar here to get wrong: xdata groups are typed, so a layer name
+;; carrying a "|" (an xref-dependent one does) or a linetype called
+;; anything at all travels as itself.
+;;
+;;   0  1000  "SOCONV"                the marker
+;;   1  1000  the version that wrote it
+;;   2  1000  the layer it came off
+;;   3  1000  its linetype, "" unless the run forced BYLAYER
+;;   4  1070  that layer's own colour, for a source layer since PURGEd
+;;   5  1070  1 when the run forced BYLAYER, else 0
+;;   6  1070  its colour,     256 (ByLayer) unless the run forced it
+;;   7  1070  its lineweight, -1 (ByLayer)  unless the run forced it
+;;
+;; Only what the conversion actually overwrote is kept.  With the
+;; forcing off -- the default, and what the sample does -- SOCONV
+;; changes nothing but the layer, so nothing but the layer is written
+;; down, and SORECONV puts nothing but the layer back.
+
+(setq *soconv-record-len* 8)
+
+;; APP's items onto ENT, leaving every OTHER application's xdata alone.
+;;
+;; (entget ent) with no application list carries no xdata at all in
+;; AutoCAD, so there this is the plain append the rest of the tree
+;; writes.  The VM the tests run on hands back every group it holds,
+;; xdata included, so the -3 already there is merged with rather than
+;; doubled -- an entity cannot carry two of them, and assoc would only
+;; ever find the first.
+(defun soconv:xput (ent app items / ed x apps)
+  (setq ed   (entget ent)
+        x    (assoc -3 ed)
+        apps (if x
+               (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x))
+               '()))
+  (setq apps (append apps (list (cons app items))))
+  (entmod (if x
+            (subst (cons -3 apps) x ed)
+            (append ed (list (cons -3 apps)))))
+)
+
+;; APP's items off ENT.  The application name goes back with NO data
+;; after it, which is how xdata is deleted -- an entmod that simply
+;; omits the application leaves it exactly where it was.
+(defun soconv:xdel (ent app / ed x apps)
+  (setq ed (entget ent (list app))
+        x  (assoc -3 ed))
+  (if x
+    (progn
+      (setq apps (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x)))
+      (setq apps (append apps (list (list app))))
+      (entmod (subst (cons -3 apps) x ed))))
+)
+
+;; The items ENT carries under our application, or nil.  An application
+;; entry with nothing after it is one xdel has emptied, and reads as no
+;; record at all -- which is what it is.
+(defun soconv:xget (ent app / x a)
+  (setq x (assoc -3 (entget ent (list app))))
+  (if x (setq a (assoc app (cdr x))))
+  (if (and a (cdr a)) (cdr a))
+)
+
+;; The colour to re-create a source layer with, read off the layer
+;; while it is still there.  A layer that is switched OFF carries the
+;; colour negated; the record keeps the colour and not the off-ness,
+;; so a layer SORECONV has to re-create comes back visible.
+(defun soconv:layer-color (name / tb c)
+  (setq tb (tblsearch "LAYER" name)
+        c  (if tb (cdr (assoc 62 tb))))
+  (if (and c (/= c 0)) (abs c) *soconv-default-color*)
+)
+
+;; Written BEFORE the move, which is the only moment the object still
+;; carries what the record is about.
+(defun soconv:stamp (ent lay / obj forced)
+  (regapp *soconv-xdata-app*)
+  (setq obj    (vlax-ename->vla-object ent)
+        forced *soconv-force-bylayer*)
+  (soconv:xput ent *soconv-xdata-app*
+    (list (cons 1000 *soconv-xdata-app*)
+          (cons 1000 *soconv-version*)
+          (cons 1000 lay)
+          (cons 1000 (if forced (vla-get-Linetype obj) ""))
+          (cons 1070 (soconv:layer-color lay))
+          (cons 1070 (if forced 1 0))
+          (cons 1070 (if forced (vla-get-Color obj) 256))
+          (cons 1070 (if forced (vla-get-Lineweight obj) -1))))
+)
+
+;; (source-layer layer-colour forced? colour linetype lineweight) off
+;; one object, or nil when it carries no record of ours.
+(defun soconv:read (ent / items)
+  (setq items (soconv:xget ent *soconv-xdata-app*))
+  (if (and items
+           (= *soconv-record-len* (length items))
+           (= *soconv-xdata-app* (cdr (nth 0 items))))
+    (list (cdr (nth 2 items))
+          (cdr (nth 4 items))
+          (= 1 (cdr (nth 5 items)))
+          (cdr (nth 6 items))
+          (cdr (nth 3 items))
+          (cdr (nth 7 items))))
+)
+
+;; The colour to re-create source layer LAY with: the one the record
+;; kept from the layer itself, off the first object that came off it.
+;; An existing layer is never recoloured -- ensure-layer only ever uses
+;; this when the layer has to be made -- so a drawing that still has
+;; its export layers keeps their colours whatever the record says.
+(defun soconv:color-for (lay recs / out r)
+  (foreach r recs
+    (if (and (null out) (= (strcase (nth 1 r)) (strcase lay)))
+      (setq out (nth 2 r))))
+  (if out out *soconv-default-color*)
+)
+
+;; Every (ename . record) in SS, in drawing order.
+(defun soconv:recorded (ss / i ent rec out)
+  (setq i 0 out '())
+  (while (< i (sslength ss))
+    (setq ent (ssname ss i))
+    (if (and (entget ent) (setq rec (soconv:read ent)))
+      (setq out (cons (cons ent rec) out)))
+    (setq i (1+ i)))
+  (reverse out)
+)
+
+;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
 (defun c:SOCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
@@ -71568,6 +71734,9 @@
       ;; unlock everything about to be touched, both ends of the move
       (setq unlocked (soconv:unlock-layers (append srcs dests) doc))
       (foreach job jobs
+        ;; the record first: after the move the object no longer
+        ;; carries the layer, or the properties, it is about
+        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job))))
         (setq obj (vlax-ename->vla-object (car job)))
         (vla-put-Layer obj (cdr job))
         (if *soconv-force-bylayer*
@@ -71583,18 +71752,122 @@
       (princ (strcat "\nSOCONV done: " (itoa (length jobs))
                      " object(s) moved -- " (soconv:tally-line tally) "."))
       (princ (strcat "\n  Moved off " (soconv:namelist srcs)
-                     " - PURGE those layers once the result looks right.")))
+                     " - PURGE those layers once the result looks right."))
+      (if *soconv-record*
+        (princ "\n  SORECONV moves it all back; PURGE only when you are sure.")
+        (princ (strcat "\n  *soconv-record* is off, so nothing was written"
+                       " down - only U undoes this run."))))
     (progn
       (princ "\nSOCONV: nothing here is on the export's layers - nothing moved.")
       (princ (strcat "\n  It converts " (soconv:namelist (soconv:sources))
                      "."))))
   (princ))
 
+(defun c:SORECONV (/ *error* doc unlocked mark-open ss recs r ent obj
+                     lay srcs offs tally missing done n)
+
+  ;; SOCONV's handler, for the same reasons (STANDARDS 5).
+  (defun *error* (msg)
+    (if unlocked (vl-catch-all-apply 'soconv:relock-layers (list unlocked)))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nSORECONV error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
+        missing  '())
+
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+
+  ;; The scope SOCONV takes, taken the same way: the highlight if there
+  ;; is one, else what is picked, else the whole drawing.  Only objects
+  ;; carrying a record move either way, so Enter is as safe here as it
+  ;; is there.
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
+      (setq ss (ssget))
+      (if (null ss)
+        (setq ss (ssget "_X")))))
+
+  (setq recs (if ss (soconv:recorded ss)))
+
+  (if recs
+    (progn
+      ;; the layers it goes back ONTO, and the layers it comes OFF.
+      ;; A destination of the revert is an output layer, so it is
+      ;; created when the conversion's own PURGE advice was taken --
+      ;; with the colour the record kept from the layer itself.
+      (setq srcs '() offs '())
+      (foreach r recs
+        (setq lay  (nth 1 r)
+              srcs (soconv:add lay srcs)
+              offs (soconv:add (soconv:layer-of (car r)) offs)))
+      (foreach lay srcs
+        (cal:ensure-layer lay (soconv:color-for lay recs)))
+      (setq unlocked (soconv:unlock-layers (append srcs offs) doc))
+
+      (foreach r recs
+        (setq ent  (car r)
+              obj  (vlax-ename->vla-object ent)
+              done T)
+        (vla-put-Layer obj (nth 1 r))
+        ;; only a run that FORCED the three properties wrote them down,
+        ;; and only such a run has anything to put back
+        (if (nth 3 r)
+          (progn
+            (vla-put-Color obj (nth 4 r))
+            (vla-put-Lineweight obj (nth 6 r))
+            (if (or (member (strcase (nth 5 r)) '("BYLAYER" "BYBLOCK"))
+                    (tblsearch "LTYPE" (nth 5 r)))
+              (vla-put-Linetype obj (nth 5 r))
+              (setq missing (soconv:add (nth 5 r) missing)
+                    done    nil))))
+        ;; The record goes with the move it described -- but only when
+        ;; the move is FINISHED.  An object whose linetype could not be
+        ;; come back to keeps its record, so loading the linetype and
+        ;; running SORECONV again really does finish it; deleting it
+        ;; here would make that advice a lie.
+        (if done (soconv:xdel ent *soconv-xdata-app*))
+        (setq tally (soconv:bump (nth 1 r) tally)))
+
+      (soconv:relock-layers unlocked)
+      (setq unlocked nil)))
+
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
+
+  (if recs
+    (progn
+      (setq n (length recs))
+      (princ (strcat "\nSORECONV done: " (itoa n)
+                     " object(s) put back -- " (soconv:tally-line tally) "."))
+      (princ (strcat "\n  Off " (soconv:namelist offs)
+                     " - this drawing is on the export's own layers again."))
+      (if missing
+        (princ (strcat "\n  Linetype " (soconv:namelist missing)
+                       " is no longer loaded, so those objects kept BYLAYER"
+                       " - LINETYPE-load it and run SORECONV again to finish"
+                       " them."))))
+    (progn
+      (princ "\nSORECONV: nothing here carries a SOCONV record - nothing moved.")
+      (princ "\n  It undoes a SOCONV run, and only from the record SOCONV")
+      (princ "\n  leaves on every object it moves.  A drawing converted with")
+      (princ "\n  *soconv-record* off, or by hand, carries none - U is the")
+      (princ "\n  only way back from those.")))
+  (princ))
+
 (defun c:SOCONVVER ()
   (princ (strcat "\nSOCONV " *soconv-version*))
   (princ))
 
-(princ (strcat "\nSOCONV " *soconv-version* " loaded.  Type SOCONV to run."))
+(princ (strcat "\nSOCONV " *soconv-version*
+               " loaded.  Type SOCONV to run, SORECONV to undo one."))
 (princ)
 
 
@@ -71610,6 +71883,8 @@
 ;;; Commands:  VSCONV     convert the import - highlight it first, or
 ;;;                       press Enter and take every VS layer in the
 ;;;                       drawing
+;;;            VSRECONV   put a converted import back on the VS layers,
+;;;                       style overrides and all
 ;;;            VSCONVVER  print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -71658,9 +71933,29 @@
 ;;; work cannot be converted twice.  Locked layers among those touched
 ;;; are unlocked for the run and re-locked afterwards, on the error path
 ;;; too, and the whole run is one undo group.
+;;;
+;;; VSRECONV PUTS ALL OF IT BACK.  U undoes a run still in the session;
+;;; VSRECONV undoes one that was saved and reopened -- which is when a
+;;; sheet turns out to have been converted by mistake, or has to go
+;;; back to whoever exported it.  Every object VSCONV moves carries a
+;;; RECORD in its own xdata: the layer it came off and that layer's
+;;; colour, the colour, linetype and lineweight the BYLAYER forcing
+;;; overwrote, and -- for a dimension -- the style name it had AND the
+;;; whole ACAD/DSTYLE override block, kept verbatim as the xdata items
+;;; it already was, so the text height and arrow size the export wrote
+;;; come back exactly as they went in.  Both halves of the dimension
+;;; step are undone, or the revert would leave the dimensions drawing
+;;; in a style they never had.
+;;;
+;;; ONE THING THE REVERT SPELLS OUT rather than restores: an object
+;;; that arrived carrying NO colour, linetype or lineweight of its own
+;;; comes back carrying an explicit ByLayer -- 256, "ByLayer", -1 --
+;;; where it had the absent group that means the same thing.  It draws
+;;; and plots identically, and a DXF diff of the before and after says
+;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.1")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -71698,6 +71993,12 @@
       *vsconv-dim-xdata* "ACAD")     ; the application whose style
                                      ; overrides are removed with them;
                                      ; nil leaves the overrides on
+
+;; The record VSRECONV reads back, and the application it lives under.
+;; nil converts exactly as before and writes nothing down, so the run
+;; can only be undone by U; the tests drive both ways.
+(setq *vsconv-record*    t
+      *vsconv-xdata-app* "VSCONV")
 
 ;; ---------------------------------------------------------------
 ;; Helpers
@@ -71782,19 +72083,174 @@
     (append alist (list (cons key 1)))))
 
 ;; One dimension onto the shop style, overrides and all.  The style name
-;; is DXF group 3 and can simply be written; the overrides are xdata
-;; under the "ACAD" application, and an application name handed to
-;; entmod with NO data after it is how xdata is deleted.  The group has
-;; to be there and empty for that: an entmod list that simply omits it
-;; leaves the xdata exactly where it was.
-(defun vsconv:restyle-dim (ent style app / ed x)
-  (setq ed (if app (entget ent (list app)) (entget ent)))
+;; is DXF group 3 and can simply be written; the overrides come off
+;; through vsconv:xdel, which deletes ONE application's xdata and
+;; leaves every other application's where it is -- this file's own
+;; record among them, since it is written before this runs.
+(defun vsconv:restyle-dim (ent style app / ed)
+  (setq ed (entget ent))
   (if (assoc 3 ed)
-    (setq ed (subst (cons 3 style) (assoc 3 ed) ed)))
-  (if (and app (setq x (assoc -3 ed)))
-    (setq ed (subst (list -3 (list app)) x ed)))
-  (entmod ed)
+    (entmod (subst (cons 3 style) (assoc 3 ed) ed)))
+  (if app (vsconv:xdel ent app))
   (entupd ent))
+
+
+;; ---------------------------------------------------------------
+;; The record
+;; ---------------------------------------------------------------
+;; Nine xdata items in a fixed order, and then -- for a dimension --
+;; the export's own override block copied straight in behind them.
+;; xdata groups are typed, so there is no grammar here to get wrong: a
+;; layer name carrying a "|" (an xref-dependent one does) travels as
+;; itself, and the overrides travel as the xdata items they already
+;; are rather than as a rendering of them.
+;;
+;;   0  1000  "VSCONV"                the marker
+;;   1  1000  the version that wrote it
+;;   2  1000  the layer it came off
+;;   3  1000  its linetype, before the BYLAYER forcing
+;;   4  1000  its dimension style, "" for anything but a dimension
+;;   5  1070  that layer's own colour, for a source layer since PURGEd
+;;   6  1070  its colour,     before the forcing
+;;   7  1070  its lineweight, before the forcing
+;;   8  1070  1 when an override block follows, else 0
+;;   9+       that block, item for item, braces and all
+;;
+;; The block is already brace-balanced where it stands, so it needs no
+;; wrapper of its own -- and must not be given one, because AutoCAD
+;; refuses xdata whose braces do not balance.
+
+(setq *vsconv-record-len* 9)
+
+;; APP's items onto ENT, leaving every OTHER application's xdata alone.
+;;
+;; (entget ent) with no application list carries no xdata at all in
+;; AutoCAD, so there this is the plain append the rest of the tree
+;; writes.  The VM the tests run on hands back every group it holds,
+;; xdata included, so the -3 already there is merged with rather than
+;; doubled -- an entity cannot carry two of them, and assoc would only
+;; ever find the first.
+(defun vsconv:xput (ent app items / ed x apps)
+  (setq ed   (entget ent)
+        x    (assoc -3 ed)
+        apps (if x
+               (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x))
+               '()))
+  (setq apps (append apps (list (cons app items))))
+  (entmod (if x
+            (subst (cons -3 apps) x ed)
+            (append ed (list (cons -3 apps)))))
+)
+
+;; APP's items off ENT.  The application name goes back with NO data
+;; after it, which is how xdata is deleted: an entmod list that simply
+;; omits the application leaves its xdata exactly where it was.
+(defun vsconv:xdel (ent app / ed x apps)
+  (setq ed (entget ent (list app))
+        x  (assoc -3 ed))
+  (if x
+    (progn
+      (setq apps (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x)))
+      (setq apps (append apps (list (list app))))
+      (entmod (subst (cons -3 apps) x ed))))
+)
+
+;; The items ENT carries under APP, or nil.  An application entry with
+;; nothing after it is one xdel has emptied, and reads as no items --
+;; which is what it is.
+(defun vsconv:xget (ent app / x a)
+  (setq x (assoc -3 (entget ent (list app))))
+  (if x (setq a (assoc app (cdr x))))
+  (if (and a (cdr a)) (cdr a))
+)
+
+;; LST with its first N items dropped.
+(defun vsconv:tail (lst n)
+  (while (and lst (> n 0)) (setq lst (cdr lst) n (1- n)))
+  lst
+)
+
+;; The colour to re-create a source layer with, read off the layer
+;; while it is still there.  A layer that is switched OFF carries the
+;; colour negated; the record keeps the colour and not the off-ness, so
+;; a layer VSRECONV has to re-create comes back visible.
+(defun vsconv:layer-color (name / tb c)
+  (setq tb (tblsearch "LAYER" name)
+        c  (if tb (cdr (assoc 62 tb))))
+  (if (and c (/= c 0)) (abs c) *vsconv-default-color*)
+)
+
+;; Written BEFORE the move and before the restyle, which is the only
+;; moment the object still carries everything the record is about.
+(defun vsconv:stamp (ent lay / obj typ sty ovr)
+  (regapp *vsconv-xdata-app*)
+  (setq obj (vlax-ename->vla-object ent)
+        typ (cdr (assoc 0 (entget ent))))
+  ;; only a DIMENSION has a style to lose or overrides to lose it to,
+  ;; and group 3 means something else entirely on an MTEXT
+  (if (= "DIMENSION" typ)
+    (setq sty (cdr (assoc 3 (entget ent)))
+          ovr (if *vsconv-dim-xdata* (vsconv:xget ent *vsconv-dim-xdata*))))
+  (vsconv:xput ent *vsconv-xdata-app*
+    (append (list (cons 1000 *vsconv-xdata-app*)
+                  (cons 1000 *vsconv-version*)
+                  (cons 1000 lay)
+                  (cons 1000 (vla-get-Linetype obj))
+                  (cons 1000 (if sty sty ""))
+                  (cons 1070 (vsconv:layer-color lay))
+                  (cons 1070 (vla-get-Color obj))
+                  (cons 1070 (vla-get-Lineweight obj))
+                  (cons 1070 (if ovr 1 0)))
+            (if ovr ovr '())))
+)
+
+;; (source-layer layer-colour colour linetype lineweight style
+;;  overrides) off one object, or nil when it carries no record of ours.
+(defun vsconv:read (ent / items)
+  (setq items (vsconv:xget ent *vsconv-xdata-app*))
+  (if (and items
+           (<= *vsconv-record-len* (length items))
+           (= *vsconv-xdata-app* (cdr (nth 0 items))))
+    (list (cdr (nth 2 items))
+          (cdr (nth 5 items))
+          (cdr (nth 6 items))
+          (cdr (nth 3 items))
+          (cdr (nth 7 items))
+          (cdr (nth 4 items))
+          (if (= 1 (cdr (nth 8 items)))
+            (vsconv:tail items *vsconv-record-len*))))
+)
+
+;; NAME added to LST unless a spelling of it is in there already; the
+;; order is first-seen, which is the order the report reads in.
+(defun vsconv:add (name lst)
+  (if (member (strcase name) (mapcar 'strcase lst))
+    lst
+    (append lst (list name)))
+)
+
+;; The colour to re-create source layer LAY with: the one the record
+;; kept from the layer itself, off the first object that came off it.
+;; An existing layer is never recoloured -- ensure-layer only ever uses
+;; this when the layer has to be made -- so a drawing that still has
+;; its export layers keeps their colours whatever the record says.
+(defun vsconv:color-for (lay recs / out r)
+  (foreach r recs
+    (if (and (null out) (= (strcase (nth 1 r)) (strcase lay)))
+      (setq out (nth 2 r))))
+  (if out out *vsconv-default-color*)
+)
+
+;; Every (ename . record) in SS, in drawing order.
+(defun vsconv:recorded (ss / i ent rec out)
+  (setq i 0 out '())
+  (while (< i (sslength ss))
+    (setq ent (ssname ss i))
+    (if (and (entget ent) (setq rec (vsconv:read ent)))
+      (setq out (cons (cons ent rec) out)))
+    (setq i (1+ i)))
+  (reverse out)
+)
 
 ;; ---------------------------------------------------------------
 ;; Main command
@@ -71879,6 +72335,10 @@
                   dest (vsconv:dest lay))
             (if dest
               (progn
+                ;; the record first: after the move and the restyle the
+                ;; object no longer carries the layer, the properties or
+                ;; the overrides it is about
+                (if *vsconv-record* (vsconv:stamp ent lay))
                 (setq obj (vlax-ename->vla-object ent))
                 (vla-put-Layer obj dest)
                 (vsconv:force-bylayer obj)
@@ -71941,11 +72401,134 @@
       (if empty
         (princ (strcat "\n  now empty: " (vsconv:namelist (reverse empty))
                        " - PURGE them when you are ready; VSCONV leaves"
-                       " them so one U backs the whole run out")))))
+                       " them so one U backs the whole run out")))
+      (if (> n-moved 0)
+        (if *vsconv-record*
+          (princ "\n  VSRECONV puts it all back, overrides and all.")
+          (princ (strcat "\n  *vsconv-record* is off, so nothing was written"
+                         " down - only U undoes this run."))))))
 
   ;; A mark is still open on the "nothing to convert" path above.
   (if mark-open
     (progn (vla-EndUndoMark doc) (setq mark-open nil)))
+  (princ))
+
+(defun c:VSRECONV (/ *error* doc unlocked mark-open ss recs r ent obj ed
+                     lay srcs offs tally missing done n n-dim)
+
+  ;; VSCONV's handler, for the same reasons (STANDARDS 5).
+  (defun *error* (msg)
+    (if unlocked (vl-catch-all-apply 'vsconv:relock-layers (list unlocked)))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nVSRECONV error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
+        missing  '()
+        n-dim    0)
+
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+
+  ;; No layer filter here, where VSCONV has one.  A converted object is
+  ;; on POOL / POINTS / DIMENSION, which is where this office's own
+  ;; drawing lives too -- so the record is what says which objects came
+  ;; from an export, and nothing else is touched whatever is selected.
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
+      (setq ss (ssget))
+      (if (null ss)
+        (setq ss (ssget "_X")))))
+
+  (setq recs (if ss (vsconv:recorded ss)))
+
+  (if recs
+    (progn
+      ;; the layers it goes back ONTO, and the layers it comes OFF.  A
+      ;; destination of the revert is an output layer, so it is created
+      ;; when the conversion's own PURGE advice was taken -- with the
+      ;; colour the record kept from the layer itself.
+      (setq srcs '() offs '())
+      (foreach r recs
+        (setq lay  (nth 1 r)
+              srcs (vsconv:add lay srcs)
+              offs (vsconv:add (cdr (assoc 8 (entget (car r)))) offs)))
+      (foreach lay srcs
+        (cal:ensure-layer lay (vsconv:color-for lay recs)))
+      (setq unlocked (vsconv:unlock-layers (append srcs offs) doc))
+
+      (foreach r recs
+        (setq ent  (car r)
+              obj  (vlax-ename->vla-object ent)
+              done T)
+        (vla-put-Layer obj (nth 1 r))
+        (vla-put-Color obj (nth 3 r))
+        (vla-put-Lineweight obj (nth 5 r))
+        (if (or (member (strcase (nth 4 r)) '("BYLAYER" "BYBLOCK"))
+                (tblsearch "LTYPE" (nth 4 r)))
+          (vla-put-Linetype obj (nth 4 r))
+          (setq missing (vsconv:add (nth 4 r) missing)
+                done    nil))
+        ;; the dimension step, both halves: the style name back in
+        ;; group 3, and the override block back under its own
+        ;; application exactly as it was lifted
+        (if (and (nth 6 r) (/= "" (nth 6 r)))
+          (progn
+            (setq ed (entget ent))
+            (if (assoc 3 ed)
+              (entmod (subst (cons 3 (nth 6 r)) (assoc 3 ed) ed)))
+            (if (and (nth 7 r) *vsconv-dim-xdata*)
+              (vsconv:xput ent *vsconv-dim-xdata* (nth 7 r)))
+            (entupd ent)
+            (setq n-dim (1+ n-dim))))
+        ;; The record goes with the move it described -- but only when
+        ;; the move is FINISHED.  An object whose linetype could not be
+        ;; come back to keeps its record, so loading the linetype and
+        ;; running VSRECONV again really does finish it; deleting it
+        ;; here would make that advice a lie.
+        (if done (vsconv:xdel ent *vsconv-xdata-app*))
+        (setq tally (vsconv:bump (strcase (nth 1 r)) tally)))
+
+      (vsconv:relock-layers unlocked)
+      (setq unlocked nil)))
+
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
+
+  (if recs
+    (progn
+      (setq n (length recs))
+      (princ (strcat "\nVSRECONV done: " (itoa n)
+                     " object(s) put back on the export's own layers."))
+      ;; in the table's own order, as VSCONV reports it
+      (foreach r *vsconv-map*
+        (if (setq lay (assoc (strcase (car r)) tally))
+          (princ (strcat "\n  " (cdr r) ": " (itoa (cdr lay))
+                         " -> " (car r)))))
+      (if (> n-dim 0)
+        (princ (strcat "\n  " (itoa n-dim) " dimension(s) back on their own"
+                       " style"
+                       (if *vsconv-dim-xdata*
+                         (strcat ", " *vsconv-dim-xdata*
+                                 " style overrides restored")
+                         ""))))
+      (if missing
+        (princ (strcat "\n  Linetype " (vsconv:namelist missing)
+                       " is no longer loaded, so those objects kept BYLAYER"
+                       " - LINETYPE-load it and run VSRECONV again to finish"
+                       " them."))))
+    (progn
+      (princ "\nVSRECONV: nothing here carries a VSCONV record - nothing moved.")
+      (princ "\n  It undoes a VSCONV run, and only from the record VSCONV")
+      (princ "\n  leaves on every object it moves.  A drawing converted with")
+      (princ "\n  *vsconv-record* off, or by hand, carries none - U is the")
+      (princ "\n  only way back from those.")))
   (princ))
 
 (defun c:VSCONVVER ()
@@ -71953,7 +72536,7 @@
   (princ))
 
 (princ (strcat "\nVSCONV " *vsconv-version*
-               " loaded.  Type VSCONV to run."))
+               " loaded.  Type VSCONV to run, VSRECONV to undo one."))
 (princ)
 
 
@@ -73174,8 +73757,10 @@
 ;;;  XFTCONV.lsp   -  survey import cleanup (Leica XFT / site trace)
 ;;;  AutoCAD 2018
 ;;;
-;;;  Command:  XFTCONV   - highlight the import, that is the only answer
-;;;                        it needs
+;;;  Commands:  XFTCONV    - highlight the import, that is the only
+;;;                          answer it needs
+;;;             XFTRECONV  - put a converted import back the way it
+;;;                          arrived
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
@@ -73212,6 +73797,24 @@
 ;;;
 ;;;  Non-text geometry is scaled and otherwise left alone.  The whole
 ;;;  run is one UNDO step.
+;;;
+;;;  XFTRECONV undoes all of it.  U undoes a run that is still in the
+;;;  session; XFTRECONV undoes one that was saved and reopened a week
+;;;  later, which is when a survey turns out to have been converted
+;;;  twice or converted by mistake.  It can do that because XFTCONV
+;;;  writes down what it erased: every block it inserts carries a
+;;;  RECORD in its own xdata - the scale and the base point the run
+;;;  used, and the marker, the name text and any leftover text that
+;;;  went with them, group by group.  Erasing alone would not be
+;;;  enough to work from: an entdel'd entity is gone for good once the
+;;;  drawing is saved, and the scale factor is not written on anything.
+;;;
+;;;  So XFTRECONV rebuilds what the swap erased, erases the block that
+;;;  replaced it, and scales the selection back by 1/12 about the same
+;;;  base point - and a drawing that has been through both is the
+;;;  drawing that arrived.  *xft-record* is the one line that turns the
+;;;  record off; with it off XFTCONV still converts and XFTRECONV has
+;;;  nothing to work from and says so.
 ;;; ===================================================================
 
 
@@ -73220,7 +73823,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.12") ; printed on load and at command start so a
+(setq *xft-version* "v1.13") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -73237,6 +73840,19 @@
   *xft-fuzz*         1e-4                 ; tolerance for "same point"
   *xft-purge-text*   t                    ; erase every TEXT/MTEXT left in the
                                           ; selection once the points are done
+)
+
+;; The record XFTRECONV reads.  *xft-record* nil converts exactly as
+;; before and writes nothing down, so the run cannot be undone later by
+;; anything but U; the tests drive both ways.  The colour is only ever
+;; reached by a rebuild onto a layer that has been PURGED since the
+;; conversion - an existing layer keeps its own, as everywhere else in
+;; the build.
+(setq
+  *xft-record*         t                  ; write the undo record on each block
+  *xft-xdata-app*      "XFTCONV"          ; the xdata application it lives under
+  *xft-num-prec*       8                  ; decimals a coordinate is written to
+  *xft-rebuild-color*  7                  ; colour for a layer XFTRECONV re-creates
 )
 
 ;; The site-trace flavour.  Same feet, same block out the other end, but
@@ -73394,6 +74010,271 @@
 
 
 ;;; -------------------------------------------------------------------
+;;;  the record - what XFTRECONV puts the survey back from
+;;; -------------------------------------------------------------------
+;;;  One string per block, in that block's own xdata.  It holds the
+;;;  entities the swap erased, written out group by group, and beside
+;;;  it as xdata reals the scale and the base point the run used - the
+;;;  two numbers no object in the drawing carries.
+;;;
+;;;  The grammar is one line: entities are separated by ";", their
+;;;  groups by "|", a group's code from its value by "=", and the parts
+;;;  of a point by ",".  Any of those - and the "\" that escapes them,
+;;;  which MTEXT formatting is full of - is backslash-escaped inside a
+;;;  value, so the string can be split a level at a time and a caption
+;;;  reading "1=2;3" is never read as structure.  Escapes come off at
+;;;  the leaf and nowhere earlier, which is why xft:split leaves them
+;;;  on.
+;;;
+;;;  Coordinates go through rtos at *xft-num-prec* decimals rather than
+;;;  as raw floats, because xdata carries strings and reals in separate
+;;;  groups and one string keeps the record readable in a DXF dump.  A
+;;;  round trip is therefore exact to 1e-8 of a drawing unit - a
+;;;  hundredth of a micron on a survey in inches - and not to the last
+;;;  bit of the float.  tests/test_xftconv.py measures exactly that, so
+;;;  the claim cannot rot.
+;;;
+;;;  Only the groups a rebuild needs are carried: what an export writes
+;;;  on the five entity types XFTCONV erases.  An object's own xdata,
+;;;  its extension dictionary and its reactors are NOT in the record and
+;;;  do not come back - a survey import has none, and inventing a
+;;;  general entity copier here would be claiming more than the tool
+;;;  can test.
+
+(setq *xft-delims* '("\\" ";" "|" "=" ","))
+
+;; The groups carried, per type.  The common ones ride on everything.
+(setq *xft-keep-common* '(8 62 6 370 410))
+(setq *xft-keep*
+  '(("LINE"   (10 11))
+    ("POINT"  (10 50))
+    ("CIRCLE" (10 40))
+    ("TEXT"   (1 7 10 11 40 41 50 51 71 72 73))
+    ("MTEXT"  (1 3 7 10 40 41 50 71 72))))
+
+;; entmake wants the subclass markers the type belongs to.
+(setq *xft-subclass*
+  '(("LINE"   "AcDbLine")
+    ("POINT"  "AcDbPoint")
+    ("CIRCLE" "AcDbCircle")
+    ("TEXT"   "AcDbText")
+    ("MTEXT"  "AcDbMText")))
+
+(defun xft:esc (s / i n c out)
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c   (substr s i 1)
+          out (strcat out (if (member c *xft-delims*) (strcat "\\" c) c))
+          i   (1+ i)))
+  out
+)
+
+(defun xft:unesc (s / i n c out)
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (and (= c "\\") (< i n))
+      (setq out (strcat out (substr s (1+ i) 1)) i (+ i 2))
+      (setq out (strcat out c) i (1+ i))))
+  out
+)
+
+;; S split on every UNESCAPED sep.  The pieces keep their escapes -
+;; take them off with xft:unesc at the leaf, or a value that escaped a
+;; "=" would be split on it at the next level down.
+(defun xft:split (s sep / i n c out cur)
+  (setq out '() cur "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (cond
+      ((and (= c "\\") (< i n))
+       (setq cur (strcat cur c (substr s (1+ i) 1)) i (+ i 2)))
+      ((= c sep) (setq out (cons cur out) cur "" i (1+ i)))
+      (t (setq cur (strcat cur c) i (1+ i)))
+    )
+  )
+  (reverse (cons cur out))
+)
+
+(defun xft:atof (s) (if s (atof s) 0.0))
+
+(defun xft:r2s (v) (rtos v 2 *xft-num-prec*))
+
+;; A DXF value as text: a point is its three parts, a number is rtos'd
+;; or itoa'd, a string is itself.
+;;
+;; ESCAPING HAPPENS HERE, on the leaves, and nowhere above.  A point
+;; writes the "," between its parts itself, so a caller that escaped
+;; the whole result afterwards would escape that comma too -- and the
+;; split that reads it back, which only cuts on an UNESCAPED one, would
+;; hand the whole "x,y,z" back as the x and read the y as zero.  Only a
+;; string can carry a delimiter, so only a string is escaped.
+(defun xft:val2s (v)
+  (cond
+    ((null v) "")
+    ((= (type v) 'LIST)
+     (strcat (xft:r2s (car v)) "," (xft:r2s (cadr v)) ","
+             (xft:r2s (if (caddr v) (caddr v) 0.0))))
+    ((= (type v) 'STR) (xft:esc v))
+    ((= (type v) 'INT) (itoa v))
+    (t (xft:r2s v))
+  )
+)
+
+;; ...and back, the CODE saying which of the four it was.  S is still
+;; escaped, so a point is split before its parts are unescaped.
+(defun xft:group (code s / b)
+  (cond
+    ((member code '(10 11))
+     (setq b (mapcar 'xft:unesc (xft:split s ",")))
+     (cons code (list (xft:atof (car b)) (xft:atof (cadr b))
+                      (xft:atof (caddr b)))))
+    ((member code '(39 40 41 50 51)) (cons code (xft:atof (xft:unesc s))))
+    ((member code '(62 66 70 71 72 73 370)) (cons code (atoi (xft:unesc s))))
+    (t (cons code (xft:unesc s)))
+  )
+)
+
+;; One entity as one string, nil for a type the record does not carry.
+;; The alist is walked in ORDER rather than assoc'd group by group, so
+;; an MTEXT that spills its text across repeated group 3s keeps all of
+;; them.
+(defun xft:ser (en / ed typ codes p out)
+  (setq ed  (entget en)
+        typ (cdr (assoc 0 ed)))
+  (if (setq codes (cadr (assoc typ *xft-keep*)))
+    (progn
+      (setq codes (append codes *xft-keep-common*)
+            out   (strcat "0=" (xft:esc typ)))
+      (foreach p ed
+        (if (member (car p) codes)
+          (setq out (strcat out "|" (itoa (car p)) "="
+                            (xft:val2s (cdr p))))))
+      out
+    )
+  )
+)
+
+(defun xft:deser (spec / g bits ed)
+  (setq ed '())
+  (foreach g (xft:split spec "|")
+    (setq bits (xft:split g "="))
+    (if (cdr bits)
+      (setq ed (cons (xft:group (atoi (xft:unesc (car bits))) (cadr bits))
+                     ed))))
+  (reverse ed)
+)
+
+;; SPEC back into the drawing, or nil when it names a type the record
+;; does not carry.  The layer goes through ensure-layer: it is an output
+;; layer for this run, and a rebuild onto one that was PURGED after the
+;; conversion has to create it (STANDARDS 5).
+(defun xft:rebuild (spec / ed typ sub lay out p)
+  (setq ed  (xft:deser spec)
+        typ (cdr (assoc 0 ed))
+        sub (cadr (assoc typ *xft-subclass*))
+        lay (cdr (assoc 8 ed)))
+  (if (and typ sub)
+    (progn
+      (cal:ensure-layer (if lay lay "0") *xft-rebuild-color*)
+      (setq out (list (cons 0 typ) '(100 . "AcDbEntity")))
+      (foreach p ed
+        (if (member (car p) *xft-keep-common*)
+          (setq out (append out (list p)))))
+      (setq out (append out (list (cons 100 sub))))
+      (foreach p ed
+        (if (not (member (car p) (cons 0 *xft-keep-common*)))
+          (setq out (append out (list p)))))
+      (entmakex out)
+    )
+  )
+)
+
+;; SPEC appended to a payload, "" and nil both meaning nothing to add.
+(defun xft:join (payload spec)
+  (cond
+    ((or (null spec) (= spec "")) payload)
+    ((= payload "") spec)
+    (t (strcat payload ";" spec))
+  )
+)
+
+;; One xdata string holds 255 characters, so the payload travels in
+;; pieces and is joined back before it is read.  A cut can land between
+;; a backslash and what it escapes; nothing looks at a piece on its own,
+;; so it does not matter.
+(defun xft:chunks (s / out)
+  (setq out '())
+  (while (> (strlen s) 250)
+    (setq out (cons (substr s 1 250) out)
+          s   (substr s 251)))
+  (reverse (cons s out))
+)
+
+;; The record onto one block: the marker word and the version that
+;; wrote it, the scale and the WCS base point as reals, then the
+;; payload.  WCS because a base kept in the UCS of the day would be
+;; read back under whatever UCS the revert happens to run in.
+(defun xft:stamp (en base scale payload / items)
+  (regapp *xft-xdata-app*)
+  (setq items (append (list (cons 1000 *xft-xdata-app*)
+                            (cons 1000 *xft-version*)
+                            (cons 1040 scale)
+                            (cons 1040 (car base))
+                            (cons 1040 (cadr base))
+                            (cons 1040 (if (caddr base) (caddr base) 0.0)))
+                      (mapcar '(lambda (c) (cons 1000 c))
+                              (xft:chunks payload))))
+  (entmod (append (entget en)
+                  (list (list -3 (cons *xft-xdata-app* items)))))
+)
+
+;; ...and back: (version scale base payload), or nil when this entity
+;; carries no record of ours.
+(defun xft:record (en / x app strs nums p)
+  (setq x (assoc -3 (entget en (list *xft-xdata-app*))))
+  (if x (setq app (assoc *xft-xdata-app* (cdr x))))
+  (if app
+    (progn
+      (setq strs '() nums '())
+      (foreach p (cdr app)
+        (cond ((= (car p) 1000) (setq strs (cons (cdr p) strs)))
+              ((= (car p) 1040) (setq nums (cons (cdr p) nums)))))
+      (setq strs (reverse strs) nums (reverse nums))
+      (if (and (cdr strs) (= (car strs) *xft-xdata-app*)
+               (= 4 (length nums)))
+        (list (cadr strs)
+              (car nums)
+              (list (cadr nums) (caddr nums) (cadddr nums))
+              (if (cddr strs) (apply 'strcat (cddr strs)) "")))
+    )
+  )
+)
+
+;; The record nearest PT gains SPEC.  A leftover text belongs to no one
+;; marker, so it is kept by the point it sat closest to: revert part of
+;; a survey and the annotation that came back is the annotation that
+;; was next to it.
+(defun xft:attach (recs pt spec / best bestd d out r)
+  (if (or (null recs) (null spec) (= spec ""))
+    recs
+    (progn
+      (foreach r recs
+        (setq d (cal:d2 pt (cadr r)))
+        (if (or (null best) (< d bestd)) (setq best r bestd d)))
+      (setq out '())
+      (foreach r recs
+        (setq out (cons (if (eq r best)
+                          (list (car r) (cadr r) (xft:join (caddr r) spec))
+                          r)
+                        out)))
+      (reverse out)
+    )
+  )
+)
+
+
+;;; -------------------------------------------------------------------
 ;;;  drawing setup - make sure the layer, style and block are there
 ;;; -------------------------------------------------------------------
 
@@ -73487,10 +74368,11 @@
 ;;;  insert one replacement point
 ;;; -------------------------------------------------------------------
 
-(defun xft:insert (pt num / apt)
-  (setq apt (list (+ (car pt) (car  *xft-att-offset*))
-                  (+ (cadr pt) (cadr *xft-att-offset*))
-                  (caddr pt)))
+(defun xft:insert (pt num / apt prev en)
+  (setq apt  (list (+ (car pt) (car  *xft-att-offset*))
+                   (+ (cadr pt) (cadr *xft-att-offset*))
+                   (caddr pt))
+        prev (entlast))
   (entmake (list '(0 . "INSERT")
                  '(100 . "AcDbEntity")
                  (cons 8 *xft-block-layer*)
@@ -73514,6 +74396,16 @@
   (entmake (list '(0 . "SEQEND")
                  '(100 . "AcDbEntity")
                  (cons 8 *xft-block-layer*)))
+  ;; the block reference just made, handed back so the run can stamp
+  ;; its record on it.  entlast is no way to find it: the attributes
+  ;; and the SEQEND are subentities, so AutoCAD answers with the
+  ;; INSERT and the VM the tests run on answers with the SEQEND.  The
+  ;; walk starts from where the drawing ended before the sequence and
+  ;; takes the first INSERT, which is the same entity on both.
+  (setq en (if prev (entnext prev) (entnext)))
+  (while (and en (/= "INSERT" (cdr (assoc 0 (entget en)))))
+    (setq en (entnext en)))
+  en
 )
 
 
@@ -73535,11 +74427,15 @@
 ;; or the whole label goes in as it stands; either way MTEXT formatting
 ;; codes are stripped and the result is trimmed.
 ;;
-;; Returns (made blank): how many blocks went in, and how many of those
-;; found no name and carry a blank number.
+;; Returns (made blank recs): how many blocks went in, how many of those
+;; found no name and carry a blank number, and one (ename centre
+;; payload) per block for the record XFTRECONV reads.  The payload is
+;; taken BEFORE anything is erased, which is the only moment the marker
+;; and its name text are still there to be read.
 (defun xft:swap (groups names reach strip / g nm ctr best bestd bestr rank
-                                            txth lim d num made blank e)
-  (setq made 0 blank 0)
+                                            txth lim d num made blank e
+                                            en spec recs)
+  (setq made 0 blank 0 recs '())
   (foreach g groups
     (setq ctr   (car g)
           best  nil
@@ -73570,12 +74466,18 @@
                          best names))
       (setq num "" blank (1+ blank))
     )
-    (xft:insert ctr num)
+    (setq spec "")
+    (if *xft-record*
+      (progn
+        (foreach e (cdr g) (setq spec (xft:join spec (xft:ser e))))
+        (if best (setq spec (xft:join spec (xft:ser (nth 3 best)))))))
+    (setq en (xft:insert ctr num))
     (foreach e (cdr g) (entdel e))
     (if best (entdel (nth 3 best)))
+    (if en (setq recs (cons (list en ctr spec) recs)))
     (setq made (1+ made))
   )
-  (list made blank)
+  (list made blank (reverse recs))
 )
 
 
@@ -73584,8 +74486,8 @@
 ;;; -------------------------------------------------------------------
 
 (defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone guard
-                     ss base i en ed typ locked
-                     markers names dots dotnames r
+                     ss base wbase i en ed typ locked
+                     markers names dots dotnames r recs
                      nmade nblank ndots nleft)
 
   (defun xft:restore ()
@@ -73678,8 +74580,12 @@
           (xft:ensure-block)
 
           ;; ---- 1. scale x12 about the middle of what was picked ---
-          ;; getboundingbox works in WCS, SCALE wants the current UCS
-          (setq base (trans (xft:centre ss) 0 1))
+          ;; getboundingbox works in WCS, SCALE wants the current UCS.
+          ;; The record keeps the WCS one: a base written down in the
+          ;; UCS of the day would be read back under whatever UCS the
+          ;; revert runs in, and land the survey somewhere else.
+          (setq wbase (xft:centre ss)
+                base  (trans wbase 0 1))
           (if (/= *xft-scale* 1.0)
             (progn
               (princ (strcat "\nScaling " (itoa (sslength ss)) " objects by "
@@ -73739,12 +74645,14 @@
           ;; ---- 3/4. name each marker, block in, marker out -------
           (setq r      (xft:swap markers names *xft-name-reach* T)
                 nmade  (car r)
-                nblank (cadr r))
+                nblank (cadr r)
+                recs   (caddr r))
           (setq r      (xft:swap dots dotnames *xft-dot-reach*
                                  *xft-dot-strip-prefix*)
                 ndots  (car r)
                 nmade  (+ nmade ndots)
-                nblank (+ nblank (cadr r)))
+                nblank (+ nblank (cadr r))
+                recs   (append recs (caddr r)))
 
           ;; ---- 5. every other bit of text in the selection goes ---
           ;; the numbers now live in the block attributes, so anything
@@ -73768,12 +74676,29 @@
                 (setq en (ssname ss i)
                       ed (entget en))
                 (if (and ed (member (cdr (assoc 0 ed)) '("TEXT" "MTEXT")))
-                  (progn (entdel en) (setq nleft (1+ nleft)))
+                  (progn
+                    ;; read before erasing, and kept by the block it
+                    ;; sat nearest: a leftover text belongs to no one
+                    ;; marker, so that is the only association there is
+                    (if *xft-record*
+                      (setq recs (xft:attach recs (xft:txtpt ed)
+                                             (xft:ser en))))
+                    (entdel en)
+                    (setq nleft (1+ nleft)))
                 )
                 (setq i (1+ i))
               )
             )
           )
+
+          ;; ---- 6. write the record down --------------------------
+          ;; Last, in one pass: the payloads are only complete once the
+          ;; purge above has handed its text to the blocks it belongs
+          ;; to, and stamping twice would mean reading each block's
+          ;; xdata back to append to it.
+          (if *xft-record*
+            (foreach r recs
+              (xft:stamp (car r) wbase *xft-scale* (caddr r))))
 
           (command "_.UNDO" "_End")
           (setq undone nil)
@@ -73791,9 +74716,215 @@
                            " had no name text nearby - inserted with a blank number.")))
           (if (> nleft 0)
             (princ (strcat "\n" (itoa nleft) " leftover text object(s) erased.")))
+          (if (and *xft-record* recs)
+            (princ "\nXFTRECONV puts all of it back - the blocks carry the record.")
+            (princ (strcat "\n*xft-record* is off, so nothing was written down -"
+                           " only U undoes this run.")))
           (princ)
         )
       )
+    )
+  )
+  (princ)
+)
+
+
+;;; -------------------------------------------------------------------
+;;;  XFTRECONV  -  the conversion, undone
+;;; -------------------------------------------------------------------
+;;;  Highlight the converted survey; every block in it that carries a
+;;;  record gives back the marker and the text it replaced, the block
+;;;  goes, and the whole highlight is scaled back by 1/12 about the
+;;;  base point the conversion used.
+;;;
+;;;  ONE RUN AT A TIME.  Two conversions have two base points, and one
+;;;  scale about one of them cannot undo both - so a highlight holding
+;;;  blocks from two runs is refused by name rather than half-reverted.
+;;;  The runs are told apart by the scale and base each block carries,
+;;;  which is exactly what the difference has to be for it to matter.
+
+;; The (ename version scale base payload) of every block in SS that
+;; carries a record of ours.
+(defun xft:records (ss / i en ed rec out)
+  (setq i 0 out '())
+  (while (< i (sslength ss))
+    (setq en (ssname ss i)
+          ed (entget en))
+    (if (and ed (= "INSERT" (cdr (assoc 0 ed)))
+             (setq rec (xft:record en)))
+      (setq out (cons (cons en rec) out)))
+    (setq i (1+ i))
+  )
+  (reverse out)
+)
+
+;; How many DIFFERENT conversions those records came from.  Two runs
+;; agreeing on scale and base to the fuzz are one run as far as the
+;; scale-back is concerned, which is the only thing this decides.
+(defun xft:runs (recs / out r key hit k)
+  (setq out '())
+  (foreach r recs
+    (setq key (list (nth 2 r) (nth 3 r)) hit nil)
+    (foreach k out
+      (if (and (not hit) (equal k key *xft-fuzz*)) (setq hit t)))
+    (if (not hit) (setq out (cons key out)))
+  )
+  (reverse out)
+)
+
+;; The locked layers in the way: the ones the blocks to be erased sit
+;; on.  A layer a rebuild writes TO is an output layer and goes through
+;; ensure-layer instead, which unlocks it for good and says so.
+(defun xft:locked-blocks (recs / lay out r)
+  (setq out '())
+  (foreach r recs
+    (setq lay (cdr (assoc 8 (entget (car r)))))
+    (if (and lay
+             (not (member (strcase lay) (mapcar 'strcase out)))
+             (xft:locked lay))
+      (setq out (cons lay out)))
+  )
+  (reverse out)
+)
+
+(defun c:XFTRECONV ( / *error* xft:restore oscm osos osclay undone guard
+                       ss recs runs locked r spec keep i en
+                       scale base nback nrebuilt)
+
+  (defun xft:restore ()
+    (if oscm   (setvar "CMDECHO" oscm))
+    (if osos   (setvar "OSMODE"  osos))
+    (if osclay (setvar "CLAYER"  osclay))
+    ;; popped on every way out, not in the handler alone -- see the
+    ;; same note in c:XFTCONV
+    (if *pop-error-mode* (*pop-error-mode*))
+  )
+
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nXFTRECONV error: " msg)))
+    (setq guard 0)
+    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+      (command)
+      (setq guard (1+ guard)))
+    (xft:restore)
+    (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (princ "\nNothing was left half done - use U to roll the run back.")
+    (princ)
+  )
+
+  (if *push-error-using-command* (*push-error-using-command*))
+
+  (setq oscm   (getvar "CMDECHO")
+        osos   (getvar "OSMODE")
+        osclay (getvar "CLAYER"))
+
+  (princ (strcat "\nXFTRECONV " *xft-version*
+                 " - put a converted survey back the way it arrived."))
+
+  ;; ---- selection, the same three ways XFTCONV takes it ------------
+  (setq ss (ssget "_I"))
+  (if (not ss)
+    (progn
+      (princ "\nSelect the converted survey (Enter = everything in this space): ")
+      (setq ss (ssget))))
+  (if (not ss)
+    (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
+  )
+
+  (cond
+    ((not ss)
+     (princ "\nNothing to work on.")
+     (xft:restore)
+     (princ))
+
+    ;; ---- nothing here was converted, or nothing wrote it down -----
+    ((not (setq recs (xft:records ss)))
+     (princ "\nNo converted points here - nothing carries an XFTCONV record.")
+     (princ "\n  XFTRECONV undoes an XFTCONV run, and only from the record")
+     (princ "\n  XFTCONV leaves on the blocks it inserts.  A survey converted")
+     (princ "\n  with *xft-record* off, or by hand, has none - U is the only")
+     (princ "\n  way back from those.")
+     (xft:restore)
+     (princ))
+
+    ;; ---- two runs cannot be undone by one scale -------------------
+    ((> (length (setq runs (xft:runs recs))) 1)
+     (princ (strcat "\nThis highlight holds points from " (itoa (length runs))
+                    " different XFTCONV runs."))
+     (princ "\n  Each was scaled about its own base point, and one scale back")
+     (princ "\n  cannot undo two - highlight one survey at a time.")
+     (xft:restore)
+     (princ))
+
+    ;; ---- a locked layer would refuse the erase --------------------
+    ((setq locked (xft:locked-blocks recs))
+     (princ (strcat "\nUnlock " (xft:namelist locked)
+                    " first, then run XFTRECONV again."))
+     (xft:restore)
+     (princ))
+
+    (t
+     (setvar "CMDECHO" 0)
+     (setvar "OSMODE" 0)
+     (if (= 1 (logand 1 (getvar "UNDOCTL")))
+       (progn
+         (command "_.UNDO" "_Begin")
+         (setq undone t)))
+
+     (setq scale    (nth 2 (car recs))
+           base     (nth 3 (car recs))
+           nback    0
+           nrebuilt 0)
+
+     ;; ---- 1. the markers and the text, back into the drawing ----
+     (setq keep (ssadd))
+     (foreach r recs
+       (foreach spec (xft:split (nth 4 r) ";")
+         (if (/= spec "")
+           (progn
+             (setq en (xft:rebuild spec))
+             (if en
+               (progn (ssadd en keep)
+                      (setq nrebuilt (1+ nrebuilt))))))
+       )
+       (entdel (car r))
+       (setq nback (1+ nback))
+     )
+
+     ;; ---- 2. what the scale-back applies to ---------------------
+     ;; everything rebuilt above, plus everything highlighted that is
+     ;; still there.  Built as its own set rather than reusing the
+     ;; highlight, and built AFTER the erase: a block's attributes are
+     ;; erased with it, and SCALE will not take a selection carrying
+     ;; entities that have gone out from under it.
+     (setq i 0)
+     (while (< i (sslength ss))
+       (setq en (ssname ss i))
+       (if (entget en) (ssadd en keep))
+       (setq i (1+ i))
+     )
+
+     ;; ---- 3. and back down to the units it arrived in ------------
+     (if (and (/= scale 0.0) (/= scale 1.0) (> (sslength keep) 0))
+       (progn
+         (princ (strcat "\nScaling " (itoa (sslength keep)) " objects back by 1/"
+                        (rtos scale 2 4) " about the conversion's own base ..."))
+         (command "_.SCALE" keep "" (trans base 0 1) (/ 1.0 scale))))
+
+     (command "_.UNDO" "_End")
+     (setq undone nil)
+     (xft:restore)
+
+     ;; ---- report -------------------------------------------------
+     (princ (strcat "\n" (itoa nback) " \"" *xft-block*
+                    "\" block(s) taken back off the survey."))
+     (princ (strcat "\n" (itoa nrebuilt)
+                    " marker and text object(s) put back."))
+     (if (= 0 nrebuilt)
+       (princ (strcat "\n  Their records carry no geometry - the run that"
+                      " wrote them found markers it could not read back.")))
+     (princ)
     )
   )
   (princ)
@@ -73816,7 +74947,8 @@
   (princ))
 
 (princ (strcat "\nXFTCONV.lsp " *xft-version*
-               " loaded.  Type XFTCONV to scale a survey import and swap its points."))
+               " loaded.  Type XFTCONV to scale a survey import and swap"
+               " its points, XFTRECONV to put one back."))
 (princ)
 
 
@@ -80623,7 +81755,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.10")
+(setq *lazpanel-version* "v3.11")
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -80744,6 +81876,7 @@
     ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SOCONV"           "SO survey onto our layers")
+    ("SORECONV"         "SO conversion, undone")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
@@ -80752,8 +81885,10 @@
     ("TYDRN"            "Text + point tidy-up")
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
     ("VSCONV"           "VS export onto shop layers")
+    ("VSRECONV"         "VS conversion, undone")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Survey import cleanup")
+    ("XFTRECONV"        "Import cleanup, undone")
     ("XYPLOT"           "X/Y offset plot")
    ))
 
@@ -80783,8 +81918,11 @@
   '(("Pool"
      ("Converters"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       )
      ("Shape"
       "POOL"
@@ -80831,6 +81969,7 @@
       "STOCKCOVER"
       "CUSTBLOCK"
       "XFTCONV"
+      "XFTRECONV"
       )
      ("Points"
       "ABFIND"
@@ -80854,8 +81993,11 @@
      ("Spa"
      ("Converters"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       )
      ("Shape, dims & check"
       "SPA"
@@ -80943,8 +82085,11 @@
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -82499,11 +83644,12 @@
   "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET"
   "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
   "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE"
-  "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SOCONVVER"
-  "VSCONV" "VSCONVVER" "WCALST" "WCALSTVER" "XFTCONV" "XFTCONV-SETUP"
-  "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA"
-  "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
-  "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV"
+  "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER" "WCALST" "WCALSTVER"
+  "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER"
+  "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT"
+  "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON"
+  "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
@@ -82520,7 +83666,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.5 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.6 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

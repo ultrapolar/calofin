@@ -54,6 +54,7 @@ mark, and a done line reports what moved, per source layer.
 | Command | What it does |
 | --- | --- |
 | `VSCONV` | Convert the highlighted import; Enter at the prompt takes every VS layer in the drawing |
+| `VSRECONV` | Put it all back on the VS layers, overrides and all |
 | `VSCONVVER` | Print the loaded version |
 
 Scope is what you highlight. Press Enter at the selection prompt and
@@ -62,6 +63,51 @@ the layers in the table are touched, so a sheet that already carries
 converted work cannot be converted twice, and a drawing with none of
 those layers is reported as such rather than prompting for a selection
 it has no use for.
+
+## Undoing it -- `VSRECONV`
+
+`U` is good for the session. `VSRECONV` undoes a conversion that was
+saved and reopened -- which is when a sheet turns out to have been
+converted by mistake, or has to go back to whoever exported it:
+
+```
+Command: VSRECONV
+Select the converted import to put back <Enter = whole drawing>:
+VSRECONV done: 7 object(s) put back on the export's own layers.
+  POOL: 2 -> 1 Perimeter
+  POINTS: 2 -> 3.1 Anchors
+  DIMENSION: 1 -> 4 Dimensions
+  1 dimension(s) back on their own style, ACAD style overrides restored
+```
+
+Every object `VSCONV` moves carries a **record** in its own xdata: the
+layer it came off and that layer's colour, the colour, linetype and
+lineweight the BYLAYER forcing overwrote, and -- for a dimension -- the
+style name it had **and the whole `ACAD`/`DSTYLE` override block, kept
+verbatim as the xdata items it already was**. Both halves of the
+dimension step are undone: a revert that put the style name back and
+left the overrides off would leave the dimensions drawing in a style
+they never had.
+
+* **Scope has no layer filter**, where `VSCONV`'s has. A converted
+  object is on `POOL` / `POINTS` / `DIMENSION`, which is where this
+  office's own drawing lives too -- so the record is what says which
+  objects came from an export, and nothing else is touched whatever is
+  selected.
+* **A source layer `PURGE`d after the conversion is re-created**, with
+  the colour the record kept off it while it was still there.
+* **The record goes with the move it describes** -- but only when the
+  move finishes. If a linetype has been purged since the conversion,
+  that object keeps its record and the run says so, so loading the
+  linetype and running `VSRECONV` again really does finish it.
+* **One thing it spells out rather than restores**: an object that
+  arrived carrying *no* colour, linetype or lineweight of its own comes
+  back carrying an explicit ByLayer -- `256`, `ByLayer`, `-1` -- where
+  it had the absent group that means the same thing. It draws and plots
+  identically; nothing else about the round trip is approximate.
+* **`*vsconv-record*` `nil` turns the record off.** `VSCONV` then
+  converts exactly as before and says so, and `VSRECONV` has nothing to
+  work from.
 
 ## Tunables
 
@@ -74,6 +120,8 @@ At the top of `VSCONV.lsp`:
 | `*vsconv-default-color*` | `7` | for a destination the table above does not name |
 | `*vsconv-dim-style*` | `"STANDARD"` | the style the dimensions land in |
 | `*vsconv-dim-xdata*` | `"ACAD"` | the application whose style overrides go with the rename; `nil` leaves the overrides on |
+| `*vsconv-record*` | `t` | write the undo record `VSRECONV` reads |
+| `*vsconv-xdata-app*` | `"VSCONV"` | the xdata application that record lives under |
 
 ## Notes & limitations
 
@@ -110,6 +158,12 @@ of those layers is reported rather than prompted over, the
 missing-dimension-style path, and the two cut-short paths (an error
 mid-run and an Esc at the prompt) that reach the command's own
 `*error*` -- which has to put the lock back and close the mark.
-`CALOFIN_LISP_ROOT=shared` reruns it against the grouped twin.
+Then `VSRECONV` over the same fixture: the round trip lands every object
+on the layer and properties it arrived with and every dimension back on
+its own style **with its override block**, a purged source layer is
+re-created with the recorded colour, a linetype that cannot be loaded
+leaves that object's record in place, `*vsconv-record*` `nil` writes
+nothing down, and an error and an `Esc` reach the reverter's own
+`*error*`. `CALOFIN_LISP_ROOT=shared` reruns it against the grouped twin.
 `python3 tests/test_shared.py` still loads it with everything else, so a
 name collision fails there.
