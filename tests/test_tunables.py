@@ -1,4 +1,4 @@
-"""The four UI files' knobs: all at the top, all explained, none stray.
+"""Every tunables block in the tree: all at the top, all explained, none stray.
 
 The chart forms and the panel are the files a person tunes -- a budget
 that has to change when a name gets longer, a ceiling that depends on
@@ -31,6 +31,12 @@ next knob underneath.
    its presence is.
 6. The knobs the VB palette shares -- the registry keys, the recent cap,
    the step ceiling -- say the same thing on both surfaces.
+
+The four GUI files came first and check 6 is still theirs -- they are
+the ones whose knobs the VB palette shares.  Checks 1-5 are the general
+rule (STANDARDS.md section 5, "Tunables") and every file in FILES meets
+them; ``abcdef`` and ``ALTABCDEF`` joined when they grew blocks of their
+own.
 
 Run: python3 tests/test_tunables.py
 """
@@ -65,6 +71,13 @@ FILES = [
      ROOT / 'lisp' / 'lazspa' / 'README.md'),
     ('LAZSTEP', ROOT / 'lisp' / 'lazstep' / 'LAZSTEP.lsp', 'lzt',
      ROOT / 'lisp' / 'lazstep' / 'README.md'),
+    # the two point plotters, which grew blocks of their own: the same
+    # rule, and the same reason -- a confidence weight or a drop-evidence
+    # ratio buried beside the solver is a number nobody can reach
+    ('abcdef', ROOT / 'lisp' / 'abcdef' / 'abcdef.lsp', 'abcdef',
+     ROOT / 'lisp' / 'abcdef' / 'README.md'),
+    ('ALTABCDEF', ROOT / 'lisp' / 'altabcdef' / 'ALTABCDEF.lsp', 'altabcdef',
+     ROOT / 'lisp' / 'altabcdef' / 'README.md'),
 ]
 
 HEADER = ';;; -------------------- tunables '
@@ -102,7 +115,17 @@ def assigned(src, ns):
     pair, not just the first.  ``(setq lzf:*dx* a lzf:*dy* b)`` writes
     both, and reading only the name after ``(setq`` calls the second one
     a constant.  So the form is walked and every name at paren depth 0
-    inside it counts.
+    inside it counts -- but only in a NAME position.
+
+    That last clause is the one to be careful about.  A setq alternates
+    name, value, name, value, and a knob is perfectly ordinary in a
+    VALUE position: ``(setq iter abcdef:*solve-iters*)`` reads the knob
+    to end a loop and ``(setq th abcdef:*text-min*)`` reads it to floor
+    a text height.  Counting those as writes calls a constant state and
+    fails a file for using its own settings, so the depth-0 atoms are
+    counted off in pairs and only the even ones are assignments.  A
+    parenthesised value takes one slot like any other atom, and a quote
+    binds to the token after it rather than taking a slot of its own.
     """
     out = {}
     for m in re.finditer(r'\(setq\b', src):
@@ -123,16 +146,22 @@ def assigned(src, ns):
                 if not depth:
                     break
             i += 1
-        d = 0
-        for t in re.finditer(r'[()]|' + ns + r':\*[a-z0-9-]+\*',
+        d = k = 0
+        for t in re.finditer(r'"(?:[^"\\]|\\.)*"|;[^\n]*|[()\']|[^\s()\'";]+',
                              src[m.end():i]):
             s = t.group(0)
             if s == '(':
+                if d == 0:
+                    k += 1                    # a list is one value slot
                 d += 1
             elif s == ')':
                 d -= 1
-            elif d == 0:
-                out.setdefault(s, []).append(m.start())
+            elif d or s == "'" or s.startswith(';') or s.startswith('"'):
+                continue                      # nested, quote, comment
+            else:
+                if k % 2 == 0 and re.fullmatch(ns + r':\*[a-z0-9-]+\*', s):
+                    out.setdefault(s, []).append(m.start())
+                k += 1
     return out
 
 
