@@ -61,8 +61,24 @@ leniency is built in:
 | --- | --- |
 | 4 | fitted on all four; if that fit is poor and leaving **one** out settles the other three, that tape is dropped and the report names it |
 | 3 | least-squares fitted, sharing the leftover error across all three |
-| 2 | the two circles are crossed exactly and the root **inside** the rectangle is taken (the mirror root sits beyond a rectangle side) |
+| 2 | the two circles are crossed exactly and the root **inside** the rectangle is taken.  Measured from two *adjacent* corners the mirror root sits beyond a rectangle side, so there is only one candidate; measured from two *opposite* corners both roots are inside and fit identically, and that row is flagged `(mirror pair)` rather than guessed at — see below |
 | 0–1 | skipped, and named on the command line |
+
+### Two tapes from opposite corners
+
+Two circles meet twice, either side of the line joining the corners they
+came from.  For two **adjacent** corners that line is a side of the
+rectangle, so one root is inside the frame and the other is not, and the
+frame picks the answer.  For two **opposite** corners the line is a
+diagonal: both roots are inside, both fit the tapes to the same
+hundredth, and the seed that would break the tie sits exactly halfway
+between them.  The sheet genuinely does not say which of the two the
+point is.
+
+Such a row is plotted, flagged `(mirror pair, two answers fit - needs a
+third tape)`, counted among the points wanting checking, and graded down
+by `abcdef:*conf-mirror*`.  A third tape from any corner settles it
+outright.
 
 What it will **not** do is drop a tape it cannot prove is the bad one.
 Three tapes that disagree give no evidence about which of them is wrong —
@@ -194,6 +210,32 @@ sample sheet (`template.csv`) found three separate problems:
    run down with it — the one thing the catch was there to prevent. Fixed
    in `abcdef.lsp` and in `ALTABCDEF.lsp`, which had inherited it.
 
+## Tunables
+
+Every threshold, layer name, colour, size and tolerance is a named
+`(setq abcdef:*name* ...)` at the top of `abcdef.lsp`, under a
+`Tunables` banner, each with a note on what it does, what unit it is in
+and which way to move it.  Nothing below that block carries a bare
+number, so changing behaviour never means reading the solver.
+
+Edit the file and `APPLOAD` it again, or `(setq abcdef:*name* value)` at
+the command line for one session.  They are grouped:
+
+| Group | What is in it |
+| --- | --- |
+| where the tapes stop agreeing | `*fit-ok*`, `*fit-bad*`, `*edge-tol*`, `*snap-show*` |
+| dropping a tape | `*drop-gain*`, `*drop-ratio*`, `*drop-margin*` — how strong the evidence has to be before Auto discards a reading |
+| whole-sheet sanity | `*swap-min*`, `*swap-ratio*` (the C/D detector), `*poor-fit*` (the alert) |
+| the confidence column | `*conf-three*`, `*conf-two*`, `*conf-fit*`, `*conf-spread*`, `*conf-cut-*`, `*conf-drop*`, `*conf-mirror*`, the `*cut-*` bands, the `*grade-*` words and `*conf-check*` |
+| what it draws | `*point-layer*` / `*point-block*` / `*point-tag*` (what ABHD reads — change only with it), `*frame-layer*`, `*warn-layer*`, their colours, and the text sizing `*text-div*` / `*text-min*` / `*tag-*` / `*note-off*` |
+| the sheet | `*file-types*`, `*hdr-dist*`, `*hdr-name*`, `*report-suffix*` |
+| reading dirty values | `*apos-over*`, `*impossible*`, `*fractions*`, `*log-denom*` |
+| numerical | `*fuzz*`, `*solve-iters*`, `*solve-step*`, `*solve-singular*`, `*seed-singular*`, `*frame-tol*` |
+
+`tests/test_abcdef.py` asserts each one is live — that changing it
+changes the drawing or the report — so a knob cannot quietly stop being
+wired to anything.
+
 ## Verification
 
 AutoLISP only runs inside AutoCAD, so two scripts stand in for it.
@@ -219,3 +261,13 @@ output and the ABHD handoff:
 python3 tests/test_abcdef.py
 CALOFIN_LISP_ROOT=shared python3 tests/test_abcdef.py   # the grouped build
 ```
+
+Beyond the arithmetic it drives the rest of a real run: the command's own
+CSV reader (quoted cells, columns in any order, the repair log), `Back`
+at every question in the chain, a cancelled file dialog, the C/D swap
+detector firing and staying quiet, the poor-fit alert, the mirror-pair
+flag, the corner self-check refusing to plot, a frozen or locked
+`POINTS` layer being restored, the `ab_pt` block being created once and
+reused, a second import in one drawing handing `ABHD` only its own
+points, a report file that cannot be written, `UNDO` switched off, an Esc
+at each prompt going through the handler, and every tunable being live.

@@ -23,18 +23,153 @@
 ;;;  Distances are entered / stored as architectural feet-inches, e.g.
 ;;;      12'-3 1/2"      3 1/2"      0'-6"      5'-0 3/4"
 ;;;
-;;;  Command:  ALTABCDEF
+;;;  ABCDEF is this command's sister, for a sheet whose bottom corners are
+;;;  labelled the other way round (C bottom-LEFT, D bottom-RIGHT - the "Z"
+;;;  reading order).  The two conventions are not interchangeable, which is
+;;;  why they are two commands; ABCDEF is the one that has grown the
+;;;  confidence report, the tape-dropping rules and the C/D detector.
+;;;
+;;;  Commands:  ALTABCDEF     read the sheet and plot every point
+;;;             ALTABCDEFVER  print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
+;;;  Every threshold, layer name, colour, size and tolerance the command
+;;;  uses is a named Tunable at the top of this file, each with a note on
+;;;  what it does and which way to move it.  Nothing below that block is
+;;;  meant to be edited to change how the tool behaves.
+;;;
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.7")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
+
+;;; --------------------------------------------------------------------------
+;;;  Tunables
+;;;
+;;;  Everything a drafter might reasonably want different is set HERE and
+;;;  nowhere else: the code below reads these names and carries no bare
+;;;  numbers of its own.  Each knob says what it does, what unit it is in,
+;;;  and which way to move it.  Change a value, save, APPLOAD again - or
+;;;  (setq altabcdef:*name* value) at the command line for one session.
+;;;
+;;;  Distances are in inches throughout (1 drawing unit = 1 inch).
+;;; --------------------------------------------------------------------------
+
+;; ---- what it draws ---------------------------------------------------------
+
+;; The three output layers and the colours they are created with (AutoCAD
+;; colour numbers: 1 red, 2 yellow, 3 green).  A layer that already exists
+;; keeps its own colour and is only switched on, thawed and unlocked.
+;;
+;; These are ALTABCDEF's own layers on purpose.  ABCDEF plots onto the
+;; shared POINTS layer as "ab_pt" blocks, which ABHD and the other fitters
+;; read; this command draws plain markers instead, so pointing it at POINTS
+;; would put entities there that those tools would try to fit a pool
+;; through.  Change these only if you know what reads them.
+(setq altabcdef:*frame-layer*  "ALTABCDEF-FRAME")
+(setq altabcdef:*frame-color*  1)
+(setq altabcdef:*point-layer*  "ALTABCDEF-POINTS")
+(setq altabcdef:*point-color*  2)
+(setq altabcdef:*label-layer*  "ALTABCDEF-LABELS")
+(setq altabcdef:*label-color*  3)
+
+;; Text height is the longer rectangle side divided by *text-div*, but
+;; never under *text-min* inches.  Everything else is measured in those
+;; text heights:
+;;   *marker-scale*  radius of the circle drawn around each point
+;;   *label-off*     how far up and right of the point its name sits, in
+;;                   marker radii
+;;   *tag-scale*     the corner letters A B C D are this many text heights
+;;   *tag-gap*       how far a corner letter sits out from its corner,
+;;                   sideways and upward
+;;   *tag-drop*      how far BELOW a bottom corner its letter's baseline
+;;                   sits (more than *tag-gap*: the letter's own height
+;;                   has to clear the corner)
+(setq altabcdef:*text-div*     120.0)
+(setq altabcdef:*text-min*     0.5)
+(setq altabcdef:*marker-scale* 0.4)
+(setq altabcdef:*label-off*    1.4)
+(setq altabcdef:*tag-scale*    1.4)
+(setq altabcdef:*tag-gap*      1.0)
+(setq altabcdef:*tag-drop*     1.6)
+
+;; ---- the sheet -------------------------------------------------------------
+
+;; What the file dialog offers, as a getfiled extension list.  CSV is read
+;; natively; the Excel formats go through Excel COM automation and so need
+;; full AutoCAD with Excel installed.
+(setq altabcdef:*file-types* "xlsx;xls;xlsm;csv")
+
+;; Header words that identify the columns, compared upper-case as
+;; substrings: a header containing the Nth entry of *hdr-dist* is the
+;; distance from the Nth corner (A B C D), and the first header containing
+;; any entry of *hdr-name* is the point name.  With no name header the
+;; first column is taken.
+(setq altabcdef:*hdr-dist* '("FROM A" "FROM B" "FROM C" "FROM D"))
+(setq altabcdef:*hdr-name* '("NAME" "POINT" "LABEL"))
+
+;; How many distances a row needs before it is plotted at all.  Two fix a
+;; point up to a mirror, three fix it outright.  Below this the row is
+;; skipped and named on the command line.
+(setq altabcdef:*min-tapes* 2)
+
+;; ---- reading dirty values --------------------------------------------------
+
+;; A reading with no foot mark whose value is more than *apos-over* times
+;; the rectangle's diagonal, and whose feet end in a 1, had its foot mark
+;; scanned as that 1 ("101-10" is 10'-10"): the 1 is dropped and the repair
+;; logged.  A value still over *impossible* times the diagonal after that
+;; cannot be a distance to a corner and is left blank (and logged).  Both
+;; are ratios; 1.0 would be the diagonal itself.
+(setq altabcdef:*apos-over*  1.05)
+(setq altabcdef:*impossible* 1.1)
+
+;; The denominators an inch fraction may have.  A slash-less digit run like
+;; "314" is rebuilt as the one fraction over one of these it could be
+;; (3/4), so a denominator not listed here is never invented.
+(setq altabcdef:*fractions* '(2 4 8 16 32))
+
+;; The correction log writes each repaired value back as feet-inches to the
+;; nearest 1/*log-denom* of an inch, reduced (476.75 -> 39'-8 3/4").
+;; A whole number, a power of two.
+(setq altabcdef:*log-denom* 32)
+
+;; ---- numerical -------------------------------------------------------------
+;; These only matter to the solver's arithmetic and should not need
+;; touching.
+
+;; Two lengths closer than this are the same length; also the shortest
+;; radius the solver will divide by.  In inches.
+(setq altabcdef:*fuzz* 1e-9)
+
+;; The least-squares fit: at most *solve-iters* Gauss-Newton steps, done
+;; when a step moves the point under *solve-step* inches in both X and Y;
+;; a normal-matrix determinant under *solve-singular* (or a linear-seed
+;; determinant under *seed-singular*) means the distances do not constrain
+;; the point and the fit stops where it is.
+(setq altabcdef:*solve-iters*    60)
+(setq altabcdef:*solve-step*     1e-7)
+(setq altabcdef:*solve-singular* 1e-12)
+(setq altabcdef:*seed-singular*  1e-9)
+
+;; The corner self-check accepts a side or diagonal within this many inches
+;; of what the entered W and H say it should be.
+(setq altabcdef:*frame-tol* 0.001)
+
+;; Two distances fix a point twice over - once each side of the line
+;; joining the two corners they were measured from - and both answers fit
+;; them EQUALLY well.  From two ADJACENT corners the mirror falls outside
+;; the rectangle and the choice is made for us; from two OPPOSITE corners
+;; it does not, and the sheet genuinely does not say which of the two the
+;; point is.  Such a row is plotted and NAMED on the command line; the
+;; mirror has to be this far from the answer to count as a real second
+;; possibility rather than rounding.
+(setq altabcdef:*mirror-min* 1.0)
 
 ;;; --------------------------------------------------------------------------
 ;;;  String helpers
@@ -162,10 +297,34 @@
                  (altabcdef:alldigits num) (altabcdef:alldigits den))
           (progn
             (setq ni (atoi num) di (atoi den))
-            (if (and (member di '(2 4 8 16 32)) (> ni 0) (< ni di))
+            (if (and (member di altabcdef:*fractions*) (> ni 0) (< ni di))
               (setq best (strcat num "/" den)))))))
     (setq k (1+ k)))
   best)
+
+;; A fraction OCR-split across tokens: "1 /4", "1/ 4" or "1 / 4" tokenises
+;; as ("1" "/4"), ("1/" "4") or ("1" "/" "4"), and the broken "/x" piece
+;; would otherwise contribute 0 - losing the fraction, so 4 1/4" reads as
+;; 5".  Re-join a token that starts or ends with "/" with its neighbour so
+;; the value parses as a real fraction.  (ABCDEF's repair, ported: the same
+;; field sheets go through both commands, and 10 cells of the sample sheet
+;; are written this way.)
+(defun altabcdef:mergefrac (toks / out tok changed)
+  (setq out '() changed nil)
+  (while toks
+    (setq tok (car toks) toks (cdr toks))
+    (cond
+      ;; "1/" + "4" -> re-queue "1/4" (also eats the middle of "1 / 4")
+      ((and toks (= (substr tok (strlen tok) 1) "/"))
+       (setq toks (cons (strcat tok (car toks)) (cdr toks)))
+       (setq changed T))
+      ;; "1" + "/4" -> "1/4"
+      ((and out (> (strlen tok) 1) (= (substr tok 1 1) "/"))
+       (setq out (cons (strcat (car out) tok) (cdr out)))
+       (setq changed T))
+      (T (setq out (cons tok out)))))
+  (if changed (setq altabcdef:*dirty* T))
+  (reverse out))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Feet-inch parser  ->  inches (real).  Returns nil for an empty OR corrupt
@@ -178,6 +337,7 @@
 ;;;    28-7"         missing foot mark    -> 28'-7"   (dash separates ft/in)
 ;;;    101-10"       foot mark read as 1  -> 10'-10"  (needs MAXD to detect)
 ;;;    20'-7 114"    "/" read as 1        -> 20'-7 1/4"
+;;;    34'-4 1 /4"   fraction split       -> 34'-4 1/4"
 ;;;    1 1'-IO 1/2"  split feet / O,I     -> 11'-10 1/2"
 ;;;  Only the non-obvious repairs set altabcdef:*dirty* (for the change report).
 ;;; --------------------------------------------------------------------------
@@ -215,7 +375,7 @@
       (setq rest (cal:trim rest))
       ;; --- inches: sum whole-number and fraction tokens ------------------
       (setq inch 0.0)
-      (foreach tok (altabcdef:tokens rest)
+      (foreach tok (altabcdef:mergefrac (altabcdef:tokens rest))
         ;; a slash-less all-digit run of 3+ digits is very likely a fraction
         ;; whose "/" was scanned as a "1" (114 -> 1/4); reconstruct it.
         (if (and (not (vl-string-search "/" tok))
@@ -234,7 +394,7 @@
       ;; --- foot mark scanned as a "1" ------------------------------------
       ;; e.g. 10'-10" -> "101-10": with no real ' and a value past the
       ;; diagonal, a trailing 1 on the feet was the apostrophe; drop it.
-      (if (and maxd (null p) (> val (* maxd 1.05))
+      (if (and maxd (null p) (> val (* maxd altabcdef:*apos-over*))
                (> (strlen ftstr) 1)
                (= (substr ftstr (strlen ftstr) 1) "1"))
         (progn
@@ -243,23 +403,24 @@
                 altabcdef:*dirty* T)))
       (if neg (setq val (- val)))
       ;; --- final sanity: non-positive or still impossible -> unreadable --
-      (if (or (<= val 0.0) (and maxd (> val (* maxd 1.1))))
+      (if (or (<= val 0.0)
+              (and maxd (> val (* maxd altabcdef:*impossible*))))
         (progn (setq altabcdef:*dirty* T) nil)
         val))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Format inches back to a feet-inch string (for the correction log), to the
-;;;  nearest 1/32", reduced.  e.g. 476.75 -> 39'-8 3/4"
+;;;  nearest 1/altabcdef:*log-denom*", reduced.  e.g. 476.75 -> 39'-8 3/4"
 ;;; --------------------------------------------------------------------------
 
-(defun altabcdef:in->ftin (v / neg feet whole frac n den ft s)
+(defun altabcdef:in->ftin (v / neg feet whole n den per s)
   (setq neg (< v 0.0) v (abs v))
-  (setq n (fix (+ (* v 32.0) 0.5)))      ; total 1/32" units, rounded
-  (setq feet (fix (/ n 384)))            ; 384 = 32*12
-  (setq n (- n (* feet 384)))
-  (setq whole (fix (/ n 32)))
-  (setq n (- n (* whole 32)))            ; leftover 1/32 units, 0..31
-  (setq den 32)
+  (setq den altabcdef:*log-denom* per (* den 12))
+  (setq n (fix (+ (* v den) 0.5)))       ; total 1/den" units, rounded
+  (setq feet (fix (/ n per)))            ; per = those units in a foot
+  (setq n (- n (* feet per)))
+  (setq whole (fix (/ n den)))
+  (setq n (- n (* whole den)))           ; leftover 1/den units
   (while (and (> n 0) (= (rem n 2) 0)) (setq n (/ n 2) den (/ den 2)))
   (setq s (strcat (itoa feet) "'-" (itoa whole)))
   (if (> n 0) (setq s (strcat s " " (itoa n) "/" (itoa den))))
@@ -276,15 +437,81 @@
 ;;;  A linear (circle-difference) solution seeds a Gauss-Newton refinement
 ;;;  of  min  S( |P-Ci| - di )^2 , which is exactly "spread the rounding
 ;;;  error evenly over the distances".  Needs >= 2 corners; 3+ give a unique
-;;;  fix.  With only 2, the frame centre is used as the seed so the interior
-;;;  intersection is chosen.
+;;;  fix.
+;;;
+;;;  TWO distances are crossed EXACTLY instead, and the root nearest the
+;;;  seed is taken.  Least-squares cannot be trusted to do it: two circles
+;;;  meet at a mirror pair either side of the line joining their centres,
+;;;  and ON that line both residual gradients point the same way, so the
+;;;  normal matrix is singular and the iteration stops where it started.
+;;;  For a pair of OPPOSITE corners the seed - the middle of the frame - is
+;;;  exactly on that line, so the old code returned the frame centre itself
+;;;  as the answer, with tens of inches of fit error and nothing but the
+;;;  RMS column to say so.  Crossing the circles gives a real answer; which
+;;;  of the mirror pair it is, only a third distance can say, and the
+;;;  command names such a row on the command line.
+;;; --------------------------------------------------------------------------
+
+;; Plain 2-D distance between two (x y ...) points.
+(defun altabcdef:d2p (p q)
+  (sqrt (+ (expt (- (car q) (car p)) 2) (expt (- (cadr q) (cadr p)) 2))))
+
+;; The points at distance RA from CA and RB from CB, as a list of one or
+;; two (x y).
+;;
+;; Quarter-inch distances routinely describe circles that miss each other,
+;; or one that swallows the other, by a fraction of an inch.  Rather than
+;; give up on those rows, the shortfall is shared equally between the two
+;; radii until the circles just touch, and the single touching point comes
+;; back - neither distance is called the liar, which is the same principle
+;; the least-squares fit works on.
+(defun altabcdef:cc-int (ca ra cb rb / d ux uy m h2 h bx by gap)
+  (setq d (altabcdef:d2p ca cb))
+  (if (< d altabcdef:*fuzz*)
+    nil                                  ; the same corner twice
+    (progn
+      (setq ux (/ (- (car cb) (car ca)) d)
+            uy (/ (- (cadr cb) (cadr ca)) d))
+      (cond
+        ((< (+ ra rb) d)                 ; circles fall short of each other
+         (setq gap (- d (+ ra rb))
+               ra  (+ ra (* 0.5 gap))
+               rb  (+ rb (* 0.5 gap))))
+        ((< d (abs (- ra rb)))           ; one circle inside the other
+         (setq gap (- (abs (- ra rb)) d))
+         (if (> ra rb)
+           (setq ra (- ra (* 0.5 gap)) rb (+ rb (* 0.5 gap)))
+           (setq ra (+ ra (* 0.5 gap)) rb (- rb (* 0.5 gap))))))
+      (setq m  (/ (+ (* d d) (* ra ra) (- (* rb rb))) (* 2.0 d))
+            h2 (- (* ra ra) (* m m)))
+      (if (< h2 0.0) (setq h2 0.0))      ; only rounding can get here now
+      (setq h  (sqrt h2)
+            bx (+ (car ca) (* m ux))
+            by (+ (cadr ca) (* m uy)))
+      (if (< h altabcdef:*fuzz*)
+        (list (list bx by))
+        (list (list (- bx (* h uy)) (+ by (* h ux)))
+              (list (+ bx (* h uy)) (- by (* h ux))))))))
+
 ;;; --------------------------------------------------------------------------
 
 (defun altabcdef:solve (corners dists cx cy / n x y i c d dx dy r jx jy f
                              saa sab sbb sac sbc a b cc det xr yr dr
-                             jaa jab jbb ga gb ddx ddy res rms iter)
+                             jaa jab jbb ga gb ddx ddy res rms iter
+                             cands best bd sc)
   (setq n (length corners))
+  ;; ---- two distances: cross the circles exactly ---------------------------
+  (if (= n 2)
+    (setq cands (altabcdef:cc-int (nth 0 corners) (nth 0 dists)
+                                  (nth 1 corners) (nth 1 dists))))
   ;; ---- seed --------------------------------------------------------------
+  (if cands
+    (progn                                   ; the root nearest the seed
+      (setq best nil bd nil)
+      (foreach c cands
+        (setq sc (altabcdef:d2p c (list cx cy)))
+        (if (or (null bd) (< sc bd)) (setq bd sc best c)))
+      (setq x (car best) y (cadr best)))
   (if (>= n 3)
     (progn                                   ; linear least squares seed
       (setq xr (car (car corners)) yr (cadr (car corners)) dr (car dists))
@@ -300,26 +527,26 @@
               sac (+ sac (* a cc)) sbc (+ sbc (* b cc)))
         (setq i (1+ i)))
       (setq det (- (* saa sbb) (* sab sab)))
-      (if (> (abs det) 1e-9)
+      (if (> (abs det) altabcdef:*seed-singular*)
         (setq x (/ (- (* sac sbb) (* sbc sab)) det)
               y (/ (- (* saa sbc) (* sab sac)) det))
         (setq x cx y cy)))                    ; degenerate -> centre
-    (setq x cx y cy))                         ; only 2 circles -> centre seed
+    (setq x cx y cy)))                        ; nothing better -> centre
   ;; ---- Gauss-Newton refinement ------------------------------------------
   (setq iter 0)
-  (while (< iter 60)
+  (while (< iter altabcdef:*solve-iters*)
     (setq jaa 0.0 jab 0.0 jbb 0.0 ga 0.0 gb 0.0 i 0)
     (while (< i n)
       (setq c (nth i corners) d (nth i dists))
       (setq dx (- x (car c)) dy (- y (cadr c)) r (sqrt (+ (* dx dx) (* dy dy))))
-      (if (< r 1e-9) (setq r 1e-9))
+      (if (< r altabcdef:*fuzz*) (setq r altabcdef:*fuzz*))
       (setq jx (/ dx r) jy (/ dy r) f (- r d))
       (setq jaa (+ jaa (* jx jx)) jab (+ jab (* jx jy)) jbb (+ jbb (* jy jy))
             ga (+ ga (* jx f)) gb (+ gb (* jy f)))
       (setq i (1+ i)))
     (setq det (- (* jaa jbb) (* jab jab)))
-    (if (< (abs det) 1e-12)
-      (setq iter 60)                          ; singular -> stop
+    (if (< (abs det) altabcdef:*solve-singular*)
+      (setq iter altabcdef:*solve-iters*)     ; singular -> stop
       (progn
         (setq ddx (/ (- (- (* ga jbb)) (- (* gb jab)))
                      det)
@@ -327,7 +554,9 @@
                      det))
         ;; ddx = -(ga*jbb - gb*jab)/det ; ddy = -(jaa*gb - jab*ga)/det
         (setq x (+ x ddx) y (+ y ddy))
-        (if (and (< (abs ddx) 1e-7) (< (abs ddy) 1e-7)) (setq iter 60))))
+        (if (and (< (abs ddx) altabcdef:*solve-step*)
+                 (< (abs ddy) altabcdef:*solve-step*))
+          (setq iter altabcdef:*solve-iters*))))
     (setq iter (1+ iter)))
   ;; ---- residuals ---------------------------------------------------------
   (setq res '() rms 0.0 i 0)
@@ -337,6 +566,38 @@
     (setq res (cons f res) rms (+ rms (* f f)) i (1+ i)))
   (setq rms (sqrt (/ rms n)))
   (cons x (cons y (cons rms (reverse res)))))
+
+;;; --------------------------------------------------------------------------
+;;;  Did these distances answer once, or twice?
+;;; --------------------------------------------------------------------------
+
+;; The mirror of (X Y) in the line through CA and CB - the other point the
+;; same two distances describe.  (With three or more distances there is
+;; only one answer and none of this applies.)
+(defun altabcdef:mirror-pt (x y ca cb / ux uy d tt vx vy)
+  (setq ux (- (car cb) (car ca)) uy (- (cadr cb) (cadr ca))
+        d  (sqrt (+ (* ux ux) (* uy uy))))
+  (if (< d altabcdef:*fuzz*)
+    (list x y)                           ; the same corner twice
+    (progn
+      (setq ux (/ ux d) uy (/ uy d)
+            vx (- x (car ca)) vy (- y (cadr ca))
+            tt (* 2.0 (+ (* vx ux) (* vy uy))))
+      (list (+ (car ca) (- (* tt ux) vx))
+            (+ (cadr ca) (- (* tt uy) vy))))))
+
+;; T when exactly two distances placed the point and the mirror answer they
+;; also allow lands inside the W x H frame whose top-left corner is
+;; (BPX BPY) - i.e. the sheet does not say which of the two it is.
+(defun altabcdef:mirror-amb-p (corners x y bpx bpy w h / m)
+  (if (/= (length corners) 2)
+    nil
+    (progn
+      (setq m (altabcdef:mirror-pt x y (nth 0 corners) (nth 1 corners)))
+      (and (> (sqrt (+ (expt (- (car m) x) 2) (expt (- (cadr m) y) 2)))
+              altabcdef:*mirror-min*)
+           (>= (car m) bpx) (<= (car m) (+ bpx w))
+           (<= (cadr m) bpy) (>= (cadr m) (- bpy h))))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Drawing helpers
@@ -417,15 +678,20 @@
                      "Text"))) '()))
   (if (vl-catch-all-error-p res) "" (altabcdef:cellstr res)))
 
-;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd.
-(defun altabcdef:col-of (up)
-  (cond ((vl-string-search "FROM A" up) 'a)
-        ((vl-string-search "FROM B" up) 'b)
-        ((vl-string-search "FROM C" up) 'c)
-        ((vl-string-search "FROM D" up) 'd)
-        ((or (vl-string-search "NAME" up) (vl-string-search "POINT" up)
-             (vl-string-search "LABEL" up)) 'name)
-        (T nil)))
+;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd
+;; by the words in altabcdef:*hdr-dist* and altabcdef:*hdr-name*: the Nth
+;; distance word wins over a name word, and the first match wins.
+(defun altabcdef:col-of (up / kind i w)
+  (setq kind nil i 0)
+  (foreach w altabcdef:*hdr-dist*
+    (if (and (null kind) (vl-string-search (strcase w) up))
+      (setq kind (cond ((= i 0) 'a) ((= i 1) 'b) ((= i 2) 'c) (T 'd))))
+    (setq i (1+ i)))
+  (if (null kind)
+    (foreach w altabcdef:*hdr-name*
+      (if (and (null kind) (vl-string-search (strcase w) up))
+        (setq kind 'name))))
+  kind)
 
 ;; nth (1-based) element of a list, or "" when the index is nil / out of range.
 (defun altabcdef:nth-field (lst idx)
@@ -617,6 +883,48 @@
           (reverse rows))))))
 
 ;;; --------------------------------------------------------------------------
+;;;  Is the frame really the rectangle it claims to be?
+;;;
+;;;  This command used to PRINT "all corners 90.00 deg" as a constant,
+;;;  which is a claim about the code rather than about the drawing.  ABCDEF
+;;;  learned the hard way that the two can part company - two field
+;;;  failures were a stale copy whose corner block no longer matched - so
+;;;  both sides and diagonals are measured off the corner variables before
+;;;  anything is drawn, and the angles are measured off the drawn
+;;;  coordinates and printed as measured.
+;;; --------------------------------------------------------------------------
+
+;; Verify the named corner variables really form the W x H rectangle they
+;; are documented to be: A-B and D-C horizontal sides of length W, A-D and
+;; B-C vertical sides of length H, and matching diagonals.  Returns nil
+;; when everything is right, else a message naming the first bad
+;; measurement.  (Corner order here is the CLOCKWISE one this command
+;; uses: A top-left, B top-right, C bottom-right, D bottom-left.)
+(defun altabcdef:frame-check (ax ay bx by cx cy dx dy w h / dg chk d bad)
+  (setq dg (sqrt (+ (* w w) (* h h))) bad nil)
+  (foreach chk (list (list "A-B" ax ay bx by w)
+                     (list "D-C" dx dy cx cy w)
+                     (list "A-D" ax ay dx dy h)
+                     (list "B-C" bx by cx cy h)
+                     (list "A-C (diagonal)" ax ay cx cy dg)
+                     (list "B-D (diagonal)" bx by dx dy dg))
+    (setq d (sqrt (+ (expt (- (nth 3 chk) (nth 1 chk)) 2)
+                     (expt (- (nth 4 chk) (nth 2 chk)) 2))))
+    (if (and (null bad) (> (abs (- d (nth 5 chk))) altabcdef:*frame-tol*))
+      (setq bad (strcat (car chk) " measures " (rtos d 2 2)
+                        "\" but should be " (rtos (nth 5 chk) 2 2) "\""))))
+  bad)
+
+;; Interior angle in degrees at corner (px py), looking toward (qx qy) and
+;; (rx ry).  Measured from the coordinates, NOT assumed.
+(defun altabcdef:corner-ang (px py qx qy rx ry / ux uy vx vy cross dot)
+  (setq ux (- qx px) uy (- qy py) vx (- rx px) vy (- ry py))
+  (setq cross (- (* ux vy) (* uy vx)) dot (+ (* ux vx) (* uy vy)))
+  (if (and (< (abs cross) altabcdef:*fuzz*) (< (abs dot) altabcdef:*fuzz*))
+    0.0
+    (* 180.0 (/ (atan (abs cross) dot) pi))))
+
+;;; --------------------------------------------------------------------------
 ;;;  Prompt helper: read a feet-inch dimension from the keyboard.
 ;;; --------------------------------------------------------------------------
 
@@ -644,8 +952,9 @@
 (defun c:ALTABCDEF (/ *error* undo-open file rows base bpx bpy W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r nm din corners dists lbl
-                    sol x y rms i tags tg p placed stage done)
+                    sol x y rms i tags tg p placed stage done chk angs)
   (vl-load-com)
+  (princ (strcat "\nALTABCDEF " *altabcdef-version*))
   ;; the plot is one undo group, so a cancelled run backs out with a
   ;; single U instead of one per entity; the group is only closed if it
   ;; was opened (STANDARDS section 5)
@@ -670,7 +979,7 @@
       ;; ---- get the spreadsheet ------------------------------------------
       ((= stage 1)
        (setq file (getfiled "Select points spreadsheet"
-                            "" "xlsx;xls;xlsm;csv" 16))
+                            "" altabcdef:*file-types* 16))
        (if (null file)
          (setq done 'quit)
          (progn
@@ -701,6 +1010,22 @@
             Bx (+ bpx W)  By bpy
             Cx (+ bpx W)  Cy (- bpy H)
             Dx bpx        Dy (- bpy H))
+      ;; ---- corner self-check ---------------------------------------------
+      ;; refuse to plot anything if the corner variables above no longer
+      ;; form the W x H rectangle (this file edited, or a stale copy
+      ;; loaded) - a wrong frame silently poisons every solved point.
+      (setq chk (altabcdef:frame-check Ax Ay Bx By Cx Cy Dx Dy W H))
+      (if chk
+        (progn
+          (alert (strcat "ALTABCDEF " *altabcdef-version*
+                         " - corner layout self-check FAILED:\n\n" chk
+                         "\n\nThe loaded copy of ALTABCDEF.lsp appears stale"
+                         "\nor hand-edited.  Re-download"
+                         "\nlisp/altabcdef/ALTABCDEF.lsp and APPLOAD it"
+                         "\nagain.  Nothing was drawn."))
+          (princ (strcat "\n** ABORT - corner self-check failed: " chk))
+          (princ))
+        (progn
       ;; ---- read the sheet ------------------------------------------------
       ;; the rectangle diagonal is the largest distance any point can be from a
       ;; corner; pass it so the parser can spot a foot mark scanned as a digit
@@ -712,23 +1037,29 @@
         (progn
           (princ (strcat (itoa (length rows)) " row(s) found."))
           ;; ---- layers & sizing --------------------------------------------
-          (altabcdef:layer "ALTABCDEF-FRAME"  1)     ; red
-          (altabcdef:layer "ALTABCDEF-POINTS" 2)     ; yellow
-          (altabcdef:layer "ALTABCDEF-LABELS" 3)     ; green
-          (setq th (/ (max W H) 120.0))        ; text height
-          (if (< th 0.5) (setq th 0.5))
-          (setq mrad (* th 0.4))               ; marker radius
+          (altabcdef:layer altabcdef:*frame-layer* altabcdef:*frame-color*)
+          (altabcdef:layer altabcdef:*point-layer* altabcdef:*point-color*)
+          (altabcdef:layer altabcdef:*label-layer* altabcdef:*label-color*)
+          (setq th (/ (max W H) altabcdef:*text-div*))   ; text height
+          (if (< th altabcdef:*text-min*) (setq th altabcdef:*text-min*))
+          (setq mrad (* th altabcdef:*marker-scale*))    ; marker radius
           ;; ---- draw the rectangle + corner tags ---------------------------
           (altabcdef:frame (list Ax Ay) (list Bx By) (list Cx Cy) (list Dx Dy)
-                        "ALTABCDEF-FRAME")
-          (setq tags (list (list "A" Ax Ay (* -1 th) th)
-                           (list "B" Bx By th th)
-                           (list "C" Cx Cy th (* -1.6 th))
-                           (list "D" Dx Dy (* -1 th) (* -1.6 th))))
+                        altabcdef:*frame-layer*)
+          ;; corner letters, offset outward from the corner each sits on
+          (setq tags (list (list "A" Ax Ay (- altabcdef:*tag-gap*)
+                                            altabcdef:*tag-gap*)
+                           (list "B" Bx By altabcdef:*tag-gap*
+                                            altabcdef:*tag-gap*)
+                           (list "C" Cx Cy altabcdef:*tag-gap*
+                                            (- altabcdef:*tag-drop*))
+                           (list "D" Dx Dy (- altabcdef:*tag-gap*)
+                                            (- altabcdef:*tag-drop*))))
           (foreach tg tags
-            (altabcdef:text (list (+ (nth 1 tg) (nth 3 tg))
-                               (+ (nth 2 tg) (nth 4 tg)))
-                         (* th 1.4) (car tg) "ALTABCDEF-FRAME"))
+            (altabcdef:text (list (+ (nth 1 tg) (* th (nth 3 tg)))
+                               (+ (nth 2 tg) (* th (nth 4 tg))))
+                         (* th altabcdef:*tag-scale*) (car tg)
+                         altabcdef:*frame-layer*))
           ;; ---- plot each measured point -----------------------------------
           (setq good 0 bad 0 placed '())
           (foreach r rows
@@ -743,20 +1074,30 @@
                                   dists   (cons (nth 2 din) dists)))
             (if (nth 3 din) (setq corners (cons (list Dx Dy) corners)
                                   dists   (cons (nth 3 din) dists)))
-            (if (>= (length corners) 2)
+            (if (>= (length corners) altabcdef:*min-tapes*)
               (progn
                 (setq sol (altabcdef:solve (reverse corners) (reverse dists)
                                         (+ bpx (/ W 2.0)) (- bpy (/ H 2.0))))
                 (setq x (car sol) y (cadr sol) rms (caddr sol))
-                (altabcdef:point  (list x y) "ALTABCDEF-POINTS")
-                (altabcdef:circle (list x y) mrad "ALTABCDEF-POINTS")
-                (altabcdef:text   (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
-                               th nm "ALTABCDEF-LABELS")
+                (altabcdef:point  (list x y) altabcdef:*point-layer*)
+                (altabcdef:circle (list x y) mrad altabcdef:*point-layer*)
+                (altabcdef:text   (list (+ x (* mrad altabcdef:*label-off*))
+                                     (+ y (* mrad altabcdef:*label-off*)))
+                               th nm altabcdef:*label-layer*)
                 (setq placed (cons (list nm x y rms (length corners)) placed))
+                (if (altabcdef:mirror-amb-p (reverse corners) x y bpx bpy W H)
+                  (princ (strcat "\n  ! " nm
+                                 " : these two distances fit a second point"
+                                 " inside the frame just as well"
+                                 "\n      (the mirror across the line"
+                                 " between the two corners) - a third"
+                                 "\n      distance is what tells them"
+                                 " apart.")))
                 (setq good (1+ good)))
               (progn
-                (princ (strcat "\n  ! " nm
-                               " : fewer than 2 distances given - skipped."))
+                (princ (strcat "\n  ! " nm " : fewer than "
+                               (itoa altabcdef:*min-tapes*)
+                               " distances given - skipped."))
                 (setq bad (1+ bad)))))
           ;; ---- report ------------------------------------------------------
           (princ "\n\n===== ALTABCDEF results (all values in inches) =====")
@@ -775,13 +1116,22 @@
                          "\n  across the given distances - typically < 0.10\" for"
                          "\n  quarter-inch data.  A large value means a bad reading."))
           ;; ---- confirm the frame is a true rectangle ----------------------
-          ;; A-B is horizontal and A-D is vertical, so every corner is exactly
-          ;; 90 deg.  If it looked like a parallelogram, the view was a tilted
-          ;; 3D orbit (a flat rectangle foreshortens) - reset to plan so it
-          ;; reads square.  Geometry is unchanged.
-          (princ (strcat "\n\n  Frame A-B-C-D: true rectangle "
-                         (rtos W 2 2) "\" (A-B) x " (rtos H 2 2)
-                         "\" (A-D), all corners 90.00 deg."))
+          ;; measure the corner angles from the coordinates that were drawn,
+          ;; rather than asserting them - so a future corner-math regression
+          ;; shows up right here instead of printing a reassuring constant.
+          ;; If the frame LOOKED like a parallelogram, the view was a tilted
+          ;; 3D orbit (a flat rectangle foreshortens) - the reset to plan
+          ;; below makes it read square.  Geometry is unchanged either way.
+          (setq angs (list (altabcdef:corner-ang Ax Ay Bx By Dx Dy)
+                           (altabcdef:corner-ang Bx By Ax Ay Cx Cy)
+                           (altabcdef:corner-ang Cx Cy Bx By Dx Dy)
+                           (altabcdef:corner-ang Dx Dy Ax Ay Cx Cy)))
+          (princ (strcat "\n\n  Frame A-B-C-D: " (rtos W 2 2) "\" (A-B) x "
+                         (rtos H 2 2) "\" (A-D).  Corner angles, measured"
+                         "\n  off the drawn coordinates: "
+                         (rtos (nth 0 angs) 2 2) " / " (rtos (nth 1 angs) 2 2)
+                         " / " (rtos (nth 2 angs) 2 2) " / "
+                         (rtos (nth 3 angs) 2 2) " deg."))
           ;; vl-catch-all-apply takes the argument list as its second argument;
           ;; called with only the lambda it raises "too few arguments" and
           ;; takes the end of the run down with it, which is exactly what
@@ -792,7 +1142,7 @@
                (vl-cmdf "_.zoom" "_Extents"))
             '())
           (princ "\n  View reset to plan (top) so the rectangle shows square.")
-          (princ)))))
+          (princ)))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (princ))
