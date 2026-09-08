@@ -1,4 +1,4 @@
-"""Every file with a knob block: all at the top, all explained, none stray.
+"""Every knob block in the tree: all at the top, all explained, none stray.
 
 The chart forms and the panel are the files a person tunes -- a budget
 that has to change when a name gets longer, a ceiling that depends on
@@ -6,18 +6,10 @@ the screen, a registry key an installer moves.  Those numbers used to
 be scattered down eight hundred to two thousand lines, each beside the
 code that read it, and finding them meant reading the file.
 
-Each of them now opens with a **tunables block**: every knob, with a
-sentence saying what changing it does.  This is what keeps that true,
+Each of the four now opens with a **tunables block**: every knob, with
+a sentence saying what changing it does.  This is what keeps that true,
 because a block that is merely tidy today is a block someone adds the
 next knob underneath.
-
-FILES below is the roster, and a tool joins it as it grows a block --
-AutoDim did, with the styles, stand-offs and side-view thresholds a
-drafter tunes.  STANDARDS.md section 5 asks for the block and for the
-README row; it is this file that holds a tool to both.  The rule names
-`tunables` as the word to use and leaves the older spellings alone
-where they got there first, so how a file marks its block off travels
-in its FILES row rather than being one constant.
 
 1. Every file has one, and it comes BEFORE the first defun -- a knob
    defined after the code that reads it is nil while that code loads.
@@ -38,9 +30,13 @@ in its FILES row rather than being one constant.
    really has.  The sentence beside it is editorial and not compared;
    its presence is.
 6. The knobs the VB palette shares -- the registry keys, the recent cap,
-   the step ceiling -- say the same thing on both surfaces.  Only the
-   four UI files reach the palette; a tool with no VB surface is not
-   checked here and does not need to be.
+   the step ceiling -- say the same thing on both surfaces.
+
+The four GUI files came first and check 6 is still theirs -- they are
+the ones whose knobs the VB palette shares.  Checks 1-5 are the general
+rule (STANDARDS.md section 5, "Tunables") and every file in FILES meets
+them; ``abcdef`` and ``ALTABCDEF`` joined when they grew blocks of their
+own.
 
 Run: python3 tests/test_tunables.py
 """
@@ -65,13 +61,14 @@ def check(label, cond, detail=''):
         FAILS.append(label)
 
 
-#: How a file rules its block off: the header line, and the first line
-#: that is past it.  The four UI files use the `tunables` spelling
-#: STANDARDS.md section 5 asks new work for; AutoDim's block got there
-#: under `SETTINGS` and closes itself explicitly, which the same rule
-#: leaves alone.
+#: How a file rules its block off: its header line, and the first line
+#: past it.  Most use the `tunables` spelling STANDARDS.md section 5
+#: asks new work for; AutoDim's block got there under `SETTINGS` and
+#: closes itself explicitly, which the same rule leaves alone.  So this
+#: travels in the FILES row rather than being one constant.
 TUNABLES = (';;; -------------------- tunables ', '\n;;; ---')
 SETTINGS = (';;;  SETTINGS\n', '\n;;; =' + '=' * 49 + ' end of SETTINGS')
+
 
 #: (tool as mirror_shared names it, source, namespace, README, markers)
 FILES = [
@@ -83,10 +80,19 @@ FILES = [
      ROOT / 'lisp' / 'lazspa' / 'README.md', TUNABLES),
     ('LAZSTEP', ROOT / 'lisp' / 'lazstep' / 'LAZSTEP.lsp', 'lzt',
      ROOT / 'lisp' / 'lazstep' / 'README.md', TUNABLES),
+    # the two point plotters, which grew blocks of their own: the same
+    # rule, and the same reason -- a confidence weight or a drop-evidence
+    # ratio buried beside the solver is a number nobody can reach
+    ('abcdef', ROOT / 'lisp' / 'abcdef' / 'abcdef.lsp', 'abcdef',
+     ROOT / 'lisp' / 'abcdef' / 'README.md', TUNABLES),
+    ('ALTABCDEF', ROOT / 'lisp' / 'altabcdef' / 'ALTABCDEF.lsp', 'altabcdef',
+     ROOT / 'lisp' / 'altabcdef' / 'README.md', TUNABLES),
+    # AutoDim, whose block is the styles, stand-offs and side-view
+    # thresholds a drafter tunes -- and which rules it off as SETTINGS,
+    # the older spelling the rule leaves where it got there first
     ('AutoDim', ROOT / 'lisp' / 'autodim' / 'AutoDim.lsp', 'ad',
      ROOT / 'lisp' / 'autodim' / 'README.md', SETTINGS),
 ]
-
 
 def split_block(src, markers):
     """(block, everything else). The block runs from its own header to
@@ -120,37 +126,31 @@ def assigned(src, ns):
     The other thing to get right: a multi-variable setq assigns every
     pair, not just the first.  ``(setq lzf:*dx* a lzf:*dy* b)`` writes
     both, and reading only the name after ``(setq`` calls the second one
-    a constant.  So the form is walked -- but by PAIRS, not by depth:
-    a setq's top-level items alternate name, value, name, value, so a
-    knob is assigned only in an even slot.  In an odd one it is being
-    READ, which ``(setq tol ad:*merge-tol*)`` does and which counting
-    every name at depth 0 called a second assignment -- and so called
-    the knob state.  A knob named in a ``;`` comment inside the form is
-    not an item at all.
+    a constant.  So the form is walked and every name at paren depth 0
+    inside it counts -- but only in a NAME position.
+
+    That last clause is the one to be careful about.  A setq alternates
+    name, value, name, value, and a knob is perfectly ordinary in a
+    VALUE position: ``(setq iter abcdef:*solve-iters*)`` reads the knob
+    to end a loop and ``(setq th abcdef:*text-min*)`` reads it to floor
+    a text height.  Counting those as writes calls a constant state and
+    fails a file for using its own settings, so the depth-0 atoms are
+    counted off in pairs and only the even ones are assignments.  A
+    parenthesised value takes one slot like any other atom, and a quote
+    binds to the token after it rather than taking a slot of its own.
     """
-    name = re.compile(ns + r':\*[a-z0-9-]+\*')
-
-    def skip_string(t, j):
-        j += 1
-        while j < len(t) and t[j] != '"':
-            j += 2 if t[j] == '\\' else 1
-        return j + 1
-
-    def skip_comment(t, j):
-        while j < len(t) and t[j] != '\n':
-            j += 1
-        return j
-
     out = {}
     for m in re.finditer(r'\(setq\b', src):
         i, depth = m.end(), 1
         while i < len(src) and depth:
             c = src[i]
             if c == '"':
-                i = skip_string(src, i) - 1
+                i += 1
+                while i < len(src) and src[i] != '"':
+                    i += 2 if src[i] == '\\' else 1
             elif c == ';':
-                i = skip_comment(src, i)
-                continue
+                while i < len(src) and src[i] != '\n':
+                    i += 1
             elif c == '(':
                 depth += 1
             elif c == ')':
@@ -158,44 +158,22 @@ def assigned(src, ns):
                 if not depth:
                     break
             i += 1
-        body, slot, j = src[m.end():i], 0, 0
-        while j < len(body):
-            c = body[j]
-            if c in ' \t\n\r':
-                j += 1
-            elif c == ';':                    # a comment is not an item
-                j = skip_comment(body, j)
-            elif c == "'":                   # belongs to the item after it
-                j += 1
-            elif c == '"':                    # a string value
-                j = skip_string(body, j)
-                slot += 1
-            elif c == '(':                    # one whole form, however deep
-                d = 0
-                while j < len(body):
-                    ch = body[j]
-                    if ch == '"':
-                        j = skip_string(body, j)
-                        continue
-                    if ch == ';':
-                        j = skip_comment(body, j)
-                        continue
-                    if ch == '(':
-                        d += 1
-                    elif ch == ')':
-                        d -= 1
-                        if not d:
-                            j += 1
-                            break
-                    j += 1
-                slot += 1
-            else:                             # a bare atom
-                k = j
-                while j < len(body) and body[j] not in ' \t\n\r();':
-                    j += 1
-                if slot % 2 == 0 and name.fullmatch(body[k:j]):
-                    out.setdefault(body[k:j], []).append(m.start())
-                slot += 1
+        d = k = 0
+        for t in re.finditer(r'"(?:[^"\\]|\\.)*"|;[^\n]*|[()\']|[^\s()\'";]+',
+                             src[m.end():i]):
+            s = t.group(0)
+            if s == '(':
+                if d == 0:
+                    k += 1                    # a list is one value slot
+                d += 1
+            elif s == ')':
+                d -= 1
+            elif d or s == "'" or s.startswith(';') or s.startswith('"'):
+                continue                      # nested, quote, comment
+            else:
+                if k % 2 == 0 and re.fullmatch(ns + r':\*[a-z0-9-]+\*', s):
+                    out.setdefault(s, []).append(m.start())
+                k += 1
     return out
 
 
@@ -207,9 +185,10 @@ def why_of(lines, i):
     is in -- the frame numbers share one paragraph and then a word
     each, and that is the right shape for them.  '' when none is there.
 
-    The continuation case is what a setq too long to take a remark on
-    its own line does (AutoDim's two entity-type lists), and reading
-    only the line itself called those unexplained.
+    The continuation case is what a setq too long to leave room for a
+    remark does (AutoDim's two entity-type lists run to the margin).
+    Reading only the line itself called those unexplained -- and worse,
+    let the NEXT knob down inherit their paragraph and pass.
     """
     ln, j, q = lines[i], 0, False
     while j < len(ln):
