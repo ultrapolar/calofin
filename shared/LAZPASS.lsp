@@ -14134,26 +14134,34 @@
                                 ; dated twin in releases/ from it
 
 ;;; -------------------- tunables ----------------------------------------
-;;; EVERYTHING adjustable in this file is in this one block, so a drawing
-;;; office that wants different layers, a different starting shape or
-;;; differently sized annotation never has to go hunting through the
-;;; code for a number.  `setq` any of them after loading -- in a startup
-;;; file, say -- and the next run picks the new value up; nothing below
-;;; caches one.  lisp/oasis/README.md carries the same list as a table.
-;;;
-;;; They are grouped the way a run uses them: where it draws, what shape
-;;; it starts from, how big the annotation is, what the pool bottom
-;;; offers, and how much slack a comparison gets.
+;;
+;; Everything a drafting office might reasonably want different is set
+;; HERE and nowhere else: the code below reads these names and carries
+;; no bare numbers of its own.  Each knob says what CHANGING it does.
+;; Change a value, save, APPLOAD again -- or (setq oasis:*name* value)
+;; at the command line for one session; nothing below caches one.  Every
+;; one of them is a row in README.md's Tunables table, and
+;; tests/test_tunables.py holds the two together.
+;;
+;; Distances are in drawing units throughout, and a survey arrives in
+;; inches, so read them as inches unless the drawing says otherwise.
+;;
+;; They are grouped the way a run uses them: where it draws, what shape
+;; it starts from, what the preview opens on, how big the annotation is,
+;; what the pool bottom offers, and how much slack a comparison gets.
 
-;;; --- 1. where the output goes ------------------------------------------
-;;; Three layers, created if the drawing has not got them and thawed,
-;;; unlocked and switched back on if it has -- a run onto a frozen layer
-;;; otherwise looks like the command did nothing.  The colour is used
-;;; only when the layer is CREATED; an existing layer keeps its own.
+;; ---- where the output goes ---------------------------------------------
 
-(setq oasis:*poollayer*  "POOL")       ; the six arcs
+;; The three layers, created if the drawing has not got them and thawed,
+;; unlocked and switched back on if it has -- a run onto a frozen layer
+;; otherwise looks like the command did nothing.  The colour beside each
+;; is used only when the layer is CREATED; a layer the drawing already
+;; has keeps its own.  *hicolor* is the odd one out: it is forced onto
+;; the circle a question is about, every time, so it reads as the answer
+;; being asked for rather than as part of the drawing.
+(setq oasis:*poollayer*  "POOL")       ; the arcs, and the pool bottom
 (setq oasis:*poolcolor*  4)
-(setq oasis:*dimlayer*   "DIMENSION")  ; every dimension
+(setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
 (setq oasis:*guidecolor* 8)
@@ -14163,34 +14171,34 @@
 ;; itself is a plan and is dimensioned in the drawing's ordinary style,
 ;; while the check drawing beside it is nothing but tie measurements and
 ;; goes in the cross-dimension style, same as every other cross dim in
-;; the repo.  A drawing that has not got one of them is told so once and
-;; those dims come out in whatever style is current -- an invented style
-;; would look right and measure wrong.
+;; the repo.  Name a style the drawing has not got and those dims come
+;; out in whatever is current, with the routine saying so once -- an
+;; invented style would look right and measure wrong.
 (setq oasis:*dimstyle*   "Standard")           ; the pool's own dims
 (setq oasis:*crossstyle* "CROSS DIMENSIONS")   ; the check drawing's
 
-;; The check drawing sits this far to the right of the pool, measured
+;; How far to the right of the pool the check drawing sits, measured
 ;; from the pool's own right-hand bound, as a multiple of the dimension
-;; stand-off.  Big enough to clear the radius dims on that side.
+;; stand-off.  Raise it if the radius dims on that side ever reach it.
 (setq oasis:*checkgap* 4.0)
 
-;;; --- 2. the shape itself -----------------------------------------------
+;; ---- the shape itself --------------------------------------------------
 
-;; Where a Center pool's top bulge sits across the X bound, as a fraction
-;; of it.  0.5 centres it, which is what every one on file wants; the
-;; value is here so an off-centre one does not need the file edited.
-;; (A COMPLEX run moves that bulge per-pool instead, by answering the
-;; placement question -- this is the default every simple run draws.)
+;; Where a Center pool's top bulge sits across the X bound, as a
+;; fraction of it.  0.5 centres the hump, which is what every pool on
+;; file wants; move it and every simple Center run draws the hump off
+;; centre.  (A COMPLEX run says it per-pool instead, by answering the
+;; placement question, so this is only the default.)
 (setq oasis:*topfrac* 0.5)
 
-;;; --- 3. the shape the preview starts from ------------------------------
-;;; A radius that has not been answered yet still needs a value for the
-;;; preview to be drawable at all, so the gaps are filled with the
-;;; proportions an oasis usually comes in and every invented one is
-;;; labelled "?".  These are those proportions.  Change them and the
-;;; FIRST question looks at a different starting shape; nothing that gets
-;;; drawn in the end depends on any of them.
+;; ---- the shape the preview opens on ------------------------------------
 
+;; A radius not answered yet still needs a value for the preview to be
+;; drawable at all, so the gaps are filled with the proportions an oasis
+;; usually comes in and every invented one is labelled "?".  Change any
+;; of these and the FIRST question looks at a different starting shape;
+;; nothing that ends up drawn depends on one.
+;;
 ;; A side bulge and the top bulge, as fractions of the bound each is
 ;; measured across -- HALVED in use, because a bulge is twice its radius
 ;; across.  Three quarters of the short bound and half the long one puts
@@ -14200,69 +14208,74 @@
 (setq oasis:*starttop*  0.5)
 
 ;; A joiner has no rule of thumb of its own -- what looks right depends
-;; entirely on the bulges either side of it -- so it is sized off them:
-;; *startjoin* of the SMALLEST neighbouring bulge, which keeps the
-;; bulges the bigger circles and so keeps the picture reading as a pool.
-;; A cloud's bottom is the exception: it sweeps under the whole pool, so
-;; it takes *startbig* of the LARGEST bulge instead.
+;; entirely on the bulges either side of it -- so it is sized off them.
+;; Lower *startjoin* for shallower reverse curves; it is a fraction of
+;; the SMALLEST neighbouring bulge, which is what keeps the bulges the
+;; bigger circles and so keeps the picture reading as a pool.  A cloud's
+;; bottom is the exception: it sweeps under the whole pool, so it takes
+;; *startbig* of the LARGEST bulge instead.
 (setq oasis:*startjoin* 0.6)
 (setq oasis:*startbig*  1.2)
 
 ;; ...and whichever of those two it is, it is then lifted to at least
-;; this multiple of its own minimum.  Below that minimum there is no
-;; fillet at all, oasis:solve gives back nil, and the first radius
-;; question would be put with an empty box on screen.  Must stay above
-;; 1.0 for that reason; the margin is what keeps a *just* buildable ring
-;; from looking pinched.
+;; this multiple of its own minimum.  Keep it above 1.0: below that
+;; minimum there is no fillet at all, oasis:solve gives back nil, and
+;; the first radius question is put with an empty box on screen.  The
+;; margin over 1.0 is what keeps a barely buildable ring from opening
+;; looking pinched.
 (setq oasis:*startclear* 1.25)
 
 ;; The two kidneys, whose provisionals cannot be read off neighbours
 ;; because the shape derives half of itself: a TRUE kidney's top circle
 ;; as a multiple of the smallest one that reaches both sides, and an
 ;; ASYMMETRIC kidney's two given sides as fractions of the short bound.
-;; The sides are deliberately unequal -- an asymmetric kidney whose
-;; preview opened symmetric would be showing the wrong shape.
+;; Keep those two unequal -- an asymmetric kidney whose preview opened
+;; symmetric would be showing the wrong shape.
 (setq oasis:*startktop*   1.5)
 (setq oasis:*startkleft*  0.40)
 (setq oasis:*startkright* 0.45)
 
 ;; The side radius a true kidney's bottom joiner is sized against when
 ;; the derivation has no answer at all.  Every top circle the questions
-;; admit does have one, so this is a backstop rather than a setting --
-;; it is here because a bare number in the middle of the code would not
-;; be, and because a nil reaching arithmetic is how a preview dies.
+;; admit does have one, so changing this changes nothing you can reach;
+;; it is here because a bare number in the middle of the provisionals
+;; would not be, and because a nil arriving at arithmetic is how a
+;; preview dies rather than draws.
 (setq oasis:*startkside* 48.0)
 
-;;; --- 4. how big the annotation is --------------------------------------
-;;; All of it scales off the pool, so a 10-foot spa and a 40-foot pool
-;;; are annotated to look the same rather than to measure the same.
-;;; Each pair below is a DIVISOR of the longer bound and a FLOOR under
-;;; the result, so a small pool still gets readable text.
+;; ---- how big the annotation is -----------------------------------------
 
-;; The dimension stand-off: how far off the pool the overall dims sit.
-;; This is POOL's own rule, and it is a tunable here only so it can be
-;; kept in step with POOL -- an oasis dimensioned beside a rectangle has
-;; to read at the same offset, so change these only together with
-;; POOL's.  (pool:dimoff, lisp/pool/POOL.LSP.)
-(setq oasis:*dimoffmin* 12.0)   ; never closer in than 12 units
-(setq oasis:*dimoffdiv* 18.0)   ; otherwise the longer bound over 18
+;; All of it scales off the pool, so a 10-foot spa and a 40-foot pool
+;; are annotated to LOOK the same rather than to measure the same.  Each
+;; pair below is a floor under the result and a divisor of the longer
+;; bound: raise a divisor for smaller annotation, raise a floor to keep
+;; a small pool readable.
+;;
+;; The dimension stand-off, which is how far off the pool the overall
+;; dims sit.  This is POOL's own rule and is a knob here only so it can
+;; be kept in step with POOL: an oasis dimensioned beside a rectangle
+;; has to read at the same offset, so move these only together with
+;; POOL's own (pool:dimoff, lisp/pool/POOL.LSP).
+(setq oasis:*dimoffmin* 12.0)
+(setq oasis:*dimoffdiv* 18.0)
 
 ;; How far a radius dimension's text is dragged off its own arc, as a
 ;; fraction of that stand-off -- away from the centre on a bulge and
 ;; towards it on a reverse arc, whose centre is itself outside the pool,
-;; so both land clear of the water.
+;; so both land clear of the water.  Raise it to pull the text further
+;; out; at 0 the text sits on the arc.
 (setq oasis:*radiusdrag* 0.9)
 
-;; The dashed guide linetype, built rather than loaded from acad.lin
-;; (a failed load falls back to CONTINUOUS in silence, which is how
-;; dashes vanish).  Dash and gap are equal, at the longer bound over
-;; *dashdiv* and never under *dashmin*.
+;; The dashed guide linetype, built rather than loaded from acad.lin (a
+;; failed load falls back to CONTINUOUS in silence, which is how dashes
+;; vanish).  Dash and gap are equal; lower *dashdiv* for a coarser dash.
 (setq oasis:*dashmin* 2.0)
 (setq oasis:*dashdiv* 40.0)
 
-;; The preview's radius labels: text height as the longer bound over
-;; *pvtextdiv*, sitting *pvtextgap* text-heights out from the arc it
-;; belongs to, along the direction that leads out of the water.
+;; The preview's radius labels: how tall the text is, and how far out
+;; from its own arc it sits, in text heights, along the direction that
+;; leads out of the water.  Raise the gap if a label ever sits on the
+;; outline it belongs to.
 (setq oasis:*pvtextdiv* 28.0)
 (setq oasis:*pvtextgap* 1.7)
 
@@ -14272,60 +14285,65 @@
 
 ;; The numbered marks the pool-bottom flow puts on every change of
 ;; tangency, so one can be named: the mark's own radius, the number's
-;; text height, and how far outside the water that number sits.
+;; text height, and how far outside the water that number sits, in text
+;; heights.  Raise the gap on a pool whose numbers crowd the outline.
 (setq oasis:*tangmarkdiv* 150.0)
 (setq oasis:*tangtextdiv* 34.0)
 (setq oasis:*tangtextgap* 1.6)
 
-;;; --- 5. the pool bottom ------------------------------------------------
+;; ---- the pool bottom ---------------------------------------------------
 
-;; The offset the hopper question offers first.  Unlike everything else
-;; here this one is REMEMBERED: an accepted answer becomes the default
-;; for the rest of the session, because a job's pools share a hopper.
+;; The hopper offset the question opens on when a session has not yet
+;; had an answer accepted.  After that the session's own last answer is
+;; what it offers, because a job's pools share a hopper -- that memory
+;; is oasis:*hopoff-last*, which is state and lives with the rest of it
+;; rather than here.  Change this one to move where a fresh session
+;; starts.
 (setq oasis:*hopoff* 18.0)
 
 ;; How many chords a GUIDED slope line is drawn with.  It follows the
 ;; wall with its offset easing away to nothing, so there is no exact
-;; curve to draw and it goes down as a polyline; more chords is a
+;; curve to draw and it goes down as a polyline: more chords is a
 ;; smoother line and a heavier drawing.
 (setq oasis:*hopchord* 24)
 
 ;; How finely the deepest point of the offset ring is looked for, in
 ;; samples round the whole ring.  Only the deep end's LOCATION comes off
-;; this scan -- every point actually drawn is solved exactly -- so it
-;; buys robustness on a lumpy outline, not precision.
+;; this scan -- every point actually drawn is solved exactly -- so
+;; raising it buys robustness on a lumpy outline, not precision.
 (setq oasis:*hopscan* 720)
 
-;;; --- 6. slack, and the loop guards -------------------------------------
+;; ---- slack, and the loop guards ----------------------------------------
 
-;; Slack for "is this the same point / the same length" tests, drawing
-;; units.  Measurements arrive in inches, so this is far below anything
-;; a tape can tell apart.
+;; Slack for "is this the same point / the same length" tests, in
+;; drawing units.  Measurements arrive in inches, so this is far below
+;; anything a tape can tell apart; raise it only for a drawing whose
+;; units are much coarser than inches.
 (setq oasis:*fuzz* 1.0e-6)
 
 ;; The tighter slack the check drawing dedupes its tie measurements
 ;; with.  Two ties wanted between the same pair of centres are one tie,
 ;; and the pair is compared as COORDINATES rather than as a distance --
 ;; a centre is either the one already tied or a different one, with no
-;; near-miss in between, so this is an equality test and gets equality's
-;; tolerance rather than the tape's.
+;; near-miss in between -- so this is an equality test and takes
+;; equality's tolerance rather than the tape's.
 (setq oasis:*ptfuzz* 1.0e-8)
 
 ;; How far out of the world plan the current UCS may lie and still count
-;; as flat.  This one is a DIRECTION COSINE, not a length: it is the
-;; UCS Z axis compared against the world Z, so it does not scale with
-;; the drawing and has nothing to do with *fuzz*.  A UCS past it is
-;; refused outright -- the arcs would each need an extrusion of their
-;; own and a plan pool has no business in one.
+;; as flat.  A DIRECTION COSINE, not a length: it compares the UCS Z
+;; axis against the world Z, so it does not scale with the drawing and
+;; has nothing to do with *fuzz*.  A UCS past it is refused outright --
+;; the arcs would each need an extrusion of their own, and a plan pool
+;; has no business in one.
 (setq oasis:*ucsfuzz* 1.0e-8)
 
-;; Two belt-and-braces loop limits.  Neither is reached by any input the
-;; questions admit; they are here so that a bug upstream costs a wrong
-;; drawing rather than a hung AutoCAD.
-;;   *cmdguard*  how many times the error handler will send an empty
-;;               (command) to drain a dimension left pending by an Esc
-;;   *ringguard* how many elements the sub-ring walker may cross, as a
-;;               multiple of the ring's own length
+;; Two belt-and-braces loop limits, neither reached by any input the
+;; questions admit: they are here so a bug upstream costs a wrong
+;; drawing rather than a hung AutoCAD.  *cmdguard* is how many empty
+;; (command) calls the error handler will send to drain a dimension left
+;; pending by an Esc; *ringguard* is how many elements the sub-ring
+;; walker may cross, as a multiple of the ring's own length.  Lower
+;; either and a legitimate run could be cut short.
 (setq oasis:*cmdguard*  10)
 (setq oasis:*ringguard* 4)
 
@@ -16963,19 +16981,22 @@
   (setq bot nil)
   (while (null bot)
     (initget 6 "Back Undo")
-    (setq off (getdist (strcat "\nHopper offset in from the wall [Back] <"
-                               (rtos oasis:*hopoff*) ">: ")))
+    (setq off (getdist
+                (strcat "\nHopper offset in from the wall [Back] <"
+                        (rtos (cond (oasis:*hopoff-last*) (oasis:*hopoff*)))
+                        ">: ")))
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
        (setq bot 'OASIS-BACK))
       (t
-       (if (null off) (setq off oasis:*hopoff*))
+       (if (null off)
+           (setq off (cond (oasis:*hopoff-last*) (oasis:*hopoff*))))
        (setq try (oasis:bottom arcs (car sh) (cadr sh) (car sd) (cadr sd)
                                off))
        (if (= (type try) 'STR)
            (princ (strcat "\nAt " (rtos off) " " try "."))
-           (setq oasis:*hopoff* off
-                 bot            (list off try))))))
+           (setq oasis:*hopoff-last* off
+                 bot                 (list off try))))))
   bot)
 
 ;; How one slope line runs.  The side is named by the arc its end of the
@@ -17107,6 +17128,12 @@
 ;; that flow used to leave every one of them on the drawing, red,
 ;; over a pool that was otherwise finished and worth keeping.
 (setq oasis:*marks*   nil)
+;; The hopper offset this session last had accepted, offered ahead of
+;; oasis:*hopoff* once there is one.  A job's pools share a hopper, so
+;; the second pool of a run should not have to be told again -- but the
+;; knob is the setting and this is the memory, and writing the setting
+;; would make a run quietly edit its own configuration.
+(setq oasis:*hopoff-last* nil)
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev

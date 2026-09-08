@@ -652,7 +652,7 @@ up; nothing caches one.
 | `oasis:*dimcolor*` | `2` | Colour it is created with |
 | `oasis:*guidelayer*` | `"POOL-GUIDE"` | Layer the dashed circles, the box and the `?` labels go on |
 | `oasis:*guidecolor*` | `8` | Colour it is created with |
-| `oasis:*hicolor*` | `1` (red) | Colour the circle being asked about is drawn in |
+| `oasis:*hicolor*` | `1` | Colour (red) the circle being asked about is drawn in. Forced every time, so it reads as the answer being asked for rather than as part of the drawing |
 | `oasis:*dimstyle*` | `"Standard"` | Style the pool's own dims are drawn in |
 | `oasis:*crossstyle*` | `"CROSS DIMENSIONS"` | Style the check drawing's are drawn in |
 | `oasis:*checkgap*` | `4.0` | How far right the check drawing sits, as a multiple of the dimension stand-off |
@@ -704,7 +704,7 @@ a floor under the result.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `oasis:*hopoff*` | `18.0` | The offset the hopper question offers first. The one knob here that is **remembered**: an accepted answer becomes the default for the rest of the session, because a job's pools share a hopper |
+| `oasis:*hopoff*` | `18.0` | The offset the hopper question opens on when a session has not yet had one accepted. After that the session offers its own last answer, because a job's pools share a hopper — that memory is `oasis:*hopoff-last*`, which is state rather than a setting, so a run never edits the configuration it was given |
 | `oasis:*hopchord*` | `24` | How many chords a **guided** slope line is drawn with — more is smoother and heavier |
 | `oasis:*hopscan*` | `720` | How finely the deepest point of the offset ring is looked for. Only the deep end's *location* comes off this scan; every point drawn is solved exactly |
 
@@ -846,7 +846,7 @@ offered, each refused and asked for instead.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 114 of them. The reference case is checked against the drawing OASIS was
+answers — 115 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at

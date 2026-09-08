@@ -2686,6 +2686,34 @@ def test_the_tunables_are_live():
     print("ok  tunables    -> layers, stand-off, drag, check gap, marks and"
           " topfrac all follow the block")
 
+def test_the_hopper_offset_is_remembered_without_writing_the_knob():
+    """A job's pools share a hopper, so the second pool of a session
+    should not have to be told the offset again -- and for a long time
+    the run got that by writing oasis:*hopoff*, the tunable itself,
+    which made a pool quietly edit the configuration it had been given.
+    The setting and the memory are two names now: the knob says where a
+    fresh session starts and is never written, oasis:*hopoff-last* holds
+    what this session last accepted and is what the question offers."""
+    def offered(vm):
+        return [p for p, _ in vm.prompts if 'Hopper offset' in p][-1]
+
+    breaks = ['Offset', 'BOttom', 120.0, 'Offset', 'Top', 100.0]
+    vm = newvm()
+    run(vm, script(bottom=breaks + [30.0, None, None]), 'first pool')
+    assert '<18.0000>' in offered(vm), offered(vm)      # the knob's own
+    assert vm.globals[Sym('oasis:*hopoff*')] == 18.0, \
+        vm.globals[Sym('oasis:*hopoff*')]
+    assert vm.globals[Sym('oasis:*hopoff-last*')] == 30.0, \
+        vm.globals[Sym('oasis:*hopoff-last*')]
+
+    # the next pool of the same session opens on what was accepted
+    vm.run('c:OASIS', script(bottom=breaks + [None, None, None]))
+    assert '<30.0000>' in offered(vm), offered(vm)
+    assert vm.globals[Sym('oasis:*hopoff*')] == 18.0, \
+        "a run wrote the tunable it was given"
+    print("ok  hopper memo -> the session remembers 30, the knob still"
+          " reads 18")
+
 
 def test_the_bottom_shares_the_pools_undo_group():
     """One U has to take the pool and its floor together, so the flow
@@ -3177,6 +3205,7 @@ if __name__ == '__main__':
     test_backing_out_of_the_bottom_leaves_the_pool_alone()
     test_the_tangency_marks_go_when_the_flow_is_cancelled()
     test_the_tunables_are_live()
+    test_the_hopper_offset_is_remembered_without_writing_the_knob()
     test_the_bottom_shares_the_pools_undo_group()
     test_nxtcloud_matches_its_reference_drawing()
     test_the_nxtcloud_lobes_are_pinned_by_the_envelope()

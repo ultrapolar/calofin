@@ -78,6 +78,15 @@ FILES = [
      ROOT / 'lisp' / 'abcdef' / 'README.md'),
     ('ALTABCDEF', ROOT / 'lisp' / 'altabcdef' / 'ALTABCDEF.lsp', 'altabcdef',
      ROOT / 'lisp' / 'altabcdef' / 'README.md'),
+    # OASIS, which had fourteen of its forty in a block and the other
+    # twenty-six spelled out where they were read -- a stand-off's 12
+    # and 18, a preview's 0.6 and 1.25, the 1e-8 a tie is deduped with.
+    # Joining here is what stopped the next one going back beside its
+    # code, and what caught the one knob in it that was really state:
+    # the hopper offset a run WROTE, so a pool quietly edited the
+    # setting it had been given (oasis:*hopoff-last* is the memory now).
+    ('OASIS', ROOT / 'lisp' / 'oasis' / 'OASIS.lsp', 'oasis',
+     ROOT / 'lisp' / 'oasis' / 'README.md'),
 ]
 
 HEADER = ';;; -------------------- tunables '
