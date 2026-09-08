@@ -71,21 +71,62 @@ APPLOAD `ABPCHECK.lsp` (or add it to your startup suite), then:
 
 ## Tunables
 
-Set at the top of the file; the limit is also asked for on every run
-and remembered for the session.
+Every value ABPCHECK reads that you might want to change sits in one
+`TUNABLES` block at the top of `ABPCHECK.lsp`, each with a comment saying
+what it does, its units, and what raising or lowering it changes. Edit
+the value and APPLOAD the file again, or type the `setq` at the command
+line to try a value for one session -- every knob is read when the
+command runs, not when the file loads.
 
-| Global | Default | What it is |
+The tables below are the block, read off it:
+
+**Where the survey points are**
+
+| Global | Default | Meaning |
 | --- | --- | --- |
-| `abp:*limit*` | `1.0` | How far off the nearest line is too far, in drawing units. What the prompt offers |
-| `abp:*pt-layer*` | `"POINTS"` | Layer whose blocks count as survey points |
-| `abp:*pt-block*` | `"ab_pt"` | Block name that counts as a survey point on any layer |
-| `abp:*pt-tag*` | `"number"` | The attribute carrying a point block's surveyed number |
-| `abp:*exact-eps*` | `1.0e-6` | Two points closer than this are the same shot |
-| `abp:*clear-shown*` | `10` | How many within-limit points the report spells out |
-| `abp:*ring-scale*` | `1.2` | Ring radius, in report text heights |
-| `abp:*miss-layer*` | `"ABPCHECK-MISS"` | Where the red rings go |
-| `abp:*report-layer*` | `"ABPCHECK-REPORT"` | Where the report goes |
+| `abp:*pt-layer*` | `"POINTS"` | Where the survey points live, and what a point block calls its number -- ABHD's *PF-POINT-LAYER* / *PF-POINT-BLOCK* / *PF-PT-TAG*. An ab_pt block counts as a point wherever it sits, so the layer only matters for bare POINT entities (layer holding the survey points) |
+| `abp:*pt-block*` | `"ab_pt"` | Where the survey points live, and what a point block calls its number -- ABHD's *PF-POINT-LAYER* / *PF-POINT-BLOCK* / *PF-PT-TAG*. An ab_pt block counts as a point wherever it sits, so the layer only matters for bare POINT entities (block name whose INSERTs mark points) |
+| `abp:*pt-tag*` | `"number"` | Where the survey points live, and what a point block calls its number -- ABHD's *PF-POINT-LAYER* / *PF-POINT-BLOCK* / *PF-PT-TAG*. An ab_pt block counts as a point wherever it sits, so the layer only matters for bare POINT entities (the attribute carrying the number) |
+| `abp:*filter*` | `'((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))` | What the highlight is allowed to hand the command: the points, the geometry they are measured against, and the two curve types that are counted rather than measured so the report can say they were left out. A type dropped from here is never seen at all; a type added that abp:ent-segs cannot break into segments is silently ignored |
+| `abp:*uncovered-types*` | `'("SPLINE" "ELLIPSE")` | The curve types the segment math does not cover. They are counted and named in the report rather than measured against, because guessing would report a point sitting ON a spline as off the line |
 
+**What counts as too far**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `abp:*limit*` | `1.0` | How far off the nearest line is too far. The command asks every run and Enter takes the offered value, so this is the default the FIRST run of a session offers; what you answer is remembered in abp:*asked* below and offered from then on. Lower it and more points are called too far (drawing units (1 inch)) |
+| `abp:*exact-eps*` | `1.0e-6` | Two points closer than this are the same shot, not two (drawing units) |
+| `abp:*plane-min*` | `0.999` | How far an entity's extrusion normal (DXF 210) may lean from world +Z before it is counted as "not in the world plane" and left out of the measurement. 0.999 is about 2.6 degrees of tilt (cosine of the tilt, so nearer 1 is stricter) |
+
+**Marking and report**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `abp:*miss-layer*` | `"ABPCHECK-MISS"` | The two layers ABPCHECK writes on, created on first use. It never clears a layer wholesale: everything it draws carries xdata under the APPID below, and only stamped objects are erased again -- so ABPCHECKRESCUE is safe on a layer the drawing already uses |
+| `abp:*miss-color*` | `1` | The two layers ABPCHECK writes on, created on first use. It never clears a layer wholesale: everything it draws carries xdata under the APPID below, and only stamped objects are erased again -- so ABPCHECKRESCUE is safe on a layer the drawing already uses (ACI: the points that are too far off (red)) |
+| `abp:*report-layer*` | `"ABPCHECK-REPORT"` | The two layers ABPCHECK writes on, created on first use. It never clears a layer wholesale: everything it draws carries xdata under the APPID below, and only stamped objects are erased again -- so ABPCHECKRESCUE is safe on a layer the drawing already uses |
+| `abp:*report-color*` | `3` | The two layers ABPCHECK writes on, created on first use. It never clears a layer wholesale: everything it draws carries xdata under the APPID below, and only stamped objects are erased again -- so ABPCHECKRESCUE is safe on a layer the drawing already uses (ACI (green)) |
+| `abp:*appid*` | `"ABPCHECK"` | The two layers ABPCHECK writes on, created on first use. It never clears a layer wholesale: everything it draws carries xdata under the APPID below, and only stamped objects are erased again -- so ABPCHECKRESCUE is safe on a layer the drawing already uses (renaming this orphans earlier runs) |
+| `abp:*flag-color*` | `1` | ACI: rows over the limit (red) |
+| `abp:*advice-color*` | `4` | ACI: advice, not a failure (cyan) |
+| `abp:*green-scale*` | `0.75` | height of a row that checked out |
+| `abp:*report-chars*` | `48.0` | report column width, in text heights |
+| `abp:*ring-scale*` | `1.2` | ring radius, in report text heights |
+| `abp:*clear-shown*` | `10` | How many within-limit points are listed before the rest are summed up in one line, so a 200-point survey does not write 200 rows (rows) |
+| `abp:*report-wide*` | `0.25` | The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
+| `abp:*report-lead*` | `1.66` | The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
+| `abp:*report-hmax*` | `30.0` | The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
+| `abp:*report-hmin*` | `200.0` | The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
+| `abp:*report-hfall*` | `2.5` | The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width (drawing units) |
+| `abp:*report-gap*` | `0.05` | The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
+| `abp:*title-scale*` | `1.5` | The title is written this many times the base height, and a section heading gets this much blank line above it. HEAD-LINES is the allowance for title, date, verdict and legend when guessing how long the sheet will run; HDG-LINES is a heading plus its gap |
+| `abp:*hdg-gap*` | `0.4` | The title is written this many times the base height, and a section heading gets this much blank line above it. HEAD-LINES is the allowance for title, date, verdict and legend when guessing how long the sheet will run; HDG-LINES is a heading plus its gap |
+| `abp:*head-lines*` | `4.5` | The title is written this many times the base height, and a section heading gets this much blank line above it. HEAD-LINES is the allowance for title, date, verdict and legend when guessing how long the sheet will run; HDG-LINES is a heading plus its gap |
+| `abp:*hdg-lines*` | `1.4` | The title is written this many times the base height, and a section heading gets this much blank line above it. HEAD-LINES is the allowance for title, date, verdict and legend when guessing how long the sheet will run; HDG-LINES is a heading plus its gap |
+| `abp:*row-indent*` | `"  "` | Findings are indented under their heading by this string |
+| `abp:*dist-mode*` | `4` | Distances in the report go through (rtos d mode prec): mode 4 is architectural (feet-inches), so 1.875 reads 0'-1 7/8"; prec is how many ways the inch is split, as a power of two (4 = sixteenths). This is the shape the report was asked for -- see the header (rtos mode) |
+| `abp:*dist-prec*` | `4` | Distances in the report go through (rtos d mode prec): mode 4 is architectural (feet-inches), so 1.875 reads 0'-1 7/8"; prec is how many ways the inch is split, as a power of two (4 = sixteenths). This is the shape the report was asked for -- see the header (2^4 = sixteenths of an inch) |
+| `abp:*tiny*` | `1.0e-8` | A bounding box smaller than this has nothing to scale a report to (drawing units) |
 ## Notes & limitations
 
 * **Splines and ellipses are counted, not measured.** The segment math

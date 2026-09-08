@@ -70,17 +70,37 @@ and set the flagged entities back to their normal color — or press
 
 ## Tunables
 
-Defaults live at the top of `check_drawing.lsp` and can also be
-changed at the command line after loading:
+Every value CHECK reads that you might want to change sits in one
+`TUNABLES` block at the top of `check_drawing.lsp`, each with a comment
+saying what it does, its units, and what raising or lowering it
+changes. Edit the value and APPLOAD the file again, or type the `setq`
+at the command line to try a value for one session:
 
 ```lisp
 (setq *cfchk-tol* 0.001)   ; gap size that still counts as "attached"
                            ; (default 0.0001 drawing units)
 ```
 
-`*cfchk-dim-color*`, `*cfchk-arc-color*`, `*cfchk-constr-layer*` and
-`*cfchk-constr-color*` control the flag colors and the construction
-layer.
+Every knob is read when the command runs, not when the file loads, so
+a value set either way is honoured by the next run.
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `*cfchk-tol*` | `1.0e-4` | Gap (drawing units) that still counts as attached; also the smallest shift CHECK bothers to make |
+| `*cfchk-anchor-tol*` | `1.0e-4` | How close two definition points must be to count as the same spot |
+| `*cfchk-anchor-min*` | `2` | Dimensions meeting at one spot that make it an anchor; 1 or 0 switches the dimension audit off |
+| `*cfchk-curve-types*` | `LINE ARC CIRCLE ELLIPSE LWPOLYLINE POLYLINE SPLINE` | Entity types a point or an arc end may attach to |
+| `*cfchk-dim-types*` | `(0 1)` | Dimension kinds audited, by DXF 70: 0 rotated, 1 aligned |
+| `*cfchk-dim-color*` / `*cfchk-arc-color*` | `1` / `6` | ACI colours for shifted dimensions (red) and snapped arcs (magenta); the report's wording follows them |
+| `*cfchk-constr-layer*` / `*cfchk-constr-color*` | `"CHECK-CONSTRUCTION"` / `2` | Where the construction XLINEs go, and the colour the layer is created with (an existing layer keeps its own) |
+| `*cfchk-dist-mode*` / `*cfchk-dist-prec*` / `*cfchk-tol-prec*` | `2` / `4` / `6` | `rtos` mode and places for the reported shift distances, and places for the tolerance echoed in the summary |
+| `*cfchk-same-pt*` | `1e-8` | Guard: two points closer than this are the same point |
+| `*cfchk-planar-eps*` | `1e-9` | Guard: how far an arc's normal may sit off world +Z before it is skipped as non-planar |
+
+Not knobs, on purpose: the collinearity guard inside the circumcenter
+helper and the linetype a new layer is created with. Both helpers are
+library bodies shared with the grouped build, so they stay literal in
+both.
 
 ## Limitations
 

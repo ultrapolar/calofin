@@ -118,7 +118,9 @@ Scaling 39 objects by 12.0000 about the middle of the selection ...
 ```
 
 The whole run is a single `U` step, so one undo puts the drawing back if the
-import turns out to be worse than usual.
+import turns out to be worse than usual. (In a drawing with undo recording
+switched off -- `UNDO` `Control` `None` -- it runs without a group rather than
+dying on the group it could not open; it used to.)
 
 Notes:
 
@@ -144,35 +146,41 @@ Notes:
   template), they are created to match the template — a `POINT` at the origin
   plus the `number` attribute definition.
 
-## Settings
+## Tunables
 
-The constants at the top of `xftconv.lsp` are the whole configuration:
+The constants at the top of `xftconv.lsp` are the whole configuration, and
+each one carries its explanation in the file -- what it is, when to change it
+and what depends on it. Nothing below that section is meant to be edited for a
+shop's own conventions.
 
 | variable | default | meaning |
 | --- | --- | --- |
-| `*xft-scale*` | `12.0` | scale factor (feet → inches) |
-| `*xft-record*` | `t` | write the undo record `XFTRECONV` reads |
-| `*xft-xdata-app*` | `"XFTCONV"` | the xdata application the record lives under |
-| `*xft-num-prec*` | `8` | decimals a coordinate is written to |
-| `*xft-rebuild-color*` | `7` | colour for a layer `XFTRECONV` has to re-create |
-| `*xft-keep-common*` | `(8 62 6 370 410)` | DXF groups the record carries whatever the entity type is |
-| `*xft-keep*` | one row per type | and the groups it carries per type -- what an export writes on the five kinds of object `XFTCONV` erases. An export that writes something else onto its markers is carried by adding its group code here |
-| `*xft-marker-layer*` | `"LEICA_POINT"` | layer of the X marker (wildcards ok) |
-| `*xft-name-layer*` | `"LEICA_POINT_NAME"` | layer of the point name text |
-| `*xft-block*` | `"ab_pt"` | block that replaces the marker |
-| `*xft-block-layer*` | `"POINTS"` | layer the block goes on |
+| `*xft-scale*` | `12.0` | scale factor applied to the whole selection (feet → inches); `1.0` skips the SCALE step |
+| `*xft-block*` | `"ab_pt"` | block that replaces the marker; built to match the template if missing |
+| `*xft-block-layer*` | `"POINTS"` | layer the block goes on; created if missing, repaired if frozen or off |
+| `*xft-block-layer-color*` | `6` | colour a missing `POINTS` is **created** with (magenta, as `SOCONV`, `VSCONV` and `DRONE` create it); an existing layer is never recoloured |
 | `*xft-att-tag*` | `"number"` | attribute tag that holds the number |
-| `*xft-att-style*` | `"Attributes"` | text style for the attribute |
-| `*xft-att-height*` | `4.0` | attribute height, as on the sample drawing |
-| `*xft-att-offset*` | `(0.8697246 -3.5316825)` | attribute offset from the point, as on the sample |
-| `*xft-name-reach*` | `6.0` | how far to look for a name, in text heights |
-| `*xft-fuzz*` | `1e-4` | tolerance for "these two lines share a centre" |
-| `*xft-purge-text*` | `t` | erase every text object left in the selection (Leica flavour) |
+| `*xft-att-style*` | `"Attributes"` | text style for the attribute; the current `TEXTSTYLE` when the drawing has no such style |
+| `*xft-att-height*` | `4.0` | attribute height, after the scale, as on the sample drawing |
+| `*xft-att-offset*` | `(0.8697246 -3.5316825)` | attribute offset from the point, after the scale, as on the sample |
+| `*xft-marker-layer*` | `"LEICA_POINT"` | layer of the Leica X marker (a `wcmatch` pattern) |
+| `*xft-name-layer*` | `"LEICA_POINT_NAME"` | layer of the Leica point name text (a `wcmatch` pattern) |
+| `*xft-name-reach*` | `6.0` | how far to look for a Leica name, in text heights |
+| `*xft-strip-prefix*` | `T` | take the letter prefix off a Leica name (`P22` → `22`); `nil` keeps the label whole |
+| `*xft-purge-text*` | `T` | erase every text object left in the selection (Leica flavour) |
 | `*xft-dot-layer*` | `"POOL_POINTS,BREAK_LINES,CROSS_MEASUREMENTS"` | layers the trace's circle markers sit on (a `wcmatch` comma list) |
 | `*xft-dot-name-layer*` | `"TEXT"` | layer of the trace's point name text |
 | `*xft-dot-reach*` | `1.0` | how far to look for a trace name, in text heights |
-| `*xft-dot-purge-text*` | `nil` | erase every text object left in the selection (trace flavour) |
 | `*xft-dot-strip-prefix*` | `nil` | take the letter prefix off a trace name too |
+| `*xft-dot-purge-text*` | `nil` | erase every text object left in the selection (trace flavour) |
+| `*xft-column-tol*` | `0.5` | how far off the marker's X, in text heights, a name still counts as "in its column" -- the rule that beats plain nearness |
+| `*xft-fuzz*` | `1e-4` | tolerance, after the scale, for "these two markers share a centre" |
+| `*xft-record*` | `t` | write the undo record `XFTRECONV` reads; `nil` converts exactly as before and writes nothing down, so the run can only be undone by `U` |
+| `*xft-xdata-app*` | `"XFTCONV"` | the xdata application the record lives under |
+| `*xft-num-prec*` | `8` | decimals a coordinate is written to -- 8 puts the round trip within 1e-8 of a drawing unit |
+| `*xft-rebuild-color*` | `7` | colour for a source layer `XFTRECONV` has to re-create because it was PURGED after the conversion; one still in the drawing keeps its own |
+| `*xft-keep-common*` | `(8 62 6 370 410)` | DXF groups the record carries whatever the entity type is |
+| `*xft-keep*` | one row per type | and the groups it carries per type -- what an export writes on the five kinds of object `XFTCONV` erases. An export that writes something else onto its markers is carried by adding its group code here |
 
 `XFTCONV-SETUP` is a separate command that only creates the layer and the block,
 if you want them in a drawing without running a conversion.
@@ -189,7 +197,8 @@ if you want them in a drawing without running a conversion.
   marker six text heights away.
 - Both exports put the name in the marker's column: Leica stacks it directly
   above (2.5 × text height up, same X), the trace lands it on the centre. A name
-  in that column therefore wins over one that is merely closer, which is what
+  in that column -- its X within `*xft-column-tol*` text heights of the
+  marker's -- therefore wins over one that is merely closer, which is what
   keeps tight clusters of points from stealing each other's numbers. Failing
   that, nearest-within-reach wins, and each name is used only once.
 - **The reach is what tells a trace's name from its caption**, since both are on
@@ -202,7 +211,9 @@ if you want them in a drawing without running a conversion.
 - The Leica number is everything from the first digit onward, after MTEXT
   formatting codes are stripped: `P22` → `22`, `P1A` → `1A`, `22` → `22`. A name
   with no digits at all is passed through unchanged. A trace name is passed
-  through whole (see above), formatting codes stripped and trimmed.
+  through whole (see above), formatting codes stripped and trimmed. Each
+  flavour has its own switch -- `*xft-strip-prefix*` and
+  `*xft-dot-strip-prefix*` -- with opposite defaults, for the reasons above.
 
 ## Tests
 
@@ -214,6 +225,18 @@ CALOFIN_LISP_ROOT=shared python3 tests/test_xftconv.py
 The trace sections run the sample export's own geometry — a 40′ × 20′
 rectangular pool in feet, its four corners drawn twice, its two break lines
 captioned — and assert that the captions survive and that no point ends up
-called `Deep End`. They then convert it and run `XFTRECONV` over the result,
-which is where the 1e-8 figure above is measured: that fixture's coordinates
-carry more decimals than the record writes down.
+called `Deep End`. The second command runs the same script over the grouped
+twin in `shared/parts/`, with the library loaded first.
+
+After the two flavours come the contingencies: undo switched off in the
+drawing (no group opened, so none closed), an import already in inches
+(`*xft-scale*` `1.0`), a plain `POINT` for a marker, an MTEXT name and a
+justified one, every settings switch in its non-default position, a frozen
+and switched-off `POINTS` repaired rather than drawn onto blind, the
+attribute style falling back to `TEXTSTYLE`, an error mid-run reaching the
+command's own handler, both flavours in one highlight, and `XFTCONV-SETUP`.
+
+Last come the record and the revert: the trace fixture is converted and
+`XFTRECONV` run over the result, which is where the 1e-8 figure above is
+measured -- that fixture's coordinates carry more decimals than the record
+writes down.

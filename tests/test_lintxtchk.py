@@ -181,6 +181,85 @@ check("LINTXTCHKVER prints the banner",
       f"LINTXTCHK v{m.group(1)}.{m.group(2)}" in ''.join(vm.printed),
       ''.join(vm.printed)[-120:])
 
+
+# ----------------------------------------------------------------------
+# The TUNABLES block: one place to change anything, every knob in it
+# explained, every knob read when the command RUNS, and every knob
+# named in the README.
+# ----------------------------------------------------------------------
+print("the tunables block")
+
+import re as _re
+_SRC = open(LSP, encoding='ascii').read()   # also asserts pure ASCII
+_lines = _SRC.splitlines()
+_start = next(i for i, l in enumerate(_lines) if l.startswith(';;;  TUNABLES'))
+_end = next(i for i, l in enumerate(_lines) if l.startswith(';;;  END TUNABLES'))
+_state = set()
+_outside = [l for i, l in enumerate(_lines)
+            if l.startswith('(setq ltc:*') and not _start < i < _end
+            and not any(k in l for k in _state)]
+check("no knob is set outside the block", not _outside, repr(_outside))
+
+
+def _explained(i):
+    if _re.search(r'\)\s*;', _lines[i]):
+        return True
+    j = i - 1
+    while j >= 0 and _lines[j].strip():
+        if _lines[j].lstrip().startswith(';;'):
+            return True
+        j -= 1
+    return False
+
+
+_undoc = [l for i, l in enumerate(_lines[_start:_end], _start)
+          if l.startswith('(setq ltc:*') and not _explained(i)]
+check("every knob carries an explanation", not _undoc, repr(_undoc))
+KNOBS = [k for k in _re.findall(r'^\(setq (ltc:\*[a-z-]+\*)', _SRC, _re.M)
+         if k not in _state]
+_vm = VM()
+_vm.load(LSP)
+check("every knob loads bound", all(_vm.loads(k) is not None for k in KNOBS),
+      repr(KNOBS))
+_readme = open(os.path.join(os.path.dirname(LSP), 'README.md')).read()
+check("the README's Tunables table names every knob",
+      not [k for k in KNOBS if k not in _readme],
+      repr([k for k in KNOBS if k not in _readme]))
+
+
+# ----------------------------------------------------------------------
+# and each knob changes what the next run draws
+# ----------------------------------------------------------------------
+print("the knobs are honoured after load")
+
+vm = VM()
+vm.load(LSP)
+vm.loads('(setq ltc:*height* 6.0 ltc:*spacing* 3.0 ltc:*indent* 4.0'
+         ' ltc:*bullet* "[ ] ")')
+vm.run('c:LINTXTCHK', [(0.0, 0.0, 0.0)])
+placed = texts(vm)
+check("*ltc:*height*: every line is written at the new height",
+      all(h == 6.0 for _x, _y, h, _s in placed), repr(placed[:2]))
+check("*ltc:*spacing*: the pitch is height x the knob",
+      abs((placed[0][1] - placed[1][1]) - 18.0) < 1e-9,
+      repr((placed[0][1], placed[1][1])))
+subs = [x for x, _y, _h, s2 in placed if s2.startswith('[ ] Does this job')]
+check("*ltc:*indent*: a sub-item is indented height x the knob",
+      subs and abs(subs[0] - 24.0) < 1e-9, repr(subs))
+check("*ltc:*bullet*: every line carries the new prefix",
+      all(s2.startswith('[ ] ') for _x, _y, _h, s2 in placed))
+check("and the done message names the height it used",
+      '6\" text.' in ''.join(vm.printed), ''.join(vm.printed)[-80:])
+
+vm = VM()
+vm.load(LSP)
+vm.loads('(setq ltc:*items* (list (cons 0 "Only line")))')
+vm.run('c:LINTXTCHK', [(0.0, 0.0, 0.0)])
+check("*ltc:*items*: the checklist is what the knob holds, count and all",
+      [s2 for _x, _y, _h, s2 in texts(vm)] == ['- Only line'] and
+      '1 checklist lines placed' in ''.join(vm.printed),
+      repr(texts(vm)))
+
 # ----------------------------------------------------------------------
 print()
 if FAILS:

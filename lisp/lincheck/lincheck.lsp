@@ -20,8 +20,64 @@
 ;;; Helpers
 ;;; ------------------------------------------------------------------
 
-(setq *lincheck-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.4")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
+
+;;; ======================================================================
+;;;  TUNABLES -- every value LINCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line, because every knob is read when the command runs,
+;;;  not when the file loads.
+;;;
+;;;  What is NOT here, on purpose: the checklist's questions.  This
+;;;  tool IS its questions -- their wording, their order and which
+;;;  answer opens which follow-up are one thing, held in the lin:
+;;;  functions below, and a table of prompts split from the branching
+;;;  that reads them would be two places to keep in step instead of
+;;;  one.  The knobs here are how the checklist TALKS, not what it asks.
+;;; ----------------------------------------------------------------------
+
+;; -- how the report reads ------------------------------------------------
+
+;; The report is printed to the command line, one line per item.  These
+;; are the pieces every line is built from: the tick that marks a done
+;; item, what separates an item from a note typed against it, and what
+;; separates a question from the answer picked.
+(setq lin:*tick*     "[x] ")
+(setq lin:*note-sep* " -- ")
+(setq lin:*ans-sep*  " -> ")
+
+;; A cross dimension is logged indented under its heading by this.
+(setq lin:*indent*   "    ")
+
+;; A section heading, in the report and on the command line.  The two
+;; differ on purpose: the report's is quieter, since it is read as a
+;; block rather than watched as it goes by.
+(setq lin:*head-in*  "== ")
+(setq lin:*head-out* "==")
+(setq lin:*head-echo-in*  "=== ")
+(setq lin:*head-echo-out* "===")
+
+;; The banner the printed report is boxed in, and its title.  RULE is
+;; drawn as-is, so its width is what sets the box's; the title is
+;; centred inside a line of the same character.
+(setq lin:*rule*     "############################################")
+(setq lin:*title*    "#          LINER CHECKLIST REPORT          #")
+
+;; -- what a typed answer may say -----------------------------------------
+
+;; A getstring prompt cannot take initget keywords, so "go back a step"
+;; has to be typed like a note.  These are the words that mean it,
+;; matched case-blind and whole; add a synonym and every typed prompt
+;; takes it.
+(setq lin:*back-words* '("B" "BACK" "U" "UNDO"))
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  The two globals below are STATE, not knobs: what
+;;;  one run of the checklist has collected so far.
 
 (setq *lin:log* nil)   ; collected report lines
 
@@ -31,6 +87,7 @@
                        ; still Enter through, never an answer by itself,
                        ; so a re-run over the same job is Enter-Enter
                        ; down the unchanged questions
+;;; ======================================================================
 
 ;; Record a line for the report.
 (defun lin:log (msg)
@@ -52,14 +109,14 @@
 ;; T when a typed string means "go back a step" - getstring prompts
 ;; cannot take initget keywords, so Back is typed like a note.
 (defun lin:back-word (s)
-  (member (strcase s) '("B" "BACK" "U" "UNDO"))
+  (member (strcase s) lin:*back-words*)
 )
 
 ;; Section header - printed to the command line and added to the report.
 (defun lin:head (title)
-  (princ (strcat "\n\n=== " title " ==="))
+  (princ (strcat "\n\n" lin:*head-echo-in* title lin:*head-echo-out*))
   (lin:log "")
-  (lin:log (strcat "== " title " =="))
+  (lin:log (strcat lin:*head-in* title lin:*head-out*))
 )
 
 ;; Simple check-off item.  Shows the item, waits for the tech to press
@@ -72,8 +129,8 @@
                                  ", or type a note): ")))
   (cond
     ((and back (lin:back-word val)) 'LIN-BACK)
-    ((= val "") (lin:log (strcat "[x] " item)) val)
-    (T (lin:log (strcat "[x] " item " -- " val)) val)
+    ((= val "") (lin:log (strcat lin:*tick* item)) val)
+    (T (lin:log (strcat lin:*tick* item lin:*note-sep* val)) val)
   )
 )
 
@@ -97,7 +154,7 @@
   (if (member ans '("Back" "Undo"))
     'LIN-BACK
     (progn (setq *lin:prev* (cons (cons prompt ans) *lin:prev*))
-           (lin:log (strcat "[x] " prompt " -> " ans)) ans)
+           (lin:log (strcat lin:*tick* prompt lin:*ans-sep* ans)) ans)
   )
 )
 
@@ -368,25 +425,25 @@
          )
        ))
       ((= entry "") (setq done T))
-      (T (setq n (1+ n)) (lin:log (strcat "    " entry)))
+      (T (setq n (1+ n)) (lin:log (strcat lin:*indent* entry)))
     )
   )
   (if (eq done 'LIN-BACK)
     'LIN-BACK
-    (progn (if (= n 0) (lin:log "    (none provided)")) n)
+    (progn (if (= n 0) (lin:log (strcat lin:*indent* "(none provided)"))) n)
   )
 )
 
 ;; Print the collected report.
 (defun lin:report ()
   (princ "\n\n")
-  (princ "############################################")
-  (princ "\n#          LINER CHECKLIST REPORT          #")
-  (princ "\n############################################")
+  (princ lin:*rule*)
+  (princ (strcat "\n" lin:*title*))
+  (princ (strcat "\n" lin:*rule*))
   (foreach line *lin:log*
     (princ (strcat "\n" line))
   )
-  (princ "\n############################################")
+  (princ (strcat "\n" lin:*rule*))
   (princ "\n")
   (princ)
 )

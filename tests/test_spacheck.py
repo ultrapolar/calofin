@@ -759,6 +759,129 @@ def test_the_ratio_itself():
     assert abs(543.625 * 0.6 - 326.175) < 1e-9
 
 
+
+# ---------------------------------------------------- tunables
+
+def test_a_missing_border_fails_however_the_layer_is_named():
+    """The title-block finding used to be decided by looking for the
+    word "OK" in its own sentence -- so a border layer with OK in its
+    name made a sheet with NO border read as a pass.  The verdict
+    carries a flag now, and the sentence is only text."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, 'Yes', '90', 'No', 'No'])
+    vm.load(CHK)
+    vm.loads('(setq spachk:*border-layer* "TB-OK")')
+    vm.run('c:SPACHECKSCAN', [None, None])
+    bad = problems(report_text(vm))
+    assert any('NO BORDER found' in b for b in bad), bad
+
+
+def test_the_title_fraction_is_the_knob_the_audit_measures_by():
+    """A shop that drew its title block at half the liner block instead
+    of 0.6 changes one number, and the same drawing passes."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, 'Yes', '90', 'No', 'No'])
+    border(vm, 352.0, 271.8125)          # exactly 0.5x
+    vm.load(CHK)
+    assert any('Title block' in b for b in
+               problems(report_text_of_run(vm))), 'expected a 0.5x sheet to fail at 0.6'
+    vm2 = build([None, 'Coversize', 'Rectangle', None,
+                 84.0, None, 'Yes', '90', 'No', 'No'])
+    border(vm2, 352.0, 271.8125)
+    vm2.load(CHK)
+    vm2.loads('(setq spachk:*title-frac* 0.5)')
+    vm2.run('c:SPACHECKSCAN', [None, None])
+    txt = report_text(vm2)
+    assert '0.50x the liner block, OK' in txt, txt
+
+
+def report_text_of_run(vm, cmd='c:SPACHECKSCAN'):
+    vm.run(cmd, [None, None])
+    return report_text(vm)
+
+
+def test_the_report_layout_knobs_size_the_sheet():
+    """The report is scaled to the drawing through the same clamps the
+    sibling checkers use, and each is read when the command runs."""
+    def height(setqs=None):
+        vm = build([None, 'Coversize', 'Rectangle', None,
+                    84.0, None, 'Yes', '90', 'No', 'No'])
+        border(vm, 422.4, 326.175)
+        vm.load(CHK)
+        if setqs:
+            vm.loads(setqs)
+        vm.run('c:SPACHECKSCAN', [None, None])
+        for e in vm.entities:
+            d = {g.a: g.b for g in vm.entdata[e] if isinstance(g, Dot)}
+            if d.get(0) == 'MTEXT' and d.get(8) == 'SPACHECK-REPORT':
+                return d.get(40), d.get(41)
+        raise AssertionError('no report')
+
+    h0, w0 = height()
+    h60, _ = height('(setq spachk:*report-hmax* 60.0)')
+    h120, _ = height('(setq spachk:*report-hmax* 120.0)')
+    assert abs(h60 - 2.0 * h120) < 1e-9, (h60, h120)
+    assert h60 <= h0 + 1e-9, (h0, h60)
+    _, w2 = height('(setq spachk:*report-chars* 96.0)')
+    assert abs(w2 - 2.0 * w0) < 1e-6, (w0, w2)
+
+
+def test_the_grade_vocabulary_is_a_table_now():
+    """Grade and taper are recognised from a table at the top of the
+    file, so a shop with its own wording adds a row rather than editing
+    a cond."""
+    vm = build([None, 'Coversize', 'Rectangle', None,
+                84.0, None, 'Yes', '90', 'No', 'No'])
+    vm.load(CHK)
+    assert vm.loads('(spachk:gradenorm "Deluxe FRP")') == 'ULTRA'
+    assert vm.loads('(spachk:gradenorm "anything else")') == 'STANDARD'
+    assert vm.loads('(spachk:tapernorm "taper 4-3 typ")') == '4-3'
+    assert vm.loads('(spachk:gradeshort "ECONOMY")') == 'ECO'
+    vm.loads('(setq spachk:*grade-words*'
+             ' (append spachk:*grade-words* (list (cons "DELUXE" "ULTRA"))))')
+    assert vm.loads('(spachk:gradenorm "Deluxe")') == 'ULTRA'
+    # a grade the table cannot place still gets the default, never nil
+    vm.loads('(setq spachk:*grade-default* "STANDARD")')
+    assert vm.loads('(spachk:gradenorm nil)') == 'STANDARD'
+
+
+def test_the_tunables_block_holds_every_knob_each_explained():
+    import re
+    src = open(CHK, encoding='ascii').read()      # also asserts pure ASCII
+    lines = src.splitlines()
+    start = next(i for i, l in enumerate(lines) if l.startswith(';;;  TUNABLES'))
+    end = next(i for i, l in enumerate(lines)
+               if l.startswith(';;;  END TUNABLES'))
+    state = {'spachk:*sysold*', 'spachk:*demo-ents*', 'spachk:*odstyle*'}
+    outside = [l for i, l in enumerate(lines)
+               if l.startswith('(setq spachk:*') and not start < i < end
+               and not any(k in l for k in state)]
+    assert not outside, outside
+
+    def explained(i):
+        if re.search(r'\)\s*;', lines[i]):
+            return True
+        j = i - 1
+        while j >= 0 and lines[j].strip():
+            if lines[j].lstrip().startswith(';;'):
+                return True
+            j -= 1
+        return False
+
+    undoc = [l for i, l in enumerate(lines[start:end], start)
+             if l.startswith('(setq spachk:*') and not explained(i)]
+    assert not undoc, undoc
+    knobs = re.findall(r'^\(setq (spachk:\*[a-z-]+\*)', src, re.M)
+    vm = VM()
+    vm.load(CHK)
+    unbound = [k for k in knobs if k not in state and vm.loads(k) is None]
+    assert not unbound, unbound
+    readme = open(os.path.join(HERE, '..', 'lisp', 'spacheck',
+                               'README.md')).read()
+    missing = [k for k in knobs if k not in state and k not in readme]
+    assert not missing, missing
+
+
 if __name__ == '__main__':
     fails = 0
     for name, fn in sorted(globals().items()):

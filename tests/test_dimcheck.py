@@ -619,4 +619,202 @@ assert len(report_texts(vm)) == 1
 print("   the probe took it; the Highlight prompt was never asked")
 
 
+# ------------------------------------------------------------------
+# The TUNABLES block: every knob is read when the command RUNS, so a
+# setq typed after loading changes the next run.  Each knob below is
+# driven through the behaviour it is supposed to change - and the
+# report is checked to describe the colours it actually used, rather
+# than saying "red" whatever the knob holds.
+# ------------------------------------------------------------------
+print("== tunables: every knob honoured after load ==")
+
+
+def scan_with(setqs, seed=seed_faults):
+    """A fresh DIMSCAN run with the given knobs overridden first."""
+    vm = build_vm()
+    if setqs:
+        vm.loads(setqs)
+    seed(vm)
+    vm.run('c:DIMSCAN', [selectable(vm)])
+    return vm
+
+
+vm = scan_with('(setq *dchk-report-layer* "MY-REPORT" *dchk-report-color* 5)')
+assert report_texts(vm, 'MY-REPORT'), [
+    grp(vm, e, 8) for e in vm.entities if grp(vm, e, 0) == 'MTEXT']
+assert not report_texts(vm), "the old layer name still got a report"
+rec = vm.loads('(tblsearch "LAYER" "MY-REPORT")')
+assert any(isinstance(g, Dot) and g.a == 62 and g.b == 5 for g in rec), rec
+print("   *dchk-report-layer* / -color*: the report moves, layer made in colour")
+
+vm = scan_with('(setq *dchk-tol* 20.0)')
+txt = report_texts(vm)[0]
+assert 'Dimensions scanned: 3 (0 with a stray definition point)' in txt, txt
+vm = scan_with(None)
+assert 'Dimensions scanned: 3 (2 with a stray definition point)' \
+    in report_texts(vm)[0], report_texts(vm)[0]
+print("   *dchk-tol* raised past the fault: the two strays read as attached")
+
+vm = scan_with('(setq *dchk-olap-types* \'("ARC"))')
+txt = report_texts(vm)[0]
+assert 'Overlapping line pairs: 0' in txt, txt
+print("   *dchk-olap-types* without LINE: the overlapping pair is not looked for")
+
+def seed_skew(vm):
+    """Two 100-long runs overlapping over 60, the second tilted 0.2 deg
+    off the first - within the direction bucket at the default 0.5 deg,
+    outside it at 0.1.  The offset fuzz is opened wide so the bucket is
+    the only thing deciding."""
+    line(vm, (0.0, 0.0), (100.0, 0.0))
+    t = math.radians(0.2)
+    line(vm, (40.0, 0.0), (40.0 + 100.0 * math.cos(t), 100.0 * math.sin(t)))
+    return {}
+
+
+vm = scan_with('(setq *dchk-olap-fuzz* 1.0)', seed=seed_skew)
+assert 'Overlapping line pairs: 1' in report_texts(vm)[0], report_texts(vm)[0]
+vm = scan_with('(setq *dchk-olap-fuzz* 1.0 *dchk-olap-dirtol* 0.1)',
+               seed=seed_skew)
+assert 'Overlapping line pairs: 0' in report_texts(vm)[0], report_texts(vm)[0]
+print("   *dchk-olap-dirtol*: narrowed under the pair's 0.2 deg, they are"
+      " never compared")
+
+vm = scan_with(None, seed=seed_skew)
+assert 'Overlapping line pairs: 0' in report_texts(vm)[0], report_texts(vm)[0]
+print("   *dchk-olap-fuzz*: at its default the same tilted pair is not an overlap")
+
+vm = scan_with('(setq *dchk-dist-mode* 4 *dchk-dist-prec* 4)')
+txt = report_texts(vm)[0]
+assert "0'-10\"" in txt, txt
+print("   *dchk-dist-mode* 4: the scan reports feet and inches")
+
+def findings(vm):
+    """The per-item lines: what follows the report's separator row.  The
+    dashboard above it carries its own needs-attention flag per line and
+    is not what *dchk-attn-words* decides."""
+    return report_texts(vm)[0].split('-' * 40)[-1]
+
+
+vm = scan_with('(setq *dchk-attn-words* "*NOTHING MATCHES THIS*")')
+assert '{\\C1;' not in findings(vm), findings(vm)
+assert 'NOT attached' in findings(vm), findings(vm)
+assert '{\\C1;' in findings(scan_with(None)), findings(scan_with(None))
+print("   *dchk-attn-words*: matched by nothing, no finding renders in the flag"
+      " colour")
+
+vm = scan_with('(setq *dchk-attn-words* "*OK*")')
+assert '{\\C1;Dim' in findings(vm) and 'OK}' in findings(vm), findings(vm)
+print("   ...and pointed at OK, it is the clean lines that turn red")
+
+vm = scan_with('(setq *dchk-flag-color* 4)')
+assert '{\\C4;' in report_texts(vm)[0], report_texts(vm)[0]
+print("   *dchk-flag-color*: the report's red runs follow the knob")
+
+vm = scan_with('(setq *dchk-green-scale* 0.5)')
+assert '{\\H0.5000x;' in report_texts(vm)[0], report_texts(vm)[0]
+print("   *dchk-green-scale*: the all-clear runs are written at the new size")
+
+
+def report_height(vm, layer='DIMCHECK-REPORT'):
+    for e in vm.entities:
+        d = {p.a: p.b for p in vm.entdata[e] if isinstance(p, Dot)}
+        if d.get(0) == 'MTEXT' and d.get(8) == layer:
+            return d.get(40), d.get(41)
+    return None, None
+
+
+h_base, w_base = report_height(scan_with(None))
+# both clamps are DIVISORS of the reference height, so a smaller number
+# is a looser bound: on this short report the ceiling is what binds.
+h_cap, _ = report_height(scan_with('(setq *dchk-report-hmax* 60.0)'))
+assert abs(h_cap - h_base / 2.0) < 1e-9, (h_base, h_cap)
+h_floor, _ = report_height(scan_with('(setq *dchk-report-hmin* 8.0)'))
+assert abs(h_floor - h_base * 30.0 / 8.0) < 1e-9, (h_base, h_floor)
+print("   *dchk-report-hmax* / -hmin*: each clamp lands the text height exactly"
+      " on reference/knob")
+
+_, w_wide = report_height(scan_with('(setq *dchk-report-chars* 90.0)'))
+assert abs(w_wide - 2.0 * w_base) < 1e-6, (w_base, w_wide)
+print("   *dchk-report-chars*: the column is exactly twice as wide at twice the knob")
+
+h_lead, _ = report_height(scan_with('(setq *dchk-report-lead* 3.32)'))
+assert h_lead < h_base, (h_base, h_lead)
+print("   *dchk-report-lead*: a looser line pitch gives a smaller text height")
+
+
+def report_x(vm):
+    for e in vm.entities:
+        if grp(vm, e, 0) == 'MTEXT' and grp(vm, e, 8) == 'DIMCHECK-REPORT':
+            return grp(vm, e, 10)[0]
+    return None
+
+
+assert report_x(scan_with('(setq *dchk-report-gap* 0.5)')) > report_x(scan_with(None))
+print("   *dchk-report-gap*: a wider gap pushes the report further right")
+
+vm = scan_with('(setq *dchk-anchor-min* 3)', seed=seed_anchor)
+assert 'off the shared anchor' not in report_texts(vm)[0], report_texts(vm)[0]
+vm = scan_with(None, seed=seed_anchor)
+assert 'off the shared anchor' in report_texts(vm)[0], report_texts(vm)[0]
+print("   *dchk-anchor-min* 3: the corner two dims meet at stops being an anchor")
+
+vm = scan_with('(setq *dchk-anchor-tol* 40.0)', seed=seed_anchor)
+assert 'Dimensions scanned' in report_texts(vm)[0]
+print("   *dchk-anchor-tol* widened: the scan still completes, merging the spots")
+
+# the guided review names the colours it actually used
+vm = build_vm()
+h = seed_faults(vm)
+vm.loads('(setq *dchk-arc-color* 3 *dchk-olap-color* 5 *dchk-flag-color* 2)')
+vm.run('c:DIMCHECK', [selectable(vm), None,
+                      'No', None, None, None,
+                      'Move', 'Move', 'Merge'])
+txt = ''.join(vm.printed) + ''.join(report_texts(vm))
+assert 'magenta' not in txt and '(cyan)' not in txt, txt[-600:]
+assert 'endpoint(s) moved (green)' in txt, txt[-600:]
+assert 'one line (blue)' in txt, txt[-600:]
+assert 'FLAGGED to fix (yellow)' in txt, txt[-600:]
+print("   the review and the report name the colours the knobs actually set")
+
+
+# ------------------------------------------------------------------
+print("== the tunables block holds every knob, each explained ==")
+import re as _re
+
+SRC = open(CHK, encoding='ascii').read()      # also asserts pure ASCII
+_lines = SRC.splitlines()
+_start = next(i for i, l in enumerate(_lines) if l.startswith(';;;  TUNABLES'))
+_end = next(i for i, l in enumerate(_lines) if l.startswith(';;;  END TUNABLES'))
+_outside = [l for i, l in enumerate(_lines)
+            if l.startswith('(setq *dchk-') and not _start < i < _end
+            and 'version' not in l]
+assert not _outside, _outside
+def _explained(i):
+    """A knob is explained by a trailing remark, or by the ;;-prose at
+    the head of the paragraph it sits in - knobs that share one
+    explanation are grouped under it deliberately."""
+    if _re.search(r'\)\s*;', _lines[i]):
+        return True
+    j = i - 1
+    while j >= 0 and _lines[j].strip():
+        if _lines[j].lstrip().startswith(';;'):
+            return True
+        j -= 1
+    return False
+
+
+_undoc = [l for i, l in enumerate(_lines[_start:_end], _start)
+          if l.startswith('(setq *dchk-') and not _explained(i)]
+assert not _undoc, _undoc
+KNOBS = [k for k in _re.findall(r'^\(setq (\*dchk-[a-z-]+\*)', SRC, _re.M)
+         if k != '*dchk-version*']
+_vm = build_vm()
+assert all(_vm.loads(k) is not None or k == '*dchk-ask-all-arc-ends*'
+           for k in KNOBS), KNOBS
+_readme = open(os.path.join(HERE, '..', 'lisp', 'dimcheck', 'README.md')).read()
+_missing = [k for k in KNOBS if k not in _readme]
+assert not _missing, _missing
+print(f"   {len(KNOBS)} knobs, all inside the block, all explained, all in the README")
+
+
 print("\nALL DIMCHECK SCENARIOS PASSED")

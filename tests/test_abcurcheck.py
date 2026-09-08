@@ -538,6 +538,51 @@ def test_bands_match_abhd():
     print("ok  the kink and corner thresholds are still ABHD's 8 and 45 deg")
 
 
+
+# ----------------------------------------------------------------------
+# The TUNABLES block: one place to change anything, every knob in it
+# explained, and every knob read when the command RUNS rather than
+# baked in at load.
+# ----------------------------------------------------------------------
+def test_the_tunables_block_holds_every_knob_each_explained():
+    import re
+    src = open(LSP, encoding='ascii').read()   # also asserts pure ASCII
+    lines = src.splitlines()
+    start = next(i for i, l in enumerate(lines)
+                 if l.startswith(';;;  TUNABLES'))
+    end = next(i for i, l in enumerate(lines)
+               if l.startswith(';;;  END TUNABLES'))
+    state = {'acc:*sysold*', 'acc:*sysvars*'}
+    outside = [l for i, l in enumerate(lines)
+               if l.startswith('(setq acc:*') and not start < i < end
+               and not any(k in l for k in state)]
+    assert not outside, outside
+
+    def explained(i):
+        if re.search(r'\)\s*;', lines[i]):
+            return True
+        j = i - 1
+        while j >= 0 and lines[j].strip():
+            if lines[j].lstrip().startswith(';;'):
+                return True
+            j -= 1
+        return False
+
+    undoc = [l for i, l in enumerate(lines[start:end], start)
+             if l.startswith('(setq acc:*') and not explained(i)]
+    assert not undoc, undoc
+    knobs = re.findall(r'^\(setq (acc:\*[a-z-]+\*)', src, re.M)
+    vm = newvm()
+    unbound = [k for k in knobs if k not in state and vm.loads(k) is None]
+    assert not unbound, unbound
+    readme = open(os.path.join(os.path.dirname(__file__), '..', 'lisp',
+                               'abcurcheck', 'README.md')).read()
+    missing = [k for k in knobs if k not in state and k not in readme]
+    assert not missing, missing
+    print("ok  %d knobs, all inside the block, all explained,"
+          " all in the README" % len(knobs))
+
+
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
 
 if __name__ == '__main__':
