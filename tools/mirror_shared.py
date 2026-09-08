@@ -1223,7 +1223,7 @@ TOOLS = {
         },
         'drop_globals': [],
     },
-    # block-number with its tag argument (*CDO-PT-TAG* stays and is
+    # block-number with its tag argument (cdo:*pt-tag* stays and is
     # passed), and the Back-word test under cdo:backp.
     # [verified: byte-identical except the legacy banner vs the twin on disk]
     'CDCALLOUT': {
@@ -1235,7 +1235,7 @@ TOOLS = {
         'drop_globals': [],
         'expand': {
             '(cal:block-number en)':
-                ['(cal:block-number en *CDO-PT-TAG*)'],
+                ['(cal:block-number en cdo:*pt-tag*)'],
         },
     },
     # One helper: the 2D dot product, dash-named autobead-dot.
@@ -1282,7 +1282,7 @@ TOOLS = {
         'swap': {},
         'drop_globals': [],
     },
-    # Layer creator and block-number with *BP-PT-TAG* passed as the
+    # Layer creator and block-number with bp:*pt-tag* passed as the
     # tag argument.
     # [verified: byte-identical except the legacy banner vs the twin on disk]
     'BPCALLOUT': {
@@ -1297,7 +1297,7 @@ TOOLS = {
         'drop_globals': [],
         'expand': {
             '(cal:block-number en)':
-                ['(cal:block-number en *BP-PT-TAG*)'],
+                ['(cal:block-number en bp:*pt-tag*)'],
         },
     },
 }

@@ -36,7 +36,8 @@ The four GUI files came first and check 6 is still theirs -- they are
 the ones whose knobs the VB palette shares.  Checks 1-5 are the general
 rule (STANDARDS.md section 5, "Tunables") and every file in FILES meets
 them; ``abcdef`` and ``ALTABCDEF`` joined when they grew blocks of their
-own.
+own, and ``BPCALLOUT`` / ``CDCALLOUT`` / ``CDCREATE`` when theirs were
+gathered into one.
 
 Run: python3 tests/test_tunables.py
 """
@@ -92,6 +93,17 @@ FILES = [
     # the older spelling the rule leaves where it got there first
     ('AutoDim', ROOT / 'lisp' / 'autodim' / 'AutoDim.lsp', 'ad',
      ROOT / 'lisp' / 'autodim' / 'README.md', SETTINGS),
+    # the three callout/create tools, which joined for the same reason
+    # again: each kept SOME of its settings in a block at the top and
+    # the rest inline -- a ring colour, a text offset, the sentence a
+    # callout is built from -- so adapting one meant reading the file
+    # to find out what was adjustable at all.
+    ('BPCALLOUT', ROOT / 'lisp' / 'bpcallout' / 'BPCALLOUT.lsp', 'bp',
+     ROOT / 'lisp' / 'bpcallout' / 'README.md', TUNABLES),
+    ('CDCALLOUT', ROOT / 'lisp' / 'cdcallout' / 'CDCALLOUT.lsp', 'cdo',
+     ROOT / 'lisp' / 'cdcallout' / 'README.md', TUNABLES),
+    ('CDCREATE', ROOT / 'lisp' / 'cdcreate' / 'CDCREATE.lsp', 'cdc',
+     ROOT / 'lisp' / 'cdcreate' / 'README.md', TUNABLES),
     # OASIS, which had fourteen of its forty in a block and the other
     # twenty-six spelled out where they were read -- a stand-off's 12
     # and 18, a preview's 0.6 and 1.25, the 1e-8 a tie is deduped with.
