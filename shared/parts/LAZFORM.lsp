@@ -87,7 +87,59 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.13")
+(setq *lazform-version* "v2.14")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them, because
+;;;  each is half of a rule rather than a setting:
+;;;    lzf:*nobtype*     the charts with no bottom-type popup (the L shapes)
+;;;    lzf:*crecharts*   the charts whose corner rows answer POOL's gate
+;;;    lzf:*sportchain*  the four keys that make up the Sport chain
+;;;    lzf:*charts* lzf:*cross* lzf:*picks* lzf:*corners* lzf:*oaslive*
+;;;    lzf:*hints*       -- the sheets themselves; the VB palette's chart
+;;;                      catalog is generated from them (gen_ui_charts.py)
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (cal:*imgfont*, lzf:*font-*, lzf:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;; The bottoms POOL draws, spelled as POOL's own keywords -- the
+;; capitals are each one's abbreviation at the prompt.  Adding a name
+;; here offers it on the popup; it does not teach POOL to draw it.
+(setq lzf:*btypes* '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
+
+;; What a corner can be: STANDARDS.md's canonical set, "(ask)" first so
+;; a row left alone sends nothing and POOL asks.  ORDER MATTERS --
+;; lzf:csized names the treatments that carry a size by their INDEX
+;; here (2 = Radius, 3 = Cut), so reorder both or neither.
+(setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
+
+;; Width budgets, in DCL character cells.  DCL does not scroll: a row
+;; wider than the screen stops the dialog opening at all, so each is a
+;; ceiling the packer wraps at, never a preference.
+(setq lzf:*tabbudget* 84)       ; the row of chart tabs
+(setq lzf:*rowbudget* 92)       ; a row of paired column boxes
+
+;; The chart column: its width in cells, and its height as a share of
+;; that width (a string, because DCL reads aspect_ratio as one).
+(setq lzf:*chart-w* 52)
+(setq lzf:*chart-a* "0.72")
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall (the registry, one value per chart,
+;; "key=typed;key=typed").  The VB palette reads the recall key too
+;; (ui/calofin_net/ChartFormView.vb, RecallStore.PoolKey), so a sheet
+;; filled in here comes back there; tests/test_chart_form.py holds the
+;; two together.
+(setq lzf:*poskey* "LazForm_Pos")
+(setq lzf:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazForm")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  THIS build takes the table, its metrics, the tile palette and the
@@ -908,7 +960,7 @@
 ;;;  On the shapes that gate their corner questions behind a yes/no
 ;;;  (lzf:*crecharts*), picking any row answers that gate too.
 
-(setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
+;;  (lzf:*ctreat* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzf:*corners*
   '(("Rectangle"
@@ -1011,7 +1063,6 @@
 (setq lzf:*insq* nil)           ; the in-square toggle, as it is set
 (setq lzf:*btype* 0)            ; the bottom-type row, as it is picked
 (setq lzf:*pos* nil)            ; where the dialog was last standing
-(setq lzf:*poskey* "LazForm_Pos") ; ...in the profile, kept over a restart
 (setq lzf:*go* nil)             ; the chart a tab click asked for
 (setq lzf:*ranchart* nil)       ; the chart Insert was finally pressed on
 
@@ -1201,7 +1252,7 @@
 ;;  the right in the chart's own order, each labelled with its letter so
 ;;  the list and the picture read as one thing.
 
-(setq lzf:*btypes* '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
+;;  (lzf:*btypes* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzf:tabstrip (cur / out c n)
   ;; The tab strip: one button per chart, the current one disabled so
@@ -1226,7 +1277,7 @@
   (reverse out))
 
 ;; Chart keys packed into rows no wider than the budget.
-(setq lzf:*tabbudget* 84)
+;;  (lzf:*tabbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzf:tabrows ( / out row w c cw)
   (setq row nil w 0)
@@ -1238,8 +1289,6 @@
   (if row (setq out (cons (reverse row) out)))
   (reverse out))
 
-(setq lzf:*chart-w* 52)         ; the chart column, in character cells
-(setq lzf:*chart-a* "0.72")     ; and its height, as a share of that
 
 ;;; -------------------- packing the column boxes ------------------------
 ;;;  A DCL DIALOG TALLER THAN THE SCREEN DOES NOT OPEN, and nothing
@@ -1258,7 +1307,7 @@
 ;;;  boundaries a reader might expect -- it follows the width, and
 ;;;  every box is labelled for itself either way.
 
-(setq lzf:*rowbudget* 92)       ; cells a packed row may occupy
+;;  (lzf:*rowbudget* itself is set in the TUNABLES block at the top of the file.)
 
 ;; One column-only box, at the given width and indent.
 (defun lzf:extbox (d w ind)
@@ -1849,8 +1898,7 @@
 ;;;  the whole of the "nothing happened" case -- no message needed, and
 ;;;  the state line reports the fill by moving on its own.
 
-(setq lzf:*recallkey*
-      "HKEY_CURRENT_USER\\Software\\Calofin\\LazForm")
+;;  (lzf:*recallkey* itself is set in the TUNABLES block at the top of the file.)
 
 ;;  A sheet is stored as one string, "key=typed;key=typed".  A value
 ;;  carrying ";" or "=" would read back as two pairs or the wrong pair,

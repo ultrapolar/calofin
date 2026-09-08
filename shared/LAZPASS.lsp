@@ -970,7 +970,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "090126 REV22")
+(setq pool:*version* "090826 REV23")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -1033,6 +1033,19 @@
 ;; ("SIDE STANDARD"), per the reference drawings.  A dim inside a
 ;; SIDE STANDARD block keeps that style even under 24 inches: the
 ;; reference sheets show a 19" S1 in SIDE STANDARD, not inches.
+;;
+;; The FLOOR dims keep their style under 24 inches too, for the same
+;; reason and by the same mechanism (pool:*flooron*, opened by
+;; pool:dimflbeg): the whole BOTTOM phase -- the H/G/F/E and M/L/K
+;; hopper chains, the sport bottom's E2/F2/G/F1/E1, and the section
+;; depths C / D / C2 -- reads as ONE chain of runs that adds up to
+;; the pool, and a 19" H in inches beside a 12'6" F in feet is the
+;; one thing a crew reads wrong.  POOLSIDE.lsp draws those same floor
+;; dims on their own and switches style for none of them, so a
+;; section drawn either way comes out the same.  (The six-sided
+;; hopper's W/L1/X are secondary sheet letters, so they are SIDE
+;; STANDARD and stay so.)
+;;
 ;; The cut-off is "UNDER 24 inches": a 2 ft corner is a STANDARD dim,
 ;; not an inches one.  It has to be read with a hair of tolerance,
 ;; because most of these lengths are not the number the crew typed --
@@ -1051,6 +1064,7 @@
 (setq pool:*crossstyle*  "CROSS DIMENSIONS")
 (setq pool:*sidestyle*   "SIDE STANDARD")
 (setq pool:*sideon*      nil)         ; a SIDE STANDARD block is open
+(setq pool:*flooron*     nil)         ; a floor-dims (BOTTOM) block is open
 (setq pool:*dimstyle0*   nil)         ; dim style current when POOL started
 ;; T = report lengths in feet-inches; set per run from the units the
 ;; DRAWING was in before POOL switched to architectural for its
@@ -1253,15 +1267,24 @@
 ;;; and the previous style comes straight back afterwards.  Every
 ;;; dimension the routine draws goes through pool:dimalg / pool:dimrot
 ;;; / pool:dimrad / pool:dimcorner1, so switching in those four covers
-;;; plan dims, hopper chain dims, corner treatments, radii and the
-;;; side-profile depths alike.  (Angular corner dims measure degrees,
-;;; not inches, so they are left alone.)
+;;; plan dims, corner treatments and radii alike.  (Angular corner
+;;; dims measure degrees, not inches, so they are left alone.)
+;;;
+;;; Two kinds of dimension are exempt, and each says so with a flag
+;;; rather than by measuring anything: a secondary sheet letter
+;;; (pool:*sideon*) and a floor dim (pool:*flooron*) -- the hopper
+;;; chains and the section depths of the BOTTOM phase, which stay in
+;;; the standard style however short a run comes out.
 
 (defun pool:dimsbegin (d / odim)
   ;; inside a SIDE STANDARD block the letter keeps that style however
   ;; small it is -- the reference sheets show a 19" S1 in SIDE
-  ;; STANDARD, not in inches
-  (if (and (< d (- pool:*smalldim* pool:*smallfuzz*)) (not pool:*sideon*))
+  ;; STANDARD, not in inches -- and inside a floor-dims block the run
+  ;; or depth keeps the standard style for the same reason: one member
+  ;; of a chain in inches while the rest read in feet is misread
+  (if (and (< d (- pool:*smalldim* pool:*smallfuzz*))
+           (not pool:*sideon*)
+           (not pool:*flooron*))
       (if (tblsearch "DIMSTYLE" pool:*smallstyle*)
           (progn
             (setq odim (getvar "DIMSTYLE"))
@@ -1360,6 +1383,23 @@
   (setq pool:*sideon* nil)
   (if (and odim (tblsearch "DIMSTYLE" odim))
       (command "_.-DIMSTYLE" "_Restore" odim)))
+
+;; Open / close a floor-dims block.  Everything the BOTTOM phase
+;; draws -- the hopper chains, the sport and six-sided letters, the
+;; section depths -- is dimensioned between these two, and the
+;; under-24" switch is suppressed for all of it (pool:*flooron*).
+;; Nothing is switched IN, so there is no previous style to hand back:
+;; a floor dim is drawn in whatever style the run is already in, which
+;; is the standard one unless the caller opened a block of its own
+;; (the six-sided hopper's W/L1/X open a SIDE STANDARD one, and keep
+;; that style).
+(defun pool:dimflbeg ()
+  (setq pool:*flooron* t)
+  nil)
+
+(defun pool:dimflend ()
+  (setq pool:*flooron* nil)
+  nil)
 
 ;; One aligned dim / radius dim in the SIDE STANDARD style.
 (defun pool:dimalgs (p1 p2 pt / od)
@@ -5418,6 +5458,7 @@
   ;; chain dimensions along the two centerlines, like the sheet
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" "DIMENSION")
+  (pool:dimflbeg)                   ; no under-24" switch below
   ;; M/L/K def points sit on the hopper edge; their dim line floats
   ;; 30" right via the 'voff vector
   (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
@@ -5454,6 +5495,7 @@
               (pool:dimalg (list (+ x0 h g f) y0) (list (+ x0 h g f) (- y0 c2))
                            (list (+ x0 h g f (* 0.3 doff)) (- y0 (* 0.5 c2))))
               (setq pool:*profents* (cons (entlast) pool:*profents*))))))
+  (pool:dimflend)
   (setvar "CLAYER" odl)
   (setq rows (list
     (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
@@ -5675,6 +5717,7 @@
   (pool:profdraw x0 y0 total wh brks "POOL" nil)
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" "DIMENSION")
+  (pool:dimflbeg)                   ; no under-24" switch below
   ;; plan chains, standard-hopper style
   (foreach tl (append (list (list 'pl 'pobl nil (member 0 hfx))
                             (list 'pobl 'pdfl nil (member 1 hfx)))
@@ -5695,6 +5738,7 @@
   (setq xd (if nopad (+ x0 e2 f2) (+ x0 e2 f2 (* 0.5 g))))
   (pool:dimalg (list xd y0) (list xd (- y0 hd))
                (list (+ xd (* 0.3 doff)) (- y0 (* 0.5 hd))))
+  (pool:dimflend)
   (setvar "CLAYER" odl)
   (setq rows (append
     (list (pool:vrow "SPT E2" e2r (distance (cadr (assoc 'pl gg)) (cadr (assoc 'pobl gg))) 0 hfx)
@@ -5988,6 +6032,7 @@
         (pool:hopovaldraw gg "POOL" nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" "DIMENSION")
+        (pool:dimflbeg)                   ; no under-24" switch below
         (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
                           (list 'phl 'phr nil (member 1 hfx))
                           (list 'phr 'pbrk nil (member 2 hfx))
@@ -6003,6 +6048,7 @@
                                 (if (caddr tl) (cadr (assoc 'voff gg))
                                     (list 0.0 0.0))))
           (if (cadddr tl) (pool:dimred)))
+        (pool:dimflend)
         (setvar "CLAYER" odl)
         (setq o (pool:circum (cadr (assoc 'ttop gg)) (cadr (assoc 'tip gg))
                              (cadr (assoc 'tbot gg)))
@@ -6327,6 +6373,7 @@
         (pool:hopgrecdraw gg "POOL" six nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" "DIMENSION")
+        (pool:dimflbeg)                   ; no under-24" switch below
         (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
                           (list 'phl 'phr nil (member 1 hfx))
                           (list 'phr 'pbrk nil (member 2 hfx))
@@ -6369,6 +6416,7 @@
                   (pool:dimalgs (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))
                                 (cal:mid (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))))
                   (if sixbad (pool:dimred)))))
+        (pool:dimflend)
         (setvar "CLAYER" odl)
         (setq rows (list
           (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
@@ -8517,8 +8565,11 @@
     (cal:sysrestore)
     ;; DIMSTYLE is read-only to setvar, so it is put back the only way
     ;; it can be: dying inside a small-dim, cross-dim or SIDE STANDARD
-    ;; block must not leave that style current in the user's drawing
-    (setq pool:*sideon* nil)
+    ;; block must not leave that style current in the user's drawing.
+    ;; The floor-dims flag switches no style, but a run that died with
+    ;; it set would draw the NEXT pool's plan with the rule off
+    (setq pool:*sideon* nil
+          pool:*flooron* nil)
     (pool:dimsend pool:*dimstyle0*)
     (pool:pvkill)
     ;; a form must never outlive the run it was given to: left behind,
@@ -8541,6 +8592,7 @@
         pool:*smallwarned* nil
         pool:*profents* nil
         pool:*sideon* nil
+        pool:*flooron* nil
         pool:*dimstyle0* (getvar "DIMSTYLE")
         ;; report lengths follow the units the DRAWING was in before
         ;; POOL switches to architectural for its prompts: a crew whose
@@ -9540,7 +9592,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.1")
+(setq *poolside-version* "v1.2")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -9551,13 +9603,13 @@
 (setq psd:*pvx-col*    7)               ; guide measuring-tie color (white)
 (setq psd:*hi-col*     1)               ; highlight color (red)
 
-;; Measurements under psd:*smalldim* are dimensioned in the drawing's
-;; "STANDARD INCHES" style when it has one, exactly as POOL does, so
-;; the two agree on a 19" run.  The missing-style note prints once.
-(setq psd:*smalldim*    24.0)
-(setq psd:*smallstyle*  "STANDARD INCHES")
-(setq psd:*smallwarned* nil)
-(setq psd:*dimstyle0*   nil)            ; dim style current when we started
+;; NO dim style is switched anywhere in this file, and that is the
+;; rule rather than an omission: every dimension POOLSIDE draws is a
+;; FLOOR dim -- the run chain, the depths and B -- and floor dims stay
+;; in the drawing's standard style however short they measure, exactly
+;; as POOL does since REV23, so the two agree on a 19" H.  (POOL still
+;; sets small PLAN dims -- corner radii, cut faces -- in
+;; "STANDARD INCHES"; POOLSIDE draws no plan.)
 
 ;; The six bottom types, POOL's own keywords and capitalization -- the
 ;; palette and the field sheets both speak these, and a tool that spelt
@@ -9932,44 +9984,21 @@
   pv)
 
 ;;; -------------------- dimensions -------------------------------------
-
-(defun psd:dimsbegin (d / odim)
-  (if (< d psd:*smalldim*)
-      (if (tblsearch "DIMSTYLE" psd:*smallstyle*)
-          (progn
-            (setq odim (getvar "DIMSTYLE"))
-            ;; already current -> nothing to switch, nothing to undo
-            (if (= (strcase odim) (strcase psd:*smallstyle*))
-                (setq odim nil)
-                (command "_.-DIMSTYLE" "_Restore" psd:*smallstyle*))
-            odim)
-          (progn
-            (if (not psd:*smallwarned*)
-                (progn
-                  (princ (strcat "\n(no \"" psd:*smallstyle*
-                                 "\" dim style in this drawing -- dims under "
-                                 (rtos psd:*smalldim*)
-                                 " drawn in the current style)"))
-                  (setq psd:*smallwarned* t)))
-            nil))))
-
-(defun psd:dimsend (odim)
-  (if (and odim (tblsearch "DIMSTYLE" odim))
-      (command "_.-DIMSTYLE" "_Restore" odim)))
+;;;
+;;;  Every dimension below is drawn in whatever dim style the drawing
+;;;  already has current -- the standard one, in the drawings these
+;;;  sections go into.  There is no small-dim style to switch to and
+;;;  none to put back: see the note at the top of the file.
 
 ;; A horizontal / vertical dimension between two points.  The
 ;; orientation is STATED, not inferred from the points: a run is
 ;; measured between two floor points at different depths, and an
 ;; aligned dimension between those would read the slope instead.
-(defun psd:dimh (p1 p2 pt / od)
-  (setq od (psd:dimsbegin (abs (- (car p1) (car p2)))))
-  (command "_.DIMLINEAR" (psd:wp p1) (psd:wp p2) "_H" (psd:wp pt))
-  (psd:dimsend od))
+(defun psd:dimh (p1 p2 pt)
+  (command "_.DIMLINEAR" (psd:wp p1) (psd:wp p2) "_H" (psd:wp pt)))
 
-(defun psd:dimv (p1 p2 pt / od)
-  (setq od (psd:dimsbegin (abs (- (cadr p1) (cadr p2)))))
-  (command "_.DIMLINEAR" (psd:wp p1) (psd:wp p2) "_V" (psd:wp pt))
-  (psd:dimsend od))
+(defun psd:dimv (p1 p2 pt)
+  (command "_.DIMLINEAR" (psd:wp p1) (psd:wp p2) "_V" (psd:wp pt)))
 
 ;; Color the just-drawn dimension red (a measurement the validator had
 ;; to adjust).
@@ -10000,10 +10029,7 @@
         (princ (strcat "\nPOOLSIDE error: " msg)))
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
-    ;; DIMSTYLE is read-only to setvar, so it is put back the only way
-    ;; it can be: dying inside a small-dim block must not leave that
-    ;; style current in the user's drawing
-    (psd:dimsend psd:*dimstyle0*)
+    ;; nothing to put DIMSTYLE back to: POOLSIDE never switches it
     (psd:pvkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
@@ -10014,9 +10040,7 @@
   (if *push-error-using-command* (*push-error-using-command*))
 
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
-  (setq psd:*valnotes* nil
-        psd:*smallwarned* nil
-        psd:*dimstyle0* (getvar "DIMSTYLE"))
+  (setq psd:*valnotes* nil)
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
@@ -17217,6 +17241,11 @@
 ;;; bottom-right, D = bottom-left), the import notices - the distances only
 ;;; fit the rectangle one way - swaps C and D to match, and says so.
 ;;;
+;;; Every threshold, layer name, colour, size and tolerance the command
+;;; uses is a named Tunable at the top of this file, each with a note on
+;;; what it does and which way to move it.  Nothing below that block is
+;;; meant to be edited to change how the tool behaves.
+;;;
 ;;; All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
@@ -17226,23 +17255,236 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.6")
+(setq *abcdef-version* "v5.7")
 
-;;; --------------------------------------------------------------------------
-;;;  Tunables
-;;; --------------------------------------------------------------------------
+;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafter might reasonably want different is set HERE and
+;; nowhere else: the code below reads these names and carries no bare
+;; numbers of its own.  Each knob says what CHANGING it does, what unit
+;; it is in, and which way to move it.  Change a value, save, APPLOAD
+;; again - or (setq abcdef:*name* value) at the command line for one
+;; session.  Every one of them is a row in README.md's Tunables table,
+;; and tests/test_tunables.py holds the two together.
+;;
+;; Distances are in inches throughout (1 drawing unit = 1 inch).
+
+;; ---- where the tapes stop agreeing ---------------------------------------
 
 ;; Quarter-inch field data that was read and typed correctly fits a
-;; rectangle well under a tenth of an inch.  These two numbers are where
-;; "fits" stops and "check this" starts, in inches of RMS leftover error.
-(setq abcdef:*fit-ok*  0.20)   ; at or under this, the tapes agree
-(setq abcdef:*fit-bad* 0.50)   ; over this, the point is flagged CHECK
+;; rectangle well under a tenth of an inch of RMS leftover error.  These
+;; two numbers are where "fits" stops and "check this" starts.
+;;   *fit-ok*   at or under this, the tapes agree: Auto keeps every tape
+;;              and never goes looking for one to drop
+;;   *fit-bad*  over this, the row is marked **CHECK in the report and a
+;;              note is written beside the point in the drawing
+;; Raise them for sloppier tapes (a sheet read to the half inch), lower
+;; them when a survey is expected to be tight.
+(setq abcdef:*fit-ok*  0.20)
+(setq abcdef:*fit-bad* 0.50)
 
 ;; How far outside the rectangle a solved point may land and still be
-;; treated as rounding to be snapped back, rather than a bad reading.
+;; treated as rounding to be snapped back onto the frame, in inches.  A
+;; snap larger than this is reported as a bad tape or a wrong dimension
+;; and counts the point as one that wants checking.
 (setq abcdef:*edge-tol* 1.0)
 
-(setq abcdef:*fuzz* 1e-9)      ; below this, two lengths are the same length
+;; A snap smaller than this is not reported at all - it is arithmetic,
+;; not a finding.  In inches.
+(setq abcdef:*snap-show* 0.001)
+
+;; ---- dropping a tape (the Auto method) -----------------------------------
+
+;; With four tapes and a poor fit, each tape is left out in turn.  The
+;; best three-tape fit is allowed to win, and that tape to be dropped,
+;; only when all of these hold:
+;;   * the three fit at or under *fit-ok* (above);
+;;   * they fit better than *drop-gain* times the four-tape fit - so the
+;;     drop has to have MENDED something, not just shaved it;
+;;   * the runner-up triple is clearly worse: at least *drop-ratio* times
+;;     the best AND at least *drop-margin* inches over it.  Near a
+;;     diagonal the best two triples fit alike, and this is what keeps a
+;;     good tape from being thrown out there.
+;; Lower *drop-ratio* / *drop-margin* to drop tapes more readily, raise
+;; them to be stricter about the evidence.
+(setq abcdef:*drop-gain*   0.5)
+(setq abcdef:*drop-ratio*  3.0)
+(setq abcdef:*drop-margin* 0.25)
+
+;; ---- whole-sheet sanity ----------------------------------------------------
+
+;; Every row with three or more tapes is solved as labelled AND with the
+;; C and D columns exchanged.  The sheet is read as clockwise-labelled
+;; (C bottom-right) when the fit as labelled is worse than *swap-min*
+;; inches per row on average and the swapped fit is under *swap-ratio*
+;; of it.  Set *swap-min* very high to switch the detector off.
+(setq abcdef:*swap-min*   0.5)
+(setq abcdef:*swap-ratio* 0.25)
+
+;; When the average fit over those rows is still worse than this many
+;; inches after any swap, the command warns on the command line and pops
+;; an alert: the A-B / A-C dimensions or the sheet are probably wrong.
+;; Points are plotted regardless.
+(setq abcdef:*poor-fit* 1.0)
+
+;; ---- the confidence column -------------------------------------------------
+
+;; Every point starts at 100 and loses points for what its tapes could
+;; not show.  The number is clamped to 1..99.
+;;   *conf-three*  taken off a point placed by three tapes
+;;   *conf-two*    taken off a point placed by only two (they cross-check
+;;                 nothing, so this is the biggest single cost)
+(setq abcdef:*conf-three* 8.0)
+(setq abcdef:*conf-two*   26.0)
+
+;; Leftover fit error costs *conf-fit* points per inch of RMS, up to
+;; *conf-fit-max*.  At the defaults a tenth of an inch costs 11.
+(setq abcdef:*conf-fit*     110.0)
+(setq abcdef:*conf-fit-max*  55.0)
+
+;; Spread - how far the answer moves when any one tape is dropped - costs
+;; *conf-spread* points per inch, up to *conf-spread-max*.
+(setq abcdef:*conf-spread*     12.0)
+(setq abcdef:*conf-spread-max* 20.0)
+
+;; The angle the best pair of tapes crosses at, in degrees.  A shallow
+;; crossing turns a quarter inch of tape error into inches of position
+;; error, so it costs more than a large fit does.  Below *cut-bad* the
+;; point loses *conf-cut-bad*, below *cut-poor* it loses *conf-cut-poor*,
+;; below *cut-fair* it loses *conf-cut-fair*; a wider crossing costs
+;; nothing.
+(setq abcdef:*cut-bad*  20.0)
+(setq abcdef:*cut-poor* 35.0)
+(setq abcdef:*cut-fair* 50.0)
+(setq abcdef:*conf-cut-bad*  22.0)
+(setq abcdef:*conf-cut-poor* 10.0)
+(setq abcdef:*conf-cut-fair*  3.0)
+
+;; A dropped tape costs this much: the row needed repairing, and a repair
+;; is a judgement even when the evidence for it was good.
+(setq abcdef:*conf-drop* 6.0)
+
+;; Two tapes fix a point twice over - once each side of the line joining
+;; the two corners they were measured from - and both answers fit them
+;; EQUALLY well.  Measured from two adjacent corners the mirror falls
+;; outside the rectangle and the choice is made for us; measured from two
+;; OPPOSITE corners it does not, and the sheet genuinely does not say
+;; which of the two the point is.  Such a row is flagged and loses this
+;; much confidence on top of the two-tape cost.
+(setq abcdef:*conf-mirror* 25.0)
+
+;; The word that goes with the number: HIGH from *grade-high* up, then
+;; GOOD, FAIR, WEAK, and POOR below *grade-weak*.
+(setq abcdef:*grade-high* 90.0)
+(setq abcdef:*grade-good* 75.0)
+(setq abcdef:*grade-fair* 60.0)
+(setq abcdef:*grade-weak* 40.0)
+
+;; A point under this confidence "wants checking": it is counted in the
+;; summary and gets a note beside it in the drawing (as does one over
+;; *fit-bad* or snapped further than *edge-tol*).
+(setq abcdef:*conf-check* 60.0)
+
+;; ---- what it draws ---------------------------------------------------------
+
+;; The survey points, as the rest of the toolkit reads them: an "ab_pt"
+;; block on layer POINTS with the sheet's label in its "number" attribute
+;; (the same block XFTCONV makes for a Leica import).  ABHD, CABHD, ADAB,
+;; ABFIND, BPCALLOUT and LHD all look for exactly this, so change these
+;; three only together with them.  *point-color* is used when the layer
+;; has to be created (2 = yellow); an existing layer keeps its colour.
+(setq abcdef:*point-layer* "POINTS")
+(setq abcdef:*point-block* "ab_pt")
+(setq abcdef:*point-tag*   "number")
+(setq abcdef:*point-color* 2)
+
+;; The rectangle with its corner letters, and the notes beside doubtful
+;; points.  Colours are AutoCAD colour numbers (1 = red), applied when the
+;; layer is created.  Nothing but the survey points ever goes on
+;; *point-layer*.
+(setq abcdef:*frame-layer* "ABCDEF-FRAME")
+(setq abcdef:*frame-color* 1)
+(setq abcdef:*warn-layer*  "ABCDEF-WARN")
+(setq abcdef:*warn-color*  1)
+
+;; Text height is the longer rectangle side divided by *text-div*, but
+;; never under *text-min* inches.  The block is scaled by the same height
+;; so its number reads at that size.
+;;   *tag-scale*  corner letters are this many text heights tall
+;;   *tag-gap*    how far a corner letter sits out from its corner,
+;;                sideways and upward, in text heights
+;;   *tag-drop*   how far BELOW a bottom corner its letter's baseline
+;;                sits, in text heights (more than *tag-gap*, because the
+;;                letter's own height has to clear the corner)
+;;   *note-off*   the "P3 WEAK" note beside a doubtful point sits this
+;;                many text heights up and to the right of it
+(setq abcdef:*text-div*  120.0)
+(setq abcdef:*text-min*  0.5)
+(setq abcdef:*tag-scale* 1.4)
+(setq abcdef:*tag-gap*   1.0)
+(setq abcdef:*tag-drop*  1.6)
+(setq abcdef:*note-off*  0.6)
+
+;; ---- the sheet -------------------------------------------------------------
+
+;; What the file dialog offers, as a getfiled extension list.  CSV is
+;; read natively; the Excel formats go through Excel COM automation.
+(setq abcdef:*file-types* "xlsx;xls;xlsm;csv")
+
+;; Header words that identify the columns, compared upper-case as
+;; substrings: a header containing the Nth entry of *hdr-dist* is the
+;; distance from the Nth corner (A B C D), and the first header containing
+;; any entry of *hdr-name* is the point name.  With no name header the
+;; first column is taken.
+(setq abcdef:*hdr-dist* '("FROM A" "FROM B" "FROM C" "FROM D"))
+(setq abcdef:*hdr-name* '("NAME" "POINT" "LABEL"))
+
+;; The report file is the sheet's name with its extension replaced by
+;; this, written beside the sheet.
+(setq abcdef:*report-suffix* "_ABCDEF_report.txt")
+
+;; ---- reading dirty values --------------------------------------------------
+
+;; A reading with no foot mark whose value is more than *apos-over* times
+;; the rectangle's diagonal, and whose feet end in a 1, had its foot mark
+;; scanned as that 1 ("101-10" is 10'-10"): the 1 is dropped and the
+;; repair logged.  A value still over *impossible* times the diagonal
+;; after that cannot be a distance to a corner and is left blank (and
+;; logged).  Both are ratios; 1.0 would be the diagonal itself.
+(setq abcdef:*apos-over*  1.05)
+(setq abcdef:*impossible* 1.1)
+
+;; The denominators an inch fraction may have.  A slash-less digit run
+;; like "314" is rebuilt as the one fraction over one of these it could
+;; be (3/4), so a denominator not listed here is never invented.
+(setq abcdef:*fractions* '(2 4 8 16 32))
+
+;; The correction log writes each repaired value back as feet-inches to
+;; the nearest 1/*log-denom* of an inch, reduced (476.75 -> 39'-8 3/4").
+;; A whole number, a power of two.
+(setq abcdef:*log-denom* 32)
+
+;; ---- numerical -------------------------------------------------------------
+;; These only matter to the solver's arithmetic and should not need
+;; touching.
+
+;; Two lengths closer than this are the same length; also the shortest
+;; radius the solver will divide by.  In inches.
+(setq abcdef:*fuzz* 1e-9)
+
+;; The least-squares fit: at most *solve-iters* Gauss-Newton steps, done
+;; when a step moves the point under *solve-step* inches in both X and Y;
+;; a normal-matrix determinant under *solve-singular* (or a linear-seed
+;; determinant under *seed-singular*) means the tapes do not constrain
+;; the point and the fit stops where it is.
+(setq abcdef:*solve-iters*    60)
+(setq abcdef:*solve-step*     1e-7)
+(setq abcdef:*solve-singular* 1e-12)
+(setq abcdef:*seed-singular*  1e-9)
+
+;; The corner self-check accepts a side or diagonal within this many
+;; inches of what W and H say it should be.
+(setq abcdef:*frame-tol* 0.001)
 
 ;;; --------------------------------------------------------------------------
 ;;;  String helpers
@@ -17371,7 +17613,7 @@
                  (abcdef:alldigits num) (abcdef:alldigits den))
           (progn
             (setq ni (atoi num) di (atoi den))
-            (if (and (member di '(2 4 8 16 32)) (> ni 0) (< ni di))
+            (if (and (member di abcdef:*fractions*) (> ni 0) (< ni di))
               (setq best (strcat num "/" den)))))))
     (setq k (1+ k)))
   best)
@@ -17465,7 +17707,7 @@
       ;; --- foot mark scanned as a "1" ------------------------------------
       ;; e.g. 10'-10" -> "101-10": with no real ' and a value past the
       ;; diagonal, a trailing 1 on the feet was the apostrophe; drop it.
-      (if (and maxd (null p) (> val (* maxd 1.05))
+      (if (and maxd (null p) (> val (* maxd abcdef:*apos-over*))
                (> (strlen ftstr) 1)
                (= (substr ftstr (strlen ftstr) 1) "1"))
         (progn
@@ -17474,23 +17716,24 @@
                 abcdef:*dirty* T)))
       (if neg (setq val (- val)))
       ;; --- final sanity: non-positive or still impossible -> unreadable --
-      (if (or (<= val 0.0) (and maxd (> val (* maxd 1.1))))
+      (if (or (<= val 0.0)
+              (and maxd (> val (* maxd abcdef:*impossible*))))
         (progn (setq abcdef:*dirty* T) nil)
         val))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Format inches back to a feet-inch string (for the correction log), to the
-;;;  nearest 1/32", reduced.  e.g. 476.75 -> 39'-8 3/4"
+;;;  nearest 1/abcdef:*log-denom*", reduced.  e.g. 476.75 -> 39'-8 3/4"
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:in->ftin (v / neg feet whole frac n den ft s)
+(defun abcdef:in->ftin (v / neg feet whole n den per s)
   (setq neg (< v 0.0) v (abs v))
-  (setq n (fix (+ (* v 32.0) 0.5)))      ; total 1/32" units, rounded
-  (setq feet (fix (/ n 384)))            ; 384 = 32*12
-  (setq n (- n (* feet 384)))
-  (setq whole (fix (/ n 32)))
-  (setq n (- n (* whole 32)))            ; leftover 1/32 units, 0..31
-  (setq den 32)
+  (setq den abcdef:*log-denom* per (* den 12))
+  (setq n (fix (+ (* v den) 0.5)))       ; total 1/den" units, rounded
+  (setq feet (fix (/ n per)))            ; per = those units in a foot
+  (setq n (- n (* feet per)))
+  (setq whole (fix (/ n den)))
+  (setq n (- n (* whole den)))           ; leftover 1/den units
   (while (and (> n 0) (= (rem n 2) 0)) (setq n (/ n 2) den (/ den 2)))
   (setq s (strcat (itoa feet) "'-" (itoa whole)))
   (if (> n 0) (setq s (strcat s " " (itoa n) "/" (itoa den))))
@@ -17531,26 +17774,26 @@
               sac (+ sac (* a cc)) sbc (+ sbc (* b cc)))
         (setq i (1+ i)))
       (setq det (- (* saa sbb) (* sab sab)))
-      (if (> (abs det) 1e-9)
+      (if (> (abs det) abcdef:*seed-singular*)
         (setq x (/ (- (* sac sbb) (* sbc sab)) det)
               y (/ (- (* saa sbc) (* sab sac)) det))
         (setq x cx y cy)))                    ; degenerate -> centre
     (setq x cx y cy))                         ; only 2 circles -> centre seed
   ;; ---- Gauss-Newton refinement ------------------------------------------
   (setq iter 0)
-  (while (< iter 60)
+  (while (< iter abcdef:*solve-iters*)
     (setq jaa 0.0 jab 0.0 jbb 0.0 ga 0.0 gb 0.0 i 0)
     (while (< i n)
       (setq c (nth i corners) d (nth i dists))
       (setq dx (- x (car c)) dy (- y (cadr c)) r (sqrt (+ (* dx dx) (* dy dy))))
-      (if (< r 1e-9) (setq r 1e-9))
+      (if (< r abcdef:*fuzz*) (setq r abcdef:*fuzz*))
       (setq jx (/ dx r) jy (/ dy r) f (- r d))
       (setq jaa (+ jaa (* jx jx)) jab (+ jab (* jx jy)) jbb (+ jbb (* jy jy))
             ga (+ ga (* jx f)) gb (+ gb (* jy f)))
       (setq i (1+ i)))
     (setq det (- (* jaa jbb) (* jab jab)))
-    (if (< (abs det) 1e-12)
-      (setq iter 60)                          ; singular -> stop
+    (if (< (abs det) abcdef:*solve-singular*)
+      (setq iter abcdef:*solve-iters*)        ; singular -> stop
       (progn
         (setq ddx (/ (- (- (* ga jbb)) (- (* gb jab)))
                      det)
@@ -17558,7 +17801,9 @@
                      det))
         ;; ddx = -(ga*jbb - gb*jab)/det ; ddy = -(jaa*gb - jab*ga)/det
         (setq x (+ x ddx) y (+ y ddy))
-        (if (and (< (abs ddx) 1e-7) (< (abs ddy) 1e-7)) (setq iter 60))))
+        (if (and (< (abs ddx) abcdef:*solve-step*)
+                 (< (abs ddy) abcdef:*solve-step*))
+          (setq iter abcdef:*solve-iters*))))
     (setq iter (1+ iter)))
   ;; ---- residuals ---------------------------------------------------------
   (setq res '() rms 0.0 i 0)
@@ -17623,6 +17868,28 @@
         (list (list bx by))
         (list (list (- bx (* h uy)) (+ by (* h ux)))
               (list (+ bx (* h uy)) (- by (* h ux))))))))
+
+;; The mirror of (X Y) in the line through CA and CB.
+;;
+;; Two circles cross twice, so two tapes fix a point twice over - once
+;; each side of the line joining the corners they came from - and the two
+;; answers fit those tapes to exactly the same hundredth.  Which one is
+;; taken is settled by the seed, and the seed is the middle of the frame,
+;; which sits ON the line for a pair of opposite corners: there the two
+;; answers are equidistant from it and the pick is a coin toss.  So the
+;; question worth asking is not which root was chosen but whether the
+;; other one was a real possibility, and that is what this computes.
+(defun abcdef:mirror-pt (x y ca cb / ux uy d tt vx vy)
+  (setq ux (- (car cb) (car ca)) uy (- (cadr cb) (cadr ca))
+        d  (sqrt (+ (* ux ux) (* uy uy))))
+  (if (< d abcdef:*fuzz*)
+    (list x y)                           ; the same corner twice
+    (progn
+      (setq ux (/ ux d) uy (/ uy d)
+            vx (- x (car ca)) vy (- y (cadr ca))
+            tt (* 2.0 (+ (* vx ux) (* vy uy))))
+      (list (+ (car ca) (- (* tt ux) vx))
+            (+ (cadr ca) (- (* tt uy) vy))))))
 
 ;; T when (X Y) is inside RECT - (xmin ymin xmax ymax) - allowing TOL of
 ;; slop on every side.
@@ -17830,9 +18097,10 @@
                 (setq nr (caddr trial))))))
      (if (and bs
               (<= br abcdef:*fit-ok*)
-              (< br (* 0.5 rms))
+              (< br (* abcdef:*drop-gain* rms))
               nr
-              (> nr (max (* 3.0 br) (+ br 0.25))))   ; the runner-up must lose
+              (> nr (max (* abcdef:*drop-ratio* br)      ; the runner-up
+                         (+ br abcdef:*drop-margin*))))   ; must lose
        (list best bs (abcdef:missing av bs))
        (list f av nil)))))
 
@@ -17878,8 +18146,19 @@
   (setq f (abcdef:fit av rect seed))
   (if f (list f av nil)))
 
+;; T when the row was placed by exactly two tapes AND the mirror answer
+;; those same two tapes allow also lands inside the frame - i.e. the sheet
+;; does not say which of the two the point is.
+(defun abcdef:mirror-amb-p (used x y rect / m)
+  (if (/= (length used) 2)
+    nil
+    (progn
+      (setq m (abcdef:mirror-pt x y (cadr (nth 0 used)) (cadr (nth 1 used))))
+      (and (> (abcdef:d2p (list x y) m) abcdef:*edge-tol*)
+           (abcdef:inside-p (car m) (cadr m) rect 0.0)))))
+
 ;; Run one row under the chosen method.  Returns
-;;   (X Y RMS USED DROPPED SPREAD CUT SNAP URMS)
+;;   (X Y RMS USED DROPPED SPREAD CUT SNAP URMS MIRROR)
 ;; or nil when the row has too little to place.
 ;;
 ;; RMS is scored against every tape the sheet gave, URMS against only the
@@ -17906,7 +18185,8 @@
       (setq sp  (abcdef:spread used rect seed (list x y))
             cut (abcdef:best-cut x y used))
       (list x y (abcdef:rms-at av x y) used dropped sp cut (caddr c)
-            (abcdef:rms-at used x y)))))
+            (abcdef:rms-at used x y)
+            (abcdef:mirror-amb-p used x y rect)))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Confidence
@@ -17926,26 +18206,28 @@
 ;;;  repair is a judgement even when the evidence for it was good.
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:confidence (used rms spread cut dropped / p)
+(defun abcdef:confidence (used rms spread cut dropped mirror / p)
   (setq p 100.0)
-  (cond ((>= used 4) (setq p (- p  0.0)))
-        ((= used 3)  (setq p (- p  8.0)))
-        (T           (setq p (- p 26.0))))
-  (setq p (- p (min 55.0 (* 110.0 rms))))
-  (if spread (setq p (- p (min 20.0 (* 12.0 spread)))))
-  (cond ((< cut 20.0) (setq p (- p 22.0)))
-        ((< cut 35.0) (setq p (- p 10.0)))
-        ((< cut 50.0) (setq p (- p  3.0))))
-  (if dropped (setq p (- p 6.0)))
+  (cond ((= used 3) (setq p (- p abcdef:*conf-three*)))
+        ((< used 3) (setq p (- p abcdef:*conf-two*))))
+  (setq p (- p (min abcdef:*conf-fit-max* (* abcdef:*conf-fit* rms))))
+  (if spread
+    (setq p (- p (min abcdef:*conf-spread-max*
+                      (* abcdef:*conf-spread* spread)))))
+  (cond ((< cut abcdef:*cut-bad*)  (setq p (- p abcdef:*conf-cut-bad*)))
+        ((< cut abcdef:*cut-poor*) (setq p (- p abcdef:*conf-cut-poor*)))
+        ((< cut abcdef:*cut-fair*) (setq p (- p abcdef:*conf-cut-fair*))))
+  (if dropped (setq p (- p abcdef:*conf-drop*)))
+  (if mirror (setq p (- p abcdef:*conf-mirror*)))
   (max 1.0 (min 99.0 p)))
 
 ;; The word that goes with a confidence number.
 (defun abcdef:grade (pct)
-  (cond ((>= pct 90.0) "HIGH")
-        ((>= pct 75.0) "GOOD")
-        ((>= pct 60.0) "FAIR")
-        ((>= pct 40.0) "WEAK")
-        (T             "POOR")))
+  (cond ((>= pct abcdef:*grade-high*) "HIGH")
+        ((>= pct abcdef:*grade-good*) "GOOD")
+        ((>= pct abcdef:*grade-fair*) "FAIR")
+        ((>= pct abcdef:*grade-weak*) "WEAK")
+        (T                            "POOR")))
 
 
 ;;; --------------------------------------------------------------------------
@@ -18005,9 +18287,8 @@
 ;;;  is why nothing else drawn here goes on the POINTS layer.
 ;;; --------------------------------------------------------------------------
 
-(setq abcdef:*point-layer* "POINTS")   ; where the survey points land
-(setq abcdef:*point-block* "ab_pt")    ; the block every fitter reads
-(setq abcdef:*point-tag*   "number")   ; its point-number attribute
+;; (The layer, block and attribute names are Tunables at the top of the
+;; file, next to the colour the layer is created with.)
 
 ;; Make sure ab_pt exists, building it the way the office template has it
 ;; when the drawing has never seen one.  (Same definition XFTCONV creates
@@ -18097,15 +18378,20 @@
                      "Text"))) '()))
   (if (vl-catch-all-error-p res) "" (abcdef:cellstr res)))
 
-;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd.
-(defun abcdef:col-of (up)
-  (cond ((vl-string-search "FROM A" up) 'a)
-        ((vl-string-search "FROM B" up) 'b)
-        ((vl-string-search "FROM C" up) 'c)
-        ((vl-string-search "FROM D" up) 'd)
-        ((or (vl-string-search "NAME" up) (vl-string-search "POINT" up)
-             (vl-string-search "LABEL" up)) 'name)
-        (T nil)))
+;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd
+;; by the words in abcdef:*hdr-dist* and abcdef:*hdr-name*: the Nth
+;; distance word wins over a name word, and the first match wins.
+(defun abcdef:col-of (up / kind i w)
+  (setq kind nil i 0)
+  (foreach w abcdef:*hdr-dist*
+    (if (and (null kind) (vl-string-search (strcase w) up))
+      (setq kind (cond ((= i 0) 'a) ((= i 1) 'b) ((= i 2) 'c) (T 'd))))
+    (setq i (1+ i)))
+  (if (null kind)
+    (foreach w abcdef:*hdr-name*
+      (if (and (null kind) (vl-string-search (strcase w) up))
+        (setq kind 'name))))
+  kind)
 
 ;; nth (1-based) element of a list, or "" when the index is nil / out of range.
 (defun abcdef:nth-field (lst idx)
@@ -18359,7 +18645,7 @@
                      (list "B-C (diagonal)" bx by cx cy dg))
     (setq d (sqrt (+ (expt (- (nth 3 chk) (nth 1 chk)) 2)
                      (expt (- (nth 4 chk) (nth 2 chk)) 2))))
-    (if (and (null bad) (> (abs (- d (nth 5 chk))) 0.001))
+    (if (and (null bad) (> (abs (- d (nth 5 chk))) abcdef:*frame-tol*))
       (setq bad (strcat (car chk) " measures " (rtos d 2 2)
                         "\" but should be " (rtos (nth 5 chk) 2 2) "\""))))
   bad)
@@ -18370,7 +18656,7 @@
 (defun abcdef:corner-ang (px py qx qy rx ry / ux uy vx vy cross dot)
   (setq ux (- qx px) uy (- qy py) vx (- rx px) vy (- ry py))
   (setq cross (- (* ux vy) (* uy vx)) dot (+ (* ux vx) (* uy vy)))
-  (if (and (< (abs cross) 1e-12) (< (abs dot) 1e-12))
+  (if (and (< (abs cross) abcdef:*fuzz*) (< (abs dot) abcdef:*fuzz*))
     0.0
     (* 180.0 (/ (atan (abs cross) dot) pi))))
 
@@ -18399,7 +18685,7 @@
 ;; beside SHEET.  Returns the path written, or nil - a report that cannot
 ;; be saved is worth a note, never worth losing the plot over.
 (defun abcdef:write-report (sheet lines / path fp ln)
-  (setq path (abcdef:sibling sheet "_ABCDEF_report.txt"))
+  (setq path (abcdef:sibling sheet abcdef:*report-suffix*))
   (setq fp (vl-catch-all-apply 'open (list path "w")))
   (if (or (vl-catch-all-error-p fp) (null fp))
     nil
@@ -18445,7 +18731,8 @@
 (defun c:ABCDEF (/ *error* undo-open file rows base bpx bpy W H method
                     Ax Ay Bx By Cx Cy Dx Dy th
                     good bad r nm din d k rr av loc x y rms used dropped
-                    sp cut snap urms pct gr rect seed tags tg tx ty placed p
+                    sp cut snap urms mirr pct gr rect seed tags tg tx ty
+                    placed p
                     flag totn tots n3 swapcd tmp angs chk rstr rl
                     stage done mark ss rep line nby4 nby3 nby2 ndrop
                     nlow path)
@@ -18475,7 +18762,7 @@
       ;; ---- get the spreadsheet ------------------------------------------
       ((= stage 1)
        (setq file (getfiled "Select points spreadsheet"
-                            "" "xlsx;xls;xlsm;csv" 16))
+                            "" abcdef:*file-types* 16))
        (if (null file)
          (setq done 'quit)
          (progn
@@ -18562,8 +18849,8 @@
                 (setq n3 (1+ n3)))))
           (setq swapcd nil)
           (if (and (> n3 0)
-                   (> totn (* 0.5 n3))        ; poor fit as labelled ...
-                   (< tots (* 0.25 totn)))    ; ... and 4x better swapped
+                   (> totn (* abcdef:*swap-min* n3))      ; poor as labelled
+                   (< tots (* abcdef:*swap-ratio* totn))) ; far better swapped
             (progn
               (setq swapcd T)
               (setq tmp Cx Cx Dx Dx tmp)
@@ -18574,7 +18861,8 @@
                 "\" swapped vs " (rtos (/ totn n3) 2 3) "\" as labelled)."
                 "\n     This sheet labels C = bottom-RIGHT and D = bottom-LEFT;"
                 "\n     C and D have been placed that way to match the data."))))
-          (if (and (> n3 0) (> (if swapcd tots totn) (* 1.0 n3)))
+          (if (and (> n3 0)
+                   (> (if swapcd tots totn) (* abcdef:*poor-fit* n3)))
             (progn
               (princ (strcat
                 "\n\n  ** WARNING: the distances fit the rectangle poorly (avg fit "
@@ -18590,12 +18878,12 @@
                 "\nsheet's values.  Points ARE plotted, but the report"
                 "\ngrades every one of them and flags the doubtful."))))
           ;; ---- layers & sizing --------------------------------------------
-          (abcdef:layer "ABCDEF-FRAME"  1)     ; red
-          (abcdef:layer "ABCDEF-WARN"   1)     ; red - notes on doubtful fits
-          (abcdef:layer abcdef:*point-layer* 2) ; yellow - the survey itself
+          (abcdef:layer abcdef:*frame-layer* abcdef:*frame-color*)
+          (abcdef:layer abcdef:*warn-layer*  abcdef:*warn-color*)
+          (abcdef:layer abcdef:*point-layer* abcdef:*point-color*)
           (abcdef:ensure-block)
-          (setq th (/ (max W H) 120.0))        ; text height
-          (if (< th 0.5) (setq th 0.5))
+          (setq th (/ (max W H) abcdef:*text-div*))   ; text height
+          (if (< th abcdef:*text-min*) (setq th abcdef:*text-min*))
           ;; ---- draw the rectangle + corner tags ---------------------------
           ;; perimeter order TL -> TR -> BR -> BL, by position (so the frame
           ;; stays a rectangle no matter which naming the sheet used).
@@ -18603,16 +18891,19 @@
                         (list (+ bpx W) bpy)
                         (list (+ bpx W) (- bpy H))
                         (list bpx (- bpy H))
-                        "ABCDEF-FRAME")
+                        abcdef:*frame-layer*)
           ;; corner name tags, offset outward from whichever corner each
           ;; letter ended up on.
           (setq tags (list (list "A" Ax Ay) (list "B" Bx By)
                            (list "C" Cx Cy) (list "D" Dx Dy)))
           (foreach tg tags
-            (setq tx (if (> (cadr tg)  (+ bpx (* 0.5 W))) th (* -1 th))
-                  ty (if (> (caddr tg) (- bpy (* 0.5 H))) th (* -1.6 th)))
+            (setq tx (* th (if (> (cadr tg) (+ bpx (* 0.5 W)))
+                             abcdef:*tag-gap* (- abcdef:*tag-gap*)))
+                  ty (* th (if (> (caddr tg) (- bpy (* 0.5 H)))
+                             abcdef:*tag-gap* (- abcdef:*tag-drop*))))
             (abcdef:text (list (+ (cadr tg) tx) (+ (caddr tg) ty))
-                         (* th 1.4) (car tg) "ABCDEF-FRAME"))
+                         (* th abcdef:*tag-scale*) (car tg)
+                         abcdef:*frame-layer*))
           ;; ---- plot each measured point -----------------------------------
           ;; RECT is the frame every solution is held inside; SEED is its
           ;; middle, which is where an ambiguous two-tape crossing starts
@@ -18636,8 +18927,10 @@
                       rms  (nth 2 loc) used    (nth 3 loc)
                       dropped (nth 4 loc)
                       sp   (nth 5 loc) cut     (nth 6 loc)
-                      snap (nth 7 loc) urms    (nth 8 loc))
-                (setq pct (abcdef:confidence (length used) urms sp cut dropped)
+                      snap (nth 7 loc) urms    (nth 8 loc)
+                      mirr (nth 9 loc))
+                (setq pct (abcdef:confidence (length used) urms sp cut
+                                             dropped mirr)
                       gr  (abcdef:grade pct))
                 ;; signed leftover error against each supplied tape, in sheet
                 ;; order A B C D ("--" = not measured) - what each tape still
@@ -18654,7 +18947,7 @@
                 ;; the report that scrolls away
                 (setq flag "")
                 (if (> rms abcdef:*fit-bad*) (setq flag "  **CHECK"))
-                (if (> snap 0.001)
+                (if (> snap abcdef:*snap-show*)
                   (setq flag (strcat flag "  (snapped "
                                      (rtos snap 2 2) "\" into frame)")))
                 (if dropped
@@ -18666,12 +18959,18 @@
                 (if (and (null dropped) (= (length used) 4)
                          (> rms abcdef:*fit-ok*))
                   (setq flag (strcat flag "  (tapes disagree, none provably wrong)")))
-                (if (or (> rms abcdef:*fit-bad*) (< pct 60.0)
-                        (> snap abcdef:*edge-tol*))
+                ;; two tapes from opposite corners answer twice, and both
+                ;; answers are in the pool - the sheet cannot say which
+                (if mirr
+                  (setq flag (strcat flag "  (mirror pair, two answers fit"
+                                          " - needs a third tape)")))
+                (if (or (> rms abcdef:*fit-bad*) (< pct abcdef:*conf-check*)
+                        (> snap abcdef:*edge-tol*) mirr)
                   (progn
                     (setq nlow (1+ nlow))
-                    (abcdef:text (list (+ x (* th 0.6)) (+ y (* th 0.6)))
-                                 th (strcat nm " " gr) "ABCDEF-WARN")))
+                    (abcdef:text (list (+ x (* th abcdef:*note-off*))
+                                       (+ y (* th abcdef:*note-off*)))
+                                 th (strcat nm " " gr) abcdef:*warn-layer*)))
                 (cond ((>= (length used) 4) (setq nby4 (1+ nby4)))
                       ((= (length used) 3)  (setq nby3 (1+ nby3)))
                       (T                    (setq nby2 (1+ nby2))))
@@ -18731,8 +19030,8 @@
           (setq rep (abcdef:say rep (strcat
             "  " (itoa nlow) " point(s) want checking"
             " (FIT over " (rtos abcdef:*fit-bad* 2 2)
-            "\", confidence under 60%, or snapped over "
-            (rtos abcdef:*edge-tol* 2 2) "\").")))
+            "\", confidence under " (rtos abcdef:*conf-check* 2 0)
+            "%, or snapped over " (rtos abcdef:*edge-tol* 2 2) "\").")))
           (setq rep (abcdef:say rep ""))
           (setq rep (abcdef:say rep
             "  TAPES  how many of the four distances the sheet gave."))
@@ -18757,7 +19056,13 @@
           (setq rep (abcdef:say rep
             "         check nothing, so a 2-tape point is capped well short"))
           (setq rep (abcdef:say rep
-            "         of certainty however neatly the circles crossed."))
+            "         of certainty however neatly the circles crossed.  A"))
+          (setq rep (abcdef:say rep
+            "         pair measured from OPPOSITE corners answers twice"))
+          (setq rep (abcdef:say rep
+            "         over, both answers inside the frame; that row is"))
+          (setq rep (abcdef:say rep
+            "         marked \"mirror pair\" and needs a third tape."))
           ;; ---- confirm the frame really is a rectangle --------------------
           ;; measure the corner angles from the coordinates that were drawn,
           ;; rather than asserting them - so a future corner-math regression
@@ -20221,18 +20526,153 @@
 ;;;  Distances are entered / stored as architectural feet-inches, e.g.
 ;;;      12'-3 1/2"      3 1/2"      0'-6"      5'-0 3/4"
 ;;;
-;;;  Command:  ALTABCDEF
+;;;  ABCDEF is this command's sister, for a sheet whose bottom corners are
+;;;  labelled the other way round (C bottom-LEFT, D bottom-RIGHT - the "Z"
+;;;  reading order).  The two conventions are not interchangeable, which is
+;;;  why they are two commands; ABCDEF is the one that has grown the
+;;;  confidence report, the tape-dropping rules and the C/D detector.
+;;;
+;;;  Commands:  ALTABCDEF     read the sheet and plot every point
+;;;             ALTABCDEFVER  print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
+;;;  Every threshold, layer name, colour, size and tolerance the command
+;;;  uses is a named Tunable at the top of this file, each with a note on
+;;;  what it does and which way to move it.  Nothing below that block is
+;;;  meant to be edited to change how the tool behaves.
+;;;
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.7")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
+
+;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafter might reasonably want different is set HERE and
+;; nowhere else: the code below reads these names and carries no bare
+;; numbers of its own.  Each knob says what CHANGING it does, what unit
+;; it is in, and which way to move it.  Change a value, save, APPLOAD
+;; again - or (setq altabcdef:*name* value) at the command line for one
+;; session.  Every one of them is a row in README.md's Tunables table,
+;; and tests/test_tunables.py holds the two together.
+;;
+;; Distances are in inches throughout (1 drawing unit = 1 inch).
+
+;; ---- what it draws ---------------------------------------------------------
+
+;; The three output layers and the colours they are created with (AutoCAD
+;; colour numbers: 1 red, 2 yellow, 3 green).  A layer that already exists
+;; keeps its own colour and is only switched on, thawed and unlocked.
+;;
+;; These are ALTABCDEF's own layers on purpose.  ABCDEF plots onto the
+;; shared POINTS layer as "ab_pt" blocks, which ABHD and the other fitters
+;; read; this command draws plain markers instead, so pointing it at POINTS
+;; would put entities there that those tools would try to fit a pool
+;; through.  Change these only if you know what reads them.
+(setq altabcdef:*frame-layer*  "ALTABCDEF-FRAME")
+(setq altabcdef:*frame-color*  1)
+(setq altabcdef:*point-layer*  "ALTABCDEF-POINTS")
+(setq altabcdef:*point-color*  2)
+(setq altabcdef:*label-layer*  "ALTABCDEF-LABELS")
+(setq altabcdef:*label-color*  3)
+
+;; Text height is the longer rectangle side divided by *text-div*, but
+;; never under *text-min* inches.  Everything else is measured in those
+;; text heights:
+;;   *marker-scale*  radius of the circle drawn around each point
+;;   *label-off*     how far up and right of the point its name sits, in
+;;                   marker radii
+;;   *tag-scale*     the corner letters A B C D are this many text heights
+;;   *tag-gap*       how far a corner letter sits out from its corner,
+;;                   sideways and upward
+;;   *tag-drop*      how far BELOW a bottom corner its letter's baseline
+;;                   sits (more than *tag-gap*: the letter's own height
+;;                   has to clear the corner)
+(setq altabcdef:*text-div*     120.0)
+(setq altabcdef:*text-min*     0.5)
+(setq altabcdef:*marker-scale* 0.4)
+(setq altabcdef:*label-off*    1.4)
+(setq altabcdef:*tag-scale*    1.4)
+(setq altabcdef:*tag-gap*      1.0)
+(setq altabcdef:*tag-drop*     1.6)
+
+;; ---- the sheet -------------------------------------------------------------
+
+;; What the file dialog offers, as a getfiled extension list.  CSV is read
+;; natively; the Excel formats go through Excel COM automation and so need
+;; full AutoCAD with Excel installed.
+(setq altabcdef:*file-types* "xlsx;xls;xlsm;csv")
+
+;; Header words that identify the columns, compared upper-case as
+;; substrings: a header containing the Nth entry of *hdr-dist* is the
+;; distance from the Nth corner (A B C D), and the first header containing
+;; any entry of *hdr-name* is the point name.  With no name header the
+;; first column is taken.
+(setq altabcdef:*hdr-dist* '("FROM A" "FROM B" "FROM C" "FROM D"))
+(setq altabcdef:*hdr-name* '("NAME" "POINT" "LABEL"))
+
+;; How many distances a row needs before it is plotted at all.  Two fix a
+;; point up to a mirror, three fix it outright.  Below this the row is
+;; skipped and named on the command line.
+(setq altabcdef:*min-tapes* 2)
+
+;; ---- reading dirty values --------------------------------------------------
+
+;; A reading with no foot mark whose value is more than *apos-over* times
+;; the rectangle's diagonal, and whose feet end in a 1, had its foot mark
+;; scanned as that 1 ("101-10" is 10'-10"): the 1 is dropped and the repair
+;; logged.  A value still over *impossible* times the diagonal after that
+;; cannot be a distance to a corner and is left blank (and logged).  Both
+;; are ratios; 1.0 would be the diagonal itself.
+(setq altabcdef:*apos-over*  1.05)
+(setq altabcdef:*impossible* 1.1)
+
+;; The denominators an inch fraction may have.  A slash-less digit run like
+;; "314" is rebuilt as the one fraction over one of these it could be
+;; (3/4), so a denominator not listed here is never invented.
+(setq altabcdef:*fractions* '(2 4 8 16 32))
+
+;; The correction log writes each repaired value back as feet-inches to the
+;; nearest 1/*log-denom* of an inch, reduced (476.75 -> 39'-8 3/4").
+;; A whole number, a power of two.
+(setq altabcdef:*log-denom* 32)
+
+;; ---- numerical -------------------------------------------------------------
+;; These only matter to the solver's arithmetic and should not need
+;; touching.
+
+;; Two lengths closer than this are the same length; also the shortest
+;; radius the solver will divide by.  In inches.
+(setq altabcdef:*fuzz* 1e-9)
+
+;; The least-squares fit: at most *solve-iters* Gauss-Newton steps, done
+;; when a step moves the point under *solve-step* inches in both X and Y;
+;; a normal-matrix determinant under *solve-singular* (or a linear-seed
+;; determinant under *seed-singular*) means the distances do not constrain
+;; the point and the fit stops where it is.
+(setq altabcdef:*solve-iters*    60)
+(setq altabcdef:*solve-step*     1e-7)
+(setq altabcdef:*solve-singular* 1e-12)
+(setq altabcdef:*seed-singular*  1e-9)
+
+;; The corner self-check accepts a side or diagonal within this many inches
+;; of what the entered W and H say it should be.
+(setq altabcdef:*frame-tol* 0.001)
+
+;; Two distances fix a point twice over - once each side of the line
+;; joining the two corners they were measured from - and both answers fit
+;; them EQUALLY well.  From two ADJACENT corners the mirror falls outside
+;; the rectangle and the choice is made for us; from two OPPOSITE corners
+;; it does not, and the sheet genuinely does not say which of the two the
+;; point is.  Such a row is plotted and NAMED on the command line; the
+;; mirror has to be this far from the answer to count as a real second
+;; possibility rather than rounding.
+(setq altabcdef:*mirror-min* 1.0)
 
 ;;; --------------------------------------------------------------------------
 ;;;  String helpers
@@ -20360,10 +20800,34 @@
                  (altabcdef:alldigits num) (altabcdef:alldigits den))
           (progn
             (setq ni (atoi num) di (atoi den))
-            (if (and (member di '(2 4 8 16 32)) (> ni 0) (< ni di))
+            (if (and (member di altabcdef:*fractions*) (> ni 0) (< ni di))
               (setq best (strcat num "/" den)))))))
     (setq k (1+ k)))
   best)
+
+;; A fraction OCR-split across tokens: "1 /4", "1/ 4" or "1 / 4" tokenises
+;; as ("1" "/4"), ("1/" "4") or ("1" "/" "4"), and the broken "/x" piece
+;; would otherwise contribute 0 - losing the fraction, so 4 1/4" reads as
+;; 5".  Re-join a token that starts or ends with "/" with its neighbour so
+;; the value parses as a real fraction.  (ABCDEF's repair, ported: the same
+;; field sheets go through both commands, and 10 cells of the sample sheet
+;; are written this way.)
+(defun altabcdef:mergefrac (toks / out tok changed)
+  (setq out '() changed nil)
+  (while toks
+    (setq tok (car toks) toks (cdr toks))
+    (cond
+      ;; "1/" + "4" -> re-queue "1/4" (also eats the middle of "1 / 4")
+      ((and toks (= (substr tok (strlen tok) 1) "/"))
+       (setq toks (cons (strcat tok (car toks)) (cdr toks)))
+       (setq changed T))
+      ;; "1" + "/4" -> "1/4"
+      ((and out (> (strlen tok) 1) (= (substr tok 1 1) "/"))
+       (setq out (cons (strcat (car out) tok) (cdr out)))
+       (setq changed T))
+      (T (setq out (cons tok out)))))
+  (if changed (setq altabcdef:*dirty* T))
+  (reverse out))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Feet-inch parser  ->  inches (real).  Returns nil for an empty OR corrupt
@@ -20376,6 +20840,7 @@
 ;;;    28-7"         missing foot mark    -> 28'-7"   (dash separates ft/in)
 ;;;    101-10"       foot mark read as 1  -> 10'-10"  (needs MAXD to detect)
 ;;;    20'-7 114"    "/" read as 1        -> 20'-7 1/4"
+;;;    34'-4 1 /4"   fraction split       -> 34'-4 1/4"
 ;;;    1 1'-IO 1/2"  split feet / O,I     -> 11'-10 1/2"
 ;;;  Only the non-obvious repairs set altabcdef:*dirty* (for the change report).
 ;;; --------------------------------------------------------------------------
@@ -20413,7 +20878,7 @@
       (setq rest (cal:trim rest))
       ;; --- inches: sum whole-number and fraction tokens ------------------
       (setq inch 0.0)
-      (foreach tok (altabcdef:tokens rest)
+      (foreach tok (altabcdef:mergefrac (altabcdef:tokens rest))
         ;; a slash-less all-digit run of 3+ digits is very likely a fraction
         ;; whose "/" was scanned as a "1" (114 -> 1/4); reconstruct it.
         (if (and (not (vl-string-search "/" tok))
@@ -20432,7 +20897,7 @@
       ;; --- foot mark scanned as a "1" ------------------------------------
       ;; e.g. 10'-10" -> "101-10": with no real ' and a value past the
       ;; diagonal, a trailing 1 on the feet was the apostrophe; drop it.
-      (if (and maxd (null p) (> val (* maxd 1.05))
+      (if (and maxd (null p) (> val (* maxd altabcdef:*apos-over*))
                (> (strlen ftstr) 1)
                (= (substr ftstr (strlen ftstr) 1) "1"))
         (progn
@@ -20441,23 +20906,24 @@
                 altabcdef:*dirty* T)))
       (if neg (setq val (- val)))
       ;; --- final sanity: non-positive or still impossible -> unreadable --
-      (if (or (<= val 0.0) (and maxd (> val (* maxd 1.1))))
+      (if (or (<= val 0.0)
+              (and maxd (> val (* maxd altabcdef:*impossible*))))
         (progn (setq altabcdef:*dirty* T) nil)
         val))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Format inches back to a feet-inch string (for the correction log), to the
-;;;  nearest 1/32", reduced.  e.g. 476.75 -> 39'-8 3/4"
+;;;  nearest 1/altabcdef:*log-denom*", reduced.  e.g. 476.75 -> 39'-8 3/4"
 ;;; --------------------------------------------------------------------------
 
-(defun altabcdef:in->ftin (v / neg feet whole frac n den ft s)
+(defun altabcdef:in->ftin (v / neg feet whole n den per s)
   (setq neg (< v 0.0) v (abs v))
-  (setq n (fix (+ (* v 32.0) 0.5)))      ; total 1/32" units, rounded
-  (setq feet (fix (/ n 384)))            ; 384 = 32*12
-  (setq n (- n (* feet 384)))
-  (setq whole (fix (/ n 32)))
-  (setq n (- n (* whole 32)))            ; leftover 1/32 units, 0..31
-  (setq den 32)
+  (setq den altabcdef:*log-denom* per (* den 12))
+  (setq n (fix (+ (* v den) 0.5)))       ; total 1/den" units, rounded
+  (setq feet (fix (/ n per)))            ; per = those units in a foot
+  (setq n (- n (* feet per)))
+  (setq whole (fix (/ n den)))
+  (setq n (- n (* whole den)))           ; leftover 1/den units
   (while (and (> n 0) (= (rem n 2) 0)) (setq n (/ n 2) den (/ den 2)))
   (setq s (strcat (itoa feet) "'-" (itoa whole)))
   (if (> n 0) (setq s (strcat s " " (itoa n) "/" (itoa den))))
@@ -20474,15 +20940,81 @@
 ;;;  A linear (circle-difference) solution seeds a Gauss-Newton refinement
 ;;;  of  min  S( |P-Ci| - di )^2 , which is exactly "spread the rounding
 ;;;  error evenly over the distances".  Needs >= 2 corners; 3+ give a unique
-;;;  fix.  With only 2, the frame centre is used as the seed so the interior
-;;;  intersection is chosen.
+;;;  fix.
+;;;
+;;;  TWO distances are crossed EXACTLY instead, and the root nearest the
+;;;  seed is taken.  Least-squares cannot be trusted to do it: two circles
+;;;  meet at a mirror pair either side of the line joining their centres,
+;;;  and ON that line both residual gradients point the same way, so the
+;;;  normal matrix is singular and the iteration stops where it started.
+;;;  For a pair of OPPOSITE corners the seed - the middle of the frame - is
+;;;  exactly on that line, so the old code returned the frame centre itself
+;;;  as the answer, with tens of inches of fit error and nothing but the
+;;;  RMS column to say so.  Crossing the circles gives a real answer; which
+;;;  of the mirror pair it is, only a third distance can say, and the
+;;;  command names such a row on the command line.
+;;; --------------------------------------------------------------------------
+
+;; Plain 2-D distance between two (x y ...) points.
+(defun altabcdef:d2p (p q)
+  (sqrt (+ (expt (- (car q) (car p)) 2) (expt (- (cadr q) (cadr p)) 2))))
+
+;; The points at distance RA from CA and RB from CB, as a list of one or
+;; two (x y).
+;;
+;; Quarter-inch distances routinely describe circles that miss each other,
+;; or one that swallows the other, by a fraction of an inch.  Rather than
+;; give up on those rows, the shortfall is shared equally between the two
+;; radii until the circles just touch, and the single touching point comes
+;; back - neither distance is called the liar, which is the same principle
+;; the least-squares fit works on.
+(defun altabcdef:cc-int (ca ra cb rb / d ux uy m h2 h bx by gap)
+  (setq d (altabcdef:d2p ca cb))
+  (if (< d altabcdef:*fuzz*)
+    nil                                  ; the same corner twice
+    (progn
+      (setq ux (/ (- (car cb) (car ca)) d)
+            uy (/ (- (cadr cb) (cadr ca)) d))
+      (cond
+        ((< (+ ra rb) d)                 ; circles fall short of each other
+         (setq gap (- d (+ ra rb))
+               ra  (+ ra (* 0.5 gap))
+               rb  (+ rb (* 0.5 gap))))
+        ((< d (abs (- ra rb)))           ; one circle inside the other
+         (setq gap (- (abs (- ra rb)) d))
+         (if (> ra rb)
+           (setq ra (- ra (* 0.5 gap)) rb (+ rb (* 0.5 gap)))
+           (setq ra (+ ra (* 0.5 gap)) rb (- rb (* 0.5 gap))))))
+      (setq m  (/ (+ (* d d) (* ra ra) (- (* rb rb))) (* 2.0 d))
+            h2 (- (* ra ra) (* m m)))
+      (if (< h2 0.0) (setq h2 0.0))      ; only rounding can get here now
+      (setq h  (sqrt h2)
+            bx (+ (car ca) (* m ux))
+            by (+ (cadr ca) (* m uy)))
+      (if (< h altabcdef:*fuzz*)
+        (list (list bx by))
+        (list (list (- bx (* h uy)) (+ by (* h ux)))
+              (list (+ bx (* h uy)) (- by (* h ux))))))))
+
 ;;; --------------------------------------------------------------------------
 
 (defun altabcdef:solve (corners dists cx cy / n x y i c d dx dy r jx jy f
                              saa sab sbb sac sbc a b cc det xr yr dr
-                             jaa jab jbb ga gb ddx ddy res rms iter)
+                             jaa jab jbb ga gb ddx ddy res rms iter
+                             cands best bd sc)
   (setq n (length corners))
+  ;; ---- two distances: cross the circles exactly ---------------------------
+  (if (= n 2)
+    (setq cands (altabcdef:cc-int (nth 0 corners) (nth 0 dists)
+                                  (nth 1 corners) (nth 1 dists))))
   ;; ---- seed --------------------------------------------------------------
+  (if cands
+    (progn                                   ; the root nearest the seed
+      (setq best nil bd nil)
+      (foreach c cands
+        (setq sc (altabcdef:d2p c (list cx cy)))
+        (if (or (null bd) (< sc bd)) (setq bd sc best c)))
+      (setq x (car best) y (cadr best)))
   (if (>= n 3)
     (progn                                   ; linear least squares seed
       (setq xr (car (car corners)) yr (cadr (car corners)) dr (car dists))
@@ -20498,26 +21030,26 @@
               sac (+ sac (* a cc)) sbc (+ sbc (* b cc)))
         (setq i (1+ i)))
       (setq det (- (* saa sbb) (* sab sab)))
-      (if (> (abs det) 1e-9)
+      (if (> (abs det) altabcdef:*seed-singular*)
         (setq x (/ (- (* sac sbb) (* sbc sab)) det)
               y (/ (- (* saa sbc) (* sab sac)) det))
         (setq x cx y cy)))                    ; degenerate -> centre
-    (setq x cx y cy))                         ; only 2 circles -> centre seed
+    (setq x cx y cy)))                        ; nothing better -> centre
   ;; ---- Gauss-Newton refinement ------------------------------------------
   (setq iter 0)
-  (while (< iter 60)
+  (while (< iter altabcdef:*solve-iters*)
     (setq jaa 0.0 jab 0.0 jbb 0.0 ga 0.0 gb 0.0 i 0)
     (while (< i n)
       (setq c (nth i corners) d (nth i dists))
       (setq dx (- x (car c)) dy (- y (cadr c)) r (sqrt (+ (* dx dx) (* dy dy))))
-      (if (< r 1e-9) (setq r 1e-9))
+      (if (< r altabcdef:*fuzz*) (setq r altabcdef:*fuzz*))
       (setq jx (/ dx r) jy (/ dy r) f (- r d))
       (setq jaa (+ jaa (* jx jx)) jab (+ jab (* jx jy)) jbb (+ jbb (* jy jy))
             ga (+ ga (* jx f)) gb (+ gb (* jy f)))
       (setq i (1+ i)))
     (setq det (- (* jaa jbb) (* jab jab)))
-    (if (< (abs det) 1e-12)
-      (setq iter 60)                          ; singular -> stop
+    (if (< (abs det) altabcdef:*solve-singular*)
+      (setq iter altabcdef:*solve-iters*)     ; singular -> stop
       (progn
         (setq ddx (/ (- (- (* ga jbb)) (- (* gb jab)))
                      det)
@@ -20525,7 +21057,9 @@
                      det))
         ;; ddx = -(ga*jbb - gb*jab)/det ; ddy = -(jaa*gb - jab*ga)/det
         (setq x (+ x ddx) y (+ y ddy))
-        (if (and (< (abs ddx) 1e-7) (< (abs ddy) 1e-7)) (setq iter 60))))
+        (if (and (< (abs ddx) altabcdef:*solve-step*)
+                 (< (abs ddy) altabcdef:*solve-step*))
+          (setq iter altabcdef:*solve-iters*))))
     (setq iter (1+ iter)))
   ;; ---- residuals ---------------------------------------------------------
   (setq res '() rms 0.0 i 0)
@@ -20535,6 +21069,38 @@
     (setq res (cons f res) rms (+ rms (* f f)) i (1+ i)))
   (setq rms (sqrt (/ rms n)))
   (cons x (cons y (cons rms (reverse res)))))
+
+;;; --------------------------------------------------------------------------
+;;;  Did these distances answer once, or twice?
+;;; --------------------------------------------------------------------------
+
+;; The mirror of (X Y) in the line through CA and CB - the other point the
+;; same two distances describe.  (With three or more distances there is
+;; only one answer and none of this applies.)
+(defun altabcdef:mirror-pt (x y ca cb / ux uy d tt vx vy)
+  (setq ux (- (car cb) (car ca)) uy (- (cadr cb) (cadr ca))
+        d  (sqrt (+ (* ux ux) (* uy uy))))
+  (if (< d altabcdef:*fuzz*)
+    (list x y)                           ; the same corner twice
+    (progn
+      (setq ux (/ ux d) uy (/ uy d)
+            vx (- x (car ca)) vy (- y (cadr ca))
+            tt (* 2.0 (+ (* vx ux) (* vy uy))))
+      (list (+ (car ca) (- (* tt ux) vx))
+            (+ (cadr ca) (- (* tt uy) vy))))))
+
+;; T when exactly two distances placed the point and the mirror answer they
+;; also allow lands inside the W x H frame whose top-left corner is
+;; (BPX BPY) - i.e. the sheet does not say which of the two it is.
+(defun altabcdef:mirror-amb-p (corners x y bpx bpy w h / m)
+  (if (/= (length corners) 2)
+    nil
+    (progn
+      (setq m (altabcdef:mirror-pt x y (nth 0 corners) (nth 1 corners)))
+      (and (> (sqrt (+ (expt (- (car m) x) 2) (expt (- (cadr m) y) 2)))
+              altabcdef:*mirror-min*)
+           (>= (car m) bpx) (<= (car m) (+ bpx w))
+           (<= (cadr m) bpy) (>= (cadr m) (- bpy h))))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Drawing helpers
@@ -20615,15 +21181,20 @@
                      "Text"))) '()))
   (if (vl-catch-all-error-p res) "" (altabcdef:cellstr res)))
 
-;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd.
-(defun altabcdef:col-of (up)
-  (cond ((vl-string-search "FROM A" up) 'a)
-        ((vl-string-search "FROM B" up) 'b)
-        ((vl-string-search "FROM C" up) 'c)
-        ((vl-string-search "FROM D" up) 'd)
-        ((or (vl-string-search "NAME" up) (vl-string-search "POINT" up)
-             (vl-string-search "LABEL" up)) 'name)
-        (T nil)))
+;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd
+;; by the words in altabcdef:*hdr-dist* and altabcdef:*hdr-name*: the Nth
+;; distance word wins over a name word, and the first match wins.
+(defun altabcdef:col-of (up / kind i w)
+  (setq kind nil i 0)
+  (foreach w altabcdef:*hdr-dist*
+    (if (and (null kind) (vl-string-search (strcase w) up))
+      (setq kind (cond ((= i 0) 'a) ((= i 1) 'b) ((= i 2) 'c) (T 'd))))
+    (setq i (1+ i)))
+  (if (null kind)
+    (foreach w altabcdef:*hdr-name*
+      (if (and (null kind) (vl-string-search (strcase w) up))
+        (setq kind 'name))))
+  kind)
 
 ;; nth (1-based) element of a list, or "" when the index is nil / out of range.
 (defun altabcdef:nth-field (lst idx)
@@ -20815,6 +21386,48 @@
           (reverse rows))))))
 
 ;;; --------------------------------------------------------------------------
+;;;  Is the frame really the rectangle it claims to be?
+;;;
+;;;  This command used to PRINT "all corners 90.00 deg" as a constant,
+;;;  which is a claim about the code rather than about the drawing.  ABCDEF
+;;;  learned the hard way that the two can part company - two field
+;;;  failures were a stale copy whose corner block no longer matched - so
+;;;  both sides and diagonals are measured off the corner variables before
+;;;  anything is drawn, and the angles are measured off the drawn
+;;;  coordinates and printed as measured.
+;;; --------------------------------------------------------------------------
+
+;; Verify the named corner variables really form the W x H rectangle they
+;; are documented to be: A-B and D-C horizontal sides of length W, A-D and
+;; B-C vertical sides of length H, and matching diagonals.  Returns nil
+;; when everything is right, else a message naming the first bad
+;; measurement.  (Corner order here is the CLOCKWISE one this command
+;; uses: A top-left, B top-right, C bottom-right, D bottom-left.)
+(defun altabcdef:frame-check (ax ay bx by cx cy dx dy w h / dg chk d bad)
+  (setq dg (sqrt (+ (* w w) (* h h))) bad nil)
+  (foreach chk (list (list "A-B" ax ay bx by w)
+                     (list "D-C" dx dy cx cy w)
+                     (list "A-D" ax ay dx dy h)
+                     (list "B-C" bx by cx cy h)
+                     (list "A-C (diagonal)" ax ay cx cy dg)
+                     (list "B-D (diagonal)" bx by dx dy dg))
+    (setq d (sqrt (+ (expt (- (nth 3 chk) (nth 1 chk)) 2)
+                     (expt (- (nth 4 chk) (nth 2 chk)) 2))))
+    (if (and (null bad) (> (abs (- d (nth 5 chk))) altabcdef:*frame-tol*))
+      (setq bad (strcat (car chk) " measures " (rtos d 2 2)
+                        "\" but should be " (rtos (nth 5 chk) 2 2) "\""))))
+  bad)
+
+;; Interior angle in degrees at corner (px py), looking toward (qx qy) and
+;; (rx ry).  Measured from the coordinates, NOT assumed.
+(defun altabcdef:corner-ang (px py qx qy rx ry / ux uy vx vy cross dot)
+  (setq ux (- qx px) uy (- qy py) vx (- rx px) vy (- ry py))
+  (setq cross (- (* ux vy) (* uy vx)) dot (+ (* ux vx) (* uy vy)))
+  (if (and (< (abs cross) altabcdef:*fuzz*) (< (abs dot) altabcdef:*fuzz*))
+    0.0
+    (* 180.0 (/ (atan (abs cross) dot) pi))))
+
+;;; --------------------------------------------------------------------------
 ;;;  Prompt helper: read a feet-inch dimension from the keyboard.
 ;;; --------------------------------------------------------------------------
 
@@ -20842,8 +21455,9 @@
 (defun c:ALTABCDEF (/ *error* undo-open file rows base bpx bpy W H
                     Ax Ay Bx By Cx Cy Dx Dy th mrad
                     good bad r nm din corners dists lbl
-                    sol x y rms i tags tg p placed stage done)
+                    sol x y rms i tags tg p placed stage done chk angs)
   (vl-load-com)
+  (princ (strcat "\nALTABCDEF " *altabcdef-version*))
   ;; the plot is one undo group, so a cancelled run backs out with a
   ;; single U instead of one per entity; the group is only closed if it
   ;; was opened (STANDARDS section 5)
@@ -20868,7 +21482,7 @@
       ;; ---- get the spreadsheet ------------------------------------------
       ((= stage 1)
        (setq file (getfiled "Select points spreadsheet"
-                            "" "xlsx;xls;xlsm;csv" 16))
+                            "" altabcdef:*file-types* 16))
        (if (null file)
          (setq done 'quit)
          (progn
@@ -20899,6 +21513,22 @@
             Bx (+ bpx W)  By bpy
             Cx (+ bpx W)  Cy (- bpy H)
             Dx bpx        Dy (- bpy H))
+      ;; ---- corner self-check ---------------------------------------------
+      ;; refuse to plot anything if the corner variables above no longer
+      ;; form the W x H rectangle (this file edited, or a stale copy
+      ;; loaded) - a wrong frame silently poisons every solved point.
+      (setq chk (altabcdef:frame-check Ax Ay Bx By Cx Cy Dx Dy W H))
+      (if chk
+        (progn
+          (alert (strcat "ALTABCDEF " *altabcdef-version*
+                         " - corner layout self-check FAILED:\n\n" chk
+                         "\n\nThe loaded copy of ALTABCDEF.lsp appears stale"
+                         "\nor hand-edited.  Re-download"
+                         "\nlisp/altabcdef/ALTABCDEF.lsp and APPLOAD it"
+                         "\nagain.  Nothing was drawn."))
+          (princ (strcat "\n** ABORT - corner self-check failed: " chk))
+          (princ))
+        (progn
       ;; ---- read the sheet ------------------------------------------------
       ;; the rectangle diagonal is the largest distance any point can be from a
       ;; corner; pass it so the parser can spot a foot mark scanned as a digit
@@ -20910,23 +21540,29 @@
         (progn
           (princ (strcat (itoa (length rows)) " row(s) found."))
           ;; ---- layers & sizing --------------------------------------------
-          (altabcdef:layer "ALTABCDEF-FRAME"  1)     ; red
-          (altabcdef:layer "ALTABCDEF-POINTS" 2)     ; yellow
-          (altabcdef:layer "ALTABCDEF-LABELS" 3)     ; green
-          (setq th (/ (max W H) 120.0))        ; text height
-          (if (< th 0.5) (setq th 0.5))
-          (setq mrad (* th 0.4))               ; marker radius
+          (altabcdef:layer altabcdef:*frame-layer* altabcdef:*frame-color*)
+          (altabcdef:layer altabcdef:*point-layer* altabcdef:*point-color*)
+          (altabcdef:layer altabcdef:*label-layer* altabcdef:*label-color*)
+          (setq th (/ (max W H) altabcdef:*text-div*))   ; text height
+          (if (< th altabcdef:*text-min*) (setq th altabcdef:*text-min*))
+          (setq mrad (* th altabcdef:*marker-scale*))    ; marker radius
           ;; ---- draw the rectangle + corner tags ---------------------------
           (altabcdef:frame (list Ax Ay) (list Bx By) (list Cx Cy) (list Dx Dy)
-                        "ALTABCDEF-FRAME")
-          (setq tags (list (list "A" Ax Ay (* -1 th) th)
-                           (list "B" Bx By th th)
-                           (list "C" Cx Cy th (* -1.6 th))
-                           (list "D" Dx Dy (* -1 th) (* -1.6 th))))
+                        altabcdef:*frame-layer*)
+          ;; corner letters, offset outward from the corner each sits on
+          (setq tags (list (list "A" Ax Ay (- altabcdef:*tag-gap*)
+                                            altabcdef:*tag-gap*)
+                           (list "B" Bx By altabcdef:*tag-gap*
+                                            altabcdef:*tag-gap*)
+                           (list "C" Cx Cy altabcdef:*tag-gap*
+                                            (- altabcdef:*tag-drop*))
+                           (list "D" Dx Dy (- altabcdef:*tag-gap*)
+                                            (- altabcdef:*tag-drop*))))
           (foreach tg tags
-            (altabcdef:text (list (+ (nth 1 tg) (nth 3 tg))
-                               (+ (nth 2 tg) (nth 4 tg)))
-                         (* th 1.4) (car tg) "ALTABCDEF-FRAME"))
+            (altabcdef:text (list (+ (nth 1 tg) (* th (nth 3 tg)))
+                               (+ (nth 2 tg) (* th (nth 4 tg))))
+                         (* th altabcdef:*tag-scale*) (car tg)
+                         altabcdef:*frame-layer*))
           ;; ---- plot each measured point -----------------------------------
           (setq good 0 bad 0 placed '())
           (foreach r rows
@@ -20941,20 +21577,30 @@
                                   dists   (cons (nth 2 din) dists)))
             (if (nth 3 din) (setq corners (cons (list Dx Dy) corners)
                                   dists   (cons (nth 3 din) dists)))
-            (if (>= (length corners) 2)
+            (if (>= (length corners) altabcdef:*min-tapes*)
               (progn
                 (setq sol (altabcdef:solve (reverse corners) (reverse dists)
                                         (+ bpx (/ W 2.0)) (- bpy (/ H 2.0))))
                 (setq x (car sol) y (cadr sol) rms (caddr sol))
-                (altabcdef:point  (list x y) "ALTABCDEF-POINTS")
-                (altabcdef:circle (list x y) mrad "ALTABCDEF-POINTS")
-                (altabcdef:text   (list (+ x (* mrad 1.4)) (+ y (* mrad 1.4)))
-                               th nm "ALTABCDEF-LABELS")
+                (altabcdef:point  (list x y) altabcdef:*point-layer*)
+                (altabcdef:circle (list x y) mrad altabcdef:*point-layer*)
+                (altabcdef:text   (list (+ x (* mrad altabcdef:*label-off*))
+                                     (+ y (* mrad altabcdef:*label-off*)))
+                               th nm altabcdef:*label-layer*)
                 (setq placed (cons (list nm x y rms (length corners)) placed))
+                (if (altabcdef:mirror-amb-p (reverse corners) x y bpx bpy W H)
+                  (princ (strcat "\n  ! " nm
+                                 " : these two distances fit a second point"
+                                 " inside the frame just as well"
+                                 "\n      (the mirror across the line"
+                                 " between the two corners) - a third"
+                                 "\n      distance is what tells them"
+                                 " apart.")))
                 (setq good (1+ good)))
               (progn
-                (princ (strcat "\n  ! " nm
-                               " : fewer than 2 distances given - skipped."))
+                (princ (strcat "\n  ! " nm " : fewer than "
+                               (itoa altabcdef:*min-tapes*)
+                               " distances given - skipped."))
                 (setq bad (1+ bad)))))
           ;; ---- report ------------------------------------------------------
           (princ "\n\n===== ALTABCDEF results (all values in inches) =====")
@@ -20973,13 +21619,22 @@
                          "\n  across the given distances - typically < 0.10\" for"
                          "\n  quarter-inch data.  A large value means a bad reading."))
           ;; ---- confirm the frame is a true rectangle ----------------------
-          ;; A-B is horizontal and A-D is vertical, so every corner is exactly
-          ;; 90 deg.  If it looked like a parallelogram, the view was a tilted
-          ;; 3D orbit (a flat rectangle foreshortens) - reset to plan so it
-          ;; reads square.  Geometry is unchanged.
-          (princ (strcat "\n\n  Frame A-B-C-D: true rectangle "
-                         (rtos W 2 2) "\" (A-B) x " (rtos H 2 2)
-                         "\" (A-D), all corners 90.00 deg."))
+          ;; measure the corner angles from the coordinates that were drawn,
+          ;; rather than asserting them - so a future corner-math regression
+          ;; shows up right here instead of printing a reassuring constant.
+          ;; If the frame LOOKED like a parallelogram, the view was a tilted
+          ;; 3D orbit (a flat rectangle foreshortens) - the reset to plan
+          ;; below makes it read square.  Geometry is unchanged either way.
+          (setq angs (list (altabcdef:corner-ang Ax Ay Bx By Dx Dy)
+                           (altabcdef:corner-ang Bx By Ax Ay Cx Cy)
+                           (altabcdef:corner-ang Cx Cy Bx By Dx Dy)
+                           (altabcdef:corner-ang Dx Dy Ax Ay Cx Cy)))
+          (princ (strcat "\n\n  Frame A-B-C-D: " (rtos W 2 2) "\" (A-B) x "
+                         (rtos H 2 2) "\" (A-D).  Corner angles, measured"
+                         "\n  off the drawn coordinates: "
+                         (rtos (nth 0 angs) 2 2) " / " (rtos (nth 1 angs) 2 2)
+                         " / " (rtos (nth 2 angs) 2 2) " / "
+                         (rtos (nth 3 angs) 2 2) " deg."))
           ;; vl-catch-all-apply takes the argument list as its second argument;
           ;; called with only the lambda it raises "too few arguments" and
           ;; takes the end of the run down with it, which is exactly what
@@ -20990,7 +21645,7 @@
                (vl-cmdf "_.zoom" "_Extents"))
             '())
           (princ "\n  View reset to plan (top) so the rectangle shows square.")
-          (princ)))))
+          (princ)))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (princ))
@@ -32366,6 +33021,20 @@
 ;;;    * Steps in side view      -> "STANDARD INCHES", depths and the
 ;;;                                 overall alike, in AUTODIM and in
 ;;;                                 AUTODIMSIDEPOV
+;;;    Those are the defaults: the names, and the cut-off under which a
+;;;    dim drops into inches, are settings (ad:*style-plan* and the
+;;;    rest, ad:*short-feet*).
+;;;
+;;;  Settings:
+;;;    Everything a drafter might want different - the style names, the
+;;;    layer, how far out the dims sit, what counts as the same place or
+;;;    the same size, the Typ. counts and wording, the side-view test's
+;;;    thresholds, which entity types are selected - is a global in the
+;;;    SETTINGS block straight after the version banner, each with its
+;;;    default and a note on what changing it does.  Nothing below that
+;;;    block repeats a value from it.  (setq ...) one after this file
+;;;    has loaded - in acaddoc.lsp, say - to change it for one machine
+;;;    without editing the file.
 ;;;
 ;;;  One dim per size - the "Typ." rule:
 ;;;    A measurement that repeats around the perimeter is called out
@@ -32378,28 +33047,35 @@
 ;;;        of matching curves reads better dimensioned where each one
 ;;;        is, so those are left alone
 ;;;    Two lengths, or two radii, within a sixteenth of an inch count
-;;;    as the same measurement.  The counts and the wording are
-;;;    ad:*typ-lines*, ad:*typ-curves* and ad:*typ-note* at the top of
-;;;    the file.
+;;;    as the same measurement (ad:*same-inches*).  The counts and the
+;;;    wording are ad:*typ-lines*, ad:*typ-curves* and ad:*typ-note* in
+;;;    the SETTINGS block.
 ;;;
 ;;;  One dimension per place:
 ;;;    Before placing anything the tool reads every linear, aligned and
 ;;;    radius dimension already in model space.  A dim is skipped when
 ;;;    one is already there for that place - same two extension line
-;;;    origins (either way round) and a dimension line within a foot of
-;;;    where the new one would sit, or for a radius dim, the same
-;;;    centre and the same radius.  So a second run over a plan that has
-;;;    grown dimensions the new geometry only, while the overall dims,
-;;;    two feet further out, are still placed even when a side of the
-;;;    plan happens to measure the same thing.
+;;;    origins (either way round) and a dimension line within
+;;;    ad:*band-feet* of where the new one would sit, or for a radius
+;;;    dim, the same centre and the same radius.  So a second run over a
+;;;    plan that has grown dimensions the new geometry only.
+;;;    The two overall dims are recognised differently, because they are
+;;;    not placed where the run before placed them - they stand clear of
+;;;    whatever dims are around the plan, so the second run's would sit
+;;;    ad:*over-feet* further out again.  What is looked for there is a
+;;;    LINEAR dim across the same two corners on the same side, at any
+;;;    distance: that is the overall dim, and the perimeter dim of a
+;;;    rectangular side spanning the same two corners is an ALIGNED one,
+;;;    so it is still dimensioned as well.
 ;;;
 ;;;  Notes:
-;;;    * All dims go on the current layer.
+;;;    * All dims go on the current layer unless ad:*layer* names one;
+;;;      AUTODIMSIDEPOV's go on ad:*steps-layer* ("DIMENSION").
 ;;;    * Ellipses and splines have no one radius to call out, so the
 ;;;      perimeter step passes over them.
 ;;;    * Perimeter dims are placed at least one foot away from the
 ;;;      perimeter, heading outwards (or 2 x DIMTXT x DIMSCALE when
-;;;      that is larger).
+;;;      that is larger) - ad:*perim-feet* and ad:*text-offsets*.
 ;;;    * Equal step widths are dimensioned once instead of once per
 ;;;      tread; a width dim is repeated only when the width changes.
 ;;;    * A dim chain breaks where a span is already dimensioned, and
@@ -32409,18 +33085,216 @@
 ;;;      are erased once their dimension chain has been created.
 ;;;    * Answering No to the floor dims question skips straight to the
 ;;;      overall dims; Back at it re-opens the stairs.
-;;;    * Break points closer together than 0.0001 drawing units are
-;;;      merged so no zero-length dimensions are created.
+;;;    * Break points closer together than 0.0001 drawing units
+;;;      (ad:*merge-tol*) are merged so no zero-length dimensions are
+;;;      created.
+;;;    * With undo recording switched off (UNDOCTL bit 1 clear) no undo
+;;;      group is opened or closed; the run goes ahead without one.
 ;;; ======================================================================
 
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.8")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
+
+;;; ======================================================================
+;;;  SETTINGS
+;;;
+;;;  Everything about this tool a drafter might want to change is set
+;;;  here and nowhere else: the code below reads these globals and never
+;;;  repeats their values.  To change one for a drawing or a machine,
+;;;  (setq ...) it after this file has loaded - in acaddoc.lsp, or at
+;;;  the command line - rather than editing the file; to change it for
+;;;  everyone, edit the value here and bump the version banner.
+;;;
+;;;  Every distance is given in FEET and converted through INSUNITS, so
+;;;  a millimetre drawing gets the same foot as an inch one.  The one
+;;;  tolerance given in inches says so in its name; the two given in
+;;;  drawing units are the tiny ones.  Numbers that are NOT here - the
+;;;  1e-8 zero-length guards, the 1e-6 ray offset - are numerical
+;;;  epsilons, not settings.
+;;; ======================================================================
+
+;; ---- units -----------------------------------------------------------
+
+(setq ad:*foot-when-unitless* 12.0)  ; drawing units in one foot when
+                                     ; INSUNITS is 0 (unitless) or a
+                                     ; unit ad:onefoot does not know: 12
+                                     ; for a drawing in inches, 304.8 for
+                                     ; one in millimetres.  A drawing
+                                     ; whose INSUNITS is set is read
+                                     ; from that instead
+
+;; ---- dimension styles ------------------------------------------------
+;; Each dimension picks its style by what it measures, not by which step
+;; placed it.  A style the drawing does not have falls back to the one
+;; that was current when the command started, and that one is restored
+;; when the command finishes.
+
+(setq ad:*style-plan*  "SIDE STANDARD")    ; perimeter sides, arc radii
+                                           ; and the stairs (AUTODIM
+                                           ; steps 2 and 3, STAIRDIM)
+(setq ad:*style-floor* "STANDARD")         ; the floor dims chains
+                                           ; (step 4, FLOORDIM)
+(setq ad:*style-over*  "STANDARD")         ; the two overall dims
+                                           ; (step 5)
+(setq ad:*style-short* "STANDARD INCHES")  ; anything measuring under
+                                           ; ad:*short-feet*, whichever
+                                           ; of the three above it would
+                                           ; otherwise have been
+(setq ad:*style-steps* "STANDARD INCHES")  ; steps drawn in side view:
+                                           ; the depth of every step and
+                                           ; the overall, in AUTODIM's
+                                           ; side-view route and in
+                                           ; AUTODIMSIDEPOV alike (a
+                                           ; depth under ad:*short-feet*
+                                           ; still drops to the short
+                                           ; style, which is the same
+                                           ; one by default)
+(setq ad:*short-feet*  1.0)                ; the cut-off for the short
+                                           ; style, in feet: a dim
+                                           ; measuring LESS than this
+                                           ; goes in ad:*style-short*.
+                                           ; Exactly this much does not.
+                                           ; The stairs prompt quotes it
+                                           ; in whole inches
+
+;; ---- layers ----------------------------------------------------------
+
+(setq ad:*layer*       nil)          ; layer AUTODIM, STAIRDIM and
+                                     ; FLOORDIM put their dims on: nil =
+                                     ; whatever layer is current when the
+                                     ; command runs (DIMLAYER still wins
+                                     ; when the drawing sets it), or a
+                                     ; name - created, or thawed, unlocked
+                                     ; and switched on, on the way in, and
+                                     ; the user's layer put back after
+(setq ad:*steps-layer* "DIMENSION")  ; the same for AUTODIMSIDEPOV, whose
+                                     ; reference drawing keeps its step
+                                     ; dims on a layer of their own; nil
+                                     ; = the current layer here too
+(setq ad:*layer-color* 7)            ; ACI colour a layer gets when it has
+                                     ; to be created (7 = white/black)
+
+;; ---- where the dims sit ----------------------------------------------
+;; The text offset is ad:*text-offsets* x DIMTXT x DIMSCALE.  The feet
+;; figures below are floors under it: at a scale where the text offset
+;; comes out larger, the text offset is what is used, so a small-scale
+;; drawing never has its dims crammed against the plan.
+
+(setq ad:*text-offsets* 2.0)   ; how many text heights a dim stands off
+                               ; its geometry.  The stair dims use
+                               ; exactly this; every other dim uses the
+                               ; larger of this and its feet figure
+(setq ad:*perim-feet*   1.0)   ; perimeter dims sit at least this far
+                               ; outside the plan, heading outwards
+(setq ad:*over-feet*    2.0)   ; the overall width sits this far above
+                               ; the topmost dim around the plan, the
+                               ; overall height this far left of the
+                               ; left-most one
+(setq ad:*near-feet*    4.0)   ; how far from the plan a dimension may
+                               ; sit and still count as one of the plan's
+                               ; own when the overall dims look for the
+                               ; outermost: further out it is another
+                               ; plan's, or the title block's, and is
+                               ; ignored.  In feet, or in text offsets
+                               ; when those are bigger
+(setq ad:*steps-feet*   2.0)   ; side-view step dims sit this far clear
+                               ; of the flight, and the overall the same
+                               ; again further out
+
+;; ---- what counts as the same -----------------------------------------
+
+(setq ad:*same-inches* 0.0625) ; INCHES: two points this close (a
+                               ; sixteenth) are the same place and two
+                               ; measurements this close are the same
+                               ; size.  The "dimensioned already" test
+                               ; reads it on extension line origins,
+                               ; centres and radii; the Typ. rule groups
+                               ; sides and radii by it
+(setq ad:*band-feet*   1.0)    ; two dims across the same two points are
+                               ; the same dim when their dimension lines
+                               ; are within this of each other.  A foot:
+                               ; a re-run, or a dim nudged by hand, is
+                               ; still recognised, while the overall
+                               ; dims, ad:*over-feet* further out, are
+                               ; dims of their own.  Keep it under
+                               ; ad:*over-feet* or the overall dims of a
+                               ; rectangle will be taken for its sides
+(setq ad:*angle-tol*   1e-3)   ; RADIANS: two lines within this of
+                               ; parallel are parallel (finding the
+                               ; treads), and a line within this of
+                               ; horizontal or vertical is square (the
+                               ; side-view test, and which lines are
+                               ; risers)
+(setq ad:*merge-tol*   1e-4)   ; DRAWING UNITS: two points closer than
+                               ; this are one.  Break points on a floor
+                               ; dims line are merged by it so no
+                               ; zero-length dim is made, a pick this
+                               ; close to an object is on the object,
+                               ; treads this close together are one
+                               ; tread, and step widths within it are
+                               ; equal
+
+;; ---- one dim per size: the Typ. rule ---------------------------------
+;; A measurement that repeats around the perimeter is called out once,
+;; on the first one found, and the rest are left to that note.
+
+(setq ad:*typ-note*   " Typ.")  ; appended to the one dim that stands
+                                ; for its group - the wording POOL.LSP
+                                ; already uses for the same job
+(setq ad:*typ-lines*  2)        ; equal straight sides it takes before
+                                ; one is noted and the rest left to it;
+                                ; below this count every one is
+                                ; dimensioned where it is
+(setq ad:*typ-curves* 4)        ; the same for equal radii.  Higher than
+                                ; the sides on purpose: a pair or a trio
+                                ; of matching curves reads better
+                                ; dimensioned where each one is
+
+;; ---- recognising steps drawn in side view ----------------------------
+;; AUTODIM takes its side-view route only when the step-1 selection
+;; passes every test here; anything failing one is dimensioned as a
+;; plan, so loosening these is what could make a plan read as steps.
+
+(setq ad:*square-share* 0.75)  ; at least this share of the straight
+                               ; segments must run square - horizontal
+                               ; or vertical - so a sloping pool floor
+                               ; at the foot of the flight still passes
+(setq ad:*min-risers*   2)     ; risers it takes to be a flight.  1
+                               ; would let a single riser and tread
+                               ; pass - and with it a plan that has one
+                               ; short vertical in it
+(setq ad:*wall-share*   0.9)   ; a vertical at least this share of the
+                               ; profile's full height is the back wall,
+                               ; not a riser - which is also what stops
+                               ; a rectangular plan reading as a
+                               ; two-step flight
+(setq ad:*join-share*   0.01)  ; how far apart, as a share of the
+                               ; profile's height (never less than
+                               ; ad:*same-inches*), the foot of one riser
+                               ; and the top of the next may be and
+                               ; still join up into one staircase
+
+;; ---- what the highlights keep ----------------------------------------
+;; DXF entity-type lists, comma-separated as ssget takes them.
+
+(setq ad:*geom-types*  "LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE,INSERT")
+                               ; what makes up a plan: the step-1
+                               ; highlight keeps these, only these block
+                               ; a perimeter ray, and these are what a
+                               ; floor dims chain breaks at
+(setq ad:*stair-types* "LINE,LWPOLYLINE")
+                               ; what the stairs highlight (step 3,
+                               ; STAIRDIM) and the side-view highlight
+                               ; (AUTODIMSIDEPOV) keep - the tool reads
+                               ; straight segments off these alone
+
+;;; ================================================== end of SETTINGS
 
 ;; ---------------------------------------------------------------- helpers
 
@@ -32434,22 +33308,36 @@
   (setq d (abs (- a b)))
   (min d (abs (- pi d))))
 
-;; perpendicular offset used for the automatic dims
+;; perpendicular offset used for the automatic dims: ad:*text-offsets*
+;; text heights at DIMSCALE (a DIMSCALE of 0 - paper-space scaling -
+;; reads as 1)
 (defun ad:dimoff ()
-  (* 2.0
+  (* ad:*text-offsets*
      (getvar "DIMTXT")
      (if (zerop (getvar "DIMSCALE")) 1.0 (getvar "DIMSCALE"))))
 
-;; one foot expressed in the current drawing units (INSUNITS),
-;; assuming inches when unitless or unknown
+;; one foot expressed in the current drawing units (INSUNITS), falling
+;; back on ad:*foot-when-unitless* when unitless or unknown
 (defun ad:onefoot (/ u)
   (setq u (getvar "INSUNITS"))
-  (cond ((= u 2) 1.0)                   ; feet
+  (cond ((= u 1) 12.0)                  ; inches
+        ((= u 2) 1.0)                   ; feet
         ((= u 4) 304.8)                 ; millimetres
         ((= u 5) 30.48)                 ; centimetres
         ((= u 6) 0.3048)                ; metres
         ((= u 10) (/ 1.0 3.0))          ; yards
-        (t 12.0)))                      ; inches / unitless
+        (t ad:*foot-when-unitless*)))   ; unitless / unknown
+
+;; a distance given in feet, or in inches, in the drawing's own units
+(defun ad:feet (n) (* n (ad:onefoot)))
+(defun ad:inches (n) (* n (/ (ad:onefoot) 12.0)))
+
+;; a setting's number for a prompt: whole numbers without a decimal
+;; point, anything else to one place
+(defun ad:numstr (n)
+  (if (equal n (float (fix n)) 1e-9)
+    (itoa (fix n))
+    (rtos n 2 1)))
 
 ;; ------------------------------------------------------------- asking
 
@@ -32491,33 +33379,26 @@
 
 ;; make that layer current, creating or repairing it on the way
 (defun ad:setlayer (name)
-  (setvar "CLAYER" (ad:ensure-layer name 7)))
+  (setvar "CLAYER" (ad:ensure-layer name ad:*layer-color*)))
+
+;; make the layer a setting names current, and return the layer that
+;; was current so the caller can put it back - nil when the setting is
+;; nil and the dims go on whatever layer is current
+(defun ad:enterlayer (name / old)
+  (if name
+    (progn
+      (setq old (getvar "CLAYER"))
+      (ad:setlayer name)
+      old)))
 
 ;; ------------------------------------------------ dimension styles
 
-;; The styles the tool asks for.  The perimeter and the stairs go in
-;; ad:*style-plan*, the floor dims chains in ad:*style-floor* and the
-;; two overall dims in ad:*style-over*; whichever of those it is,
-;; anything measuring less than a foot goes in ad:*style-short*
-;; instead, a sub-foot dim reading better in inches.
-(setq ad:*style-plan*  "SIDE STANDARD"
-      ad:*style-floor* "STANDARD"
-      ad:*style-short* "STANDARD INCHES"
-      ad:*style-over*  "STANDARD")
+;; The style names are settings - ad:*style-plan*, ad:*style-floor*,
+;; ad:*style-over*, ad:*style-short* and ad:*style-steps* in the
+;; SETTINGS block at the top of the file - and so is the cut-off under
+;; which a dim drops into ad:*style-short*, ad:*short-feet*.
 
-;; Repeated measurements are called out once and noted, rather than
-;; dimensioned over and over.  ad:*typ-note* is the suffix the one dim
-;; that stands for its group carries - the wording POOL.LSP already
-;; uses for the same job.  The two counts are how many equal ones it
-;; takes before that happens: two equal straight sides are enough,
-;; while equal radii are left alone until there are more than three of
-;; them, a pair or a trio of matching curves reading better dimensioned
-;; where they are.
-(setq ad:*typ-note*   " Typ."
-      ad:*typ-lines*  2
-      ad:*typ-curves* 4)
-
-;; per-run state, all reset by ad:begin
+;; per-run state, all reset by ad:begin - not settings
 (setq ad:*dims*      nil    ; the places that already carry a dimension
       ad:*rads*      nil    ; the arcs that already carry a radius dim
       ad:*skipped*   0      ; how many dims this run left to what was there
@@ -32539,42 +33420,53 @@
       (ad:setdimstyle want)
       (setq ad:*curstyle* want))))
 
+;; the length under which a dim drops into ad:*style-short*
+(defun ad:shortlimit () (ad:feet ad:*short-feet*))
+
 ;; the style a dimension of this measured length belongs in
 (defun ad:styfor (len base)
-  (if (< len (ad:onefoot)) ad:*style-short* base))
+  (if (< len (ad:shortlimit)) ad:*style-short* base))
 
 ;; ---------------------------------------- dimensions already in place
 
 ;; how close two extension line origins have to be before they count as
-;; the same place - a sixteenth of an inch, in the drawing's own units
-(defun ad:dupetol () (/ (ad:onefoot) 192.0))
+;; the same place - ad:*same-inches*, in the drawing's own units
+(defun ad:dupetol () (ad:inches ad:*same-inches*))
 
 ;; how close two dimension lines have to be before dims across the same
-;; two points count as the same dim.  A foot: enough that a re-run, or
-;; a dim nudged by hand, is recognised, and small enough that the
-;; overall dims - two feet further out - are still their own dims.
-(defun ad:bandtol () (ad:onefoot))
+;; two points count as the same dim - ad:*band-feet*, in the drawing's
+;; own units
+(defun ad:bandtol () (ad:feet ad:*band-feet*))
 
 ;; every dimension in model space
 (defun ad:dimss ()
   (ssget "_X" '((0 . "DIMENSION") (410 . "Model"))))
 
 ;; a linear / aligned dimension as (origin1 origin2 dimline-point) -
-;; nil for any other kind (radial, angular, ordinate), which has no
-;; pair of extension line origins to compare
+;; nil for any other kind.  The kind is read off group 70's low three
+;; bits (0 rotated, 1 aligned): an angular or ordinate dim writes
+;; groups 13 and 14 too, but not the pair of extension line origins
+;; this tool places, so it must not block a place
 (defun ad:dimpts (en / el)
   (setq el (entget en))
   (if (and el
            (= "DIMENSION" (cdr (assoc 0 el)))
+           (assoc 70 el)
+           (member (logand 7 (cdr (assoc 70 el))) '(0 1))
            (assoc 13 el)
            (assoc 14 el)
            (assoc 10 el))
-    (list (cdr (assoc 13 el)) (cdr (assoc 14 el)) (cdr (assoc 10 el)))))
+    (list (cdr (assoc 13 el)) (cdr (assoc 14 el)) (cdr (assoc 10 el))
+          (logand 7 (cdr (assoc 70 el))))))
 
-;; note that p1-p2 now carries a dimension whose dim line runs through
-;; loc, so nothing later in the same run doubles up on it
-(defun ad:remember (p1 p2 loc)
-  (setq ad:*dims* (cons (list p1 p2 loc) ad:*dims*)))
+;; note that p1-p2 now carries a dimension of this kind whose dim line
+;; runs through loc, so nothing later in the same run doubles up on it.
+;; The kind is DXF 70's low bits, as ad:dimpts reads them back off the
+;; drawing: 0 for the rotated / linear dims ad:lindim places, 1 for the
+;; aligned ones - which is how the overall dims are told apart from a
+;; perimeter dim across the same two corners.
+(defun ad:remember (p1 p2 loc kind)
+  (setq ad:*dims* (cons (list p1 p2 loc kind) ad:*dims*)))
 
 ;; a radius dimension as (centre radius), nil for anything else.  Only
 ;; radius dims are read: a diameter dim writes two points on the circle
@@ -32670,6 +33562,33 @@
       (setq hit t)))
   hit)
 
+;; T when p1-p2 already carries a LINEAR dimension standing off the
+;; same side as loc - the "is the overall dim already there" test.
+;; ad:dimmed-p's band cannot serve here: an overall dim is placed clear
+;; of the dims already around the plan, so a second run would put its
+;; own ad:*over-feet* further out again and never recognise the first,
+;; leaving a fresh pair stacked outside the old one every time.  What
+;; the test must NOT match is the perimeter dim of a rectangular side,
+;; which spans the very same two corners - and that one is ALIGNED,
+;; which is the difference read here.  A linear dim of the same span
+;; the drafter placed themselves counts too, and is meant to: it is
+;; the overall dim, however far out they put it.
+(defun ad:overdimmed-p (p1 p2 loc / tol sgn lst q hit)
+  (setq tol (ad:dupetol)
+        sgn (if (< (ad:lineoff p1 p2 loc) 0.0) -1.0 1.0)
+        lst ad:*dims*)
+  (while (and lst (not hit))
+    (setq q   (car lst)
+          lst (cdr lst))
+    (if (and (equal 0 (cadddr q))
+             (or (and (ad:samept (car q) p1 tol)
+                      (ad:samept (cadr q) p2 tol))
+                 (and (ad:samept (car q) p2 tol)
+                      (ad:samept (cadr q) p1 tol)))
+             (> (* sgn (ad:lineoff p1 p2 (caddr q))) 0.0))
+      (setq hit t)))
+  hit)
+
 ;; Split records whose car is the measurement into groups of equal
 ;; measurement, within tol.  Order is kept both ways: a group sits
 ;; where its first member was found, and its members keep the order
@@ -32736,22 +33655,40 @@
     ((ad:dimmed-p p1 p2 loc) (ad:skip))
     (t (ad:usestyle (ad:styfor len base))
        (ad:aligned p1 p2 loc note)
-       (ad:remember p1 p2 loc)
+       (ad:remember p1 p2 loc 1)
        1)))
 
-;; the same for a horizontal ("_H") or vertical ("_V") linear dim - the
-;; length that picks the style is the one the dim reads out, not the
-;; distance between the two points
+;; the length a linear dim reads out - its span along the dimension
+;; line's own axis, not the distance between the two points
+(defun ad:linlen (p1 p2 dir)
+  (if (= dir "_V")
+    (abs (- (cadr p1) (cadr p2)))
+    (abs (- (car p1) (car p2)))))
+
+;; the same as ad:putaligned for a horizontal ("_H") or vertical ("_V")
+;; linear dim, the style picked by the length the dim reads out
 (defun ad:putlinear (p1 p2 loc dir base / len)
-  (setq len (if (= dir "_V")
-              (abs (- (cadr p1) (cadr p2)))
-              (abs (- (car p1) (car p2)))))
+  (setq len (ad:linlen p1 p2 dir))
   (cond
     ((<= len 1e-8) 0)
     ((ad:dimmed-p p1 p2 loc) (ad:skip))
     (t (ad:usestyle (ad:styfor len base))
        (ad:lindim p1 p2 loc dir)
-       (ad:remember p1 p2 loc)
+       (ad:remember p1 p2 loc 0)
+       1)))
+
+;; and the same again for one of the two overall dims, which is "already
+;; there" on the strength of ad:overdimmed-p rather than the band: it is
+;; not placed where the last run placed it, so only the span, the side
+;; and the kind can recognise it.
+(defun ad:putoverdim (p1 p2 loc dir base / len)
+  (setq len (ad:linlen p1 p2 dir))
+  (cond
+    ((<= len 1e-8) 0)
+    ((ad:overdimmed-p p1 p2 loc) (ad:skip))
+    (t (ad:usestyle (ad:styfor len base))
+       (ad:lindim p1 p2 loc dir)
+       (ad:remember p1 p2 loc 0)
        1)))
 
 ;; place one radius dimension on the arc en, its leader reaching from
@@ -32780,14 +33717,14 @@
 (defun ad:putrun (pts loc sty / p prev)
   (ad:usestyle sty)
   (ad:aligned (car pts) (cadr pts) loc "")
-  (ad:remember (car pts) (cadr pts) loc)
+  (ad:remember (car pts) (cadr pts) loc 1)
   (if (cddr pts)
     (progn
       (command "_.DIMCONTINUE")
       (setq prev (cadr pts))
       (foreach p (cddr pts)
         (command "_non" (trans p 0 1))
-        (ad:remember prev p loc)
+        (ad:remember prev p loc 1)
         (setq prev p))
       (command "" "")))
   (1- (length pts)))
@@ -32962,9 +33899,13 @@
   n)
 
 ;; dxf filter for geometry that can be dimensioned / block a ray /
-;; break a dim chain
+;; break a dim chain - ad:*geom-types*
 (defun ad:geomfilter ()
-  '((0 . "LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE,INSERT")))
+  (list (cons 0 ad:*geom-types*)))
+
+;; dxf filter for a stairs or side-view highlight - ad:*stair-types*
+(defun ad:stairfilter ()
+  (list (cons 0 ad:*stair-types*)))
 
 ;; everything in model space matching the geometry filter
 (defun ad:geomss ()
@@ -33045,8 +33986,9 @@
     (progn
       (setq diag (* 2.0 (distance (car box) (cadr box)))
             eps  (* 1e-6 diag)
-            ;; at least a foot away from the perimeter, heading outwards
-            off  (max (ad:dimoff) (ad:onefoot)))
+            ;; at least ad:*perim-feet* away from the perimeter,
+            ;; heading outwards
+            off  (max (ad:dimoff) (ad:feet ad:*perim-feet*)))
       ;; the straight sides
       (foreach g (ad:groupsame (ad:perimsegs ss diag eps off) (ad:dupetol))
         (if (>= (length g) ad:*typ-lines*)
@@ -33085,10 +34027,11 @@
     (prompt (strcat "\nHighlight the stairs (window or pick the tread"
                     " lines), then press Enter."
                     "\nStep widths and the distances between steps both"
-                    " get dimensioned - anything under 12\" in"
-                    " \"STANDARD INCHES\"."
+                    " get dimensioned - anything under "
+                    (ad:numstr (* 12.0 ad:*short-feet*)) "\" in \""
+                    ad:*style-short* "\"."
                     "  Press Enter without selecting to skip.")))
-  (setq ss  (if ss0 ss0 (ssget '((0 . "LINE,LWPOLYLINE"))))
+  (setq ss  (if ss0 ss0 (ssget (ad:stairfilter)))
         cnt 0)
   (if ss
     (progn
@@ -33101,7 +34044,7 @@
               hit nil
               out '())
         (foreach g groups
-          (if (and (not hit) (< (ad:angdiff a (car g)) 1e-3))
+          (if (and (not hit) (< (ad:angdiff a (car g)) ad:*angle-tol*))
             (setq g   (cons (car g) (cons s (cdr g)))
                   hit t))
           (setq out (cons g out)))
@@ -33131,7 +34074,7 @@
           (setq lastw nil)
           (foreach td tds
             (setq w (distance (cadr td) (caddr td)))
-            (if (or (null lastw) (> (abs (- w lastw)) 1e-4))
+            (if (or (null lastw) (> (abs (- w lastw)) ad:*merge-tol*))
               (progn
                 (setq mid (cal:midn (cadr td) (caddr td))
                       loc (mapcar '(lambda (m vv) (- m (* off vv))) mid v))
@@ -33142,7 +34085,7 @@
           (setq ts   '()
                 prev nil)
           (foreach td tds
-            (if (or (null prev) (> (- (car td) prev) 1e-4))
+            (if (or (null prev) (> (- (car td) prev) ad:*merge-tol*))
               (setq ts   (cons (car td) ts)
                     prev (car td))))
           (setq ts (reverse ts))
@@ -33188,56 +34131,60 @@
 ;; every dim runs object to object.
 ;; Returns the number of dimensions placed.
 (defun ad:floorchain (p1 p2 loc obstacles / ssx lin lobj len dir ds d x
-                                            starton endon chain prev)
+                                            tol starton endon chain prev)
   ;; as in ad:sideclear: entlast is ours only when the entmake worked.
   ;; Here it matters twice over - the entity is pulled OUT of the
   ;; caller's selection set below and then erased, so a failed entmake
   ;; would have quietly taken one of the user's objects with it.
   (setq ssx (if obstacles obstacles (ad:geomss))
         lin (if (entmake (list '(0 . "LINE") (cons 10 p1) (cons 11 p2)))
-              (entlast)))
+              (entlast))
+        tol ad:*merge-tol*)
   (if (null lin)
-    (progn (prompt "\nCould not draw the measuring line - floor dims skipped.")
-           (setq ds nil)))
-  (if lin
+    (progn
+      (prompt "\nCould not draw the measuring line - floor dims skipped.")
+      0)
     (progn
       (setq lobj (vlax-ename->vla-object lin))
-      (if (and ssx (ssmemb lin ssx)) (ssdel lin ssx))))
-  (setq len (distance p1 p2)
-        dir (mapcar '(lambda (b c) (/ (- c b) len)) p1 p2)
-        ds  '())
-  ;; distance of every crossing object along the line, noting crossings
-  ;; sitting right on the picked start / end points
-  (foreach x (if lin (ad:xpoints lobj ssx))
-    (setq d (apply '+ (mapcar '* dir (mapcar '- x p1))))
-    (cond ((< (abs d) 1e-4)           (setq starton t))
-          ((< (abs (- d len)) 1e-4)   (setq endon t))
-          ((and (> d 1e-4) (< d (- len 1e-4))) (setq ds (cons d ds)))))
-  (if lin (entdel lin))
-  ;; sorted break points, near-coincident ones merged
-  (setq chain (list p1)
-        prev  0.0)
-  (foreach d (vl-sort ds '<)
-    (if (> (- d prev) 1e-4)
-      (setq chain (cons (mapcar '(lambda (b v) (+ b (* d v))) p1 dir) chain)
-            prev  d)))
-  (setq chain (reverse (cons p2 chain)))
-  ;; an end the user did not land on an object is pulled back to the
-  ;; last object before it, so every dim in the chain runs object to
-  ;; object and none hangs off the end into open drawing
-  (if (not starton)
-    (progn
-      (setq chain (cdr chain))
-      (prompt (strcat "\n  (start point was not on an object - the chain"
-                      " starts at the first one the line crosses)"))))
-  (if (and (cdr chain) (not endon))
-    (progn
-      (setq chain (reverse (cdr (reverse chain))))
-      (prompt (strcat "\n  (end point was not on an object - the chain"
-                      " stops at the last one the line crosses)"))))
-  (if (cdr chain)
-    (ad:dimchain chain loc ad:*style-floor*)
-    0))
+      (if (and ssx (ssmemb lin ssx)) (ssdel lin ssx))
+      (setq len (distance p1 p2)
+            dir (mapcar '(lambda (b c) (/ (- c b) len)) p1 p2)
+            ds  '())
+      ;; distance of every crossing object along the line, noting
+      ;; crossings sitting right on the picked start / end points
+      (foreach x (ad:xpoints lobj ssx)
+        (setq d (apply '+ (mapcar '* dir (mapcar '- x p1))))
+        (cond ((< (abs d) tol)                   (setq starton t))
+              ((< (abs (- d len)) tol)           (setq endon t))
+              ((and (> d tol) (< d (- len tol))) (setq ds (cons d ds)))))
+      (entdel lin)
+      ;; sorted break points, near-coincident ones merged
+      (setq chain (list p1)
+            prev  0.0)
+      (foreach d (vl-sort ds '<)
+        (if (> (- d prev) tol)
+          (setq chain (cons (mapcar '(lambda (b v) (+ b (* d v))) p1 dir)
+                            chain)
+                prev  d)))
+      (setq chain (reverse (cons p2 chain)))
+      ;; an end the user did not land on an object is pulled back to
+      ;; the last object before it, so every dim in the chain runs
+      ;; object to object and none hangs off the end into open drawing
+      (if (not starton)
+        (progn
+          (setq chain (cdr chain))
+          (prompt (strcat "\n  (start point was not on an object - the"
+                          " chain starts at the first one the line"
+                          " crosses)"))))
+      (if (and (cdr chain) (not endon))
+        (progn
+          (setq chain (reverse (cdr (reverse chain))))
+          (prompt (strcat "\n  (end point was not on an object - the"
+                          " chain stops at the last one the line"
+                          " crosses)"))))
+      (if (cdr chain)
+        (ad:dimchain chain loc ad:*style-floor*)
+        0))))
 
 ;; erase everything drawn after entity MARK (nil = an empty drawing) -
 ;; the rollback when a Back re-opens an earlier dimensioning step.  The
@@ -33319,7 +34266,7 @@
   (setq box (cal:bbox-ss plan))
   (if box
     (progn
-      (setq mrg  (max (* 4.0 (ad:onefoot)) (* 4.0 (ad:dimoff)))
+      (setq mrg  (* ad:*near-feet* (max (ad:onefoot) (ad:dimoff)))
             near (list (mapcar '(lambda (v) (- v mrg)) (car box))
                        (mapcar '(lambda (v) (+ v mrg)) (cadr box)))
             mn   (car box)
@@ -33336,32 +34283,32 @@
                   mx (mapcar 'max mx (cadr b))))))
       (list mn mx))))
 
-;; the two overall dims, both in the "STANDARD" style: the plan's full
-;; width about two feet above the topmost dimension around it, and its
-;; full height about two feet to the left of the left-most one.  Both
+;; the two overall dims, both in ad:*style-over*: the plan's full width
+;; ad:*over-feet* above the topmost dimension around it, and its full
+;; height ad:*over-feet* to the left of the left-most one.  Both
 ;; extents are read before either dim goes in, so the first one placed
 ;; cannot push the second further out.
 ;; Returns how many were placed (0, 1 or 2 - one already there is not
-;; repeated).
+;; repeated, however far out the run that placed it put it).
 (defun ad:overall (plan / box out gap x0 y0 x1 y1 cnt)
   (setq cnt 0
         box (cal:bbox-ss plan))
   (if box
     (progn
       (setq out (ad:dimextents plan)
-            gap (* 2.0 (ad:onefoot))
+            gap (ad:feet ad:*over-feet*)
             x0  (car  (car box))
             y0  (cadr (car box))
             x1  (car  (cadr box))
             y1  (cadr (cadr box)))
-      ;; overall width, sitting two feet above the topmost dim
-      (setq cnt (+ cnt (ad:putlinear
+      ;; overall width, sitting ad:*over-feet* above the topmost dim
+      (setq cnt (+ cnt (ad:putoverdim
                          (list x0 y1 0.0)
                          (list x1 y1 0.0)
                          (list (* 0.5 (+ x0 x1)) (+ (cadr (cadr out)) gap) 0.0)
                          "_H" ad:*style-over*)))
-      ;; overall height, sitting two feet left of the left-most dim
-      (setq cnt (+ cnt (ad:putlinear
+      ;; overall height, sitting ad:*over-feet* left of the left-most dim
+      (setq cnt (+ cnt (ad:putoverdim
                          (list x0 y0 0.0)
                          (list x0 y1 0.0)
                          (list (- (car (car out)) gap) (* 0.5 (+ y0 y1)) 0.0)
@@ -33375,8 +34322,8 @@
 (defun ad:risers (ss / s out)
   (setq out '())
   (foreach s (ad:allsegs ss)
-    (if (and (< (ad:angdiff (ad:segang s) (* 0.5 pi)) 1e-3)
-             (> (abs (- (cadr (car s)) (cadr (cadr s)))) 1e-4))
+    (if (and (< (ad:angdiff (ad:segang s) (* 0.5 pi)) ad:*angle-tol*)
+             (> (abs (- (cadr (car s)) (cadr (cadr s)))) ad:*merge-tol*))
       (setq out (cons (if (> (cadr (car s)) (cadr (cadr s)))
                         s
                         (list (cadr s) (car s)))
@@ -33409,15 +34356,18 @@
 ;; side view rather than a plan?  It does when
 ;;   * nothing in it is curved - no arc, circle, ellipse, spline,
 ;;     polyline bulge or block;
-;;   * three quarters or more of its straight segments run square, so a
-;;     sloping pool floor at the foot of the flight is still allowed;
-;;   * it has two or more risers and at least one tread per gap
-;;     between them;
+;;   * ad:*square-share* (three quarters) or more of its straight
+;;     segments run square, so a sloping pool floor at the foot of the
+;;     flight is still allowed;
+;;   * it has ad:*min-risers* (two) or more risers and at least one
+;;     tread per gap between them;
 ;;   * and the risers form a connected staircase across the drawing,
-;;     each starting where the one before it finished.
-;; A vertical as tall as the whole profile is the back wall, not a
-;; step, and is left out of that reckoning - which is also what stops a
-;; rectangular plan reading as a two-step flight.
+;;     each starting where the one before it finished, within
+;;     ad:*join-share* of the profile's height.
+;; A vertical ad:*wall-share* of the whole profile's height or taller
+;; is the back wall, not a step, and is left out of that reckoning -
+;; which is also what stops a rectangular plan reading as a two-step
+;; flight.
 ;; Returns the risers, top down, or nil.
 (defun ad:stepprofile-p (ss / segs s pp vert horz nsq ymin ymax hgt
                               tol risers r)
@@ -33427,9 +34377,9 @@
         ymin nil
         ymax nil)
   (foreach s segs
-    (cond ((< (ad:angdiff (ad:segang s) (* 0.5 pi)) 1e-3)
+    (cond ((< (ad:angdiff (ad:segang s) (* 0.5 pi)) ad:*angle-tol*)
            (setq vert (cons s vert)))
-          ((< (ad:angdiff (ad:segang s) 0.0) 1e-3)
+          ((< (ad:angdiff (ad:segang s) 0.0) ad:*angle-tol*)
            (setq horz (cons s horz))))
     (foreach pp s
       (setq ymin (if ymin (min ymin (cadr pp)) (cadr pp))
@@ -33438,22 +34388,22 @@
         hgt (if ymin (- ymax ymin) 0.0))
   (if (and (> hgt 1e-8)
            (zerop (ad:curves ss))
-           (>= (length vert) 2)
+           (>= (length vert) ad:*min-risers*)
            (>= (length horz) 1)
-           (>= (* 4 nsq) (* 3 (length segs))))
+           (>= nsq (* ad:*square-share* (length segs))))
     (progn
       ;; the risers, a full-height back wall left out
-      (setq tol    (max (ad:dupetol) (* 0.01 hgt))
+      (setq tol    (max (ad:dupetol) (* ad:*join-share* hgt))
             risers '())
       (foreach s vert
         (setq r (if (> (cadr (car s)) (cadr (cadr s)))
                   s
                   (list (cadr s) (car s))))
-        (if (< (- (cadr (car r)) (cadr (cadr r))) (* 0.9 hgt))
+        (if (< (- (cadr (car r)) (cadr (cadr r))) (* ad:*wall-share* hgt))
           (setq risers (cons r risers))))
       (setq risers (vl-sort risers
                             '(lambda (a b) (< (car (car a)) (car (car b))))))
-      (if (and (cdr risers)
+      (if (and (>= (length risers) ad:*min-risers*)
                (>= (length horz) (1- (length risers)))
                (or (ad:stairlike-p risers tol)
                    (ad:stairlike-p (reverse risers) tol)))
@@ -33468,7 +34418,7 @@
 ;; Returns the number of dimensions placed.
 (defun ad:dimsteps (chain side stack base / clear xs xdim edge loc
                                             cnt nris prev pb)
-  (setq clear (max (ad:dimoff) (* 2.0 (ad:onefoot)))
+  (setq clear (max (ad:dimoff) (ad:feet ad:*steps-feet*))
         cnt   0
         nris  0
         edge  nil
@@ -33479,7 +34429,7 @@
                   (if (> side 0.0) (apply 'max xs) (apply 'min xs)))
           edge xdim))
   (foreach pb (cdr chain)
-    (if (> (abs (- (cadr prev) (cadr pb))) 1e-4)
+    (if (> (abs (- (cadr prev) (cadr pb))) ad:*merge-tol*)
       (progn
         (if (not stack)
           (setq xdim (+ (* side clear)
@@ -33567,10 +34517,11 @@
            (setq nf2 (if (numberp v) v 0))
            (setq stage 7))))))
   (prompt (strcat "\n=== AUTODIM step 5 of 5: overall dims ==="
-                  "\nPlacing the overall width about 2ft above the"
-                  " topmost dim and the overall height about 2ft to"
-                  " the left of the left-most one - no input"
-                  " needed..."))
+                  "\nPlacing the overall width about "
+                  (ad:numstr ad:*over-feet*) "ft above the topmost dim"
+                  " and the overall height about "
+                  (ad:numstr ad:*over-feet*) "ft to the left of the"
+                  " left-most one - no input needed..."))
   (setq nover (ad:overall plan))
   (prompt (strcat "\n" (itoa nover) " overall dimension(s) placed."))
   ;; the run's total, for AUTODIM's sign-off line
@@ -33584,15 +34535,15 @@
 (defun ad:runsteps (risers / n)
   (prompt (strcat "\n=== AUTODIM: that is a side view of steps ==="
                   "\nDimensioning the depth of every step, to the right"
-                  " of the flight in \"" ad:*style-short* "\", and the"
+                  " of the flight in \"" ad:*style-steps* "\", and the"
                   " overall depth further right again - no input"
                   " needed..."))
-  (setq n (ad:dimsteps (ad:stepchain risers) 1.0 T ad:*style-short*))
+  (setq n (ad:dimsteps (ad:stepchain risers) 1.0 T ad:*style-steps*))
   (prompt (strcat "\n" (itoa n) " step dimension(s) placed."))
   ;; the run's total, for AUTODIM's sign-off line
   n)
 
-(defun c:AUTODIM (/ *error* oldcmd olddim plan risers n undo-open)
+(defun c:AUTODIM (/ *error* oldcmd olddim oldlay plan risers n undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -33600,6 +34551,7 @@
     (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
@@ -33629,12 +34581,16 @@
         (progn
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
+      (setq oldlay (ad:enterlayer ad:*layer*))
       (setq n (if (setq risers (ad:stepprofile-p plan))
                 (ad:runsteps risers)
                 (ad:runplan plan)))
       (ad:skipreport)
       (ad:usestyle olddim)
-      (command "_.UNDO" "_End")
+      (if oldlay (setvar "CLAYER" oldlay))
+      ;; only close the group that was opened - with undo off there is
+      ;; none, and an _End then errors out of the command
+      (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
       (setvar "CMDECHO" oldcmd)
       (prompt (strcat "\nAUTODIM finished - "
@@ -33642,7 +34598,7 @@
                       " dimension(s) placed."))))
   (princ))
 
-(defun c:STAIRDIM (/ *error* oldcmd olddim n ss0 undo-open)
+(defun c:STAIRDIM (/ *error* oldcmd olddim oldlay n ss0 undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -33650,6 +34606,7 @@
     (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
@@ -33658,7 +34615,7 @@
         olddim (getvar "DIMSTYLE"))
   ;; a pickfirst selection if there is one, grabbed before the undo
   ;; group's command clears it - nil makes ad:dimstairs ask
-  (setq ss0 (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
+  (setq ss0 (ssget "_I" (ad:stairfilter)))
   (setvar "CMDECHO" 0)
   (ad:begin)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -33667,16 +34624,18 @@
     (progn
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
+  (setq oldlay (ad:enterlayer ad:*layer*))
   (setq n (ad:dimstairs ss0))
   (prompt (strcat "\n" (itoa n) " stair dimension(s) placed."))
   (ad:skipreport)
   (ad:usestyle olddim)
-  (command "_.UNDO" "_End")
+  (if oldlay (setvar "CLAYER" oldlay))
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   (princ))
 
-(defun c:FLOORDIM (/ *error* oldcmd olddim n undo-open)
+(defun c:FLOORDIM (/ *error* oldcmd olddim oldlay n undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -33684,6 +34643,7 @@
     (setq undo-open nil)
     (if olddim
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
+    (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
@@ -33698,12 +34658,14 @@
     (progn
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
+  (setq oldlay (ad:enterlayer ad:*layer*))
   (setq n (ad:getfloor "Floor dims" nil nil))
   (prompt (strcat "\n" (if (numberp n) (itoa n) "0")
                   " floor dimension(s) placed."))
   (ad:skipreport)
   (ad:usestyle olddim)
-  (command "_.UNDO" "_End")
+  (if oldlay (setvar "CLAYER" oldlay))
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   (princ))
@@ -33712,10 +34674,11 @@
 ;; every riser gets a vertical dimension placed beside its step,
 ;; stepping down the flight with the nosing corners as extension line
 ;; origins, plus one overall height dimension further out.  The dims
-;; are created on layer "DIMENSION" in the "STANDARD INCHES" style to
-;; match the reference drawing - a riser is under a foot anyway, so
-;; that is the style the length rule asks for too.  A riser that is
-;; dimensioned already is left alone, as everywhere else.
+;; are created on layer ad:*steps-layer* ("DIMENSION") in the
+;; ad:*style-steps* style ("STANDARD INCHES") to match the reference
+;; drawing - a riser is under a foot anyway, so that is the style the
+;; length rule asks for too.  A riser that is dimensioned already is
+;; left alone, as everywhere else.
 (defun c:AUTODIMSIDEPOV (/ *error* oldcmd olddim oldlay ss risers chain
                             sx cnt undo-open)
   (defun *error* (msg)
@@ -33731,7 +34694,7 @@
       (prompt (strcat "\nAutoDim error: " msg)))
     (princ))
   ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,LWPOLYLINE"))))
+  (setq ss (ssget "_I" (ad:stairfilter)))
   (if (null ss)
     (progn
       (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side"
@@ -33739,13 +34702,12 @@
                       " step, plus the overall height."
                       "\nHighlight the side view of the steps, then press"
                       " Enter."))
-      (setq ss (ssget '((0 . "LINE,LWPOLYLINE"))))))
+      (setq ss (ssget (ad:stairfilter)))))
   (if (null ss)
     (prompt "\nNothing highlighted - AUTODIMSIDEPOV cancelled.")
     (progn
       (setq oldcmd (getvar "CMDECHO")
-            olddim (getvar "DIMSTYLE")
-            oldlay (getvar "CLAYER"))
+            olddim (getvar "DIMSTYLE"))
       (setvar "CMDECHO" 0)
       (ad:begin)
       ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -33754,7 +34716,7 @@
         (progn
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
-      (ad:setlayer "DIMENSION")
+      (setq oldlay (ad:enterlayer ad:*steps-layer*))
       ;; told these are steps, so every vertical is taken as a riser -
       ;; no staircase test here, unlike AUTODIM's own side-view branch
       (setq risers (ad:risers ss))
@@ -33765,12 +34727,12 @@
           (setq chain (ad:stepchain risers)
                 ;; dims go on the high side of the steps
                 sx    (if (>= (car (car chain)) (car (last chain))) 1.0 -1.0)
-                cnt   (ad:dimsteps chain sx nil ad:*style-short*))
+                cnt   (ad:dimsteps chain sx nil ad:*style-steps*))
           (prompt (strcat "\n" (itoa cnt) " step dimension(s) placed."))
           (ad:skipreport)))
       (ad:usestyle olddim)
-      (setvar "CLAYER" oldlay)
-      (command "_.UNDO" "_End")
+      (if oldlay (setvar "CLAYER" oldlay))
+      (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
       (setvar "CMDECHO" oldcmd)))
   (princ))
@@ -36011,7 +36973,7 @@
 ;;;       are asked to pick the two you mean.
 ;;;   2.  If the two walls intersect at a point, that intersection is
 ;;;       the starting point.
-;;;   3.  Choose the draw direction [Inside out/Outside in]:
+;;;   3.  Choose the draw direction [Inside/Outside]:
 ;;;         INSIDE OUT (default) - steps are built from the corner out
 ;;;         toward the pool from given step treads and step widths.
 ;;;         OUTSIDE IN - the furthest (outermost) step is placed first
@@ -36123,23 +37085,17 @@
 ;;;   clears the widest tread in the flight, which is what keeps both
 ;;;   extension lines running forward, out of the steps.
 ;;;
-;;; OPTIONAL SETTINGS (set these before running the command)
-;;;   *CS-WIDTH-TOL*      step width tolerance in drawing units.  When
-;;;                       nil (the default) it is 1/8" converted through
-;;;                       the drawing's INSUNITS setting.
-;;;   *CS-DEPTH-DIMSTYLE* dim style for step-tread dims (also used by
-;;;                       the side-profile dims).
-;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
-;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
-;;;                       default) the current layer is used.
-;;;   *CS-PROFILE-DIMGAP* how far the side profile's dims stand off the
-;;;                       flight, on top of the clearance the geometry
-;;;                       needs.  nil (the default) is four text
-;;;                       heights or three quarters of a tread,
-;;;                       whichever is more, so the fan keeps its
-;;;                       proportions whether or not the drawing has a
-;;;                       dim scale set up.  It also sets how much
-;;;                       further out again the overall depth sits.
+;;; THE SETTINGS
+;;;   Every number this routine can be told to draw differently is a
+;;;   setting at the top of the file, under SETTINGS, one per knob with
+;;;   what it does and what it defaults to - the width tolerance and the
+;;;   inches it is derived from, the two dim styles and the dim layer,
+;;;   how far the tread chain stands off the run and how far the width
+;;;   dims nest behind it, the nearly-parallel warning, and the side
+;;;   profile's dim gap.  setq one before running the command and the
+;;;   next run picks it up.  There is nothing to change further down:
+;;;   the code reads every one of them through a helper that falls back
+;;;   to the shipped default when the value cannot be used.
 ;;;
 ;;; NOTES
 ;;;   - Geometry is assumed to be drawn in plan view.  The routine warns
@@ -36158,25 +37114,84 @@
 ;;;     picks are always made by hand.
 ;;; ======================================================================
 
-;; Settings - only defined if not already set, so the two routines that
-;; share them stay in sync no matter which file loads first.
+;;; ------------------------------ SETTINGS ------------------------------
+;;;  THE KNOBS, all of them, in one place.  Each is defined only if it
+;;;  is not already set, so the three step routines share ONE set of
+;;;  settings whichever file loads first and a value set before loading
+;;;  them stands.  setq one at the command line - or in acaddoc.lsp -
+;;;  and the next run picks it up.
+;;;
+;;;  Deliberately NOT settings: the epsilons the geometry compares
+;;;  against (a point is on a line or it is not), the temporary vectors
+;;;  the run previews itself with, the direction the side profile reads
+;;;  (down and to the left, the way the shop's elevations do), and the
+;;;  bead itself - that is AUTOBEAD's work, on AUTOBEAD's own settings.
+
+;; Step width tolerance, in drawing units: a step whose requested width
+;; is within this of the wall opening it lands in is snapped to the
+;; walls; any other width is held exactly and breaks away from them.
+;; nil = derive it from *cs-tol-inch* through the drawing's INSUNITS.
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
-(if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
+(if (not (boundp '*cs-width-tol*)) (setq *cs-width-tol* nil))
+
+;; What that tolerance is in INCHES when it is derived - the shop reads
+;; it as 1/8".  Raise it to let a wider mismatch still snap to the
+;; walls; 0.0 snaps only an exact fit.
+(if (not (boundp '*cs-tol-inch*)) (setq *cs-tol-inch* 0.125))
+
+;; Dim style for the step-tread dims - the side profile's depth dims
+;; use it too.  A style the drawing does not have is reported at the
+;; start of the run and the current style is used instead.
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
+
+;; Dim style for the step-width dims, with the same fallback.
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
-;; How far the side profile's dims stand off the flight, on top of the
-;; clearance the geometry itself needs.  nil = four text heights, which
-;; is what the shop's own elevations read like; raise it to open the
-;; fan out further, lower it to tuck the dims in.
+
+;; Layer the dimensions are drawn on.  nil = the current layer; a layer
+;; that is missing, off, frozen or locked is reported and the current
+;; layer is used, so a run never draws dims where they cannot be seen.
+(if (not (boundp '*cs-dim-layer*)) (setq *cs-dim-layer* nil))
+
+;; How far the step-tread dim chain stands off the run's axis, in TEXT
+;; HEIGHTS - so it tracks DIMSCALE (or the annotation scale) instead of
+;; the drawing's size.  2.0 keeps the chain clear of its own text.
+(if (not (boundp '*cs-dim-offset*)) (setq *cs-dim-offset* 2.0))
+
+;; How far a step-width dim sits behind the corner, in text heights, on
+;; top of half that step's own width.  The half-width is what nests the
+;; wider steps progressively further out; this is the gap on top of it.
+(if (not (boundp '*cs-dim-nest*)) (setq *cs-dim-nest* 1.5))
+
+;; CORNERSTP only.  The tread chain also clears this fraction of the
+;; first step's width, so a wide run does not run its chain through the
+;; steps; the larger of it and *cs-dim-offset* wins.
+(if (not (boundp '*cs-chain-frac*)) (setq *cs-chain-frac* 0.2))
+
+;; CORNERSTP only.  How close to parallel, in DEGREES, the two selected
+;; walls may be before the run says the corner it found is a long way
+;; off.  It warns and carries on - it never refuses the selection.
+(if (not (boundp '*cs-parallel-tol*)) (setq *cs-parallel-tol* 1.0))
+
+;; How far the side profile's dims stand off the flight, in drawing
+;; units, on top of the clearance the geometry itself needs.  nil = the
+;; larger of the two terms below, which is what the shop's own
+;; elevations read like; raise it to open the fan out further, lower it
+;; to tuck the dims in.  It also sets how much further out again the
+;; overall depth sits.
 (if (not (boundp '*cs-profile-dimgap*)) (setq *cs-profile-dimgap* nil))
+
+;; The two terms of that default: text heights, and a fraction of the
+;; widest tread in the flight.  Keeping both is what makes the fan hold
+;; its proportions whether or not the drawing has a dim scale set up.
+(if (not (boundp '*cs-profile-gap-txt*)) (setq *cs-profile-gap-txt* 4.0))
+(if (not (boundp '*cs-profile-gap-tread*)) (setq *cs-profile-gap-tread* 0.75))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.0") ; printed on load and at command start so a
+(setq *cs-version* "v4.1") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -36385,19 +37400,59 @@
   (cs-mid2 (cdr (assoc 10 ed)) (cdr (assoc 11 ed))))
 
 ;;; ------------------------- setting helpers ----------------------------
+;;;  Every setting is read through one of these rather than straight out
+;;;  of the global, and the fallback in each is the value the SETTINGS
+;;;  block initialises that setting to: a setting somebody set to
+;;;  something unusable - a string where a number belongs, a symbol -
+;;;  then costs the shipped behaviour and nothing else, instead of
+;;;  failing in the middle of a run.  tests/test_steps_settings.py holds
+;;;  the two copies of each number together.
 
-;; 1/8" expressed in the drawing's units (INSUNITS); inches if unitless
-(defun cs-autotol ( / iu)
-  (setq iu (getvar "INSUNITS"))
-  (cond ((= iu 1) 0.125)            ; inches
-        ((= iu 2) (/ 0.125 12.0))   ; feet
-        ((= iu 4) 3.175)            ; millimeters
-        ((= iu 5) 0.3175)           ; centimeters
-        ((= iu 6) 0.003175)         ; meters
-        (T        0.125)))          ; unitless - assume inches
+;; A setting that has to be a number: V when it is one, DFLT when it is
+;; not.
+(defun cs-num (v dflt) (if (numberp v) v dflt))
+
+;; *cs-tol-inch* expressed in the drawing's units (INSUNITS); inches
+;; when the drawing is unitless
+(defun cs-autotol ( / iu b)
+  (setq iu (getvar "INSUNITS")
+        b  (cs-num *cs-tol-inch* 0.125))
+  (cond ((= iu 2) (/ b 12.0))     ; feet
+        ((= iu 4) (* b 25.4))     ; millimeters
+        ((= iu 5) (* b 2.54))     ; centimeters
+        ((= iu 6) (* b 0.0254))   ; meters
+        (T        b)))            ; inches, or unitless - assume inches
 
 (defun cs-tolerance ( )
   (if (numberp *cs-width-tol*) *cs-width-tol* (cs-autotol)))
+
+;; The nearly-parallel warning threshold in RADIANS, which is what the
+;; angle test has; the setting is in degrees, which is how a drafter
+;; reads it.
+(defun cs-partol ( ) (* pi (/ (cs-num *cs-parallel-tol* 1.0) 180.0)))
+
+;; How far the step-tread dim chain stands off the run's axis.
+(defun cs-dimoff (txth) (* (cs-num *cs-dim-offset* 2.0) txth))
+
+;; How far a step-width dim sits behind the corner: half that step's
+;; own width - which is what nests the wider steps further out - plus
+;; the standoff on top of it.
+(defun cs-nestoff (w txth)
+  (+ (* 0.5 w) (* (cs-num *cs-dim-nest* 1.5) txth)))
+
+;; The tread chain's standoff off the bisector, which also clears a
+;; fraction of the first step's width so a wide run keeps its chain out
+;; of the steps.
+(defun cs-chainoff (w txth)
+  (max (cs-dimoff txth) (* (cs-num *cs-chain-frac* 0.2) w)))
+
+;; How far the side profile's dims stand off the flight, WIDEST being
+;; the widest tread in it.
+(defun cs-pgap (txth widest)
+  (if (numberp *cs-profile-dimgap*)
+    *cs-profile-dimgap*
+    (max (* (cs-num *cs-profile-gap-txt* 4.0) txth)
+         (* (cs-num *cs-profile-gap-tread* 0.75) widest))))
 
 ;; annotation text height in drawing units; DIMSCALE is 0 for
 ;; annotative dim styles, where the annotation scale governs instead
@@ -36815,7 +37870,7 @@
            (exit)))
   (setq ang (abs (- (angle (car w1) (cadr w1)) (angle (car w2) (cadr w2)))))
   (while (> ang pi) (setq ang (- ang pi)))
-  (if (or (< ang 0.0175) (> ang (- pi 0.0175)))
+  (if (or (< ang (cs-partol)) (> ang (- pi (cs-partol))))
     (princ (strcat "\nWARNING: the two walls are nearly parallel; the"
                    " corner is "
                    (rtos (distance corner (cs-mid2 (car w1) (cadr w1))))
@@ -37074,13 +38129,12 @@
                     (if dimflag
                       (progn
                         (if (null offd)
-                          (setq offd (max (* 2.0 txth) (* 0.2 w))))
+                          (setq offd (cs-chainoff w txth)))
                         ;; step width: nested just outside the corner
                         (cs-dim *cs-width-dimstyle* e1 e2
                                 (cs-add corner
                                         (cs-scl bis
-                                                (- (+ (* 0.5 w)
-                                                      (* 1.5 txth))))))
+                                                (- (cs-nestoff w txth)))))
                         ;; step tread: chain link back out to the
                         ;; previous (next-further-out) tread
                         (if pprev
@@ -37216,7 +38270,7 @@
             (progn
               (setq w (distance e1 e2))
               ;; fix the tread chain's side offset once, off the bisector
-              (if (null offd) (setq offd (max (* 2.0 txth) (* 0.2 w))))
+              (if (null offd) (setq offd (cs-chainoff w txth)))
               ;; step tread: link of a chain along the bisector, from the
               ;; previous tread crossing (p - bis*dep) to this one (p)
               (cs-dim *cs-depth-dimstyle*
@@ -37228,8 +38282,7 @@
               ;; wider (deeper) steps stack progressively further out
               (cs-dim *cs-width-dimstyle*
                       e1 e2
-                      (cs-add corner
-                              (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))))
+                      (cs-add corner (cs-scl bis (- (cs-nestoff w txth)))))))
           (setq prevL e1 prevR e2 pprev p drawn (1+ drawn)
                 slog (cons (list (cs-since mark) svdist svl svr svp svt svn)
                            slog)
@@ -37266,12 +38319,12 @@
              ;; its length, placed behind the wall
              (cs-dim *cs-width-dimstyle* bns bnff
                      (cs-add (cs-mid2 bns bnff)
-                             (cs-scl bnrm (- (+ bno (* 2.0 txth))))))
+                             (cs-scl bnrm (- (+ bno (cs-dimoff txth))))))
              ;; its offset off the wall, just past the cap
              (cs-dim *cs-depth-dimstyle* bnfar bnff
                      (cs-add (cs-mid2 bnfar bnff)
                              (cs-scl (cs-unit (cs-vec corner bnfar))
-                                     (* 2.0 txth))))))
+                                     (cs-dimoff txth))))))
          (princ (strcat "\nBench drawn: " (rtos (distance bns bnff))
                         " along the wall, " (rtos bno)
                         " off it, ending on step " (itoa bnk) "."))))))
@@ -37383,14 +38436,9 @@
                       ;; in one chain.  Clearing the widest tread is what
                       ;; keeps BOTH extension lines running forward, out of
                       ;; the flight; the gap on top of that is what makes
-                      ;; the fan readable, and *cs-profile-dimgap* sets it.
-                      ;; four text heights, or three quarters of a tread -
-                      ;; whichever is more, so the fan keeps its proportions
-                      ;; whether or not the drawing has a dim scale set up
-                      (setq pgap (cond ((numberp *cs-profile-dimgap*)
-                                        *cs-profile-dimgap*)
-                                       ((max (* 4.0 txth)
-                                             (* 0.75 (apply 'max tds)))))
+                      ;; the fan readable, and cs-pgap - *cs-profile-dimgap*
+                      ;; and the two terms of its default - is what sets it
+                      (setq pgap (cs-pgap txth (apply 'max tds))
                             pfo  (+ (apply 'max tds) pgap)
                             ix   1)
                       (while (< ix (length cnrs))
@@ -37423,11 +38471,14 @@
   (if (and diag (nth 3 diag)) (redraw (nth 3 diag) 4))
   (redraw)
   (if oldstyle (cs-setstyle oldstyle))   ; back to the entry dim style
-  (command "_.UNDO" "_End")
+  ;; close only a group this run opened: in a drawing with UNDO off
+  ;; none was, and _End on no group is an error of its own
+  (if undoflag
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (if oldce (setvar "CMDECHO" oldce))
   (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
-  (setq undoflag nil)
 
   ;; ---- 11. bead the steps -----------------------------------------------
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
@@ -37548,7 +38599,7 @@
   (princ "\n  - optionally a chamfer diagonal or a fillet arc with them")
   (princ "\n  - more than two straight walls: it asks you to pick the two")
   (princ "\nTHE PROMPTS, IN ORDER")
-  (princ "\n  1. Draw steps [Inside out/Outside in]")
+  (princ "\n  1. Draw steps [Inside/Outside]")
   (princ "\n     Inside out: corner outward - each step asks step tread,")
   (princ "\n       then width (Enter fits the step to the walls).")
   (princ "\n     Outside in: the width of the furthest step places it")
@@ -37650,13 +38701,13 @@
     (cs-conn prevL e1 w1 w2)
     (cs-conn prevR e2 w1 w2)
     (setq w (distance e1 e2))
-    (if (null offd) (setq offd (max (* 2.0 txth) (* 0.2 w))))
+    (if (null offd) (setq offd (cs-chainoff w txth)))
     (cs-dim *cs-depth-dimstyle*
             (cs-add p (cs-scl bis (- dep))) p
             (cs-add (cs-add p (cs-scl bis (* -0.5 dep)))
                     (cs-scl perp offd)))
     (cs-dim *cs-width-dimstyle* e1 e2
-            (cs-add org (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))
+            (cs-add org (cs-scl bis (- (cs-nestoff w txth)))))
     (cond
       ((= n 1)
        (princ "\n[2] Step 1: step tread 24, width 48.  The wall opening")
@@ -37676,8 +38727,9 @@
     (setq prevL e1 prevR e2 n (1+ n)))
 
   (if oldstyle (cs-setstyle oldstyle))
-  (command "_.UNDO" "_End")
-  (setq undoflag nil)
+  (if undoflag                           ; only a group this run opened
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (setvar "CMDECHO" oldce)
   (princ "\n[5] Done.  One U removes this whole demo.  Now try it for")
   (princ "\n    real: type CORNERSTP, select two wall lines of a corner,")
@@ -37834,23 +38886,16 @@
 ;;;   riser line) keeps the extension lines hooked to the geometry
 ;;;   while the dim still reads the drop, not the slope.
 ;;;
-;;; OPTIONAL SETTINGS (set these before running the command)
-;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
-;;;                       (the default) it is 1/8" converted through the
-;;;                       drawing's INSUNITS setting.
-;;;   *CS-DEPTH-DIMSTYLE* dim style for step-tread dims (the side
-;;;                       profile's dims use it too).
-;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
-;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
-;;;                       default) the current layer is used.
-;;;   *CS-PROFILE-DIMGAP* how far the side profile's dims stand off the
-;;;                       flight, on top of the clearance the geometry
-;;;                       needs.  nil (the default) is four text
-;;;                       heights or three quarters of a tread,
-;;;                       whichever is more, so the fan keeps its
-;;;                       proportions whether or not the drawing has a
-;;;                       dim scale set up.  It also sets how much
-;;;                       further out again the overall depth sits.
+;;; THE SETTINGS
+;;;   Every number this routine can be told to draw differently is a
+;;;   setting at the top of the file, under SETTINGS, one per knob with
+;;;   what it does and what it defaults to - the width tolerance and the
+;;;   inches it is derived from, the two dim styles and the dim layer,
+;;;   how far the tread chain stands off the axis and how far the width
+;;;   dims nest behind the start of it, and the side profile's dim gap.
+;;;   setq one before running the command and the next run picks it up.
+;;;   They are shared with CORNERSTP and NORMIESTEP, which is why they
+;;;   are *cs- names: one set of knobs for the three step routines.
 ;;;
 ;;; NOTES
 ;;;   - Geometry is assumed to be drawn in plan view.  The routine warns
@@ -37869,25 +38914,75 @@
 ;;;     picks are always made by hand.
 ;;; ======================================================================
 
-;; Settings - only defined if not already set, so this file and
-;; CORNERSTP.lsp stay in sync no matter which one loads first.
+;;; ------------------------------ SETTINGS ------------------------------
+;;;  THE KNOBS, all of them, in one place.  Each is defined only if it
+;;;  is not already set, so this file, CORNERSTP.lsp and NORMIESTEP.lsp
+;;;  share ONE set of settings whichever loads first and a value set
+;;;  before loading them stands.  setq one at the command line - or in
+;;;  acaddoc.lsp - and the next run picks it up.
+;;;
+;;;  Deliberately NOT settings: the epsilons the geometry compares
+;;;  against (a point is on the curve or it is not), the temporary
+;;;  vectors the run previews itself with, the direction the side
+;;;  profile reads (down and to the left, the way the shop's elevations
+;;;  do), and the bead - that is AUTOBEAD's work, on its own settings.
+
+;; Step width tolerance, in drawing units: a step whose requested width
+;; is within this of the curve's opening at that distance is snapped to
+;; the curve; any other width is held exactly and breaks away from it.
+;; nil = derive it from *cs-tol-inch* through the drawing's INSUNITS.
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
-(if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
+(if (not (boundp '*cs-width-tol*)) (setq *cs-width-tol* nil))
+
+;; What that tolerance is in INCHES when it is derived - the shop reads
+;; it as 1/8".  Raise it to let a wider mismatch still snap to the
+;; curve; 0.0 snaps only an exact fit.
+(if (not (boundp '*cs-tol-inch*)) (setq *cs-tol-inch* 0.125))
+
+;; Dim style for the step-tread dims - the side profile's depth dims
+;; use it too.  A style the drawing does not have is reported at the
+;; start of the run and the current style is used instead.
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
+
+;; Dim style for the step-width dims, with the same fallback.
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
-;; How far the side profile's dims stand off the flight, on top of the
-;; clearance the geometry itself needs.  nil = four text heights, which
-;; is what the shop's own elevations read like; raise it to open the
-;; fan out further, lower it to tuck the dims in.
+
+;; Layer the dimensions are drawn on.  nil = the current layer; a layer
+;; that is missing, off, frozen or locked is reported and the current
+;; layer is used, so a run never draws dims where they cannot be seen.
+(if (not (boundp '*cs-dim-layer*)) (setq *cs-dim-layer* nil))
+
+;; How far the step-tread dim chain stands off the measuring axis, in
+;; TEXT HEIGHTS - so it tracks DIMSCALE (or the annotation scale)
+;; instead of the drawing's size.  2.0 keeps it clear of its own text.
+(if (not (boundp '*cs-dim-offset*)) (setq *cs-dim-offset* 2.0))
+
+;; How far a step-width dim sits behind the start of the axis, in text
+;; heights, on top of half that step's own width.  The half-width is
+;; what nests the wider steps progressively further out; this is the
+;; gap on top of it.
+(if (not (boundp '*cs-dim-nest*)) (setq *cs-dim-nest* 1.5))
+
+;; How far the side profile's dims stand off the flight, in drawing
+;; units, on top of the clearance the geometry itself needs.  nil = the
+;; larger of the two terms below, which is what the shop's own
+;; elevations read like; raise it to open the fan out further, lower it
+;; to tuck the dims in.  It also sets how much further out again the
+;; overall depth sits.
 (if (not (boundp '*cs-profile-dimgap*)) (setq *cs-profile-dimgap* nil))
+
+;; The two terms of that default: text heights, and a fraction of the
+;; widest tread in the flight.  Keeping both is what makes the fan hold
+;; its proportions whether or not the drawing has a dim scale set up.
+(if (not (boundp '*cs-profile-gap-txt*)) (setq *cs-profile-gap-txt* 4.0))
+(if (not (boundp '*cs-profile-gap-tread*)) (setq *cs-profile-gap-tread* 0.75))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.12") ; printed on load and at command start so a
+(setq *hs-version* "v3.13") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -38256,37 +39351,60 @@
   (setq ed (entget e))
   (hs-mid2 (cdr (assoc 10 ed)) (cdr (assoc 11 ed))))
 
-;;; ------------------------- drawing helpers ----------------------------
+;;; ------------------------- setting helpers ----------------------------
+;;;  Every setting is read through one of these rather than straight out
+;;;  of the global, and the fallback in each is the value the SETTINGS
+;;;  block initialises that setting to: a setting somebody set to
+;;;  something unusable - a string where a number belongs, a symbol -
+;;;  then costs the shipped behaviour and nothing else, instead of
+;;;  failing in the middle of a run.  tests/test_steps_settings.py holds
+;;;  the two copies of each number together.
 
-(defun hs-mkline (a b)
-  (entmake (list '(0 . "LINE")
-                 (cons 10 (list (car a) (cadr a) 0.0))
-                 (cons 11 (list (car b) (cadr b) 0.0)))))
+;; A setting that has to be a number: V when it is one, DFLT when it is
+;; not.
+(defun hs-num (v dflt) (if (numberp v) v dflt))
 
-;; 1/8" expressed in the drawing's units (INSUNITS); inches if unitless
-(defun hs-autotol ( / iu)
-  (setq iu (getvar "INSUNITS"))
-  (cond ((= iu 1) 0.125)            ; inches
-        ((= iu 2) (/ 0.125 12.0))   ; feet
-        ((= iu 4) 3.175)            ; millimeters
-        ((= iu 5) 0.3175)           ; centimeters
-        ((= iu 6) 0.003175)         ; meters
-        (T        0.125)))          ; unitless - assume inches
+;; *cs-tol-inch* expressed in the drawing's units (INSUNITS); inches
+;; when the drawing is unitless
+(defun hs-autotol ( / iu b)
+  (setq iu (getvar "INSUNITS")
+        b  (hs-num *cs-tol-inch* 0.125))
+  (cond ((= iu 2) (/ b 12.0))     ; feet
+        ((= iu 4) (* b 25.4))     ; millimeters
+        ((= iu 5) (* b 2.54))     ; centimeters
+        ((= iu 6) (* b 0.0254))   ; meters
+        (T        b)))            ; inches, or unitless - assume inches
 
 (defun hs-tolerance ( )
   (if (numberp *cs-width-tol*) *cs-width-tol* (hs-autotol)))
 
-;; annotation text height in drawing units; DIMSCALE is 0 for
-;; annotative dim styles, where the annotation scale governs instead
+;; How far the step-tread dim chain stands off the measuring axis.
+(defun hs-dimoff (txth) (* (hs-num *cs-dim-offset* 2.0) txth))
+
+;; How far a step-width dim sits behind the start of the axis: half
+;; that step's own width - which is what nests the wider steps further
+;; out - plus the standoff on top of it.
+(defun hs-nestoff (w txth)
+  (+ (* 0.5 w) (* (hs-num *cs-dim-nest* 1.5) txth)))
+
+;; How far the side profile's dims stand off the flight, WIDEST being
+;; the widest tread in it.
+(defun hs-pgap (txth widest)
+  (if (numberp *cs-profile-dimgap*)
+    *cs-profile-dimgap*
+    (max (* (hs-num *cs-profile-gap-txt* 4.0) txth)
+         (* (hs-num *cs-profile-gap-tread* 0.75) widest))))
+
 ;; The widest tread, for spacing the side profile's dimensions.  The
 ;; list is empty when every logged step landed within 1e-6 of the one
 ;; before it -- (apply 'max nil) is an error, so a degenerate run
 ;; falls back to plain text-height spacing.  CORNERSTP skips its whole
 ;; profile in that case (CORNERSTP.lsp, "No usable tread spacing").
 (defun hs-maxtread (treads)
-  (if treads (apply 'max treads) 0.0)
-)
+  (if treads (apply 'max treads) 0.0))
 
+;; annotation text height in drawing units; DIMSCALE is 0 for
+;; annotative dim styles, where the annotation scale governs instead
 (defun hs-txth ( / h s)
   (setq h (getvar "DIMTXT")
         s (getvar "DIMSCALE"))
@@ -38296,6 +39414,13 @@
                    (/ 1.0 (getvar "CANNOSCALEVALUE")))
                   (1.0))))
   (if (and h (> (* h s) 0.0)) (* h s) 1.0))
+
+;;; ------------------------- drawing helpers ----------------------------
+
+(defun hs-mkline (a b)
+  (entmake (list '(0 . "LINE")
+                 (cons 10 (list (car a) (cadr a) 0.0))
+                 (cons 11 (list (car b) (cadr b) 0.0)))))
 
 ;; make dimension style NAME current, but only if it exists and is not
 ;; already current.  Uses ActiveX so style names containing spaces are
@@ -38702,7 +39827,7 @@
       (setq undoflag T)))
   (setq cum 0.0 n 1 drawn 0
         pprev sp                        ; tread chain starts at the axis
-        offd  (* 2.0 txth)              ; tread-dim offset off the axis
+        offd  (hs-dimoff txth)          ; tread-dim offset off the axis
         oldce (getvar "CMDECHO")
         oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                  ; quiet the dimstyle/dim commands
@@ -38727,8 +39852,7 @@
                 lastwid wid)
           (if dimflag
             (hs-dim *cs-width-dimstyle* wallA wallB
-                    (hs-add sp (hs-scl dir (- (+ (* 0.5 wid)
-                                                 (* 1.5 txth)))))))
+                    (hs-add sp (hs-scl dir (- (hs-nestoff wid txth))))))
           (princ (strcat "\n  Width at the wall: " (rtos wid) "."))))))
 
   (while
@@ -38852,8 +39976,8 @@
                 (hs-dim *cs-width-dimstyle* e1 e2
                         (hs-add sp
                                 (hs-scl dir
-                                        (- (+ (* 0.5 (distance e1 e2))
-                                              (* 1.5 txth))))))
+                                        (- (hs-nestoff (distance e1 e2)
+                                                       txth)))))
                 ;; step tread: chain link along the axis, from the
                 ;; previous step edge (the start for step 1) to here
                 (hs-dim *cs-depth-dimstyle* pprev p
@@ -39047,14 +40171,9 @@
                   ;; in one chain.  Clearing the widest tread is what
                   ;; keeps BOTH extension lines running forward, out of
                   ;; the flight; the gap on top of that is what makes
-                  ;; the fan readable, and *cs-profile-dimgap* sets it.
-                  ;; four text heights, or three quarters of a tread -
-                  ;; whichever is more, so the fan keeps its proportions
-                  ;; whether or not the drawing has a dim scale set up
-                  (setq pgap (cond ((numberp *cs-profile-dimgap*)
-                                    *cs-profile-dimgap*)
-                                   ((max (* 4.0 txth)
-                                         (* 0.75 (hs-maxtread treads)))))
+                  ;; the fan readable, and hs-pgap - *cs-profile-dimgap*
+                  ;; and the two terms of its default - is what sets it
+                  (setq pgap (hs-pgap txth (hs-maxtread treads))
                         pfo  (+ (hs-maxtread treads) pgap)
                         jx   1)
                   (while (< jx (length cnrs))
@@ -39083,11 +40202,14 @@
                    " step(s) drawn, parallel and centered on the axis.")))
   (redraw)
   (if oldstyle (hs-setstyle oldstyle))   ; back to the entry dim style
-  (command "_.UNDO" "_End")
+  ;; close only a group this run opened: in a drawing with UNDO off
+  ;; none was, and _End on no group is an error of its own
+  (if undoflag
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (if oldce (setvar "CMDECHO" oldce))
   (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
-  (setq undoflag nil)
 
   ;; ---- 8. bead the steps -----------------------------------------------
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
@@ -39286,7 +40408,7 @@
   (princ "\n    both ends of the boundary but draws no chord.")
   (setq wallA (hs-add sp (hs-scl u (* 0.5 wallw)))
         wallB (hs-add sp (hs-scl u (* -0.5 wallw)))
-        offd  (* 2.0 txth)
+        offd  (hs-dimoff txth)
         pprev sp
         cum   0.0
         n     1)
@@ -39304,7 +40426,7 @@
     (setq ea (append ea (list e1))
           eb (append eb (list e2)))
     (hs-dim *cs-width-dimstyle* e1 e2
-            (hs-add sp (hs-scl dir (- (+ (* 0.5 wid) (* 1.5 txth))))))
+            (hs-add sp (hs-scl dir (- (hs-nestoff wid txth)))))
     (hs-dim *cs-depth-dimstyle* pprev p
             (hs-add (hs-mid2 pprev p) (hs-scl u offd)))
     (princ (strcat "\n[" (itoa (1+ n)) "] Step " (itoa n) ": width "
@@ -39327,8 +40449,9 @@
   (hs-tut-pause)
 
   (if oldstyle (hs-setstyle oldstyle))
-  (command "_.UNDO" "_End")
-  (setq undoflag nil)
+  (if undoflag                           ; only a group this run opened
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (setvar "CMDECHO" oldce)
   (princ "\n[7] Done.  One U removes the demo.  For the curve modes, draw")
   (princ "\n    an arc and run HEMISTEP selecting it (plus an axis line if")
@@ -39492,23 +40615,17 @@
 ;;;   riser line) keeps the extension lines hooked to the geometry
 ;;;   while the dim still reads the drop, not the slope.
 ;;;
-;;; OPTIONAL SETTINGS (set these before running the command)
-;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
-;;;                       (the default) it is 1/8" converted through the
-;;;                       drawing's INSUNITS setting.
-;;;   *CS-DEPTH-DIMSTYLE* dim style for step-tread dims (the side
-;;;                       profile's dims use it too).
-;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
-;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
-;;;                       default) the current layer is used.
-;;;   *CS-PROFILE-DIMGAP* how far the side profile's dims stand off the
-;;;                       flight, on top of the clearance the geometry
-;;;                       needs.  nil (the default) is four text
-;;;                       heights or three quarters of a tread,
-;;;                       whichever is more, so the fan keeps its
-;;;                       proportions whether or not the drawing has a
-;;;                       dim scale set up.  It also sets how much
-;;;                       further out again the overall depth sits.
+;;; THE SETTINGS
+;;;   Every number this routine can be told to draw differently is a
+;;;   setting at the top of the file, under SETTINGS, one per knob with
+;;;   what it does and what it defaults to - the width tolerance and the
+;;;   inches it is derived from, how close two ends must be to count as
+;;;   joined when a U is chained together, the two dim styles and the
+;;;   dim layer, how far the tread chain stands off the run and how far
+;;;   the width dim nests behind it, and the side profile's dim gap.
+;;;   setq one before running the command and the next run picks it up.
+;;;   They are shared with CORNERSTP and HEMISTEP, which is why they are
+;;;   *cs- names: one set of knobs for the three step routines.
 ;;;
 ;;; NOTES
 ;;;   - Geometry is assumed to be drawn in plan view.  The routine warns
@@ -39524,25 +40641,81 @@
 ;;;     picks are always made by hand.
 ;;; ======================================================================
 
-;; Settings - only defined if not already set, so this file, CORNERSTP
-;; and HEMISTEP stay in sync no matter which one loads first.
+;;; ------------------------------ SETTINGS ------------------------------
+;;;  THE KNOBS, all of them, in one place.  Each is defined only if it
+;;;  is not already set, so this file, CORNERSTP.lsp and HEMISTEP.lsp
+;;;  share ONE set of settings whichever loads first and a value set
+;;;  before loading them stands.  setq one at the command line - or in
+;;;  acaddoc.lsp - and the next run picks it up.
+;;;
+;;;  Deliberately NOT settings: the epsilons the geometry compares
+;;;  against (a point is on a line or it is not), the temporary vectors
+;;;  the run previews itself with, the direction the side profile reads
+;;;  (down and to the left, the way the shop's elevations do), and the
+;;;  bead - that is AUTOBEAD's work, on AUTOBEAD's own settings.
+
+;; Width tolerance, in drawing units.  Every step here is the one width
+;; you give, so this does not size a step: it is the slack the U mode
+;; measures with, and *cs-join-fuzz* below is derived from it.
+;; nil = derive it from *cs-tol-inch* through the drawing's INSUNITS.
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
-(if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
+(if (not (boundp '*cs-width-tol*)) (setq *cs-width-tol* nil))
+
+;; What that tolerance is in INCHES when it is derived - the shop reads
+;; it as 1/8".
+(if (not (boundp '*cs-tol-inch*)) (setq *cs-tol-inch* 0.125))
+
+;; NORMIESTEP only.  How far apart two ends may be, in drawing units,
+;; and still count as JOINED when the parts of a U are chained together
+;; - the setting that decides whether a U traced by hand is read as one
+;; outline or refused as parts that do not connect.  nil = four times
+;; the width tolerance; raise it for a sloppier outline, at the risk of
+;; joining two ends that were meant to stay apart.
+(if (not (boundp '*cs-join-fuzz*)) (setq *cs-join-fuzz* nil))
+
+;; Dim style for the step-tread dims - the side profile's depth dims
+;; use it too.  A style the drawing does not have is reported at the
+;; start of the run and the current style is used instead.
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
+
+;; Dim style for the step-width dim, with the same fallback.
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
-;; How far the side profile's dims stand off the flight, on top of the
-;; clearance the geometry itself needs.  nil = four text heights, which
-;; is what the shop's own elevations read like; raise it to open the
-;; fan out further, lower it to tuck the dims in.
+
+;; Layer the dimensions are drawn on.  nil = the current layer; a layer
+;; that is missing, off, frozen or locked is reported and the current
+;; layer is used, so a run never draws dims where they cannot be seen.
+(if (not (boundp '*cs-dim-layer*)) (setq *cs-dim-layer* nil))
+
+;; How far the step-tread dim chain stands off the run's axis, in TEXT
+;; HEIGHTS - so it tracks DIMSCALE (or the annotation scale) instead of
+;; the drawing's size.  2.0 keeps the chain clear of its own text, and
+;; the note a NotGiven corner leaves stands off by the same gap.
+(if (not (boundp '*cs-dim-offset*)) (setq *cs-dim-offset* 2.0))
+
+;; How far the step-width dim sits behind the wall, in text heights, on
+;; top of half the run's own width.
+(if (not (boundp '*cs-dim-nest*)) (setq *cs-dim-nest* 1.5))
+
+;; How far the side profile's dims stand off the flight, in drawing
+;; units, on top of the clearance the geometry itself needs.  nil = the
+;; larger of the two terms below, which is what the shop's own
+;; elevations read like; raise it to open the fan out further, lower it
+;; to tuck the dims in.  It also sets how much further out again the
+;; overall depth sits.
 (if (not (boundp '*cs-profile-dimgap*)) (setq *cs-profile-dimgap* nil))
+
+;; The two terms of that default: text heights, and a fraction of the
+;; widest tread in the flight.  Keeping both is what makes the fan hold
+;; its proportions whether or not the drawing has a dim scale set up.
+(if (not (boundp '*cs-profile-gap-txt*)) (setq *cs-profile-gap-txt* 4.0))
+(if (not (boundp '*cs-profile-gap-tread*)) (setq *cs-profile-gap-tread* 0.75))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.6") ; printed on load and at command start so a
+(setq *ns-version* "v3.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -39838,31 +41011,65 @@
   (ns-mid2 (cdr (assoc 10 ed)) (cdr (assoc 11 ed))))
 
 ;;; ------------------------- setting helpers ----------------------------
+;;;  Every setting is read through one of these rather than straight out
+;;;  of the global, and the fallback in each is the value the SETTINGS
+;;;  block initialises that setting to: a setting somebody set to
+;;;  something unusable - a string where a number belongs, a symbol -
+;;;  then costs the shipped behaviour and nothing else, instead of
+;;;  failing in the middle of a run.  tests/test_steps_settings.py holds
+;;;  the two copies of each number together.
 
-;; 1/8" expressed in the drawing's units (INSUNITS); inches if unitless
-(defun ns-autotol ( / iu)
-  (setq iu (getvar "INSUNITS"))
-  (cond ((= iu 1) 0.125)            ; inches
-        ((= iu 2) (/ 0.125 12.0))   ; feet
-        ((= iu 4) 3.175)            ; millimeters
-        ((= iu 5) 0.3175)           ; centimeters
-        ((= iu 6) 0.003175)         ; meters
-        (T        0.125)))          ; unitless - assume inches
+;; A setting that has to be a number: V when it is one, DFLT when it is
+;; not.
+(defun ns-num (v dflt) (if (numberp v) v dflt))
+
+;; *cs-tol-inch* expressed in the drawing's units (INSUNITS); inches
+;; when the drawing is unitless
+(defun ns-autotol ( / iu b)
+  (setq iu (getvar "INSUNITS")
+        b  (ns-num *cs-tol-inch* 0.125))
+  (cond ((= iu 2) (/ b 12.0))     ; feet
+        ((= iu 4) (* b 25.4))     ; millimeters
+        ((= iu 5) (* b 2.54))     ; centimeters
+        ((= iu 6) (* b 0.0254))   ; meters
+        (T        b)))            ; inches, or unitless - assume inches
 
 (defun ns-tolerance ( )
   (if (numberp *cs-width-tol*) *cs-width-tol* (ns-autotol)))
 
-;; annotation text height in drawing units; DIMSCALE is 0 for
-;; annotative dim styles, where the annotation scale governs instead
+;; How far apart two ends may be and still count as joined when the
+;; parts of a U are chained together.  Never less than 1e-6: two ends
+;; at the same point have to join whatever the setting says.
+(defun ns-fuzz (tol)
+  (max (ns-num *cs-join-fuzz* (* 4.0 tol)) 1e-6))
+
+;; How far the step-tread dim chain stands off the run's axis - and how
+;; far a NotGiven corner's note stands off the corner it speaks for.
+(defun ns-dimoff (txth) (* (ns-num *cs-dim-offset* 2.0) txth))
+
+;; How far the step-width dim sits behind the wall: half the run's own
+;; width plus the standoff on top of it.
+(defun ns-nestoff (w txth)
+  (+ (* 0.5 w) (* (ns-num *cs-dim-nest* 1.5) txth)))
+
+;; How far the side profile's dims stand off the flight, WIDEST being
+;; the widest tread in it.
+(defun ns-pgap (txth widest)
+  (if (numberp *cs-profile-dimgap*)
+    *cs-profile-dimgap*
+    (max (* (ns-num *cs-profile-gap-txt* 4.0) txth)
+         (* (ns-num *cs-profile-gap-tread* 0.75) widest))))
+
 ;; The widest tread, for spacing the side profile's dimensions.  The
 ;; list is empty when every logged step landed within 1e-6 of the one
 ;; before it -- (apply 'max nil) is an error, so a degenerate run
 ;; falls back to plain text-height spacing.  CORNERSTP skips its whole
 ;; profile in that case (CORNERSTP.lsp, "No usable tread spacing").
 (defun ns-maxtread (treads)
-  (if treads (apply 'max treads) 0.0)
-)
+  (if treads (apply 'max treads) 0.0))
 
+;; annotation text height in drawing units; DIMSCALE is 0 for
+;; annotative dim styles, where the annotation scale governs instead
 (defun ns-txth ( / h s)
   (setq h (getvar "DIMTXT")
         s (getvar "DIMSCALE"))
@@ -40184,7 +41391,10 @@
       (setq fsteps (ns-ftake 'steps))
       (if (not (and (numberp fsteps) (> fsteps 0))) (setq fsteps nil))))
   (setq tol  (ns-tolerance)
-        txth (ns-txth))
+        txth (ns-txth)
+        ;; how far apart two ends may be and still count as joined
+        ;; when the parts of a U are chained together
+        fuzz (ns-fuzz tol))
   ;; Read distances architectural-style for the whole command: a bare
   ;; number is drawing units (inches in an inch-based drawing) and
   ;; feet-inch entry like 1'4 works whatever LUNITS was set to.
@@ -40197,6 +41407,10 @@
     (princ (strcat "\nWARNING: the current layer (" (getvar "CLAYER")
                    ") is off, frozen or locked - new steps may not"
                    " appear.")))
+  (if (zerop (getvar "INSUNITS"))
+    (princ (strcat "\nNote: drawing units are unitless; the width"
+                   " tolerance is taken as " (rtos tol)
+                   ", so ends within " (rtos fuzz) " count as joined.")))
 
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
@@ -40230,9 +41444,6 @@
   (if zf
     (princ (strcat "\nWARNING: a selected line is not flat (its ends"
                    " differ in Z) - it is used as seen in plan.")))
-  ;; endpoint fuzz for deciding what joins what
-  (setq fuzz (max (* 4.0 tol) 1e-6))
-
   (cond
     ((null segs)
      (princ "\nNo straight lines in the selection.") (exit))
@@ -40519,7 +41730,7 @@
   ;; and hemisphere routines (and the shop's own example drawings) do -
   ;; NOT outside the whole run, which would drag every chain dim's
   ;; extension lines across the entire step field.
-  (setq offd   (* 2.0 txth)
+  (setq offd   (ns-dimoff txth)
         dimoff (ns-scl u offd))
 
   ;; ---- 5. step treads, one per step ------------------------------------
@@ -40761,12 +41972,13 @@
             (T
              (setq ngp (ns-mid2 (car base) (cadr base))
                    ngv (ns-scl dir -1.0))))
-          (ns-note (ns-add ngp (ns-scl ngv (* 2.0 txth))) txth
+          (ns-note (ns-add ngp (ns-scl ngv (ns-dimoff txth))) txth
                    "CORNERS NOT GIVEN - DRAWN SQUARE")))
       (if dimflag
         (ns-dim *cs-width-dimstyle* first1 first2
-                (ns-add sp (ns-scl dir (- (+ (* 0.5 (distance first1 first2))
-                                             (* 1.5 txth)))))))))
+                (ns-add sp (ns-scl dir
+                                   (- (ns-nestoff (distance first1 first2)
+                                                  txth))))))))
 
   ;; ---- 6b. side profile ------------------------------------------------
   ;; The plan run gave each step's STEP TREAD; here each step's STEP
@@ -40876,14 +42088,9 @@
                   ;; in one chain.  Clearing the widest tread is what
                   ;; keeps BOTH extension lines running forward, out of
                   ;; the flight; the gap on top of that is what makes
-                  ;; the fan readable, and *cs-profile-dimgap* sets it.
-                  ;; four text heights, or three quarters of a tread -
-                  ;; whichever is more, so the fan keeps its proportions
-                  ;; whether or not the drawing has a dim scale set up
-                  (setq pgap (cond ((numberp *cs-profile-dimgap*)
-                                    *cs-profile-dimgap*)
-                                   ((max (* 4.0 txth)
-                                         (* 0.75 (ns-maxtread treads)))))
+                  ;; the fan readable, and ns-pgap - *cs-profile-dimgap*
+                  ;; and the two terms of its default - is what sets it
+                  (setq pgap (ns-pgap txth (ns-maxtread treads))
                         pfo  (+ (ns-maxtread treads) pgap)
                         k    1)
                   (while (< k (length cnrs))
@@ -40914,11 +42121,14 @@
                    ".")))
   (redraw)
   (if oldstyle (ns-setstyle oldstyle))
-  (command "_.UNDO" "_End")
+  ;; close only a group this run opened: in a drawing with UNDO off
+  ;; none was, and _End on no group is an error of its own
+  (if undoflag
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (if oldce (setvar "CMDECHO" oldce))
   (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
-  (setq undoflag nil)
 
   ;; ---- 8. bead the steps -----------------------------------------------
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
@@ -41128,7 +42338,9 @@
   (ns-tut-pause)
 
   (setq pprev sp cum 0.0 n 1
-        offd  (ns-scl u (+ (* 0.5 wid) (* 2.0 txth))))
+        ;; the demo puts its tread chain where the command puts it -
+        ;; just off the run's axis, not outside the whole run
+        offd  (ns-scl u (ns-dimoff txth)))
   (foreach lst '(12.0 12.0 12.0)
     ;; the LAST tread gives up the corner offset at each end - the real
     ;; command draws it full width and trims it once the run is known
@@ -41160,7 +42372,7 @@
   (ns-mkline e2 (ns-add e2 (ns-scl dir (- cum off))))
   (ns-outer e2 u dir cum "Cut" off)
   (ns-dim *cs-width-dimstyle* first1 first2
-          (ns-add sp (ns-scl dir (- (+ (* 0.5 wid) (* 1.5 txth))))))
+          (ns-add sp (ns-scl dir (- (ns-nestoff wid txth)))))
   (princ "\n[5] The SIDE WALLS close the run - square off the wall, from")
   (princ "\n    the wall to the LAST step, whose corners take the")
   (princ "\n    treatment: here CUT, so each one runs 9 back along")
@@ -41171,8 +42383,9 @@
   (ns-tut-pause)
 
   (if oldstyle (ns-setstyle oldstyle))
-  (command "_.UNDO" "_End")
-  (setq undoflag nil)
+  (if undoflag                           ; only a group this run opened
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (setvar "CMDECHO" oldce)
   (princ "\n[6] Done.  One U removes the demo.  Try the other modes too:")
   (princ "\n    two lines of a corner, or a U outline (even one with")
@@ -41299,7 +42512,76 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.5")
+(setq *lazstep-version* "v1.6")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them:
+;;;    lzt:*types*       the three routines, their titles and entry points
+;;;    lzt:*asks* lzt:*ask-common*
+;;;                      the questions each routine asks beyond the chart
+;;;  The VB palette's step sheets are generated from lzt:chart for every
+;;;  count up to the ceiling below (tools/gen_ui_charts.py), so a change
+;;;  to any of the frame numbers here is a regeneration there.
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (cal:*imgfont*, lzt:*font-*, lzt:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;;  THE FRAME THE CHART IS DRAWN IN.  Everything is in PER-MILLE of the
+;;  picture, x and y, y down -- the same convention as an image tile,
+;;  so the only conversion at draw time is a multiply.  Integers, so
+;;  nothing depends on float formatting and two runs of the generator
+;;  agree to the unit.
+;;
+;;  The picture is one tall frame with the PLAN in the top third, the
+;;  tread dimension row(s) under it, and the SIDE PROFILE below that.
+;;  One coordinate space, one drawing engine, one set of bands.
+(setq lzt:*plan-x0*   100)      ; the wall, or the corner
+(setq lzt:*plan-x1*   860)      ; the far end of the run
+(setq lzt:*plan-yc*   180)      ; the run's centre line
+(setq lzt:*plan-hh*   120)      ; half the plan's opening at the far end
+(setq lzt:*width-x*   930)      ; where a whole-run width dim stands
+(setq lzt:*chord-x1*  860)      ; the last chord across a hemi curve
+(setq lzt:*curve-rx*  840)      ; ...whose crown sits beyond it, at x0 + this
+(setq lzt:*tread-y0*  385)      ; the tread dimension row
+(setq lzt:*tread-y1*  445)      ; ...and the second one, when N needs it
+(setq lzt:*one-row*     4)      ; treads that fit one row of boxes
+(setq lzt:*prof-x*    860)      ; top of the flight, x...
+(setq lzt:*prof-y*    540)      ; ...and y: the profile hangs from here
+(setq lzt:*prof-w*    760)      ; the flight's whole run...
+(setq lzt:*prof-h*    450)      ; ...and its whole drop
+(setq lzt:*prof-gap*   40)      ; how far a depth dim stands off its step
+
+;;  THE CEILING.  DCL will not scroll and a dialog taller than the
+;;  screen does not open at all, so the count has to stop somewhere.
+;;  Eight steps is one row of eight width boxes plus five rows of
+;;  paired depth boxes beside a twenty-cell chart, which fits a laptop
+;;  screen; nine does not reliably, and nothing here can ask the screen
+;;  how tall it is.  The VB palette offers exactly the counts a sheet
+;;  was generated for, up to this number (ChartCatalog.MaxSteps).
+(setq lzt:*max-steps* 8)
+
+;; The chart column: width in cells, its total height in rows spread
+;; over the bands, and the edit_width of a box wedged into the drawing.
+(setq lzt:*chart-w* 58)
+(setq lzt:*chart-h* 20)
+(setq lzt:*wedge-ed* 5)
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall -- one registry value per routine AND
+;; count ("CORNERSTP-3"), because a three-step sheet recalled onto a
+;; five-step drawing would put numbers against treads they were never
+;; measured on.  The VB palette reads the same key and slot
+;; (ui/calofin_net/StepFormView.vb).
+(setq lzt:*poskey* "LazStep_Pos")
+(setq lzt:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazStep")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -41350,40 +42632,6 @@
 ;;;  image-tile pixels do.
 
 
-
-;;; -------------------- the frame the chart is drawn in ------------------
-;;;  Everything is in PER-MILLE of the picture, x and y, y down -- the
-;;;  same convention as an image tile, so the only conversion at draw
-;;;  time is a multiply.  Integers, so nothing depends on float
-;;;  formatting and two runs of the generator agree to the unit.
-;;;
-;;;  The picture is one tall frame with the PLAN in the top third, the
-;;;  tread dimension row(s) under it, and the SIDE PROFILE below that.
-;;;  One coordinate space, one drawing engine, one set of bands.
-
-(setq lzt:*plan-x0*   100)      ; the wall, or the corner
-(setq lzt:*plan-x1*   860)      ; the far end of the run
-(setq lzt:*plan-yc*   180)      ; the run's centre line
-(setq lzt:*plan-hh*   120)      ; half the plan's opening at the far end
-(setq lzt:*width-x*   930)      ; where a whole-run width dim stands
-(setq lzt:*chord-x1*  860)      ; the last chord across a hemi curve
-(setq lzt:*curve-rx*  840)      ; ...whose crown sits beyond it, at x0 + this
-(setq lzt:*tread-y0*  385)      ; the tread dimension row
-(setq lzt:*tread-y1*  445)      ; ...and the second one, when N needs it
-(setq lzt:*one-row*     4)      ; treads that fit one row of boxes
-(setq lzt:*prof-x*    860)      ; top of the flight
-(setq lzt:*prof-y*    540)
-(setq lzt:*prof-w*    760)      ; the flight's whole run...
-(setq lzt:*prof-h*    450)      ; ...and its whole drop
-(setq lzt:*prof-gap*   40)      ; how far a depth dim stands off its step
-
-;;  THE CEILING.  DCL will not scroll and a dialog taller than the
-;;  screen does not open at all, so the count has to stop somewhere.
-;;  Eight steps is one row of eight width boxes plus five rows of
-;;  paired depth boxes beside a twenty-cell chart, which fits a laptop
-;;  screen; nine does not reliably, and nothing here can ask the screen
-;;  how tall it is.
-(setq lzt:*max-steps* 8)
 
 ;;; -------------------- generating the chart -----------------------------
 ;;;  A chart is (type title (outline ...) (dimension ...) (cut ...)).
@@ -41681,7 +42929,6 @@
 (setq lzt:*chart* nil)          ; the chart generated for that count
 (setq lzt:*focus* nil)          ; the key whose box has the caret
 (setq lzt:*pos* nil)            ; where the dialog was last standing
-(setq lzt:*poskey* "LazStep_Pos") ; ...in the profile, kept over a restart
 (setq lzt:*page* 1)             ; which page is open
 (setq lzt:*go* nil)             ; the type a tab click asked for
 (setq lzt:*msg* "")             ; what page one has to say about the count
@@ -41737,8 +42984,7 @@
 ;;;  the whole of the "nothing happened" case -- no message needed, and
 ;;;  the state line reports the fill by moving on its own.
 
-(setq lzt:*recallkey*
-      "HKEY_CURRENT_USER\\Software\\Calofin\\LazStep")
+;;  (lzt:*recallkey* itself is set in the TUNABLES block at the top of the file.)
 
 ;;  A sheet is stored as one string, "key=typed;key=typed".  A value
 ;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
@@ -42181,9 +43427,6 @@
 
 ;;; -------------------- the generated DCL --------------------------------
 
-(setq lzt:*chart-w* 58)         ; the chart column, in character cells
-(setq lzt:*chart-h* 20)         ; its total height, spread over the bands
-(setq lzt:*wedge-ed* 5)         ; a wedge box's edit_width
 
 ;; character cells across for a per-mille x
 (defun lzt:cellx (v) (/ (* v lzt:*chart-w*) 1000.0))
@@ -63182,25 +64425,85 @@
 (vl-load-com)
 
 ;; --------------------------- settings ------------------------------
-(setq *paddle-version* "v1.11") ; printed on load and at command start
-                             ; so a loaded routine and its releases/
-                             ; twin can never disagree
-(setq *paddle-blkname* "Pad36x36") ; the 3'x3' pad block
-(setq *paddle-padsize* 36.0) ; pads are 36" x 36"
-(setq *paddle-blkfile* "24inpad.dwg") ; dwg holding the pad blocks
-(setq *paddle-maxrad* 54.0)  ; 4'-6" : largest concave radius needing pads
-(setq *paddle-layer* "PADS") ; layer pads are inserted on
-(setq *paddle-align* nil)    ; nil = pads stay parallel to the X/Y axes,
-                             ; T = rotate pads with the perimeter edge
-(setq *paddle-fuzz* 0.05)    ; max gap between segment ends when
-                             ; chaining loose lines/arcs into a loop
-(setq *paddle-cornertol* (/ (* 30.0 pi) 180.0)) ; a connection point
-                             ; has to bend MORE than 30 degrees away
-                             ; from straight to count as an inside
-                             ; corner; gentler joints are semi-straight
-(setq *paddle-arctol* (/ (* 10.0 pi) 180.0)) ; an arc whose total bend
-                             ; is 10 degrees or less is semi-straight
-                             ; too - no pads along it
+;; Every knob PADDLE has lives in this block: change a value here,
+;; save, and APPLOAD the file again.  Distances are drawing units
+;; (inches on an architectural drawing); the two angles are typed in
+;; degrees and converted to radians on the same line.  Nothing below
+;; this block is meant to be edited to change behaviour.
+
+;; Version banner.  Bump it on every change to this file: it is
+;; printed on load and at command start, and tools/release_lisp.py
+;; reads it to stamp the dated twin in releases/, so a loaded routine
+;; and its release can never disagree.
+(setq *paddle-version* "v1.12")
+
+;; --- the pad itself ---
+;; Name of the block inserted at every pad spot.  *paddle-blkfile*
+;; ships two, Pad36x36 and Pad24x24; if you switch, set
+;; *paddle-padsize* to match or the rows along arcs are spaced for
+;; the wrong pad.
+(setq *paddle-blkname* "Pad36x36")
+;; Edge of the pad in drawing units (a 36" x 36" square).  This one
+;; number sets the pitch of the flush rows along concave arcs, the
+;; collision distance in the dodge pass, the size of the fallback
+;; square block, and the wording of every message that quotes it.
+(setq *paddle-padsize* 36.0)
+;; The dwg the block definitions are imported from when the drawing
+;; does not already hold them.  Looked up with findfile, so put its
+;; folder on the AutoCAD support path or drop the dwg beside the
+;; drawing.  If it cannot be found a plain square block is made.
+(setq *paddle-blkfile* "24inpad.dwg")
+;; Layer the pads land on.  Created when missing; an existing one is
+;; thawed, unlocked and turned on so the result is visible.
+(setq *paddle-layer* "PADS")
+;; AutoCAD colour index the layer is created with.  An existing layer
+;; keeps whatever colour it already has.
+(setq *paddle-layer-color* 7)
+;; nil = every pad stays parallel to the X/Y axes (the shop standard).
+;; T   = each pad rotates to follow its stretch of perimeter instead.
+(setq *paddle-align* nil)
+
+;; --- what counts as a feature ---
+;; Largest concave radius that still needs pads, 4'-6".  Concave arcs
+;; this tight or tighter get a flush row of pads; bigger sweeps get
+;; none.
+(setq *paddle-maxrad* 54.0)
+;; A connection point (line meets line, line meets arc, a polyline
+;; vertex) counts as a sharp inside corner only when the perimeter
+;; bends MORE than this many degrees away from straight, into the
+;; pool, at that one point.  Gentler joints - drafting kinks, a wall
+;; drawn as several nearly-collinear pieces, the mouth of a shallow
+;; alcove - are semi-straight and get no pad.  Edit the 30.0; the
+;; rest of the line converts it to radians.
+(setq *paddle-cornertol* (/ (* 30.0 pi) 180.0))
+;; A concave arc counts as a feature only when its total bend is MORE
+;; than this many degrees; a gentler sweep is a semi-straight line
+;; however tight its radius.  Judged separately from corners on
+;; purpose: a curve earns its row of pads more easily than a joint
+;; earns one pad.  Edit the 10.0.
+(setq *paddle-arctol* (/ (* 10.0 pi) 180.0))
+
+;; --- reading the perimeter ---
+;; Largest gap between the end of one loose line/arc and the start of
+;; the next that still counts as touching when PADDLE chains them into
+;; a loop.  Segments shorter than this are dropped as slivers (a
+;; doubled polyline vertex, a zero-length line), which is also what
+;; keeps a corner drawn with a duplicate vertex from being missed.
+(setq *paddle-fuzz* 0.05)
+
+;; --- TUTORIALPADDLE ---
+;; Layer the tutorial draws its labelled sample perimeter on, and the
+;; colour index it is given.  Created if missing, recoloured either
+;; way, and left behind unless the demo is erased at the end.
+(setq *paddle-demo-layer* "PADDLE-DEMO")
+(setq *paddle-demo-color* 3)
+
+;; -------------------------- text helper ----------------------------
+;; A length as inches with the mark, 36.0 -> 36" -- every message that
+;; quotes the pad size goes through this so *paddle-padsize* is the
+;; only place it is written.
+(defun paddle--in (n)
+  (strcat (rtos n 2 (if (equal n (float (fix n)) 1e-9) 0 2)) "\""))
 
 (defun paddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
 (defun paddle--rot (v a) ; rotate vector v by angle a
@@ -63606,11 +64909,22 @@
   (vla-put-Layer obj *paddle-layer*)
   obj)
 
+;; Loops that enclose no area - two lines lying on top of each other,
+;; a polyline that doubles straight back on itself - have no inside
+;; for anything to be concave toward, and the sign of their zero area
+;; is float noise, so the 180-degree reversal at each end could be
+;; called an inside corner on the strength of a -0.0.  Returns LOOPS
+;; without them.  (Auto-detect never picks one, since it keeps the
+;; largest area; an explicit selection would have padded it.)
+(defun paddle--solid-loops (loops)
+  (vl-remove-if '(lambda (l) (< (abs (paddle--area l)) 1e-6)) loops))
+
 ;; --------------------------- selection -----------------------------
 ;; Turns a selection set (or the whole current tab when SS is nil) into
 ;; a list of closed perimeter loops (vertex lists). Auto-detect keeps
 ;; only the largest loop.
-(defun paddle--perimeters (ss / auto i segs res loops nopen best bestarea a)
+(defun paddle--perimeters (ss / auto i segs res loops nopen nflat best
+                              bestarea a)
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
@@ -63622,13 +64936,18 @@
           (setq segs (append segs (paddle--ent-segs (ssname ss i)))
                 i    (1+ i)))
         (setq res   (paddle--chain segs)
-              loops (car res)
+              loops (paddle--solid-loops (car res))
+              nflat (- (length (car res)) (length loops))
               nopen (cdr res))
         (if (> nopen 0)
             (princ (strcat "\nPADDLE: ignored " (itoa nopen)
                            " open chain(s) that never close back on themselves"
                            " (check for gaps; chaining tolerance is "
                            (rtos *paddle-fuzz* 2 2) ").")))
+        (if (> nflat 0)
+            (princ (strcat "\nPADDLE: ignored " (itoa nflat)
+                           " closed loop(s) that enclose no area"
+                           " (lines doubling back on themselves).")))
         (if auto
             (progn ; keep only the biggest closed loop
               (setq bestarea 0.0)
@@ -63660,7 +64979,8 @@
         space (vla-get-Block (vla-get-ActiveLayout doc)))
 
   (princ (strcat "\nPADDLE " *paddle-version*))
-  (princ (strcat "\nPADDLE - 36\" pads at concave perimeter features (R <= "
+  (princ (strcat "\nPADDLE - " (paddle--in *paddle-padsize*)
+                 " pads at concave perimeter features (R <= "
                  (rtos *paddle-maxrad* 4 0) " and inside corners)."))
 
   (setq padsize *paddle-padsize*
@@ -63685,7 +65005,7 @@
         (vla-StartUndoMark doc)
         (setq mark-open T)
         (paddle--ensure-block doc blkname padsize)
-        (paddle--ensure-layer *paddle-layer* 7)
+        (paddle--ensure-layer *paddle-layer* *paddle-layer-color*)
         (setq delta (paddle--block-delta space blkname))
         (foreach vts perims
           (if (> (length vts) 1)
@@ -63702,7 +65022,8 @@
         (if allpads
             (progn
               (princ (strcat "\nPADDLE: inserted " (itoa (length allpads))
-                             " 36\" pad(s) on layer \"" *paddle-layer* "\" ("
+                             " " (paddle--in padsize) " pad(s) on layer \""
+                             *paddle-layer* "\" ("
                              (itoa ncorner) " at inside corners, "
                              (itoa narc) " along concave arcs)."))
               (if (> ndodge 0)
@@ -63783,7 +65104,8 @@
   (princ (strcat "\n    than " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
                  " degrees in total, gets a row of pads: the middle of the"))
   (princ "\n    curve is always covered, then pads march flush toward both ends")
-  (princ "\n    (exactly 36\" on center, touching, never overlapping) - a blocky")
+  (princ (strcat "\n    (exactly " (paddle--in *paddle-padsize*)
+                 " on center, touching, never overlapping) - a blocky"))
   (princ "\n    version of the curve. The extreme ends of the radius may stay")
   (princ "\n    uncovered; that is by design. Bigger concave radii, and curves")
   (princ (strcat "\n    bending " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
@@ -63792,7 +65114,8 @@
   (princ "\n    point stays dead-center on that point - it never moves. The pads")
   (princ "\n    along curves do the dodging: they slide over to sit flush")
   (princ "\n    alongside, or drop out when a neighbour already covers their spot.")
-  (princ (strcat "\n 5. RESULT. 36\" x 36\" pads (block " *paddle-blkname*
+  (princ (strcat "\n 5. RESULT. " (paddle--in *paddle-padsize*) " x "
+                 (paddle--in *paddle-padsize*) " pads (block " *paddle-blkname*
                  ", imported from"))
   (princ (strcat "\n    " *paddle-blkfile* " if needed), always square to the"
                  " X/Y axes, on layer"))
@@ -63801,8 +65124,8 @@
   (initget "Yes No")
   (if (/= (getkword "\nDraw a live demonstration in this drawing? [Yes/No] <Yes>: ") "No")
       (progn
-        (setq lay "PADDLE-DEMO")
-        (vla-put-Color (vla-Add (vla-get-Layers doc) lay) 3)
+        (setq lay *paddle-demo-layer*)
+        (vla-put-Color (vla-Add (vla-get-Layers doc) lay) *paddle-demo-color*)
         (setq base (getpoint "\nPick a clear spot for the demo <0,0>: "))
         (if (not base) (setq base '(0.0 0.0 0.0)))
         (setq pl   (paddle--demo-pline base lay)
@@ -63830,7 +65153,7 @@
                                    *paddle-padsize*)
               blk   *paddle-blkname*)
         (paddle--ensure-block doc blk *paddle-padsize*)
-        (paddle--ensure-layer *paddle-layer* 7)
+        (paddle--ensure-layer *paddle-layer* *paddle-layer-color*)
         (setq delta (paddle--block-delta space blk)
               ncorner 0 narc 0)
         (princ "\nStep 1 - inside corners: one pad centered on each corner of the slot.")
@@ -63840,7 +65163,8 @@
                      (setq ents (cons (entlast) ents) ncorner (1+ ncorner)))))
         (paddle--pause)
         (princ "\nStep 2 - the R4'-0\" curve: first pad centered on the middle of the")
-        (princ "\nradius, the rest flush at 36\" on center, stair-stepping the curve.")
+        (princ (strcat "\nradius, the rest flush at " (paddle--in *paddle-padsize*)
+                       " on center, stair-stepping the curve."))
         (princ "\nNote the R6'-0\" curve and the kink get nothing.")
         (foreach pad feats
           (if (= (caddr pad) "arc")
@@ -63941,6 +65265,8 @@
 ;;;  No.  LINGUTTERSCAN prints the same report and stops without
 ;;;  touching the drawing; run it first on a sheet you care about.  The
 ;;;  whole run is one undo group: a single U puts the drawing back.
+;;;  (In a drawing with undo control off there is no group to open, so
+;;;  the gut still happens but a U will not take it back in one step.)
 ;;;
 ;;;  Usage
 ;;;    Command: LINGUTTER       highlight the area before typing it and
@@ -63964,7 +65290,9 @@
 ;;;    lg:*ontol*        how far a dimension's attachment point may sit
 ;;;                      off the perimeter and still count as on it
 ;;;    lg:*snaps*        the snap ladder: how far apart two ends may be
-;;;                      and still count as one point, tried in order
+;;;                      and still count as one point, tried tightest
+;;;                      first -- sorted for you, so the order it is
+;;;                      typed in cannot change what the report claims
 ;;;    lg:*cover*        how much of the highlight's extent a traced
 ;;;                      exterior must span before it is believed
 ;;;    lg:*runpaddle*    T to run PADDLE at the end, nil to stop after
@@ -64004,24 +65332,76 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.2")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.3")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
-(setq lg:*poollayer*   "POOL")
-(setq lg:*poolcolor*   4)          ; ACI 4 = cyan, POOL's own colour
+;;; -------------------- the knobs ---------------------------------------
+;;; Everything a drawing might want changed, all in one block; nothing
+;;; settable lives anywhere else in this file.  setq any of them after
+;;; loading -- in a startup file, say.  Each is read fresh when a
+;;; command runs, so a value changed between two runs takes effect on
+;;; the second without reloading the file.  WHAT each does is here;
+;;; WHY, and what it costs to move it, is in the Notes at the head of
+;;; this file and in lisp/lingutter/README.md.
+;;;
+;;; The two STYLE lists are wildcard patterns matched against the
+;;; dimension's style name -- "CROSS DIM*" is what catches both a
+;;; drawing spelled "CROSS DIM" and this repo's "CROSS DIMENSIONS".
+;;; The two LAYER lists are whole names, no wildcards.  Both kinds are
+;;; matched with case folded, because wcmatch and member do not.
+
+(setq lg:*poollayer*   "POOL")     ; layer the traced perimeter is drawn
+                                   ; on; made if missing, and thawed /
+                                   ; switched on / unlocked if it exists
+                                   ; but cannot be drawn on
+(setq lg:*poolcolor*   4)          ; its colour when the layer has to be
+                                   ; created -- ACI 4 = cyan, POOL's own.
+                                   ; Ignored when the layer already exists
 (setq lg:*anystyles*   '("CROSS DIM*"))
+                                   ; dim styles kept WHEREVER they sit: a
+                                   ; cross dim spans the pool, so most of
+                                   ; it is nowhere near the edge
 (setq lg:*perimstyles* '("STANDARD" "SIDE STANDARD"))
-(setq lg:*keeplayers*  nil)        ; e.g. '("TITLEBLOCK") to spare one
+                                   ; dim styles kept only ON the
+                                   ; perimeter -- every attachment point
+                                   ; within lg:*ontol* of the loop.  The
+                                   ; same style on a hopper or step goes
+(setq lg:*keeplayers*  nil)        ; layers left alone entirely, even
+                                   ; inside the highlight; nil = none,
+                                   ; e.g. '("TITLEBLOCK") to spare one
 (setq lg:*skiplayers*  '("DEFPOINTS" "DIMENSION"))
-(setq lg:*ontol*       1.0)        ; drawing units; inches by default
-(setq lg:*snaps*  '(0.05 6.0 24.0)) ; snap ladder: how far apart two ends
-                                   ; may be and still be treated as one
-                                   ; node, tried tightest first
+                                   ; layers the perimeter is never traced
+                                   ; FROM.  They are still swept: this
+                                   ; keeps dimension geometry out of the
+                                   ; walk, it does not spare it
+(setq lg:*ontol*       1.0)        ; how far a dimension's attachment
+                                   ; point may sit off the perimeter and
+                                   ; still count as on it.  Drawing
+                                   ; units, so inches on these sheets
+(setq lg:*snaps*  '(0.05 6.0 24.0)) ; the snap ladder: how far apart two
+                                   ; ends may be and still be treated as
+                                   ; one node.  Tried TIGHTEST FIRST, a
+                                   ; rung at a time, and only climbed
+                                   ; when the rung below could not
+                                   ; produce an exterior covering
+                                   ; lg:*cover* of the highlight.
+                                   ; Order and junk are not yours to get
+                                   ; right -- lg:ladder sorts the list
+                                   ; and drops anything that is not a
+                                   ; tolerance above zero.  Snapping
+                                   ; MOVES a corner by up to the rung
+                                   ; that healed it, which is why the
+                                   ; report always names that rung
 (setq lg:*cover*       0.8)        ; how much of the highlight's extent a
-                                   ; traced exterior has to span to be
-                                   ; believed as the perimeter
-(setq lg:*runpaddle*   t)
+                                   ; traced exterior has to span, both
+                                   ; ways, to be believed as the
+                                   ; perimeter: a fraction, 0.8 = 80%.
+                                   ; Falling short is a warning, never a
+                                   ; veto -- see the Notes
+(setq lg:*runpaddle*   t)          ; T to hand the new perimeter to
+                                   ; PADDLE and pad it; nil to stop after
+                                   ; the gut and leave it unpadded
 
 ;;; -------------------- ask layer ---------------------------------------
 ;;; STANDARDS.md section 4, copied from the library so this file loads
@@ -64032,6 +65412,10 @@
 ;;; The sysvars this tool moves, saved in restore order -- OSMODE first,
 ;;; because object snaps are the setting the user misses most if a run is
 ;;; ever cut short partway.
+
+                                   ; Working state, NOT a knob -- it is
+                                   ; down here so the block above is
+                                   ; only ever things meant to be set
 
 ;; Unlock every named layer that is locked, and hand back the list of
 ;; those that were -- entdel refuses an entity on a locked layer, so a
@@ -64067,11 +65451,16 @@
 ;;; A segment is (p1 p2 bulge) with 2-D points, and a loop is a list of
 ;;; (x y bulge) vertices whose bulge belongs to the segment LEAVING it --
 ;;; PADDLE's shapes exactly, so a loop traced here can be handed to it.
-;;; The four readers below and lg:chain are ports of paddle--arcdata,
-;;; --lwverts, --plverts, --vts->segs, --ent-segs and --chain
-;;; (lisp/paddle/PADDLE.lsp).  LINGUTTER is a standalone file and cannot
-;;; call into PADDLE's, so tests/test_lingutter.py runs the two side by
-;;; side on the same geometry and fails when they part company.
+;;; The readers below are ports of paddle--arcdata, --area, --lwverts,
+;;; --plverts, --vts->segs and --ent-segs (lisp/paddle/PADDLE.lsp).
+;;; LINGUTTER is a standalone file and cannot call into PADDLE's, so
+;;; tests/test_lingutter.py runs the two side by side on the same
+;;; geometry and fails when they part company.
+;;;
+;;; PADDLE's --chain is NOT among them, and deliberately: chaining
+;;; segments end to end finds a loop, which is the guess this tool
+;;; exists to stop making.  What reads these segments here is the
+;;; outer-face walk below.
 
 ;; Segment data for vertex A -> B with bulge b (b /= 0):
 ;; returns (theta radius center start-tangent end-tangent)
@@ -64470,6 +65859,25 @@
   (if (> (length out) 2)
     (mapcar '(lambda (q) (list (car q) (cadr q) 0.0)) out)))
 
+;; The snap ladder as the walk needs it: numbers above zero, tightest
+;; first.  The ORDER is not the drafter's to choose -- lg:perimeter
+;; climbs a rung at a time and reports the rung that worked, and it
+;; calls the first rung "nothing had to be moved".  A ladder typed
+;; loosest-first would therefore heal a 24" gap and report that nothing
+;; moved, which is the one thing this tool promises never to be quiet
+;; about.  Sorting here makes "tightest first" true however it was
+;; typed, and drops anything that is not a usable tolerance.
+;;
+;; Nothing usable left means no snapping at all rather than no walk at
+;; all: a hairline rung still traces an outline that was drawn closed,
+;; where an empty ladder would send even a clean pool to the hull.
+(defun lg:ladder ( / out)
+  (setq out (vl-sort (vl-remove-if-not
+                       '(lambda (x) (and (numberp x) (> x 0.0)))
+                       lg:*snaps*)
+                     '<))
+  (if out out (list 1e-6)))
+
 ;; The perimeter of the highlighted geometry, and how it was arrived at.
 ;; Returns (vts (tol short)), where tol is
 ;;   nil     the exterior was walked with nothing moved,
@@ -64483,11 +65891,13 @@
 ;; no fault of its own, and answering that with a convex hull would be
 ;; worse than answering it with the pool and a word of warning.
 ;; nil when there is not enough geometry to draw a perimeter round.
-(defun lg:perimeter (segs / pts tol vts a out fall falla falltol tight)
+(defun lg:perimeter (segs / pts tol vts a out fall falla falltol tight
+                            rungs)
   (setq pts   (lg:segs-pts segs)
         falla 0.0
-        tight (car lg:*snaps*))
-  (foreach tol lg:*snaps*
+        rungs (lg:ladder)
+        tight (car rungs))
+  (foreach tol rungs
     (if (null out)
       (progn
         (setq vts (lg:exterior segs tol))
@@ -64750,7 +66160,7 @@
       (cond
         ((eq (car how) 'HULL)
          (princ (strcat "\n** No exterior could be walked at any tolerance"
-                        " up to " (rtos (last lg:*snaps*) 2 2) " - the"
+                        " up to " (rtos (last (lg:ladder)) 2 2) " - the"
                         " highlight is wrapped in its convex hull instead."
                         "  That straightens out every concave feature, so"
                         " PADDLE will find nothing to pad: close the"
@@ -64873,8 +66283,14 @@
           (setq perim (lg:draw-perim vts lg:*poollayer*))
           (lg:relock locked)
           (setq locked nil)
-          (command "_.UNDO" "_End")
-          (setq undo-open nil)
+          ;; closed only if one was opened: with undo control off there
+          ;; is no group of this command's to end, and closing one it
+          ;; never opened is an error out of the command -- the same
+          ;; guard the handler above already makes
+          (if undo-open
+            (progn
+              (command "_.UNDO" "_End")
+              (setq undo-open nil)))
           (princ (strcat "\nLINGUTTER: " (itoa (length kill))
                          " highlighted object" (lg:s (length kill))
                          " erased; the perimeter is one closed polyline"
@@ -76818,7 +78234,56 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.4")
+(setq *lazspa-version* "v1.5")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them:
+;;;    lzs:*naok*      the keys that take NA on each sheet -- an NA on
+;;;                    any other key is DEMOTED to unanswered, and the
+;;;                    state line says so
+;;;    lzs:*cuts*      where each chart is cut into bands
+;;;    lzs:*charts* lzs:*corners* lzs:*second* lzs:*lists* lzs:*hints*
+;;;                    -- the sheets themselves; the VB palette's chart
+;;;                    catalog is generated from them (gen_ui_charts.py)
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (cal:*imgfont*, lzs:*font-*, lzs:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;; What a corner can be, in the SHEET LEGEND's words -- 90 / Radius /
+;; Diagonal -- with "(ask)" first so a row left alone sends nothing.
+;; SPA normalises these onto the canonical Square / Radius / Cut /
+;; NotGiven set itself, which is why they are not spelled canonically
+;; here.  ORDER MATTERS: lzs:sized names the treatments that carry a
+;; size by INDEX (2 = Radius, 3 = Diagonal), so reorder both or neither.
+(setq lzs:*ctreat* '("(ask)" "90" "Radius" "Diagonal"))
+
+;; Width budget for the row of chart tabs, in DCL character cells.
+;; Three charts run about 39 cells, so this never wraps today; it is
+;; here because DCL does not scroll, and a fourth shape must cost a row
+;; rather than the whole form.
+(setq lzs:*tabbudget* 84)
+
+;; The chart column: width in cells, and its total height in rows,
+;; which is spread over the bands the chart is cut into.
+(setq lzs:*chart-w* 52)
+(setq lzs:*chart-h* 19)
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall (the registry, one value per chart,
+;; "key=typed;key=typed").  The VB palette reads the recall key too
+;; (ui/calofin_net/ChartFormView.vb, RecallStore.SpaKey), so a sheet
+;; filled in here comes back there; tests/test_chart_form.py holds the
+;; two together.
+(setq lzs:*poskey* "LazSpa_Pos")
+(setq lzs:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazSpa")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  THIS build takes the table, its metrics, the tile palette and the
@@ -77003,7 +78468,7 @@
 ;;;  asks corner treatments for.  An octagon's corners ARE its S / S1 /
 ;;;  S2 letters, already on the chart, and a round spa has none.
 
-(setq lzs:*ctreat* '("(ask)" "90" "Radius" "Diagonal"))
+;;  (lzs:*ctreat* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzs:*corners*
   '(("Rectangle"
@@ -77163,7 +78628,6 @@
 (setq lzs:*focus* nil)          ; the key whose box has the caret
 (setq lzs:*chart* nil)          ; the chart being filled in
 (setq lzs:*pos* nil)            ; where the dialog was last standing
-(setq lzs:*poskey* "LazSpa_Pos") ; ...in the profile, kept over a restart
 (setq lzs:*go* nil)             ; the chart a tab click asked for
 
 (defun lzs:get (key / p)
@@ -77401,8 +78865,7 @@
 ;;;  the whole of the "nothing happened" case -- no message needed, and
 ;;;  the state line reports the fill by moving on its own.
 
-(setq lzs:*recallkey*
-      "HKEY_CURRENT_USER\\Software\\Calofin\\LazSpa")
+;;  (lzs:*recallkey* itself is set in the TUNABLES block at the top of the file.)
 
 ;;  A sheet is stored as one string, "key=typed;key=typed".  A value
 ;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
@@ -77633,7 +79096,7 @@
 ;; run about 39 cells, so this never wraps today -- it is here because
 ;; DCL does not scroll and a fourth shape must cost a row rather than
 ;; the whole form.
-(setq lzs:*tabbudget* 84)
+;;  (lzs:*tabbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzs:tabrows ( / out row w c cw)
   (setq row nil w 0)
@@ -77657,8 +79120,6 @@
     (setq out (cons "  }" out)))
   (reverse out))
 
-(setq lzs:*chart-w* 52)         ; the chart column, in character cells
-(setq lzs:*chart-h* 19)         ; its total height, spread over the bands
 
 ;; character cells across for a per-mille x
 (defun lzs:cellx (v) (/ (* v lzs:*chart-w*) 1000.0))
@@ -78255,7 +79716,59 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.13")
+(setq *lazform-version* "v2.14")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them, because
+;;;  each is half of a rule rather than a setting:
+;;;    lzf:*nobtype*     the charts with no bottom-type popup (the L shapes)
+;;;    lzf:*crecharts*   the charts whose corner rows answer POOL's gate
+;;;    lzf:*sportchain*  the four keys that make up the Sport chain
+;;;    lzf:*charts* lzf:*cross* lzf:*picks* lzf:*corners* lzf:*oaslive*
+;;;    lzf:*hints*       -- the sheets themselves; the VB palette's chart
+;;;                      catalog is generated from them (gen_ui_charts.py)
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (cal:*imgfont*, lzf:*font-*, lzf:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;; The bottoms POOL draws, spelled as POOL's own keywords -- the
+;; capitals are each one's abbreviation at the prompt.  Adding a name
+;; here offers it on the popup; it does not teach POOL to draw it.
+(setq lzf:*btypes* '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
+
+;; What a corner can be: STANDARDS.md's canonical set, "(ask)" first so
+;; a row left alone sends nothing and POOL asks.  ORDER MATTERS --
+;; lzf:csized names the treatments that carry a size by their INDEX
+;; here (2 = Radius, 3 = Cut), so reorder both or neither.
+(setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
+
+;; Width budgets, in DCL character cells.  DCL does not scroll: a row
+;; wider than the screen stops the dialog opening at all, so each is a
+;; ceiling the packer wraps at, never a preference.
+(setq lzf:*tabbudget* 84)       ; the row of chart tabs
+(setq lzf:*rowbudget* 92)       ; a row of paired column boxes
+
+;; The chart column: its width in cells, and its height as a share of
+;; that width (a string, because DCL reads aspect_ratio as one).
+(setq lzf:*chart-w* 52)
+(setq lzf:*chart-a* "0.72")
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall (the registry, one value per chart,
+;; "key=typed;key=typed").  The VB palette reads the recall key too
+;; (ui/calofin_net/ChartFormView.vb, RecallStore.PoolKey), so a sheet
+;; filled in here comes back there; tests/test_chart_form.py holds the
+;; two together.
+(setq lzf:*poskey* "LazForm_Pos")
+(setq lzf:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazForm")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  THIS build takes the table, its metrics, the tile palette and the
@@ -79076,7 +80589,7 @@
 ;;;  On the shapes that gate their corner questions behind a yes/no
 ;;;  (lzf:*crecharts*), picking any row answers that gate too.
 
-(setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
+;;  (lzf:*ctreat* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzf:*corners*
   '(("Rectangle"
@@ -79179,7 +80692,6 @@
 (setq lzf:*insq* nil)           ; the in-square toggle, as it is set
 (setq lzf:*btype* 0)            ; the bottom-type row, as it is picked
 (setq lzf:*pos* nil)            ; where the dialog was last standing
-(setq lzf:*poskey* "LazForm_Pos") ; ...in the profile, kept over a restart
 (setq lzf:*go* nil)             ; the chart a tab click asked for
 (setq lzf:*ranchart* nil)       ; the chart Insert was finally pressed on
 
@@ -79369,7 +80881,7 @@
 ;;  the right in the chart's own order, each labelled with its letter so
 ;;  the list and the picture read as one thing.
 
-(setq lzf:*btypes* '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
+;;  (lzf:*btypes* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzf:tabstrip (cur / out c n)
   ;; The tab strip: one button per chart, the current one disabled so
@@ -79394,7 +80906,7 @@
   (reverse out))
 
 ;; Chart keys packed into rows no wider than the budget.
-(setq lzf:*tabbudget* 84)
+;;  (lzf:*tabbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzf:tabrows ( / out row w c cw)
   (setq row nil w 0)
@@ -79406,8 +80918,6 @@
   (if row (setq out (cons (reverse row) out)))
   (reverse out))
 
-(setq lzf:*chart-w* 52)         ; the chart column, in character cells
-(setq lzf:*chart-a* "0.72")     ; and its height, as a share of that
 
 ;;; -------------------- packing the column boxes ------------------------
 ;;;  A DCL DIALOG TALLER THAN THE SCREEN DOES NOT OPEN, and nothing
@@ -79426,7 +80936,7 @@
 ;;;  boundaries a reader might expect -- it follows the width, and
 ;;;  every box is labelled for itself either way.
 
-(setq lzf:*rowbudget* 92)       ; cells a packed row may occupy
+;;  (lzf:*rowbudget* itself is set in the TUNABLES block at the top of the file.)
 
 ;; One column-only box, at the given width and indent.
 (defun lzf:extbox (d w ind)
@@ -80017,8 +81527,7 @@
 ;;;  the whole of the "nothing happened" case -- no message needed, and
 ;;;  the state line reports the fill by moving on its own.
 
-(setq lzf:*recallkey*
-      "HKEY_CURRENT_USER\\Software\\Calofin\\LazForm")
+;;  (lzf:*recallkey* itself is set in the TUNABLES block at the top of the file.)
 
 ;;  A sheet is stored as one string, "key=typed;key=typed".  A value
 ;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
@@ -80749,7 +82258,53 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.10")
+(setq *lazpanel-version* "v3.11")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.  Nothing below this block
+;;;  is meant to be edited to tune the panel.
+;;;
+;;;  Also editable, but living beside the code that reads them because
+;;;  they ARE the panel rather than settings of it:
+;;;    lzp:*captions*   one caption per command -- the only place they live
+;;;    lzp:*groups*     the pages, as columns of command names
+;;;  tools/check_registry.py --fix maintains both; the VB palette's
+;;;  catalog is generated from them (tools/gen_ui_data.py).
+
+;; The Find page's tab title.  Find is a page but not a group: it stays
+;; out of lzp:*groups* -- what Rest is computed against and what
+;; lzp:commands folds -- so renaming it here is safe and adding it to a
+;; group is not.
+(setq lzp:*findname* "Find")
+
+;; The screen-button toolbar's name, as the CUI lists it.
+(setq lzp:*tbname* "LazPanel")
+
+;; Where the panel remembers its position between restarts: a value in
+;; the AutoCAD profile (setenv), which is always writable where the
+;; registry may not be.
+(setq lzp:*poskey* "LazPanel_Pos")
+
+;; Where pins and recents live: one registry key, values "Pins" and
+;; "Recent", names joined with ";".  THE VB PALETTE READS THE SAME KEY
+;; (ui/calofin_net/PaletteMemory.vb) so a drafter has one set of pins
+;; whichever surface they pinned from.  Change it here and there
+;; together, or tests/test_palette_shell.py fails.
+(setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
+
+;; How wide, in DCL character cells, a row of pinned or recent buttons
+;; may be before the next button starts a new row.  DCL does not
+;; scroll: a row past the screen's width does not clip the page, it
+;; stops the dialog opening at all, so this is a ceiling and not a
+;; preference.  84 fits a laptop screen.
+(setq lzp:*pinbudget* 84)
+
+;; How many recently launched tools are remembered, newest first.  The
+;; palette keeps the same number (PaletteMemory.RecentLimit) and
+;; tests/test_palette_shell.py holds the two together.
+(setq lzp:*reclimit* 5)
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -81128,13 +82683,11 @@
 ;; column layout and no roster of its own, it searches the whole one, so
 ;; it must stay out of lzp:*groups* -- which is what "Rest" is computed
 ;; against, what lzp:commands folds, and what lzp:dcl-one lays out.
-(setq lzp:*findname* "Find")
+;;  (lzp:*findname* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
-(setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
 (setq lzp:*pos* nil)              ; where the panel was last standing
-(setq lzp:*poskey* "LazPanel_Pos") ; ...in the profile, kept over a restart
 (setq lzp:*go* nil)               ; the group a tab click asked for
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
 (setq lzp:*iconstep* nil)         ; the COM call the icon write died on
@@ -81146,7 +82699,6 @@
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
 (setq lzp:*page* nil)             ; the page the panel reopens on
 (setq lzp:*pins* nil)             ; the pinned tools, in pin order
-(setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
 
 ;;; -------------------- roster access -----------------------------------
 
@@ -81355,7 +82907,7 @@
 ;;  So pins are packed greedily into as many rows as they need, with
 ;;  the Pin... button packed last like any other item.  Pin thirty
 ;;  tools and you get a tall panel, never a broken one.
-(setq lzp:*pinbudget* 84)
+;;  (lzp:*pinbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzp:pin-label (n) (strcat "    : button { label = \"" n
                                  "\"; key = \"pin_" n "\"; }"))
@@ -81413,7 +82965,7 @@
 ;;  Keys are "rec_", which cannot collide with the same tool's "pin_"
 ;;  button or with its own button further down the page.
 
-(setq lzp:*reclimit* 5)           ; how many are remembered
+;;  (lzp:*reclimit* itself is set in the TUNABLES block at the top of the file.)
 (setq lzp:*recent* nil)           ; most recent first
 
 ;; Everything remembered, minus what Pinned already shows.
@@ -81842,6 +83394,11 @@
 ;;  can be carried in an ordinary string, and MSXML turns that string
 ;;  into a real VT_UI1 array on the other side.  Both components ship
 ;;  with Windows, and the toolbar this icon goes on already needs COM.
+;;  NOT A KNOB: the alphabet is RFC 4648's, the same 64 characters on
+;;  both ends of the transfer.  It is a literal nothing re-assigns, so
+;;  it is shaped like a tunable and tests/test_tunables.py would ask
+;;  for it in the block at the top -- but reordering a character here
+;;  does not adjust anything, it decodes the icon to garbage.
 (setq lzp:*b64*
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
 
