@@ -25517,53 +25517,147 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.4")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
-;; ---- configuration ---------------------------------------------------
+;;; ======================================================================
+;;;  TUNABLES -- every value ABCURCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq acc:*kink-tol* 5.0) -- because every
+;;;  knob is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); angles are DEGREES here even though the code works in
+;;;  radians; colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey).
+;;;
+;;;  The tangent bands are ABHD's, not this file's: the two commands
+;;;  have to agree on what smooth means, and tests/test_abcurcheck.py
+;;;  fails if they part company.  Move them only when ABHD's move.
+;;; ----------------------------------------------------------------------
+
+;; -- where the marks go -------------------------------------------------
 
 (setq acc:*mark-layer*   "POOL-CONT")  ; findings and declarations go here
 (setq acc:*comb-layer*   "POOL-COMB")  ; the curvature comb goes here
-(setq acc:*fuzz*         1.0e-4)       ; endpoint-matching fuzz, as ABHD's
-                                       ; *PF-CHAIN-FUZZ*: closer than this
-                                       ; and two ends are the same point
-(setq acc:*tangent-eps*  0.5)          ; deg - at or under this a joint is
-                                       ; tangent
-(setq acc:*kink-tol*     8.0)          ; deg - ABHD's *PF-TANG-TOL*: the
-                                       ; most a joint may turn and still
-                                       ; read as smooth
-(setq acc:*corner-ang*   45.0)         ; deg - ABHD's *PF-CORNER-ANG*:
-                                       ; over this it is a corner, not a
-                                       ; kink
-(setq acc:*micro-len*    3.0)          ; a segment shorter than this (3
-                                       ; inches) is a micro-segment: the
-                                       ; signature of a traced outline
-(setq acc:*micro-share*  0.10)         ; share of the perimeter sitting in
-                                       ; micro-segments that costs the
-                                       ; whole noise score
-(setq acc:*close-tol*    5.0)          ; deg - how far the signed turning
-                                       ; total may sit off 360 before the
-                                       ; loop is called self-crossing
-(setq acc:*snap-dist*    6.0)          ; how near a declaration pick must
-                                       ; land to a joint to claim it
-(setq acc:*mark-radius*  4.0)          ; radius of the finding rings
-(setq acc:*cross-max*    300)          ; skip the O(n^2) crossing scan
-                                       ; above this many segments, and say
-                                       ; so rather than pretend it ran
-(setq acc:*comb-step*    12.0)         ; one comb tooth per foot of run
-(setq acc:*comb-max*     24.0)         ; length of the tooth at the
-                                       ; tightest curvature in the loop
-(setq acc:*excess-free*  0.35)         ; turning excess a freeform pool is
-                                       ; allowed before the noise score
-                                       ; starts to fall...
-(setq acc:*excess-cap*   1.00)         ; ...and where it reaches zero
-(setq acc:*w-integrity*  40.0)         ; index weights: G0 is pass/fail,
-(setq acc:*w-tangency*   35.0)         ; tangency scales with the total
-(setq acc:*w-noise*      25.0)         ; undeclared kink, noise with the
-                                       ; micro share and turning excess
+(setq acc:*mark-color*   3)            ; ACI: the marks layer (green)
+(setq acc:*comb-color*   4)            ; ACI: the comb layer (cyan)
+(setq acc:*gap-color*    1)            ; ACI: a gap, or the kink band (red)
+(setq acc:*corner-color* 2)            ; ACI: an undeclared corner (yellow)
+(setq acc:*decl-color*   3)            ; ACI: a declared break (green)
 
+;; Everything ABCURCHECK draws carries xdata under this name, so a
+;; rescue erases only its own work off a layer the drawing may already
+;; be using.  Renaming it orphans what earlier runs left behind --
+;; including the declarations a later run is supposed to remember.
+(setq acc:*appid*        "ABCURCHECK")
+
+;; The dashed linetype declarations are ringed with, and its pattern:
+;; dash, gap, and the total the two must add up to.  It is created at
+;; pool scale so the dashes read on a 40-foot perimeter.
+(setq acc:*dash-name*    "DASHED")
+(setq acc:*dash-on*      12.0)         ; drawing units of dash
+(setq acc:*dash-off*     6.0)          ; ...and of gap
+;; -- G0: is the loop closed at all -------------------------------------
+
+;; Closer than this and two ends are the same point -- ABHD's
+;; *PF-CHAIN-FUZZ*.  Raising it forgives sloppier joins; a gap over it
+;; is a finding in its own right and the worst thing the grade can
+;; carry.
+(setq acc:*fuzz*         1.0e-4)       ; drawing units
+
+;; The signed turning of a simple closed loop is 360 degrees.  This is
+;; how far off that the total may sit before the loop is called
+;; self-crossing.
+(setq acc:*close-tol*    5.0)          ; degrees
+
+;; The crossing scan compares every segment with every other, so it is
+;; skipped above this many segments -- and the report says it was
+;; skipped rather than pretending it ran.
+(setq acc:*cross-max*    300)          ; segments
+
+;; -- G1: how sharply a joint may turn ----------------------------------
+
+;; At or under this a joint is TANGENT -- the two sides run on into
+;; each other and there is nothing to report.
+(setq acc:*tangent-eps*  0.5)          ; degrees
+
+;; The most a joint may turn and still read as smooth, and the angle
+;; over which it stops being a kink and becomes a corner.  Both are
+;; ABHD's (*PF-TANG-TOL* and *PF-CORNER-ANG*): the 8-45 band is the one
+;; a fabricator finds in the bead, which is why it leads the grade.
+;; Move them only when ABHD's move -- the test fails if they part.
+(setq acc:*kink-tol*     8.0)          ; degrees
+(setq acc:*corner-ang*   45.0)         ; degrees
+
+;; -- noise: what a traced outline leaves behind ------------------------
+
+;; A segment shorter than this is a micro-segment, the signature of an
+;; outline traced by hand rather than drawn.
+(setq acc:*micro-len*    3.0)          ; drawing units
+
+;; The share of the perimeter sitting in micro-segments that costs the
+;; whole noise score.  Lower it and a lightly traced outline is
+;; punished harder.
+(setq acc:*micro-share*  0.10)         ; fraction of the perimeter
+
+;; A freeform pool turns more than 360 degrees in total because it
+;; weaves; FREE is the excess it is owed before the noise score starts
+;; to fall, and CAP is where that score reaches zero.  These two are
+;; the values most worth recalibrating against real drawings.
+(setq acc:*excess-free*  0.35)         ; turns beyond one full turn
+(setq acc:*excess-cap*   1.00)         ; ...and where it reaches zero
+
+;; -- the 0-100 index ---------------------------------------------------
+
+;; What each half of the check is worth.  The three are summed and
+;; printed as the denominator, so they need not add to 100 -- but the
+;; grade word is set by the single worst thing found, not by the index,
+;; and these weights do not move it.
+(setq acc:*w-integrity*  40.0)         ; G0: gaps, doubles, crossings
+(setq acc:*w-tangency*   35.0)         ; the kink and corner bands
+(setq acc:*w-noise*      25.0)         ; micro share and turning excess
+
+;; -- picking and marking ------------------------------------------------
+
+;; How near a pick must land to a joint to declare it -- or, on Remove,
+;; to drop the declaration nearest the pick.
+(setq acc:*snap-dist*    6.0)          ; drawing units
+
+;; Radius of the rings drawn round a finding or a declaration.
+(setq acc:*mark-radius*  4.0)          ; drawing units
+
+;; -- the curvature comb -------------------------------------------------
+
+;; One comb tooth per this much run, and the length of the tooth at the
+;; tightest curvature in the loop -- every other tooth is scaled
+;; against that one, so the comb is a picture of relative curvature.
+(setq acc:*comb-step*    12.0)         ; drawing units per tooth
+(setq acc:*comb-max*     24.0)         ; drawing units at the tightest bend
+
+;; -- the finding labels -------------------------------------------------
+
+;; Label text is sized against the perimeter, so it reads the same on a
+;; 20-foot spa and a 60-foot pool: perimeter/DIV, but never under MIN.
+(setq acc:*label-min*    4.0)          ; drawing units
+(setq acc:*label-div*    200.0)        ; perimeter divided by this
+
+;; -- numerical guards (rarely changed) ---------------------------------
+
+;; A curvature below this is straight, so the comb is not drawn at all;
+;; a tooth shorter than this is not drawn either.
+(setq acc:*flat-curv*    1.0e-12)      ; 1/drawing units
+(setq acc:*flat-tooth*   1.0e-6)       ; drawing units
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  The sysvar list and its snapshot below are not
+;;;  knobs: they are what the run puts back on the way out.
 (setq acc:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
 ;; Local copies of the generic library helpers, as the standalone tier
@@ -26203,7 +26297,12 @@
         ix (acc:index res))
   (princ (strcat "\n\n  GRADE  " (cal:pad (car g) 10)
                  "set by: " (cadr g)))
-  (princ (strcat "\n  Index  " (cal:pad (strcat (itoa (car ix)) " / 100") 10)
+  (princ (strcat "\n  Index  "
+                 (cal:pad (strcat (itoa (car ix)) " / "
+                                  (itoa (fix (+ acc:*w-integrity*
+                                                acc:*w-tangency*
+                                                acc:*w-noise*))))
+                          10)
                  "(integrity " (itoa (cadr ix))
                  ", tangency " (itoa (caddr ix))
                  ", noise " (itoa (cadddr ix)) ")"))
@@ -26216,14 +26315,15 @@
 ;; calls).  Dash lengths are in drawing units - sized for an inch
 ;; drawing, so the dashes read at pool scale.
 (defun acc:ensure-dashed ()
-  (if (not (tblsearch "LTYPE" "DASHED"))
+  (if (not (tblsearch "LTYPE" acc:*dash-name*))
     (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLinetypeTableRecord")
-                   '(2 . "DASHED") '(70 . 0)
+                   (cons 2 acc:*dash-name*) '(70 . 0)
                    '(3 . "Dashed __ __ __ __ __")
-                   '(72 . 65) '(73 . 2) '(40 . 18.0)
-                   '(49 . 12.0) '(74 . 0)
-                   '(49 . -6.0) '(74 . 0)))))
+                   '(72 . 65) '(73 . 2)
+                   (cons 40 (+ acc:*dash-on* acc:*dash-off*))
+                   (cons 49 acc:*dash-on*) '(74 . 0)
+                   (cons 49 (- acc:*dash-off*)) '(74 . 0)))))
 
 ;; ---- "this one is mine" stamping -------------------------------------
 ;; ABCURCHECK draws onto layers the drawing may already be using, so it
@@ -26235,15 +26335,15 @@
 (defun acc:tag (en kind / ed)
   (if en
     (progn
-      (regapp "ABCURCHECK")
+      (regapp acc:*appid*)
       (setq ed (entget en))
-      (entmod (append ed (list (list -3 (list "ABCURCHECK"
+      (entmod (append ed (list (list -3 (list acc:*appid*
                                               (cons 1000 kind))))))))
   en)
 
 (defun acc:kind (en / x)
-  (setq x (assoc -3 (entget en '("ABCURCHECK"))))
-  (if x (cdr (assoc 1000 (cdr (assoc "ABCURCHECK" (cdr x)))))))
+  (setq x (assoc -3 (entget en (list acc:*appid*))))
+  (if x (cdr (assoc 1000 (cdr (assoc acc:*appid* (cdr x)))))))
 
 ;; Erase this command's own objects of one KIND on a layer, leaving
 ;; anything the user drew there alone.  Returns how many went.
@@ -26300,24 +26400,25 @@
 ;; drawing and the answer list can never disagree.
 (defun acc:draw-declared (declared / p)
   (acc:ensure-dashed)
-  (cal:ensure-layer acc:*mark-layer* 3)
+  (cal:ensure-layer acc:*mark-layer* acc:*mark-color*)
   (acc:purge acc:*mark-layer* "DECL")
   (foreach p declared
-    (acc:tag (acc:ring p acc:*mark-radius* 3 T) "DECL")))
+    (acc:tag (acc:ring p acc:*mark-radius* acc:*decl-color* T) "DECL")))
 
 ;; Ring and label every undeclared finding.  Only what fails is marked:
 ;; a ring on all 47 joints of a normal polyline says nothing, and a
 ;; drawing nobody can read is a check nobody runs.
 (defun acc:draw-marks (res / h col lab n j)
-  (cal:ensure-layer acc:*mark-layer* 3)
+  (cal:ensure-layer acc:*mark-layer* acc:*mark-color*)
   (acc:purge acc:*mark-layer* "MARK")
-  (setq h (max 4.0 (/ (acc:val "perim" res) 200.0))
+  (setq h (max acc:*label-min*
+               (/ (acc:val "perim" res) acc:*label-div*))
         n 0)
   (foreach j (acc:offenders res)
     (setq col (if (or (>= (acc:j-gap j) acc:*fuzz*)
                       (= (acc:j-band j) "kink"))
-                1     ; red - a gap, or the 8-45 deg band that hurts
-                2)    ; yellow - a corner nobody declared
+                acc:*gap-color*      ; a gap, or the band that hurts
+                acc:*corner-color*)  ; a corner nobody declared
           lab (if (>= (acc:j-gap j) acc:*fuzz*)
                 (strcat "gap " (rtos (acc:j-gap j) 2 3))
                 (strcat (rtos (acc:deg (abs (acc:j-ang j))) 2 1) "%%d"))
@@ -26360,14 +26461,14 @@
         kmax 0.0)
   (foreach pr segs
     (setq kmax (max kmax (abs (acc:seg-curv pr)))))
-  (if (< kmax 1.0e-12)
+  (if (< kmax acc:*flat-curv*)
     (progn
       (princ "\n  The comb was not drawn: this perimeter is all straight"
              )
       (princ "\n  lines, so every tooth would have zero length.")
       0)
     (progn
-      (cal:ensure-layer acc:*comb-layer* 4)
+      (cal:ensure-layer acc:*comb-layer* acc:*comb-color*)
       (acc:purge acc:*comb-layer* "MARK")
       (setq scale (/ acc:*comb-max* kmax)
             tips  (acc:comb-tips segs scale)
@@ -26377,7 +26478,7 @@
         ;; a zero-length tooth on a straight run would be a degenerate
         ;; line, so only real teeth are drawn - the envelope still runs
         ;; through the curve there, which is what flat should look like
-        (if (> (cal:dist (car pr) (cadr pr)) 1.0e-6)
+        (if (> (cal:dist (car pr) (cadr pr)) acc:*flat-tooth*)
           (acc:tag
             (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
                             (cons 8 acc:*comb-layer*) '(100 . "AcDbLine")
@@ -26434,7 +26535,8 @@
              (setq p (cal:2d p) best nil bd nil)
              (foreach q declared
                (setq d (cal:dist p q))
-               (if (or (null bd) (< d bd)) (setq bd d best q)))
+               (if (and (<= d acc:*snap-dist*) (or (null bd) (< d bd)))
+                 (setq bd d best q)))
              (if best
                (setq declared (acc:remove best declared))
                (princ "\n  Nothing declared to drop."))))))
@@ -26670,33 +26772,124 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.4")
+(setq *abpcheck-version* "v1.5")
 
-;;; -------------------- tunables ----------------------------------------
+;;; ======================================================================
+;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq abp:*limit* 0.5) -- because every knob
+;;;  is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
+
+;; -- where the survey points are ---------------------------------------
 
 ;; Where the survey points live, and what a point block calls its
 ;; number -- ABHD's *PF-POINT-LAYER* / *PF-POINT-BLOCK* / *PF-PT-TAG*.
+;; An ab_pt block counts as a point wherever it sits, so the layer only
+;; matters for bare POINT entities.
 (setq abp:*pt-layer* "POINTS")    ; layer holding the survey points
 (setq abp:*pt-block* "ab_pt")     ; block name whose INSERTs mark points
 (setq abp:*pt-tag*   "number")    ; the attribute carrying the number
 
+;; What the highlight is allowed to hand the command: the points, the
+;; geometry they are measured against, and the two curve types that are
+;; counted rather than measured so the report can say they were left
+;; out.  A type dropped from here is never seen at all; a type added
+;; that abp:ent-segs cannot break into segments is silently ignored.
+(setq abp:*filter*
+  '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE")))
+
+;; The curve types the segment math does not cover.  They are counted
+;; and named in the report rather than measured against, because
+;; guessing would report a point sitting ON a spline as off the line.
+(setq abp:*uncovered-types* '("SPLINE" "ELLIPSE"))
+
+;; -- what counts as too far --------------------------------------------
+
 ;; How far off the nearest line is too far.  The command asks, Enter
-;; takes what is here, and the answer is remembered for the session.
-(setq abp:*limit* 1.0)            ; 1 inch
+;; takes what is here, and the answer is remembered for the session --
+;; so this is the FIRST-RUN default, not a cap.
+(setq abp:*limit* 1.0)            ; drawing units (1 inch)
 
 ;; Two points closer than this are the same shot, not two.
-(setq abp:*exact-eps* 1.0e-6)
+(setq abp:*exact-eps* 1.0e-6)     ; drawing units
 
+;; How far an entity's extrusion normal (DXF 210) may lean from world
+;; +Z before it is counted as "not in the world plane" and left out of
+;; the measurement.  0.999 is about 2.6 degrees of tilt.
+(setq abp:*plane-min* 0.999)      ; cosine of the tilt, so nearer 1 is stricter
+
+;; -- marking and report ------------------------------------------------
+
+;; The two layers ABPCHECK writes on, created on first use.  It never
+;; clears a layer wholesale: everything it draws carries xdata under
+;; the APPID below, and only stamped objects are erased again -- so
+;; ABPCHECKRESCUE is safe on a layer the drawing already uses.
 (setq abp:*miss-layer*   "ABPCHECK-MISS")
-(setq abp:*miss-color*   1)       ; red: the points that are too far off
+(setq abp:*miss-color*   1)       ; ACI: the points that are too far off (red)
 (setq abp:*report-layer* "ABPCHECK-REPORT")
-(setq abp:*report-color* 3)
-(setq abp:*flag-color*   1)       ; red rows
-(setq abp:*advice-color* 4)       ; cyan: advice, not a failure
+(setq abp:*report-color* 3)       ; ACI (green)
+(setq abp:*appid*        "ABPCHECK")  ; renaming this orphans earlier runs
+
+(setq abp:*flag-color*   1)       ; ACI: rows over the limit (red)
+(setq abp:*advice-color* 4)       ; ACI: advice, not a failure (cyan)
 (setq abp:*green-scale*  0.75)    ; height of a row that checked out
 (setq abp:*report-chars* 48.0)    ; report column width, in text heights
 (setq abp:*ring-scale*   1.2)     ; ring radius, in report text heights
-(setq abp:*clear-shown*  10)      ; how many within-limit points are listed
+
+;; How many within-limit points are listed before the rest are summed
+;; up in one line, so a 200-point survey does not write 200 rows.
+(setq abp:*clear-shown*  10)      ; rows
+
+;; The report is scaled to the drawing, as the check family's siblings
+;; do it.  WIDE: on a wide, short sheet the reference height is at
+;; least this fraction of the width.  LEAD: MTEXT line pitch as a
+;; multiple of text height.  HMAX/HMIN: divisors clamping the height --
+;; never taller than reference/HMAX, never shorter than reference/HMIN,
+;; so a smaller number is a looser bound.  HFALL: the height used when
+;; there is nothing to scale against.  GAP: space between drawing and
+;; report, as a fraction of the drawing's width.
+(setq abp:*report-wide*  0.25)
+(setq abp:*report-lead*  1.66)
+(setq abp:*report-hmax*  30.0)
+(setq abp:*report-hmin*  200.0)
+(setq abp:*report-hfall* 2.5)     ; drawing units
+(setq abp:*report-gap*   0.05)
+
+;; The title is written this many times the base height, and a section
+;; heading gets this much blank line above it.  HEAD-LINES is the
+;; allowance for title, date, verdict and legend when guessing how long
+;; the sheet will run; HDG-LINES is a heading plus its gap.
+(setq abp:*title-scale*  1.5)
+(setq abp:*hdg-gap*      0.4)
+(setq abp:*head-lines*   4.5)
+(setq abp:*hdg-lines*    1.4)
+
+;; Findings are indented under their heading by this string.
+(setq abp:*row-indent*   "  ")
+
+;; Distances in the report go through (rtos d mode prec): mode 4 is
+;; architectural (feet-inches), so 1.875 reads 0'-1 7/8"; prec is how
+;; many ways the inch is split, as a power of two (4 = sixteenths).
+;; This is the shape the report was asked for -- see the header.
+(setq abp:*dist-mode*    4)       ; rtos mode
+(setq abp:*dist-prec*    4)       ; 2^4 = sixteenths of an inch
+
+;; A bounding box smaller than this has nothing to scale a report to.
+(setq abp:*tiny*         1.0e-8)  ; drawing units
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  The one thing kept between commands is the sysvar
+;;;  snapshot below, and abp:*limit*, which the command overwrites with
+;;;  whatever you last answered.
+;;; ======================================================================
 
 ;;; -------------------- generic helpers ----------------------------------
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
@@ -26913,10 +27106,10 @@
               ext (cdr (assoc 210 ed)))
         (if (or (= lay (strcase abp:*miss-layer*))
                 (= lay (strcase abp:*report-layer*))
-                (assoc -3 (entget en '("ABPCHECK"))))
+                (assoc -3 (entget en (list abp:*appid*))))
           (setq nmine (1+ nmine))
           (progn
-            (if (and ext (< (abs (caddr ext)) 0.999))
+            (if (and ext (< (abs (caddr ext)) abp:*plane-min*))
               (setq nocs (1+ nocs)))
             (cond
               ;; ab_pt blocks are survey points wherever they sit
@@ -26948,7 +27141,7 @@
                                  pts))))
               ;; the segment math does not cover these, and guessing
               ;; would report a point sitting ON a spline as off the line
-              ((member typ '("SPLINE" "ELLIPSE")) (setq nspl (1+ nspl)))
+              ((member typ abp:*uncovered-types*) (setq nspl (1+ nspl)))
               (T (setq segs (append segs (abp:ent-segs en))))))))))
   (list (cal:dedupe (reverse pts) abp:*exact-eps*)
         segs nspl nocs nmine))
@@ -26985,30 +27178,39 @@
 
 ;; The report's title line: half again the base height.
 (defun abp:big (s)
-  (strcat "{\\H1.5x;" s "}"))
+  (strcat "{\\H" (rtos abp:*title-scale* 2 2) "x;" s "}"))
 
 ;; A section heading: underlined, with a thin blank line above it so
 ;; the sections read as blocks.
 (defun abp:hdg (s)
-  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+  (strcat "{\\H" (rtos abp:*hdg-gap* 2 2) "x;\\P}{\\L" s "}"))
 
 ;; Findings are indented two spaces under their heading; the indent
 ;; sits INSIDE the colour/height wrap so a row still starts with its
 ;; colour code.
-(defun abp:render (r)
+;; The word for an ACI colour, so the legend names the colour actually
+;; used instead of saying "red" whatever abp:*flag-color* holds.
+(defun abp:color-name (aci / q)
+  (setq q (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if q (cdr q) (strcat "colour " (itoa aci))))
+
+(defun abp:render (r / i)
+  (setq i abp:*row-indent*)
   (cond ((abp:lvl-p r 3) (abp:hdg (abp:row-txt r)))
-        ((abp:lvl-p r 1) (abp:red (strcat "  " (abp:row-txt r))))
-        ((abp:lvl-p r 2) (abp:cyan (strcat "  " (abp:row-txt r))))
-        (t (abp:small (strcat "  " (abp:row-txt r))))))
+        ((abp:lvl-p r 1) (abp:red (strcat i (abp:row-txt r))))
+        ((abp:lvl-p r 2) (abp:cyan (strcat i (abp:row-txt r))))
+        (t (abp:small (strcat i (abp:row-txt r))))))
 
 ;; The one finding line, the shape the report was asked for:
 ;;     Pt. 17    closest line is 0'-1 7/8" away
 (defun abp:finding (q)
   (strcat "Pt. " (cal:pad (abp:pt-name (cdr q)) 6)
-          "closest line is " (rtos (car q) 4 4) " away"))
+          "closest line is " (abp:dstr (car q)) " away"))
 
 ;; Distance as the report writes it, for prose (the limit, mostly).
-(defun abp:dstr (d) (rtos d 4 4))
+(defun abp:dstr (d) (rtos d abp:*dist-mode* abp:*dist-prec*))
 
 ;; The findings, worst first: everything over the limit under one
 ;; heading, then the near misses under another, capped so a 200-point
@@ -27080,20 +27282,20 @@
           ((abp:lvl-p r 2) (setq nadv (1+ nadv)))))
   ;; height: the head is title (1.5) + date + verdict (1.2) + legend; a
   ;; heading row is one line plus the 0.4 gap above it
-  (setq nlin 4.5)
+  (setq nlin abp:*head-lines*)
   (foreach r rows
-    (setq nlin (+ nlin (cond ((abp:lvl-p r 3) 1.4)
+    (setq nlin (+ nlin (cond ((abp:lvl-p r 3) abp:*hdg-lines*)
                              ((abp:row-lvl r) 1.0)
                              (t abp:*green-scale*)))))
-  (if (and bb (> (max (abp:bw bb) (abp:bh bb)) 1.0e-8))
+  (if (and bb (> (max (abp:bw bb) (abp:bh bb)) abp:*tiny*))
     (progn
-      (setq ref (max (abp:bh bb) (* 0.25 (abp:bw bb)))
-            h   (/ ref (* 1.66 nlin)))
-      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-    (setq h 2.5))
+      (setq ref (max (abp:bh bb) (* abp:*report-wide* (abp:bw bb)))
+            h   (/ ref (* abp:*report-lead* nlin)))
+      (if (> h (/ ref abp:*report-hmax*)) (setq h (/ ref abp:*report-hmax*)))
+      (if (< h (/ ref abp:*report-hmin*)) (setq h (/ ref abp:*report-hmin*))))
+    (setq h abp:*report-hfall*))
   (setq ins (if bb
-                (list (+ (caddr bb) (* 0.05 (max (abp:bw bb) 1.0)))
+                (list (+ (caddr bb) (* abp:*report-gap* (max (abp:bw bb) 1.0)))
                       (cadddr bb) 0.0)
                 (list 0.0 0.0 0.0)))
   ;; the head: a large title, the date and version small under it, the
@@ -27120,8 +27322,9 @@
                       (strcat "Too far = more than " (abp:dstr limit)
                               " off the nearest line.  Read-only scan -"
                               " nothing you drew was changed.  Too far in "
-                              (abp:red "red")
-                              ", advice in " (abp:cyan "cyan")
+                              (abp:red (abp:color-name abp:*flag-color*))
+                              ", advice in "
+                              (abp:cyan (abp:color-name abp:*advice-color*))
                               "; points that check out are smaller."))))
   (foreach r rows
     (setq txt (strcat txt "\\P" (abp:render r))))
@@ -27138,10 +27341,10 @@
 (defun abp:tag-mine (en / ed)
   (if en
     (progn
-      (regapp "ABPCHECK")
+      (regapp abp:*appid*)
       (setq ed (entget en))
-      (entmod (append ed (list (list -3 (list "ABPCHECK"
-                                              (cons 1000 "ABPCHECK"))))))))
+      (entmod (append ed (list (list -3 (list abp:*appid*
+                                              (cons 1000 abp:*appid*))))))))
   en)
 
 ;; Erase only ABPCHECK's own objects on a layer; anything the user drew
@@ -27156,7 +27359,7 @@
           (setq i 0)
           (repeat (sslength ss)
             (setq en (ssname ss i))
-            (if (assoc -3 (entget en '("ABPCHECK")))
+            (if (assoc -3 (entget en (list abp:*appid*)))
               (progn (entdel en) (setq n (1+ n))))
             (setq i (1+ i)))))))
   n)
@@ -27188,12 +27391,6 @@
   (if v v dflt))
 
 ;;; -------------------- the commands ------------------------------------
-
-;; The selection filter: the points and the geometry they are measured
-;; against, plus the two curve types that are counted rather than
-;; measured, so the report can say they were left out.
-(setq abp:*filter*
-  '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE")))
 
 (defun c:ABPCHECK ( / *error* undo-open ss got pts segs nspl nocs nmine
                       keyed rows bb res h nring)

@@ -327,6 +327,54 @@ check("the Highlight prompt is never asked",
       not any(p[0] == 'ssget' for p in vm9.prompts), repr(vm9.prompts))
 check("and the report still lands", report_text(vm9) is not None)
 
+
+
+# ----------------------------------------------------------------------
+# The TUNABLES block: one place to change anything, every knob in it
+# explained, and every knob read when the command RUNS rather than
+# baked in at load.
+# ----------------------------------------------------------------------
+def test_the_tunables_block_holds_every_knob_each_explained():
+    import re
+    src = open(CHK, encoding='ascii').read()   # also asserts pure ASCII
+    lines = src.splitlines()
+    start = next(i for i, l in enumerate(lines)
+                 if l.startswith(';;;  TUNABLES'))
+    end = next(i for i, l in enumerate(lines)
+               if l.startswith(';;;  END TUNABLES'))
+    state = {'abp:*sysold*'}
+    outside = [l for i, l in enumerate(lines)
+               if l.startswith('(setq abp:*') and not start < i < end
+               and not any(k in l for k in state)]
+    assert not outside, outside
+
+    def explained(i):
+        if re.search(r'\)\s*;', lines[i]):
+            return True
+        j = i - 1
+        while j >= 0 and lines[j].strip():
+            if lines[j].lstrip().startswith(';;'):
+                return True
+            j -= 1
+        return False
+
+    undoc = [l for i, l in enumerate(lines[start:end], start)
+             if l.startswith('(setq abp:*') and not explained(i)]
+    assert not undoc, undoc
+    knobs = re.findall(r'^\(setq (abp:\*[a-z-]+\*)', src, re.M)
+    vm = vm_with()
+    unbound = [k for k in knobs if k not in state and vm.loads(k) is None]
+    assert not unbound, unbound
+    readme = open(os.path.join(os.path.dirname(__file__), '..', 'lisp',
+                               'abpcheck', 'README.md')).read()
+    missing = [k for k in knobs if k not in state and k not in readme]
+    assert not missing, missing
+    print("ok  %d knobs, all inside the block, all explained,"
+          " all in the README" % len(knobs))
+
+
+test_the_tunables_block_holds_every_knob_each_explained()
+
 # ----------------------------------------------------------------------
 print()
 if FAILS:

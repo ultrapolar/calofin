@@ -127,31 +127,76 @@ runs.
 
 ## Tunables
 
-Every threshold is a global at the top of the file.
+Every value ABCURCHECK reads that you might want to change sits in one
+`TUNABLES` block at the top of `ABCURCHECK.lsp`, each with a comment saying
+what it does, its units, and what raising or lowering it changes. Edit
+the value and APPLOAD the file again, or type the `setq` at the command
+line to try a value for one session -- every knob is read when the
+command runs, not when the file loads.
+
+The tables below are the block, read off it:
+
+**Where the marks go**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `acc:*tangent-eps*` | `0.5` | deg -- at or under this a joint is tangent |
-| `acc:*kink-tol*` | `8.0` | deg -- ABHD's `*PF-TANG-TOL*` |
-| `acc:*corner-ang*` | `45.0` | deg -- ABHD's `*PF-CORNER-ANG*` |
-| `acc:*micro-len*` | `3.0` | shorter than this is a micro-segment |
-| `acc:*micro-share*` | `0.10` | micro share that costs the whole noise score |
-| `acc:*close-tol*` | `5.0` | deg the signed turning may sit off 360 |
-| `acc:*snap-dist*` | `6.0` | how near a declaration pick must land to a joint |
-| `acc:*fuzz*` | `1.0e-4` | closer than this and two ends are the same point |
-| `acc:*cross-max*` | `300` | segments above which the crossing scan stands down |
-| `acc:*comb-step*` | `12.0` | one comb tooth per foot of run |
-| `acc:*comb-max*` | `24.0` | tooth length at the tightest curvature in the loop |
-| `acc:*excess-free*` | `0.35` | turning excess a freeform pool is owed... |
-| `acc:*excess-cap*` | `1.00` | ...and where the noise score reaches zero |
-| `acc:*w-integrity*` / `*w-tangency*` / `*w-noise*` | `40` / `35` / `25` | index weights |
-| `acc:*mark-layer*` / `*comb-layer*` | `POOL-CONT` / `POOL-COMB` | output layers |
+| `acc:*mark-layer*` / `acc:*comb-layer*` / `acc:*mark-color*` / `acc:*comb-color*` / `acc:*gap-color*` / `acc:*corner-color*` / `acc:*decl-color*` | `"POOL-CONT"` / `"POOL-COMB"` / `3` / `4` / `1` / `2` / `3` | findings and declarations go here; the curvature comb goes here; ACI: the marks layer (green); ACI: the comb layer (cyan); ACI: a gap, or the kink band (red); ACI: an undeclared corner (yellow); ACI: a declared break (green) |
+| `acc:*appid*` | `"ABCURCHECK"` | Everything ABCURCHECK draws carries xdata under this name, so a rescue erases only its own work off a layer the drawing may already be using. Renaming it orphans what earlier runs left behind -- including the declarations a later run is supposed to remember |
+| `acc:*dash-name*` / `acc:*dash-on*` / `acc:*dash-off*` | `"DASHED"` / `12.0` / `6.0` | The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total the two must add up to. It is created at pool scale so the dashes read on a 40-foot perimeter (drawing units of dash; ...and of gap) |
 
-The two excess bounds and the micro share are the values most worth
-recalibrating against real drawings; the tangent bands are ABHD's and
-should move only if ABHD's do (`tests/test_abcurcheck.py` fails if they
-part company).
+**G0: is the loop closed at all**
 
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `acc:*fuzz*` | `1.0e-4` | Closer than this and two ends are the same point -- ABHD's *PF-CHAIN-FUZZ*. Raising it forgives sloppier joins; a gap over it is a finding in its own right and the worst thing the grade can carry (drawing units) |
+| `acc:*close-tol*` | `5.0` | The signed turning of a simple closed loop is 360 degrees. This is how far off that the total may sit before the loop is called self-crossing (degrees) |
+| `acc:*cross-max*` | `300` | The crossing scan compares every segment with every other, so it is skipped above this many segments -- and the report says it was skipped rather than pretending it ran (segments) |
+
+**G1: how sharply a joint may turn**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `acc:*tangent-eps*` | `0.5` | At or under this a joint is TANGENT -- the two sides run on into each other and there is nothing to report (degrees) |
+| `acc:*kink-tol*` / `acc:*corner-ang*` | `8.0` / `45.0` | The most a joint may turn and still read as smooth, and the angle over which it stops being a kink and becomes a corner. Both are ABHD's (*PF-TANG-TOL* and *PF-CORNER-ANG*): the 8-45 band is the one a fabricator finds in the bead, which is why it leads the grade. Move them only when ABHD's move -- the test fails if they part (degrees) |
+
+**Noise: what a traced outline leaves behind**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `acc:*micro-len*` | `3.0` | A segment shorter than this is a micro-segment, the signature of an outline traced by hand rather than drawn (drawing units) |
+| `acc:*micro-share*` | `0.10` | The share of the perimeter sitting in micro-segments that costs the whole noise score. Lower it and a lightly traced outline is punished harder (fraction of the perimeter) |
+| `acc:*excess-free*` / `acc:*excess-cap*` | `0.35` / `1.00` | A freeform pool turns more than 360 degrees in total because it weaves; FREE is the excess it is owed before the noise score starts to fall, and CAP is where that score reaches zero. These two are the values most worth recalibrating against real drawings (turns beyond one full turn; ...and where it reaches zero) |
+
+**The 0-100 index**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `acc:*w-integrity*` / `acc:*w-tangency*` / `acc:*w-noise*` | `40.0` / `35.0` / `25.0` | What each half of the check is worth. The three are summed and printed as the denominator, so they need not add to 100 -- but the grade word is set by the single worst thing found, not by the index, and these weights do not move it (G0: gaps, doubles, crossings; the kink and corner bands; micro share and turning excess) |
+
+**Picking and marking**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `acc:*snap-dist*` | `6.0` | How near a pick must land to a joint to declare it -- or, on Remove, to drop the declaration nearest the pick (drawing units) |
+| `acc:*mark-radius*` | `4.0` | Radius of the rings drawn round a finding or a declaration (drawing units) |
+
+**The curvature comb**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `acc:*comb-step*` / `acc:*comb-max*` | `12.0` / `24.0` | One comb tooth per this much run, and the length of the tooth at the tightest curvature in the loop -- every other tooth is scaled against that one, so the comb is a picture of relative curvature (drawing units per tooth; drawing units at the tightest bend) |
+
+**The finding labels**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `acc:*label-min*` / `acc:*label-div*` | `4.0` / `200.0` | Label text is sized against the perimeter, so it reads the same on a 20-foot spa and a 60-foot pool: perimeter/DIV, but never under MIN (drawing units; perimeter divided by this) |
+
+**Numerical guards (rarely changed)**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `acc:*flat-curv*` / `acc:*flat-tooth*` | `1.0e-12` / `1.0e-6` | A curvature below this is straight, so the comb is not drawn at all; a tooth shorter than this is not drawn either (1/drawing units; drawing units) |
 ## Notes & limitations
 
 * **Curvature jumps are drawn, not scored.** A polyline of lines and
