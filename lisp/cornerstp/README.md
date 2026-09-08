@@ -111,11 +111,36 @@ override):
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `*cs-width-tol*` | `nil` | Step width tolerance, drawing units; nil = 1/8" converted through `INSUNITS` |
-| `*cs-depth-dimstyle*` | `"STANDARD INCHES"` | Style for step-tread dims (the side profile's dims too) |
+| `*cs-width-tol*` | `nil` | Step width tolerance, drawing units: a width within this of the opening it lands in snaps to the walls (to the curve, in HEMISTEP); nil = derive it from `*cs-tol-inch*` through `INSUNITS` |
+| `*cs-tol-inch*` | `0.125` | What that tolerance is in INCHES when it is derived -- 1/8", the way the shop reads it |
+| `*cs-depth-dimstyle*` | `"STANDARD INCHES"` | Style for step-tread dims (the side profile's depth dims too) |
 | `*cs-width-dimstyle*` | `"SIDE STANDARD"` | Style for step-width dims |
 | `*cs-dim-layer*` | `nil` | Layer for the dimensions; nil = current layer |
-| `*cs-profile-dimgap*` | `nil` | How far the side profile's dims stand off the flight, on top of the clearance the geometry needs; nil = four text heights or 3/4 of a tread, whichever is more |
+| `*cs-dim-offset*` | `2.0` | How far the step-tread dim chain stands off the run, in TEXT HEIGHTS -- so it tracks `DIMSCALE`, not the drawing's size |
+| `*cs-dim-nest*` | `1.5` | How far a step-width dim sits behind the run, in text heights, on top of half that step's own width (the half-width is what nests the wider steps further out) |
+| `*cs-profile-dimgap*` | `nil` | How far the side profile's dims stand off the flight, on top of the clearance the geometry needs; nil = the larger of the two terms below |
+| `*cs-profile-gap-txt*` | `4.0` | ...that default's first term, in text heights |
+| `*cs-profile-gap-tread*` | `0.75` | ...and its second, as a fraction of the widest tread |
+
+One knob each of two of them keeps to itself:
+
+| Variable | File | Default | Meaning |
+| --- | --- | --- | --- |
+| `*cs-chain-frac*` | CORNERSTP | `0.2` | The tread chain also clears this fraction of the first step's width, so a wide run does not run its chain through the steps; the larger of it and `*cs-dim-offset*` wins |
+| `*cs-parallel-tol*` | CORNERSTP | `1.0` | How close to parallel, in DEGREES, the two selected walls may be before the run says the corner it found is a long way off. It warns and carries on |
+| `*cs-join-fuzz*` | NORMIESTEP | `nil` | How far apart two ends may be and still count as JOINED when the parts of a U are chained -- what decides whether a hand-traced U reads as one outline or is refused as parts that do not connect; nil = four times the width tolerance |
+
+Deliberately not settings, in any of the three: the epsilons the
+geometry compares against, the temporary vectors a run previews itself
+with, the direction the side profile reads (down and to the left, the
+way the shop's elevations do), and the bead -- that is `AUTOBEAD`'s
+work, on `AUTOBEAD`'s own settings.
+
+A setting that is not a number where a number belongs falls back to the
+value it shipped with rather than failing mid-run, and
+`tests/test_steps_settings.py` holds the two copies of every default --
+the one the settings block sets and the one its reader falls back to --
+together.
 
 ## Notes & limitations
 
@@ -127,12 +152,13 @@ override):
   dim by its grip if it lands awkwardly.
 * One `U` reverses a whole run -- except the bead pass, which is its
   own group (AutoCAD does not nest undo groups).
-* CORNERSTP's bracketed option text still spells the choices out
-  (`[Inside out/Outside in]`, `[Middle of diagonal/True corner]`,
-  `[Parallel to diagonal/...]`) while the typed keywords are the bare
-  words listed above -- clicking those bracket phrases does not send a
-  valid keyword. A known migration item (`STANDARDS.md` section 7.2);
-  type the capitalized letters.
+* Every bracket shows exactly the keywords its prompt accepts, so a
+  click on one sends a word the command takes (`[Inside/Outside]`, not
+  the old `[Inside out/Outside in]`); the explanation lives in the
+  question text. `tools/check_lisp.py` fails a bracket that drifts.
+* A drawing with UNDO switched off (`UNDOCTL` bit 1 clear) is handled:
+  no group is opened, and none is closed. One `U` then undoes nothing,
+  which is what UNDO off means.
 * The three routines namespace their helpers apart (`cs-`, `hs-`,
   `ns-`) and guard the settings globals they share, so loading all
   three (or the bundle) in one session is safe.
@@ -151,6 +177,13 @@ override):
 * `python3 tests/test_normiestep_corner.py` -- NORMIESTEP's corner
   mode -- the recess outside the corner and both of its sides -- in
   the VM.
+* `python3 tests/test_steps_settings.py` -- the tunables above (every
+  knob wired up, each reader falling back to the value the settings
+  block sets, a knob set to nonsense drawing the default, and each one
+  moving the drawing when it is set to something real), and the
+  contingencies: UNDO off, the dim styles missing, a dim layer that
+  cannot be drawn on, a frozen current layer, AUTOBEAD absent, and
+  selections that cannot be made into a run.
 
 Each VM-driven one reruns against the grouped build with
 `CALOFIN_LISP_ROOT=shared`.

@@ -374,6 +374,34 @@ prefix, colon-separated: `tool:helper-name`, globals with earmuffs
 `tools/check_scope.py` has a case-collision check. Pick one spelling
 per name and keep it.)
 
+**Tunables.** A global that is a *setting* -- a literal nothing
+re-assigns, that a person might reasonably want different -- goes in a
+tunables block at the top of the file, between the version banner and
+the first `defun`, under a `;;; ---` rule naming it. `tunables` is the
+word to use; PADDLE spells its rule `settings` and LINGUTTER `the
+knobs`, which is the same block under an older name and fine to leave.
+What matters is that there is one of them and everything is in it. One
+`setq` per line with a sentence saying what changing it does; not what
+it is, what moves when you change it. Scattering settings down the
+file beside the code that reads them means finding them is reading the
+file, and a knob defined *after* the code that reads it is nil while
+that code loads. Every knob is also a row in a table in the tool's
+README: `## Tunables` where there is one, PADDLE's
+`## Assumptions / configuration` where the table came first.
+
+A knob-shaped global that is not a setting -- LAZPANEL's base64
+alphabet is RFC 4648's, and reordering a character in it decodes the
+icon to garbage rather than adjusting anything -- stays where it is and
+says `NOT A KNOB:` in the comment directly above, with the reason. The
+reason is the point: without it the marker is a way to opt out of the
+rule rather than a fact about the constant.
+
+State (`nil`-initialized, written as the tool runs) is not a knob and
+does not go in the block; hoisting it there advertises an initial value
+as a setting. `tests/test_tunables.py` holds all of this for the four
+GUI files -- the panel and the three chart forms, whose knobs the VB
+palette shares -- and it is the pattern for any tool that grows one.
+
 **Commands.** `(defun c:TOOLNAME ...)` -- `c:` lowercase, name
 uppercase. Secondary commands by fixed suffix:
 
@@ -757,7 +785,15 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
 * Prefix styles: 15 files use `prefix-`, `paddle--` uses a double
   hyphen; new work uses `tool:`. Existing prefixes migrate only if
   their file is otherwise being reworked -- a rename touches every
-  line.  (Still open, on purpose.)
+  line.  (Still open, on purpose.)  BPCALLOUT's `*BP-LAYER*` family
+  took `bp:` under exactly that clause: its knobs were being gathered
+  into one tunables block, and the block is what `test_tunables.py`
+  reads, so the rename was the price of being pinned rather than
+  merely tidy.  CDCALLOUT's three point-classifier globals moved the
+  same way, and for the sharper reason that the file already spelled
+  its other knobs `cdo:*style*` / `cdo:*layer*` -- one file, two
+  schemes.  Both READMEs name the old spellings for anyone whose
+  startup file sets them.
 * ~~4 living files with no `*error*` handler~~ **DONE** -- `abcdef`
   and `altabcdef` plot geometry, so they took a handler AND an undo
   group (a cancelled plot is one U now, not one per entity);
@@ -777,6 +813,14 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
   tracks `undo-open` and closes only a group it opened, in the
   canonical casing (an error before the `_Begin` used to run `_End` on
   nothing, erroring inside the error handler).
+* ~~The same class in the step family~~ **DONE** (2026-09-08) -- all
+  six of `CORNERSTP`/`HEMISTEP`/`NORMIESTEP` and their three tutorials
+  opened the group only when `UNDOCTL` said undo was recording and then
+  closed it flat, so a drawing with UNDO off ended every run on `_End`
+  with no group open.  Their handlers had it right all along; the
+  success path now reads the same `undo-open` flag.
+  `tests/test_steps_settings.py` runs all six with `UNDOCTL` bit 1
+  clear.
 * ~~BPCALLOUT's `*break,` wildcard typo~~ **DONE** -- and the whole
   cancel test is now ONE canonical spelling repo-wide, with
   `cal:error-cancel-p` / `cal:undobegin` / `cal:undoend` in the

@@ -83,7 +83,56 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.4")
+(setq *lazspa-version* "v1.5")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them:
+;;;    lzs:*naok*      the keys that take NA on each sheet -- an NA on
+;;;                    any other key is DEMOTED to unanswered, and the
+;;;                    state line says so
+;;;    lzs:*cuts*      where each chart is cut into bands
+;;;    lzs:*charts* lzs:*corners* lzs:*second* lzs:*lists* lzs:*hints*
+;;;                    -- the sheets themselves; the VB palette's chart
+;;;                    catalog is generated from them (gen_ui_charts.py)
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (cal:*imgfont*, lzs:*font-*, lzs:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;; What a corner can be, in the SHEET LEGEND's words -- 90 / Radius /
+;; Diagonal -- with "(ask)" first so a row left alone sends nothing.
+;; SPA normalises these onto the canonical Square / Radius / Cut /
+;; NotGiven set itself, which is why they are not spelled canonically
+;; here.  ORDER MATTERS: lzs:sized names the treatments that carry a
+;; size by INDEX (2 = Radius, 3 = Diagonal), so reorder both or neither.
+(setq lzs:*ctreat* '("(ask)" "90" "Radius" "Diagonal"))
+
+;; Width budget for the row of chart tabs, in DCL character cells.
+;; Three charts run about 39 cells, so this never wraps today; it is
+;; here because DCL does not scroll, and a fourth shape must cost a row
+;; rather than the whole form.
+(setq lzs:*tabbudget* 84)
+
+;; The chart column: width in cells, and its total height in rows,
+;; which is spread over the bands the chart is cut into.
+(setq lzs:*chart-w* 52)
+(setq lzs:*chart-h* 19)
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall (the registry, one value per chart,
+;; "key=typed;key=typed").  The VB palette reads the recall key too
+;; (ui/calofin_net/ChartFormView.vb, RecallStore.SpaKey), so a sheet
+;; filled in here comes back there; tests/test_chart_form.py holds the
+;; two together.
+(setq lzs:*poskey* "LazSpa_Pos")
+(setq lzs:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazSpa")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  THIS build takes the table, its metrics, the tile palette and the
@@ -268,7 +317,7 @@
 ;;;  asks corner treatments for.  An octagon's corners ARE its S / S1 /
 ;;;  S2 letters, already on the chart, and a round spa has none.
 
-(setq lzs:*ctreat* '("(ask)" "90" "Radius" "Diagonal"))
+;;  (lzs:*ctreat* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzs:*corners*
   '(("Rectangle"
@@ -428,7 +477,6 @@
 (setq lzs:*focus* nil)          ; the key whose box has the caret
 (setq lzs:*chart* nil)          ; the chart being filled in
 (setq lzs:*pos* nil)            ; where the dialog was last standing
-(setq lzs:*poskey* "LazSpa_Pos") ; ...in the profile, kept over a restart
 (setq lzs:*go* nil)             ; the chart a tab click asked for
 
 (defun lzs:get (key / p)
@@ -666,8 +714,7 @@
 ;;;  the whole of the "nothing happened" case -- no message needed, and
 ;;;  the state line reports the fill by moving on its own.
 
-(setq lzs:*recallkey*
-      "HKEY_CURRENT_USER\\Software\\Calofin\\LazSpa")
+;;  (lzs:*recallkey* itself is set in the TUNABLES block at the top of the file.)
 
 ;;  A sheet is stored as one string, "key=typed;key=typed".  A value
 ;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
@@ -898,7 +945,7 @@
 ;; run about 39 cells, so this never wraps today -- it is here because
 ;; DCL does not scroll and a fourth shape must cost a row rather than
 ;; the whole form.
-(setq lzs:*tabbudget* 84)
+;;  (lzs:*tabbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzs:tabrows ( / out row w c cw)
   (setq row nil w 0)
@@ -922,8 +969,6 @@
     (setq out (cons "  }" out)))
   (reverse out))
 
-(setq lzs:*chart-w* 52)         ; the chart column, in character cells
-(setq lzs:*chart-h* 19)         ; its total height, spread over the bands
 
 ;; character cells across for a per-mille x
 (defun lzs:cellx (v) (/ (* v lzs:*chart-w*) 1000.0))

@@ -42,6 +42,11 @@ What is checked here:
    already uses for the recall store.
 6. `calofin:run` reports a missing entry point instead of erroring, and
    hands the routine one alist when it is there.
+7. Contingencies -- the things the palette never sends and the wire has
+   to take anyway: a value that is already a number, a packed string
+   somebody edited by hand, an entry point named by symbol, and a
+   routine that dies, whose error must NOT be swallowed here because
+   the routine's own handler is the one that should report it.
 
 Run: python3 tests/test_palette_wire.py
 """
@@ -279,6 +284,89 @@ vm3.loads('(setq t:*have* (calofin:loaded))')
 have = [str(x) for x in vm3.globals['t:*have*'] or []]
 check("calofin:loaded still reports what is defined", have == ['POOL'],
       repr(have))
+
+
+print("== 7. contingencies: what the wire does with what it should never get ==")
+
+# The palette never sends any of these -- MeasurePair always quotes, the
+# dropdowns send words, the count is the one integer and it is a
+# literal -- but the wire is an ENTRY POINT, and an entry point takes
+# what it is given.  Each case here is one that made a reader die, or
+# would have.
+vm = fresh()
+vm.loads('(setq t:*n* (calofin:form nil \'((b . 84) (l . "72"))))')
+got = [entry(p) for p in vm.globals['t:*n*']]
+check("a measure that is already a number travels as itself",
+      any(k == 'b' and float(v) == 84.0 for k, v in got), repr(got))
+check("beside the text that is read", any(k == 'l' and float(v) == 72.0
+                                          for k, v in got), repr(got))
+
+vm.loads('(setq t:*u2* (calofin:unreadable '
+         '\'((b . 84) (c . nil) (d . "zz") (e . "  ") (f . 3.5))))')
+bad = [str(x) for x in vm.globals['t:*u2*'] or []]
+check("a number is never unreadable - only text can be", bad == ['d'],
+      repr(bad))
+check("nor is nil, which is an empty box, not a bad one", 'c' not in bad)
+
+vm.loads('(setq t:*e1* (calofin:form nil nil))')
+vm.loads('(setq t:*e2* (calofin:unreadable nil))')
+vm.loads('(setq t:*e3* (calofin:unreadable-str nil))')
+check("nothing in gives nothing out, on all three",
+      not vm.globals['t:*e1*'] and not vm.globals['t:*e2*']
+      and str(vm.globals['t:*e3*'] or '') == '',
+      repr((vm.globals['t:*e1*'], vm.globals['t:*e2*'],
+            vm.globals['t:*e3*'])))
+
+# a packed string the palette could never write, because RecallStore
+# .Pack refuses a value carrying a separator -- but a registry value is
+# a registry value, and someone will edit one by hand
+for packed, want in (("a==b", ""), (";;", ""), ("=x", ""),
+                     ("noequals", ""), ("a=", ""), ("a=zz;;b=84", "a"),
+                     (";a=zz;", "a")):
+    vm.loads('(setq t:*m* (calofin:unreadable-str "%s"))' % packed)
+    check("packed %-12r -> %r" % (packed, want),
+          str(vm.globals['t:*m*'] or '') == want, repr(vm.globals['t:*m*']))
+
+# the entry point may be named either way
+vm = fresh()
+vm.loads('(setq t:*out* nil)')
+vm.loads('(defun pool:run-with-answers (form) (setq t:*out* form) t)')
+vm.loads("(calofin:run 'pool:run-with-answers nil '((b . \"84\")))")
+check("a routine named by SYMBOL is found too",
+      [entry(p) for p in vm.globals['t:*out*'] or []] == [('b', 84.0)],
+      repr(vm.globals['t:*out*']))
+
+# and one the session has not loaded is REPORTED, by either spelling.
+# Naming it in the message is where that used to break: the message was
+# built with strcat, which takes strings and nothing else, so the
+# symbol spelling died on the line that exists to say the routine is
+# missing.  (It reads as fine in a VM where Sym subclasses str, which
+# is why tests/lispvm.py's strcat rejects a symbol on purpose.)
+for named, how in (('"nope:run"', 'string'), ("'nope:run", 'symbol')):
+    vm = fresh()
+    vm.printed = []
+    vm.loads('(calofin:run %s nil \'((b . "84")))' % named)
+    said = "".join(vm.printed)
+    check("an unloaded routine named by %-6s reports, and names itself"
+          % how, 'nope:run' in said and 'not loaded' in said, repr(said))
+
+# A ROUTINE THAT DIES IS NOT CAUGHT HERE.  That is LAZFORM's design and
+# it is the right one: POOL installs its own *error*, and a POOL that
+# fails must report as POOL.  A wire that swallowed the error would
+# leave the drawing half-done with nothing on the command line to say
+# so.  So the error must reach the caller, which in the VM means
+# reaching Python.
+vm = fresh()
+vm.loads('(setq t:*ran* nil)')
+vm.loads('(defun pool:run-with-answers (form) (setq t:*ran* t) (strlen 5))')
+died = False
+try:
+    vm.loads('(calofin:run "pool:run-with-answers" nil \'((b . "84")))')
+except Exception:                                          # noqa: BLE001
+    died = True
+check("a routine that errors is NOT swallowed by the wire",
+      died and vm.globals['t:*ran*'], "died=%r ran=%r"
+      % (died, vm.globals['t:*ran*']))
 
 
 print()

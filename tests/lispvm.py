@@ -941,9 +941,16 @@ BUILTINS[Sym('grdraw')] = lambda vm, a: NIL
 def _strcat(vm, a):
     """AutoCAD's strcat takes strings and nothing else -- a nil that
     reached it is a bug in the routine, so it dies here rather than
-    quietly stringifying itself."""
+    quietly stringifying itself.
+
+    A SYMBOL is not a string either, and that one needs saying because
+    Sym subclasses str here: without the isinstance below, a routine
+    that strcats a symbol -- an entry point handed 'pool:run instead of
+    "pool:run" -- reads as fine in the VM and dies in AutoCAD with bad
+    argument type: stringp.  (vl-princ-to-string or princ is the way to
+    name a symbol in a message.)"""
     for i, x in enumerate(a):
-        if not isinstance(x, str):
+        if isinstance(x, Sym) or not isinstance(x, str):
             raise LispError(
                 f"strcat: bad argument type: stringp {x!r} (arg {i + 1})", vm)
     return ''.join(a)
@@ -1284,12 +1291,37 @@ def _entmod(vm, a):
 
 @bi('entdel')
 def _entdel(vm, a):
+    """(entdel ename) -- erase, or un-erase, one entity.  An attributed
+    INSERT (group 66 = 1) owns the ATTRIBs and the SEQEND that follow
+    it, and AutoCAD erases them with it -- the tests build such blocks
+    as separate entmakes, so the run is toggled here as one, or a
+    routine that erases a point block would leave its number attribute
+    behind as a live entity the next sweep trips over."""
     e = a[0]
     if isinstance(e, Ent):
-        if e in vm.deleted:
-            vm.deleted.discard(e)
-        else:
-            vm.deleted.add(e)
+        run = [e]
+        if _dxf(vm, e, 0) == 'INSERT' and _dxf(vm, e, 66) == 1:
+            try:
+                i = vm.entities.index(e)
+            except ValueError:
+                i = None
+            if i is not None:
+                for f in vm.entities[i + 1:]:
+                    t = _dxf(vm, f, 0)
+                    if t not in ('ATTRIB', 'SEQEND'):
+                        break
+                    run.append(f)
+                    if t == 'SEQEND':
+                        break
+        # which way the toggle goes is decided ONCE, off the INSERT:
+        # asking again inside the loop would see the erase just made
+        # and put the attributes straight back
+        restoring = e in vm.deleted
+        for f in run:
+            if restoring:
+                vm.deleted.discard(f)
+            else:
+                vm.deleted.add(f)
     return e
 
 
