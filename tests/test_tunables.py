@@ -117,6 +117,14 @@ FILES = [
     # setting it had been given (oasis:*hopoff-last* is the memory now).
     ('OASIS', ROOT / 'lisp' / 'oasis' / 'OASIS.lsp', 'oasis',
      ROOT / 'lisp' / 'oasis' / 'README.md', TUNABLES),
+    # POINTRENAMER, whose knobs reach further than most: what counts as
+    # a point, what counts as the perimeter, and -- since v1.4 -- which
+    # vertices of a fitted polyline are on the drawn curve at all.  It
+    # had OASIS's problem too: the band and the direction were knobs a
+    # run WROTE, so a value set at the top lasted until the first answer
+    # (ptr:*band-now* / ptr:*dir-now* are the memory now).
+    ('POINTRENAMER', ROOT / 'lisp' / 'pointrenamer' / 'POINTRENAMER.lsp',
+     'ptr', ROOT / 'lisp' / 'pointrenamer' / 'README.md', TUNABLES),
     # the check family.  Six of the ten name their globals tool:*x*, so
     # they read here; the other four (CHECK, DIMCHECK, LINFINCHECK,
     # COVERCHECK) still spell theirs *tool-x*, which this file's
