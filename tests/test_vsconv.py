@@ -19,6 +19,14 @@ The cancel paths matter for the same reason they do in DRONE and TYDRN:
 the handler is a local of the command, and it is what puts a locked
 layer back and closes the mark when a run is cut short.
 
+Then the contingencies: each knob in its non-default position
+(*vsconv-force-bylayer* nil, *vsconv-dim-xdata* nil, a retuned
+*vsconv-map* pointing at a layer the colour table does not name), an
+export with no dimensions -- which must NOT leave an empty DIMENSION
+layer behind, since only the destinations a selection reaches are
+created -- and a frozen, switched-off destination that has to be
+repaired rather than quietly drawn onto.
+
 Script values answer the interactive calls in order: None is Enter at
 the pickfirst probe and again at the selection prompt, which sends the
 tool to every VS layer in the drawing.  A function-valued answer runs
@@ -133,11 +141,13 @@ LOCKED = 4
 SRC = ('1 Perimeter', '2 Coping', '3 Features', '3.1 Anchors', '4 Dimensions')
 
 
-def survey(vm):
+def survey(vm, dims=True):
     """The export as it arrives: five numbered layers, "3.1 Anchors"
     LOCKED (the lock the run has to open and put back), POINTS already
     in the drawing and locked too -- that one is a DESTINATION, so it is
-    repaired for good -- and POOL and DIMENSION not there at all."""
+    repaired for good -- and POOL and DIMENSION not there at all.
+    dims=False is the export the surveyor dimensioned nothing on: the
+    layer is there, empty."""
     for name in SRC:
         vm.loads(layer(name, 7, LOCKED if name == '3.1 Anchors' else 0))
     vm.loads(layer('POINTS', 6, LOCKED))
@@ -155,7 +165,8 @@ def survey(vm):
     vm.loads(line('3 Features', 20, 10, 30, 10))    # a step
     vm.loads(point('3.1 Anchors', 5, 5))            # survey points
     vm.loads(point('3.1 Anchors', 95, 5))
-    vm.loads(dim('4 Dimensions', 'QCADDimStyle', 50, -12))
+    if dims:
+        vm.loads(dim('4 Dimensions', 'QCADDimStyle', 50, -12))
     vm.loads(text('TEXT', 'TITLE BLOCK', 0, 200))   # not the export's
 
 
@@ -175,14 +186,18 @@ def error_global(vm):
     return isinstance(v, tuple) or isinstance(v, list)
 
 
-def fresh(load=True):
+def fresh(load=True, dims=True):
     vm = VM()
     if ROOT == 'shared':
         vm.load(LIB)
     vm.load(VSCONV)
     if load:
-        survey(vm)
+        survey(vm, dims)
     return vm
+
+
+def layer_color(vm, name):
+    return grp(vm.recdata[vm.tablerecs['LAYER'][name.upper()]], 62)
 
 
 def bylayer(d):
@@ -294,6 +309,14 @@ check("only the layer the highlight actually emptied is reported empty",
       any('now empty: 3.1 Anchors -' in s for s in vm.printed)
       and not any('1 Perimeter' in s and 'now empty' in s
                   for s in vm.printed), repr(vm.printed[-3:]))
+check("only POINTS, the one destination the highlight reached, exists --"
+      " no POOL and no DIMENSION were created for it",
+      'POOL' not in vm.tables['LAYER']
+      and 'DIMENSION' not in vm.tables['LAYER'],
+      repr(sorted(vm.tables['LAYER'])))
+check("and only the source layer it took from was unlocked",
+      vm.lock_log == [('3.1 ANCHORS', False), ('3.1 ANCHORS', True)],
+      repr(vm.lock_log))
 
 # ----------------------------------------------------------------------
 # a drawing that is not a VS export
@@ -331,6 +354,23 @@ check("and that is not the same message as a drawing without them",
       not any('carries none of the VS layers' in s for s in vm.printed))
 check("the mark is closed either way",
       vm.undo_log == ['start', 'end'] and vm.undo_marks == 0)
+check("no destination layer was created for a run that moved nothing",
+      not any(n in vm.tables['LAYER'] for n in ('POOL', 'POINTS', 'DIMENSION')),
+      repr(sorted(vm.tables['LAYER'])))
+
+# ----------------------------------------------------------------------
+# an export with nothing dimensioned
+# ----------------------------------------------------------------------
+print("vsconv -- an export with no dimensions leaves no DIMENSION behind")
+vm = fresh(dims=False)
+vm.run('c:VSCONV', [None, None])
+check("POOL and POINTS, which the run reached, are there",
+      'POOL' in vm.tables['LAYER'] and 'POINTS' in vm.tables['LAYER'])
+check("DIMENSION, which it never reached, was not created",
+      'DIMENSION' not in vm.tables['LAYER'], repr(sorted(vm.tables['LAYER'])))
+check("and the empty 4 Dimensions is not reported emptied by this run",
+      not any('4 Dimensions' in s and 'now empty' in s for s in vm.printed),
+      repr(vm.printed[-3:]))
 
 # ----------------------------------------------------------------------
 # the shop dimension style is missing
@@ -349,6 +389,78 @@ check("and the run says so once, not once per dimension",
       len([s for s in vm.printed
            if 'no "STANDARD INCHES" dimension style' in s]) == 1,
       repr(vm.printed[-4:]))
+
+# ----------------------------------------------------------------------
+# the BYLAYER tunable
+# ----------------------------------------------------------------------
+print("vsconv -- *vsconv-force-bylayer* nil moves the layer and nothing else")
+vm = fresh()
+vm.loads('(setq *vsconv-force-bylayer* nil)')
+vm.run('c:VSCONV', [None, None])
+lines = ents(vm, 'LINE')
+check("the move still happened",
+      sorted(grp(d, 8) for d in lines) == ['POOL'] * 3,
+      repr([grp(d, 8) for d in lines]))
+check("but the explicit colour, linetype and lineweight survived it",
+      all(grp(d, 62) == 2 and grp(d, 6) == 'DASHED' and grp(d, 370) == 35
+          for d in lines),
+      repr([(grp(d, 62), grp(d, 6), grp(d, 370)) for d in lines]))
+check("the dimension restyle does not depend on it",
+      grp(ents(vm, 'DIMENSION')[0], 3) == 'STANDARD'
+      and xdata(ents(vm, 'DIMENSION')[0], 'ACAD') == [],
+      repr(grp(ents(vm, 'DIMENSION')[0], -3)))
+
+# ----------------------------------------------------------------------
+# the xdata tunable
+# ----------------------------------------------------------------------
+print("vsconv -- *vsconv-dim-xdata* nil renames the style and leaves the overrides")
+vm = fresh()
+vm.loads('(setq *vsconv-dim-xdata* nil)')
+vm.run('c:VSCONV', [None, None])
+d = ents(vm, 'DIMENSION')[0]
+check("the style name changed", grp(d, 3) == 'STANDARD', repr(grp(d, 3)))
+check("the DSTYLE overrides are still on it",
+      xdata(d, 'ACAD'), repr(grp(d, -3)))
+check("and the report does not claim they were removed",
+      any('1 dimension(s) -> STANDARD' in s and 'removed' not in s
+          for s in vm.printed), repr(vm.printed[-6:]))
+
+# ----------------------------------------------------------------------
+# a retuned map
+# ----------------------------------------------------------------------
+print("vsconv -- a retuned *vsconv-map* is the whole retune")
+vm = fresh()
+vm.loads('(setq *vsconv-map* \'(("1 Perimeter" . "OUTLINE")))')
+vm.run('c:VSCONV', [None, None])
+check("the outline went to the new layer, and only the outline",
+      sorted(grp(d, 8) for d in ents(vm, 'LINE'))
+      == ['3 Features', 'OUTLINE', 'OUTLINE'],
+      repr([grp(d, 8) for d in ents(vm, 'LINE')]))
+check("created in *vsconv-default-color*, since the colour table does not"
+      " name it", layer_color(vm, 'OUTLINE') == 7, repr(layer_color(vm, 'OUTLINE')))
+check("layers the new table does not name were left alone",
+      [grp(d, 8) for d in ents(vm, 'POINT')] == ['3.1 Anchors'] * 2
+      and 'POOL' not in vm.tables['LAYER'],
+      repr([grp(d, 8) for d in ents(vm, 'POINT')]))
+check("the report reads in the new table's terms",
+      any('1 Perimeter: 2 -> OUTLINE' in s for s in vm.printed),
+      repr(vm.printed[-4:]))
+
+# ----------------------------------------------------------------------
+# a frozen, switched-off destination
+# ----------------------------------------------------------------------
+print("vsconv -- a frozen, switched-off destination is repaired, and says so")
+vm = fresh()
+vm.loads(layer('POOL', -4, 1))          # off (negative colour) and frozen
+vm.run('c:VSCONV', [None, None])
+check("POOL is thawed and switched on",
+      not (layer_flags(vm, 'POOL') & 1) and layer_color(vm, 'POOL') == 4,
+      repr((layer_flags(vm, 'POOL'), layer_color(vm, 'POOL'))))
+check("and the run said so",
+      any('POOL was off, frozen or locked' in s for s in vm.printed),
+      repr(vm.printed[:3]))
+check("the outline landed on it",
+      sorted(grp(d, 8) for d in ents(vm, 'LINE')) == ['POOL'] * 3)
 
 # ----------------------------------------------------------------------
 # an error mid-run

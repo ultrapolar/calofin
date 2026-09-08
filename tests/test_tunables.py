@@ -36,7 +36,8 @@ The four GUI files came first and check 6 is still theirs -- they are
 the ones whose knobs the VB palette shares.  Checks 1-5 are the general
 rule (STANDARDS.md section 5, "Tunables") and every file in FILES meets
 them; ``abcdef`` and ``ALTABCDEF`` joined when they grew blocks of their
-own.
+own, and ``BPCALLOUT`` / ``CDCALLOUT`` / ``CDCREATE`` when theirs were
+gathered into one.
 
 Run: python3 tests/test_tunables.py
 """
@@ -68,6 +69,10 @@ def check(label, cond, detail=''):
 #: travels in the FILES row rather than being one constant.
 TUNABLES = (';;; -------------------- tunables ', '\n;;; ---')
 SETTINGS = (';;;  SETTINGS\n', '\n;;; =' + '=' * 49 + ' end of SETTINGS')
+#: The check family rules its block off with a banner naming itself at
+#: both ends, which reads better in a 4,000-line file than a single
+#: rule does -- same block, same rule, its own furniture.
+BANNER = (';;;  TUNABLES', '\n;;;  END TUNABLES')
 
 
 #: (tool as mirror_shared names it, source, namespace, README, markers)
@@ -98,6 +103,56 @@ FILES = [
     # nobody can retune from the middle of the file
     ('CONSTELLATION', ROOT / 'lisp' / 'constellation' / 'CONSTELLATION.lsp',
      'cst', ROOT / 'lisp' / 'constellation' / 'README.md', TUNABLES),
+    # the three callout/create tools, which joined for the same reason
+    # again: each kept SOME of its settings in a block at the top and
+    # the rest inline -- a ring colour, a text offset, the sentence a
+    # callout is built from -- so adapting one meant reading the file
+    # to find out what was adjustable at all.
+    ('BPCALLOUT', ROOT / 'lisp' / 'bpcallout' / 'BPCALLOUT.lsp', 'bp',
+     ROOT / 'lisp' / 'bpcallout' / 'README.md', TUNABLES),
+    ('CDCALLOUT', ROOT / 'lisp' / 'cdcallout' / 'CDCALLOUT.lsp', 'cdo',
+     ROOT / 'lisp' / 'cdcallout' / 'README.md', TUNABLES),
+    ('CDCREATE', ROOT / 'lisp' / 'cdcreate' / 'CDCREATE.lsp', 'cdc',
+     ROOT / 'lisp' / 'cdcreate' / 'README.md', TUNABLES),
+    # OASIS, which had fourteen of its forty in a block and the other
+    # twenty-six spelled out where they were read -- a stand-off's 12
+    # and 18, a preview's 0.6 and 1.25, the 1e-8 a tie is deduped with.
+    # Joining here is what stopped the next one going back beside its
+    # code, and what caught the one knob in it that was really state:
+    # the hopper offset a run WROTE, so a pool quietly edited the
+    # setting it had been given (oasis:*hopoff-last* is the memory now).
+    ('OASIS', ROOT / 'lisp' / 'oasis' / 'OASIS.lsp', 'oasis',
+     ROOT / 'lisp' / 'oasis' / 'README.md', TUNABLES),
+    # POINTRENAMER, whose knobs reach further than most: what counts as
+    # a point, what counts as the perimeter, and -- since v1.4 -- which
+    # vertices of a fitted polyline are on the drawn curve at all.  It
+    # had OASIS's problem too: the band and the direction were knobs a
+    # run WROTE, so a value set at the top lasted until the first answer
+    # (ptr:*band-now* / ptr:*dir-now* are the memory now).
+    ('POINTRENAMER', ROOT / 'lisp' / 'pointrenamer' / 'POINTRENAMER.lsp',
+     'ptr', ROOT / 'lisp' / 'pointrenamer' / 'README.md', TUNABLES),
+    # the band unroller, whose numbers were spread down 1,240 lines: the
+    # dart cap in the emitter, the stop line in the drawing loop, the
+    # layer names at the entmake, the 1% target written out four times
+    ('wcalst', ROOT / 'lisp' / 'wcalst' / 'wcalst.lsp', 'wc',
+     ROOT / 'lisp' / 'wcalst' / 'README.md', TUNABLES),
+    # the check family.  Six of the ten name their globals tool:*x*, so
+    # they read here; the other four (CHECK, DIMCHECK, LINFINCHECK,
+    # COVERCHECK) still spell theirs *tool-x*, which this file's
+    # namespace pattern cannot see -- their own suites carry the same
+    # three assertions until that rename happens.
+    ('SPACHECK', ROOT / 'lisp' / 'spacheck' / 'SPACHECK.lsp', 'spachk',
+     ROOT / 'lisp' / 'spacheck' / 'README.md', BANNER),
+    ('ABPCHECK', ROOT / 'lisp' / 'abpcheck' / 'ABPCHECK.lsp', 'abp',
+     ROOT / 'lisp' / 'abpcheck' / 'README.md', BANNER),
+    ('ABCURCHECK', ROOT / 'lisp' / 'abcurcheck' / 'ABCURCHECK.lsp', 'acc',
+     ROOT / 'lisp' / 'abcurcheck' / 'README.md', BANNER),
+    ('lincheck', ROOT / 'lisp' / 'lincheck' / 'lincheck.lsp', 'lin',
+     ROOT / 'lisp' / 'lincheck' / 'README.md', BANNER),
+    ('ccprecheck', ROOT / 'lisp' / 'ccprecheck' / 'ccprecheck.lsp', 'chk',
+     ROOT / 'lisp' / 'ccprecheck' / 'README.md', BANNER),
+    ('LINTXTCHK', ROOT / 'lisp' / 'lintxtchk' / 'LINTXTCHK.lsp', 'ltc',
+     ROOT / 'lisp' / 'lintxtchk' / 'README.md', BANNER),
 ]
 
 def split_block(src, markers):
@@ -186,31 +241,43 @@ def assigned(src, ns):
 def why_of(lines, i):
     """What line I of a block says about changing the knob it sets.
 
-    Either a remark after the value, the ``;`` lines continuing under
-    it, or the ``;;`` comment standing over the run of setqs this one
-    is in -- the frame numbers share one paragraph and then a word
-    each, and that is the right shape for them.  '' when none is there.
+    All of what is there: a remark after the value, the ``;`` lines
+    continuing under it, and the ``;;`` comment standing over the run of
+    setqs this one is in -- the frame numbers share one paragraph and
+    then a word each, and that is the right shape for them.  '' when
+    none of the three is there.
+
+    All three rather than the first one found, because the check family
+    writes the UNIT as its remark and the explanation in the paragraph
+    above: "drawing units" was reading as the whole answer.  Joining can
+    only lengthen an answer, so nothing that explained itself before can
+    start failing here.
 
     The continuation case is what a setq too long to leave room for a
     remark does (AutoDim's two entity-type lists run to the margin).
     Reading only the line itself called those unexplained -- and worse,
     let the NEXT knob down inherit their paragraph and pass.
     """
+    parts = []
     ln, j, q = lines[i], 0, False
     while j < len(ln):
         if ln[j] == '"':
             q = not q
         elif ln[j] == ';' and not q:
-            return ln[j:].strip('; ').strip()
+            parts.append(ln[j:].strip('; ').strip())
+            break
         j += 1
     # the ;-comment lines continuing underneath, before the next setq
-    below = []
     k = i + 1
     while k < len(lines) and lines[k].lstrip().startswith(';'):
-        below.append(lines[k].lstrip(';').strip())
+        parts.append(lines[k].lstrip(';').strip())
         k += 1
-    if below:
-        return " ".join(below).strip()
+    # ...and the ;; paragraph standing over the run this setq is in.
+    # All three are joined rather than the first one winning: the check
+    # family writes the UNIT as the remark and the explanation in the
+    # paragraph above, and a unit on its own is not what changing it
+    # does.  Joining can only lengthen an answer, so nothing that
+    # explained itself before can start failing here.
     k = i - 1
     while k >= 0 and lines[k].startswith('(setq '):
         k -= 1
@@ -218,7 +285,8 @@ def why_of(lines, i):
     while k >= 0 and lines[k].lstrip().startswith(';'):
         why.insert(0, lines[k].lstrip(';').strip())
         k -= 1
-    return " ".join(why).strip()
+    parts.extend(why)
+    return " ".join(p for p in parts if p).strip()
 
 
 MARK = 'NOT A KNOB:'

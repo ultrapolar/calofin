@@ -22,7 +22,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, LispError, Dot  # noqa: E402
+from lispvm import VM, LispError, Dot, Sym, BUILTINS, NIL  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 LSP = os.path.join(HERE, '..', 'lisp', 'pointrenamer', 'POINTRENAMER.lsp')
@@ -37,7 +37,7 @@ LAYER_POOL = '''
 
 RECT_CCW = '''
   (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
-                 '(8 . "POOL") '(100 . "AcDbPolyline")
+                 '(8 . "POOL") '(410 . "Model") '(100 . "AcDbPolyline")
                  '(90 . 4) '(70 . 1)
                  '(10 0.0 0.0)     '(42 . 0.0)
                  '(10 240.0 0.0)   '(42 . 0.0)
@@ -48,7 +48,7 @@ RECT_CCW = '''
 #: clockwise -- the user's Clockwise must mean the same thing on both
 RECT_CW = '''
   (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
-                 '(8 . "POOL") '(100 . "AcDbPolyline")
+                 '(8 . "POOL") '(410 . "Model") '(100 . "AcDbPolyline")
                  '(90 . 4) '(70 . 1)
                  '(10 0.0 0.0)     '(42 . 0.0)
                  '(10 0.0 120.0)   '(42 . 0.0)
@@ -59,7 +59,7 @@ RECT_CW = '''
 #: bulge-1 segments (radius 50), counter-clockwise
 STADIUM = '''
   (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
-                 '(8 . "POOL") '(100 . "AcDbPolyline")
+                 '(8 . "POOL") '(410 . "Model") '(100 . "AcDbPolyline")
                  '(90 . 4) '(70 . 1)
                  '(10 0.0 0.0)     '(42 . 0.0)
                  '(10 200.0 0.0)   '(42 . 1.0)
@@ -68,43 +68,94 @@ STADIUM = '''
 
 CIRCLE = '''
   (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                 '(8 . "POOL") '(100 . "AcDbCircle")
+                 '(8 . "POOL") '(410 . "Model") '(100 . "AcDbCircle")
                  '(10 500.0 500.0 0.0) '(40 . 100.0)))'''
 
 SPLINE = '''
   (entmake (list '(0 . "SPLINE") '(100 . "AcDbEntity")
-                 '(8 . "POOL") '(100 . "AcDbSpline")
+                 '(8 . "POOL") '(410 . "Model") '(100 . "AcDbSpline")
                  '(10 0.0 0.0 0.0) '(10 50.0 20.0 0.0)))'''
 
 LINE = '''
   (entmake (list '(0 . "LINE") '(100 . "AcDbEntity")
-                 '(8 . "POOL") '(100 . "AcDbLine")
+                 '(8 . "POOL") '(410 . "Model") '(100 . "AcDbLine")
                  '(10 0.0 0.0 0.0) '(11 100.0 0.0 0.0)))'''
 
 
-def ab_pt(x, y, number, tab='Model'):
+def ab_pt(x, y, number, tab='Model', layer='POINTS', block='ab_pt',
+          tag='number'):
     """An ab_pt block with its surveyed number in the number attribute.
     Carries its tab (410) like a real database entity, so the
-    current-tab filter in ptr:clash-count can see it."""
+    current-tab filter -- in ptr:clash-count and now in the Enter =
+    whole drawing fallback -- can see it.  The layer, block and tag are
+    arguments so the same fixture can prove the knobs that name them."""
     return f'''
   (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity")
-                 '(8 . "POINTS") '(410 . "{tab}")
+                 '(8 . "{layer}") '(410 . "{tab}")
                  '(100 . "AcDbBlockReference")
-                 '(2 . "ab_pt") (list 10 {x} {y} 0.0) '(66 . 1)))
-  (entmake (list '(0 . "ATTRIB") '(8 . "POINTS")
-                 '(2 . "number") '(1 . "{number}")))
-  (entmake (list '(0 . "SEQEND") '(8 . "POINTS")))'''
+                 '(2 . "{block}") (list 10 {x} {y} 0.0) '(66 . 1)))
+  (entmake (list '(0 . "ATTRIB") '(8 . "{layer}")
+                 '(2 . "{tag}") '(1 . "{number}")))
+  (entmake (list '(0 . "SEQEND") '(8 . "{layer}")))'''
+
+
+def layer(name):
+    return f'''
+  (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                 '(100 . "AcDbLayerTableRecord")
+                 '(2 . "{name}") '(70 . 0) '(62 . 4)
+                 '(6 . "Continuous")))'''
+
+
+#: a CLOSED polyline with two vertices on the same spot: it passes for a
+#: perimeter candidate and has no length to sweep
+DEGENERATE = '''
+  (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
+                 '(8 . "POOL") '(410 . "Model") '(100 . "AcDbPolyline")
+                 '(90 . 2) '(70 . 1)
+                 '(10 10.0 10.0)   '(42 . 0.0)
+                 '(10 10.0 10.0)   '(42 . 0.0)))'''
+
+
+def heavy(flag_detour, flag_frame=16):
+    """An old-style (heavy) POLYLINE rectangle with two extra vertices:
+    a DETOUR out to (360,60) carrying flag_detour, and a far-away
+    spline FRAME point carrying flag_frame.  Which of them the tool
+    walks is what ptr:*vertex-skip* decides."""
+    def vert(x, y, f):
+        return f'''
+  (entmake (list '(0 . "VERTEX") '(100 . "AcDbEntity") '(8 . "POOL")
+                 '(410 . "Model") '(100 . "AcDbVertex")
+                 (list 10 {x} {y} 0.0) '(42 . 0.0) '(70 . {f})))'''
+    return ('''
+  (entmake (list '(0 . "POLYLINE") '(100 . "AcDbEntity") '(8 . "POOL")
+                 '(410 . "Model") '(100 . "AcDb2dPolyline")
+                 '(66 . 1) '(70 . 1)))'''
+            + vert(0.0, 0.0, 0) + vert(240.0, 0.0, 0)
+            + vert(360.0, 60.0, flag_detour)
+            + vert(240.0, 120.0, 0) + vert(0.0, 120.0, 0)
+            + vert(0.0, 600.0, flag_frame)
+            + '''
+  (entmake (list '(0 . "SEQEND") '(8 . "POOL") '(410 . "Model")))''')
+
+
+def miss(vm):
+    """A click that hit nothing: entsel answers nil, exactly as Enter
+    does, and AutoCAD sets ERRNO 7 to say which of the two it was."""
+    vm.sysvars['ERRNO'] = 7
+    return None
 
 
 #: a point block with NO attribute chain at all -- nowhere to write
 BARE = '''
   (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity")
-                 '(8 . "POINTS") '(100 . "AcDbBlockReference")
+                 '(8 . "POINTS") '(410 . "Model")
+                 '(100 . "AcDbBlockReference")
                  '(2 . "ab_pt") (list 10 7.0 7.0 0.0)))'''
 
 POINT = '''
   (entmake (list '(0 . "POINT") '(100 . "AcDbEntity")
-                 '(8 . "POINTS") '(100 . "AcDbPoint")
+                 '(8 . "POINTS") '(410 . "Model") '(100 . "AcDbPoint")
                  (list 10 5.0 5.0 0.0)))'''
 
 
@@ -479,6 +530,267 @@ txt = run(vm, [rect + ins, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 10,
                'Yes'], 'clash-other-tab')
 check("a Layout1 block already on 11 is not warned about",
       'Warning:' not in txt, txt[-400:])
+
+# ----------------------------------------------------------------------
+# 15. a click that MISSED is not an Enter.  entsel answers nil to both;
+#     ERRNO 7 is the only thing that tells them apart, and without
+#     asking, a mis-click silently accepts the very perimeter the user
+#     was reaching past it to override
+# ----------------------------------------------------------------------
+print("a mis-click at the perimeter pick")
+
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+txt = run(vm, [None,       # highlight: whole drawing
+               miss,       # a click that hit nothing
+               None,       # NOW Enter, which does take the found loop
+               (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'], 'mis-click')
+check("a click that hit nothing says so instead of taking the candidate",
+      'Nothing there - click on the perimeter itself, or press Enter'
+      in txt, txt[-800:])
+got = numbers(vm)
+check("and the run carries on normally once the pick lands",
+      got[(0.0, 60.0)] == '1' and got[(60.0, 0.0)] == '2', repr(got))
+
+vm = VM()
+vm.load(LSP)
+vm.loads(LAYER_POOL)
+lin = made(vm, LINE)[0]
+vm.loads(ab_pt(20, 0, 'a') + ab_pt(80, 0, 'b'))
+txt = run(vm, [None, miss, [lin, (0.0, 0.0, 0.0)],
+               (0.0, 0.0, 0.0), 'CO', 6.0, 1, 'Yes'], 'mis-click-nocand')
+check("with nothing found, the miss does not offer an Enter that would "
+      "not work",
+      'Nothing there - click on the perimeter itself.' in txt, txt[-800:])
+
+# ----------------------------------------------------------------------
+# 16. a perimeter with no length is refused -- and STOPS BEING OFFERED,
+#     or Enter hands the same unusable loop back for ever
+# ----------------------------------------------------------------------
+print("a perimeter with no length to sweep")
+
+vm = VM()
+vm.load(LSP)
+vm.loads(LAYER_POOL)
+vm.loads(DEGENERATE)
+lin = made(vm, LINE)[0]
+vm.loads(ab_pt(20, 0, 'a') + ab_pt(80, 0, 'b'))
+txt = run(vm, [None,      # highlight: whole drawing
+               None,      # Enter takes the degenerate candidate...
+               None,      # ...which is now gone, so Enter has nothing
+               [lin, (0.0, 0.0, 0.0)],
+               (0.0, 0.0, 0.0), 'CO', 6.0, 1, 'Yes'], 'degenerate')
+check("a zero-length perimeter is refused by name",
+      'That perimeter has no length' in txt, txt[-900:])
+check("and is not offered a second time",
+      'no closed polyline to fall back on' in txt, txt[-900:])
+got = numbers(vm)
+check("the pick that follows still works",
+      got[(20.0, 0.0)] == '1' and got[(80.0, 0.0)] == '2', repr(got))
+
+# ----------------------------------------------------------------------
+# 17. a heavy POLYLINE that has been fitted: the vertices fitting ADDED
+#     are the curve the sheet shows and are walked; a spline FRAME
+#     control point is not on the curve and is skipped.  ptr:*vertex-skip*
+#     is the mask, and flipping it back to 17 restores the old walk
+# ----------------------------------------------------------------------
+print("a fitted heavy POLYLINE")
+
+FITTED = [ab_pt(120, 0, 1),      # on the bottom run
+          ab_pt(360, 60, 2),     # the curve-fit detour apex
+          ab_pt(120, 120, 3)]    # on the top run
+
+vm = newvm([heavy(1)] + FITTED)   # detour flagged 1 = added by curve fit
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'CO', 6.0, 1, 'Yes'],
+          'curve-fit')
+check("a curve-fit vertex is part of the run, so a shot on it is ON the "
+      "perimeter",
+      '3 point(s) to renumber: 3 within' in txt, txt[-900:])
+check("and the far-off spline frame point is skipped, or the loop would "
+      "balloon past every one of them",
+      '0 beyond' in txt, txt[-900:])
+
+vm = newvm([heavy(1)] + FITTED)
+vm.loads('(setq ptr:*vertex-skip* 17)')     # the pre-v1.4 walk
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'CO', 6.0, 1, 'Yes'],
+          'curve-fit-old-mask')
+check("with the mask set back to 17 the detour is dropped and the shot "
+      "on it falls outside the band -- which is the bug the knob names",
+      '2 within' in txt and '1 beyond' in txt, txt[-900:])
+
+# ----------------------------------------------------------------------
+# 18. a write that cannot land (a locked layer is the everyday reason)
+#     is named in the table and counted, never reported as a rename
+# ----------------------------------------------------------------------
+print("a write that does not land")
+
+real_entmod = BUILTINS[Sym('entmod')]
+state = {'n': 0}
+
+
+def _entmod_second_fails(vm, a):
+    state['n'] += 1
+    return NIL if state['n'] == 2 else real_entmod(vm, a)
+
+
+BUILTINS[Sym('entmod')] = _entmod_second_fails
+try:
+    vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+    txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
+              'locked')
+finally:
+    BUILTINS[Sym('entmod')] = real_entmod
+
+check("the row that did not land says so", 'NOT WRITTEN' in txt, txt[-900:])
+check("the count is what actually landed, not what was attempted",
+      '1 point(s) renumbered 1-2' in txt, txt[-900:])
+check("and the reason is named",
+      'Warning: 1 of them could not be written' in txt
+      and 'most likely locked' in txt, txt[-900:])
+got = numbers(vm)
+check("the point that could not be written keeps its old number",
+      got[(60.0, 0.0)] == '17', repr(got))
+check("the one that could is renumbered", got[(0.0, 60.0)] == '1', repr(got))
+
+# ----------------------------------------------------------------------
+# 19. nothing within the band: the "Around the perimeter" heading used
+#     to print anyway, immediately followed by the "Beyond" one, over a
+#     single list
+# ----------------------------------------------------------------------
+print("an empty band")
+
+vm = newvm([RECT_CCW, ab_pt(120, 60, 1), ab_pt(100, 60, 2)])
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
+          'empty-band')
+check("with nothing near, the near heading is not printed",
+      'Around the perimeter' not in txt, txt[-900:])
+check("only the one that describes the list that follows",
+      'Beyond 0\'-6" off the perimeter' in txt, txt[-900:])
+check("and every point is still renumbered",
+      '2 point(s) renumbered 1-2' in txt, txt[-900:])
+
+# ----------------------------------------------------------------------
+# 20. Enter = whole drawing means the tab you are looking at -- the same
+#     scope the clash check sweeps.  Renumbering points in a layout you
+#     cannot see, which the clash check would not even warn about, is
+#     not what Enter was meant to say
+# ----------------------------------------------------------------------
+print("Enter = whole drawing stays in this tab")
+
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9),
+            ab_pt(120, 118, 5, tab='Layout1')])
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
+          'this-tab')
+got = numbers(vm)
+check("a point on another tab is left out of the count",
+      '2 point(s) to renumber' in txt, txt[-900:])
+check("and keeps its number", got[(120.0, 118.0)] == '5', repr(got))
+check("the model-space points are renumbered as usual",
+      got[(0.0, 60.0)] == '1' and got[(60.0, 0.0)] == '2', repr(got))
+
+# ----------------------------------------------------------------------
+# 21. the knobs at the top of the file are the ones the code reads --
+#     every one set to something else, and the run follows it
+# ----------------------------------------------------------------------
+print("every knob is the one the code reads")
+
+# what counts as a point, and where the number lives
+vm = VM()
+vm.load(LSP)
+vm.loads(LAYER_POOL + layer('SHOTS') + layer('SPA'))
+vm.loads('(setq ptr:*pt-layer* "SHOTS" ptr:*pt-block* "survey_pt"'
+         '      ptr:*pt-tag* "PTNUM" ptr:*perim-layer* "SPA")')
+vm.loads(RECT_CCW.replace('"POOL"', '"SPA"'))
+vm.loads(ab_pt(60, 0, 17, layer='SHOTS', block='survey_pt', tag='PTNUM')
+         + ab_pt(0, 60, 9, layer='SHOTS', block='survey_pt', tag='PTNUM'))
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
+          'knobs-point')
+got = numbers(vm)
+check("*pt-layer*, *pt-block* and *pt-tag* name what is renumbered",
+      got[(0.0, 60.0)] == '1' and got[(60.0, 0.0)] == '2', repr(got))
+check("*perim-layer* names where the perimeter is looked for",
+      'Enter = the highlighted closed polyline on SPA'
+      in '|'.join(p for p, _ in vm.prompts), repr(vm.prompts[:4]))
+
+# what the questions start at
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+vm.loads('(setq ptr:*first* 100 ptr:*dir* "COunterclockwise"'
+         '      ptr:*band* 24.0)')
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), None, None, None, 'Yes'],
+          'knobs-questions')
+asked = '|'.join(p for p, _ in vm.prompts)
+check("*first* is the number the count is offered at",
+      '<100>' in asked, asked[-700:])
+check("*dir* is the direction offered", '<COunterclockwise>' in asked,
+      asked[-700:])
+check("*band* is the band offered", "<2'-0\">" in asked, asked[-700:])
+check("and Enter at all three takes them",
+      '2 point(s) renumbered 100-101' in txt, txt[-500:])
+
+# what the report looks like
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+vm.loads('(setq ptr:*far-pick* 500.0)')
+txt = run(vm, [None, None, (100.0, 60.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
+          'knobs-farpick')
+check("*far-pick* raised past the miss quietens the note",
+      'Note: the pick sits' not in txt, txt[-600:])
+
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+vm.loads('(setq ptr:*name-width* 14)')
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
+          'knobs-width')
+check("*name-width* is the column the old number is padded to",
+      'Pt. 17            ->  Pt. 2' in txt, txt[-600:])
+
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+vm.loads('(setq ptr:*dist-mode* 2 ptr:*dist-prec* 2)')
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
+          'knobs-dist')
+check("*dist-mode* / *dist-prec* are how every distance is written",
+      'within 6.00 of the perimeter' in txt, txt[-800:])
+
+# the sysvars saved and put back
+vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+vm.loads('(setq ptr:*sysvars* (list "CMDECHO" "OSMODE"))')
+vm.sysvars['OSMODE'] = 4133
+run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
+    'knobs-sysvars')
+check("*sysvars* is the list saved and restored",
+      vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1,
+      repr((vm.sysvars['OSMODE'], vm.sysvars['CMDECHO'])))
+
+# ----------------------------------------------------------------------
+# 22. what the two numeric prompts refuse.  Offering Back never loosens
+#     what counts as a valid answer (STANDARDS 3)
+# ----------------------------------------------------------------------
+print("what the numeric prompts refuse")
+
+for label, script, why in (
+        ("a band of zero", [None, None, (0.0, 0.0, 0.0), 'Clockwise', 0.0],
+         'zero not allowed'),
+        ("a negative band", [None, None, (0.0, 0.0, 0.0), 'Clockwise', -6.0],
+         'negative not allowed'),
+        ("a first number of zero",
+         [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 0],
+         'zero not allowed')):
+    vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
+    try:
+        vm.run('c:POINTRENAMER', [None] + script)
+        check(label + " is refused", False, "it was accepted")
+    except LispError as e:
+        check(label + " is refused", why in str(e), str(e))
+
+# ----------------------------------------------------------------------
+# 23. the band is inclusive: a point exactly at it counts as ON the
+#     perimeter, which is what "within 6 inches" reads as
+# ----------------------------------------------------------------------
+print("the band edge")
+
+vm = newvm([RECT_CCW, ab_pt(60, 6, 1), ab_pt(120, 7, 2)])
+txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
+          'band-edge')
+check("a point exactly one band off is within it, one past it is not",
+      '2 point(s) to renumber: 1 within' in txt and '1 beyond' in txt,
+      txt[-800:])
 
 # ----------------------------------------------------------------------
 print()

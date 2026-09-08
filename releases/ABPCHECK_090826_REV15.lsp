@@ -63,35 +63,127 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.4")
+(setq *abpcheck-version* "v1.5")
 
-;;; -------------------- tunables ----------------------------------------
+;;; ======================================================================
+;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq abp:*limit* 0.5) -- because every knob
+;;;  is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
+
+;; -- where the survey points are ---------------------------------------
 
 ;; Where the survey points live, and what a point block calls its
 ;; number -- ABHD's *PF-POINT-LAYER* / *PF-POINT-BLOCK* / *PF-PT-TAG*.
+;; An ab_pt block counts as a point wherever it sits, so the layer only
+;; matters for bare POINT entities.
 (setq abp:*pt-layer* "POINTS")    ; layer holding the survey points
 (setq abp:*pt-block* "ab_pt")     ; block name whose INSERTs mark points
 (setq abp:*pt-tag*   "number")    ; the attribute carrying the number
 
-;; How far off the nearest line is too far.  The command asks, Enter
-;; takes what is here, and the answer is remembered for the session.
-(setq abp:*limit* 1.0)            ; 1 inch
+;; What the highlight is allowed to hand the command: the points, the
+;; geometry they are measured against, and the two curve types that are
+;; counted rather than measured so the report can say they were left
+;; out.  A type dropped from here is never seen at all; a type added
+;; that abp:ent-segs cannot break into segments is silently ignored.
+(setq abp:*filter*
+  '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE")))
+
+;; The curve types the segment math does not cover.  They are counted
+;; and named in the report rather than measured against, because
+;; guessing would report a point sitting ON a spline as off the line.
+(setq abp:*uncovered-types* '("SPLINE" "ELLIPSE"))
+
+;; -- what counts as too far --------------------------------------------
+
+;; How far off the nearest line is too far.  The command asks every
+;; run and Enter takes the offered value, so this is the default the
+;; FIRST run of a session offers; what you answer is remembered in
+;; abp:*asked* below and offered from then on.  Lower it and more
+;; points are called too far.
+(setq abp:*limit* 1.0)            ; drawing units (1 inch)
 
 ;; Two points closer than this are the same shot, not two.
-(setq abp:*exact-eps* 1.0e-6)
+(setq abp:*exact-eps* 1.0e-6)     ; drawing units
 
-;; Marking and report.
-(setq abp:*sysold*       nil)     ; saved sysvars, restored on the way out
+;; How far an entity's extrusion normal (DXF 210) may lean from world
+;; +Z before it is counted as "not in the world plane" and left out of
+;; the measurement.  0.999 is about 2.6 degrees of tilt.
+(setq abp:*plane-min* 0.999)      ; cosine of the tilt, so nearer 1 is stricter
+
+;; -- marking and report ------------------------------------------------
+
+;; The two layers ABPCHECK writes on, created on first use.  It never
+;; clears a layer wholesale: everything it draws carries xdata under
+;; the APPID below, and only stamped objects are erased again -- so
+;; ABPCHECKRESCUE is safe on a layer the drawing already uses.
 (setq abp:*miss-layer*   "ABPCHECK-MISS")
-(setq abp:*miss-color*   1)       ; red: the points that are too far off
+(setq abp:*miss-color*   1)       ; ACI: the points that are too far off (red)
 (setq abp:*report-layer* "ABPCHECK-REPORT")
-(setq abp:*report-color* 3)
-(setq abp:*flag-color*   1)       ; red rows
-(setq abp:*advice-color* 4)       ; cyan: advice, not a failure
+(setq abp:*report-color* 3)       ; ACI (green)
+(setq abp:*appid*        "ABPCHECK")  ; renaming this orphans earlier runs
+
+(setq abp:*flag-color*   1)       ; ACI: rows over the limit (red)
+(setq abp:*advice-color* 4)       ; ACI: advice, not a failure (cyan)
 (setq abp:*green-scale*  0.75)    ; height of a row that checked out
 (setq abp:*report-chars* 48.0)    ; report column width, in text heights
 (setq abp:*ring-scale*   1.2)     ; ring radius, in report text heights
-(setq abp:*clear-shown*  10)      ; how many within-limit points are listed
+
+;; How many within-limit points are listed before the rest are summed
+;; up in one line, so a 200-point survey does not write 200 rows.
+(setq abp:*clear-shown*  10)      ; rows
+
+;; The report is scaled to the drawing, as the check family's siblings
+;; do it.  WIDE: on a wide, short sheet the reference height is at
+;; least this fraction of the width.  LEAD: MTEXT line pitch as a
+;; multiple of text height.  HMAX/HMIN: divisors clamping the height --
+;; never taller than reference/HMAX, never shorter than reference/HMIN,
+;; so a smaller number is a looser bound.  HFALL: the height used when
+;; there is nothing to scale against.  GAP: space between drawing and
+;; report, as a fraction of the drawing's width.
+(setq abp:*report-wide*  0.25)
+(setq abp:*report-lead*  1.66)
+(setq abp:*report-hmax*  30.0)
+(setq abp:*report-hmin*  200.0)
+(setq abp:*report-hfall* 2.5)     ; drawing units
+(setq abp:*report-gap*   0.05)
+
+;; The title is written this many times the base height, and a section
+;; heading gets this much blank line above it.  HEAD-LINES is the
+;; allowance for title, date, verdict and legend when guessing how long
+;; the sheet will run; HDG-LINES is a heading plus its gap.
+(setq abp:*title-scale*  1.5)
+(setq abp:*hdg-gap*      0.4)
+(setq abp:*head-lines*   4.5)
+(setq abp:*hdg-lines*    1.4)
+
+;; Findings are indented under their heading by this string.
+(setq abp:*row-indent*   "  ")
+
+;; Distances in the report go through (rtos d mode prec): mode 4 is
+;; architectural (feet-inches), so 1.875 reads 0'-1 7/8"; prec is how
+;; many ways the inch is split, as a power of two (4 = sixteenths).
+;; This is the shape the report was asked for -- see the header.
+(setq abp:*dist-mode*    4)       ; rtos mode
+(setq abp:*dist-prec*    4)       ; 2^4 = sixteenths of an inch
+
+;; A bounding box smaller than this has nothing to scale a report to.
+(setq abp:*tiny*         1.0e-8)  ; drawing units
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  What follows is STATE, not settings: what one run
+;;;  has to put back, and what the session remembers you answered.
+(setq abp:*sysold*       nil)     ; saved sysvars, restored on the way out
+(setq abp:*asked*        nil)     ; the limit you last answered, this session
+;;; ======================================================================
 
 ;;; -------------------- generic helpers ----------------------------------
 ;;;  A self-contained file: it carries its own helpers.
@@ -445,10 +537,10 @@
               ext (cdr (assoc 210 ed)))
         (if (or (= lay (strcase abp:*miss-layer*))
                 (= lay (strcase abp:*report-layer*))
-                (assoc -3 (entget en '("ABPCHECK"))))
+                (assoc -3 (entget en (list abp:*appid*))))
           (setq nmine (1+ nmine))
           (progn
-            (if (and ext (< (abs (caddr ext)) 0.999))
+            (if (and ext (< (abs (caddr ext)) abp:*plane-min*))
               (setq nocs (1+ nocs)))
             (cond
               ;; ab_pt blocks are survey points wherever they sit
@@ -480,7 +572,7 @@
                                  pts))))
               ;; the segment math does not cover these, and guessing
               ;; would report a point sitting ON a spline as off the line
-              ((member typ '("SPLINE" "ELLIPSE")) (setq nspl (1+ nspl)))
+              ((member typ abp:*uncovered-types*) (setq nspl (1+ nspl)))
               (T (setq segs (append segs (abp:ent-segs en))))))))))
   (list (abp:dedupe (reverse pts) abp:*exact-eps*)
         segs nspl nocs nmine))
@@ -517,30 +609,39 @@
 
 ;; The report's title line: half again the base height.
 (defun abp:big (s)
-  (strcat "{\\H1.5x;" s "}"))
+  (strcat "{\\H" (rtos abp:*title-scale* 2 2) "x;" s "}"))
 
 ;; A section heading: underlined, with a thin blank line above it so
 ;; the sections read as blocks.
 (defun abp:hdg (s)
-  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+  (strcat "{\\H" (rtos abp:*hdg-gap* 2 2) "x;\\P}{\\L" s "}"))
 
 ;; Findings are indented two spaces under their heading; the indent
 ;; sits INSIDE the colour/height wrap so a row still starts with its
 ;; colour code.
-(defun abp:render (r)
+;; The word for an ACI colour, so the legend names the colour actually
+;; used instead of saying "red" whatever abp:*flag-color* holds.
+(defun abp:color-name (aci / q)
+  (setq q (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if q (cdr q) (strcat "colour " (itoa aci))))
+
+(defun abp:render (r / i)
+  (setq i abp:*row-indent*)
   (cond ((abp:lvl-p r 3) (abp:hdg (abp:row-txt r)))
-        ((abp:lvl-p r 1) (abp:red (strcat "  " (abp:row-txt r))))
-        ((abp:lvl-p r 2) (abp:cyan (strcat "  " (abp:row-txt r))))
-        (t (abp:small (strcat "  " (abp:row-txt r))))))
+        ((abp:lvl-p r 1) (abp:red (strcat i (abp:row-txt r))))
+        ((abp:lvl-p r 2) (abp:cyan (strcat i (abp:row-txt r))))
+        (t (abp:small (strcat i (abp:row-txt r))))))
 
 ;; The one finding line, the shape the report was asked for:
 ;;     Pt. 17    closest line is 0'-1 7/8" away
 (defun abp:finding (q)
   (strcat "Pt. " (abp:pad (abp:pt-name (cdr q)) 6)
-          "closest line is " (rtos (car q) 4 4) " away"))
+          "closest line is " (abp:dstr (car q)) " away"))
 
 ;; Distance as the report writes it, for prose (the limit, mostly).
-(defun abp:dstr (d) (rtos d 4 4))
+(defun abp:dstr (d) (rtos d abp:*dist-mode* abp:*dist-prec*))
 
 ;; The findings, worst first: everything over the limit under one
 ;; heading, then the near misses under another, capped so a 200-point
@@ -612,20 +713,20 @@
           ((abp:lvl-p r 2) (setq nadv (1+ nadv)))))
   ;; height: the head is title (1.5) + date + verdict (1.2) + legend; a
   ;; heading row is one line plus the 0.4 gap above it
-  (setq nlin 4.5)
+  (setq nlin abp:*head-lines*)
   (foreach r rows
-    (setq nlin (+ nlin (cond ((abp:lvl-p r 3) 1.4)
+    (setq nlin (+ nlin (cond ((abp:lvl-p r 3) abp:*hdg-lines*)
                              ((abp:row-lvl r) 1.0)
                              (t abp:*green-scale*)))))
-  (if (and bb (> (max (abp:bw bb) (abp:bh bb)) 1.0e-8))
+  (if (and bb (> (max (abp:bw bb) (abp:bh bb)) abp:*tiny*))
     (progn
-      (setq ref (max (abp:bh bb) (* 0.25 (abp:bw bb)))
-            h   (/ ref (* 1.66 nlin)))
-      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-    (setq h 2.5))
+      (setq ref (max (abp:bh bb) (* abp:*report-wide* (abp:bw bb)))
+            h   (/ ref (* abp:*report-lead* nlin)))
+      (if (> h (/ ref abp:*report-hmax*)) (setq h (/ ref abp:*report-hmax*)))
+      (if (< h (/ ref abp:*report-hmin*)) (setq h (/ ref abp:*report-hmin*))))
+    (setq h abp:*report-hfall*))
   (setq ins (if bb
-                (list (+ (caddr bb) (* 0.05 (max (abp:bw bb) 1.0)))
+                (list (+ (caddr bb) (* abp:*report-gap* (max (abp:bw bb) 1.0)))
                       (cadddr bb) 0.0)
                 (list 0.0 0.0 0.0)))
   ;; the head: a large title, the date and version small under it, the
@@ -652,8 +753,9 @@
                       (strcat "Too far = more than " (abp:dstr limit)
                               " off the nearest line.  Read-only scan -"
                               " nothing you drew was changed.  Too far in "
-                              (abp:red "red")
-                              ", advice in " (abp:cyan "cyan")
+                              (abp:red (abp:color-name abp:*flag-color*))
+                              ", advice in "
+                              (abp:cyan (abp:color-name abp:*advice-color*))
                               "; points that check out are smaller."))))
   (foreach r rows
     (setq txt (strcat txt "\\P" (abp:render r))))
@@ -670,10 +772,10 @@
 (defun abp:tag-mine (en / ed)
   (if en
     (progn
-      (regapp "ABPCHECK")
+      (regapp abp:*appid*)
       (setq ed (entget en))
-      (entmod (append ed (list (list -3 (list "ABPCHECK"
-                                              (cons 1000 "ABPCHECK"))))))))
+      (entmod (append ed (list (list -3 (list abp:*appid*
+                                              (cons 1000 abp:*appid*))))))))
   en)
 
 ;; Erase only ABPCHECK's own objects on a layer; anything the user drew
@@ -688,7 +790,7 @@
           (setq i 0)
           (repeat (sslength ss)
             (setq en (ssname ss i))
-            (if (assoc -3 (entget en '("ABPCHECK")))
+            (if (assoc -3 (entget en (list abp:*appid*)))
               (progn (entdel en) (setq n (1+ n))))
             (setq i (1+ i)))))))
   n)
@@ -720,12 +822,6 @@
   (if v v dflt))
 
 ;;; -------------------- the commands ------------------------------------
-
-;; The selection filter: the points and the geometry they are measured
-;; against, plus the two curve types that are counted rather than
-;; measured, so the report can say they were left out.
-(setq abp:*filter*
-  '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE")))
 
 (defun c:ABPCHECK ( / *error* undo-open ss got pts segs nspl nocs nmine
                       keyed rows bb res h nring)
@@ -783,24 +879,27 @@
                         " against - include the drawn geometry in the"
                         " selection.")))
         (T
-         (setq abp:*limit*
+         ;; offer what you answered last, or the knob's default the
+         ;; first time this session -- the knob itself stays the
+         ;; default it was set to and is never written over
+         (setq abp:*asked*
                (abp:asklimit "How far off the line is too far?"
-                             abp:*limit*))
+                             (if abp:*asked* abp:*asked* abp:*limit*)))
          (setq keyed (abp:measure pts segs)
-               rows  (abp:rows keyed abp:*limit* nspl nocs)
+               rows  (abp:rows keyed abp:*asked* nspl nocs)
                bb    (abp:bbox pts)
-               res   (abp:write-report rows bb abp:*limit*)
+               res   (abp:write-report rows bb abp:*asked*)
                h     (caddr res)
-               nring (abp:ring keyed abp:*limit* h))
+               nring (abp:ring keyed abp:*asked* h))
          (princ (strcat "\n" (itoa (length pts)) " point(s) measured"
                         " against " (itoa (length segs)) " segment(s)."))
          (if (> (car res) 0)
            (princ (strcat "\n" (itoa (car res)) " point(s) more than "
-                          (abp:dstr abp:*limit*) " off the nearest line - "
+                          (abp:dstr abp:*asked*) " off the nearest line - "
                           (itoa nring) " ringed on layer "
                           abp:*miss-layer* "."))
            (princ (strcat "\nAll clear - every point is within "
-                          (abp:dstr abp:*limit*) " of a line.")))
+                          (abp:dstr abp:*asked*) " of a line.")))
          (princ (strcat "\nReport written on layer " abp:*report-layer*
                         ".  ABPCHECKRESCUE removes both."))))))
   (command "_.UNDO" "_End")

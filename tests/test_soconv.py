@@ -15,6 +15,13 @@ tests pin the same way: an error mid-run and an Esc at the selection
 prompt both reach the command's OWN *error*, which has to put back the
 locks the run took off and close the mark it opened.
 
+Then the contingencies the table promises: the correct spelling of the
+export's misspelled layer converting too, a wildcard row and an added
+row behaving as rules (a destination the colour table does not name is
+created in *soconv-default-color*), a frozen, switched-off destination
+repaired rather than quietly drawn onto, and a highlight carrying
+nothing of the export's being told so rather than converted.
+
 Script values answer the interactive calls in order: None is Enter at
 the pickfirst probe and again at the selection prompt, which sends the
 tool to the whole drawing.  A function-valued answer runs when its
@@ -291,6 +298,102 @@ check("no layer was created for a run with nothing to do",
       repr(sorted(vm.tables['LAYER'])))
 check("the mark was opened and closed",
       vm.undo_log == ['start', 'end'] and vm.undo_marks == 0)
+
+# ----------------------------------------------------------------------
+# the table is the whole conversion
+# ----------------------------------------------------------------------
+print("soconv -- *soconv-map* is the whole conversion")
+
+
+def fixed_export(vm):
+    """The survey, plus a point on the CORRECTLY spelled anchor layer
+    (an export that fixed its typo) and a note on a layer no rule
+    names."""
+    survey(vm)
+    vm.loads(layer('Existing Anchors', 30))
+    vm.loads(ent('POINT', 'Existing Anchors'))
+    vm.loads(layer('Site Notes', 2))
+    vm.loads(ent('TEXT', 'Site Notes', "'(40 . 6.0) '(1 . \"Gate\")"))
+
+
+vm = fresh(fixed_export)
+vm.run('c:SOCONV', [None, None])
+check("the correct spelling, listed after the export's, converts too",
+      layers_of(vm, 'POINT') == ['POINTS'] * 4, repr(layers_of(vm, 'POINT')))
+check("a layer no row names is nobody's business",
+      layers_of(vm, 'TEXT') == ['Site Notes'], repr(layers_of(vm, 'TEXT')))
+
+vm = fresh(fixed_export)
+vm.loads('(setq *soconv-map* (append *soconv-map*'
+         ' \'(("Site Notes" "*" "SURVEY"))))')
+vm.run('c:SOCONV', [None, None])
+check("a row added to the table is a rule like any other",
+      layers_of(vm, 'TEXT') == ['SURVEY'], repr(layers_of(vm, 'TEXT')))
+check("its destination, which the colour table does not name, was created"
+      " in *soconv-default-color*",
+      grp(vm.recdata[vm.tablerecs['LAYER']['SURVEY']], 62) == 7,
+      repr(vm.recdata[vm.tablerecs['LAYER']['SURVEY']]))
+check("and it is counted in the done line", any(
+    '1 -> SURVEY' in s for s in vm.printed), repr(vm.printed[-2:]))
+
+vm = fresh(fixed_export)
+vm.loads('(setq *soconv-map* \'(("Existing Anchor*" "*" "POINTS")))')
+vm.run('c:SOCONV', [None, None])
+check("a wildcard row takes both spellings at once",
+      layers_of(vm, 'POINT')
+      == ['LEICA_DISTO_POINT_ENTITY', 'POINTS', 'POINTS', 'POINTS'],
+      repr(layers_of(vm, 'POINT')))
+check("and rows no longer in the table are no longer rules",
+      layers_of(vm, 'ARC') == ['Obstacles', 'Pool Perimeter']
+      and layers_of(vm, 'MTEXT') == ['Dimensions'],
+      repr((layers_of(vm, 'ARC'), layers_of(vm, 'MTEXT'))))
+check("the message names only what the new table converts", any(
+    'It converts Existing Anchor*.' in s for s in vm.printed)
+    or any('Moved off Existing Anchorss, Existing Anchors' in s
+           for s in vm.printed), repr(vm.printed[-2:]))
+
+# ----------------------------------------------------------------------
+# a frozen, switched-off destination
+# ----------------------------------------------------------------------
+print("soconv -- a frozen, switched-off destination is repaired, and says so")
+
+
+def frozen_text(vm):
+    survey(vm)
+    vm.loads(layer('TEXT', -4, 1))       # off (negative colour) and frozen
+
+
+vm = fresh(frozen_text)
+vm.run('c:SOCONV', [None, None])
+check("TEXT is thawed and switched on",
+      not (layer_flags(vm, 'TEXT') & 1)
+      and grp(vm.recdata[vm.tablerecs['LAYER']['TEXT']], 62) == 4,
+      repr(vm.recdata[vm.tablerecs['LAYER']['TEXT']]))
+check("and the run said so", any(
+    'TEXT was off, frozen or locked' in s for s in vm.printed),
+    repr(vm.printed[:3]))
+check("the note landed on it", layers_of(vm, 'MTEXT') == ['TEXT'])
+
+# ----------------------------------------------------------------------
+# a highlight with nothing of the export's in it
+# ----------------------------------------------------------------------
+print("soconv -- a highlight carrying nothing of the export's is told so")
+vm = fresh()
+picked = [e for e in vm.entities
+          if grp(vm.entdata[e], 8) in ('0', 'POINTS')]
+vm.pickfirst = ['<ss>'] + picked
+vm.run('c:SOCONV', [])
+check("nothing moved",
+      layers_of(vm, 'ARC') == ['Obstacles', 'Pool Perimeter']
+      and layers_of(vm, 'POINT') == ['Existing Anchorss',
+                                     'LEICA_DISTO_POINT_ENTITY', 'POINTS'],
+      repr(layers_of(vm, 'POINT')))
+check("and it says so rather than reporting a conversion of nothing", any(
+    'nothing here is on the export' in s for s in vm.printed)
+    and not any('SOCONV done' in s for s in vm.printed), repr(vm.printed))
+check("no layer was created and nothing was unlocked",
+      'TEXT' not in vm.tables['LAYER'] and vm.lock_log == [],
+      repr((sorted(vm.tables['LAYER']), vm.lock_log)))
 
 # ----------------------------------------------------------------------
 # an error mid-run
