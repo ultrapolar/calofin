@@ -97,6 +97,12 @@ FILES = [
     # the older spelling the rule leaves where it got there first
     ('AutoDim', ROOT / 'lisp' / 'autodim' / 'AutoDim.lsp', 'ad',
      ROOT / 'lisp' / 'autodim' / 'README.md', SETTINGS),
+    # CONSTELLATION, which grew a block when its knobs were gathered:
+    # five layer colours that were literals inside two drawing defuns,
+    # the label and marker floors, and the damping factors of a solver
+    # nobody can retune from the middle of the file
+    ('CONSTELLATION', ROOT / 'lisp' / 'constellation' / 'CONSTELLATION.lsp',
+     'cst', ROOT / 'lisp' / 'constellation' / 'README.md', TUNABLES),
     # the three callout/create tools, which joined for the same reason
     # again: each kept SOME of its settings in a block at the top and
     # the rest inline -- a ring colour, a text offset, the sentence a

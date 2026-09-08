@@ -35,6 +35,11 @@ explanation beside it, under the tunables rule (STANDARDS 5) that
 landed in this same release, and the contingencies a survey brings
 in run in the VM at both tiers.
 
+`CONSTELLATION` gets the same pass, and joins the tunables rule with
+`AUTODIM` and the two point plotters: every knob gathered into a block
+at the top and explained, the paths a clean run never takes driven under
+test, and the four defects that turned up on the way closed.
+
 ### Added
 
 - **`XFTRECONV`** (`lisp/xftconv/`, with `XFTCONV` at v1.14) puts a
@@ -180,6 +185,37 @@ in run in the VM at both tiers.
   `wc:*apex-min-f*` of the local depth instead, which is what the
   README had always claimed happened.
 
+- **`CONSTELLATION` closed an undo group it never opened** -- the same
+  defect `XFTCONV` had above, found independently in the same release.
+  With UNDO off (`UNDOCTL` bit 1 clear) `cst:undobegin` rightly opens
+  nothing, but the success path called `cst:undoend` unconditionally, so
+  every run in such a drawing ended in the error handler. Guarded on
+  `undo-open`, the way the handler already was. Two files carrying one
+  mistake is the argument for the library idiom, not for two fixes.
+
+- **`CONSTELLATION`'s handler closed the group with plain `command`.**
+  STANDARDS section 5: AutoCAD 2015+ rejects `(command)` inside `*error*`
+  unless the error mode was pushed, so an Esc could leave the group open.
+  The handler now closes it through `command-s` under
+  `vl-catch-all-apply`, as SMARTFILLET and CUSTBLOCK do. (The VM treats
+  the two alike, so the cancel sweep passed either way; the library's
+  own `cal:undoend` idiom still carries the plain form.)
+
+- **Back from the arcs into a full chart bounced straight back out.** A
+  full chart closes itself so the walk needs no final `D` -- and did so
+  on re-entry too, so the one reason to Back into it (a dim to change)
+  was unreachable. A chart that is already full on the way in now waits
+  for `D`, like a fix pass; one that fills up under the operator still
+  closes itself.
+
+- **A local named `fix` shadowed the AutoLISP builtin of that name.**
+  `c:CONSTELLATION` held the answer to "What needs changing?" in a local
+  called `fix`; AutoLISP locals are dynamically scoped, so for the whole
+  of that command -- and everything it calls -- `(fix ...)` found a
+  string where the function should be. Harmless while nothing called it,
+  and found the moment something did: the clamp added to `cst:askcount`
+  above. The local is `tofix` now, with a comment saying why.
+
 - **`TUTORIALABHD`'s demo never created the layer it drew on.** Its
   captions, its three candidate outlines and their labels all go on
   `POOL-FIT`, and `entmake` onto a layer the drawing does not have
@@ -284,6 +320,24 @@ in run in the VM at both tiers.
   line saying so (STANDARDS 5). The READMEs and tests had it right; the
   headers claimed re-locking for both.
 
+- **`CONSTELLATION` v1.4 joins the tunables rule** (STANDARDS.md
+  section 5), with 38 knobs in a block at the top and a row apiece in
+  its README. Five layer colours came out of `cst:preview` and
+  `cst:draw`, where they were literal ACI numbers; the label and marker
+  floors out of `cst:texth` and `cst:dotr`; the Levenberg-Marquardt
+  damping factors out of `cst:lm`; the outline default out of
+  `cst:ask`; the overhang threshold out of the report. `cst:*maxpts*`
+  is read off the label string instead of being a second number to keep
+  in step with it, and `cst:*defcount*` is clamped into range at the
+  ask, since the README invites setting it after loading. The golden
+  angle is named once for its two users and carries a `NOT A KNOB:`
+  marker, since spreading the scattered start evenly is what it does
+  and no other value does it. The block closes with the other numbers
+  that look tunable and are not -- where `A` sits, the `ab_pt`
+  geometry, the float guards, the library helpers the grouped build
+  swaps away. `tests/test_tunables.py` carries the file now, so the
+  next knob cannot land underneath the block.
+
 - **ABHD puts every knob at the top too** (`abhd.lsp` at 090826
   REV15), in one tunables block of 53 settings in three groups --
   drawing setup, fitter tuning, guards -- each with a sentence on what
@@ -340,6 +394,19 @@ in run in the VM at both tiers.
   colour, `VSCONV`'s `*vsconv-dim-xdata*` `nil`, an export with nothing
   dimensioned, and a `SOCONV` highlight carrying nothing of the
   export's.
+
+- `tests/test_constellation.py` grows fifteen contingency tests -- 73
+  assertions on top of the 113 already there, 186 in all: Esc mid-chart
+  and at the last question, Back at every question in the chain and back
+  into a full chart, the count floor and ceiling and a clamped default,
+  zero and negative measurements at every distance prompt, pair and run
+  names that are not ones, a pair given twice, the three-point floor,
+  the layer colours and an existing layer keeping its own, a frozen and
+  switched-off layer restored, the block made once, UNDO off, an arc
+  named out of ring order and one with an impossible radius, and each
+  knob at the top moved and shown to move what it says. Both tiers.
+- `tests/test_tunables.py` takes `CONSTELLATION` into `FILES`, which is
+  what holds its block and its README table together from here on.
 
 - `tests/test_abhd_contingencies.py` drives `ABHD`, `ABHDCOVER` and
   `ADAB` through the paths a bad drawing takes -- no points, two
