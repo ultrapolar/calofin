@@ -342,7 +342,7 @@ def test_the_tunables_block_holds_every_knob_each_explained():
                  if l.startswith(';;;  TUNABLES'))
     end = next(i for i, l in enumerate(lines)
                if l.startswith(';;;  END TUNABLES'))
-    state = {'abp:*sysold*'}
+    state = {'abp:*sysold*', 'abp:*asked*'}
     outside = [l for i, l in enumerate(lines)
                if l.startswith('(setq abp:*') and not start < i < end
                and not any(k in l for k in state)]

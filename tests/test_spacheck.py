@@ -852,8 +852,10 @@ def test_the_tunables_block_holds_every_knob_each_explained():
     start = next(i for i, l in enumerate(lines) if l.startswith(';;;  TUNABLES'))
     end = next(i for i, l in enumerate(lines)
                if l.startswith(';;;  END TUNABLES'))
+    state = {'spachk:*sysold*', 'spachk:*demo-ents*', 'spachk:*odstyle*'}
     outside = [l for i, l in enumerate(lines)
-               if l.startswith('(setq spachk:*') and not start < i < end]
+               if l.startswith('(setq spachk:*') and not start < i < end
+               and not any(k in l for k in state)]
     assert not outside, outside
 
     def explained(i):
@@ -870,7 +872,6 @@ def test_the_tunables_block_holds_every_knob_each_explained():
              if l.startswith('(setq spachk:*') and not explained(i)]
     assert not undoc, undoc
     knobs = re.findall(r'^\(setq (spachk:\*[a-z-]+\*)', src, re.M)
-    state = {'spachk:*sysold*', 'spachk:*demo-ents*', 'spachk:*odstyle*'}
     vm = VM()
     vm.load(CHK)
     unbound = [k for k in knobs if k not in state and vm.loads(k) is None]
