@@ -384,7 +384,8 @@ are set for the duration of the command and restored afterwards; each
 dimension keeps the settings as its own style override, so the numbers
 stay in inches once the command is done.
 
-Defaults (constants at the top of the file):
+Defaults (the first group of the `ADJUSTABLE CONSTANTS` block at the
+top of the file — see **Tunables** below):
 
 ```lisp
 (setq spa:*dimlunit* 5)     ; 5 = fractional inches (39 3/8), 2 = decimal (39.375)
@@ -520,6 +521,41 @@ hinge length vs foam length, and each hinge's offset from the left edge.
 The corner letters, the mode note and the report table all live on
 `SPA-NOTES`. Freeze that one layer and what is left is the outline and
 its dimensions — the drawing as the order sheet shows it.
+
+## Tunables
+
+**Every knob the routine has is in one block at the top of `SPA.LSP`**,
+under `ADJUSTABLE CONSTANTS`. Each one is written *once*: change a
+value there and every place that reads it follows. (Numbers still
+appear in the code below and a few happen to equal a knob above, so
+retune by editing the named constant rather than by searching for its
+value.) Each group says what it controls; the map is:
+
+| Group | What it sets |
+| --- | --- |
+| dimension text | units, precision, the inch mark, and the arrow / extension / gap sizes as multiples of the note height |
+| dimension stand-off | how far the cover's overalls sit outside it, how far the water's edge's sit inside, the inboard flat dims, the lap note |
+| corner callouts | the circled 90 mark, the `?` and `Not Given` note, and how far a radius, cut or octagon-cut callout is dragged out |
+| drawing furniture | how `doff` and `th` are sized off the spa — a floor and a divisor each |
+| hinge lettering | label height, frame width, text style, how far the label sits off its line, and the fold hinge's dash scale |
+| layers and colours | `POOL` / `COVER` / `DIMENSION` / `SPA-NOTES` / `TEXT`, the colour each is created with, the red of an adjusted letter and the cyan of a recommendation — plus `*lay-hinge*`, which is where the hinges themselves are drawn |
+| linetypes | the dashed, dotted and fold-hinge patterns, in inches, scaled to cancel `LTSCALE` |
+| dimension styles | the two style names, the water's edge's furniture factor, and the suggested cover lap |
+| **the foam sheet** | `*foamtab*` — the shop data this whole pass is built on: grade + taper give foam width, foam length and the acceptable piece counts. `*foamdflt*` is the last-resort sheet, and using it IS noted in the report. A grade whose taper only the Standard row carries falls back to Standard's numbers first, and quietly |
+| **hardware** | `*hardtab*` — what the longest hinge calls for, per grade, and the three item names in the order they are reported |
+| hinge solver | the fewest pieces a cover can be, how many extra counts to try when a spillaway will not be dodged, and how far off the edge a hinge is kept |
+| report table | row pitch, column positions, the text heights of the heading, a red failure and a cyan recommendation |
+| guide preview | the three guide colours and the nominal guide's size, letter heights and treatment cap |
+
+Not in that block, on purpose: run state (the which-outline switch, the
+guide's entity list), the octagon's edge table (that is shape
+structure, not a setting), and the bare `1.0e-6` float-noise guards.
+
+`spa:*capfuzz*` is a millionth of an inch of slack on the corner-size
+cap, so a treatment typed at exactly the maximum the prompt printed is
+accepted rather than re-asked with the same number back. (`POOL` needs
+the same guard more sharply — its cap is compared against a setback
+computed through a cosine.)
 
 ## Notes
 

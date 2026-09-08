@@ -6,6 +6,78 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.6 -- 2026-09-08
+
+POOL and SPA went over end to end: every knob either tool has now lives
+in one documented block at the top of its file, and the one prompt a
+drafter could not answer is fixed.
+
+### Fixed
+
+- **A corner treatment sized at exactly its cap was refused, and the
+  maximum the prompt then printed failed the same test** (`POOL.LSP`
+  090826 REV23, `SPA.LSP` 090826 REV15). A treatment is capped at half
+  the shorter wall it sits on, so two of them can never overlap and
+  fold the perimeter -- but the cap is compared against a setback the
+  routine WORKS OUT rather than the number that was typed. A radius
+  becomes `r / tan(angle/2)`, and at a true 90-degree corner
+  `cos(45)/sin(45)` is `1.0000000000000002` in floating point, not `1`.
+
+  So a 120" radius on a 240"-wide pool -- the full-round end a crew
+  really does draw -- measured `120.00000000000003` against a cap of
+  `120`, was rejected as too large, and the prompt answered with
+  `max 120.0000`: type that back and it is rejected again. A question
+  that cannot be satisfied by the figure it shows you, on an input a
+  shop actually enters.
+
+  Both files gained a `*capfuzz*` of a millionth of an inch on that
+  comparison -- float noise and nothing else, orders below the 1/16" a
+  tape reads, so no real measurement changes hands and a treatment
+  still cannot overrun its wall. `test_pool_runtime.py` R36/R36b and
+  two new cases in `test_spa_runtime.py` pin both halves: the exact-cap
+  size draws its four arcs, and a genuinely oversized one is still
+  refused exactly once and then takes the maximum it printed.
+
+### Changed
+
+- **Every knob in `POOL.LSP` and `SPA.LSP` is in one block at the top
+  of its file**, under `ADJUSTABLE CONSTANTS`, grouped by topic with an
+  explanation of what each group controls and what moves when it
+  changes -- 85 constants in POOL, 106 in SPA. Each is WRITTEN ONCE, so
+  a shop cannot retune a number in one place and leave it behind in
+  another, and a check over both files confirms every constant declared
+  is also read somewhere.
+
+  What moved up: the output layers and the colour each is created with
+  (POOL had `"POOL"`, `"POOL-NOTES"` and `"DIMENSION"` spelled out 67
+  times between them), the linetype patterns, the `doff`/`th` rules
+  every flow sizes its furniture with, the corner-mark proportions, the
+  report and mini-model layout, the guide colours and nominal rings,
+  the fitting engine's sweep counts and scan steps, and the suggestion
+  and fallback rules. In SPA that also brought up the two tables the
+  whole hinge pass is built on -- `spa:*foamtab*` and `spa:*hardtab*`,
+  the shop's own foam-sheet and hardware data, which sat 1,200 lines
+  down.
+
+  Three kinds of thing are deliberately NOT in the blocks, and each
+  block says so: run state (set and cleared by a run, not tuned), the
+  shape index tables (which corner joins which -- editing one describes
+  a different pool, it does not retune this one), and the bare
+  `1.0e-6` guards inside the geometry, which are float noise rather
+  than measurements.
+
+- **`spa:*lay-hinge*`** names the layer the hinges are drawn on, which
+  was the literal `"COVER"` inside the draw loop. It is cover hardware,
+  so the default is unchanged; the constant is what makes a sheet
+  showing only the water's edge retunable, and its comment says how.
+
+- `pool:*lts*` is gone -- a global nothing had read since the
+  per-entity linetype scale replaced it, still carrying the comment
+  "(legacy, unused)".
+
+- Both per-tool READMEs gained a **Tunables** section mapping the
+  groups in the block, per STANDARDS.md section 5.
+
 ## v3.5 -- 2026-09-02
 
 `SOCONV`'s sibling, written the same way: from a before/after the shop

@@ -186,48 +186,316 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
-(setq spa:*version* "090126 REV14")
+(setq spa:*version* "090826 REV15")
 
-;;; -------------------- adjustable constants --------------------------
+;;; ==================== ADJUSTABLE CONSTANTS ==========================
+;;;
+;;;  EVERY KNOB THIS TOOL HAS IS IN THIS BLOCK.  Each one is WRITTEN
+;;;  ONCE: change a value here and every place that reads it follows,
+;;;  so nothing can be retuned in one spot and left behind in another.
+;;;  Each group says what it controls and what moves when it changes.
+;;;
+;;;  (Numbers still appear in the code below, and a few of them happen
+;;;  to equal a knob above -- a 0.5 that halves a span is not the same
+;;;  0.5 as a callout offset.  Those are arithmetic local to one
+;;;  formula, not settings, so do NOT find-and-replace by value: retune
+;;;  by editing the named constant here.)
+;;;
+;;;  Three kinds of thing are deliberately NOT here, so the block stays
+;;;  a control panel rather than a dump of every literal in the file:
+;;;
+;;;    * RUN STATE -- spa:*form*, spa:*mode* and the rest of the
+;;;      which-outline switch, the guide's entity list.  They are set
+;;;      and cleared by a run, not tuned.  spa:*form* sits with the
+;;;      answer store that owns it; the rest are collected at the END
+;;;      of this block under their own heading.
+;;;    * SHAPE STRUCTURE -- spa:*octedges*, spa:*octnames*.  Those say
+;;;      WHICH corner joins which, not how the tool behaves: editing one
+;;;      does not retune this routine, it describes a different spa.
+;;;    * FLOAT-NOISE GUARDS -- the bare 1.0e-6 / 1.0e-9 tests inside the
+;;;      geometry ("is this length zero yet").  They are not
+;;;      measurements and have no shop meaning.
+;;;
+;;;  Lengths are DRAWING UNITS (inches).  Colours are AutoCAD colour
+;;;  numbers (1 red, 2 yellow, 3 green, 4 cyan, 6 magenta, 7 white/black,
+;;;  8 gray).
 
-;; Dimension text units.  5 = Fractional inches (84-1/2), 2 = Decimal
-;; inches (84.50).  Anything but 4 (Architectural) keeps the numbers in
-;; standard inches instead of rolling them up into feet.
-(setq spa:*dimlunit* 5)
+;;; ---- dimension text
+;;;
+;;;  Every dimension is written in standard inches whatever the host
+;;;  drawing is set to.  Anything but 4 (Architectural) keeps the
+;;;  numbers in inches instead of rolling them up into feet.
+
+(setq spa:*dimlunit* 5)         ; 5 = fractional (84-1/2), 2 = decimal (84.50)
 (setq spa:*dimprec*  3)         ; 5 -> 1/8", 2 -> 3 decimal places
 (setq spa:*dimpost*  "\"")      ; suffix stuck on every measurement
 
-;; How far the dimension lines stand off the cover outline, and where
-;; the Water's Edge / Cover Size note sits along its dimension line.
+;;  The dimension furniture is sized off the drawing's note height th,
+;;  so the numbers read at any spa size.  These are the multiples of it.
+(setq spa:*dim-asz*  0.8)       ; arrow size
+(setq spa:*dim-exe*  0.6)       ; extension line past the dim line
+(setq spa:*dim-exo*  0.6)       ; extension line offset from the outline
+(setq spa:*dim-gap*  0.4)       ; gap round the text
+
+;;  The system variables the routine sets for the run and puts back
+;;  afterwards.  A variable this release does not have is skipped.
+(setq spa:*dimvars*
+      '("DIMLUNIT" "DIMFRAC" "DIMDEC" "DIMZIN" "DIMPOST" "DIMTAD" "DIMTMOVE"
+        "DIMTXT" "DIMASZ"
+        "DIMEXE" "DIMEXO" "DIMGAP" "DIMSCALE" "DIMTIX" "DIMTOFL" "DIMATFIT"))
+
+;;; ---- where the dimension lines stand off
+;;;
+;;;  The COVER's overalls go outside the drawing; the WATER'S EDGE's go
+;;;  a third of the way into its own outline when both are drawn, hooked
+;;;  to points on the dimension line itself so the arrows land on the
+;;;  outline rather than trailing extension lines across the cover.
+
 (setq spa:*dimoff*    36.0)     ; 3 ft: cover outline -> the LEFT overall dim
 (setq spa:*topoff*    24.0)     ; 2 ft: cover outline -> the TOP overall dim
 (setq spa:*flatoff*   18.0)     ; outline -> the inboard flat dims
 (setq spa:*insetfrac* 0.3333)   ; water's edge dims, a third of the way in
 (setq spa:*lapoff*    14.0)     ; how far under the cover the lap note sits
 
-;; Hinge lettering and linework, matched to the office template's
-;; before/after sample: labels are MTEXT in the Attributes style at a
-;; fixed 5" height, bottom-centred 3" off the line; the fold hinge is
-;; drawn in the stock DASHED2 linetype at an effective 5" dash.
+;;; ---- corner callouts, as multiples of doff
+;;;
+;;;  A radius corner takes a radius dim read from outside the arc, a cut
+;;;  corner an aligned dim across its face, a square one the circled
+;;;  90-degree mark of STANDARDS.md section 2, and a NotGiven corner
+;;;  that same mark with a "?" and a "Not Given" note past its tip.
+
+(setq spa:*mark-r*    0.18)     ; circle radius on the corner point
+(setq spa:*mark-lead* 1.2)      ; how far out its leader runs
+(setq spa:*ng-txt*    0.25)     ; "Not Given" text height
+(setq spa:*ng-off*    1.45)     ; how far out that note sits
+(setq spa:*rad-off*   0.9)      ; radius dim, dragged out past the arc
+(setq spa:*cut-off*   0.6)      ; cut-face dim, out past the face
+(setq spa:*oct-off*   0.8)      ; the octagon's one cut callout
+
+;;; ---- how big the drawing furniture comes out
+;;;
+;;;  Both flows size their dimension offsets and text off the spa
+;;;  itself, so a 5 ft cover and a 12 ft one both come out readable:
+;;;
+;;;      doff = max(*doff-min*, longer overall / *doff-div*)
+;;;      th   = max(*th-min*,   longer overall / *th-div*)
+
+(setq spa:*doff-min*  6.0)      ; never closer than 6"
+(setq spa:*doff-div* 12.0)
+(setq spa:*th-min*    1.0)      ; never smaller than 1"
+(setq spa:*th-div*   40.0)
+
+;;; ---- hinge lettering and linework
+;;;
+;;;  Matched to the office template's before/after sample: labels are
+;;;  MTEXT in the Attributes style at a fixed height, bottom-centred off
+;;;  the line; the fold hinge is drawn in the stock DASHED2 linetype at
+;;;  an effective 5" dash.
+
 (setq spa:*hingetxth*  5.0)     ; hinge label height
 (setq spa:*hingetxw*  60.0)     ; hinge label MTEXT frame width
 (setq spa:*hingestyle* "Attributes")  ; label style (Standard when absent)
+(setq spa:*hingetxoff* 0.6)     ; label height multiples: line -> label
 (setq spa:*hdashmult* 20.0)     ; DASHED2 0.25" dash x 20 = 5" on paper
+
+;;; ---- the note stacked under every overall
 
 (setq spa:*sfx-water* "Water's Edge")
 (setq spa:*sfx-cover* "Cover Size")
-(setq spa:*lay-water* "POOL")   ; water's edge perimeter layer (dashed)
-(setq spa:*lay-cover* "COVER")  ; cover size perimeter layer
 
-;; Dimension styles, one per outline.  A style the drawing already
-;; defines is used exactly as it stands -- the office template wins --
-;; and one that is missing is built from the standard-inches settings
-;; below, the water's edge at spa:*wefactor* of the normal furniture
-;; size (the 0.5 in its name).
+;;; ---- output layers and their colours
+;;;
+;;;  Made (or un-frozen, unlocked and switched back on) at the start of
+;;;  every run by spa:layer.  Rename one here and every entity the
+;;;  routine draws follows it; the colour is used only when the layer
+;;;  has to be created, so a drawing that already carries the layer
+;;;  keeps the office's own colour.
+
+(setq spa:*lay-water* "POOL")   ; water's edge perimeter (dashed)
+(setq spa:*lay-cover* "COVER")  ; cover size perimeter
+(setq spa:*lay-dim*   "DIMENSION")  ; every dimension and corner mark
+(setq spa:*lay-notes* "SPA-NOTES")  ; corner letters, mode note, report,
+                                    ; and the grey input guide
+(setq spa:*lay-text*  "TEXT")   ; the Hinge / Velcro Hinge labels
+;; The hinges themselves are cover hardware, so they are drawn on the
+;; cover's layer even on a sheet that shows only the water's edge (the
+;; report says so).  Point this at spa:*lay-water* to have them follow
+;; whichever outline was actually drawn.
+(setq spa:*lay-hinge* "COVER")
+(setq spa:*col-water* 4)        ; cyan
+(setq spa:*col-cover* 6)        ; magenta
+(setq spa:*col-dim*   2)        ; yellow
+(setq spa:*col-notes* 3)        ; green
+(setq spa:*col-text*  7)        ; white / black
+(setq spa:*col-bad*   1)        ; red -- a letter the validator adjusted
+(setq spa:*col-advice* 4)       ; cyan -- a recommendation, not a failure
+
+;;; ---- linetypes
+;;;
+;;;  Defined here rather than loaded from acad.lin, so a failed load can
+;;;  never fall back to CONTINUOUS silently.  A pattern is (dash gap ...)
+;;;  in inches -- positive draws, negative gaps, 0 is a dot -- scaled per
+;;;  entity to cancel the drawing's LTSCALE.  A spa is a fraction of a
+;;;  pool's size, so POOL's 12" dash would read as a solid line here.
+
+(setq spa:*dashname* "SPADASH")
+(setq spa:*dashpat*  '(4.0 -3.0))
+(setq spa:*dotname*  "SPADOT")
+(setq spa:*dotpat*   '(0.0 -3.0))
+(setq spa:*hdashname* "DASHED2")        ; the stock fold-hinge pattern
+(setq spa:*hdashpat*  '(0.25 -0.125))
+
+;;; ---- dimension styles, one per outline
+;;;
+;;;  A style the drawing already defines is used exactly as it stands --
+;;;  the office template wins -- and one that is missing is built from
+;;;  the standard-inches settings above, the water's edge at
+;;;  spa:*wefactor* of the normal furniture size (the 0.5 in its name).
+
 (setq spa:*ds-cover*  "STANDARD INCHES")
 (setq spa:*ds-water*  "STANDARD INCHES 0.5")
 (setq spa:*wefactor*  0.5)
 (setq spa:*gapdflt*   6.0)      ; suggested cover lap over the water's edge
+
+;;  Offsetting a corner by g is not the same for every treatment: a
+;;  radius stays concentric (r -> r + g) and a cut face lengthens by
+;;  g * (2*sqrt2 - 2).  That factor, once.
+(setq spa:*diagoff* 0.82842712)
+
+;;  How far a corner treatment may exceed its own setback cap before the
+;;  size is refused and re-asked.  Float noise only -- a millionth of an
+;;  inch, orders below the 1/16" a tape reads -- so a face typed at
+;;  exactly the maximum the prompt printed is accepted rather than
+;;  re-asked with the same number.  (POOL carries the same guard, and
+;;  needs it more: its cap is compared against a setback the routine
+;;  computes through a cosine.)
+(setq spa:*capfuzz* 1.0e-6)
+
+;;  How far the eight sides of an octagon may differ and still count as
+;;  "all equal" -- a rounded-off cut face like 39-3/8" must still read
+;;  as the regular octagon it is, and get one Typ. callout rather than
+;;  a full set of flats.
+(setq spa:*octeq* 0.125)
+
+;;  ...and how far two corners' sizes may differ and still be one
+;;  treatment for the Typ. rule.
+(setq spa:*sameeps* 0.0005)
+
+;;; ---- the report table
+
+(setq spa:*rep-row*    2.2)     ; h multiples: row pitch
+(setq spa:*rep-title*  1.25)    ; h multiples: the heading's text height
+(setq spa:*rep-note*   1.4)     ; h multiples: a red failure note
+(setq spa:*rep-advice* 1.15)    ; h multiples: a cyan recommendation
+(setq spa:*rep-c1*    20.0)     ; h multiples: the TARGET column
+(setq spa:*rep-c2*    29.0)     ; ACTUAL
+(setq spa:*rep-c3*    38.0)     ; DELTA
+(setq spa:*rep-w*     46.0)     ; table width
+
+;;; ---- the guide preview
+;;;
+;;;  A grey nominal spa is drawn as soon as the shape is picked and the
+;;;  element being measured turns red.  The nominal sizes below are what
+;;;  the guide is drawn at before any measurement is in.
+
+(setq spa:*pv-col*  8)          ; guide outline (dark gray)
+(setq spa:*pvx-col* 7)          ; measuring tie (white)
+(setq spa:*hi-col*  1)          ; the element being asked for (red)
+;;  The RECTANGLE guide's nominal box.  The octagon and round guides
+;;  keep their own ring in spa:octpreview / spa:roundpreview rather
+;;  than reading these: their field-sheet ties (B, T, S, A, S1, V, S2)
+;;  are laid out at coordinates measured around that ring, so a size
+;;  changed here alone would leave the ties floating off it.
+(setq spa:*pv-w*  240.0)        ; nominal guide width
+(setq spa:*pv-l*  200.0)        ; nominal guide length
+(setq spa:*pv-th*  12.0)        ; guide corner-letter height
+(setq spa:*pv-tie* 10.0)        ; guide tie-letter height
+(setq spa:*pv-lbl* 22.0)        ; how far a rectangle corner letter sits out
+(setq spa:*pv-olbl* 20.0)       ; ...and an octagon one, which sits tighter
+(setq spa:*pv-cap* 50.0)        ; biggest treatment the guide will draw,
+                                ; so one huge corner cannot swallow it
+
+;;; ---- the foam sheet
+;;;
+;;;  THE SHOP DATA THIS ROUTINE IS BUILT ON.  Grade and taper -- read off
+;;;  the Spa Cover Details block, or asked -- pick a row, and the row
+;;;  gives the foam width (the widest a piece may be, so the maximum
+;;;  hinge spacing), the foam length (the longest a hinge may run) and
+;;;  which piece counts are acceptable.
+;;;
+;;;  Row: (grade taper ((foamW . foamL) ...) (piece counts, 5 = 5+))
+;;;  A grade+taper with two width options (48" / 49-1/2") carries both;
+;;;  the solver picks the one that needs the fewest hinges.  A foamL of
+;;;  nil means the sheet sets no length limit.
+;;;
+;;;  A grade/taper pair that is not in this table falls back to the
+;;;  STANDARD row for that taper -- an Economy cover in a taper only the
+;;;  Standard sheet carries is drawn to Standard's numbers, and QUIETLY:
+;;;  the report says nothing about it.  Only when even that misses does
+;;;  spa:*foamdflt* below take over, and that one IS noted.
+
+(setq spa:*foamtab*
+  (list
+    (list "ECONOMY"     "3-2"   (list (cons 48.0 96.0))                  (list 2))
+    (list "STANDARD"    "3-2"   (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2))
+    (list "STANDARD"    "4-2"   (list (cons 48.0 96.0)  (cons 49.5 102.0)) (list 2 3 4))
+    (list "STANDARD"    "4-3"   (list (cons 48.0 144.0))                 (list 2 3 4))
+    (list "STANDARD"    "5-3"   (list (cons 48.0 96.0))                  (list 2 3 4 5))
+    (list "STANDARD"    "5-4"   (list (cons 48.0 96.0))                  (list 2 3 4 5))
+    (list "STANDARD"    "3-3"   (list (cons 48.0 144.0))                 (list 2 3 4 5))
+    (list "ULTRA"       "3-2"   (list (cons 48.0 144.0))                 (list 2))
+    (list "ULTRA"       "4-3"   (list (cons 48.0 96.0))                  (list 2 3 4))
+    (list "ULTRA"       "3-3"   (list (cons 48.0 144.0))                 (list 2 3 4 5))
+    (list "THERMOLIGHT" "1-3/8" (list (cons 53.0 nil))                   (list 2 3 4 5))))
+
+(setq spa:*foamdflt*  (list (cons 48.0 96.0)))   ; assumed when nothing matches
+(setq spa:*foamdpc*   (list 2 3 4 5))
+(setq spa:*thermotaper* "1-3/8")  ; the one taper a Thermo-Light comes in
+
+;;; ---- hardware called for by the LONGEST hinge, per grade
+;;;
+;;;  Each rule is (OVER <inches>) | (ALWAYS) | (NEVER) | (REQUEST), and
+;;;  the three columns are velcro hinges, double C channel, hold down
+;;;  kit -- in that order, which is the order they are reported in.
+
+(setq spa:*hardtab*
+  (list                 ;  grade          velcro        double C      hold down
+    (list "ECONOMY"     '(REQUEST)    '(REQUEST)    '(REQUEST))
+    (list "STANDARD"    '(OVER 120.0) '(OVER 108.0) '(OVER 120.0))
+    (list "ULTRA"       '(OVER 108.0) '(NEVER)      '(OVER 96.0))
+    (list "THERMOLIGHT" '(ALWAYS)     '(NEVER)      '(NEVER))))
+
+(setq spa:*hardnames* (list "VELCRO HINGES" "DOUBLE C CHANNEL"
+                            "HOLD DOWN KIT"))
+
+;;; ---- the hinge placement solver
+;;;
+;;;  The fewest pieces that fit the foam width are used, spaced evenly,
+;;;  then nudged off any spillaway zone.  When no nudge works the piece
+;;;  count is bumped and the search runs again, up to spa:*hinge-try*
+;;;  counts past the minimum; failing everything the even layout is kept
+;;;  and the report says which hinge is in a zone.
+
+(setq spa:*hinge-min*  2)       ; a cover is never fewer pieces than this
+(setq spa:*hinge-try*  3)       ; how many extra piece counts to try
+(setq spa:*hinge-edge* 0.01)    ; keep a hinge this far off the cover's edge
+
+;;; ---- vocabulary
+;;;
+;;;  The subject the all-same round asks about, spelled ONCE: it is the
+;;;  label the treatment question and its size follow-up both read
+;;;  ("How should the four corners be treated?", "Radius for the four
+;;;  corners"), and the string spa:fckey matches to hand that round
+;;;  corner A's form boxes.  Lower case, because spa:fckey folds first.
+
+(setq spa:*allcorners* "the four corners")
+
+;;; ---- RUN STATE (not knobs)
+;;;
+;;;  Declared here because AutoLISP wants a global declared at top
+;;;  level, but set and cleared by the run itself -- editing a value
+;;;  here changes nothing.  The which-outline switch is set by
+;;;  spa:setmode from the mode question and the constants above.
 
 (setq spa:*base*     (list 0.0 0.0))
 (setq spa:*dashlt*   "CONTINUOUS")   ; resolved to SPADASH per run
@@ -247,7 +515,6 @@
 (setq spa:*advice*    nil)           ; hardware recommendations
 (setq spa:*grade*     nil)           ; from the Spa Cover Details block
 (setq spa:*taper*     nil)
-
 ;;; -------------------- small vector helpers --------------------------
 
 (defun spa:unit (p / d)
@@ -391,8 +658,8 @@
 ;; so the pool's 12" dash would read as a solid line here).
 (defun spa:ltload (name)
   (if (= name "DOT")
-      (spa:ltmake "SPADOT" "Spa guide dot . . . . . . . ." '(0.0 -3.0))
-      (spa:ltmake "SPADASH" "Spa dashed __ __ __ __" '(4.0 -3.0))))
+      (spa:ltmake spa:*dotname* "Spa guide dot . . . . . . . ." spa:*dotpat*)
+      (spa:ltmake spa:*dashname* "Spa dashed __ __ __ __" spa:*dashpat*)))
 
 ;; extra = a list of extra DXF pairs (linetype override and friends).
 (defun spa:line (p1 p2 lay extra)
@@ -537,7 +804,7 @@
 
 ;; Dotted WHITE guide line -- the measuring ties on the input screen.
 (defun spa:linedot (p1 p2)
-  (spa:line p1 p2 "SPA-NOTES"
+  (spa:line p1 p2 spa:*lay-notes*
             (append (list (cons 62 spa:*pvx-col*))
                     (if (/= spa:*dotlt* "CONTINUOUS")
                         (list (cons 6 spa:*dotlt*) (cons 48 (spa:ltsc)))))))
@@ -547,11 +814,6 @@
 ;;;  Every dimension this command makes is written in standard inches,
 ;;;  placed outside the shape, and (for overalls and sides, never for
 ;;;  corners) suffixed with the Water's Edge / Cover Size note.
-
-(setq spa:*dimvars*
-      '("DIMLUNIT" "DIMFRAC" "DIMDEC" "DIMZIN" "DIMPOST" "DIMTAD" "DIMTMOVE"
-        "DIMTXT" "DIMASZ"
-        "DIMEXE" "DIMEXO" "DIMGAP" "DIMSCALE" "DIMTIX" "DIMTOFL" "DIMATFIT"))
 
 ;; setvar that quietly skips a variable this release does not have.
 (defun spa:setv (v val)
@@ -569,10 +831,10 @@
   (spa:setv "DIMPOST"  spa:*dimpost*)   ; the inch mark
   (spa:setv "DIMSCALE" 1.0)             ; sizes below are already real
   (spa:setv "DIMTXT"   th)
-  (spa:setv "DIMASZ"   (* 0.8 th))
-  (spa:setv "DIMEXE"   (* 0.6 th))
-  (spa:setv "DIMEXO"   (* 0.6 th))
-  (spa:setv "DIMGAP"   (* 0.4 th))
+  (spa:setv "DIMASZ"   (* spa:*dim-asz* th))
+  (spa:setv "DIMEXE"   (* spa:*dim-exe* th))
+  (spa:setv "DIMEXO"   (* spa:*dim-exo* th))
+  (spa:setv "DIMGAP"   (* spa:*dim-gap* th))
   (spa:setv "DIMTIX"   0)               ; text may go outside...
   (spa:setv "DIMTOFL"  1)               ; ...but keep the dimension line
   (spa:setv "DIMATFIT" 3)
@@ -648,7 +910,7 @@
 ;; real radius dimension.  ce is the corner's (prev-end next-end mid).
 (defun spa:dimrad (ce outd doff sfx / tip loc was e od)
   (setq tip (caddr ce)
-        loc (spa:wp (cal:v+ tip (cal:v* outd (* 0.9 doff))))
+        loc (spa:wp (cal:v+ tip (cal:v* outd (* spa:*rad-off* doff))))
         was (entlast))
   (spa:arc3p (car ce) tip (cadr ce) (getvar "CLAYER") nil)
   (setq e (entlast))
@@ -770,13 +1032,6 @@
            (setq v (spa:fkword v kws)))
       v
       (cal:askkw msg kws shown dflt back)))
-
-;; The subject the all-same round asks about, spelled ONCE: it is the
-;; label the treatment question and its size follow-up both read
-;; ("How should the four corners be treated?", "Radius for the four
-;; corners"), and the string spa:fckey matches to hand that round
-;; corner A's form boxes.  Lower case, because spa:fckey folds first.
-(setq spa:*allcorners* "the four corners")
 
 ;; The form-key stem for a corner question, from the label every flow
 ;; already passes spa:askcorner -- "Corner A" is cornera.  The all-same
@@ -1003,9 +1258,8 @@
 ;;;  dimension is being asked for.  Once all inputs are in, the guide
 ;;;  deletes itself and is replaced by the true spa.
 
-(setq spa:*pv-col*  8)                  ; guide outline color (dark gray)
-(setq spa:*pvx-col* 7)                  ; measuring-tie color (white)
-(setq spa:*hi-col*  1)                  ; highlight color (red)
+;; The three guide colours are knobs and live at the top of the file
+;; (spa:*pv-col*, spa:*pvx-col*, spa:*hi-col*).
 
 ;; Override (or set) the color of an entity, refresh it, return it.
 (defun spa:setcol (e col / ed old)
@@ -1039,7 +1293,7 @@
   e)
 
 (defun spa:pvline (p1 p2)
-  (spa:line p1 p2 "SPA-NOTES" nil)
+  (spa:line p1 p2 spa:*lay-notes* nil)
   (spa:setcol (entlast) spa:*pv-col*))
 
 ;; Guide measuring line, drawn WHITE and DOTTED so it stands out from
@@ -1053,7 +1307,7 @@
 (defun spa:pvtie (p q lbl th / e et)
   (setq e (spa:pvadd (spa:pvlined p q)))
   (spa:text (cal:v+ (cal:mid p q) (list (* 0.5 th) (* 0.5 th)))
-            (* 1.2 th) lbl "SPA-NOTES")
+            (* 1.2 th) lbl spa:*lay-notes*)
   (setq et (spa:pvadd (spa:setcol (entlast) spa:*pv-col*)))
   (cons lbl (list e et)))
 
@@ -1079,7 +1333,7 @@
 
 ;; Report cell: red when the row is flagged.
 (defun spa:rtext (pt h str lay red)
-  (if red (spa:textc pt h str lay 1) (spa:text pt h str lay)))
+  (if red (spa:textc pt h str lay spa:*col-bad*) (spa:text pt h str lay)))
 
 (defun spa:valnote (msg)
   (setq spa:*valnotes* (append spa:*valnotes* (list msg)))
@@ -1094,17 +1348,18 @@
 ;; rows  = list of (label target actual [red]); a nil target prints N/A
 ;; notes = list of failure strings (written big and red)
 (defun spa:report (rows notes x y h lay / lh ytop y0 xr r tgt act dl ds n)
-  (setq lh (* 2.2 h)
+  (setq lh (* spa:*rep-row* h)
         ytop (+ y lh)
-        xr (+ x (* 46.0 h))
+        xr (+ x (* spa:*rep-w* h))
         y ytop)
   (setq y (- y lh))
-  (spa:text (list x y) (* 1.25 h) (strcat "SPA LAYOUT REPORT - " spa:*modename*) lay)
+  (spa:text (list x y) (* spa:*rep-title* h)
+            (strcat "SPA LAYOUT REPORT - " spa:*modename*) lay)
   (setq y (- y lh))
   (spa:text (list x y) h "MEASUREMENT" lay)
-  (spa:text (list (+ x (* 20.0 h)) y) h "TARGET" lay)
-  (spa:text (list (+ x (* 29.0 h)) y) h "ACTUAL" lay)
-  (spa:text (list (+ x (* 38.0 h)) y) h "DELTA" lay)
+  (spa:text (list (+ x (* spa:*rep-c1* h)) y) h "TARGET" lay)
+  (spa:text (list (+ x (* spa:*rep-c2* h)) y) h "ACTUAL" lay)
+  (spa:text (list (+ x (* spa:*rep-c3* h)) y) h "DELTA" lay)
   (foreach r rows
     (setq y (- y lh)
           tgt (cadr r)
@@ -1114,18 +1369,18 @@
         (progn
           (setq dl (- act tgt)
                 ds (strcat (if (< dl 0.0) "" "+") (rtos dl 2 2)))
-          (spa:rtext (list (+ x (* 20.0 h)) y) h (rtos tgt 2 2) lay (nth 3 r))
-          (spa:rtext (list (+ x (* 38.0 h)) y) h ds lay (nth 3 r)))
+          (spa:rtext (list (+ x (* spa:*rep-c1* h)) y) h (rtos tgt 2 2) lay (nth 3 r))
+          (spa:rtext (list (+ x (* spa:*rep-c3* h)) y) h ds lay (nth 3 r)))
         (progn
-          (spa:rtext (list (+ x (* 20.0 h)) y) h "N/A" lay (nth 3 r))
-          (spa:rtext (list (+ x (* 38.0 h)) y) h "-" lay (nth 3 r))))
-    (spa:rtext (list (+ x (* 29.0 h)) y) h (rtos act 2 2) lay (nth 3 r)))
+          (spa:rtext (list (+ x (* spa:*rep-c1* h)) y) h "N/A" lay (nth 3 r))
+          (spa:rtext (list (+ x (* spa:*rep-c3* h)) y) h "-" lay (nth 3 r))))
+    (spa:rtext (list (+ x (* spa:*rep-c2* h)) y) h (rtos act 2 2) lay (nth 3 r)))
   (foreach n notes
     (setq y (- y (* 1.5 lh)))
-    (spa:textc (list x y) (* 1.4 h) n lay 1))
+    (spa:textc (list x y) (* spa:*rep-note* h) n lay spa:*col-bad*))
   (foreach n spa:*advice*
     (setq y (- y (* 1.3 lh)))
-    (spa:textc (list x y) (* 1.15 h) n lay 4))
+    (spa:textc (list x y) (* spa:*rep-advice* h) n lay spa:*col-advice*))
   (setq y0 (- y lh)
         ytop (+ ytop (* 0.6 lh)))
   (spa:line (list (- x h) y0) (list xr y0) lay nil)
@@ -1138,11 +1393,11 @@
 ;; saying so when the cover was turned to lie long-ways.
 (defun spa:modenote (x y th)
   (spa:textc (list x y) (* 1.6 th)
-             (strcat "SPA OUTLINE DRAWN AT " spa:*modename*) "SPA-NOTES" 7)
+             (strcat "SPA OUTLINE DRAWN AT " spa:*modename*) spa:*lay-notes* 7)
   (if spa:*turned*
       (spa:textc (list x (- y (* 2.2 th))) (* 1.2 th)
                  "TURNED A QUARTER TURN - LONG OVERALL RUNS ACROSS"
-                 "SPA-NOTES" 7)))
+                 spa:*lay-notes* 7)))
 
 ;;; -------------------- water's edge <-> cover -------------------------
 ;;;
@@ -1163,7 +1418,7 @@
 ;;;    90        stays a sharp 90
 ;;;  and a treatment offset inward past nothing falls back to a 90.
 
-(setq spa:*diagoff* 0.82842712)         ; 2*sqrt 2 - 2
+;; The offset factor for a cut face is spa:*diagoff*, at the top.
 
 ;; Which way the offset runs to get from the outline just drawn to the
 ;; other one: +1 outward (water's edge -> cover), -1 inward.
@@ -1353,31 +1608,9 @@
 ;;;  the Attributes style (Standard when absent) at a fixed 5" height,
 ;;;  bottom-centred 3" west of its hinge, on the TEXT layer.
 
-;; Foam sheet: (grade taper ((foamW . foamL) ...) (piece counts, 5 = 5+))
-;; A grade+taper with two width options (48" / 49-1/2") carries both;
-;; the solver picks the one that needs the fewest hinges.
-(setq spa:*foamtab*
-  (list
-    (list "ECONOMY"     "3-2"   (list (cons 48.0 96.0))                  (list 2))
-    (list "STANDARD"    "3-2"   (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2))
-    (list "STANDARD"    "4-2"   (list (cons 48.0 96.0)  (cons 49.5 102.0)) (list 2 3 4))
-    (list "STANDARD"    "4-3"   (list (cons 48.0 144.0))                 (list 2 3 4))
-    (list "STANDARD"    "5-3"   (list (cons 48.0 96.0))                  (list 2 3 4 5))
-    (list "STANDARD"    "5-4"   (list (cons 48.0 96.0))                  (list 2 3 4 5))
-    (list "STANDARD"    "3-3"   (list (cons 48.0 144.0))                 (list 2 3 4 5))
-    (list "ULTRA"       "3-2"   (list (cons 48.0 144.0))                 (list 2))
-    (list "ULTRA"       "4-3"   (list (cons 48.0 96.0))                  (list 2 3 4))
-    (list "ULTRA"       "3-3"   (list (cons 48.0 144.0))                 (list 2 3 4 5))
-    (list "THERMOLIGHT" "1-3/8" (list (cons 53.0 nil))                   (list 2 3 4 5))))
-
-;; Hardware called for by the LONGEST hinge, per grade.  Each rule is
-;; (OVER <inches>) | (ALWAYS) | (NEVER) | (REQUEST).
-(setq spa:*hardtab*
-  (list                 ;  grade          velcro        double C      hold down
-    (list "ECONOMY"     '(REQUEST)    '(REQUEST)    '(REQUEST))
-    (list "STANDARD"    '(OVER 120.0) '(OVER 108.0) '(OVER 120.0))
-    (list "ULTRA"       '(OVER 108.0) '(NEVER)      '(OVER 96.0))
-    (list "THERMOLIGHT" '(ALWAYS)     '(NEVER)      '(NEVER))))
+;; The foam sheet and the hardware rules are the shop data this pass is
+;; built on, so both tables live at the top of the file
+;; (spa:*foamtab*, spa:*hardtab*).
 
 ;; A rule against the longest hinge -> (needed . reason), needed nil when
 ;; the item is not called for.
@@ -1540,8 +1773,8 @@
   (setq prev x1 xs nil i 1 ok t)
   (while (and ok (< i n))
     (setq x (+ x1 (* (- x2 x1) (/ (float i) n)))
-          lo (max (+ prev 0.01) (- x2 (* fw (- n i))))
-          hi (min (+ prev fw) (- x2 0.01)))
+          lo (max (+ prev spa:*hinge-edge*) (- x2 (* fw (- n i))))
+          hi (min (+ prev fw) (- x2 spa:*hinge-edge*)))
     (if (> lo hi)
         (setq ok nil)
         (progn
@@ -1559,7 +1792,7 @@
                       (setq cand e)))
                 (if cand (setq x cand) (setq ok nil))))
           (if ok (setq xs (cons x xs) prev x i (1+ i))))))
-  (if (and ok (<= (- x2 prev) (+ fw 0.01)))
+  (if (and ok (<= (- x2 prev) (+ fw spa:*hinge-edge*)))
       (reverse xs)))
 
 ;; The longest hinge a station list would produce.
@@ -1575,7 +1808,7 @@
 ;; minimum-count layout with the flag down.
 (defun spa:hsolve (x1 x2 fw forb nmin / n xs)
   (setq n nmin)
-  (while (and (<= n (+ nmin 3)) (not xs))
+  (while (and (<= n (+ nmin spa:*hinge-try*)) (not xs))
     (setq xs (spa:hplace x1 x2 n fw forb))
     (if (not xs) (setq n (1+ n))))
   (if xs
@@ -1627,9 +1860,9 @@
 ;; ent-scale x LTSCALE x 0.25 = 5.  In the office template (LTSCALE 50)
 ;; that lands the sample drawing's exact 0.4.
 (defun spa:hdash ( / lt)
-  (setq lt (spa:ltmake "DASHED2"
+  (setq lt (spa:ltmake spa:*hdashname*
                        "Dashed (.5x) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _"
-                       '(0.25 -0.125)))
+                       spa:*hdashpat*))
   (if (/= lt "CONTINUOUS")
       (list (cons 6 lt) (cons 48 (* spa:*hdashmult* (spa:ltsc))))))
 
@@ -1641,9 +1874,9 @@
 (defun spa:htext (x ymid str)
   (entmake (list '(0 . "MTEXT")
                  '(100 . "AcDbEntity")
-                 '(8 . "TEXT")
+                 (cons 8 spa:*lay-text*)
                  '(100 . "AcDbMText")
-                 (cons 10 (spa:wp (list (- x (* 0.6 spa:*hingetxth*)) ymid)))
+                 (cons 10 (spa:wp (list (- x (* spa:*hingetxoff* spa:*hingetxth*)) ymid)))
                  (cons 40 spa:*hingetxth*)
                  (cons 41 spa:*hingetxw*)
                  '(71 . 8)              ; bottom centre
@@ -1776,7 +2009,7 @@
   (if (and (null spa:*grade*) (null spa:*taper*))
       (spa:readblock))                  ; not offered earlier -- offer now
   (if (null spa:*grade*) (setq spa:*grade* "STANDARD"))
-  (if (spa:thermop) (setq spa:*taper* "1-3/8"))
+  (if (spa:thermop) (setq spa:*taper* spa:*thermotaper*))
   ;; getstring cannot take keywords, so Back is typed like a value here
   ;; -- B, BACK, U or UNDO alone, any case -- as the prompt says
   (while (null spa:*taper*)
@@ -1830,7 +2063,7 @@
             (progn
               (spa:valnote (strcat "GRADE/TAPER " grade " " taper
                                    " NOT ON THE FOAM SHEET - 48/96 ASSUMED"))
-              (setq opts (list (cons 48.0 96.0)) allowed (list 2 3 4 5))))
+              (setq opts spa:*foamdflt* allowed spa:*foamdpc*)))
         ;; 3 -- pick the foam option and the layout.
         ;; A grade/taper can carry MORE THAN ONE foam sheet -- Standard
         ;; 3-2 and 4-2 each come in a 48 x 144/96 and a 49-1/2 x 102 --
@@ -1843,7 +2076,7 @@
         (foreach opt opts
           (setq fw (car opt)
                 fl (cdr opt)
-                nmin (max 2 (spa:ceilv (/ (- x2 x1) fw)))
+                nmin (max spa:*hinge-min* (spa:ceilv (/ (- x2 x1) fw)))
                 res (spa:hsolve x1 x2 fw forb nmin)
                 mc (spa:hmaxchord desc (cadr res))
                 lenok (or (null fl) (<= mc (+ fl 0.01)))
@@ -1885,9 +2118,9 @@
                 (setq maxch (max maxch (- (cadr ch) (car ch))))
                 (if (= hty "H")
                     (spa:line (list x (car ch)) (list x (cadr ch))
-                              "COVER" (spa:hdash))
+                              spa:*lay-hinge* (spa:hdash))
                     (spa:line (list x (car ch)) (list x (cadr ch))
-                              "COVER" nil))
+                              spa:*lay-hinge* nil))
                 (spa:htext x (* 0.5 (+ (car ch) (cadr ch)))
                            (if (= hty "H") "Hinge" "Velcro Hinge"))
                 (if (and fl (> (- (cadr ch) (car ch)) (+ fl 0.01)))
@@ -1908,7 +2141,7 @@
         (if hw
             (progn
               (setq k 0)
-              (foreach nm (list "VELCRO HINGES" "DOUBLE C CHANNEL" "HOLD DOWN KIT")
+              (foreach nm spa:*hardnames*
                 (setq vd (spa:hardverdict (nth (1+ k) hw) maxch))
                 (if (car vd)
                     (spa:advise (strcat nm ": YES - " (cdr vd)))
@@ -2035,7 +2268,7 @@
   (setq c0 (car corners) same t)
   (foreach c corners
     (if (or (/= (car c) (car c0))
-            (> (abs (- (cadr c) (cadr c0))) 0.0005))
+            (> (abs (- (cadr c) (cadr c0))) spa:*sameeps*))
         (setq same nil)))
   same)
 
@@ -2044,13 +2277,13 @@
 (defun spa:dim90 (quad i cen doff txt / p outd r)
   (setq p (nth i quad)
         outd (spa:unit (cal:v- p cen))
-        r (* 0.18 doff))
+        r (* spa:*mark-r* doff))
   (entmake (list '(0 . "CIRCLE")
-                 (cons 8 "DIMENSION")
+                 (cons 8 spa:*lay-dim*)
                  (cons 10 (spa:wp p))
                  (cons 40 r)))
   (command "_.LEADER" (spa:wp (cal:v+ p (cal:v* outd r)))
-           (spa:wp (cal:v+ p (cal:v* outd (* 1.2 doff))))
+           (spa:wp (cal:v+ p (cal:v* outd (* spa:*mark-lead* doff))))
            "" txt ""))
 
 ;; A NotGiven corner's mark: the circled corner with a ? leader, and a
@@ -2063,11 +2296,11 @@
   (setq p (nth i quad)
         outd (spa:unit (cal:v- p cen)))
   (spa:dim90 quad i cen doff (strcat "?" sfx))
-  (setq h (* 0.25 doff)
-        tp (cal:v+ p (cal:v* outd (* 1.45 doff))))
+  (setq h (* spa:*ng-txt* doff)
+        tp (cal:v+ p (cal:v* outd (* spa:*ng-off* doff))))
   (if (< (car outd) 0.0)
       (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
-  (spa:text tp h "Not Given" "DIMENSION"))
+  (spa:text tp h "Not Given" spa:*lay-dim*))
 
 ;; Corner callouts, laid out the way the order sheet does them: the note
 ;; sits OUTSIDE the corner, on the 45-degree line out of it.
@@ -2099,7 +2332,7 @@
     ((= ty "Cut")
      (setq fm (cal:mid (car ce) (cadr ce)))
      (spa:dimalg (car ce) (cadr ce)
-                 (cal:v+ fm (cal:v* outd (* 0.6 doff))) sfx))
+                 (cal:v+ fm (cal:v* outd (* spa:*cut-off* doff))) sfx))
     ((= ty "NotGiven")
      (spa:dimng quad i cen doff sfx))
     (t                                  ; Square
@@ -2142,7 +2375,7 @@
        (spa:pvadd (spa:pvline (car (nth i ce)) (cadr (nth i ce)))))
       ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
-                  "SPA-NOTES" nil)
+                  spa:*lay-notes* nil)
        (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))))
     (setq i (1+ i)))
   pv)
@@ -2230,7 +2463,7 @@
              (while (and maxsb
                          (not (eq sz 'CAL-BACK))
                          (> (setq sb (if (= ty "Radius") sz (* sz 0.70711)))
-                            maxsb))
+                            (+ maxsb spa:*capfuzz*)))
                (princ (strcat "\nToo large for this corner's walls -- max "
                               (rtos (if (= ty "Radius") maxsb
                                         (/ maxsb 0.70711)))
@@ -2245,9 +2478,9 @@
 
 ;; Gray nominal rectangle with its corner letters.
 (defun spa:rectpreview ( / gq cen pr ent all pv)
-  (setq gq (list (list 0.0 0.0) (list 240.0 0.0)
-                 (list 240.0 200.0) (list 0.0 200.0))
-        cen (list 120.0 100.0)
+  (setq gq (list (list 0.0 0.0) (list spa:*pv-w* 0.0)
+                 (list spa:*pv-w* spa:*pv-l*) (list 0.0 spa:*pv-l*))
+        cen (list (* 0.5 spa:*pv-w*) (* 0.5 spa:*pv-l*))
         all nil pv nil)
   (setq pv (list (cons 'ab (list (spa:pvline (nth 0 gq) (nth 1 gq))))
                  (cons 'bc (list (spa:pvline (nth 1 gq) (nth 2 gq))))
@@ -2257,8 +2490,8 @@
   (foreach pr (list (list (nth 0 gq) "A") (list (nth 1 gq) "B")
                     (list (nth 2 gq) "C") (list (nth 3 gq) "D"))
     (spa:text (cal:v+ (car pr)
-                      (cal:v* (spa:unit (cal:v- (car pr) cen)) 22.0))
-              12.0 (cadr pr) "SPA-NOTES")
+                      (cal:v* (spa:unit (cal:v- (car pr) cen)) spa:*pv-lbl*))
+              spa:*pv-th* (cadr pr) spa:*lay-notes*)
     (setq ent (spa:setcol (entlast) spa:*pv-col*)
           all (cons ent all)
           pv (cons (cons (spa:lblkey (cadr pr)) (list ent)) pv)))
@@ -2355,14 +2588,15 @@
           ;; show the chosen treatments on the guide, scaled from the
           ;; real spa onto the 240 x 200 nominal and capped so a big
           ;; treatment cannot swallow the guide
-          (setq gq (list (list 0.0 0.0) (list 240.0 0.0)
-                         (list 240.0 200.0) (list 0.0 200.0))
-                gsc (/ 240.0 (max w 1.0)))
+          (setq gq (list (list 0.0 0.0) (list spa:*pv-w* 0.0)
+                         (list spa:*pv-w* spa:*pv-l*) (list 0.0 spa:*pv-l*))
+                gsc (/ spa:*pv-w* (max w 1.0)))
           (if anycut
               (setq pv (spa:pvcorners
                          pv gq
                          (mapcar '(lambda (c)
-                                    (list (car c) (min 50.0 (* (cadr c) gsc))))
+                                    (list (car c)
+                                          (min spa:*pv-cap* (* (cadr c) gsc))))
                                  corners))))
           nil)))
 
@@ -2387,8 +2621,8 @@
   (setq quad (spa:quadat (list 0.0 0.0) w l)
         a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (list (* 0.5 w) (* 0.5 l))
-        doff (max 6.0 (/ (max w l) 12.0))
-        th (max 1.0 (/ (max w l) 40.0))
+        doff (max spa:*doff-min* (/ (max w l) spa:*doff-div*))
+        th (max spa:*th-min* (/ (max w l) spa:*th-div*))
         spa:*dashlt* (spa:ltload "DASHED")
         mode1 spa:*mode*)
 
@@ -2463,7 +2697,7 @@
         out1 (or (null meth) (= mode1 "Coversize"))
         sb1 (spa:maxsetback corners)
         ip1 (spa:insidepts 0.0 w 0.0 l sb1 sb1))
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" spa:*lay-dim*)
   (spa:dimstylenow th)
   ;; the overalls -- the only dims that carry the Water's Edge / Cover
   ;; Size note
@@ -2513,7 +2747,7 @@
   (setq i 0)
   (foreach lbl quad
     (spa:text (cal:v+ lbl (cal:v* (spa:unit (cal:v- lbl cen)) (* 1.6 th)))
-              th (nth i lbls) "SPA-NOTES")
+              th (nth i lbls) spa:*lay-notes*)
     (setq i (1+ i)))
   (spa:modenote xlo (- ylo (* 1.4 spa:*dimoff*)) th)
   (setq rows (list (list (strcat "OVERALL ACROSS (" (nth 0 lbls) "-" (nth 1 lbls) ")")
@@ -2551,7 +2785,7 @@
           (t
            (spa:hingeflow (list "RECT" quad corners) 0.0 w th nil))))
   (if hrows (setq rows (append rows hrows)))
-  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
+  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th spa:*lay-notes*)
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -2626,7 +2860,8 @@
           all (cons ent all)))
   (setq k 0)
   (foreach p npts
-    (spa:text (spa:lbloff p cen npts 20.0) 12.0 (nth k spa:*octnames*) "SPA-NOTES")
+    (spa:text (spa:lbloff p cen npts spa:*pv-olbl*) spa:*pv-th*
+              (nth k spa:*octnames*) spa:*lay-notes*)
     (setq ent (spa:setcol (entlast) spa:*pv-col*)
           all (cons ent all)
           pv (cons (cons (spa:lblkey (nth k spa:*octnames*)) (list ent)) pv)
@@ -2635,13 +2870,13 @@
   ;; the field-sheet ties: B/T/S across the top, A/S1/V down the left,
   ;; S2 parallel to the bottom-right cut
   (setq pvo (list
-    (spa:pvtie (list 0.0 300.0) (list 240.0 300.0) "B" 10.0)
-    (spa:pvtie (list 70.294 278.0) (list 169.706 278.0) "T" 10.0)
-    (spa:pvtie (list 0.0 278.0) (list 70.294 278.0) "S" 10.0)
-    (spa:pvtie (list -85.0 0.0) (list -85.0 240.0) "A" 10.0)
-    (spa:pvtie (list -42.0 169.706) (list -42.0 240.0) "S1" 10.0)
-    (spa:pvtie (list -42.0 70.294) (list -42.0 169.706) "V" 10.0)
-    (spa:pvtie (list 185.0 -15.0) (list 255.0 55.0) "S2" 10.0)))
+    (spa:pvtie (list 0.0 300.0) (list 240.0 300.0) "B" spa:*pv-tie*)
+    (spa:pvtie (list 70.294 278.0) (list 169.706 278.0) "T" spa:*pv-tie*)
+    (spa:pvtie (list 0.0 278.0) (list 70.294 278.0) "S" spa:*pv-tie*)
+    (spa:pvtie (list -85.0 0.0) (list -85.0 240.0) "A" spa:*pv-tie*)
+    (spa:pvtie (list -42.0 169.706) (list -42.0 240.0) "S1" spa:*pv-tie*)
+    (spa:pvtie (list -42.0 70.294) (list -42.0 169.706) "V" spa:*pv-tie*)
+    (spa:pvtie (list 185.0 -15.0) (list 255.0 55.0) "S2" spa:*pv-tie*)))
   (cons pv pvo))
 
 ;; Full guided flow for an octagonal spa.
@@ -2713,8 +2948,8 @@
 
   (setq pts (spa:octpts bov aov s s1)
         cen (spa:centroid pts)
-        doff (max 6.0 (/ (max bov aov) 12.0))
-        th (max 1.0 (/ (max bov aov) 40.0))
+        doff (max spa:*doff-min* (/ (max bov aov) spa:*doff-div*))
+        th (max spa:*th-min* (/ (max bov aov) spa:*th-div*))
         spa:*dashlt* (spa:ltload "DASHED")
         mode1 spa:*mode*)
 
@@ -2788,11 +3023,11 @@
         s2act (distance (nth 1 pts) (nth 2 pts))
         ;; "all sides equal" to within 1/8" -- a rounded-off cut face
         ;; like 39-3/8" must still read as the regular octagon it is
-        alleq (and (< (abs (- tact vact)) 0.125)
-                   (< (abs (- tact s2act)) 0.125))
+        alleq (and (< (abs (- tact vact)) spa:*octeq*)
+                   (< (abs (- tact s2act)) spa:*octeq*))
         out1 (or (null meth) (= mode1 "Coversize"))
         ip1 (spa:insidepts 0.0 bov 0.0 aov s s1))
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" spa:*lay-dim*)
   (spa:dimstylenow th)
   ;; the two overalls, hooked to real corners
   (if out1
@@ -2811,7 +3046,7 @@
   ;; the corner cut itself -- one callout on the bottom-right cut, Typ.
   ;; because all four cuts of an octagon are the same
   (setq p (nth 1 pts) q (nth 2 pts))
-  (spa:dimalg p q (spa:outoffp p q pts (* 0.8 doff)) " Typ.")
+  (spa:dimalg p q (spa:outoffp p q pts (* spa:*oct-off* doff)) " Typ.")
 
   ;; the second outline, in ITS dimension style, plus its cut face
   (if meth
@@ -2826,7 +3061,7 @@
             (spa:dimoveralls t (nth 7 pts2) (nth 2 pts2) (nth 0 pts2) (nth 5 pts2)
                              xlo yhi))
         (setq p (nth 5 pts2) q (nth 6 pts2))
-        (spa:dimalg p q (spa:outoffp p q pts2 (* 0.8 doff)) " Typ.")
+        (spa:dimalg p q (spa:outoffp p q pts2 (* spa:*oct-off* doff)) " Typ.")
         (spa:setmode mode1)
         ;; and how far the cover laps the water's edge, at the bottom
         (spa:dimstyle spa:*ds-cover* th 1.0)
@@ -2836,7 +3071,7 @@
   ;; -------------------------------------------------- labels + report
   (setq k 0)
   (foreach p pts
-    (spa:text (spa:lbloff p cen pts (* 1.8 th)) th (nth k spa:*octnames*) "SPA-NOTES")
+    (spa:text (spa:lbloff p cen pts (* 1.8 th)) th (nth k spa:*octnames*) spa:*lay-notes*)
     (setq k (1+ k)))
   (spa:modenote xlo (- ylo (* 1.4 spa:*dimoff*)) th)
   (setq rows (list (list "OVERALL ACROSS" bov bov)
@@ -2864,7 +3099,7 @@
           (t
            (spa:hingeflow (list "OCT" pts) 0.0 bov th nil))))
   (if hrows (setq rows (append rows hrows)))
-  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
+  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th spa:*lay-notes*)
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -2877,11 +3112,11 @@
 
 (defun spa:roundpreview ( / cen pv)
   (setq cen (list 120.0 120.0))
-  (spa:body-round cen 240.0 240.0 "SPA-NOTES" nil)
+  (spa:body-round cen 240.0 240.0 spa:*lay-notes* nil)
   (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))
   (setq pv (list
-    (spa:pvtie (list 0.0 285.0) (list 240.0 285.0) "B" 10.0)
-    (spa:pvtie (list -50.0 0.0) (list -50.0 240.0) "A" 10.0)))
+    (spa:pvtie (list 0.0 285.0) (list 240.0 285.0) "B" spa:*pv-tie*)
+    (spa:pvtie (list -50.0 0.0) (list -50.0 240.0) "A" spa:*pv-tie*)))
   pv)
 
 (defun spa:roundflow ( / oldclay pv ans bov aov cen doff th rows tmp
@@ -2928,8 +3163,8 @@
       (princ "\nThe long overall runs across, so the spa is drawn a quarter turn over."))
 
   (setq cen (list (* 0.5 bov) (* 0.5 aov))
-        doff (max 6.0 (/ (max bov aov) 12.0))
-        th (max 1.0 (/ (max bov aov) 40.0))
+        doff (max spa:*doff-min* (/ (max bov aov) spa:*doff-div*))
+        th (max spa:*th-min* (/ (max bov aov) spa:*th-div*))
         spa:*dashlt* (spa:ltload "DASHED")
         mode1 spa:*mode*)
   (spa:perround cen bov aov)
@@ -2984,7 +3219,7 @@
   ;; overalls have to run through the centre, so the water's edge pair
   ;; sits on the centre lines rather than a third of the way in.
   (setq out1 (or (null meth) (= mode1 "Coversize")))
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" spa:*lay-dim*)
   (spa:dimstylenow th)
   (if out1
       (progn
@@ -3042,7 +3277,7 @@
           (t
            (spa:hingeflow (list "ROUND" cen bov aov) 0.0 bov th nil))))
   (if hrows (setq rows (append rows hrows)))
-  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th "SPA-NOTES")
+  (spa:report rows spa:*valnotes* (+ xhi spa:*dimoff*) yhi th spa:*lay-notes*)
   (princ "\nSpa layout complete -- see the report table.")
   (princ))
 
@@ -3113,7 +3348,7 @@
   (if (spa:thermop)
       (progn
         (spa:setmode "Coversize")
-        (setq spa:*taper* "1-3/8")
+        (setq spa:*taper* spa:*thermotaper*)
         (princ "\nThermo-Light: the water's edge and the cover size are the same.")
         (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
       (spa:setmode
@@ -3136,11 +3371,11 @@
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
-  (spa:layer spa:*lay-water* 4)
-  (spa:layer spa:*lay-cover* 6)
-  (spa:layer "DIMENSION" 2)
-  (spa:layer "SPA-NOTES" 3)
-  (spa:layer "TEXT" 7)
+  (spa:layer spa:*lay-water* spa:*col-water*)
+  (spa:layer spa:*lay-cover* spa:*col-cover*)
+  (spa:layer spa:*lay-dim*   spa:*col-dim*)
+  (spa:layer spa:*lay-notes* spa:*col-notes*)
+  (spa:layer spa:*lay-text*  spa:*col-text*)
 
   ;; dashed / dotted patterns up front so the guide draws them; the
   ;; patterns are defined in inches and scaled to cancel LTSCALE, so they

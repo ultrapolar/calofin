@@ -1903,4 +1903,41 @@ assert [c[1] for c in vm.commands if c and c[0] == '_.UNDO'] == \
     [c for c in vm.commands if c and c[0] == '_.UNDO']
 print("   POOL cut short closes its own group; POOLDEMO after it opens and closes its own")
 
+print("== R36. a treatment sized at exactly its cap is accepted ==")
+# The cap is half the shorter adjacent wall, and it is compared against
+# a setback the ROUTINE works out rather than the number the crew typed:
+# pool:cornerk turns a radius into cos(45)/sin(45) x itself, which is
+# 1.0000000000000002 and not 1.0.  A 120" radius on a 240"-wide pool --
+# the full-round end a crew really does draw -- therefore measured
+# 120.00000000000003 against a cap of 120 and was refused, and the
+# maximum the prompt then printed (120) failed the very same test: a
+# question that could not be answered with the number it showed you.
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0,
+          "Radius", 120.0,        # exactly half the 240" end
+          "No"],
+         "R36")
+assert not [s for s in vm.printed if "Too large" in s], \
+    [s for s in vm.printed if "Too large" in s]
+_arcs = drawn(vm, 'ARC', 'POOL')
+assert len(_arcs) == 4, len(_arcs)
+assert all(abs(a[40] - 120.0) < 1e-6 for a in _arcs), [a[40] for a in _arcs]
+print("   a radius of exactly half the wall draws its four arcs")
+
+print("== R36b. and one that genuinely will not fit is still refused ==")
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0,
+          "Radius", 200.0,        # will not fit
+          100.0,                  # re-entered
+          "No"],
+         "R36b")
+_msg = [s for s in vm.printed if "Too large" in s]
+assert len(_msg) == 1, _msg
+assert "120" in _msg[0], _msg[0]
+# and the maximum it prints is one the prompt would accept
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0, "Radius", 200.0, 120.0, "No"], "R36c")
+assert len([s for s in vm.printed if "Too large" in s]) == 1
+print("   an oversized radius is refused once, and its printed max is taken")
+
 print("\nALL RUNTIME SCENARIOS PASSED")

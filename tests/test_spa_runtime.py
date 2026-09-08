@@ -458,6 +458,37 @@ def test_thermolight_style_all_velcro():
     assert hinge_labels(vm), "no hinges drawn"
 
 
+def test_corner_size_at_exactly_the_cap():
+    """A treatment sized at exactly its cap is accepted, not re-asked.
+
+    The cap is half the shorter side; a cut face is capped through its
+    setback (face / sqrt 2), so the maximum the prompt prints is a
+    division away from the number that is compared.  Typing that
+    printed maximum back must be accepted -- a prompt that refuses the
+    figure it just told you is one a drafter cannot get out of.
+    """
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'Yes', 'Radius', 30.0,    # exactly half the 60" side
+              'No', 'No'],
+             'corner/radius-at-the-cap')
+    assert not [s for s in vm.printed if 'Too large' in s], \
+        [s for s in vm.printed if 'Too large' in s]
+    _, bulges = plverts(vm, 'COVER')
+    assert any(abs(b) > 1e-9 for b in bulges), bulges
+
+
+def test_corner_size_over_the_cap_is_still_refused():
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'Yes', 'Radius', 45.0,    # will not fit
+              30.0,                     # the maximum, typed back
+              'No', 'No'],
+             'corner/radius-over-the-cap')
+    assert len([s for s in vm.printed if 'Too large' in s]) == 1, \
+        [s for s in vm.printed if 'Too large' in s]
+
+
 if __name__ == '__main__':
     fails = 0
     for name, fn in sorted(globals().items()):

@@ -120,93 +120,346 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "090126 REV22")
+(setq pool:*version* "090826 REV23")
 
-;;; -------------------- adjustable constants --------------------------
+;;; ==================== ADJUSTABLE CONSTANTS ==========================
+;;;
+;;;  EVERY KNOB THIS TOOL HAS IS IN THIS BLOCK.  Each one is WRITTEN
+;;;  ONCE: change a value here and every place that reads it follows,
+;;;  so nothing can be retuned in one spot and left behind in another.
+;;;  Each group says what it controls and what moves when it changes.
+;;;
+;;;  (Numbers still appear in the code below, and a few of them happen
+;;;  to equal a knob above -- a 0.5 that halves a span is not the same
+;;;  0.5 as a callout offset.  Those are arithmetic local to one
+;;;  formula, not settings, so do NOT find-and-replace by value: retune
+;;;  by editing the named constant here.)
+;;;
+;;;  Three kinds of thing are deliberately NOT here, so the block stays
+;;;  a control panel rather than a dump of every literal in the file:
+;;;
+;;;    * RUN STATE -- pool:*form*, the guide-preview engine's own
+;;;      globals, the per-run flags.  They are set and cleared by a run,
+;;;      not tuned.  Most sit with the engine that owns them (the answer
+;;;      store's beside the store, the preview's beside the preview),
+;;;      under a comment saying so; the ones with no such home are
+;;;      collected at the END of this block under their own heading.
+;;;    * SHAPE STRUCTURE -- pool:*grecedges*, pool:*hexsides*,
+;;;      pool:*grec-simple* and friends.  Those describe WHICH corner
+;;;      joins which, not how the tool behaves: editing one does not
+;;;      retune this routine, it describes a different pool.  They stay
+;;;      beside the flow that reads them.
+;;;    * FLOAT-NOISE GUARDS -- the bare 1.0e-6 / 1.0e-9 tests inside the
+;;;      geometry ("is this length zero yet").  They are not
+;;;      measurements and have no shop meaning.
+;;;
+;;;  Lengths are DRAWING UNITS (inches).  Colours are AutoCAD colour
+;;;  numbers (1 red, 2 yellow, 3 green, 4 cyan, 7 white/black, 8 gray).
 
-(setq pool:*side-tol*  1.0)     ; side length tolerance (drawing units)
-(setq pool:*cross-tol* 2.0)     ; cross dimension tolerance
+;;; ---- field tolerances: how far the drawn pool may sit off the tape
+;;;
+;;;  A crew's measurements never close perfectly, so the fitter is
+;;;  allowed to miss them by this much before it reports a failure.
+;;;  Tighten them and more pools come back "CROSS DIMS FAILED";
+;;;  loosen them and the drawing drifts further from what was taped.
+
+(setq pool:*side-tol*  1.0)     ; side length tolerance
+(setq pool:*cross-tol* 2.0)     ; cross dimension (diagonal) tolerance
 (setq pool:*grec-step* 0.125)   ; Grecian diagonal adjustment increment
 (setq pool:*grec-max*  4)       ; max increments each way (4 * 1/8 = 1/2)
-(setq pool:*base*      (list 0.0 0.0))
-(setq pool:*dashlt*    "CONTINUOUS")  ; resolved to DASHED per run
-(setq pool:*dotlt*     "CONTINUOUS")  ; resolved to POOLDOT per run
-(setq pool:*lts*       1.0)           ; (legacy, unused: see pool:ltsc)
-(setq pool:*mlkoff*    30.0)          ; M/L/K dim line offset right of the hopper
-(setq pool:*pvents*    nil)           ; live guide-preview entities
-(setq pool:*insq*      nil)           ; T = in-square pool (no cross dims)
+
+;; How far a corner treatment may exceed its own setback cap before the
+;; size is refused and re-asked.  It exists because the cap is compared
+;; against a number the ROUTINE works out rather than the one the crew
+;; typed: a radius of exactly half the wall comes back as
+;; 120.00000000000003 through pool:cornerk (cos/sin of 45 degrees do not
+;; divide to exactly 1.0 in floating point), which read as "too large"
+;; and re-asked -- printing a maximum of 120 that then failed the same
+;; test, a prompt the crew could not satisfy with the number it showed
+;; them.  A millionth of an inch is float noise and nothing else: it is
+;; orders below the 1/16" a tape reads, so no real measurement changes
+;; hands, and a treatment can still never overrun the wall it sits on.
+(setq pool:*capfuzz*   1.0e-6)
+
+;;; ---- output layers and their colours
+;;;
+;;;  Made (or un-frozen, unlocked and switched back on) at the start of
+;;;  every run by pool:layer.  Rename one here and every entity the
+;;;  routine draws follows it; the colour is used only when the layer
+;;;  has to be created, so a drawing that already carries the layer
+;;;  keeps the office's own colour.
+
+(setq pool:*lay-pool*  "POOL")        ; the pool perimeter and the bottom
+(setq pool:*lay-dim*   "DIMENSION")   ; every dimension and corner mark
+(setq pool:*lay-notes* "POOL-NOTES")  ; guide, report, mini-model, dashed
+                                      ; reference lines
+(setq pool:*col-pool*  4)             ; cyan
+(setq pool:*col-dim*   2)             ; yellow
+(setq pool:*col-notes* 3)             ; green
+(setq pool:*col-bad*   1)             ; red -- a measurement the validator
+                                      ; had to adjust, in the drawing and
+                                      ; in the report table
+
+;;; ---- linetypes
+;;;
+;;;  Defined here rather than loaded from acad.lin: a failed load used
+;;;  to fall back to CONTINUOUS silently, which is how dashes vanished.
+;;;  A pattern is (dash gap ...) in inches -- positive draws, negative
+;;;  gaps, 0 is a dot -- and is scaled per entity to cancel the
+;;;  drawing's LTSCALE, so it plots the same size in any drawing.
+
+(setq pool:*dashname* "POOLDASH")
+(setq pool:*dashpat*  '(12.0 -12.0))  ; 1 ft dash, 1 ft gap
+(setq pool:*dotname*  "POOLDOT")
+(setq pool:*dotpat*   '(0.0 -1.0))    ; dot, 1" gap
+
+;;; ---- dimension styles
+;;;
+;;;  A style the drawing already defines is used as it stands -- the
+;;;  office template wins -- and a missing one leaves the dim in the
+;;;  current style with a note printed once per run.
+;;;
+;;;  Measurements under pool:*smalldim* are drawn in pool:*smallstyle*
+;;;  (see pool:dimsbegin).  Cross dims (the diagonal block, any shape)
+;;;  use pool:*crossstyle* instead -- see pool:dimxbegin.
+;;;
+;;;  The SECONDARY perimeter letters -- the ones the field sheets stack
+;;;  against an overall (S, S1, T, V, the end radii, an L's wing/step
+;;;  sides, the six-sided hopper's W/L1/X) -- go in pool:*sidestyle*
+;;;  ("SIDE STANDARD"), per the reference drawings.  A dim inside a
+;;;  SIDE STANDARD block keeps that style even under 24 inches: the
+;;;  reference sheets show a 19" S1 in SIDE STANDARD, not inches.
+;;;
+;;;  The cut-off is "UNDER 24 inches": a 2 ft corner is a STANDARD dim,
+;;;  not an inches one.  It has to be read with a hair of tolerance,
+;;;  because most of these lengths are not the number the crew typed --
+;;;  they are measured back off geometry the routine built from it, and
+;;;  a 24" radius corner comes back as 23.99999999999913 as readily as
+;;;  24.000000000001137 (a three-point arc's circumcentre, a treated
+;;;  corner's two end points).  Compared raw, the same 2 ft corner draws
+;;;  in inches or not depending on which way the last bit fell.  The
+;;;  tolerance is float noise only -- a MILLIONTH of an inch, a million
+;;;  times the noise it absorbs and orders below the 1/16" a tape can
+;;;  read, so every real measurement under 2 ft is still an inches dim.
+
+(setq pool:*smalldim*    24.0)
+(setq pool:*smallfuzz*   1.0e-6)
+(setq pool:*smallstyle*  "STANDARD INCHES")
+(setq pool:*crossstyle*  "CROSS DIMENSIONS")
+(setq pool:*sidestyle*   "SIDE STANDARD")
+
+;;; ---- how big the drawing furniture comes out
+;;;
+;;;  Every flow sizes its dimension offsets and its text off the pool
+;;;  itself, so a 12 ft spa pool and a 60 ft lap pool both come out
+;;;  readable.  doff is the dimension stand-off, th the note text
+;;;  height:
+;;;
+;;;      doff = max(*doff-min*, longest side / *doff-div*)
+;;;      th   = max(*th-min*,   longest side / *th-div*)
+;;;
+;;;  The minimums are what stops a small pool's dims collapsing into
+;;;  each other; the divisors are what keeps a big one's from sprawling.
+
+(setq pool:*doff-min* 12.0)     ; never closer than 1 ft
+(setq pool:*doff-div* 18.0)
+(setq pool:*th-min*   3.0)      ; never smaller than 3"
+(setq pool:*th-div*   70.0)
+
+;;; ---- corner marks and callouts, as multiples of doff
+;;;
+;;;  The square-corner mark of STANDARDS.md section 2 is a small circle
+;;;  on the corner with a leader out along its outward diagonal; a
+;;;  NotGiven corner adds a "Not Given" note past the leader tip.
+
+(setq pool:*mark-r*     0.18)   ; circle radius on the corner point
+(setq pool:*mark-lead*  1.2)    ; how far out the leader runs
+(setq pool:*ng-txt*     0.25)   ; "Not Given" text height
+(setq pool:*ng-off*     1.45)   ; how far out that note sits
+(setq pool:*rad-off*    0.9)    ; radius dim, dragged out past the arc
+(setq pool:*cut-off*    0.5)    ; cut-face dim, out past the face
+
+;;; ---- where the bottom's chain dimensions sit
+;;;
+;;;  The H/G/F/E chain runs below the hopper centre and the M/L/K chain
+;;;  to the right of the hopper's edge, the way the field sheet stacks
+;;;  them.  The H/G/F/E line drops by whichever is CLOSER -- a fixed
+;;;  foot, or a sixth of the hopper's width -- so it stays inside the
+;;;  hopper on a small pool and does not wander on a big one.
+
+(setq pool:*mlkoff*    30.0)    ; M/L/K dim line, right of the hopper
+(setq pool:*chainoff*  12.0)    ; H/G/F/E drop: at most this...
+(setq pool:*chaindiv*  6.0)     ; ...and at most hopper width / this
+
+;;; ---- the report table and the mini-model beside it
+;;;
+;;;  Column positions are multiples of the note height h, so the table
+;;;  scales with the drawing.  Feet-inch strings run longer than decimal
+;;;  inches, so the ACTUAL and DELTA columns move out when the report is
+;;;  in feet-inches (see pool:*ftin*).
+
+(setq pool:*rep-gap*    2.0)    ; doff multiples: pool -> table
+(setq pool:*rep-row*    2.2)    ; h multiples: row pitch
+(setq pool:*rep-title*  1.25)   ; h multiples: the heading's text height
+(setq pool:*rep-note*   1.4)    ; h multiples: a red failure note
+(setq pool:*rep-c1*    20.0)    ; h multiples: the TARGET column
+(setq pool:*rep-c2*    29.0)    ; ACTUAL, decimal inches
+(setq pool:*rep-c2f*   33.0)    ; ACTUAL, feet-inches
+(setq pool:*rep-c3*    38.0)    ; DELTA, decimal inches
+(setq pool:*rep-c3f*   46.0)    ; DELTA, feet-inches
+(setq pool:*rep-w*     46.0)    ; table width, decimal inches
+(setq pool:*rep-wf*    54.0)    ; table width, feet-inches
+(setq pool:*map-gap*    3.0)    ; th multiples: table -> mini-model
+(setq pool:*map-size*  24.0)    ; th multiples: the mini-model's box
+
+;;; ---- the guide preview
+;;;
+;;;  A gray pool of the chosen shape is drawn as soon as the shape is
+;;;  picked and reshapes itself around every answer; the element being
+;;;  asked for turns red.  The nominal point rings below are what the
+;;;  guide starts at before any measurement is in -- proportions, not
+;;;  sizes, since the first answer rescales them.
+
+(setq pool:*pv-col*  8)         ; guide outline (dark gray)
+(setq pool:*pvx-col* 7)         ; cross-dim / measuring line (white)
+(setq pool:*hi-col*  1)         ; the element being asked for (red)
+(setq pool:*pv-margin* 30.0)    ; smallest margin round the guide's zoom
+(setq pool:*pv-churn*  0.05)    ; re-zoom only when the box moved this
+                                ; much of its own width -- lower follows
+                                ; the shape more closely and flickers more
+
+;;; ---- the fitting engine
+;;;
+;;;  Two passes, both iterative: sides held exactly true while the cross
+;;;  dims are pulled as close as they will come, then -- only if that
+;;;  missed -- the sides allowed to flex inside their tolerance band.
+;;;  More iterations fit marginally better and cost time on every run;
+;;;  the acceptance slack is what stops a fit that landed a thousandth
+;;;  outside its band being reported as a failure.
+
+(setq pool:*fit-iter*    3000)  ; relaxation sweeps, pulling phase
+(setq pool:*fit-polish*   400)  ; sweeps of the sides-only finish
+(setq pool:*fit-quad*    2000)  ; sweeps for the four-corner relaxation
+(setq pool:*fit-slack*   0.05)  ; how far outside a band still passes
+
+;;  The four-bar scan: the angle at corner A is swept coarsely across
+;;  the whole usable range, then re-swept finely round the best hit.
+(setq pool:*alfa-lo*    15.0)   ; degrees
+(setq pool:*alfa-hi*   165.0)
+(setq pool:*alfa-step*   0.25)  ; coarse sweep
+(setq pool:*alfa-fine*   0.3)   ; how far either side the fine sweep runs
+(setq pool:*alfa-fstep*  0.005) ; fine sweep
+
+;;  The Grecian end solver: the diagonal angle is scanned for the one
+;;  that reproduces the measured end width, and a fit within
+;;  pool:*grec-fit* of it is taken.
+(setq pool:*grecth-step* 0.00087)  ; radians, ~ 0.05 degree
+(setq pool:*grec-fit*    0.0625)   ; accept an end within 1/16"
+
+;;; ---- what the routine offers when a measurement is missing
+;;;
+;;;  None of these change the drawing on its own: each is a SUGGESTION
+;;;  the crew takes with Enter or types over, or a floor a letter that
+;;;  will not close is lifted to.
+
+;; A pool runs about twice as long as it is wide, so the width question
+;; is offered this fraction of the length rather than asked cold.
+(setq pool:*half-ratio* 0.5)
+
+;; A derived letter is quoted to the nearest quarter inch -- the
+;; granularity a tape is actually read to (pool:q4).
+(setq pool:*quarter*    0.25)
+
+;; A sheet letter that does not close positive against its overall is
+;; lifted to a positive floor and the report says so.  The floor is the
+;; smaller of this and a share of the overall, so a small pool does not
+;; get a foot of correction imposed on it.
+(setq pool:*fixfloor*  12.0)
+
+;;; ---- how far a wall dim may slide to stay ON the pool
+;;;
+;;;  A corner UNDER 90 degrees pokes out past its own treatment, so the
+;;;  drawn edge near it starts a little way up the wall and the far end
+;;;  cannot always meet it exactly there.  Splitting that mismatch
+;;;  between the two ends costs 1/16" on a pool built two degrees off
+;;;  square and a thousandth of an inch on one built a quarter-degree
+;;;  off -- under what a tape can read either way, so the dim still says
+;;;  what was measured.  A genuinely sharp corner misses by INCHES,
+;;;  blows this budget, and keeps the true corners instead.
+(setq pool:*hookslack* 0.0625)
+
+;;; ---- when a corner may be called square on the sheet
+;;;
+;;;  How far off 90 a corner may sit and still be marked "90%%d".  This
+;;;  separates two POPULATIONS, so it wants to sit between them rather
+;;;  than hug either: a pool the crew still calls a rectangle can fit
+;;;  several degrees off square (240x120 with cross dims 12" apart fits
+;;;  at 86.8 / 93.2), while the corners this gate exists to refuse -- a
+;;;  grecian's cut corners and an L's bend -- are 135, a full 45 degrees
+;;;  away.  20 degrees clears any real rectangle and still leaves more
+;;;  than twice that margin to 135.
+(setq pool:*sq90-tol* (* pi (/ 20.0 180.0)))
+
+;;; ---- vocabulary
+;;;
+;;;  Bottom-type keywords, shared by the rectangle / oval / grecian
+;;;  dispatchers.  Normal and the four special bottoms all run through
+;;;  pool:hopnormal (they are the same plan chain with G and/or E
+;;;  pinned); Sport is the symmetric full-width bottom.  L / Lazy L
+;;;  pools take the standard hopper only and are not asked.
+;;;  KEYWORDS ARE NOT FREELY EDITABLE: the palette's field map, the
+;;;  form tests and STANDARDS.md all spell these, and the shown bracket
+;;;  must stay the keyword list with slashes (STANDARDS section 1).
+
+(setq pool:*btypes*  "Normal Sport Wedge SLope MOdflat SHallow")
+(setq pool:*btshown* "Normal/Sport/Wedge/SLope/MOdflat/SHallow")
+
+;;; ---- nominal guide rings
+;;;
+;;;  What the Grecian and Octagon guides look like before any
+;;;  measurement is in.  The octagon's is a REGULAR one -- 300 square,
+;;;  cut c = 300/(2+root 2) = 87.87, so all eight sides come out 124.26
+;;;  -- because that is what the shape being measured looks like.  (An
+;;;  elongated guide made the sheet read like a grecian's.)
+
+(setq pool:*grecnpts* (list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0)
+                            (list 410.0 125.0) (list 360.0 180.0)
+                            (list 0.0 180.0) (list -50.0 125.0)
+                            (list -50.0 55.0)))
+(setq pool:*octnpts* (list (list 87.87 0.0) (list 212.13 0.0)
+                           (list 300.0 87.87) (list 300.0 212.13)
+                           (list 212.13 300.0) (list 87.87 300.0)
+                           (list 0.0 212.13) (list 0.0 87.87)))
+
+;;; ---- RUN STATE (not knobs)
+;;;
+;;;  Declared here because AutoLISP wants a global declared at top
+;;;  level, but set and cleared by the run itself -- editing a value
+;;;  here changes nothing.  The rest of the run state lives with the
+;;;  engine that owns it (the guide preview's, the answer store's).
+
+(setq pool:*base*        (list 0.0 0.0))  ; insertion point for this run
+(setq pool:*dashlt*      "CONTINUOUS")    ; resolved to POOLDASH per run
+(setq pool:*dotlt*       "CONTINUOUS")    ; resolved to POOLDOT per run
+(setq pool:*pvents*      nil)             ; live guide-preview entities
+(setq pool:*insq*        nil)             ; T = in-square (no cross dims)
+(setq pool:*valnotes*    nil)             ; validation problems, for the report
+(setq pool:*smallwarned* nil)             ; the missing-style note is once a run
+(setq pool:*sideon*      nil)             ; a SIDE STANDARD block is open
+(setq pool:*dimstyle0*   nil)             ; dim style current when POOL started
+(setq pool:*ftin*        nil)             ; T = report in feet-inches; set per
+                                          ; run from the units the DRAWING was
+                                          ; in before POOL switched to
+                                          ; architectural for its prompts
 ;; Entities making up the side profile (section) and its depth dims.
 ;; An L pool's mirror flips the PLAN top-to-bottom; a longitudinal
 ;; section is unchanged by that, so these are held out of it.
 (setq pool:*profents*  nil)
 
-;; Bottom-type keywords, shared by the rectangle / oval / grecian
-;; dispatchers.  Normal and the four special bottoms all run through
-;; pool:hopnormal (they are the same plan chain with G and/or E
-;; pinned); Sport is the symmetric full-width bottom.  L / Lazy L
-;; pools take the standard hopper only and are not asked.
-(setq pool:*btypes*   "Normal Sport Wedge SLope MOdflat SHallow")
-(setq pool:*btshown* "Normal/Sport/Wedge/SLope/MOdflat/SHallow")
+;; A square-cornered quad, for the flows whose frame has no corner
+;; treatments of its own to pass on (the oval and mutt hoppers).
 (setq pool:*sq4* (list (list "Square" 0.0) (list "Square" 0.0)
                        (list "Square" 0.0) (list "Square" 0.0)))
-;; How far off 90 a corner may sit and still be marked "90%%d" on the
-;; sheet.  This separates two POPULATIONS, so it wants to sit between
-;; them rather than hug either: a pool the crew still calls a
-;; rectangle can fit several degrees off square (240x120 with cross
-;; dims 12" apart fits at 86.8 / 93.2), while the corners this gate
-;; exists to refuse -- a grecian's cut corners and an L's bend -- are
-;; 135, a full 45 degrees away.  20 degrees clears any real rectangle
-;; and still leaves more than twice that margin to 135.
-(setq pool:*sq90-tol* (* pi (/ 20.0 180.0)))
-;; How far a wall dim may read off its true corner-to-corner run in
-;; order to keep both of its extension lines ON the pool -- see the
-;; "dims attached to the pool" block below.  A corner UNDER 90 degrees
-;; pokes out past its own treatment, so the drawn edge near it starts a
-;; little way up the wall and the far end cannot always meet it exactly
-;; there.  Splitting that mismatch between the two ends costs 1/16" on
-;; a pool built two degrees off square and a thousandth of an inch on
-;; one built a quarter-degree off -- under what a tape can read either
-;; way, so the dim still says what was measured.  A genuinely sharp
-;; corner misses by INCHES, blows this budget, and keeps the true
-;; corners instead.
-(setq pool:*hookslack* 0.0625)
-(setq pool:*valnotes* nil)            ; validation problems for the report
-
-;; Measurements under pool:*smalldim* are dimensioned in the drawing's
-;; "STANDARD INCHES" dim style (see pool:dimsbegin); the missing-style
-;; note is printed at most once per run.  Cross dims (the diagonal
-;; block, any shape) use pool:*crossstyle* instead -- see pool:dimxbegin.
-;;
-;; The SECONDARY perimeter letters -- the ones the field sheets stack
-;; against an overall (S, S1, T, V, the end radii, an L's wing/step
-;; sides, the six-sided hopper's W/L1/X) -- go in pool:*sidestyle*
-;; ("SIDE STANDARD"), per the reference drawings.  A dim inside a
-;; SIDE STANDARD block keeps that style even under 24 inches: the
-;; reference sheets show a 19" S1 in SIDE STANDARD, not inches.
-;; The cut-off is "UNDER 24 inches": a 2 ft corner is a STANDARD dim,
-;; not an inches one.  It has to be read with a hair of tolerance,
-;; because most of these lengths are not the number the crew typed --
-;; they are measured back off geometry the routine built from it, and a
-;; 24" radius corner comes back as 23.99999999999913 as readily as
-;; 24.000000000001137 (a three-point arc's circumcentre, a treated
-;; corner's two end points).  Compared raw, the same 2 ft corner draws
-;; in inches or not depending on which way the last bit fell.  The
-;; tolerance is float noise only -- a MILLIONTH of an inch, a million
-;; times the noise it absorbs and orders below the 1/16" a tape can
-;; read, so every real measurement under 2 ft is still an inches dim.
-(setq pool:*smalldim*    24.0)
-(setq pool:*smallfuzz*   1.0e-6)
-(setq pool:*smallstyle*  "STANDARD INCHES")
-(setq pool:*smallwarned* nil)
-(setq pool:*crossstyle*  "CROSS DIMENSIONS")
-(setq pool:*sidestyle*   "SIDE STANDARD")
-(setq pool:*sideon*      nil)         ; a SIDE STANDARD block is open
-(setq pool:*dimstyle0*   nil)         ; dim style current when POOL started
-;; T = report lengths in feet-inches; set per run from the units the
-;; DRAWING was in before POOL switched to architectural for its
-;; prompts (getdist keeps only the value, never how it was typed, so
-;; the drawing's own units are the crew's declared preference).
-(setq pool:*ftin*        nil)
 
 ;;; -------------------- small vector helpers --------------------------
 
@@ -350,13 +603,13 @@
 ;; Kept for compatibility: our patterns are self-defined now.
 (defun pool:ltload (name)
   (if (= name "DOT")
-      (pool:ltmake "POOLDOT" "Pool guide dot . . . . . . . ." '(0.0 -1.0))
-      (pool:ltmake "POOLDASH" "Pool dashed __ __ __ __" '(12.0 -12.0))))
+      (pool:ltmake pool:*dotname* "Pool guide dot . . . . . . . ." pool:*dotpat*)
+      (pool:ltmake pool:*dashname* "Pool dashed __ __ __ __" pool:*dashpat*)))
 
 ;; Dashed reference line on POOL-NOTES.
 (defun pool:lined (p1 p2)
   (entmake (append (list '(0 . "LINE")
-                         (cons 8 "POOL-NOTES")
+                         (cons 8 pool:*lay-notes*)
                          (cons 10 (pool:wp p1))
                          (cons 11 (pool:wp p2)))
                    (if (/= pool:*dashlt* "CONTINUOUS")
@@ -367,7 +620,7 @@
 ;; on the input screen, so they read clearly over the pool outline.
 (defun pool:linedot (p1 p2)
   (entmake (append (list '(0 . "LINE")
-                         (cons 8 "POOL-NOTES")
+                         (cons 8 pool:*lay-notes*)
                          (cons 62 pool:*pvx-col*)
                          (cons 10 (pool:wp p1))
                          (cons 11 (pool:wp p2)))
@@ -476,7 +729,7 @@
       (progn
         (setq od (pool:dimsbegin (cdr (assoc 40 (entget ent)))))
         (command "_.DIMRADIUS" (list ent (pool:wp tip))
-                 (pool:wp (pool:v+ tip (pool:v* outd (* 0.9 doff)))))
+                 (pool:wp (pool:v+ tip (pool:v* outd (* pool:*rad-off* doff)))))
         (pool:dimsend od))
       ;; a degenerate end (bulge ~ 0) drew a straight line instead
       (princ "\n(radius dim skipped -- the end came out flat, no arc)")))
@@ -654,7 +907,7 @@
         (setq tot (+ tot v) n (1+ n))))
   (if (> n 0)
       (progn
-        (setq v (* 0.5 (/ tot n)))
+        (setq v (* pool:*half-ratio* (/ tot n)))
         (if (> v 1.0e-6) v))))
 
 ;;; -------------------- form answers -----------------------------------
@@ -1044,9 +1297,8 @@
 ;;; actual pool as the numbers come in.  Once all inputs are in, the
 ;;; guide deletes itself and is replaced by the true out-of-square pool.
 
-(setq pool:*pv-col* 8)                  ; guide outline color (dark gray)
-(setq pool:*pvx-col* 7)                 ; cross-dim / measuring line color (white)
-(setq pool:*hi-col* 1)                  ; highlight color (red)
+;; The three guide colours are knobs and live at the top of the file
+;; (pool:*pv-col*, pool:*pvx-col*, pool:*hi-col*).
 
 ;; Override (or set) the color of an entity, refresh it, return it.
 (defun pool:setcol (e col / ed old)
@@ -1076,7 +1328,7 @@
 (defun pool:lblkey (s) (read (strcat "l" s)))
 
 (defun pool:pvline (p1 p2)
-  (pool:line p1 p2 "POOL-NOTES")
+  (pool:line p1 p2 pool:*lay-notes*)
   (pool:setcol (entlast) pool:*pv-col*))
 
 ;; Guide measuring line -- the cross dims and other ties, drawn WHITE
@@ -1182,7 +1434,7 @@
       (setq mj (list 0.0 (* 0.5 a) 0.0) rt (/ b a)))
   (entmake (list '(0 . "ELLIPSE")
                  '(100 . "AcDbEntity")
-                 (cons 8 "POOL-NOTES")
+                 (cons 8 pool:*lay-notes*)
                  '(100 . "AcDbEllipse")
                  (cons 10 (pool:wp cen))
                  (cons 11 mj)                  ; major semi-axis, relative
@@ -1200,10 +1452,10 @@
     ((= ty "LINE") (pool:pvadd (pool:pvline (cadr pr) (caddr pr))))
     ((= ty "LINED") (pool:pvadd (pool:pvlined (cadr pr) (caddr pr))))
     ((= ty "TEXT")
-     (pool:text (cadr pr) (caddr pr) (cadddr pr) "POOL-NOTES")
+     (pool:text (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
      (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
     ((= ty "ARC")
-     (pool:arc3p (cadr pr) (caddr pr) (cadddr pr) "POOL-NOTES")
+     (pool:arc3p (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
      (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
     ((= ty "ELL")
      (pool:pvell (cadr pr) (caddr pr) (cadddr pr))
@@ -1235,7 +1487,7 @@
         qx (apply 'max (mapcar 'car pts))
         py (apply 'min (mapcar 'cadr pts))
         qy (apply 'max (mapcar 'cadr pts))
-        m (max 30.0 (* 0.10 (max (- qx px) (- qy py)))))
+        m (max pool:*pv-margin* (* 0.10 (max (- qx px) (- qy py)))))
   (list (list (- px m) (- py m)) (list (+ qx m) (+ qy m))))
 
 ;; Follow the reshaped guide with the view -- but only when the box
@@ -1247,7 +1499,7 @@
            (or (null o)
                (> (+ (distance (car box) (car o))
                      (distance (cadr box) (cadr o)))
-                  (* 0.05 (distance (car box) (cadr box))))))
+                  (* pool:*pv-churn* (distance (car box) (cadr box))))))
       (progn
         (setq pool:*pvbox* box)
         (command "_.ZOOM" "_Window"
@@ -1496,13 +1748,15 @@
       (pool:4bar bo tp le ri (pool:d2r 90.0))
       (progn
         (setq r1 (pool:scanalfa bo tp le ri dac dbd
-                                (pool:d2r 15.0) (pool:d2r 165.0) (pool:d2r 0.25)))
+                                (pool:d2r pool:*alfa-lo*) (pool:d2r pool:*alfa-hi*)
+                                (pool:d2r pool:*alfa-step*)))
         (if r1
             (progn
               (setq alfa (cadr r1)
                     r2 (pool:scanalfa bo tp le ri dac dbd
-                                      (- alfa (pool:d2r 0.3)) (+ alfa (pool:d2r 0.3))
-                                      (pool:d2r 0.005)))
+                                      (- alfa (pool:d2r pool:*alfa-fine*))
+                                      (+ alfa (pool:d2r pool:*alfa-fine*))
+                                      (pool:d2r pool:*alfa-fstep*)))
               (car (if r2 r2 r1)))))))
 
 (defun pool:setnth (lst i val / k out)
@@ -1591,14 +1845,14 @@
            (or (null dbd) (<= (abs (- (nth 5 m1) dbd)) xtol)))
       (list q1 nil)
       (progn
-        (setq q2 (pool:relaxquad q1 bo tp le ri dac dbd stol 2000)
+        (setq q2 (pool:relaxquad q1 bo tp le ri dac dbd stol pool:*fit-quad*)
               m2 (pool:quadmeas q2)
-              sok (and (<= (abs (- (car m2) bo)) (+ stol 0.05))
-                       (<= (abs (- (cadr m2) tp)) (+ stol 0.05))
-                       (<= (abs (- (caddr m2) le)) (+ stol 0.05))
-                       (<= (abs (- (cadddr m2) ri)) (+ stol 0.05)))
-              xok (and (or (null dac) (<= (abs (- (nth 4 m2) dac)) (+ xtol 0.05)))
-                       (or (null dbd) (<= (abs (- (nth 5 m2) dbd)) (+ xtol 0.05)))))
+              sok (and (<= (abs (- (car m2) bo)) (+ stol pool:*fit-slack*))
+                       (<= (abs (- (cadr m2) tp)) (+ stol pool:*fit-slack*))
+                       (<= (abs (- (caddr m2) le)) (+ stol pool:*fit-slack*))
+                       (<= (abs (- (cadddr m2) ri)) (+ stol pool:*fit-slack*)))
+              xok (and (or (null dac) (<= (abs (- (nth 4 m2) dac)) (+ xtol pool:*fit-slack*)))
+                       (or (null dbd) (<= (abs (- (nth 5 m2) dbd)) (+ xtol pool:*fit-slack*)))))
         (if (and sok xok)
             (list q2 nil)
             (list q1 t)))))
@@ -1631,7 +1885,7 @@
   (while (< th 1.5533)
     (setq dd (abs (- (pool:grecf w lt lb th) e)))
     (if (< dd berr) (setq berr dd best th))
-    (setq th (+ th 0.00087)))           ; ~ 0.05 degree steps
+    (setq th (+ th pool:*grecth-step*)))
   (list best berr))
 
 ;; Try to fit the end width by adjusting the angle; when that is not
@@ -1652,7 +1906,7 @@
               (if (and (> lt2 0.0) (> lb2 0.0))
                   (progn
                     (setq r (pool:grecth w lt2 lb2 e))
-                    (if (<= (cadr r) 0.0625)   ; within 1/16"
+                    (if (<= (cadr r) pool:*grec-fit*)
                         (setq out (list lt2 lb2 (car r))))))))
         (setq j (1+ j)))
       (setq i (1+ i)))
@@ -1788,14 +2042,14 @@
                                       (- (caddr e) (cadddr e))
                                       (+ (caddr e) (cadddr e)) 1.0))
                    edgecons))
-  (setq p1 (pool:relaxn seed (append xcon e0) 3000)
-        p1 (pool:relaxn p1 e0 400))
+  (setq p1 (pool:relaxn seed (append xcon e0) pool:*fit-iter*)
+        p1 (pool:relaxn p1 e0 pool:*fit-polish*))
   (if (<= (pool:crossmax p1 crosscons) xtol)
       (list p1 nil)
       (progn
-        (setq p2 (pool:relaxn p1 (append xcon eb) 3000))
-        (if (and (<= (pool:edgemax p2 edgecons) 0.05)
-                 (<= (pool:crossmax p2 crosscons) (+ xtol 0.05)))
+        (setq p2 (pool:relaxn p1 (append xcon eb) pool:*fit-iter*))
+        (if (and (<= (pool:edgemax p2 edgecons) pool:*fit-slack*)
+                 (<= (pool:crossmax p2 crosscons) (+ xtol pool:*fit-slack*)))
             (list p2 nil)
             (list p1 t)))))
 
@@ -1820,24 +2074,11 @@
 ;; dashed internal end chords), corner labels clear of the linework,
 ;; and the active mode's cross diagonals (dashed).  Returns the
 ;; highlight assoc (edge prompt-keys + one entry per cross name).
-(setq pool:*grecnpts* (list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0)
-                            (list 410.0 125.0) (list 360.0 180.0)
-                            (list 0.0 180.0) (list -50.0 125.0)
-                            (list -50.0 55.0)))
-
 ;; An OCTAGON is the same eight-corner shape with the same edge list --
 ;; only the proportions differ: its cuts run at 45 degrees (S = S1) and
 ;; its short flats match the cut faces, where a grecian's ends are long
-;; and shallow.
-;;
-;; The guide is a REGULAR octagon -- 300 square, cut c = 300/(2+root 2)
-;; = 87.87, so all eight sides come out 124.26 -- because that is what
-;; the shape being measured looks like.  (An elongated guide made the
-;; sheet read like a grecian's.)
-(setq pool:*octnpts* (list (list 87.87 0.0) (list 212.13 0.0)
-                           (list 300.0 87.87) (list 300.0 212.13)
-                           (list 212.13 300.0) (list 87.87 300.0)
-                           (list 0.0 212.13) (list 0.0 87.87)))
+;; and shallow.  Both nominal rings are knobs and live at the top of the
+;; file (pool:*grecnpts*, pool:*octnpts*).
 
 ;; The Grecian / Octagon guide is built by gr:geo inside pool:grecflow
 ;; (a live-guide geometry function fed to pool:pvlive), so the ring
@@ -1855,7 +2096,8 @@
 
 ;; Round to the nearest quarter inch -- the granularity a tape is read
 ;; to in the field, and the one a DERIVED letter is worth quoting at.
-(defun pool:q4 (v) (* 0.25 (fix (+ (* 4.0 v) 0.5))))
+(defun pool:q4 (v)
+  (* pool:*quarter* (fix (+ (/ v pool:*quarter*) 0.5))))
 
 ;; The grecian corner cut, filled in from its FACE.  A crew tapes
 ;; ACROSS the cut (S2) far more readily than it locates the virtual
@@ -2195,19 +2437,19 @@
         ;; and its report rows go red
         (if (<= tv 1.0e-6)
             (progn
-              (setq tv (min 12.0 (* 0.25 braw)) sv (/ (- braw tv) 2.0) ovbad t)
+              (setq tv (min pool:*fixfloor* (* 0.25 braw)) sv (/ (- braw tv) 2.0) ovbad t)
               (pool:valnote "OVERALL SHEET FAILED - S + T + S DOES NOT FIT B, ADJUSTED")))
         (if (<= sv 1.0e-6)
             (progn
-              (setq sv (min 12.0 (* 0.125 braw)) tv (- braw sv sv) ovbad t)
+              (setq sv (min pool:*fixfloor* (* 0.125 braw)) tv (- braw sv sv) ovbad t)
               (pool:valnote "OVERALL SHEET FAILED - T LONGER THAN B, ADJUSTED")))
         (if (<= vov 1.0e-6)
             (progn
-              (setq vov (min 12.0 (* 0.25 araw)) s1v (/ (- araw vov) 2.0) ovbad t)
+              (setq vov (min pool:*fixfloor* (* 0.25 araw)) s1v (/ (- araw vov) 2.0) ovbad t)
               (pool:valnote "OVERALL SHEET FAILED - S1 + V + S1 DOES NOT FIT A, ADJUSTED")))
         (if (<= s1v 1.0e-6)
             (progn
-              (setq s1v (min 12.0 (* 0.125 araw)) vov (- araw s1v s1v) ovbad t)
+              (setq s1v (min pool:*fixfloor* (* 0.125 araw)) vov (- araw s1v s1v) ovbad t)
               (pool:valnote "OVERALL SHEET FAILED - V LONGER THAN A, ADJUSTED")))
         (setq hyp (sqrt (+ (* sv sv) (* s1v s1v)))
               bo tv tp tv le araw ri araw
@@ -2461,8 +2703,8 @@
         ymin (apply 'min (mapcar 'cadr pts))
         ymax (apply 'max (mapcar 'cadr pts))
         w (- xmax xmin) hh (- ymax ymin)
-        doff (max 12.0 (/ (max w hh) 18.0))
-        th (max 3.0 (/ (max w hh) 70.0))
+        doff (max pool:*doff-min* (/ (max w hh) pool:*doff-div*))
+        th (max pool:*th-min* (/ (max w hh) pool:*th-div*))
         pool:*dashlt* (pool:ltload "DASHED")
         cen (list 0.0 0.0))
   (foreach p pts (setq cen (pool:v+ cen p)))
@@ -2478,8 +2720,8 @@
     (if (member (caddr e) '(ad bc))
         (pool:lined p qq)
         (pool:line (cadr (nth (car e) gce))          ; eNext(i)
-                   (car (nth (cadr e) gce)) "POOL"))) ; ePrev(j)
-  (setq gcarcs (pool:ringarcs gce gcs "POOL"))
+                   (car (nth (cadr e) gce)) pool:*lay-pool*))) ; ePrev(j)
+  (setq gcarcs (pool:ringarcs gce gcs pool:*lay-pool*))
 
   ;; -------- dimensions (DIMENSION)
   ;; In-square: the field-sheet exterior set only -- S+T share a row
@@ -2492,7 +2734,7 @@
   ;; an overall (S, T, S1, V -- and out of square, every edge) read in
   ;; SIDE STANDARD; the overalls themselves (B, A / the end chords)
   ;; and the S2 corner cut stay in the standard style.
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" pool:*lay-dim*)
   (if pool:*insq*
       (progn
         ;; S: pool's left extreme to the top side start (row 1)
@@ -2606,7 +2848,7 @@
   (setq rows (append rows (pool:hopgrecdsp pts doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report
   (setq mprims nil k 0)
   (foreach e pool:*grecedges*
@@ -2616,8 +2858,8 @@
   (setq mlbls nil)
   (foreach p pts
     (setq mlbls (append mlbls (list (cons p (nth (length mlbls) pool:*grecnames*))))))
-  (pool:minimap mprims pts mlbls (+ (car rbox) (* 3.0 th)) (cadr rbox)
-                (* 24.0 th) th)
+  (pool:minimap mprims pts mlbls (+ (car rbox) (* pool:*map-gap* th)) (cadr rbox)
+                (* pool:*map-size* th) th)
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
@@ -2804,9 +3046,9 @@
         p1 (pool:relaxn guess
                         (append (pool:hexdiagcon diags 0.4)
                                 (pool:hexsidecon sides 0.0 1.0))
-                        3000))
+                        pool:*fit-iter*))
   ;; polish: a sides-only pass so the sides land exactly true
-  (setq p1 (pool:relaxn p1 (pool:hexsidecon sides 0.0 1.0) 400)
+  (setq p1 (pool:relaxn p1 (pool:hexsidecon sides 0.0 1.0) pool:*fit-polish*)
         e1 (pool:hexerr p1 sides diags))
   (if (<= (cadr e1) xtol)
       (list p1 nil)
@@ -2814,9 +3056,9 @@
         (setq p2 (pool:relaxn p1
                               (append (pool:hexdiagcon diags 0.5)
                                       (pool:hexsidecon sides stol 1.0))
-                              3000)
+                              pool:*fit-iter*)
               e2 (pool:hexerr p2 sides diags))
-        (if (and (<= (car e2) (+ stol 0.05)) (<= (cadr e2) (+ xtol 0.05)))
+        (if (and (<= (car e2) (+ stol pool:*fit-slack*)) (<= (cadr e2) (+ xtol pool:*fit-slack*)))
             (list p2 nil)
             (list p1 t)))))
 
@@ -3093,8 +3335,8 @@
         ymax (apply 'max (mapcar 'cadr pts))
         w (- xmax xmin)
         hh (- ymax ymin)
-        doff (max 12.0 (/ (max w hh) 18.0))
-        th (max 3.0 (/ (max w hh) 70.0))
+        doff (max pool:*doff-min* (/ (max w hh) pool:*doff-div*))
+        th (max pool:*th-min* (/ (max w hh) pool:*th-div*))
         pool:*dashlt* (pool:ltload "DASHED")
         cen (list 0.0 0.0))
   (foreach p pts (setq cen (pool:v+ cen p)))
@@ -3118,16 +3360,16 @@
                                         nil))
                     (list 0 1 2 3 4 5)))
   (foreach pr pool:*hexsides*            ; side i: eNext(i) -> ePrev(i+1)
-    (pool:line (cadr (nth (car pr) hce)) (car (nth (cadr pr) hce)) "POOL"))
+    (pool:line (cadr (nth (car pr) hce)) (car (nth (cadr pr) hce)) pool:*lay-pool*))
   (setq hcarcs nil k 0)
   (foreach p hcs
     (cond
       ((= (car p) "Cut")
-       (pool:line (car (nth k hce)) (cadr (nth k hce)) "POOL")
+       (pool:line (car (nth k hce)) (cadr (nth k hce)) pool:*lay-pool*)
        (setq hcarcs (cons nil hcarcs)))
       ((= (car p) "Radius")
        (pool:arc3p (car (nth k hce)) (caddr (nth k hce)) (cadr (nth k hce))
-                   "POOL")
+                   pool:*lay-pool*)
        (setq hcarcs (cons (entlast) hcarcs)))
       (t (setq hcarcs (cons nil hcarcs))))
     (setq k (1+ k)))
@@ -3141,7 +3383,7 @@
   ;; principal walls (main run, far end, deep end) stay standard:
   ;; true L -> C-D, D-E, E-F secondary; lazy L -> the bends B-C, D-E
   ;; and the top E-F.
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" pool:*lay-dim*)
   (setq k 0)
   (foreach pr pool:*hexsides*
     (if (member k (if lazy '(1 3 4) '(2 3 4)))
@@ -3276,7 +3518,7 @@
 
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report
   (setq mprims nil k 0)
   (foreach pr pool:*hexsides*
@@ -3284,8 +3526,8 @@
   (setq mlbls nil)
   (foreach p pts
     (setq mlbls (append mlbls (list (cons p (nth (length mlbls) lbls))))))
-  (pool:minimap mprims pts mlbls (+ (car rbox) (* 3.0 th)) (cadr rbox)
-                (* 24.0 th) th)
+  (pool:minimap mprims pts mlbls (+ (car rbox) (* pool:*map-gap* th)) (cadr rbox)
+                (* pool:*map-size* th) th)
   (cond
     (failed
      (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***"))
@@ -3299,7 +3541,7 @@
 
 ;; Report cell: red when the row is flagged.
 (defun pool:rtext (pt h str lay red)
-  (if red (pool:textc pt h str lay 1) (pool:text pt h str lay)))
+  (if red (pool:textc pt h str lay pool:*col-bad*) (pool:text pt h str lay)))
 
 ;; rows  = list of (label target actual [red])
 ;; notes = list of failure strings (written big and red)
@@ -3321,17 +3563,17 @@
 (defun pool:report (rows notes x y h lay / lh ytop y0 xr r tgt act c2 c3 n)
   ;; feet-inch strings run longer than decimal inches, so the TARGET/
   ;; ACTUAL/DELTA columns spread out when the report is in feet-inches
-  (setq lh (* 2.2 h)
+  (setq lh (* pool:*rep-row* h)
         ytop (+ y lh)
-        c2 (if pool:*ftin* 33.0 29.0)
-        c3 (if pool:*ftin* 46.0 38.0)
-        xr (+ x (* (if pool:*ftin* 54.0 46.0) h))
+        c2 (if pool:*ftin* pool:*rep-c2f* pool:*rep-c2*)
+        c3 (if pool:*ftin* pool:*rep-c3f* pool:*rep-c3*)
+        xr (+ x (* (if pool:*ftin* pool:*rep-wf* pool:*rep-w*) h))
         y ytop)
   (setq y (- y lh))
-  (pool:text (list x y) (* 1.25 h) "POOL LAYOUT REPORT" lay)
+  (pool:text (list x y) (* pool:*rep-title* h) "POOL LAYOUT REPORT" lay)
   (setq y (- y lh))
   (pool:text (list x y) h "MEASUREMENT" lay)
-  (pool:text (list (+ x (* 20.0 h)) y) h "TARGET" lay)
+  (pool:text (list (+ x (* pool:*rep-c1* h)) y) h "TARGET" lay)
   (pool:text (list (+ x (* c2 h)) y) h "ACTUAL" lay)
   (pool:text (list (+ x (* c3 h)) y) h "DELTA" lay)
   ;; a 4th row element flags the row RED: the validator adjusted it
@@ -3342,7 +3584,7 @@
     (pool:rtext (list x y) h (car r) lay (nth 3 r))
     (if (and tgt act)
         (progn
-          (pool:rtext (list (+ x (* 20.0 h)) y) h (pool:fmtlen tgt) lay (nth 3 r))
+          (pool:rtext (list (+ x (* pool:*rep-c1* h)) y) h (pool:fmtlen tgt) lay (nth 3 r))
           (pool:rtext (list (+ x (* c3 h)) y) h (pool:fmtdelta (- act tgt))
                       lay (nth 3 r)))
         ;; NA target: measurement was not taken in the field.  A row
@@ -3350,14 +3592,14 @@
         ;; the sheet never said, so there is nothing to compare and
         ;; nothing was built to a size
         (progn
-          (pool:rtext (list (+ x (* 20.0 h)) y) h
+          (pool:rtext (list (+ x (* pool:*rep-c1* h)) y) h
                       (if tgt (pool:fmtlen tgt) "N/A") lay (nth 3 r))
           (pool:rtext (list (+ x (* c3 h)) y) h "-" lay (nth 3 r))))
     (pool:rtext (list (+ x (* c2 h)) y) h
                 (if act (pool:fmtlen act) "N/A") lay (nth 3 r)))
   (foreach n notes
     (setq y (- y (* 1.5 lh)))
-    (pool:textc (list x y) (* 1.4 h) n lay 1))
+    (pool:textc (list x y) (* pool:*rep-note* h) n lay pool:*col-bad*))
   (setq y0 (- y lh)
         ytop (+ ytop (* 0.6 lh)))
   (pool:line (list (- x h) y0) (list xr y0) lay)
@@ -3411,13 +3653,13 @@
         (foreach p prims
           (cond
             ((eq (car p) 'l)
-             (pool:line (pool:mms (cadr p)) (pool:mms (caddr p)) "POOL-NOTES"))
+             (pool:line (pool:mms (cadr p)) (pool:mms (caddr p)) pool:*lay-notes*))
             ((eq (car p) 'a)
              (pool:arc3p (pool:mms (cadr p)) (pool:mms (caddr p))
-                         (pool:mms (cadddr p)) "POOL-NOTES"))
+                         (pool:mms (cadddr p)) pool:*lay-notes*))
             ((eq (car p) 'rb)
              (pool:roundbody (pool:mms (cadr p)) (* sc (caddr p))
-                             (* sc (cadddr p)) "POOL-NOTES"))))
+                             (* sc (cadddr p)) pool:*lay-notes*))))
         (setq spoly (if poly (mapcar 'pool:mms poly))
               cen (list 0.0 0.0))
         (foreach l lbls (setq cen (pool:v+ cen (pool:mms (car l)))))
@@ -3428,7 +3670,7 @@
                          (pool:lbloff tx cen spoly (* 1.6 lth))
                          (pool:v+ tx (pool:v* (pool:unit (pool:v- tx cen))
                                               (* 1.6 lth))))
-                     lth (cdr l) "POOL-NOTES"))))
+                     lth (cdr l) pool:*lay-notes*))))
   (princ))
 
 
@@ -3715,16 +3957,16 @@
                                        (caddr (nth i corners))))
                    (list 0 1 2 3)))
   (foreach i (list 0 1 2 3)             ; straight sides (eNext(i) -> ePrev(i+1))
-    (pool:line (cadr (nth i ce)) (car (nth (rem (+ i 1) 4) ce)) "POOL"))
+    (pool:line (cadr (nth i ce)) (car (nth (rem (+ i 1) 4) ce)) pool:*lay-pool*))
   (setq arcs nil)
   (foreach i (list 0 1 2 3)             ; corner treatments
     (setq tyi (car (nth i corners)))
     (cond
       ((= tyi "Cut")
-       (pool:line (car (nth i ce)) (cadr (nth i ce)) "POOL")
+       (pool:line (car (nth i ce)) (cadr (nth i ce)) pool:*lay-pool*)
        (setq arcs (cons nil arcs)))
       ((= tyi "Radius")
-       (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)) "POOL")
+       (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce)) pool:*lay-pool*)
        (setq arcs (cons (entlast) arcs)))
       (t (setq arcs (cons nil arcs)))))
   (reverse arcs))
@@ -3739,13 +3981,13 @@
 ;; leader says -- "90%%d" on a square corner, "?" on a NotGiven one,
 ;; either with a " Typ." suffix when one mark speaks for several.
 (defun pool:dim90 (p outd doff txt / r)
-  (setq r (* 0.18 doff))
+  (setq r (* pool:*mark-r* doff))
   (entmake (list '(0 . "CIRCLE")
-                 (cons 8 "DIMENSION")
+                 (cons 8 pool:*lay-dim*)
                  (cons 10 (pool:wp p))
                  (cons 40 r)))
   (command "_.LEADER" (pool:wp (pool:v+ p (pool:v* outd r)))
-           (pool:wp (pool:v+ p (pool:v* outd (* 1.2 doff))))
+           (pool:wp (pool:v+ p (pool:v* outd (* pool:*mark-lead* doff))))
            "" txt ""))
 
 ;; A NotGiven corner: the same circled mark, but the leader asks a
@@ -3758,11 +4000,11 @@
   ;; own width when the corner points LEFT -- text runs left-to-right
   ;; from its insertion point, so an unadjusted note on a left-hand
   ;; corner would read back across its own leader and into the pool
-  (setq h (* 0.25 doff)
-        tp (pool:v+ p (pool:v* outd (* 1.45 doff))))
+  (setq h (* pool:*ng-txt* doff)
+        tp (pool:v+ p (pool:v* outd (* pool:*ng-off* doff))))
   (if (< (car outd) 0.0)
       (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
-  (pool:text tp h "Not Given" "DIMENSION"))
+  (pool:text tp h "Not Given" pool:*lay-dim*))
 
 ;; One corner's annotation, whichever of the four treatments it
 ;; carries.  ang is the corner's real wedge angle, and it decides
@@ -3794,20 +4036,20 @@
                                   (distance (car ce) (cadr ce)))))
      (if (= sfx "")
          (command "_.DIMRADIUS" (list arc (pool:wp am))
-                  (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff)))))
+                  (pool:wp (pool:v+ am (pool:v* outd (* pool:*rad-off* doff)))))
          (command "_.DIMRADIUS" (list arc (pool:wp am))
                   "_T" (strcat "<>" sfx)
-                  (pool:wp (pool:v+ am (pool:v* outd (* 0.9 doff))))))
+                  (pool:wp (pool:v+ am (pool:v* outd (* pool:*rad-off* doff))))))
      (pool:dimsend od))
     ((= ty "Cut")
      (setq fm (pool:mid (car ce) (cadr ce))
            od (pool:dimsbegin (distance (car ce) (cadr ce))))
      (if (= sfx "")
          (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
-                  (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff)))))
+                  (pool:wp (pool:v+ fm (pool:v* outd (* pool:*cut-off* doff)))))
          (command "_.DIMALIGNED" (pool:wp (car ce)) (pool:wp (cadr ce))
                   "_T" (strcat "<>" sfx)
-                  (pool:wp (pool:v+ fm (pool:v* outd (* 0.5 doff))))))
+                  (pool:wp (pool:v+ fm (pool:v* outd (* pool:*cut-off* doff))))))
      (pool:dimsend od))))
 
 ;; Corner annotations for the rectangle.  In-square pools get a single
@@ -3910,7 +4152,7 @@
        (pool:pvadd (pool:pvline (car (nth i ce)) (cadr (nth i ce)))))
       ((= (car cc) "Radius")
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
-                   "POOL-NOTES")
+                   pool:*lay-notes*)
        (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))))
     (setq i (1+ i)))
   pv)
@@ -4014,7 +4256,8 @@
         ;; skewed out-of-square corner, not just on a square one
         (setq wed (if ang ang (/ pi 2.0)))
         (while (and maxsb
-                    (> (setq sb (* sz (pool:cornerk ty wed))) maxsb))
+                    (> (setq sb (* sz (pool:cornerk ty wed)))
+                       (+ maxsb pool:*capfuzz*)))
           (princ (strcat "\nToo large for this corner's walls -- max "
                          (rtos (/ maxsb (pool:cornerk ty wed)))
                          ".  Re-enter."))
@@ -4234,7 +4477,7 @@
         ;; (2/3 down from the top of L), whichever is closer; the
         ;; M/L/K chain sits 12" right of the hopper's right edge
         hc2 (pool:v- hc (pool:v* (pool:unit vdir)
-                                 (min 12.0 (/ (distance hbr htr) 6.0)))))
+                                 (min pool:*chainoff* (/ (distance hbr htr) pool:*chaindiv*)))))
   (list (list 'hbl hbl) (list 'htl htl) (list 'hbr hbr) (list 'htr htr)
         (list 'brkb brkb) (list 'brkt brkt)
         (list 'lab1 lab1) (list 'lab2 lab2)
@@ -4396,7 +4639,7 @@
 ;; its donor) so the caller can flag their dims and report rows red.
 (defun pool:chainval (vals total / out fixed n i j v flo need big bigi w)
   (setq n (length vals)
-        flo (min 12.0 (/ (abs total) (* 4.0 n)))
+        flo (min pool:*fixfloor* (/ (abs total) (* 4.0 n)))
         out vals fixed nil i 0)
   (while (< i n)
     (setq v (nth i out))
@@ -4431,8 +4674,8 @@
   (setq e (entlast))
   (if (and e (setq ed (entget e)))
       (entmod (if (assoc 62 ed)
-                  (subst (cons 62 1) (assoc 62 ed) ed)
-                  (append ed (list (cons 62 1)))))))
+                  (subst (cons 62 pool:*col-bad*) (assoc 62 ed) ed)
+                  (append ed (list (cons 62 pool:*col-bad*)))))))
 
 ;; Report row, red-flagged when index i is among the adjusted ones.
 (defun pool:vrow (label tgt act i fixed)
@@ -4538,7 +4781,7 @@
                 fb (max 0.0 (- toth hv gv ev)))
           (pool:profdraw x0 y0 toth wh2
                          (pool:btmbrks style hv gv fb wh2 dp2 c22)
-                         "POOL-NOTES" t)
+                         pool:*lay-notes* t)
           (pool:pvctie (list (+ x0 toth (* 0.6 doff)) y0)
                        (list (+ x0 toth (* 0.6 doff)) (- y0 wh2)) "C" th)
           (pool:pvctie (list (+ x0 hv) y0)
@@ -4640,16 +4883,16 @@
               dp (pool:askdeep "D - deep end depth" nil wh)
               c2 wh)))
   (setq gg (pool:hopcalc quad corners h g e m k))
-  (pool:hopdraw gg "POOL" tie)
+  (pool:hopdraw gg pool:*lay-pool* tie)
   ;; side profile below the plan, per the style
   (if wh
       (pool:profdraw x0 y0 toth wh
                      (pool:btmbrks (if (caddr sp) style "SLope")
                                    h g f wh dp c2)
-                     "POOL" nil))
+                     pool:*lay-pool* nil))
   ;; chain dimensions along the two centerlines, like the sheet
   (setq odl (getvar "CLAYER"))
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" pool:*lay-dim*)
   ;; M/L/K def points sit on the hopper edge; their dim line floats
   ;; 30" right via the 'voff vector
   (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
@@ -4738,7 +4981,7 @@
         dtr (pool:linex (car dfr) (cadr dfr) (car dft) (cadr dft))
         hc (pool:v* (pool:v+ (pool:v+ dbl dtl) (pool:v+ dbr dtr)) 0.25)
         up (pool:unit (cadr lline))
-        hc2 (pool:v- hc (pool:v* up (min 12.0 (/ (distance dbr dtr) 6.0)))))
+        hc2 (pool:v- hc (pool:v* up (min pool:*chainoff* (/ (distance dbr dtr) pool:*chaindiv*)))))
   (list (list 'oblb oblb) (list 'oblt oblt)
         (list 'obrb obrb) (list 'obrt obrt)
         (list 'dbl dbl) (list 'dtl dtl) (list 'dbr dbr) (list 'dtr dtr)
@@ -4819,12 +5062,12 @@
           gg (pool:hopsportc lline rline bline tline cen
                              e2v f2v gv f1v e1v mv kv))
     (pool:pvcopen)
-    (pool:hopsportdraw gg nil "POOL-NOTES" t)
+    (pool:hopsportdraw gg nil pool:*lay-notes* t)
     (pool:profdraw x0 y0 total wh2
                    (list (cons e2v wh2) (cons (+ e2v f2v) dp2)
                          (cons (+ e2v f2v gv) dp2)
                          (cons (- total e1v) wh2))
-                   "POOL-NOTES" t)
+                   pool:*lay-notes* t)
     (pool:pvctie (cadr (assoc 'pl gg)) (cadr (assoc 'pobl gg)) "E2" th)
     (pool:pvctie (cadr (assoc 'pobl gg)) (cadr (assoc 'pdfl gg)) "F2" th)
     (pool:pvctie (cadr (assoc 'pdfl gg)) (cadr (assoc 'pdfr gg)) "G" th)
@@ -4898,15 +5141,15 @@
   (if vfx (pool:valnote (strcat "SPORT WIDTHS FAILED - "
                                 (pool:fixnames vfx '("M" "L" "K"))
                                 " ADJUSTED, VERIFY")))
-  (pool:hopsportdraw gg nopad "POOL" nil)
+  (pool:hopsportdraw gg nopad pool:*lay-pool* nil)
   ;; profile below, with C and D dims only
   (setq brks (if nopad
                  (list (cons e2 wh) (cons (+ e2 f2) hd) (cons (- total e1) wh))
                  (list (cons e2 wh) (cons (+ e2 f2) hd)
                        (cons (- total e1 f1) hd) (cons (- total e1) wh))))
-  (pool:profdraw x0 y0 total wh brks "POOL" nil)
+  (pool:profdraw x0 y0 total wh brks pool:*lay-pool* nil)
   (setq odl (getvar "CLAYER"))
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" pool:*lay-dim*)
   ;; plan chains, standard-hopper style
   (foreach tl (append (list (list 'pl 'pobl nil (member 0 hfx))
                             (list 'pobl 'pdfl nil (member 1 hfx)))
@@ -5019,7 +5262,7 @@
   (cond
     ((and pvflag pool:*pvcoll*) (pool:pvcput (list "ARC" p mm q)))
     (pvflag
-     (pool:arc3p p mm q "POOL-NOTES")
+     (pool:arc3p p mm q pool:*lay-notes*)
      (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
     (t (pool:arc3p p mm q lay))))
 
@@ -5058,11 +5301,11 @@
         ;; whichever is closer
         tip2 (pool:v- tip
                       (pool:v* (pool:unit v)
-                               (min 12.0
+                               (min pool:*chainoff*
                                     (/ (distance
                                          (pool:linex vc v (car hb) (cadr hb))
                                          (pool:linex vc v (car ht) (cadr ht)))
-                                       6.0)))))
+                                       pool:*chaindiv*)))))
   (list (list 'tip tip) (list 'ttop tt) (list 'tbot tb)
         (list 'htr (pool:linex (car re) (cadr re) (car ht) (cadr ht)))
         (list 'hbr (pool:linex (car re) (cadr re) (car hb) (cadr hb)))
@@ -5136,7 +5379,7 @@
                 r3v (max (min r3v (* 0.9 gv)) (* 0.02 len))
                 gg (pool:hopovalc quad tipl tipr hv gv ev mv kv r3v))
           (pool:pvcopen)
-          (pool:hopovaldraw gg "POOL-NOTES" t)
+          (pool:hopovaldraw gg pool:*lay-notes* t)
           (pool:pvctie (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg)) "H" th)
           (pool:pvctie (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg)) "G" th)
           (pool:pvctie (cadr (assoc 'phl gg)) (cadr (assoc 'ptan gg)) "R3" th)
@@ -5217,9 +5460,9 @@
               (setq r3wbad t)
               (pool:valnote "OVAL HOPPER R3 + W DOES NOT CLOSE AGAINST G - VERIFY")))
         (setq gg (pool:hopovalc quad tipl tipr h g e m k r3))
-        (pool:hopovaldraw gg "POOL" nil)
+        (pool:hopovaldraw gg pool:*lay-pool* nil)
         (setq odl (getvar "CLAYER"))
-        (setvar "CLAYER" "DIMENSION")
+        (setvar "CLAYER" pool:*lay-dim*)
         (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
                           (list 'phl 'phr nil (member 1 hfx))
                           (list 'phr 'pbrk nil (member 2 hfx))
@@ -5301,7 +5544,7 @@
         ;; chain placement: H/G/F/E below the hopper centre by 12" or
         ;; L/6 (whichever is closer); M/L/K 12" right of the hopper
         hc2 (pool:v- hc (pool:v* (pool:unit v)
-                                 (min 12.0 (/ (distance hbr htr) 6.0))))
+                                 (min pool:*chainoff* (/ (distance hbr htr) pool:*chaindiv*))))
         out (list
           (list 'hbl hbl) (list 'htl htl) (list 'hbr hbr) (list 'htr htr)
           (list 'brkb (pool:linex (car brk) (cadr brk) aa (pool:v- bb aa)))
@@ -5450,7 +5693,7 @@
                               lv)))
                 gg (pool:hopgrecc pts hv gv ev mv kv hx))
           (pool:pvcopen)
-          (pool:hopgrecdraw gg "POOL-NOTES" six t)
+          (pool:hopgrecdraw gg pool:*lay-notes* six t)
           (pool:pvctie (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg)) "H" th)
           (pool:pvctie (cadr (assoc 'phl gg)) (cadr (assoc 'phr gg)) "G" th)
           (pool:pvctie (cadr (assoc 'phr gg)) (cadr (assoc 'pbrk gg)) "F" th)
@@ -5556,9 +5799,9 @@
                                   ((not six) nil)
                                   ((= mode "Offsets") (list "Offsets" co))
                                   (t (list "Letters" w l1 l)))))
-        (pool:hopgrecdraw gg "POOL" six nil)
+        (pool:hopgrecdraw gg pool:*lay-pool* six nil)
         (setq odl (getvar "CLAYER"))
-        (setvar "CLAYER" "DIMENSION")
+        (setvar "CLAYER" pool:*lay-dim*)
         (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
                           (list 'phl 'phr nil (member 1 hfx))
                           (list 'phr 'pbrk nil (member 2 hfx))
@@ -6232,8 +6475,8 @@
   (if (= ptype "Rectangle")
       (setq arcs (pool:drawrect quad corners))
       (progn
-        (pool:line a b "POOL")
-        (pool:line c d "POOL")))
+        (pool:line a b pool:*lay-pool*)
+        (pool:line c d pool:*lay-pool*)))
 
   ;; -------------------------------------- exact two-triangle check
   ;; Computed only (needs the A-C cross dim -- skipped when it was NA);
@@ -6244,8 +6487,8 @@
   (if (and dac (not tri))
       (setq notes (cons "TRIANGLE CHECK IMPOSSIBLE - VERIFY MEASUREMENTS" notes)))
 
-  (setq doff (max 12.0 (/ (max bo tp le ri) 18.0))
-        th (max 3.0 (/ (max bo tp le ri) 70.0)))
+  (setq doff (max pool:*doff-min* (/ (max bo tp le ri) pool:*doff-div*))
+        th (max pool:*th-min* (/ (max bo tp le ri) pool:*th-div*)))
 
   ;; ------------------------------------------------ oval ends
   ;; The arcs are built from the resolved radii (sagitta off each end
@@ -6266,9 +6509,9 @@
               notes (append (nth 5 ores) notes)
               tipl (pool:v+ midl (pool:v* ml (caddr ores)))
               tipr (pool:v+ midr (pool:v* mr (cadddr ores))))
-        (pool:arc3p a tipl d "POOL")
+        (pool:arc3p a tipl d pool:*lay-pool*)
         (setq larc (entlast))
-        (pool:arc3p b tipr c "POOL")
+        (pool:arc3p b tipr c pool:*lay-pool*)
         (setq rarc (entlast))))
 
   ;; ------------------------------------------------ extents
@@ -6279,7 +6522,7 @@
         ymin (apply 'min (mapcar 'cadr allpts)))
 
   ;; ------------------------------------------------ dimensions
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" pool:*lay-dim*)
   (if (= ptype "Rectangle")
       ;; per the reference: only the northern and western perimeter
       ;; dims, hooked to the drawn wall (object-bounded) rather than to
@@ -6397,7 +6640,7 @@
                                                    (cadr (nth (cadr lbl) corners)) nil)))))))))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report
   (setq mprims (list (list 'l a b) (list 'l d c)))
   (if (= ptype "Oval")
@@ -6406,7 +6649,7 @@
       (setq mprims (append mprims (list (list 'l a d) (list 'l b c)))))
   (pool:minimap mprims quad
                 (list (cons a "A") (cons b "B") (cons c "C") (cons d "D"))
-                (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
+                (+ (car rbox) (* pool:*map-gap* th)) (cadr rbox) (* pool:*map-size* th) th)
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
@@ -6482,11 +6725,11 @@
   (pool:pvkill)
 
   (setq cen (list (* 0.5 b) (* 0.5 a))
-        doff (max 12.0 (/ (max b a) 18.0))
-        th (max 3.0 (/ (max b a) 70.0))
+        doff (max pool:*doff-min* (/ (max b a) pool:*doff-div*))
+        th (max pool:*th-min* (/ (max b a) pool:*th-div*))
         notes nil
         pool:*dashlt* (pool:ltload "DASHED"))
-  (pool:roundbody cen b a "POOL")
+  (pool:roundbody cen b a pool:*lay-pool*)
   (if (> (abs (- a b)) 1.0e-6)
       (princ "\nOut of square: the two overalls differ, so the pool is drawn as an ellipse.")
       (princ "\nIn square: A and B agree, so the pool is drawn as a true circle."))
@@ -6499,7 +6742,7 @@
         xmax b ymax a)
 
   ;; per the field sheet: B across the top, A up the left side
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" pool:*lay-dim*)
   (pool:dimalg tipl tipr (list (* 0.5 b) (+ a (* 1.4 doff))))
   (pool:dimalg (list (* 0.5 b) 0.0) (list (* 0.5 b) a)
                (list (- 0.0 (* 1.4 doff)) (* 0.5 a)))
@@ -6508,11 +6751,11 @@
   (setq rows (list (list "OV B" braw b) (list "OV A" araw a))
         rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))
   (setq notes (append notes pool:*valnotes*))
-  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; mini-model beside the report -- a round pool has no corner
   ;; letters, but the outline keeps the report set consistent
   (pool:minimap (list (list 'rb cen b a)) nil nil
-                (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
+                (+ (car rbox) (* pool:*map-gap* th)) (cadr rbox) (* pool:*map-size* th) th)
   (princ "\nPool layout complete -- see the report table.")
   (princ))
 
@@ -6768,26 +7011,26 @@
   ;; NOW, before the pool is drawn or the bottom letters asked, and
   ;; red in the report after
   (if (<= s1l 1.0e-6)
-      (progn (setq s1l (min 12.0 (* 0.125 araw)) vl (- araw s1l s1l) rombad t)
+      (progn (setq s1l (min pool:*fixfloor* (* 0.125 araw)) vl (- araw s1l s1l) rombad t)
              (pool:valnote "ROMAN S1 LEFT NOT POSITIVE - ADJUSTED")))
   (if (<= s1r 1.0e-6)
-      (progn (setq s1r (min 12.0 (* 0.125 araw)) vr (- araw s1r s1r) rombad t)
+      (progn (setq s1r (min pool:*fixfloor* (* 0.125 araw)) vr (- araw s1r s1r) rombad t)
              (pool:valnote "ROMAN S1 RIGHT NOT POSITIVE - ADJUSTED")))
   (if (<= vl 1.0e-6)
-      (progn (setq vl (min 12.0 (* 0.5 araw)) s1l (/ (- araw vl) 2.0) rombad t)
+      (progn (setq vl (min pool:*fixfloor* (* 0.5 araw)) s1l (/ (- araw vl) 2.0) rombad t)
              (pool:valnote "ROMAN S1 + V + S1 LEFT DOES NOT FIT A - ADJUSTED")))
   (if (<= vr 1.0e-6)
-      (progn (setq vr (min 12.0 (* 0.5 araw)) s1r (/ (- araw vr) 2.0) rombad t)
+      (progn (setq vr (min pool:*fixfloor* (* 0.5 araw)) s1r (/ (- araw vr) 2.0) rombad t)
              (pool:valnote "ROMAN S1 + V + S1 RIGHT DOES NOT FIT A - ADJUSTED")))
   (if (<= sl 1.0e-6)
-      (progn (setq sl (min 12.0 (/ braw 8.0)) rombad t)
+      (progn (setq sl (min pool:*fixfloor* (/ braw 8.0)) rombad t)
              (pool:valnote "ROMAN S LEFT NOT POSITIVE - ADJUSTED")))
   (if (<= sr 1.0e-6)
-      (progn (setq sr (min 12.0 (/ braw 8.0)) rombad t)
+      (progn (setq sr (min pool:*fixfloor* (/ braw 8.0)) rombad t)
              (pool:valnote "ROMAN S RIGHT NOT POSITIVE - ADJUSTED")))
   (if (<= (setq tv (- braw sl sr)) 1.0e-6)
       (progn
-        (setq tv (min 12.0 (* 0.25 braw))
+        (setq tv (min pool:*fixfloor* (* 0.25 braw))
               sl (/ (- braw tv) 2.0) sr sl rombad t)
         (pool:valnote "ROMAN S + T + S DOES NOT FIT B - ADJUSTED")))
   (princ))
@@ -6842,18 +7085,18 @@
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         meas (pool:quadmeas quad)
         notes nil
-        doff (max 12.0 (/ (max tv araw) 18.0))
-        th (max 3.0 (/ (max tv araw) 70.0))
+        doff (max pool:*doff-min* (/ (max tv araw) pool:*doff-div*))
+        th (max pool:*th-min* (/ (max tv araw) pool:*th-div*))
         pool:*dashlt* (pool:ltload "DASHED"))
   ;; sides run between the corner-treatment ends (the true corners
   ;; when the corners are square); the dashed body chords stay on the
   ;; true corners -- they are construction, not walls
   (setq rce (pool:ringends quad rcs))
-  (pool:line (cadr (nth 0 rce)) (car (nth 1 rce)) "POOL")
-  (pool:line (cadr (nth 2 rce)) (car (nth 3 rce)) "POOL")
+  (pool:line (cadr (nth 0 rce)) (car (nth 1 rce)) pool:*lay-pool*)
+  (pool:line (cadr (nth 2 rce)) (car (nth 3 rce)) pool:*lay-pool*)
   (pool:lined b c)
   (pool:lined d a)
-  (setq rcarcs (pool:ringarcs rce rcs "POOL"))
+  (setq rcarcs (pool:ringarcs rce rcs pool:*lay-pool*))
   (setq ml (pool:unit (pool:perp (pool:v- d a))))
   (if (< (pool:dot (pool:v- (pool:mid a d) cen) ml) 0.0)
       (setq ml (pool:v* ml -1.0)))
@@ -6862,8 +7105,8 @@
       (setq mr (pool:v* mr -1.0)))
   ;; the S1 stubs spring from the treatment ends down the end lines
   ;; (ePrev at A and C, eNext at B and D -- the stub side of each)
-  (setq lend (pool:romend a d (car (nth 0 rce)) (cadr (nth 3 rce)) ml sl vl "POOL")
-        rend (pool:romend b c (cadr (nth 1 rce)) (car (nth 2 rce)) mr sr vr "POOL")
+  (setq lend (pool:romend a d (car (nth 0 rce)) (cadr (nth 3 rce)) ml sl vl pool:*lay-pool*)
+        rend (pool:romend b c (cadr (nth 1 rce)) (car (nth 2 rce)) mr sr vr pool:*lay-pool*)
         tipl (car lend) tipr (car rend))
 
   ;; dims
@@ -6872,7 +7115,7 @@
         xmax (apply 'max (mapcar 'car allpts))
         ymax (apply 'max (mapcar 'cadr allpts))
         ymin (apply 'min (mapcar 'cadr allpts)))
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" pool:*lay-dim*)
   (if pool:*insq*
       ;; in-square, per the field sheet: S+T+S share a row along the
       ;; top with B outboard of them (S shows at BOTH ends), and
@@ -6973,7 +7216,7 @@
   (setq rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report:
   ;; the two sides, the S1 stubs and the end arcs
   (pool:minimap
@@ -6984,7 +7227,7 @@
           (list 'a (cadr rend) tipr (caddr rend)))
     quad
     (list (cons a "A") (cons b "B") (cons c "C") (cons d "D"))
-    (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
+    (+ (car rbox) (* pool:*map-gap* th)) (cadr rbox) (* pool:*map-size* th) th)
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
@@ -7027,11 +7270,11 @@
            v (- aov s1 s1))
      (if (<= v 1.0e-6)
          (progn
-           (setq s1 (min 12.0 (* 0.125 aov)) v (- aov s1 s1) bad t)
+           (setq s1 (min pool:*fixfloor* (* 0.125 aov)) v (- aov s1 s1) bad t)
            (pool:valnote (strcat nm " END S1 + V + S1 DOES NOT FIT A - ADJUSTED"))))
      (if (<= s 1.0e-6)
          (progn
-           (setq s (min 12.0 (/ bov 8.0)) bad t)
+           (setq s (min pool:*fixfloor* (/ bov 8.0)) bad t)
            (pool:valnote (strcat nm " END S NOT POSITIVE - ADJUSTED"))))
      (list 0.0 s s1 v nil bad))
     ((= style "ROman")
@@ -7039,7 +7282,7 @@
            s1 (car res) v (cadr res))
      (if (<= v 1.0e-6)
          (progn
-           (setq s1 (min 12.0 (* 0.125 aov)) v (- aov s1 s1) bad t)
+           (setq s1 (min pool:*fixfloor* (* 0.125 aov)) v (- aov s1 s1) bad t)
            (pool:valnote (strcat nm " END S1 + V + S1 DOES NOT FIT A - ADJUSTED"))))
      (setq s (cond
                (sraw sraw)
@@ -7048,7 +7291,7 @@
                (t (/ bov 8.0))))
      (if (<= s 1.0e-6)
          (progn
-           (setq s (min 12.0 (/ bov 8.0)) bad t)
+           (setq s (min pool:*fixfloor* (/ bov 8.0)) bad t)
            (pool:valnote (strcat nm " END S NOT POSITIVE - ADJUSTED"))))
      (list s 0.0 s1 v rraw bad))
     ((= style "Oval")
@@ -7374,7 +7617,7 @@
           tv (- braw extl extr))
     (if (<= (- tv insl insr) 1.0e-6)
         (progn
-          (setq tv (+ insl insr (min 12.0 (* 0.25 braw))) muttbad t)
+          (setq tv (+ insl insr (min pool:*fixfloor* (* 0.25 braw))) muttbad t)
           (pool:valnote "MUTT ENDS DO NOT FIT B - BODY ADJUSTED")))
     (princ))
 
@@ -7488,8 +7731,8 @@
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         meas (pool:quadmeas quad)
         notes nil
-        doff (max 12.0 (/ (max braw araw) 18.0))
-        th (max 3.0 (/ (max braw araw) 70.0))
+        doff (max pool:*doff-min* (/ (max braw araw) pool:*doff-div*))
+        th (max pool:*th-min* (/ (max braw araw) pool:*th-div*))
         pool:*dashlt* (pool:ltload "DASHED")
         uab (pool:unit (pool:v- b a))
         udc (pool:unit (pool:v- c d)))
@@ -7512,16 +7755,16 @@
         pdc0 (pool:v+ d (pool:v* udc insl))
         pdc1 (pool:v- c (pool:v* udc insr)))
   (pool:line (pool:v+ (cadr (nth 0 mce)) (pool:v* uab insl))
-             (pool:v- (car (nth 1 mce)) (pool:v* uab insr)) "POOL")
+             (pool:v- (car (nth 1 mce)) (pool:v* uab insr)) pool:*lay-pool*)
   (pool:line (pool:v+ (car (nth 3 mce)) (pool:v* udc insl))
-             (pool:v- (cadr (nth 2 mce)) (pool:v* udc insr)) "POOL")
+             (pool:v- (cadr (nth 2 mce)) (pool:v* udc insr)) pool:*lay-pool*)
   (setq lend (pool:muttend a d pab0 pdc0
                            (car (nth 0 mce)) (cadr (nth 3 mce)) ml dstyle
-                           (caddr dres) (nth 3 dres) extl "POOL")
+                           (caddr dres) (nth 3 dres) extl pool:*lay-pool*)
         rend (pool:muttend b c pab1 pdc1
                            (cadr (nth 1 mce)) (car (nth 2 mce)) mr sstyle
-                           (caddr sres) (nth 3 sres) extr "POOL")
-        mcarcs (pool:ringarcs mce mcs "POOL")
+                           (caddr sres) (nth 3 sres) extr pool:*lay-pool*)
+        mcarcs (pool:ringarcs mce mcs pool:*lay-pool*)
         tipl (car lend) tipr (car rend))
 
   ;; -------- extents / dims
@@ -7530,7 +7773,7 @@
         xmax (apply 'max (mapcar 'car allpts))
         ymax (apply 'max (mapcar 'cadr allpts))
         ymin (apply 'min (mapcar 'cadr allpts)))
-  (setvar "CLAYER" "DIMENSION")
+  (setvar "CLAYER" pool:*lay-dim*)
   (if pool:*insq*
       ;; field-sheet set: each end's letters where its home sheet puts
       ;; them -- S row + top side under B along the top, S1/V columns
@@ -7661,7 +7904,7 @@
   (setq rows (append rows (pool:hopmuttdsp quad tipl tipr doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
-  (setq rbox (pool:report rows notes (+ xmax (* 2.0 doff)) ymax th "POOL-NOTES"))
+  (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the
   ;; report: sides + each end in its own style
   (pool:minimap
@@ -7670,7 +7913,7 @@
             (pool:muttmmend sstyle b c pab1 pdc1 rend tipr))
     quad
     (list (cons a "A") (cons b "B") (cons c "C") (cons d "D"))
-    (+ (car rbox) (* 3.0 th)) (cadr rbox) (* 24.0 th) th)
+    (+ (car rbox) (* pool:*map-gap* th)) (cadr rbox) (* pool:*map-size* th) th)
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
@@ -7845,9 +8088,9 @@
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
-  (pool:layer "POOL" 4)
-  (pool:layer "DIMENSION" 2)
-  (pool:layer "POOL-NOTES" 3)
+  (pool:layer pool:*lay-pool*  pool:*col-pool*)
+  (pool:layer pool:*lay-dim*   pool:*col-dim*)
+  (pool:layer pool:*lay-notes* pool:*col-notes*)
 
   ;; dashed linetype up front so the guide's cross dims draw dashed
   ;; patterns are defined in inches and scaled to cancel LTSCALE, so

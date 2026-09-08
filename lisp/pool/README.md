@@ -1306,13 +1306,54 @@ from the given lengths) and the angle search repeats. The lengths and
 angle actually used are reported; if nothing fits, the end is drawn at
 45° with the given lengths and flagged as failed in the report.
 
-## Tolerance constants
+## Tunables
 
-At the top of the file, all in drawing units (inches):
+**Every knob the routine has is in one block at the top of
+`POOL.LSP`**, under `ADJUSTABLE CONSTANTS`. Each one is written *once*:
+change a value there and every place that reads it follows, so nothing
+can be retuned in one spot and left behind in another. Each group in
+the block says what it controls and what moves when it changes; what
+follows is the map.
 
-```lisp
-(setq pool:*side-tol*  1.0)     ; side length tolerance
-(setq pool:*cross-tol* 2.0)     ; cross dimension tolerance
-(setq pool:*grec-step* 0.125)   ; Grecian diagonal adjustment increment
-(setq pool:*grec-max*  4)       ; max increments each way (= 1/2")
-```
+Numbers still appear in the code below, and a few happen to equal a
+knob above — a `0.5` that halves a span is not the same `0.5` as a
+callout offset. Those are arithmetic local to one formula, not
+settings, so retune by editing the named constant rather than by
+searching for its value.
+
+| Group | What it sets |
+| --- | --- |
+| field tolerances | how far the drawn pool may sit off the tape before the report calls it a failure (`*side-tol*` 1", `*cross-tol*` 2", the Grecian diagonal step and its limit), plus `*capfuzz*` — see below |
+| layers and colours | `POOL` / `DIMENSION` / `POOL-NOTES` and the colour each is created with; the red a validator-adjusted measurement is painted |
+| linetypes | the dashed and dotted patterns, defined in inches and scaled to cancel `LTSCALE` |
+| dimension styles | `STANDARD INCHES`, `CROSS DIMENSIONS`, `SIDE STANDARD`, and the under-24" cut-over |
+| drawing furniture | how the dimension stand-off `doff` and the note height `th` are sized off the pool — a floor and a divisor each |
+| corner marks | the circled 90 mark, the `?` and `Not Given` note, and how far a radius or cut callout is dragged out |
+| bottom chains | where the H/G/F/E and M/L/K dimension lines sit |
+| report and mini-model | row pitch, column positions (a second set for feet-inch reports, which run wider), the table's distance from the pool, the mini-model's size |
+| guide preview | the three guide colours, the nominal Grecian and Octagon rings, and how far the guide has to move before the view follows it |
+| fitting engine | relaxation sweep counts, the four-bar angle scan, the Grecian end solver's step and its accept-within, and the slack that stops a fit landing a thousandth outside its band being reported as a failure |
+| suggestions | the 2:1 length-to-width ratio the width question is offered at, the quarter-inch a derived letter is quoted to, and the floor a letter that will not close is lifted to |
+
+Three kinds of thing are deliberately **not** in that block, and the
+block says so: run state (set and cleared by a run, not tuned), the
+shape index tables (which corner joins which — editing one describes a
+different pool, it does not retune this one), and the bare `1.0e-6`
+guards inside the geometry, which are float noise rather than
+measurements.
+
+### `pool:*capfuzz*`
+
+A corner treatment is capped at half the shorter wall it sits on, so
+two treatments can never overlap and fold the perimeter. That cap is
+compared against a setback the routine **works out** rather than the
+number the crew typed: a radius becomes `r / tan(angle/2)`, and at a
+true 90° corner `cos(45°)/sin(45°)` is `1.0000000000000002` in floating
+point, not `1`. So a 120" radius on a 240"-wide pool — the full-round
+end a crew really does draw — measured `120.00000000000003` against a
+cap of `120`, was refused as too large, and the maximum the prompt then
+printed (`120`) failed the very same test: a question that could not be
+answered with the number it showed you. `*capfuzz*` is a millionth of
+an inch of slack on that comparison — orders below the 1/16" a tape
+reads, so no real measurement changes hands and a treatment still
+cannot overrun its wall.
