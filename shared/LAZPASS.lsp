@@ -13922,7 +13922,7 @@
 ;;; ever changing tangent, which is why the whole thing can be given as a
 ;;; handful of radii and two overall dimensions.
 ;;;
-;;; Four families come out of that, and the first question is which:
+;;; Five families come out of that, and the first question is which:
 ;;;
 ;;;   Center    three bulges -- left, right and one across the top,
 ;;;             centred -- joined by three reverse arcs.
@@ -13933,6 +13933,10 @@
 ;;;             sit INSIDE the big top circle, touching it from within,
 ;;;             and the outline hands straight over at each touch --
 ;;;             a SEAM, the one joint with nothing drawn between.
+;;;   NXTcloud  three lobes and four fillets, and the one shape whose
+;;;             ring meets a bulge TWICE: the centre lobe is walked
+;;;             under on the way out and over on the way back, so eight
+;;;             elements are cut from seven circles.
 ;;;
 ;;; The two families that come two ways get a second question of their
 ;;; own, asked straight after.  A cloud is one shape with two bottoms:
@@ -13943,7 +13947,7 @@
 ;;; touch it; on an ASYMMETRIC one the two unequal sides are given and
 ;;; the top circle is derived -- tangent to the top bound and both
 ;;; sides, its centre landing wherever those three contacts put it.
-;;; The pair of answers together names one of six rings.
+;;; The pair of answers together names one of seven rings.
 ;;;
 ;;;                        top bulge
 ;;;                      ___________                  ___________
@@ -14126,61 +14130,225 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.5")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.6")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
 ;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafting office might reasonably want different is set
+;; HERE and nowhere else: the code below reads these names and carries
+;; no bare numbers of its own.  Each knob says what CHANGING it does.
+;; Change a value, save, APPLOAD again -- or (setq oasis:*name* value)
+;; at the command line for one session; nothing below caches one.  Every
+;; one of them is a row in README.md's Tunables table, and
+;; tests/test_tunables.py holds the two together.
+;;
+;; Distances are in drawing units throughout, and a survey arrives in
+;; inches, so read them as inches unless the drawing says otherwise.
+;;
+;; They are grouped the way a run uses them: where it draws, what shape
+;; it starts from, what the preview opens on, how big the annotation is,
+;; what the pool bottom offers, and how much slack a comparison gets.
 
-(setq oasis:*poollayer*  "POOL")       ; the six arcs
+;; ---- where the output goes ---------------------------------------------
+
+;; The three layers, created if the drawing has not got them and thawed,
+;; unlocked and switched back on if it has -- a run onto a frozen layer
+;; otherwise looks like the command did nothing.  The colour beside each
+;; is used only when the layer is CREATED; a layer the drawing already
+;; has keeps its own.  *hicolor* is the odd one out: it is forced onto
+;; the circle a question is about, every time, so it reads as the answer
+;; being asked for rather than as part of the drawing.
+(setq oasis:*poollayer*  "POOL")       ; the arcs, and the pool bottom
 (setq oasis:*poolcolor*  4)
-(setq oasis:*dimlayer*   "DIMENSION")  ; every dimension
+(setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
 (setq oasis:*guidecolor* 8)
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
-;; Where a Center pool's top bulge sits across the X bound, as a fraction
-;; of it.  0.5 centres it, which is what every one on file wants; the
-;; value is here so an off-centre one does not need the file edited.
-(setq oasis:*topfrac* 0.5)
-
-;; The pool bottom.  The offset the hopper question offers first, the
-;; number of chords a guided slope line is drawn with, and how finely the
-;; deepest point of the offset ring is looked for.
-(setq oasis:*hopoff*   18.0)
-(setq oasis:*hopchord* 24)
-(setq oasis:*hopscan*  720)
-
-;; Slack for "is this the same point / the same length" tests, drawing
-;; units.  Measurements arrive in inches, so this is far below anything
-;; a tape can tell apart.
-(setq oasis:*fuzz* 1.0e-6)
-
 ;; Two styles, because the two drawings are read differently: the pool
 ;; itself is a plan and is dimensioned in the drawing's ordinary style,
 ;; while the check drawing beside it is nothing but tie measurements and
 ;; goes in the cross-dimension style, same as every other cross dim in
-;; the repo.  A drawing that has not got one of them is told so once and
-;; those dims come out in whatever style is current -- an invented style
-;; would look right and measure wrong.
+;; the repo.  Name a style the drawing has not got and those dims come
+;; out in whatever is current, with the routine saying so once -- an
+;; invented style would look right and measure wrong.
 (setq oasis:*dimstyle*   "Standard")           ; the pool's own dims
 (setq oasis:*crossstyle* "CROSS DIMENSIONS")   ; the check drawing's
 
-;; The check drawing sits this far to the right of the pool, measured
+;; How far to the right of the pool the check drawing sits, measured
 ;; from the pool's own right-hand bound, as a multiple of the dimension
-;; stand-off.  Big enough to clear the radius dims on that side.
+;; stand-off.  Raise it if the radius dims on that side ever reach it.
 (setq oasis:*checkgap* 4.0)
 
-;; The shape the preview starts from, before any radius has been given:
-;; how far across the envelope a side bulge and the top bulge usually
-;; reach, as fractions.  Three quarters of the short bound and half the
-;; long one is what an oasis normally comes in, so the first question is
-;; already looking at something familiar.
+;; ---- the shape itself --------------------------------------------------
+
+;; Where a Center pool's top bulge sits across the X bound, as a
+;; fraction of it.  0.5 centres the hump, which is what every pool on
+;; file wants; move it and every simple Center run draws the hump off
+;; centre.  (A COMPLEX run says it per-pool instead, by answering the
+;; placement question, so this is only the default.)
+(setq oasis:*topfrac* 0.5)
+
+;; ---- the shape the preview opens on ------------------------------------
+
+;; A radius not answered yet still needs a value for the preview to be
+;; drawable at all, so the gaps are filled with the proportions an oasis
+;; usually comes in and every invented one is labelled "?".  Change any
+;; of these and the FIRST question looks at a different starting shape;
+;; nothing that ends up drawn depends on one.
+;;
+;; A side bulge and the top bulge, as fractions of the bound each is
+;; measured across -- HALVED in use, because a bulge is twice its radius
+;; across.  Three quarters of the short bound and half the long one puts
+;; a 40 x 20 at 7'-6" side bulges and a 10'-0" top, against the 8'/9'
+;; and 11' of the drawing this tool was written from.
 (setq oasis:*startside* 0.75)
 (setq oasis:*starttop*  0.5)
 
-;;; -------------------- the four shapes ----------------------------------
+;; A joiner has no rule of thumb of its own -- what looks right depends
+;; entirely on the bulges either side of it -- so it is sized off them.
+;; Lower *startjoin* for shallower reverse curves; it is a fraction of
+;; the SMALLEST neighbouring bulge, which is what keeps the bulges the
+;; bigger circles and so keeps the picture reading as a pool.  A cloud's
+;; bottom is the exception: it sweeps under the whole pool, so it takes
+;; *startbig* of the LARGEST bulge instead.
+(setq oasis:*startjoin* 0.6)
+(setq oasis:*startbig*  1.2)
+
+;; ...and whichever of those two it is, it is then lifted to at least
+;; this multiple of its own minimum.  Keep it above 1.0: below that
+;; minimum there is no fillet at all, oasis:solve gives back nil, and
+;; the first radius question is put with an empty box on screen.  The
+;; margin over 1.0 is what keeps a barely buildable ring from opening
+;; looking pinched.
+(setq oasis:*startclear* 1.25)
+
+;; The two kidneys, whose provisionals cannot be read off neighbours
+;; because the shape derives half of itself: a TRUE kidney's top circle
+;; as a multiple of the smallest one that reaches both sides, and an
+;; ASYMMETRIC kidney's two given sides as fractions of the short bound.
+;; Keep those two unequal -- an asymmetric kidney whose preview opened
+;; symmetric would be showing the wrong shape.
+(setq oasis:*startktop*   1.5)
+(setq oasis:*startkleft*  0.40)
+(setq oasis:*startkright* 0.45)
+
+;; The side radius a true kidney's bottom joiner is sized against when
+;; the derivation has no answer at all.  Every top circle the questions
+;; admit does have one, so changing this changes nothing you can reach;
+;; it is here because a bare number in the middle of the provisionals
+;; would not be, and because a nil arriving at arithmetic is how a
+;; preview dies rather than draws.
+(setq oasis:*startkside* 48.0)
+
+;; ---- how big the annotation is -----------------------------------------
+
+;; All of it scales off the pool, so a 10-foot spa and a 40-foot pool
+;; are annotated to LOOK the same rather than to measure the same.  Each
+;; pair below is a floor under the result and a divisor of the longer
+;; bound: raise a divisor for smaller annotation, raise a floor to keep
+;; a small pool readable.
+;;
+;; The dimension stand-off, which is how far off the pool the overall
+;; dims sit.  This is POOL's own rule and is a knob here only so it can
+;; be kept in step with POOL: an oasis dimensioned beside a rectangle
+;; has to read at the same offset, so move these only together with
+;; POOL's own (pool:dimoff, lisp/pool/POOL.LSP).
+(setq oasis:*dimoffmin* 12.0)
+(setq oasis:*dimoffdiv* 18.0)
+
+;; How far a radius dimension's text is dragged off its own arc, as a
+;; fraction of that stand-off -- away from the centre on a bulge and
+;; towards it on a reverse arc, whose centre is itself outside the pool,
+;; so both land clear of the water.  Raise it to pull the text further
+;; out; at 0 the text sits on the arc.
+(setq oasis:*radiusdrag* 0.9)
+
+;; The dashed guide linetype, built rather than loaded from acad.lin (a
+;; failed load falls back to CONTINUOUS in silence, which is how dashes
+;; vanish).  Dash and gap are equal; lower *dashdiv* for a coarser dash.
+(setq oasis:*dashmin* 2.0)
+(setq oasis:*dashdiv* 40.0)
+
+;; The preview's radius labels: how tall the text is, and how far out
+;; from its own arc it sits, in text heights, along the direction that
+;; leads out of the water.  Raise the gap if a label ever sits on the
+;; outline it belongs to.
+(setq oasis:*pvtextdiv* 28.0)
+(setq oasis:*pvtextgap* 1.7)
+
+;; The little circle the check drawing marks each centre with.
+(setq oasis:*markmin* 1.0)
+(setq oasis:*markdiv* 90.0)
+
+;; The numbered marks the pool-bottom flow puts on every change of
+;; tangency, so one can be named: the mark's own radius, the number's
+;; text height, and how far outside the water that number sits, in text
+;; heights.  Raise the gap on a pool whose numbers crowd the outline.
+(setq oasis:*tangmarkdiv* 150.0)
+(setq oasis:*tangtextdiv* 34.0)
+(setq oasis:*tangtextgap* 1.6)
+
+;; ---- the pool bottom ---------------------------------------------------
+
+;; The hopper offset the question opens on when a session has not yet
+;; had an answer accepted.  After that the session's own last answer is
+;; what it offers, because a job's pools share a hopper -- that memory
+;; is oasis:*hopoff-last*, which is state and lives with the rest of it
+;; rather than here.  Change this one to move where a fresh session
+;; starts.
+(setq oasis:*hopoff* 18.0)
+
+;; How many chords a GUIDED slope line is drawn with.  It follows the
+;; wall with its offset easing away to nothing, so there is no exact
+;; curve to draw and it goes down as a polyline: more chords is a
+;; smoother line and a heavier drawing.
+(setq oasis:*hopchord* 24)
+
+;; How finely the deepest point of the offset ring is looked for, in
+;; samples round the whole ring.  Only the deep end's LOCATION comes off
+;; this scan -- every point actually drawn is solved exactly -- so
+;; raising it buys robustness on a lumpy outline, not precision.
+(setq oasis:*hopscan* 720)
+
+;; ---- slack, and the loop guards ----------------------------------------
+
+;; Slack for "is this the same point / the same length" tests, in
+;; drawing units.  Measurements arrive in inches, so this is far below
+;; anything a tape can tell apart; raise it only for a drawing whose
+;; units are much coarser than inches.
+(setq oasis:*fuzz* 1.0e-6)
+
+;; The tighter slack the check drawing dedupes its tie measurements
+;; with.  Two ties wanted between the same pair of centres are one tie,
+;; and the pair is compared as COORDINATES rather than as a distance --
+;; a centre is either the one already tied or a different one, with no
+;; near-miss in between -- so this is an equality test and takes
+;; equality's tolerance rather than the tape's.
+(setq oasis:*ptfuzz* 1.0e-8)
+
+;; How far out of the world plan the current UCS may lie and still count
+;; as flat.  A DIRECTION COSINE, not a length: it compares the UCS Z
+;; axis against the world Z, so it does not scale with the drawing and
+;; has nothing to do with *fuzz*.  A UCS past it is refused outright --
+;; the arcs would each need an extrusion of their own, and a plan pool
+;; has no business in one.
+(setq oasis:*ucsfuzz* 1.0e-8)
+
+;; Two belt-and-braces loop limits, neither reached by any input the
+;; questions admit: they are here so a bug upstream costs a wrong
+;; drawing rather than a hung AutoCAD.  *cmdguard* is how many empty
+;; (command) calls the error handler will send to drain a dimension left
+;; pending by an Esc; *ringguard* is how many elements the sub-ring
+;; walker may cross, as a multiple of the ring's own length.  Lower
+;; either and a legitimate run could be cut short.
+(setq oasis:*cmdguard*  10)
+(setq oasis:*ringguard* 4)
+
+;;; -------------------- the five shapes ----------------------------------
 ;;; Every one of them is a ring of BULGES -- circles pinned to the
 ;;; envelope -- with a JOINER between each consecutive pair.  A joiner is
 ;;; either a reverse arc of a radius the user gives, or, when both bulges
@@ -14240,12 +14408,12 @@
 (defun oasis:complex-p (ans)
   (= (nth 11 ans) "Complex"))
 
-;; The shape, resolved.  The first question offers four families --
-;; Center, TopRight, Cloud and Kidney -- and the two families that come
-;; two ways get a second question of their own, asked straight after: a
-;; cloud is one shape with two bottoms, a kidney one shape whose sides
-;; are either matched or not.  The pair of answers together names one of
-;; the six rings.
+;; The shape, resolved.  The first question offers five families --
+;; Center, TopRight, Cloud, Kidney and NXTcloud -- and the two families
+;; that come two ways get a second question of their own, asked straight
+;; after: a cloud is one shape with two bottoms, a kidney one shape
+;; whose sides are either matched or not.  The pair of answers together
+;; names one of the seven rings.
 (defun oasis:variant (ans)
   (cond ((= (nth 0 ans) "Cloud")
          (if (= (nth 10 ans) "Rounded") "RoundedBottom" "StraightBottom"))
@@ -14647,7 +14815,7 @@
 ;; The dash pattern the guide circles are drawn with, scaled to the pool
 ;; so it reads the same on a 10-foot spa and a 40-foot pool.
 (defun oasis:dashlt (w h / d)
-  (setq d (max 2.0 (/ (max w h) 40.0)))
+  (setq d (max oasis:*dashmin* (/ (max w h) oasis:*dashdiv*)))
   (oasis:ltmake "OASISDASH" "Oasis guide __ __ __ __" (list d (- 0.0 d))))
 
 ;;; -------------------- layers ------------------------------------------
@@ -15162,7 +15330,7 @@
 ;; parallel to the world Z.  Every plan-drafting UCS is.
 (defun oasis:ucs-flat-p ( / z)
   (setq z (trans '(0.0 0.0 1.0) 1 0 T))
-  (< (abs (- (abs (caddr z)) 1.0)) 1.0e-8))
+  (< (abs (- (abs (caddr z)) 1.0)) oasis:*ucsfuzz*))
 
 ;; How far the current UCS is turned from the world X axis.  Read off the
 ;; components rather than with (angle ...), which projects onto the UCS
@@ -15206,7 +15374,7 @@
 ;; How far off the pool the dimensions sit.  POOL's rule, so an oasis
 ;; drawn beside a rectangle is dimensioned at the same stand-off.
 (defun oasis:dimoff (w h)
-  (max 12.0 (/ (max w h) 18.0)))
+  (max oasis:*dimoffmin* (/ (max w h) oasis:*dimoffdiv*)))
 
 ;; The midpoint of an arc, and the direction out of the pool there.
 ;; On a bulge that is away from the centre; on a reverse arc it is
@@ -15297,11 +15465,15 @@
       ((oasis:line-p a)
        (command "_.DIMALIGNED"
                 (oasis:wp (nth 1 a) base) (oasis:wp (nth 2 a) base)
-                (oasis:wp (polar (car md) (cdr md) (* 0.9 doff)) base)))
+                (oasis:wp (polar (car md) (cdr md)
+                                 (* oasis:*radiusdrag* doff))
+                          base)))
       (t
        (command "_.DIMRADIUS"
                 (list e (oasis:wp (car md) base))
-                (oasis:wp (polar (car md) (cdr md) (* 0.9 doff)) base)))))
+                (oasis:wp (polar (car md) (cdr md)
+                                 (* oasis:*radiusdrag* doff))
+                          base)))))
   (princ))
 
 ;;; -------------------- the check drawing --------------------------------
@@ -15343,8 +15515,8 @@
   ;; otherwise be tied to itself, which is a dimension of nothing
   (setq hit (< (distance p q) oasis:*fuzz*))
   (foreach e ties
-    (if (or (and (equal (car e) p 1e-8) (equal (cadr e) q 1e-8))
-            (and (equal (car e) q 1e-8) (equal (cadr e) p 1e-8)))
+    (if (or (and (equal (car e) p oasis:*ptfuzz*) (equal (cadr e) q oasis:*ptfuzz*))
+            (and (equal (car e) q oasis:*ptfuzz*) (equal (cadr e) p oasis:*ptfuzz*)))
         (setq hit T)))
   (if hit ties (append ties (list (list p q)))))
 
@@ -15365,7 +15537,7 @@
   (oasis:dimstyle-on oasis:*crossstyle*)
   (setvar "CLAYER" oasis:*guidelayer*)
   (oasis:pv-box w h cbase lt)
-  (setq mark (max 1.0 (/ (max w h) 90.0)))
+  (setq mark (max oasis:*markmin* (/ (max w h) oasis:*markdiv*)))
   ;; the outline itself, so the centres have something to belong to
   (oasis:draw arcs cbase oasis:*poollayer*)
   (setvar "CLAYER" oasis:*guidelayer*)
@@ -15476,18 +15648,18 @@
               rl   (cond ((nth 4 ans)) (side))
               rt   (cond ((nth 5 ans)) (side))
               rr   (cond ((nth 6 ans)) (side))
-              g    (* 0.6 (min rl rt rr))
+              g    (* oasis:*startjoin* (min rl rt rr))
               ca   (oasis:nxtcen w h rl 0)
               cd   (oasis:nxtcen w h rt 1)
               cg   (oasis:nxtcen w h rr 2))
         (list w h rl rt rr
-              (cond ((nth 7 ans))  ((max g (* 1.25 (oasis:filmin cd rt
+              (cond ((nth 7 ans))  ((max g (* oasis:*startclear* (oasis:filmin cd rt
                                                                  ca rl)))))
-              (cond ((nth 8 ans))  ((max g (* 1.25 (oasis:filmin cg rr
+              (cond ((nth 8 ans))  ((max g (* oasis:*startclear* (oasis:filmin cg rr
                                                                  cd rt)))))
-              (cond ((nth 9 ans))  ((max g (* 1.25 (oasis:filmin ca rl
+              (cond ((nth 9 ans))  ((max g (* oasis:*startclear* (oasis:filmin ca rl
                                                                  cd rt)))))
-              (cond ((nth 13 ans)) ((max g (* 1.25 (oasis:filmin cd rt
+              (cond ((nth 13 ans)) ((max g (* oasis:*startclear* (oasis:filmin cd rt
                                                                  cg rr)))))
               0.0))
   (if (oasis:kidney-p var)
@@ -15498,13 +15670,13 @@
       ;; sides the way every joiner is
       (progn
         (setq rt (if (= var "TrueKidney")
-                     (cond ((nth 5 ans)) ((* 1.5 (oasis:ktrue-min w h)))))
+                     (cond ((nth 5 ans)) ((* oasis:*startktop* (oasis:ktrue-min w h)))))
               rl (if (= var "AsymKidney")
-                     (cond ((nth 4 ans)) ((* 0.40 (min w h)))))
+                     (cond ((nth 4 ans)) ((* oasis:*startkleft* (min w h)))))
               rr (if (= var "AsymKidney")
-                     (cond ((nth 6 ans)) ((* 0.45 (min w h)))))
+                     (cond ((nth 6 ans)) ((* oasis:*startkright* (min w h)))))
               g  (if (= var "TrueKidney")
-                     (cond ((oasis:ktrue-side w h rt)) (48.0))
+                     (cond ((oasis:ktrue-side w h rt)) (oasis:*startkside*))
                      (min rl rr))
               ;; the two circles the bottom joiner will actually span --
               ;; the matching pair derived on a true kidney, the two given
@@ -15519,8 +15691,8 @@
               ;; the preview would have nothing to draw until the very
               ;; last question was answered
               (cond ((nth 9 ans))
-                    ((max (* 0.6 g)
-                          (* 1.25 (oasis:filmin cl gl cr gr)))))
+                    ((max (* oasis:*startjoin* g)
+                          (* oasis:*startclear* (oasis:filmin cl gl cr gr)))))
               nil off))
       (progn
   (setq side (* 0.5 oasis:*startside* (min w h))
@@ -15539,21 +15711,23 @@
         ;; A cloud's bottom is the exception: it sweeps under the whole
         ;; pool, so it is read off the biggest bulge rather than the
         ;; smallest.
-        g    (* 0.6 (min rl rr (cond (rt) (rl))))
-        big  (* 1.2 (max rl rr (cond (rt) (rl))))
+        g    (* oasis:*startjoin* (min rl rr (cond (rt) (rl))))
+        big  (* oasis:*startbig* (max rl rr (cond (rt) (rl))))
         cl   (list rl rl)
         ct   (if rt (oasis:topcen w h rt var off))
         cr   (list (- w rr) rr))
   (list w h rl rt rr
         (cond ((nth 7 ans))
-              ((oasis:cloud-p var) (max g (* 1.25 (oasis:filmin cr rr cl rl))))
-              ((max g (* 1.25 (oasis:filmin ct rt cl rl)))))
+              ((oasis:cloud-p var)
+               (max g (* oasis:*startclear* (oasis:filmin cr rr cl rl))))
+              ((max g (* oasis:*startclear* (oasis:filmin ct rt cl rl)))))
         (cond ((nth 8 ans))
               ((oasis:cloud-p var) nil)
-              ((max g (* 1.25 (oasis:filmin cr rr ct rt)))))
+              ((max g (* oasis:*startclear* (oasis:filmin cr rr ct rt)))))
         (cond ((nth 9 ans))
-              ((oasis:cloud-p var) (max big (* 1.25 (oasis:filmin cl rl cr rr))))
-              ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))
+              ((oasis:cloud-p var)
+               (max big (* oasis:*startclear* (oasis:filmin cl rl cr rr))))
+              ((max g (* oasis:*startclear* (oasis:filmin cl rl cr rr)))))
         nil off)))))
 
 ;; Erase a preview.  Entities the user has since deleted are skipped, so
@@ -15622,7 +15796,7 @@
       (progn
         (cal:osdown)
         (setq lt   (oasis:dashlt w h)
-              hgt  (/ (max w h) 28.0)
+              hgt  (/ (max w h) oasis:*pvtextdiv*)
               full (oasis:fillin ans)
               arcs (oasis:solve (nth 0 full) (nth 1 full) (nth 2 full)
                                 (nth 3 full) (nth 4 full) (nth 5 full)
@@ -15660,7 +15834,8 @@
                                   (rtos (nth slot ans))
                                   (if slot "?" (rtos (nth 2 a))))
                           out (cons (oasis:pv-text
-                                      (polar (car md) (cdr md) (* 1.7 hgt))
+                                      (polar (car md) (cdr md)
+                                             (* oasis:*pvtextgap* hgt))
                                       hgt txt base hi)
                                     out)))
                 (setq i (1+ i)))
@@ -15943,20 +16118,33 @@
 ;; refused: that is an ordinary trimmed bulge, and oasis:report-extents
 ;; names it.
 ;;
-;; The hump's OTHER refusal has no counterpart here, and that is not an
-;; oversight.  A hump has no size limit -- it is trimmed away long
-;; before it reaches anything -- so it can grow to swallow the left
-;; bulge, and oasis:ask-offset turns that away.  A corner bulge cannot:
-;; it is tangent to the Y-max bound and at most half the envelope
-;; across, and both side bulges are tangent to the Y-min bound and at
-;; most half the envelope across from the other side, so the gap between
-;; those centres is never smaller than the radii differ by.  Wherever
-;; along the top wall it is put, it is never inside a side bulge and
-;; never swallows one.
+;; The hump's OTHER refusal -- a third bulge that swallows a side one --
+;; is checked here too, and for a while it was not, on the argument that
+;; a corner bulge cannot reach: it is tangent to the Y-max bound and at
+;; most half the envelope across, and both side bulges are tangent to
+;; the Y-min bound and at most half the envelope across from the other
+;; side, so the gap between those centres in Y alone is h - rt - rs and
+;; the radii differ by |rt - rs|, and the first is never less than the
+;; second.
+;;
+;; Never LESS -- but it can be EQUAL, and equal is nested: the two
+;; circles touch from the inside, which is the one case no tangent
+;; radius bridges either.  It needs the larger of the pair to be exactly
+;; half the Y bound, which is a legal answer, and the two centres to
+;; share an X, which the placement is free to arrange.  A 40 x 20 with a
+;; 10' corner bulge and a 9' right bulge shifted a foot out is one:
+;; every question answered, and then no outline at all.  So the
+;; placement is checked against both side bulges, exactly as
+;; oasis:ask-offset checks the hump against the left one -- and HERE
+;; rather than at the right bulge's own question, because on this shape
+;; the placement is asked after that question and oasis:right-nests has
+;; already had its look.
 ;;
 ;; Tie is checked the same way, because by the time it is checked it IS
-;; a shift: oasis:tieoff has already turned it into one.
-(defun oasis:ask-place (msg w h rt rr / v ct bad)
+;; a shift: oasis:tieoff has already turned it into one.  That matters:
+;; a tie at its own floor stands the corner bulge straight above the
+;; right one, which is precisely the shared X the nesting case needs.
+(defun oasis:ask-place (msg w h rl rt rr / v ct bad)
   (setq v   (oasis:askshift msg)
         bad T)
   (while bad
@@ -15976,12 +16164,22 @@
                    (oasis:tieoff w h rt rr v))))
       (t
        (setq ct  (oasis:topcen w h rt "TopRight" v)
-             bad (or (< (car ct) 0.0) (> (car ct) w)))
+             bad (cond ((or (< (car ct) 0.0) (> (car ct) w)) "out")
+                       ((oasis:nested-p ct rt (list rl rl) rl) "left")
+                       ((oasis:nested-p ct rt (list (- w rr) rr) rr)
+                        "right")))
        (if bad
            (progn
-             (princ (strcat "\nThat puts the corner bulge's centre at "
-                            (rtos (car ct)) ", off the " (rtos w)
-                            " envelope altogether -- it has to stay on it."))
+             (if (= bad "out")
+                 (princ (strcat "\nThat puts the corner bulge's centre at "
+                                (rtos (car ct)) ", off the " (rtos w)
+                                " envelope altogether -- it has to stay"
+                                " on it."))
+                 (princ (strcat "\nThere the corner bulge and the " bad
+                                " bulge lie one inside the other, so no"
+                                " tangent radius can join them.  Move it"
+                                " along the wall, or change one of the two"
+                                " radii.")))
              (setq v (oasis:askshift msg)))))))
   v)
 
@@ -16077,7 +16275,7 @@
     ;; the same slot, and the same shift, asked against the mark each
     ;; shape measures it from
     ((= k 12) (if (= var "TopRight")
-                  (oasis:ask-place (oasis:sprompt var 12) w h rt rr)
+                  (oasis:ask-place (oasis:sprompt var 12) w h rl rt rr)
                   (oasis:ask-offset (oasis:sprompt var 12) w h rl rt)))
     ((= k 13) (oasis:ask-tangent (oasis:sprompt var 13) cd rt cg rr runs))))
 
@@ -16387,7 +16585,7 @@
         want  (oasis:spanlen arcs sa sb)
         out   nil
         guard 0)
-  (while (and (> want oasis:*fuzz*) (< guard (* 4 n)))
+  (while (and (> want oasis:*fuzz*) (< guard (* oasis:*ringguard* n)))
     (setq l     (oasis:elen (nth k arcs))
           avail (* l (- 1.0 u0)))
     (if (<= want (+ avail oasis:*fuzz*))
@@ -16476,8 +16674,8 @@
   (setq js  (oasis:joints arcs)
         n   (length js)
         i   0
-        hgt (/ (max w h) 34.0)
-        mk  (/ (max w h) 150.0)
+        hgt (/ (max w h) oasis:*tangtextdiv*)
+        mk  (/ (max w h) oasis:*tangmarkdiv*)
         out nil)
   (while (< i n)
     (setq at  (oasis:ringat arcs (nth i js))
@@ -16485,7 +16683,7 @@
           ;; the number sits OUTSIDE the water, clear of the outline
           out (cons (oasis:pv-text (polar (car at)
                                           (+ (cadr at) pi)
-                                          (* 1.6 hgt))
+                                          (* oasis:*tangtextgap* hgt))
                                    hgt (itoa (1+ i)) base T)
                     out)
           i   (1+ i)))
@@ -16784,19 +16982,22 @@
   (setq bot nil)
   (while (null bot)
     (initget 6 "Back Undo")
-    (setq off (getdist (strcat "\nHopper offset in from the wall [Back] <"
-                               (rtos oasis:*hopoff*) ">: ")))
+    (setq off (getdist
+                (strcat "\nHopper offset in from the wall [Back] <"
+                        (rtos (cond (oasis:*hopoff-last*) (oasis:*hopoff*)))
+                        ">: ")))
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
        (setq bot 'OASIS-BACK))
       (t
-       (if (null off) (setq off oasis:*hopoff*))
+       (if (null off)
+           (setq off (cond (oasis:*hopoff-last*) (oasis:*hopoff*))))
        (setq try (oasis:bottom arcs (car sh) (cadr sh) (car sd) (cadr sd)
                                off))
        (if (= (type try) 'STR)
            (princ (strcat "\nAt " (rtos off) " " try "."))
-           (setq oasis:*hopoff* off
-                 bot            (list off try))))))
+           (setq oasis:*hopoff-last* off
+                 bot                 (list off try))))))
   bot)
 
 ;; How one slope line runs.  The side is named by the arc its end of the
@@ -16814,10 +17015,10 @@
 ;; own questions have it.  Back out of the first step and nothing is
 ;; added at all.  Returns the lines to report, so they land after the
 ;; pool's own, or nil when nothing was added.
-(defun oasis:askbottom (arcs w h base lt / marks ans pos k v off bot done)
-  (setq marks (oasis:tangmarks arcs w h base lt)
-        ans   (list nil nil nil nil nil)
-        pos   0)
+(defun oasis:askbottom (arcs w h base lt / ans pos k v off bot done)
+  (setq oasis:*marks* (oasis:tangmarks arcs w h base lt)
+        ans           (list nil nil nil nil nil)
+        pos           0)
   (while (and pos (< pos 5))
     (setq k pos
           v (cond ((= k 0) (oasis:askbreak "Shallow" arcs w h base))
@@ -16833,7 +17034,7 @@
                    (setq pos nil)))
         (setq ans (oasis:put ans k v)
               pos (1+ pos))))
-  (setq marks (oasis:pv-clear marks))
+  (setq oasis:*marks* (oasis:pv-clear oasis:*marks*))
   (if (null pos)
       nil
       (progn
@@ -16922,6 +17123,18 @@
 
 ;;; -------------------- the command -------------------------------------
 
+;; The numbered tangency marks the pool-bottom flow puts up.  A
+;; module global rather than a local of oasis:askbottom because
+;; c:OASIS's handler has to be able to clear them: an Esc inside
+;; that flow used to leave every one of them on the drawing, red,
+;; over a pool that was otherwise finished and worth keeping.
+(setq oasis:*marks*   nil)
+;; The hopper offset this session last had accepted, offered ahead of
+;; oasis:*hopoff* once there is one.  A job's pools share a hopper, so
+;; the second pool of a run should not have to be told again -- but the
+;; knob is the setting and this is the memory, and writing the setting
+;; would make a run quietly edit its own configuration.
+(setq oasis:*hopoff-last* nil)
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
@@ -16937,12 +17150,16 @@
     ;; an Esc part-way through a dimension leaves that command pending,
     ;; and the UNDO below would be swallowed as an answer to it
     (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
     ;; the preview is scaffolding, not a result -- it goes whether the run
-    ;; finished or the user pressed Esc part-way through the questions
+    ;; finished or the user pressed Esc part-way through the questions.
+    ;; So are the pool-bottom flow's numbered tangency marks, which are
+    ;; put up by a defun this handler cannot see the locals of -- hence
+    ;; oasis:*marks*.  Esc there left them on a finished pool.
     (oasis:pv-clear prev)
+    (setq oasis:*marks* (oasis:pv-clear oasis:*marks*))
     (if undo-open (command "_.UNDO" "_End"))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -34966,11 +35183,11 @@
 ;;;
 ;;; Click every point that is bad, one after another, as many as you
 ;;; like; press Enter when done.  Each click:
-;;;   * snaps to the nearest survey point within *BP-SNAP* of the pick
+;;;   * snaps to the nearest survey point within bp:*snap* of the pick
 ;;;     (an "ab_pt" INSERT on any layer, any other INSERT on the POINTS
 ;;;     layer, or a plain POINT on the POINTS layer - the same
 ;;;     classifier the rest of the toolset uses),
-;;;   * draws a *BP-RADIUS* circle on the FGStep layer centered on
+;;;   * draws a bp:*radius* circle on the bp:*layer* layer centered on
 ;;;     that point, and
 ;;;   * reads what the point is called from the block's "number"
 ;;;     attribute, the name the drawing itself carries.
@@ -34984,46 +35201,97 @@
 ;;; exactly where you clicked - and reported as "Pt.?", so a stray
 ;;; shot with no block under it can be called out too.  Clicking a
 ;;; ringed point AGAIN un-rings it: the circle is erased and the point
-;;; leaves the callout - reselect a point to undo it.
+;;; leaves the callout - reselect a point to undo it.  A click that
+;;; snaps to a DIFFERENT survey point never un-rings a neighbour it
+;;; merely lands close to (v1.7 did, so two points under 10" apart
+;;; could not both be ringed); only a click with no survey point under
+;;; it is read against the rings it sits inside.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *bpcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;;
-;;; Assumes drawing units are INCHES (architectural).  Adjust the
-;;; constants below for other setups.
+;;; Assumes drawing units are INCHES (architectural).  Every knob -
+;;; layer and its colour, ring size, snap reach, text height, the
+;;; wording of the callout, what counts as a survey point - is in the
+;;; configuration block right below, each with its explanation.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.7")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *bpcallout-version* "v1.8")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
-(setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
-                                    ; text go on - the same layer LHD
-                                    ; puts its miss rings on
-(setq *BP-RADIUS*      5.0)         ; ring RADIUS (5 inches); halve it
-                                    ; here if a 5" diameter is wanted
-(setq *BP-SNAP*        12.0)        ; a pick within this of a survey
-                                    ; point rings THAT point; farther
-                                    ; away, the pick itself is ringed
-                                    ; and named "?"
-(setq *BP-TEXT-HGT*    6.0)         ; callout text height
-(setq *BP-POINT-BLOCK* "ab_pt")     ; block name whose INSERTs mark
-                                    ; points wherever they sit
-(setq *BP-POINT-LAYER* "POINTS")    ; layer whose POINTs/INSERTs are
-                                    ; always points
-(setq *BP-PT-TAG*      "number")    ; attribute tag on the point block
-                                    ; naming the point, as in "Pt.17"
-(setq *BP-EXACT-EPS*   0.001)       ; two picks this close land on the
-                                    ; same spot - the second un-rings it
 
-;; ---- helpers -------------------------------------------------------
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS -
+;;; inches in this shop's architectural drawings.
+
+;; -- where the marks go
+(setq bp:*layer* "FGStep")          ; layer the rings and the callout
+                                    ; text land on - the same layer LHD
+                                    ; puts its miss rings on.  Created
+                                    ; when the drawing lacks it; thawed,
+                                    ; unlocked and switched on when it
+                                    ; is there but unusable
+(setq bp:*layer-color* 1)           ; ACI colour that layer is CREATED
+                                    ; with (1 = red).  A layer already
+                                    ; in the drawing keeps its own
+
+;; -- the rings
+(setq bp:*radius* 5.0)              ; ring RADIUS (5" = a 10" circle);
+                                    ; halve it if a 5" DIAMETER is
+                                    ; wanted.  Also how far an un-ring
+                                    ; click reaches: a click inside a
+                                    ; ring that has no survey point
+                                    ; under it removes that ring
+(setq bp:*snap* 12.0)               ; a pick within this of a survey
+                                    ; point rings THAT point - the
+                                    ; nearest one when several qualify;
+                                    ; farther away, the pick itself is
+                                    ; ringed and named bp:*unknown*
+(setq bp:*exact-eps* 0.001)         ; two ring centres this close are
+                                    ; the same spot, so a second click
+                                    ; on a ringed survey point un-rings
+                                    ; it rather than ringing it twice
+
+;; -- the callout text
+(setq bp:*text-hgt* 6.0)            ; TEXT height of the callout
+(setq bp:*text-gap* 10.0)           ; Enter at the text prompt tucks the
+                                    ; callout this far to the right of
+                                    ; AND below the last ring's centre
+(setq bp:*pt-prefix* "Pt.")         ; how a point is named, in the
+                                    ; callout and on the command line:
+                                    ; the prefix + its number, "Pt.12"
+(setq bp:*tail-one* " is bad")      ; what follows the name when ONE
+                                    ; point was ringed: "Pt.12 is bad"
+(setq bp:*tail-many* " are bad")    ; ...and when two or more were:
+                                    ; "Pt.12, Pt.15 and Pt.20 are bad"
+(setq bp:*unknown* "?")             ; the number given to a ring with
+                                    ; no readable survey point under
+                                    ; it, so it still reads "Pt.? is
+                                    ; bad" rather than vanishing
+
+;; -- what counts as a survey point.  The classifier is shared with
+;;    LHD and CDCALLOUT: change it in all three or the tools disagree
+(setq bp:*point-block* "ab_pt")     ; block name whose INSERTs mark
+                                    ; points wherever they sit
+(setq bp:*point-layer* "POINTS")    ; layer whose POINTs and INSERTs
+                                    ; are always points, whatever block
+(setq bp:*pt-tag* "number")         ; attribute tag on the point block
+                                    ; naming the point.  A block without
+                                    ; it lends its first attribute that
+                                    ; reads as a number instead
+
+;;; -------------------- helpers ----------------------------------------
 
 ;; Every survey point in the drawing, as ((x y) . name) pairs.  What
-;; counts as a point matches LHD's classifier: an *BP-POINT-BLOCK*
-;; INSERT anywhere, any other INSERT on the *BP-POINT-LAYER* layer,
+;; counts as a point matches LHD's classifier: an bp:*point-block*
+;; INSERT anywhere, any other INSERT on the bp:*point-layer* layer,
 ;; or a plain POINT on that layer.  A point with no readable number
-;; is carried as "?" so it can still be ringed and reported.
+;; is carried as bp:*unknown* ("?") so it can still be ringed and
+;; reported.
 (defun bp:collect-points (/ ss i en ed typ p nm out)
   (setq out nil
         ss  (ssget "_X" '((0 . "INSERT,POINT"))))
@@ -35038,46 +35306,52 @@
         (cond
           ((= typ "INSERT")
            (if (or (= (strcase (cdr (assoc 2 ed)))
-                      (strcase *BP-POINT-BLOCK*))
+                      (strcase bp:*point-block*))
                    (= (strcase (cdr (assoc 8 ed)))
-                      (strcase *BP-POINT-LAYER*)))
+                      (strcase bp:*point-layer*)))
              (progn
-               (setq nm (cal:block-number en *BP-PT-TAG*))
+               (setq nm (cal:block-number en bp:*pt-tag*))
                (setq out (cons (cons (list (car p) (cadr p))
-                                     (if (and nm (/= nm "")) nm "?"))
+                                     (if (and nm (/= nm "")) nm
+                                       bp:*unknown*))
                                out)))))
           ((= typ "POINT")
            (if (= (strcase (cdr (assoc 8 ed)))
-                  (strcase *BP-POINT-LAYER*))
-             (setq out (cons (cons (list (car p) (cadr p)) "?") out)))))
+                  (strcase bp:*point-layer*))
+             (setq out (cons (cons (list (car p) (cadr p)) bp:*unknown*)
+                             out)))))
         (setq i (1+ i)))))
   out)
 
-;; The survey point nearest to pick PK, when one sits within *BP-SNAP*
+;; The survey point nearest to pick PK, when one sits within bp:*snap*
 ;; of it; nil otherwise.  Returns the ((x y) . name) pair.
 (defun bp:nearest-point (pk cands / best bd c d)
   (setq best nil bd nil)
   (foreach c cands
     (setq d (cal:dist pk (car c)))
-    (if (and (<= d *BP-SNAP*) (or (null bd) (< d bd)))
+    (if (and (<= d bp:*snap*) (or (null bd) (< d bd)))
       (setq best c bd d)))
   best)
 
 ;; The picked-list entry a new click lands on, when it lands on one:
 ;; either its snapped centre CTR is (as good as) an already-ringed
-;; spot, or - for a pick with no survey point under it - the raw pick
-;; PK is inside an existing ring.  Entries are (ctr name ring-ename);
-;; nil when the click is somewhere new.
-(defun bp:ringed-at (pk ctr picked / hit bd q d)
+;; spot, or - ONLY for a pick with no survey point under it, SNAPPED
+;; nil - the raw pick PK is inside an existing ring.  A pick that did
+;; snap to a survey point is that point and nothing else: v1.7 read it
+;; against the rings too, so a click meant for a point 8" from a ringed
+;; one landed inside the 5" ring and un-ringed the neighbour instead.
+;; Entries are (ctr name ring-ename); nil when the click is somewhere
+;; new.
+(defun bp:ringed-at (pk ctr picked snapped / hit bd q d)
   (setq hit nil)
   (foreach q picked
-    (if (< (cal:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
-  (if (null hit)
+    (if (< (cal:dist ctr (car q)) bp:*exact-eps*) (setq hit q)))
+  (if (and (null hit) (not snapped))
     (progn                              ; nearest ring the pick sits in
       (setq bd nil)
       (foreach q picked
         (setq d (cal:dist pk (car q)))
-        (if (and (<= d *BP-RADIUS*) (or (null bd) (< d bd)))
+        (if (and (<= d bp:*radius*) (or (null bd) (< d bd)))
           (setq hit q bd d)))))
   hit)
 
@@ -35088,35 +35362,37 @@
 
 ;; The callout sentence: "Pt.12 is bad", "Pt.12 and Pt.15 are bad",
 ;; "Pt.12, Pt.15 and Pt.20 are bad" - commas between all but the last
-;; pair, "and" before the last, is/are by count.
+;; pair, "and" before the last, is/are by count.  The name prefix and
+;; the two sentence tails are the bp:*pt-prefix* / bp:*tail-* knobs.
 (defun bp:phrase (names / n s i)
   (setq n (length names))
   (cond
     ((= n 0) "")
-    ((= n 1) (strcat "Pt." (car names) " is bad"))
+    ((= n 1) (strcat bp:*pt-prefix* (car names) bp:*tail-one*))
     (T
-     (setq s (strcat "Pt." (car names)) i 1)
+     (setq s (strcat bp:*pt-prefix* (car names)) i 1)
      (while (< i (1- n))
-       (setq s (strcat s ", Pt." (nth i names))
+       (setq s (strcat s ", " bp:*pt-prefix* (nth i names))
              i (1+ i)))
-     (strcat s " and Pt." (nth (1- n) names) " are bad"))))
+     (strcat s " and " bp:*pt-prefix* (nth (1- n) names)
+             bp:*tail-many*))))
 
 ;; Ring one bad point.
 (defun bp:draw-ring (ctr)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbCircle")
+                  (cons 8 bp:*layer*) '(100 . "AcDbCircle")
                   (cons 10 (list (car ctr) (cadr ctr) 0.0))
-                  (cons 40 *BP-RADIUS*))))
+                  (cons 40 bp:*radius*))))
 
 ;; Write the callout text at P.
 (defun bp:draw-text (p str)
   (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbText")
+                  (cons 8 bp:*layer*) '(100 . "AcDbText")
                   (cons 10 (list (car p) (cadr p) 0.0))
-                  (cons 40 *BP-TEXT-HGT*)
+                  (cons 40 bp:*text-hgt*)
                   (cons 1 str))))
 
-;; ---- command -------------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
@@ -35143,7 +35419,7 @@
   (setq cands (bp:collect-points))
   (if cands
     (princ (strcat "\n" (itoa (length cands)) " survey point(s) found;"
-                   " a click within " (rtos *BP-SNAP* 4 0)
+                   " a click within " (rtos bp:*snap* 4 0)
                    " snaps to the nearest one."))
     (princ (strcat "\nNo survey points found in the drawing - clicks"
                    " will be ringed where picked and named \"?\".")))
@@ -35154,23 +35430,24 @@
     (setq hit (bp:nearest-point pk cands))
     (if hit
       (setq ctr (car hit) nm (cdr hit))
-      (setq ctr (list (car pk) (cadr pk)) nm "?"))
-    (setq old (bp:ringed-at pk ctr picked))
+      (setq ctr (list (car pk) (cadr pk)) nm bp:*unknown*))
+    (setq old (bp:ringed-at pk ctr picked hit))
     (if old
       (progn                            ; reselecting a point undoes it
         (if (and (caddr old) (entget (caddr old)))
           (entdel (caddr old)))
         (setq picked (bp:drop-entry (caddr old) picked))
-        (princ (strcat "\n  Pt." (cadr old) " un-ringed.")))
+        (princ (strcat "\n  " bp:*pt-prefix* (cadr old)
+                       " un-ringed.")))
       (progn
-        (cal:ensure-layer *BP-LAYER* 1)
+        (cal:ensure-layer bp:*layer* bp:*layer-color*)
         (setq picked (cons (list ctr nm (bp:draw-ring ctr)) picked))
         (if hit
-          (princ (strcat "\n  Pt." nm " ringed."))
+          (princ (strcat "\n  " bp:*pt-prefix* nm " ringed."))
           (princ (strcat "\n  No survey point within "
-                         (rtos *BP-SNAP* 4 0)
-                         " of the pick - ringed where clicked, as"
-                         " Pt.?."))))))
+                         (rtos bp:*snap* 4 0)
+                         " of the pick - ringed where clicked, as "
+                         bp:*pt-prefix* bp:*unknown* "."))))))
 
   (if (null picked)
     (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
@@ -35182,11 +35459,11 @@
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"
                                     " the last ring>: ")))
       (if (null txtpt)                          ; Enter: tuck it beside
-        (setq txtpt (list (+ (car lastpt) (* 2.0 *BP-RADIUS*))
-                          (- (cadr lastpt) (* 2.0 *BP-RADIUS*)))))
+        (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
+                          (- (cadr lastpt) bp:*text-gap*))))
       (bp:draw-text txtpt phrase)
       (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
-                     " point(s) ringed on layer " *BP-LAYER*
+                     " point(s) ringed on layer " bp:*layer*
                      ";  \"" phrase "\""))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
@@ -35849,9 +36126,12 @@
 ;;; Point numbers are typed the way they read in the drawing: "35",
 ;;; "Pt.35", "pt 35", "#35" and "035" all name the same point -- the
 ;;; number is matched against the "number" attribute on the survey
-;;; point blocks (the same classifier BPCALLOUT and LHD use: an
-;;; "ab_pt" INSERT on any layer, any other INSERT on the POINTS
-;;; layer, or a plain POINT on the POINTS layer).
+;;; point blocks: an "ab_pt" INSERT on any layer, or any other INSERT
+;;; on the POINTS layer.  That is BPCALLOUT's and LHD's classifier
+;;; minus its third kind -- a plain POINT carries no attribute, so it
+;;; has no number to be asked for by, and this tool only ever names
+;;; points.  A block whose number cannot be read is left out for the
+;;; same reason.
 ;;;
 ;;; A number that names no point in the drawing is reported and the
 ;;; prompt re-asks -- nothing is drawn from a typo.  The whole run is
@@ -35867,30 +36147,65 @@
 ;;; drawing started from the wrong template is obvious instead of
 ;;; silently producing wrong-looking dims (CDCREATE's rule, kept).
 ;;;
+;;; Every knob - style, layer and its colour, the dimension-line
+;;; offset, the same-spot tolerance, what counts as a survey point - is
+;;; in the configuration block right below, each with its explanation.
+;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *cdcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.8")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *cdcallout-version* "v1.9")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
-(setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
-(setq cdo:*layer*       "DIMENSION")        ; layer the dims land on
-(setq cdo:*offset*      0.0)        ; distance the dimension line is
-                                    ; pushed off the tie it measures,
-                                    ; drawing units (0.0 = right
-                                    ; inbetween, on the tie itself --
-                                    ; CDCREATE's convention)
-(setq *CDO-POINT-BLOCK* "ab_pt")    ; block name whose INSERTs mark
-                                    ; points wherever they sit
-(setq *CDO-POINT-LAYER* "POINTS")   ; layer whose POINTs/INSERTs are
-                                    ; always points
-(setq *CDO-PT-TAG*      "number")   ; attribute tag on the point block
-                                    ; naming the point, as in "Pt.17"
 
-;; ---- point lookup --------------------------------------------------
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
+;; -- how the dimensions land (CDCREATE's and POOL's convention)
+(setq cdo:*style* "CROSS DIMENSIONS") ; dimension style the dims are
+                                    ; drawn in.  NOT invented when the
+                                    ; drawing lacks it: the dims then
+                                    ; take the current style and the run
+                                    ; says so, because a wrong template
+                                    ; should be obvious, not papered over
+(setq cdo:*layer* "DIMENSION")      ; layer the dims land on, ByLayer
+                                    ; (colour, linetype and lineweight
+                                    ; overrides stripped).  Created when
+                                    ; the drawing lacks it; thawed,
+                                    ; unlocked and switched on when it
+                                    ; is there but unusable
+(setq cdo:*layer-color* 7)          ; ACI colour that layer is CREATED
+                                    ; with (7 = white/black).  A layer
+                                    ; already in the drawing keeps its
+                                    ; own
+(setq cdo:*offset* 0.0)             ; distance the dimension line is
+                                    ; pushed off the tie it measures.
+                                    ; 0.0 = right inbetween, on the tie
+                                    ; itself (CDCREATE's convention);
+                                    ; positive = to the left of the
+                                    ; FROM->TO direction, negative = to
+                                    ; the right
+(setq cdo:*exact-eps* 0.001)        ; two survey points closer than
+                                    ; this sit on the same spot: the
+                                    ; tie is refused, nothing to measure
+
+;; -- what counts as a survey point.  The classifier is shared with
+;;    BPCALLOUT and LHD: change it in all three or the tools disagree
+(setq cdo:*point-block* "ab_pt")    ; block name whose INSERTs mark
+                                    ; points wherever they sit
+(setq cdo:*point-layer* "POINTS")   ; layer whose INSERTs are always
+                                    ; points, whatever block they are
+(setq cdo:*pt-tag* "number")        ; attribute tag on the point block
+                                    ; naming the point.  A block without
+                                    ; it lends its first attribute that
+                                    ; reads as a number instead
+
+;;; -------------------- point lookup ------------------------------------
 
 ;; Every NAMED survey point in the drawing, as ((x y z) . name) pairs.
 ;; What counts as a point matches BPCALLOUT/LHD; a point whose number
@@ -35906,11 +36221,11 @@
               ed (entget en)
               p  (cdr (assoc 10 ed)))
         (if (or (= (strcase (cdr (assoc 2 ed)))
-                   (strcase *CDO-POINT-BLOCK*))
+                   (strcase cdo:*point-block*))
                 (= (strcase (cdr (assoc 8 ed)))
-                   (strcase *CDO-POINT-LAYER*)))
+                   (strcase cdo:*point-layer*)))
           (progn
-            (setq nm (cal:block-number en *CDO-PT-TAG*))
+            (setq nm (cal:block-number en cdo:*pt-tag*))
             (if (and nm (/= nm ""))
               (setq out (cons (cons (list (car p) (cadr p) 0.0) nm)
                               out)))))
@@ -35947,7 +36262,7 @@
       (setq found c)))
   found)
 
-;; ---- dimension helpers (CDCREATE's conventions, kept) --------------
+;;; -------------------- dimension helpers (CDCREATE's, kept) ------------
 
 ;; midpoint of p1->p2, pushed perpendicular to the tie by dist
 ;; (dist 0.0 puts the dimension line straight inbetween, on the tie)
@@ -35997,7 +36312,7 @@
 
 ;; make that layer current, creating or repairing it on the way
 (defun cdo:setlayer (name)
-  (setvar "CLAYER" (cdo:ensure-layer name 7)))
+  (setvar "CLAYER" (cdo:ensure-layer name cdo:*layer-color*)))
 
 ;; restore a dimension style by name when the drawing has it;
 ;; returns T when the style was set
@@ -36029,7 +36344,7 @@
       (entupd en)
       t)))
 
-;; ---- the command ---------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call (the BPCALLOUT v1.0 lesson).
@@ -36133,7 +36448,7 @@
              ((null (setq b (cdo:find-point s2 cands)))
               (princ (strcat "\n  No point numbered \"" s2
                              "\" in the drawing -- nothing drawn.")))
-             ((< (distance (car a) (car b)) 1e-9)
+             ((< (distance (car a) (car b)) cdo:*exact-eps*)
               (princ (strcat "\n  Pt." (cdr a) " and Pt." (cdr b)
                              " sit on the same spot -- nothing to"
                              " measure.")))
@@ -36163,7 +36478,7 @@
       (setvar "CLAYER"  ocl)
       (setvar "OSMODE"  oos)
       (setvar "CMDECHO" oce)
-      (command "_.UNDO" "_End")
+      (if grouped (command "_.UNDO" "_End"))
       (setq grouped nil)
 
       (princ (strcat "\nCDCALLOUT: " (itoa made) " cross dimension"
@@ -36234,23 +36549,11 @@
 ;;;    Command: CDCREATE
 ;;;    Command: CDCREATEVER      prints the version
 ;;;
-;;;  Tunables (setq them after loading if a drawing needs different
-;;;  names, e.g. in a startup file):
-;;;    cdc:*style*   dimension style to use   ("CROSS DIMENSIONS")
-;;;    cdc:*layer*   layer to create dims on  ("DIMENSION")
-;;;    cdc:*offset*  distance the dimension line is pushed off the
-;;;                  line it measures, drawing units (0.0 = on it)
-;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
-;;;    cdc:*skipdimmed*  T to leave a tie that is dimensioned already,
-;;;                  nil to dimension it again anyway
-;;;    cdc:*dupetol* how close two extension line origins have to be to
-;;;                  count as the same point; nil = a sixteenth of an
-;;;                  inch in the drawing's own units
-;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
-;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
-;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
-;;;                  before the text goes to its bottom end instead of
-;;;                  its right-hand one
+;;;  Tunables: every knob -- style, layer and its colour, the offset,
+;;;  the text-position rule, erase / skip-dimensioned / same-point
+;;;  tolerance -- sits in the configuration block right after this
+;;;  header, each with its explanation.  (setq ...) one after loading,
+;;;  in a startup file say, when a drawing needs different names.
 ;;;
 ;;;  Notes
 ;;;    * Only LINE entities are dimensioned.  Anything else in the
@@ -36276,18 +36579,77 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-(setq *cdcreate-version* "v1.3")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *cdcreate-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
-(setq cdc:*style*  "CROSS DIMENSIONS")
-(setq cdc:*layer*  "DIMENSION")
-(setq cdc:*offset* 0.0)
-(setq cdc:*erase*  t)
-(setq cdc:*textpos* 0.8)
-(setq cdc:*vertang* 15.0)
-(setq cdc:*skipdimmed* t)
-(setq cdc:*dupetol* nil)           ; nil = 1/16" in the drawing's units
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
+;; -- how the dimensions land (POOL's convention for its cross dims)
+(setq cdc:*style* "CROSS DIMENSIONS") ; dimension style the dims are
+                                   ; drawn in.  NOT invented when the
+                                   ; drawing lacks it: the dims then
+                                   ; take the current style and the run
+                                   ; says so, because a wrong template
+                                   ; should be obvious, not papered over
+(setq cdc:*layer* "DIMENSION")     ; layer the dims land on, ByLayer
+                                   ; (colour, linetype and lineweight
+                                   ; overrides stripped).  Created when
+                                   ; the drawing lacks it; thawed,
+                                   ; unlocked and switched on when it is
+                                   ; there but unusable
+(setq cdc:*layer-color* 7)         ; ACI colour that layer is CREATED
+                                   ; with (7 = white/black).  A layer
+                                   ; already in the drawing keeps its own
+(setq cdc:*offset* 0.0)            ; distance the dimension line is
+                                   ; pushed off the line it measures.
+                                   ; 0.0 = on the line itself; positive
+                                   ; = to the left of the line's own
+                                   ; start->end direction, negative = to
+                                   ; the right
+
+;; -- where the text sits
+(setq cdc:*textpos* 0.8)           ; position of the text along the
+                                   ; dimension line, as a fraction of
+                                   ; its length measured from the far
+                                   ; end toward the right-hand (or
+                                   ; bottom) end: 0.5 = centred, and no
+                                   ; text move at all; 1.0 = right at
+                                   ; that end; 0.8 = 80% of the way
+(setq cdc:*vertang* 15.0)          ; degrees off vertical within which
+                                   ; a line counts as standing up, so
+                                   ; its text goes to the BOTTOM end
+                                   ; rather than the right-hand one
+                                   ; (where "right-hand" would be a
+                                   ; coin toss).  0.0 = only a dead-
+                                   ; vertical line, 90.0 = every line
+
+;; -- what happens to the lines
+(setq cdc:*erase* T)               ; T erases each line once its
+                                   ; dimension is drawn - the tie is the
+                                   ; dimension now; nil keeps them.  A
+                                   ; line that got no dimension is never
+                                   ; erased either way
+(setq cdc:*skipdimmed* T)          ; T leaves a line alone when some
+                                   ; dimension in model space already
+                                   ; runs between its two ends - either
+                                   ; way round, any style or layer; nil
+                                   ; dimensions it again anyway
+(setq cdc:*dupetol* nil)           ; how close two extension-line
+                                   ; origins have to be to count as the
+                                   ; same point, drawing units.  nil =
+                                   ; a sixteenth of an inch in the
+                                   ; drawing's own units (read off
+                                   ; INSUNITS, so 1.5875 in a mm drawing)
+
+;;; -------------------- run state ---------------------------------------
+;;; Not a knob, and outside the block above on purpose: cdc:syssave
+;;; writes its snapshot of the sysvars the run moves here, and
+;;; cdc:sysrestore empties it again, so it is live only mid-run.
 
 ;;; -------------------- helpers ------------------------------------
 
@@ -36526,7 +36888,7 @@
             (progn
               (command "_.UNDO" "_Begin")
               (setq undo-open T)))
-          (setvar "CLAYER" (cal:ensure-layer cdc:*layer* 7))
+          (setvar "CLAYER" (cal:ensure-layer cdc:*layer* cdc:*layer-color*))
           (setq havestyle (cdc:setstyle cdc:*style*))
           (if (not havestyle)
             (princ (strcat "\n** This drawing has no \"" cdc:*style*
@@ -36573,7 +36935,7 @@
 
           ;; -- 5. put the drawing back the way it was
           (cdc:restyle odim)
-          (command "_.UNDO" "_End")
+          (if undo-open (command "_.UNDO" "_End"))
           (setq undo-open nil)
 
           (princ (strcat "\n" (itoa made) " cross dimension"

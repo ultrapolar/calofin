@@ -177,8 +177,8 @@ DXF entity-type lists, comma-separated as `ssget` takes them.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ad:*geom-types*` | `LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE,INSERT` | What makes up a plan: the step-1 highlight keeps these, only these block a perimeter ray, and these are what a floor-dims chain breaks at |
-| `ad:*stair-types*` | `LINE,LWPOLYLINE` | What the stairs highlight (step 3, `STAIRDIM`) and the side-view highlight (`AUTODIMSIDEPOV`) keep |
+| `ad:*geom-types*` | `"LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE,INSERT"` | What makes up a plan: the step-1 highlight keeps these, only these block a perimeter ray, and these are what a floor-dims chain breaks at |
+| `ad:*stair-types*` | `"LINE,LWPOLYLINE"` | What the stairs highlight (step 3, `STAIRDIM`) and the side-view highlight (`AUTODIMSIDEPOV`) keep |
 
 The numbers that are *not* settings -- the `1e-8` zero-length guards, the
 `1e-6` ray offset -- are numerical epsilons, not knobs.
