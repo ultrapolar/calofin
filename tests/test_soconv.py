@@ -358,6 +358,243 @@ check("the layers were never unlocked, so nothing to relock",
       repr(vm.lock_log))
 
 # ----------------------------------------------------------------------
+# the record, and SORECONV reading it back
+# ----------------------------------------------------------------------
+# SOCONV moves objects between layers; U undoes that while the session
+# lasts, and nothing did once the drawing had been saved and reopened.
+# So every object it moves carries a record of where it came from, and
+# SORECONV is the other direction.
+print("soconv -- every moved object carries a record of where it came from")
+
+
+def xdata(d, app):
+    """The items one application carries, [] when it is there and empty,
+    None when it is not there at all."""
+    g = grp(d, -3)
+    if g is None:
+        return None
+    apps = [g] if (g and isinstance(g[0], str)) else g
+    for a in apps:
+        if a and a[0] == app:
+            return a[1:]
+    return None
+
+
+def ename_where(vm, code, val):
+    """The first live entity whose group CODE reads VAL.
+
+    An ENAME, deliberately: entmod hands the VM a NEW alist for the
+    entity, so a data list captured before a run is the state it was in
+    then -- which is exactly the trap a record test would fall into,
+    since writing the record IS an entmod.
+    """
+    for e in vm.entities:
+        if e not in vm.deleted and grp(vm.entdata[e], code) == val:
+            return e
+    return None
+
+
+def state(vm):
+    """Every live entity as (type, layer, colour, linetype, lineweight,
+    height, text) -- what a round trip has to reproduce."""
+    return [(grp(d, 0), grp(d, 8), grp(d, 62), grp(d, 6), grp(d, 370),
+             grp(d, 40), grp(d, 1)) for d in ents(vm)]
+
+
+vm = fresh()
+before = state(vm)
+vm.run('c:SOCONV', [None, None])
+
+moved = [d for d in ents(vm) if xdata(d, 'SOCONV')]
+check("every object the run moved carries one, and nothing else does",
+      len(moved) == 9 and len([d for d in ents(vm) if xdata(d, 'SOCONV')])
+      == len(moved), repr(len(moved)))
+rec = xdata([d for d in ents(vm) if grp(d, 0) == 'MTEXT'][0], 'SOCONV')
+check("...naming the tool, the version, and the layer it came off",
+      rec[0] == Dot(1000, 'SOCONV')
+      and re.fullmatch(r'v\d+\.\d+', rec[1].b)
+      and rec[2] == Dot(1000, 'Dimensions'), repr(rec))
+check("...and that layer's own colour, for one PURGEd later",
+      rec[4] == Dot(1070, 255), repr(rec))
+check("with the forcing off it records no properties to put back",
+      rec[5] == Dot(1070, 0) and rec[3] == Dot(1000, ''), repr(rec))
+check("the done line offers the way back", any(
+    'SORECONV moves it all back' in s for s in vm.printed), repr(vm.printed[-2:]))
+
+print("soconv -- SORECONV puts the drawing back on the export's layers")
+vm.printed = []
+vm.run('c:SORECONV', [None, None])
+check("every object is on the layer it arrived on", state(vm) == before,
+      "before %r\nafter  %r" % (before, state(vm)))
+check("and the record went with the move it described",
+      not [d for d in ents(vm) if xdata(d, 'SOCONV')],
+      repr([xdata(d, 'SOCONV') for d in ents(vm)]))
+check("nothing was erased and nothing was drawn", len(ents(vm)) == 11)
+check("the summary names the counts, per source layer", any(
+    'SORECONV done: 9 object(s) put back -- 4 -> Pool Perimeter,'
+    ' 2 -> POINTS' not in s for s in vm.printed) and any(
+    'SORECONV done: 9 object(s) put back' in s for s in vm.printed),
+    repr(vm.printed[-3:]))
+check("...and says what it came off", any(
+    'Off POOL, POINTS, TEXT, DIMENSION' in s for s in vm.printed),
+    repr(vm.printed[-2:]))
+check("one undo mark, opened and closed",
+    vm.undo_log[-2:] == ['start', 'end'] and vm.undo_marks == 0,
+    repr(vm.undo_log))
+check("Dimensions is an OUTPUT layer for the revert, so it is left usable",
+      not layer_flags(vm, 'Dimensions') & LOCKED and any(
+          'Dimensions was off, frozen or locked' in s for s in vm.printed),
+      repr(vm.printed[-4:]))
+check("the global *error* is untouched", not error_global(vm))
+
+vm.printed = []
+vm.run('c:SORECONV', [None, None])
+check("a second revert finds nothing and says what it undoes", any(
+    'nothing here carries a SOCONV record' in s for s in vm.printed)
+    and any('*soconv-record* off' in s for s in vm.printed), repr(vm.printed))
+
+# ----------------------------------------------------------------------
+# the forced properties, which are the only ones a record carries
+# ----------------------------------------------------------------------
+print("soconv -- with *soconv-force-bylayer* on, the properties come back too")
+
+vm = fresh()
+vm.loads('(entmake \'((0 . "LTYPE") (2 . "DASHED")))')
+vm.loads('(entmake (list \'(0 . "LINE") \'(8 . "Obstacles")'
+         ' \'(10 1.0 1.0 0.0) \'(11 9.0 9.0 0.0) \'(62 . 2)'
+         ' \'(6 . "DASHED") \'(370 . 35)))')
+vm.loads('(setq *soconv-force-bylayer* T)')
+dashed = ename_where(vm, 6, 'DASHED')
+was = (grp(vm.entdata[dashed], 62), grp(vm.entdata[dashed], 6),
+       grp(vm.entdata[dashed], 370))
+vm.run('c:SOCONV', [None, None])
+rec = xdata(vm.entdata[dashed], 'SOCONV')
+check("the record says the run forced BYLAYER, and what it overwrote",
+      rec[5] == Dot(1070, 1) and rec[3] == Dot(1000, 'DASHED')
+      and rec[6] == Dot(1070, 2) and rec[7] == Dot(1070, 35), repr(rec))
+check("...and the forcing really did overwrite it",
+      (grp(vm.entdata[dashed], 62), grp(vm.entdata[dashed], 6),
+       grp(vm.entdata[dashed], 370)) == (256, 'ByLayer', -1),
+      repr(vm.entdata[dashed]))
+vm.run('c:SORECONV', [None, None])
+now = (grp(vm.entdata[dashed], 62), grp(vm.entdata[dashed], 6),
+       grp(vm.entdata[dashed], 370))
+check("the revert puts the colour, linetype and lineweight back",
+      now == was, repr((was, now)))
+check("...and the layer with them",
+      grp(vm.entdata[dashed], 8) == 'Obstacles')
+
+# An object that arrived with NO colour of its own comes back with the
+# explicit ByLayer that means the same thing -- the one thing the
+# revert spells out rather than restores, and the header says so.
+plain = vm.entdata[ename_where(vm, 0, 'MTEXT')]
+check("an absent property comes back as the explicit ByLayer it meant",
+      (grp(plain, 62), grp(plain, 6), grp(plain, 370))
+      == (256, 'ByLayer', -1), repr(plain))
+
+print("soconv -- a linetype that has been purged since leaves the job open")
+vm = fresh()
+vm.loads('(entmake (list \'(0 . "LINE") \'(8 . "Obstacles")'
+         ' \'(10 1.0 1.0 0.0) \'(11 9.0 9.0 0.0) \'(62 . 2)'
+         ' \'(6 . "GONE") \'(370 . 35)))')
+vm.loads('(setq *soconv-force-bylayer* T)')
+gone = ename_where(vm, 6, 'GONE')
+vm.run('c:SOCONV', [None, None])
+vm.printed = []
+vm.run('c:SORECONV', [None, None])
+check("the layer and the colour still come back",
+      grp(vm.entdata[gone], 8) == 'Obstacles'
+      and grp(vm.entdata[gone], 62) == 2, repr(vm.entdata[gone]))
+check("the run names the linetype it could not load", any(
+    'Linetype GONE is no longer loaded' in s for s in vm.printed),
+    repr(vm.printed[-2:]))
+check("and KEEPS that object's record, so running it again can finish it",
+      xdata(vm.entdata[gone], 'SOCONV') is not None,
+      repr(xdata(vm.entdata[gone], 'SOCONV')))
+check("...while every finished object's record is gone",
+      len([d for d in ents(vm) if xdata(d, 'SOCONV')]) == 1,
+      repr(len([d for d in ents(vm) if xdata(d, 'SOCONV')])))
+
+# ----------------------------------------------------------------------
+# a source layer that was PURGEd, as the done line invites
+# ----------------------------------------------------------------------
+print("soconv -- a source layer purged on the tool's own advice is re-created")
+
+vm = fresh()
+vm.run('c:SOCONV', [None, None])
+# PURGE, the way the done line says to: the layer records go, the
+# objects have already left them
+vm.loads('(setq *soconv-record* *soconv-record*)')
+for name in ('POOL PERIMETER', 'OBSTACLES', 'DIMENSIONS'):
+    vm.tables['LAYER'].discard(
+        next(n for n in vm.tables['LAYER'] if n.upper() == name))
+    vm.tablerecs['LAYER'].pop(name, None)
+check("the fixture really purged them",
+      not [n for n in vm.tables['LAYER'] if n.upper() == 'OBSTACLES'])
+vm.printed = []
+vm.run('c:SORECONV', [None, None])
+check("the objects are back on layers the drawing no longer had",
+      sorted(layers_of(vm, 'ARC')) == ['Obstacles', 'Pool Perimeter'],
+      repr(layers_of(vm, 'ARC')))
+check("...re-created with the colour the record kept off the layer",
+      grp(vm.recdata[vm.tablerecs['LAYER']['OBSTACLES']], 62) == 51,
+      repr(vm.recdata[vm.tablerecs['LAYER']['OBSTACLES']]))
+check("...and the notes' layer with them",
+      layers_of(vm, 'MTEXT') == ['Dimensions'], repr(layers_of(vm, 'MTEXT')))
+
+# ----------------------------------------------------------------------
+# the record can be switched off, and then there is nothing to undo from
+# ----------------------------------------------------------------------
+print("soconv -- *soconv-record* nil converts and writes nothing down")
+
+vm = fresh()
+vm.loads('(setq *soconv-record* nil)')
+vm.run('c:SOCONV', [None, None])
+check("the conversion still happens", layers_of(vm, 'ARC') == ['POOL', 'POOL'])
+check("but nothing carries a record",
+      not [d for d in ents(vm) if xdata(d, 'SOCONV')])
+check("and the run says so rather than promising a revert", any(
+    '*soconv-record* is off' in s for s in vm.printed), repr(vm.printed[-2:]))
+vm.printed = []
+vm.run('c:SORECONV', [None, None])
+check("SORECONV then moves nothing and explains why", any(
+    'nothing here carries a SOCONV record' in s for s in vm.printed)
+    and layers_of(vm, 'ARC') == ['POOL', 'POOL'], repr(vm.printed))
+
+# ----------------------------------------------------------------------
+# the cut-short paths, as SOCONV's own
+# ----------------------------------------------------------------------
+print("soconv -- SORECONV cut short reaches its own handler")
+
+vm = fresh()
+vm.run('c:SOCONV', [None, None])
+vm.handle_errors = True
+vm.loads('(defun soconv:tally-line (tally) (soconv:no-such-helper tally))')
+vm.run('c:SORECONV', [None, None])
+check("the run is aborted through *error*, not a crash",
+      len(vm.handled_errors) == 1
+      and 'undefined function' in vm.handled_errors[0], repr(vm.handled_errors))
+check("the handler closed the mark it opened",
+      vm.undo_marks == 0 and vm.undo_log[-1] == 'end', repr(vm.undo_log))
+check("the error is reported under the reverter's name", any(
+    s.startswith('\nSORECONV error:') for s in vm.printed), repr(vm.printed[-3:]))
+check("the global *error* is untouched afterwards", not error_global(vm))
+
+vm = fresh()
+vm.run('c:SOCONV', [None, None])
+vm.handle_errors = True
+was = state(vm)
+vm.printed = []
+vm.run('c:SORECONV', [None, esc])
+check("Esc at the selection prompt is a quiet cancel",
+      vm.handled_errors and 'cancelled' in vm.handled_errors[0]
+      and not any('SORECONV error' in s for s in vm.printed),
+      repr(vm.printed[-2:]))
+check("nothing was moved back", state(vm) == was)
+check("the mark opened before the prompt is closed",
+      vm.undo_marks == 0 and vm.undo_log[-1] == 'end', repr(vm.undo_log))
+
+# ----------------------------------------------------------------------
 # the version reporter
 # ----------------------------------------------------------------------
 print("soconv -- the version reporter")

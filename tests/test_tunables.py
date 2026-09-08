@@ -1,4 +1,4 @@
-"""Every tunables block in the tree: all at the top, all explained, none stray.
+"""Every knob block in the tree: all at the top, all explained, none stray.
 
 The chart forms and the panel are the files a person tunes -- a budget
 that has to change when a name gets longer, a ceiling that depends on
@@ -62,44 +62,56 @@ def check(label, cond, detail=''):
         FAILS.append(label)
 
 
-#: (tool as mirror_shared names it, source, namespace, README)
+#: How a file rules its block off: its header line, and the first line
+#: past it.  Most use the `tunables` spelling STANDARDS.md section 5
+#: asks new work for; AutoDim's block got there under `SETTINGS` and
+#: closes itself explicitly, which the same rule leaves alone.  So this
+#: travels in the FILES row rather than being one constant.
+TUNABLES = (';;; -------------------- tunables ', '\n;;; ---')
+SETTINGS = (';;;  SETTINGS\n', '\n;;; =' + '=' * 49 + ' end of SETTINGS')
+
+
+#: (tool as mirror_shared names it, source, namespace, README, markers)
 FILES = [
     ('LAZPANEL', ROOT / 'lisp' / 'lazpanel' / 'LAZPANEL.lsp', 'lzp',
-     ROOT / 'lisp' / 'lazpanel' / 'README.md'),
+     ROOT / 'lisp' / 'lazpanel' / 'README.md', TUNABLES),
     ('LAZFORM', ROOT / 'lisp' / 'lazform' / 'LAZFORM.lsp', 'lzf',
-     ROOT / 'lisp' / 'lazform' / 'README.md'),
+     ROOT / 'lisp' / 'lazform' / 'README.md', TUNABLES),
     ('LAZSPA', ROOT / 'lisp' / 'lazspa' / 'LAZSPA.lsp', 'lzs',
-     ROOT / 'lisp' / 'lazspa' / 'README.md'),
+     ROOT / 'lisp' / 'lazspa' / 'README.md', TUNABLES),
     ('LAZSTEP', ROOT / 'lisp' / 'lazstep' / 'LAZSTEP.lsp', 'lzt',
-     ROOT / 'lisp' / 'lazstep' / 'README.md'),
+     ROOT / 'lisp' / 'lazstep' / 'README.md', TUNABLES),
     # the two point plotters, which grew blocks of their own: the same
     # rule, and the same reason -- a confidence weight or a drop-evidence
     # ratio buried beside the solver is a number nobody can reach
     ('abcdef', ROOT / 'lisp' / 'abcdef' / 'abcdef.lsp', 'abcdef',
-     ROOT / 'lisp' / 'abcdef' / 'README.md'),
+     ROOT / 'lisp' / 'abcdef' / 'README.md', TUNABLES),
     ('ALTABCDEF', ROOT / 'lisp' / 'altabcdef' / 'ALTABCDEF.lsp', 'altabcdef',
-     ROOT / 'lisp' / 'altabcdef' / 'README.md'),
+     ROOT / 'lisp' / 'altabcdef' / 'README.md', TUNABLES),
+    # AutoDim, whose block is the styles, stand-offs and side-view
+    # thresholds a drafter tunes -- and which rules it off as SETTINGS,
+    # the older spelling the rule leaves where it got there first
+    ('AutoDim', ROOT / 'lisp' / 'autodim' / 'AutoDim.lsp', 'ad',
+     ROOT / 'lisp' / 'autodim' / 'README.md', SETTINGS),
     # the three callout/create tools, which joined for the same reason
     # again: each kept SOME of its settings in a block at the top and
     # the rest inline -- a ring colour, a text offset, the sentence a
     # callout is built from -- so adapting one meant reading the file
     # to find out what was adjustable at all.
     ('BPCALLOUT', ROOT / 'lisp' / 'bpcallout' / 'BPCALLOUT.lsp', 'bp',
-     ROOT / 'lisp' / 'bpcallout' / 'README.md'),
+     ROOT / 'lisp' / 'bpcallout' / 'README.md', TUNABLES),
     ('CDCALLOUT', ROOT / 'lisp' / 'cdcallout' / 'CDCALLOUT.lsp', 'cdo',
-     ROOT / 'lisp' / 'cdcallout' / 'README.md'),
+     ROOT / 'lisp' / 'cdcallout' / 'README.md', TUNABLES),
     ('CDCREATE', ROOT / 'lisp' / 'cdcreate' / 'CDCREATE.lsp', 'cdc',
-     ROOT / 'lisp' / 'cdcreate' / 'README.md'),
+     ROOT / 'lisp' / 'cdcreate' / 'README.md', TUNABLES),
 ]
 
-HEADER = ';;; -------------------- tunables '
-
-
-def split_block(src):
-    """(block, everything else). The block runs from its own ;;; header
-    to the next one."""
-    i = src.index(HEADER)
-    j = src.index('\n;;; ---', i + len(HEADER))
+def split_block(src, markers):
+    """(block, everything else). The block runs from its own header to
+    the first line past it."""
+    head, end = markers
+    i = src.index(head)
+    j = src.index(end, i + len(head))
     return src[i:j], src[:i] + src[j:]
 
 
@@ -180,10 +192,15 @@ def assigned(src, ns):
 def why_of(lines, i):
     """What line I of a block says about changing the knob it sets.
 
-    Either a remark after the value, or the ``;;`` comment standing
-    over the run of setqs this one is in -- the frame numbers share one
-    paragraph and then a word each, and that is the right shape for
-    them.  '' when neither is there.
+    Either a remark after the value, the ``;`` lines continuing under
+    it, or the ``;;`` comment standing over the run of setqs this one
+    is in -- the frame numbers share one paragraph and then a word
+    each, and that is the right shape for them.  '' when none is there.
+
+    The continuation case is what a setq too long to leave room for a
+    remark does (AutoDim's two entity-type lists run to the margin).
+    Reading only the line itself called those unexplained -- and worse,
+    let the NEXT knob down inherit their paragraph and pass.
     """
     ln, j, q = lines[i], 0, False
     while j < len(ln):
@@ -192,6 +209,14 @@ def why_of(lines, i):
         elif ln[j] == ';' and not q:
             return ln[j:].strip('; ').strip()
         j += 1
+    # the ;-comment lines continuing underneath, before the next setq
+    below = []
+    k = i + 1
+    while k < len(lines) and lines[k].lstrip().startswith(';'):
+        below.append(lines[k].lstrip(';').strip())
+        k += 1
+    if below:
+        return " ".join(below).strip()
     k = i - 1
     while k >= 0 and lines[k].startswith('(setq '):
         k -= 1
@@ -240,16 +265,16 @@ def table_of(readme):
 print("== 1. every file opens with a tunables block ==")
 
 BLOCKS = {}
-for tool, path, ns, _readme in FILES:
+for tool, path, ns, _readme, mk in FILES:
     src = read(path)
-    check("%s has one" % tool, HEADER in src)
-    if HEADER not in src:
+    check("%s has one" % tool, mk[0] in src)
+    if mk[0] not in src:
         continue
-    block, rest = split_block(src)
+    block, rest = split_block(src, mk)
     BLOCKS[tool] = (src, block, rest, ns)
     first_defun = src.index('\n(defun ')
     check("%s: it comes before the first defun" % tool,
-          src.index(HEADER) < first_defun,
+          src.index(mk[0]) < first_defun,
           "a knob defined after the code that reads it is nil while "
           "that code loads")
     check("%s: %d knob(s)" % (tool, len(knobs_in(block, ns))),
@@ -258,7 +283,7 @@ for tool, path, ns, _readme in FILES:
 
 print("== 2. every knob says what changing it does ==")
 
-for tool, path, ns, _readme in FILES:
+for tool, path, ns, _readme, mk in FILES:
     if tool not in BLOCKS:
         continue
     _src, block, _rest, _ns = BLOCKS[tool]
@@ -275,7 +300,7 @@ for tool, path, ns, _readme in FILES:
 
 print("== 3. a knob is a literal nothing re-assigns ==")
 
-for tool, path, ns, _readme in FILES:
+for tool, path, ns, _readme, mk in FILES:
     if tool not in BLOCKS:
         continue
     _src, block, rest, _ns = BLOCKS[tool]
@@ -288,7 +313,7 @@ for tool, path, ns, _readme in FILES:
 
 print("== 4. no knob-shaped global lives outside its block ==")
 
-for tool, path, ns, _readme in FILES:
+for tool, path, ns, _readme, mk in FILES:
     if tool not in BLOCKS:
         continue
     _src, block, rest, _ns = BLOCKS[tool]
@@ -327,7 +352,7 @@ for tool, path, ns, _readme in FILES:
 
 print("== 5. every knob is in its README, with the default it has ==")
 
-for tool, path, ns, readme in FILES:
+for tool, path, ns, readme, mk in FILES:
     if tool not in BLOCKS:
         continue
     _src, block, _rest, _ns = BLOCKS[tool]

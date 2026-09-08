@@ -449,6 +449,248 @@ check("a locked layer with none of the selection on it does not stop it",
       inserts(vm) == [(1.0, 2.0, "C1")], repr(inserts(vm)))
 
 # ----------------------------------------------------------------------
+# 9. the record, and XFTRECONV reading it back
+# ----------------------------------------------------------------------
+# XFTCONV erases things, and an erased entity is gone for good once the
+# drawing is saved -- so the undo has to work from what was written
+# down, not from the database.  What is written down is xdata on each
+# block: the scale and base the run used, and the marker, the name text
+# and any leftover text it swept, group by group.
+print("the record XFTCONV leaves behind")
+
+
+def xdata(d, app):
+    """The items one application carries, [] when it is there and empty,
+    None when it is not there at all."""
+    g = grp(d, -3)
+    if g is None:
+        return None
+    apps = [g] if (g and isinstance(g[0], str)) else g
+    for a in apps:
+        if a and a[0] == app:
+            return a[1:]
+    return None
+
+
+def blocks(vm):
+    """[(ename, data)] for every live ab_pt INSERT."""
+    return [(e, vm.entdata[e]) for e in vm.entities
+            if e not in vm.deleted and grp(vm.entdata[e], 0) == 'INSERT'
+            and grp(vm.entdata[e], 2) == 'ab_pt']
+
+
+def ents(vm, *types):
+    out = []
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        d = vm.entdata[e]
+        if not types or grp(d, 0) in types:
+            out.append(d)
+    return out
+
+
+def shape(d):
+    """An entity as the tuple a round trip has to reproduce."""
+    return (grp(d, 0), grp(d, 8), grp(d, 10), grp(d, 11), grp(d, 40),
+            grp(d, 1), grp(d, 62), grp(d, 72), grp(d, 73))
+
+
+def near(a, b, tol=1e-6):
+    """shape() tuples equal, numbers to TOL -- the record writes a
+    coordinate through rtos at 8 decimals, so the round trip is exact
+    to 1e-8 of a drawing unit and not to the last bit of the float."""
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return len(a) == len(b) and all(near(x, y, tol) for x, y in zip(a, b))
+    if isinstance(a, float) and isinstance(b, (int, float)):
+        return abs(a - b) <= tol
+    if isinstance(b, float) and isinstance(a, (int, float)):
+        return abs(a - b) <= tol
+    return a == b
+
+
+vm = newvm([LAYERS])
+ents_in = []
+ents_in += made(vm, marker(0.0, 0.5))
+ents_in += made(vm, name_text(0.2, 1.0, "P9"))
+ents_in += made(vm, marker(100.0, 100.0))
+ents_in += made(vm, name_text(60.0, 60.0, "a loose note"))
+before = [shape(d) for d in ents(vm)]
+vm.run('c:XFTCONV', [None, ents_in])
+
+recs = [xdata(d, 'XFTCONV') for _e, d in blocks(vm)]
+check("every block carries a record", len(recs) == 2 and all(recs), repr(recs))
+check("...naming the tool and the version that wrote it",
+      all(r[0] == Dot(1000, 'XFTCONV') for r in recs)
+      and all(re.fullmatch(r'v\d+\.\d+', r[1].b) for r in recs),
+      repr(recs[0][:2]))
+scales = {r[2].b for r in recs}
+bases = {(r[3].b, r[4].b, r[5].b) for r in recs}
+check("...and the scale and the base point the run used, as reals",
+      scales == {12.0} and bases == {(50.0, 50.25, 0.0)},
+      repr((scales, bases)))
+check("the base recorded is the one the SCALE was actually about",
+      [c for c in vm.commands if c and c[0] == '_.SCALE'][0][-2]
+      == [50.0, 50.25, 0.0])
+check("the run says the record is there",
+      'XFTRECONV puts all of it back' in ''.join(vm.printed),
+      ''.join(vm.printed)[-200:])
+
+print("XFTRECONV puts the survey back")
+vm.printed, vm.commands = [], []
+vm.run('c:XFTRECONV', [None, [e for e in vm.entities if e not in vm.deleted]])
+
+check("every ab_pt block is gone again", blocks(vm) == [], repr(blocks(vm)))
+after = [shape(d) for d in ents(vm)]
+check("the marker lines, the names and the swept note are all back",
+      len(after) == len(before)
+      and all(any(near(b, a) for a in after) for b in before),
+      "before %r\nafter %r" % (sorted(map(str, before)),
+                               sorted(map(str, after))))
+check("...including the leftover text the purge erased",
+      any(a[5] == 'a loose note' for a in after), repr(after))
+scale = [c for c in vm.commands if c and c[0] == '_.SCALE']
+check("one SCALE back, by 1/12 about the very base point recorded",
+      len(scale) == 1 and abs(scale[0][-1] - 1.0 / 12.0) < 1e-12
+      and scale[0][-2] == [50.0, 50.25, 0.0], repr(scale))
+check("nothing erased is handed to that SCALE",
+      all(e not in vm.deleted for e in scale[0][-3][1:]), repr(scale[0][-3]))
+check("the revert is one undo group",
+      [c for c in vm.commands if c and c[0] == '_.UNDO'] ==
+      [['_.UNDO', '_Begin'], ['_.UNDO', '_End']], repr(vm.commands))
+check("the error mode is popped and the settings are back",
+      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
+      and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
+check("the report counts both halves of the job",
+      '2 "ab_pt" block(s) taken back off the survey.' in ''.join(vm.printed)
+      and '6 marker and text object(s) put back.' in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+
+vm.printed = []
+vm.run('c:XFTRECONV', [None, [e for e in vm.entities if e not in vm.deleted]])
+check("a second revert finds no record and says so",
+      'nothing carries an XFTCONV record' in ''.join(vm.printed),
+      ''.join(vm.printed)[-200:])
+
+# ----------------------------------------------------------------------
+# 10. the site trace round trip: circles, and captions that never move
+# ----------------------------------------------------------------------
+print("the site trace, converted and put back")
+
+vm = newvm([DOT_LAYERS])
+ents_in = []
+for lay, x, y, nm in SAMPLE_DOTS:
+    ents_in += made(vm, circle(lay, x, y))
+    if nm:
+        ents_in += made(vm, dot_name(x, y, nm))
+caps = []
+for x, y, cs in SAMPLE_CAPTIONS:
+    caps += made(vm, caption(x, y, cs))
+before = [shape(d) for d in ents(vm)]
+vm.run('c:XFTCONV', [None, ents_in + caps])
+vm.run('c:XFTRECONV', [None, [e for e in vm.entities if e not in vm.deleted]])
+after = [shape(d) for d in ents(vm)]
+
+check("all twelve circles come back, both copies of every corner",
+      len([a for a in after if a[0] == 'CIRCLE']) == 12,
+      repr(len([a for a in after if a[0] == 'CIRCLE'])))
+check("every marker and every label is back where it was",
+      len(after) == len(before)
+      and all(any(near(b, a) for a in after) for b in before),
+      "%d before, %d after" % (len(before), len(after)))
+check("the captions never moved -- the trace is swept neither way",
+      sorted(a[5] for a in after if a[5] and ' ' in a[5]) ==
+      ['Deep End', 'Diagonal 1', 'Diagonal 2', 'Shallow End'],
+      repr(sorted(a[5] for a in after if a[5])))
+check("and no ab_pt survives it", blocks(vm) == [])
+
+# The trace fixture is what measures the precision claim: its
+# coordinates carry more decimals than the record writes down.
+worst = 0.0
+for b in before:
+    if not b[2]:
+        continue
+    a = min((a for a in after if a[0] == b[0] and a[2]),
+            key=lambda a: abs(a[2][0] - b[2][0]) + abs(a[2][1] - b[2][1]))
+    worst = max(worst, abs(a[2][0] - b[2][0]), abs(a[2][1] - b[2][1]))
+check("a coordinate comes back within the 1e-8 the record writes to",
+      worst <= 1e-8, "worst %r" % worst)
+
+# ----------------------------------------------------------------------
+# 11. the three ways XFTRECONV refuses rather than half-reverting
+# ----------------------------------------------------------------------
+print("what XFTRECONV will not do")
+
+vm = newvm([LAYERS])
+first = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P1"))
+vm.run('c:XFTCONV', [None, first])
+second = made(vm, marker(900.0, 900.5)) + made(vm, name_text(900.2, 901.0, "P2"))
+vm.run('c:XFTCONV', [None, second])
+live_all = [e for e in vm.entities if e not in vm.deleted]
+was = [shape(d) for d in ents(vm)]
+vm.printed, vm.commands = [], []
+vm.run('c:XFTRECONV', [None, live_all])
+check("two runs in one highlight are refused by name",
+      'holds points from 2 different XFTCONV runs' in ''.join(vm.printed),
+      ''.join(vm.printed)[-260:])
+check("...and nothing at all is touched",
+      [shape(d) for d in ents(vm)] == was and not vm.commands,
+      repr(vm.commands))
+check("...and that exit pops the error mode too",
+      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0)
+
+vm = newvm([LAYERS])
+ents_in = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P3"))
+vm.run('c:XFTCONV', [None, ents_in])
+vm.loads('(setq lk (tblobjname "LAYER" "POINTS"))'
+         '(entmod (subst (cons 70 4) (assoc 70 (entget lk)) (entget lk)))')
+live_all = [e for e in vm.entities if e not in vm.deleted]
+vm.printed, vm.commands = [], []
+vm.run('c:XFTRECONV', [None, live_all])
+check("a locked block layer is named, and nothing runs",
+      'Unlock POINTS' in ''.join(vm.printed) and not vm.commands
+      and len(blocks(vm)) == 1, ''.join(vm.printed)[-200:])
+
+vm = newvm([LAYERS])
+vm.loads('(setq *xft-record* nil)')
+ents_in = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P4"))
+vm.run('c:XFTCONV', [None, ents_in])
+check("with *xft-record* off nothing is written down",
+      all(xdata(d, 'XFTCONV') is None for _e, d in blocks(vm)))
+check("...and the run says so instead of promising a revert",
+      '*xft-record* is off' in ''.join(vm.printed), ''.join(vm.printed)[-200:])
+vm.printed, vm.commands = [], []
+vm.run('c:XFTRECONV', [None, [e for e in vm.entities if e not in vm.deleted]])
+check("XFTRECONV then says there is nothing to work from",
+      'nothing carries an XFTCONV record' in ''.join(vm.printed)
+      and not vm.commands and len(blocks(vm)) == 1,
+      ''.join(vm.printed)[-200:])
+
+# ----------------------------------------------------------------------
+# 12. the cut-short paths, exactly as XFTCONV's own
+# ----------------------------------------------------------------------
+print("XFTRECONV, cut short")
+
+vm = newvm([LAYERS])
+vm.sysvars['CTAB'] = 'Model'
+vm.run('c:XFTRECONV', [None, None])
+check("an empty drawing: says so, mode popped, settings untouched",
+      'Nothing to work on' in ''.join(vm.printed)
+      and vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
+      and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
+
+vm = newvm([LAYERS])
+vm.handle_errors = True
+vm.run('c:XFTRECONV', [None, esc])
+check("Esc at the highlight goes through the handler, once",
+      vm.handled_errors == ['Function cancelled'], repr(vm.handled_errors))
+check("...which popped the mode and restored the settings",
+      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
+      and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
+check("a cancel prints no error line",
+      not any('XFTRECONV error' in s for s in vm.printed))
+
+# ----------------------------------------------------------------------
 print()
 if FAILS:
     print(f"{len(FAILS)} FAILED: " + ", ".join(FAILS))
