@@ -31477,48 +31477,195 @@
 ;;;
 ;;;  Nothing is written until the split is shown and answered Yes, the
 ;;;  old-to-new table is printed so a callout can be chased afterwards,
-;;;  and the whole renumber is one U.
+;;;  and the whole renumber is one U.  A write that does not land -- a
+;;;  locked POINTS layer is the everyday reason -- is named in the table
+;;;  and counted at the end, never reported as a renumber that happened.
+;;;
+;;;  EVERY knob the tool has is in the TUNABLES block below, grouped and
+;;;  explained; nothing past it is a value meant to be edited.
 ;;; ======================================================================
 
 ;;; -------------------- version -----------------------------------------
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.3")
+(setq *pointrenamer-version* "v1.4")
 
 ;;; -------------------- tunables ----------------------------------------
+;;;  Every knob the tool has, all of them here.
+;;;  Past this block nothing is a bare number: every value the tool's
+;;;  behaviour turns on is named here, with what it does and what moving
+;;;  it costs.  Two ways to change one:
+;;;
+;;;    for good     edit the line here and re-APPLOAD the file
+;;;    for one job  type (setq ptr:*band* 3.0) at the command line after
+;;;                 loading -- it holds until the drawing closes
+;;;
+;;;  The groups, in the order you are likely to want them:
+;;;
+;;;    1  what counts as a point         4  what the report looks like
+;;;    2  what counts as the perimeter   5  tolerances, named not tuned
+;;;    3  what the questions start at
+;;;
+;;;  Every one of them is a literal the tool only ever READS, so what
+;;;  stands here is what the file does.  The two answers carried between
+;;;  runs -- the band and the direction -- are remembered in state of
+;;;  their own below the block, seeded from the knobs here, so a run
+;;;  cannot quietly overwrite the value you set.
+;;;
+;;;  One number is deliberately NOT here: the clamp inside the generic
+;;;  tangent helper.  That helper is the shared library's, carried here
+;;;  as a copy, and in the grouped build the library's own body is what
+;;;  runs -- so a knob here would be read at one tier and ignored at the
+;;;  other, which is worse than a number with a comment on it.
 
-;; Where the survey points live and what a point block calls its number
-;; -- ABPCHECK's abp:*pt-layer* / abp:*pt-block* / abp:*pt-tag*.
-(setq ptr:*pt-layer* "POINTS")    ; layer holding the survey points
-(setq ptr:*pt-block* "ab_pt")     ; block name whose INSERTs mark points
-(setq ptr:*pt-tag*   "number")    ; the attribute carrying the number
+;; -- 1. what counts as a point ----------------------------------------
 
-;; The layer the pool outline lives on, where the perimeter is looked
-;; for first.
+;; ABPCHECK's definition of a survey point, unchanged, so the two tools
+;; never disagree about what they are looking at (its abp:*pt-layer* /
+;; abp:*pt-block* / abp:*pt-tag*).  A block counts when it is NAMED
+;; *pt-block*, wherever in the drawing it sits, or when it sits on
+;; *pt-layer*, whatever it is named -- widen either and more blocks are
+;; swept in.  A block with nowhere to write a number is counted out loud
+;; and left alone whichever way it got here.
+(setq ptr:*pt-layer* "POINTS")    ; layer whose blocks count as points
+(setq ptr:*pt-block* "ab_pt")     ; block name that counts wherever it sits
+(setq ptr:*pt-tag*   "number")    ; the attribute the number lives in
+
+;; -- 2. what counts as the perimeter ----------------------------------
+
+;; Where the perimeter is looked for before anything is asked: the
+;; BIGGEST closed polyline on this layer inside the highlight.  Point it
+;; at the spa's layer and a spa sheet needs no pick either.  When the
+;; highlight holds no closed polyline on this layer but exactly one
+;; anywhere, that one is offered instead -- and a click overrides
+;; whatever was found, always.
 (setq ptr:*perim-layer* "POOL")
 
-;; How far off the perimeter still counts as on it.  The command asks,
-;; Enter takes what is here, and the answer is remembered for the
-;; session.
-(setq ptr:*band* 6.0)             ; 6 inches
+;; What the highlight is allowed to keep, so a hatch or a dimension
+;; cannot be dragged in by a sloppy window.  LINE and ARC are missing on
+;; purpose: they are perfectly good perimeters, but only when clicked
+;; for by name, never when swept up by the window.
+(setq ptr:*filter* '((0 . "POINT,INSERT,LWPOLYLINE,POLYLINE")))
 
-;; Which way round the last run went; the next run offers it as the
-;; default.
+;; Which vertices of an old-style (heavy) POLYLINE are NOT on the drawn
+;; curve, as a mask over the vertex flags (DXF group 70).  Bit 16 is a
+;; spline FRAME control point: the curve is pulled toward it and never
+;; through it, so walking the frame measures against a shape that is not
+;; on the sheet.  Bits 1 and 8 are the opposite -- the extra vertices
+;; curve- and spline-fitting ADD are the curve the sheet shows -- so
+;; they are kept.  Set it to 17 to walk a fitted polyline by its control
+;; points instead, as this tool did before v1.4.
+(setq ptr:*vertex-skip* 16)
+
+;; -- 3. what the questions start at -----------------------------------
+
+;; How far off the perimeter still counts as on it -- what the FIRST run
+;; of a session offers, before anyone has answered.  Later runs offer
+;; the last answer instead (ptr:*band-now*, below).  Zero is refused at
+;; the prompt (initget 6) -- to mean "only what is exactly on it",
+;; answer a hair such as 1/16" rather than 0.  Inches, like every
+;; distance here: 6.0 is six inches.
+(setq ptr:*band* 6.0)
+
+;; Which way round the FIRST run of a session offers, on the same
+;; footing as the band.  Spelled exactly as the keywords are, because
+;; this string IS the offered default: "Clockwise" or
+;; "COunterclockwise", nothing else.
 (setq ptr:*dir* "Clockwise")
 
-;; Two spots closer than this are the same spot (closing-run test).
+;; The number the count starts at, offered at every run.  Unlike the
+;; band and the direction this one is NOT carried between runs: a
+;; renumber almost always starts at 1, and continuing someone else's
+;; count is the exception you type.  Zero and negatives are refused.
+(setq ptr:*first* 1)
+
+;; The sysvars saved on the way in and put back on the way out, however
+;; the run ends.  Add a name here if a change ever starts touching one.
+(setq ptr:*sysvars* '("CMDECHO"))
+
+;; -- 4. what the report looks like ------------------------------------
+
+;; A start pick further than this off the perimeter is called out.  The
+;; sweep still begins at the nearest spot on the run, but a pick this
+;; far away is more often a mis-click than a corner.  Raise it to quiet
+;; the note on a plan drawn at a large scale, lower it to be told about
+;; a looser one.  Inches: 12.0 is a foot.
+(setq ptr:*far-pick* 12.0)
+
+;; The width the OLD number is padded to in the old-to-new table, so the
+;; arrows line up.  Widen it for a survey that numbers its shots
+;; "SW-CORNER-01" rather than "17".
+(setq ptr:*name-width* 8)
+
+;; How every distance in a prompt or a report is written -- the two
+;; arguments of (rtos d MODE PRECISION).  Mode 4 is feet-and-inches,
+;; which is what the sheets carry and what the crew reads back, and
+;; precision 4 is a sixteenth.  Mode 2 precision 2 would print "6.00"
+;; where this prints 0'-6".
+(setq ptr:*dist-mode* 4)
+(setq ptr:*dist-prec* 4)
+
+;; -- 5. tolerances ----------------------------------------------------
+;;  Named so that nothing in the code is an unexplained number, not so
+;;  that they can be tuned: every one is a floating-point noise floor,
+;;  in drawing units (inches).  Move one only with a reason.
+
+;; Two spots closer together than this are the same spot -- the test for
+;; whether a closed polyline's last vertex already sits on its first, so
+;; the closing run is not laid down twice.
 (setq ptr:*exact-eps* 1.0e-6)
 
+;; A perimeter shorter than this has nothing to sweep, so it is refused
+;; instead of divided by.
+(setq ptr:*zero-len* 1.0e-6)
 
-;; What the highlight keeps: the points and the polylines the perimeter
-;; could be.  Everything else never enters the selection.
-(setq ptr:*filter* '((0 . "POINT,INSERT,LWPOLYLINE,POLYLINE")))
+;; Below this a bulge is a straight line rather than an arc -- and so is
+;; the chord under one, which the same floor guards, because the arc
+;; math divides by both.
+(setq ptr:*bulge-eps* 1.0e-9)
+
+;; Below this a determinant has gone to zero: three points are collinear
+;; and have no circumcentre, and an arc's sweep is a whole circle rather
+;; than nothing at all.
+(setq ptr:*flat-eps* 1.0e-10)
+
+;; Below this a segment has no direction to project onto, so the nearest
+;; spot on it is simply its start.  It is a length SQUARED, which is why
+;; it is the square of the floors above.
+(setq ptr:*tiny-len2* 1.0e-20)
+
+;; How near a whole number a point's number has to read before the clash
+;; sweep counts it as one.  A shot numbered "3.5" is not in the range
+;; 1-10 in any sense a callout cares about, and neither is "3.0000001".
+(setq ptr:*whole-eps* 1.0e-9)
+
+;; Added to every station before it is wrapped round the loop, so that a
+;; point clicked dead-on the start sorts FIRST instead of being wrapped
+;; by floating-point noise to the far end of the sweep.  It has to be
+;; bigger than that noise and far smaller than the gap between two shots
+;; anyone would call separate.
+(setq ptr:*start-whisker* 1.0e-4)
+
+;;; -------------------- state -------------------------------------------
+;;;  Not knobs: what a run writes down, seeded from the block above.  A
+;;;  setting hoisted in here would advertise an initial value as a knob;
+;;;  a knob left down here would be overwritten by the first run.
+
+;; The band and the direction the last run of this session used, offered
+;; as the default by the next one.  nil until a run has answered, and
+;; the knobs above are what is offered until then.
+(setq ptr:*band-now* nil)
+(setq ptr:*dir-now* nil)
+
 
 ;;; -------------------- generic helpers ----------------------------------
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 
 ;;; -------------------- tool-specific asks ------------------------------
+
+;; Distance as every prompt and report writes it.
+(defun ptr:dstr (d) (rtos d ptr:*dist-mode* ptr:*dist-prec*))
 
 ;; Which way round.  CW and CCW ride along ALL-CAPS and hidden, so they
 ;; must be typed in full and cannot steal a canonical hotkey; they are
@@ -31556,8 +31703,6 @@
         ((null v) dflt)
         (t v)))
 
-;; Distance as the reports write it.
-(defun ptr:dstr (d) (rtos d 4 4))
 
 ;;; -------------------- arc / segment geometry --------------------------
 ;;;  A segment is (startPt endPt bulge), 2D points -- ABHD's shape, by
@@ -31573,7 +31718,7 @@
         x2 (car pb) y2 (cadr pb)
         x3 (car pc) y3 (cadr pc)
         d  (* 2.0 (+ (* x1 (- y2 y3)) (* x2 (- y3 y1)) (* x3 (- y1 y2)))))
-  (if (< (abs d) 1.0e-10)
+  (if (< (abs d) ptr:*flat-eps*)
     nil
     (progn
       (setq s1 (+ (* x1 x1) (* y1 y1))
@@ -31588,13 +31733,13 @@
 ;; vertex under a bulge (a traced outline leaves those behind), where
 ;; there is nothing to sweep and the chord math would divide by zero.
 (defun ptr:arc-geom (p1 p2 b / ch dir apex c)
-  (if (< (abs b) 1.0e-9)
+  (if (< (abs b) ptr:*bulge-eps*)
     nil
     (progn
       (setq p1 (cal:2d p1)
             p2 (cal:2d p2)
             ch (cal:dist p1 p2))
-      (if (< ch 1.0e-9)
+      (if (< ch ptr:*bulge-eps*)
         nil
         (progn
           (setq dir  (cal:v* (cal:v- p2 p1) (/ 1.0 ch))
@@ -31612,7 +31757,7 @@
 ;; degenerate).
 (defun ptr:seg-len (seg / p1 p2 b g)
   (setq p1 (car seg) p2 (cadr seg) b (caddr seg))
-  (if (< (abs b) 1.0e-9)
+  (if (< (abs b) ptr:*bulge-eps*)
     (cal:dist p1 p2)
     (progn
       (setq g (ptr:arc-geom p1 p2 b))
@@ -31634,12 +31779,12 @@
         p1 (cal:2d (car seg))
         p2 (cal:2d (cadr seg))
         b  (caddr seg))
-  (if (< (abs b) 1.0e-9)
+  (if (< (abs b) ptr:*bulge-eps*)
     (progn
       (setq v    (cal:v- p2 p1)
             w    (cal:v- p p1)
             len2 (cal:dot v v))
-      (if (< len2 1.0e-20)
+      (if (< len2 ptr:*tiny-len2*)
         (cons (cal:dist p p1) 0.0)
         (progn
           (setq t2 (/ (cal:dot w v) len2))
@@ -31681,13 +31826,13 @@
           b  (caddr s))
     (setq a (+ a (* 0.5 (- (* (car p1) (cadr p2))
                            (* (car p2) (cadr p1))))))
-    (if (> (abs b) 1.0e-9)
+    (if (> (abs b) ptr:*bulge-eps*)
       (progn
         ;; bulge = tan(sweep/4); segment area = r^2/2 (th - sin th),
         ;; signed the way the bulge turns
         (setq th (* 4.0 (atan (abs b)))
               ch (cal:dist p1 p2))
-        (if (> (abs (sin (/ th 2.0))) 1.0e-12)
+        (if (> (abs (sin (/ th 2.0))) ptr:*flat-eps*)
           (progn
             (setq r (/ ch (* 2.0 (sin (/ th 2.0)))))
             (setq a (+ a (* (if (> b 0.0) 1.0 -1.0)
@@ -31702,7 +31847,7 @@
 
 ;; X into [0, M), for walking a station round a closed loop.
 (defun ptr:wrap (x m)
-  (if (<= m 1.0e-12)
+  (if (<= m ptr:*zero-len*)
     0.0
     (progn
       (setq x (- x (* m (fix (/ x m)))))
@@ -31713,7 +31858,7 @@
 ;; The whisker keeps a point clicked dead-on as the start FIRST instead
 ;; of letting floating-point noise wrap it to the far end of the loop.
 (defun ptr:dirkey (s s0 len fwd)
-  (ptr:wrap (+ (if fwd (- s s0) (- s0 s)) 1.0e-4) len))
+  (ptr:wrap (+ (if fwd (- s s0) (- s0 s)) ptr:*start-whisker*) len))
 
 ;;; -------------------- entity -> segments ------------------------------
 
@@ -31751,8 +31896,11 @@
         bls    nil
         sub    (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    ;; skip spline/fit control vertices (flag bits 1 and 16)
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the vertices that are not ON the drawn curve -- the spline
+    ;; FRAME, by ptr:*vertex-skip*.  The curve- and spline-FIT vertices
+    ;; are the curve the sheet shows and are walked with the rest.
+    (if (= 0 (logand ptr:*vertex-skip*
+                     (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -31760,7 +31908,12 @@
   (while (< n (1- (length pts)))
     (setq segs (cons (list (nth n pts) (nth (1+ n) pts) (nth n bls)) segs)
           n    (1+ n)))
-  (if (and closed (> (length pts) 2))
+  ;; the same closing run lw-segs draws, under the same guard: a heavy
+  ;; polyline whose last vertex already sits on its first would
+  ;; otherwise carry a zero-length segment round the loop
+  (if (and closed
+           (> (length pts) 2)
+           (> (cal:dist (last pts) (car pts)) ptr:*exact-eps*))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
   (reverse segs))
 
@@ -31778,10 +31931,10 @@
            a1    (cdr (assoc 50 ed))
            a2    (cdr (assoc 51 ed))
            delta (cal:angnorm (- a2 a1)))
-     (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
+     (if (< delta ptr:*flat-eps*) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment (its bulge is
      ;; infinite): hand back two semicircles instead
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
+     (if (> delta (- (* 2.0 pi) ptr:*bulge-eps*))
        (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
              (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
        (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
@@ -31844,6 +31997,16 @@
 
 ;;; -------------------- reading the selection ---------------------------
 
+;; Is this entity a survey point block?  ABPCHECK's definition, in ONE
+;; place because two different sweeps ask it -- the highlight and the
+;; clash check -- and a knob that only half of them read would warn
+;; about the wrong points.  ED is the entity's data, which both callers
+;; already hold.
+(defun ptr:point-block-p (ed)
+  (and (= "INSERT" (cdr (assoc 0 ed)))
+       (or (= (strcase (cdr (assoc 2 ed))) (strcase ptr:*pt-block*))
+           (= (strcase (cdr (assoc 8 ed))) (strcase ptr:*pt-layer*)))))
+
 ;; WHICH attribute of a point block gets the new number: the TAG one
 ;; when the block carries it, else the first attribute already holding
 ;; something numeric -- the same fallback ptr:block-number reads by, so
@@ -31889,9 +32052,7 @@
     (cond
       ;; ab_pt blocks are survey points wherever they sit; other blocks
       ;; only count on the points layer
-      ((and (= typ "INSERT")
-            (or (= (strcase (cdr (assoc 2 ed))) (strcase ptr:*pt-block*))
-                (= lay (strcase ptr:*pt-layer*))))
+      ((ptr:point-block-p ed)
        (setq att (ptr:attr-target en ptr:*pt-tag*))
        (if att
          (setq n   (1+ n)
@@ -31918,7 +32079,7 @@
 ;; in [first, last] -- the collision the renumber cannot see, said out
 ;; loud instead of found at the next callout.  Only the current tab is
 ;; swept: a Layout1 detail reusing the numbers is not a clash.
-(defun ptr:clash-count (renamed first lastn / ss i en ed lay att nm v n)
+(defun ptr:clash-count (renamed first lastn / ss i en ed att nm v n)
   (setq n 0
         ss (ssget "_X" (list '(0 . "INSERT") (cons 410 (getvar "CTAB")))))
   (if ss
@@ -31927,10 +32088,8 @@
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
-              i   (1+ i)
-              lay (strcase (cdr (assoc 8 ed))))
-        (if (or (= (strcase (cdr (assoc 2 ed))) (strcase ptr:*pt-block*))
-                (= lay (strcase ptr:*pt-layer*)))
+              i   (1+ i))
+        (if (ptr:point-block-p ed)
           (progn
             (setq att (ptr:attr-target en ptr:*pt-tag*))
             (if (and att (not (member att renamed)))
@@ -31938,7 +32097,7 @@
                 (setq nm (cal:block-number en ptr:*pt-tag*)
                       v  (if nm (distof nm 2)))
                 (if (and v
-                         (equal v (float (fix v)) 1.0e-9)
+                         (equal v (float (fix v)) ptr:*whole-eps*)
                          (>= v (float first))
                          (<= v (float lastn)))
                   (setq n (1+ n))))))))))
@@ -31948,10 +32107,14 @@
 
 ;; The one write the whole command makes: the new number into the point
 ;; block's attribute, and the block redisplayed so the sheet shows it.
-(defun ptr:set-number (att ins s / ed)
-  (setq ed (entget att))
-  (entmod (subst (cons 1 s) (assoc 1 ed) ed))
-  (entupd ins))
+;; entmod answers nil when it could NOT write -- a locked layer is the
+;; everyday reason -- so its answer is carried back rather than assumed,
+;; and the caller counts what never landed instead of printing a table
+;; of renames that did not happen.  T when the number is on the sheet.
+(defun ptr:set-number (att ins s / ed got)
+  (setq ed  (entget att)
+        got (entmod (subst (cons 1 s) (assoc 1 ed) ed)))
+  (if got (progn (entupd ins) T)))
 
 ;;; -------------------- asking for the perimeter ------------------------
 
@@ -31962,6 +32125,12 @@
 (defun ptr:ask-perim (cand / v en done res)
   (while (not done)
     (initget "Back Undo")
+    ;; ERRNO is sticky -- it holds whatever the last failing call left
+    ;; there -- so it is cleared here and read immediately after the
+    ;; pick.  The clear is wrapped because an engine that makes ERRNO
+    ;; read-only would otherwise kill the command at its own prompt,
+    ;; and not telling a mis-click from Enter is the smaller loss.
+    (vl-catch-all-apply 'setvar (list "ERRNO" 0))
     (setq v (entsel
               (if cand
                 (strcat "\nSelect the perimeter (Enter = the highlighted"
@@ -31971,6 +32140,15 @@
                         " line or arc) [Back]: "))))
     (cond
       ((member v '("Back" "Undo")) (setq done T res 'CAL-BACK))
+      ;; entsel answers nil for Enter AND for a click that hit nothing.
+      ;; ERRNO 7 is what tells them apart, and without asking, a click
+      ;; that missed silently accepts the found perimeter -- the one
+      ;; outcome the user was reaching past it to override.
+      ((and (null v) (= 7 (getvar "ERRNO")))
+       (princ (strcat "\nNothing there - click on the perimeter itself"
+                      (if cand
+                        ", or press Enter to take the one that was found."
+                        "."))))
       ((and (null v) cand) (setq done T res cand))
       ((null v)
        (princ (strcat "\nThe highlight holds no closed polyline to fall"
@@ -31990,7 +32168,7 @@
                           nskip cand res perim segs tab len area fwd
                           start s0 dir band first lastn near far order
                           row q d k n new renamed nhead i dirword clash
-                          pick1)
+                          pick1 nfail nwrit ok)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -31999,7 +32177,7 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nPOINTRENAMER error: " msg)))
     (princ))
-  (cal:syssave '("CMDECHO"))
+  (cal:syssave ptr:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; a highlight made before the command was typed (pickfirst), grabbed
   ;; before the undo group's command clears it - step 1 takes it once,
@@ -32023,7 +32201,14 @@
          (progn
            (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
            (setq ss (ssget ptr:*filter*))))
-       (if (null ss) (setq ss (ssget "_X" ptr:*filter*)))
+       ;; "whole drawing" is the tab you are looking at, the same scope
+       ;; the clash check sweeps and the same one COVERCHECK and XFTCONV
+       ;; use for this prompt: renumbering points in a layout you cannot
+       ;; see -- and which the clash check would not even warn about --
+       ;; is never what Enter was meant to say
+       (if (null ss)
+         (setq ss (ssget "_X" (append ptr:*filter*
+                                      (list (cons 410 (getvar "CTAB")))))))
        (cond
          ((null ss)
           (princ "\nNothing to renumber - no points or polylines in the drawing.")
@@ -32056,8 +32241,12 @@
                 segs  (ptr:ent-segs perim)
                 tab   (ptr:seg-tab segs)
                 len   (ptr:tab-len tab))
-          (if (<= len 1.0e-6)
-            (princ "\nThat perimeter has no length - pick another.")
+          (if (<= len ptr:*zero-len*)
+            (progn
+              ;; a candidate this broken has to stop being offered, or
+              ;; Enter hands the same unusable loop back for ever
+              (if (eq perim cand) (setq cand nil))
+              (princ "\nThat perimeter has no length - pick another."))
             (progn
               (setq area (ptr:loop-area segs))
               (setq step 3))))))
@@ -32073,30 +32262,30 @@
          (t
           (setq start (ptr:measure res tab)
                 s0    (cdr start))
-          (if (> (car start) 12.0)
+          (if (> (car start) ptr:*far-pick*)
             (princ (strcat "\nNote: the pick sits " (ptr:dstr (car start))
                            " off the perimeter - the sweep starts at"
                            " the nearest spot on it.")))
           (setq step 4))))
       ;; ---- 4. which way round ------------------------------------
       ((= step 4)
-       (setq res (ptr:askdir ptr:*dir*))
+       (setq res (ptr:askdir (if ptr:*dir-now* ptr:*dir-now* ptr:*dir*)))
        (cond
          ((eq res 'CAL-BACK) (setq step 3))
-         (t (setq ptr:*dir* res
+         (t (setq ptr:*dir-now* res
                   step 5))))
       ;; ---- 5. the band -------------------------------------------
       ((= step 5)
        (setq res (ptr:asklimit
                    "How far off the perimeter still counts as on it?"
-                   ptr:*band* T))
+                   (if ptr:*band-now* ptr:*band-now* ptr:*band*) T))
        (cond
          ((eq res 'CAL-BACK) (setq step 4))
-         (t (setq ptr:*band* res
+         (t (setq ptr:*band-now* res
                   step 6))))
       ;; ---- 6. the first number -----------------------------------
       ((= step 6)
-       (setq res (ptr:asknum "Start the numbering at" 1 T))
+       (setq res (ptr:asknum "Start the numbering at" ptr:*first* T))
        (cond
          ((eq res 'CAL-BACK) (setq step 5))
          (t (setq first res
@@ -32107,9 +32296,9 @@
        ;; the direction asked for matches the loop's own winding
        ;; (counter-clockwise = positive area; a degenerate zero-area
        ;; run counts as drawn counter-clockwise)
-       (setq fwd  (eq (= ptr:*dir* "COunterclockwise") (>= area 0.0))
-             dir  ptr:*dir*
-             band ptr:*band*
+       (setq fwd  (eq (= ptr:*dir-now* "COunterclockwise") (>= area 0.0))
+             dir  ptr:*dir-now*
+             band ptr:*band-now*
              near nil
              far  nil)
        (foreach q recs
@@ -32144,31 +32333,46 @@
   ;; ---- the write, in one pass, then the old-to-new table ----------
   (if go
     (progn
-      (setq dirword (if (= ptr:*dir* "COunterclockwise")
+      (setq dirword (if (= dir "COunterclockwise")
                       "counterclockwise" "clockwise")
             n       first
             renamed nil
             nhead   (length near)
-            i       0)
+            i       0
+            nfail   0)
       (foreach row order
-        (if (= i 0)
+        ;; the near heading only when something IS near: with an empty
+        ;; band both headings used to print, back to back, over one list
+        (if (and (= i 0) (> nhead 0))
           (princ (strcat "\nAround the perimeter (" dirword " from the"
                          " pick):")))
         (if (= i nhead)
-          (princ (strcat "\nBeyond " (ptr:dstr ptr:*band*) " off the"
+          (princ (strcat "\nBeyond " (ptr:dstr band) " off the"
                          " perimeter (the count carries on, same"
                          " sweep):")))
-        (setq new (itoa n))
-        (ptr:set-number (nth 4 row) (nth 5 row) new)
-        (setq renamed (cons (nth 4 row) renamed))
+        (setq new (itoa n)
+              ok  (ptr:set-number (nth 4 row) (nth 5 row) new))
+        (if ok
+          (setq renamed (cons (nth 4 row) renamed))
+          (setq nfail (1+ nfail)))
+        ;; the row is printed either way, and a write that did not land
+        ;; says so on its own line -- a table that shows a rename the
+        ;; drawing never took is worse than no table at all
         (princ (strcat "\n  Pt. "
                        (cal:pad (if (and (nth 3 row) (/= (nth 3 row) ""))
                                   (nth 3 row) "?")
-                                8)
-                       "->  Pt. " new))
+                                ptr:*name-width*)
+                       "->  Pt. " new
+                       (if ok "" "   NOT WRITTEN")))
         (setq n (1+ n) i (1+ i)))
-      (princ (strcat "\n" (itoa (length order)) " point(s) renumbered "
+      (setq nwrit (- (length order) nfail))
+      (princ (strcat "\n" (itoa nwrit) " point(s) renumbered "
                      (itoa first) "-" (itoa lastn) "."))
+      (if (> nfail 0)
+        (princ (strcat "\nWarning: " (itoa nfail) " of them could not be"
+                       " written and still carry their old number - the"
+                       " layer they sit on is most likely locked."
+                       "  Unlock it and run POINTRENAMER again.")))
       (setq clash (ptr:clash-count renamed first lastn))
       (if (> clash 0)
         (princ (strcat "\nWarning: " (itoa clash) " point(s) OUTSIDE"
