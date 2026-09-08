@@ -84,6 +84,42 @@ a stripped override block) is not in the drawing any more to be read.
   number attribute behind as a live entity for the next sweep to trip
   over.
 
+- **The three callout/create tools put every knob at the top**, in one
+  tunables block with a sentence each on what changing it does, and
+  join `tests/test_tunables.py` so it stays that way. Each had kept
+  some settings in a block and the rest inline. New knobs, all
+  defaulting to today's behaviour: `bp:*layer-color*`, `bp:*text-gap*`
+  (the callout's default spot, which used to be twice the ring radius,
+  so shrinking the ring moved the text too), the callout's own wording
+  (`bp:*pt-prefix*`, `bp:*tail-one*`, `bp:*tail-many*`, `bp:*unknown*`
+  -- seven string literals over four functions until now),
+  `cdo:*layer-color*`, `cdo:*exact-eps*` and `cdc:*layer-color*`.
+
+  Two renames come with it, both under STANDARDS 8.4's "only if the
+  file is otherwise being reworked": BPCALLOUT's `*BP-LAYER*` family
+  takes the file's `bp:` prefix, and CDCALLOUT's three point-classifier
+  globals take `cdo:` -- that file already spelled its other knobs
+  `cdo:*style*` and `cdo:*layer*`, so it had two schemes for its own
+  settings. Both READMEs name the old spellings for anyone whose
+  startup file sets them.
+
+### Fixed
+
+- **BPCALLOUT could not ring two points closer than twice its ring
+  radius.** A click was read against the rings already down even when
+  it had snapped to a survey point, so with the 5" default and two
+  points 8" apart, clicking the second landed inside the first's ring
+  and un-ringed it -- the run reported "nothing picked" and drew
+  nothing. Only a click with NO survey point under it is read against
+  the rings now; a click that snapped is the point it snapped to.
+
+- **`CDCALLOUT` and `CDCREATE` closed an undo group they had never
+  opened.** Both guard the `_.UNDO _Begin` behind the `UNDOCTL` check
+  -- `_Begin` with undo off errors out of the command -- and then
+  closed unconditionally, so in a drawing with undo switched off the
+  run ended on a stray `_End`. Both close only a group they opened,
+  which is what the flag was already there to say.
+
 ### Notes
 
 - Each reverter is on the panel under its converter, in the same
