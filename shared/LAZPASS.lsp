@@ -35473,10 +35473,12 @@
 ;;;     anchor. A dimension with a stray
 ;;;     definition point gets:
 ;;;       - a construction line (XLINE) drawn through its two dimmed
-;;;         points on layer CHECK-CONSTRUCTION (yellow),
+;;;         points on the construction layer (CHECK-CONSTRUCTION,
+;;;         yellow, by default),
 ;;;       - the stray point shifted onto the closest point of the
 ;;;         closest object,
-;;;       - its color changed to red so you can see it was shifted.
+;;;       - its color changed (red by default) so you can see it was
+;;;         shifted.
 ;;;
 ;;;  2. Arcs: each arc endpoint must sit at the END of another object.
 ;;;       - On an object but not at its end -> endpoint moved to the
@@ -35485,7 +35487,7 @@
 ;;;         of any object in the selection (or, when every nearby
 ;;;         object is closed, the closest point on the closest one).
 ;;;     A moved arc is re-fitted through its fixed end, its old
-;;;     midpoint and the new end, then recolored magenta.
+;;;     midpoint and the new end, then recolored (magenta by default).
 ;;;
 ;;;  Everything runs inside one UNDO group; a single U reverts every
 ;;;  change CHECK made. Tunables are just below.
@@ -35495,25 +35497,120 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.7")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
 
-;; --- tunables ------------------------------------------------------
-(setq *cfchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
-(setq *cfchk-dim-color*    1)       ; red: dimensions whose points were shifted
-(setq *cfchk-arc-color*    6)       ; magenta: arcs whose endpoints were snapped
-(setq *cfchk-constr-layer* "CHECK-CONSTRUCTION")
-(setq *cfchk-constr-color* 2)       ; yellow
-(setq *cfchk-anchor-tol*   1.0e-4)  ; how close two dimension points must be to count as the same spot
-(setq *cfchk-anchor-min*   2)       ; that many dimensions meeting there make it an anchor
+;;; ======================================================================
+;;;  TUNABLES -- every value CHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the number or string, save, and APPLOAD the
+;;;  file again.  To try a value for one session only, type the setq at
+;;;  the command line -- e.g. (setq *cfchk-tol* 0.001) -- because every
+;;;  knob is read when CHECK runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
 
-;; entity types dimensions and arc ends may attach to
+;; -- what counts as attached ------------------------------------------
+
+;; A dimension point or an arc end that sits within this distance of
+;; an object is ATTACHED and left alone.  It is also the smallest shift
+;; CHECK will make, so raising it forgives bigger gaps AND suppresses
+;; the small corrections it would otherwise apply; lowering it makes
+;; the audit stricter on both counts.
+(setq *cfchk-tol*          1.0e-4)  ; drawing units
+
+;; Two dimensions measuring to the same spot make it an ANCHOR: a point
+;; that is left exactly where it is, geometry under it or not, and that
+;; a stray point nearer to it than to any line is shifted onto.  This
+;; is how close two definition points must be to count as one spot.
+;; Raising it merges nearby but distinct points into one anchor, which
+;; then stops them being corrected.
+(setq *cfchk-anchor-tol*   1.0e-4)  ; drawing units
+
+;; ...and how many dimensions must meet there.  2 is the everyday case
+;; (the pair of dims pinning a hypotenuse corner).  1 or 0 would make
+;; every definition point its own anchor and silently switch the
+;; dimension audit off, so keep it at 2 or more.
+(setq *cfchk-anchor-min*   2)       ; dimensions meeting at one spot
+
+;; Entity types a dimension point or an arc end may attach to.  Every
+;; name must be a curve AutoCAD can measure to (vlax-curve-*); a type
+;; that is not is tolerated but never matches.
 (setq *cfchk-curve-types*
       '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
 
+;; Which kinds of dimension are audited, by the low three bits of DXF
+;; group 70: 0 = rotated (horizontal / vertical), 1 = aligned.  The
+;; other kinds -- angular (2, 5), diameter (3), radius (4), ordinate
+;; (6) -- have no pair of definition points to shift and are counted
+;; as "unsupported type skipped".
+(setq *cfchk-dim-types*    '(0 1))
+
+;; -- what CHECK draws and recolours -----------------------------------
+
+(setq *cfchk-dim-color*    1)       ; ACI: dimensions whose points were shifted (red)
+(setq *cfchk-arc-color*    6)       ; ACI: arcs whose endpoints were snapped (magenta)
+
+;; Construction lines (XLINEs) through the ORIGINAL points of every
+;; shifted dimension go on this layer, created on first use; delete or
+;; freeze the layer when the review is done.  The colour is applied
+;; only when CHECK creates the layer -- a layer already in the drawing
+;; keeps its own colour, and the XLINEs draw ByLayer.
+(setq *cfchk-constr-layer* "CHECK-CONSTRUCTION")
+(setq *cfchk-constr-color* 2)       ; ACI (yellow)
+
+;; -- how the report reads ---------------------------------------------
+
+;; Distances in the command-line report go through (rtos d mode prec):
+;; mode 2 is decimal, 3 engineering, 4 architectural (feet-inches);
+;; prec is decimal places (for mode 4: the inch is split 2^prec ways).
+;; The tolerance is echoed with more places than a shift because it is
+;; usually smaller than one.
+(setq *cfchk-dist-mode*    2)       ; rtos mode
+(setq *cfchk-dist-prec*    4)       ; places for a shift or snap distance
+(setq *cfchk-tol-prec*     6)       ; places for the tolerance in the summary
+
+;; -- numerical guards (rarely changed) --------------------------------
+
+;; Two points closer than this are the SAME point: no construction
+;; line is drawn through them, an arc is never re-fitted onto its own
+;; other end, and a snap target that close to that end is passed over.
+;; Only a drawing at an extreme scale should need this moved.
+(setq *cfchk-same-pt*      1e-8)    ; drawing units
+
+;; An ARC is only audited when its extrusion normal (DXF 210) is within
+;; this of world +Z; a tilted or mirrored (0 0 -1) arc is counted as
+;; "non-planar skipped" instead of being re-fitted in the wrong plane.
+(setq *cfchk-planar-eps*   1e-9)    ; dimensionless (normal components)
+
+;; Not knobs, on purpose: the collinearity guard inside
+;; cfchk:circumcenter (1e-12) and the Continuous linetype
+;; cfchk:ensure-layer gives a new layer.  Both helpers are library
+;; bodies -- the grouped build takes them from CALOFIN-LIB.lsp -- so a
+;; value changed here would be honoured by one build and not the other.
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  CHECK keeps no state between runs.
+;;; ======================================================================
+
 ;; --- small helpers -------------------------------------------------
+
+;; A distance as the report prints it (see *cfchk-dist-mode*).
+(defun cfchk:dist (d)
+  (rtos d *cfchk-dist-mode* *cfchk-dist-prec*))
+
+;; The word for an ACI colour, so the report follows the colour knobs
+;; instead of saying "red" whatever *cfchk-dim-color* is set to.
+(defun cfchk:color-name (aci / p)
+  (setq p (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if p (cdr p) (strcat "colour " (itoa aci))))
 
 (defun cfchk:set-color (ent color / ed old)
   (setq ed  (entget ent)
@@ -35526,7 +35623,7 @@
 (defun cfchk:make-xline (p1 p2 / len)
   ;; infinite construction line through p1-p2 on the check layer
   (setq len (distance p1 p2))
-  (if (> len 1e-8)
+  (if (> len *cfchk-same-pt*)
     (entmake (list '(0 . "XLINE")
                    '(100 . "AcDbEntity")
                    (cons 8 *cfchk-constr-layer*)
@@ -35583,14 +35680,14 @@
   ;; only arcs drawn in the world XY plane are handled
   (setq n (cdr (assoc 210 ed)))
   (or (null n)
-      (and (< (abs (car n)) 1e-9)
-           (< (abs (cadr n)) 1e-9)
+      (and (< (abs (car n)) *cfchk-planar-eps*)
+           (< (abs (cadr n)) *cfchk-planar-eps*)
            (> (caddr n) 0.0))))
 
 (defun cfchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed)
   ;; re-fit the arc through its fixed end, its old midpoint and the
   ;; target point; returns T on success
-  (if (and (> (distance target fixed) 1e-8)
+  (if (and (> (distance target fixed) *cfchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
       (setq r  (distance c target)
@@ -35616,7 +35713,7 @@
   ;; CHECK shifts); nil for every other kind of dimension
   (setq ed    (entget ent)
         dtype (logand 7 (cdr (assoc 70 ed))))
-  (if (member dtype '(0 1))
+  (if (member dtype *cfchk-dim-types*)
     (progn
       (setq p13 (cdr (assoc 13 ed))
             p14 (cdr (assoc 14 ed)))
@@ -35680,7 +35777,7 @@
 (defun cfchk:check-dim (ent cands anchors / ed dtype p13 p14 d1 d2)
   (setq ed    (entget ent)
         dtype (logand 7 (cdr (assoc 70 ed))))
-  (if (member dtype '(0 1))                 ; rotated/linear or aligned
+  (if (member dtype *cfchk-dim-types*)      ; rotated/linear or aligned
     (progn
       (setq p13 (cdr (assoc 13 ed))         ; the two dimmed points
             p14 (cdr (assoc 14 ed))
@@ -35692,9 +35789,10 @@
           (cfchk:set-color ent *cfchk-dim-color*)
           (entupd ent)
           (princ (strcat "\n  Dimension " (cdr (assoc 5 ed)) ":"
-                         (if d1 (strcat " point 1 shifted " (rtos d1 2 4)) "")
-                         (if d2 (strcat " point 2 shifted " (rtos d2 2 4)) "")
-                         " onto the nearest object or anchor; recolored red."))
+                         (if d1 (strcat " point 1 shifted " (cfchk:dist d1)) "")
+                         (if d2 (strcat " point 2 shifted " (cfchk:dist d2)) "")
+                         " onto the nearest object or anchor; recolored "
+                         (cfchk:color-name *cfchk-dim-color*) "."))
           'fixed)
         'ok))
     'skipped))
@@ -35718,7 +35816,8 @@
     ((<= (caddr near) *cfchk-tol*)          ; endpoint sits on an object...
      (setq ends (cfchk:curve-ends (car near)))
      ;; never snap onto the arc's own other endpoint
-     (setq ends (vl-remove-if '(lambda (q) (< (distance q other) 1e-8)) ends))
+     (setq ends (vl-remove-if '(lambda (q) (< (distance q other) *cfchk-same-pt*))
+                              ends))
      (cond
        ((null ends) nil)                    ; closed curve: no ends to demand
        ((vl-some '(lambda (q) (<= (distance p q) *cfchk-tol*)) ends)
@@ -35729,7 +35828,7 @@
           (distance p target)))))
     (t                                      ; floating: closest end anywhere,
      (setq target (cfchk:nearest-end p ent cands))
-     (if (or (null target) (< (distance target other) 1e-8))
+     (if (or (null target) (< (distance target other) *cfchk-same-pt*))
        (setq target (cadr near)))           ; else closest point on closest object
      (if (cfchk:rebuild-arc ent which other mid target)
        (distance p target)))))
@@ -35744,9 +35843,10 @@
         (progn
           (cfchk:set-color ent *cfchk-arc-color*)
           (princ (strcat "\n  Arc " (cdr (assoc 5 ed)) ":"
-                         (if d1 (strcat " start snapped " (rtos d1 2 4)) "")
-                         (if d2 (strcat " end snapped " (rtos d2 2 4)) "")
-                         " to nearest object end; recolored magenta."))
+                         (if d1 (strcat " start snapped " (cfchk:dist d1)) "")
+                         (if d2 (strcat " end snapped " (cfchk:dist d2)) "")
+                         " to nearest object end; recolored "
+                         (cfchk:color-name *cfchk-arc-color*) "."))
           'fixed)
         'ok))
     'skipped))
@@ -35807,7 +35907,8 @@
         (setq anchors (cfchk:shared-anchors dims))
         (if anchors
           (princ (strcat "\n" (itoa (length anchors))
-                         " point(s) carry more than one dimension - treated"
+                         " point(s) carry " (itoa *cfchk-anchor-min*)
+                         " or more dimensions - treated"
                          " as anchors and left alone.")))
         (foreach e dims
           (setq res (cfchk:check-dim e cands anchors))
@@ -35823,14 +35924,17 @@
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n--- CHECK complete (attachment tolerance "
-                       (rtos *cfchk-tol* 2 6) ") ---"
+                       (rtos *cfchk-tol* *cfchk-dist-mode* *cfchk-tol-prec*)
+                       ") ---"
                        "\nDimensions: " (itoa (+ ndf ndo)) " checked, "
-                       (itoa ndf) " shifted onto nearest object (red)"
+                       (itoa ndf) " shifted onto nearest object ("
+                       (cfchk:color-name *cfchk-dim-color*) ")"
                        (if (> nds 0)
                          (strcat ", " (itoa nds) " unsupported type skipped")
                          "")
                        "\nArcs: " (itoa (+ naf nao)) " checked, "
-                       (itoa naf) " with endpoint(s) snapped (magenta)"
+                       (itoa naf) " with endpoint(s) snapped ("
+                       (cfchk:color-name *cfchk-arc-color*) ")"
                        (if (> nas 0)
                          (strcat ", " (itoa nas) " non-planar skipped")
                          "")
