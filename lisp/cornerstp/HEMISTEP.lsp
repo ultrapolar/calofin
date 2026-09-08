@@ -134,23 +134,16 @@
 ;;;   riser line) keeps the extension lines hooked to the geometry
 ;;;   while the dim still reads the drop, not the slope.
 ;;;
-;;; OPTIONAL SETTINGS (set these before running the command)
-;;;   *CS-WIDTH-TOL*      width tolerance in drawing units.  When nil
-;;;                       (the default) it is 1/8" converted through the
-;;;                       drawing's INSUNITS setting.
-;;;   *CS-DEPTH-DIMSTYLE* dim style for step-tread dims (the side
-;;;                       profile's dims use it too).
-;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
-;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
-;;;                       default) the current layer is used.
-;;;   *CS-PROFILE-DIMGAP* how far the side profile's dims stand off the
-;;;                       flight, on top of the clearance the geometry
-;;;                       needs.  nil (the default) is four text
-;;;                       heights or three quarters of a tread,
-;;;                       whichever is more, so the fan keeps its
-;;;                       proportions whether or not the drawing has a
-;;;                       dim scale set up.  It also sets how much
-;;;                       further out again the overall depth sits.
+;;; THE SETTINGS
+;;;   Every number this routine can be told to draw differently is a
+;;;   setting at the top of the file, under SETTINGS, one per knob with
+;;;   what it does and what it defaults to - the width tolerance and the
+;;;   inches it is derived from, the two dim styles and the dim layer,
+;;;   how far the tread chain stands off the axis and how far the width
+;;;   dims nest behind the start of it, and the side profile's dim gap.
+;;;   setq one before running the command and the next run picks it up.
+;;;   They are shared with CORNERSTP and NORMIESTEP, which is why they
+;;;   are *cs- names: one set of knobs for the three step routines.
 ;;;
 ;;; NOTES
 ;;;   - Geometry is assumed to be drawn in plan view.  The routine warns
@@ -169,21 +162,71 @@
 ;;;     picks are always made by hand.
 ;;; ======================================================================
 
-;; Settings - only defined if not already set, so this file and
-;; CORNERSTP.lsp stay in sync no matter which one loads first.
-(if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
-(if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
+;;; ------------------------------ SETTINGS ------------------------------
+;;;  THE KNOBS, all of them, in one place.  Each is defined only if it
+;;;  is not already set, so this file, CORNERSTP.lsp and NORMIESTEP.lsp
+;;;  share ONE set of settings whichever loads first and a value set
+;;;  before loading them stands.  setq one at the command line - or in
+;;;  acaddoc.lsp - and the next run picks it up.
+;;;
+;;;  Deliberately NOT settings: the epsilons the geometry compares
+;;;  against (a point is on the curve or it is not), the temporary
+;;;  vectors the run previews itself with, the direction the side
+;;;  profile reads (down and to the left, the way the shop's elevations
+;;;  do), and the bead - that is AUTOBEAD's work, on its own settings.
+
+;; Step width tolerance, in drawing units: a step whose requested width
+;; is within this of the curve's opening at that distance is snapped to
+;; the curve; any other width is held exactly and breaks away from it.
+;; nil = derive it from *cs-tol-inch* through the drawing's INSUNITS.
+(if (not (boundp '*cs-width-tol*)) (setq *cs-width-tol* nil))
+
+;; What that tolerance is in INCHES when it is derived - the shop reads
+;; it as 1/8".  Raise it to let a wider mismatch still snap to the
+;; curve; 0.0 snaps only an exact fit.
+(if (not (boundp '*cs-tol-inch*)) (setq *cs-tol-inch* 0.125))
+
+;; Dim style for the step-tread dims - the side profile's depth dims
+;; use it too.  A style the drawing does not have is reported at the
+;; start of the run and the current style is used instead.
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
+
+;; Dim style for the step-width dims, with the same fallback.
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
-;; How far the side profile's dims stand off the flight, on top of the
-;; clearance the geometry itself needs.  nil = four text heights, which
-;; is what the shop's own elevations read like; raise it to open the
-;; fan out further, lower it to tuck the dims in.
+
+;; Layer the dimensions are drawn on.  nil = the current layer; a layer
+;; that is missing, off, frozen or locked is reported and the current
+;; layer is used, so a run never draws dims where they cannot be seen.
+(if (not (boundp '*cs-dim-layer*)) (setq *cs-dim-layer* nil))
+
+;; How far the step-tread dim chain stands off the measuring axis, in
+;; TEXT HEIGHTS - so it tracks DIMSCALE (or the annotation scale)
+;; instead of the drawing's size.  2.0 keeps it clear of its own text.
+(if (not (boundp '*cs-dim-offset*)) (setq *cs-dim-offset* 2.0))
+
+;; How far a step-width dim sits behind the start of the axis, in text
+;; heights, on top of half that step's own width.  The half-width is
+;; what nests the wider steps progressively further out; this is the
+;; gap on top of it.
+(if (not (boundp '*cs-dim-nest*)) (setq *cs-dim-nest* 1.5))
+
+;; How far the side profile's dims stand off the flight, in drawing
+;; units, on top of the clearance the geometry itself needs.  nil = the
+;; larger of the two terms below, which is what the shop's own
+;; elevations read like; raise it to open the fan out further, lower it
+;; to tuck the dims in.  It also sets how much further out again the
+;; overall depth sits.
 (if (not (boundp '*cs-profile-dimgap*)) (setq *cs-profile-dimgap* nil))
+
+;; The two terms of that default: text heights, and a fraction of the
+;; widest tread in the flight.  Keeping both is what makes the fan hold
+;; its proportions whether or not the drawing has a dim scale set up.
+(if (not (boundp '*cs-profile-gap-txt*)) (setq *cs-profile-gap-txt* 4.0))
+(if (not (boundp '*cs-profile-gap-tread*)) (setq *cs-profile-gap-tread* 0.75))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.12") ; printed on load and at command start so a
+(setq *hs-version* "v3.13") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -556,37 +599,60 @@
   (setq ed (entget e))
   (hs-mid2 (cdr (assoc 10 ed)) (cdr (assoc 11 ed))))
 
-;;; ------------------------- drawing helpers ----------------------------
+;;; ------------------------- setting helpers ----------------------------
+;;;  Every setting is read through one of these rather than straight out
+;;;  of the global, and the fallback in each is the value the SETTINGS
+;;;  block initialises that setting to: a setting somebody set to
+;;;  something unusable - a string where a number belongs, a symbol -
+;;;  then costs the shipped behaviour and nothing else, instead of
+;;;  failing in the middle of a run.  tests/test_steps_settings.py holds
+;;;  the two copies of each number together.
 
-(defun hs-mkline (a b)
-  (entmake (list '(0 . "LINE")
-                 (cons 10 (list (car a) (cadr a) 0.0))
-                 (cons 11 (list (car b) (cadr b) 0.0)))))
+;; A setting that has to be a number: V when it is one, DFLT when it is
+;; not.
+(defun hs-num (v dflt) (if (numberp v) v dflt))
 
-;; 1/8" expressed in the drawing's units (INSUNITS); inches if unitless
-(defun hs-autotol ( / iu)
-  (setq iu (getvar "INSUNITS"))
-  (cond ((= iu 1) 0.125)            ; inches
-        ((= iu 2) (/ 0.125 12.0))   ; feet
-        ((= iu 4) 3.175)            ; millimeters
-        ((= iu 5) 0.3175)           ; centimeters
-        ((= iu 6) 0.003175)         ; meters
-        (T        0.125)))          ; unitless - assume inches
+;; *cs-tol-inch* expressed in the drawing's units (INSUNITS); inches
+;; when the drawing is unitless
+(defun hs-autotol ( / iu b)
+  (setq iu (getvar "INSUNITS")
+        b  (hs-num *cs-tol-inch* 0.125))
+  (cond ((= iu 2) (/ b 12.0))     ; feet
+        ((= iu 4) (* b 25.4))     ; millimeters
+        ((= iu 5) (* b 2.54))     ; centimeters
+        ((= iu 6) (* b 0.0254))   ; meters
+        (T        b)))            ; inches, or unitless - assume inches
 
 (defun hs-tolerance ( )
   (if (numberp *cs-width-tol*) *cs-width-tol* (hs-autotol)))
 
-;; annotation text height in drawing units; DIMSCALE is 0 for
-;; annotative dim styles, where the annotation scale governs instead
+;; How far the step-tread dim chain stands off the measuring axis.
+(defun hs-dimoff (txth) (* (hs-num *cs-dim-offset* 2.0) txth))
+
+;; How far a step-width dim sits behind the start of the axis: half
+;; that step's own width - which is what nests the wider steps further
+;; out - plus the standoff on top of it.
+(defun hs-nestoff (w txth)
+  (+ (* 0.5 w) (* (hs-num *cs-dim-nest* 1.5) txth)))
+
+;; How far the side profile's dims stand off the flight, WIDEST being
+;; the widest tread in it.
+(defun hs-pgap (txth widest)
+  (if (numberp *cs-profile-dimgap*)
+    *cs-profile-dimgap*
+    (max (* (hs-num *cs-profile-gap-txt* 4.0) txth)
+         (* (hs-num *cs-profile-gap-tread* 0.75) widest))))
+
 ;; The widest tread, for spacing the side profile's dimensions.  The
 ;; list is empty when every logged step landed within 1e-6 of the one
 ;; before it -- (apply 'max nil) is an error, so a degenerate run
 ;; falls back to plain text-height spacing.  CORNERSTP skips its whole
 ;; profile in that case (CORNERSTP.lsp, "No usable tread spacing").
 (defun hs-maxtread (treads)
-  (if treads (apply 'max treads) 0.0)
-)
+  (if treads (apply 'max treads) 0.0))
 
+;; annotation text height in drawing units; DIMSCALE is 0 for
+;; annotative dim styles, where the annotation scale governs instead
 (defun hs-txth ( / h s)
   (setq h (getvar "DIMTXT")
         s (getvar "DIMSCALE"))
@@ -596,6 +662,13 @@
                    (/ 1.0 (getvar "CANNOSCALEVALUE")))
                   (1.0))))
   (if (and h (> (* h s) 0.0)) (* h s) 1.0))
+
+;;; ------------------------- drawing helpers ----------------------------
+
+(defun hs-mkline (a b)
+  (entmake (list '(0 . "LINE")
+                 (cons 10 (list (car a) (cadr a) 0.0))
+                 (cons 11 (list (car b) (cadr b) 0.0)))))
 
 ;; T when layer NAME exists and can be drawn on right now
 (defun hs-layerok (name / ld f cl)
@@ -1012,7 +1085,7 @@
       (setq undoflag T)))
   (setq cum 0.0 n 1 drawn 0
         pprev sp                        ; tread chain starts at the axis
-        offd  (* 2.0 txth)              ; tread-dim offset off the axis
+        offd  (hs-dimoff txth)          ; tread-dim offset off the axis
         oldce (getvar "CMDECHO")
         oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                  ; quiet the dimstyle/dim commands
@@ -1037,8 +1110,7 @@
                 lastwid wid)
           (if dimflag
             (hs-dim *cs-width-dimstyle* wallA wallB
-                    (hs-add sp (hs-scl dir (- (+ (* 0.5 wid)
-                                                 (* 1.5 txth)))))))
+                    (hs-add sp (hs-scl dir (- (hs-nestoff wid txth))))))
           (princ (strcat "\n  Width at the wall: " (rtos wid) "."))))))
 
   (while
@@ -1162,8 +1234,8 @@
                 (hs-dim *cs-width-dimstyle* e1 e2
                         (hs-add sp
                                 (hs-scl dir
-                                        (- (+ (* 0.5 (distance e1 e2))
-                                              (* 1.5 txth))))))
+                                        (- (hs-nestoff (distance e1 e2)
+                                                       txth)))))
                 ;; step tread: chain link along the axis, from the
                 ;; previous step edge (the start for step 1) to here
                 (hs-dim *cs-depth-dimstyle* pprev p
@@ -1357,14 +1429,9 @@
                   ;; in one chain.  Clearing the widest tread is what
                   ;; keeps BOTH extension lines running forward, out of
                   ;; the flight; the gap on top of that is what makes
-                  ;; the fan readable, and *cs-profile-dimgap* sets it.
-                  ;; four text heights, or three quarters of a tread -
-                  ;; whichever is more, so the fan keeps its proportions
-                  ;; whether or not the drawing has a dim scale set up
-                  (setq pgap (cond ((numberp *cs-profile-dimgap*)
-                                    *cs-profile-dimgap*)
-                                   ((max (* 4.0 txth)
-                                         (* 0.75 (hs-maxtread treads)))))
+                  ;; the fan readable, and hs-pgap - *cs-profile-dimgap*
+                  ;; and the two terms of its default - is what sets it
+                  (setq pgap (hs-pgap txth (hs-maxtread treads))
                         pfo  (+ (hs-maxtread treads) pgap)
                         jx   1)
                   (while (< jx (length cnrs))
@@ -1393,11 +1460,14 @@
                    " step(s) drawn, parallel and centered on the axis.")))
   (redraw)
   (if oldstyle (hs-setstyle oldstyle))   ; back to the entry dim style
-  (command "_.UNDO" "_End")
+  ;; close only a group this run opened: in a drawing with UNDO off
+  ;; none was, and _End on no group is an error of its own
+  (if undoflag
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (if oldce (setvar "CMDECHO" oldce))
   (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
-  (setq undoflag nil)
 
   ;; ---- 8. bead the steps -----------------------------------------------
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
@@ -1596,7 +1666,7 @@
   (princ "\n    both ends of the boundary but draws no chord.")
   (setq wallA (hs-add sp (hs-scl u (* 0.5 wallw)))
         wallB (hs-add sp (hs-scl u (* -0.5 wallw)))
-        offd  (* 2.0 txth)
+        offd  (hs-dimoff txth)
         pprev sp
         cum   0.0
         n     1)
@@ -1614,7 +1684,7 @@
     (setq ea (append ea (list e1))
           eb (append eb (list e2)))
     (hs-dim *cs-width-dimstyle* e1 e2
-            (hs-add sp (hs-scl dir (- (+ (* 0.5 wid) (* 1.5 txth))))))
+            (hs-add sp (hs-scl dir (- (hs-nestoff wid txth)))))
     (hs-dim *cs-depth-dimstyle* pprev p
             (hs-add (hs-mid2 pprev p) (hs-scl u offd)))
     (princ (strcat "\n[" (itoa (1+ n)) "] Step " (itoa n) ": width "
@@ -1637,8 +1707,9 @@
   (hs-tut-pause)
 
   (if oldstyle (hs-setstyle oldstyle))
-  (command "_.UNDO" "_End")
-  (setq undoflag nil)
+  (if undoflag                           ; only a group this run opened
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (setvar "CMDECHO" oldce)
   (princ "\n[7] Done.  One U removes the demo.  For the curve modes, draw")
   (princ "\n    an arc and run HEMISTEP selecting it (plus an axis line if")

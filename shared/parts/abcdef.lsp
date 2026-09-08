@@ -76,6 +76,11 @@
 ;;; bottom-right, D = bottom-left), the import notices - the distances only
 ;;; fit the rectangle one way - swaps C and D to match, and says so.
 ;;;
+;;; Every threshold, layer name, colour, size and tolerance the command
+;;; uses is a named Tunable at the top of this file, each with a note on
+;;; what it does and which way to move it.  Nothing below that block is
+;;; meant to be edited to change how the tool behaves.
+;;;
 ;;; All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
@@ -85,23 +90,236 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.6")
+(setq *abcdef-version* "v5.7")
 
-;;; --------------------------------------------------------------------------
-;;;  Tunables
-;;; --------------------------------------------------------------------------
+;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafter might reasonably want different is set HERE and
+;; nowhere else: the code below reads these names and carries no bare
+;; numbers of its own.  Each knob says what CHANGING it does, what unit
+;; it is in, and which way to move it.  Change a value, save, APPLOAD
+;; again - or (setq abcdef:*name* value) at the command line for one
+;; session.  Every one of them is a row in README.md's Tunables table,
+;; and tests/test_tunables.py holds the two together.
+;;
+;; Distances are in inches throughout (1 drawing unit = 1 inch).
+
+;; ---- where the tapes stop agreeing ---------------------------------------
 
 ;; Quarter-inch field data that was read and typed correctly fits a
-;; rectangle well under a tenth of an inch.  These two numbers are where
-;; "fits" stops and "check this" starts, in inches of RMS leftover error.
-(setq abcdef:*fit-ok*  0.20)   ; at or under this, the tapes agree
-(setq abcdef:*fit-bad* 0.50)   ; over this, the point is flagged CHECK
+;; rectangle well under a tenth of an inch of RMS leftover error.  These
+;; two numbers are where "fits" stops and "check this" starts.
+;;   *fit-ok*   at or under this, the tapes agree: Auto keeps every tape
+;;              and never goes looking for one to drop
+;;   *fit-bad*  over this, the row is marked **CHECK in the report and a
+;;              note is written beside the point in the drawing
+;; Raise them for sloppier tapes (a sheet read to the half inch), lower
+;; them when a survey is expected to be tight.
+(setq abcdef:*fit-ok*  0.20)
+(setq abcdef:*fit-bad* 0.50)
 
 ;; How far outside the rectangle a solved point may land and still be
-;; treated as rounding to be snapped back, rather than a bad reading.
+;; treated as rounding to be snapped back onto the frame, in inches.  A
+;; snap larger than this is reported as a bad tape or a wrong dimension
+;; and counts the point as one that wants checking.
 (setq abcdef:*edge-tol* 1.0)
 
-(setq abcdef:*fuzz* 1e-9)      ; below this, two lengths are the same length
+;; A snap smaller than this is not reported at all - it is arithmetic,
+;; not a finding.  In inches.
+(setq abcdef:*snap-show* 0.001)
+
+;; ---- dropping a tape (the Auto method) -----------------------------------
+
+;; With four tapes and a poor fit, each tape is left out in turn.  The
+;; best three-tape fit is allowed to win, and that tape to be dropped,
+;; only when all of these hold:
+;;   * the three fit at or under *fit-ok* (above);
+;;   * they fit better than *drop-gain* times the four-tape fit - so the
+;;     drop has to have MENDED something, not just shaved it;
+;;   * the runner-up triple is clearly worse: at least *drop-ratio* times
+;;     the best AND at least *drop-margin* inches over it.  Near a
+;;     diagonal the best two triples fit alike, and this is what keeps a
+;;     good tape from being thrown out there.
+;; Lower *drop-ratio* / *drop-margin* to drop tapes more readily, raise
+;; them to be stricter about the evidence.
+(setq abcdef:*drop-gain*   0.5)
+(setq abcdef:*drop-ratio*  3.0)
+(setq abcdef:*drop-margin* 0.25)
+
+;; ---- whole-sheet sanity ----------------------------------------------------
+
+;; Every row with three or more tapes is solved as labelled AND with the
+;; C and D columns exchanged.  The sheet is read as clockwise-labelled
+;; (C bottom-right) when the fit as labelled is worse than *swap-min*
+;; inches per row on average and the swapped fit is under *swap-ratio*
+;; of it.  Set *swap-min* very high to switch the detector off.
+(setq abcdef:*swap-min*   0.5)
+(setq abcdef:*swap-ratio* 0.25)
+
+;; When the average fit over those rows is still worse than this many
+;; inches after any swap, the command warns on the command line and pops
+;; an alert: the A-B / A-C dimensions or the sheet are probably wrong.
+;; Points are plotted regardless.
+(setq abcdef:*poor-fit* 1.0)
+
+;; ---- the confidence column -------------------------------------------------
+
+;; Every point starts at 100 and loses points for what its tapes could
+;; not show.  The number is clamped to 1..99.
+;;   *conf-three*  taken off a point placed by three tapes
+;;   *conf-two*    taken off a point placed by only two (they cross-check
+;;                 nothing, so this is the biggest single cost)
+(setq abcdef:*conf-three* 8.0)
+(setq abcdef:*conf-two*   26.0)
+
+;; Leftover fit error costs *conf-fit* points per inch of RMS, up to
+;; *conf-fit-max*.  At the defaults a tenth of an inch costs 11.
+(setq abcdef:*conf-fit*     110.0)
+(setq abcdef:*conf-fit-max*  55.0)
+
+;; Spread - how far the answer moves when any one tape is dropped - costs
+;; *conf-spread* points per inch, up to *conf-spread-max*.
+(setq abcdef:*conf-spread*     12.0)
+(setq abcdef:*conf-spread-max* 20.0)
+
+;; The angle the best pair of tapes crosses at, in degrees.  A shallow
+;; crossing turns a quarter inch of tape error into inches of position
+;; error, so it costs more than a large fit does.  Below *cut-bad* the
+;; point loses *conf-cut-bad*, below *cut-poor* it loses *conf-cut-poor*,
+;; below *cut-fair* it loses *conf-cut-fair*; a wider crossing costs
+;; nothing.
+(setq abcdef:*cut-bad*  20.0)
+(setq abcdef:*cut-poor* 35.0)
+(setq abcdef:*cut-fair* 50.0)
+(setq abcdef:*conf-cut-bad*  22.0)
+(setq abcdef:*conf-cut-poor* 10.0)
+(setq abcdef:*conf-cut-fair*  3.0)
+
+;; A dropped tape costs this much: the row needed repairing, and a repair
+;; is a judgement even when the evidence for it was good.
+(setq abcdef:*conf-drop* 6.0)
+
+;; Two tapes fix a point twice over - once each side of the line joining
+;; the two corners they were measured from - and both answers fit them
+;; EQUALLY well.  Measured from two adjacent corners the mirror falls
+;; outside the rectangle and the choice is made for us; measured from two
+;; OPPOSITE corners it does not, and the sheet genuinely does not say
+;; which of the two the point is.  Such a row is flagged and loses this
+;; much confidence on top of the two-tape cost.
+(setq abcdef:*conf-mirror* 25.0)
+
+;; The word that goes with the number: HIGH from *grade-high* up, then
+;; GOOD, FAIR, WEAK, and POOR below *grade-weak*.
+(setq abcdef:*grade-high* 90.0)
+(setq abcdef:*grade-good* 75.0)
+(setq abcdef:*grade-fair* 60.0)
+(setq abcdef:*grade-weak* 40.0)
+
+;; A point under this confidence "wants checking": it is counted in the
+;; summary and gets a note beside it in the drawing (as does one over
+;; *fit-bad* or snapped further than *edge-tol*).
+(setq abcdef:*conf-check* 60.0)
+
+;; ---- what it draws ---------------------------------------------------------
+
+;; The survey points, as the rest of the toolkit reads them: an "ab_pt"
+;; block on layer POINTS with the sheet's label in its "number" attribute
+;; (the same block XFTCONV makes for a Leica import).  ABHD, CABHD, ADAB,
+;; ABFIND, BPCALLOUT and LHD all look for exactly this, so change these
+;; three only together with them.  *point-color* is used when the layer
+;; has to be created (2 = yellow); an existing layer keeps its colour.
+(setq abcdef:*point-layer* "POINTS")
+(setq abcdef:*point-block* "ab_pt")
+(setq abcdef:*point-tag*   "number")
+(setq abcdef:*point-color* 2)
+
+;; The rectangle with its corner letters, and the notes beside doubtful
+;; points.  Colours are AutoCAD colour numbers (1 = red), applied when the
+;; layer is created.  Nothing but the survey points ever goes on
+;; *point-layer*.
+(setq abcdef:*frame-layer* "ABCDEF-FRAME")
+(setq abcdef:*frame-color* 1)
+(setq abcdef:*warn-layer*  "ABCDEF-WARN")
+(setq abcdef:*warn-color*  1)
+
+;; Text height is the longer rectangle side divided by *text-div*, but
+;; never under *text-min* inches.  The block is scaled by the same height
+;; so its number reads at that size.
+;;   *tag-scale*  corner letters are this many text heights tall
+;;   *tag-gap*    how far a corner letter sits out from its corner,
+;;                sideways and upward, in text heights
+;;   *tag-drop*   how far BELOW a bottom corner its letter's baseline
+;;                sits, in text heights (more than *tag-gap*, because the
+;;                letter's own height has to clear the corner)
+;;   *note-off*   the "P3 WEAK" note beside a doubtful point sits this
+;;                many text heights up and to the right of it
+(setq abcdef:*text-div*  120.0)
+(setq abcdef:*text-min*  0.5)
+(setq abcdef:*tag-scale* 1.4)
+(setq abcdef:*tag-gap*   1.0)
+(setq abcdef:*tag-drop*  1.6)
+(setq abcdef:*note-off*  0.6)
+
+;; ---- the sheet -------------------------------------------------------------
+
+;; What the file dialog offers, as a getfiled extension list.  CSV is
+;; read natively; the Excel formats go through Excel COM automation.
+(setq abcdef:*file-types* "xlsx;xls;xlsm;csv")
+
+;; Header words that identify the columns, compared upper-case as
+;; substrings: a header containing the Nth entry of *hdr-dist* is the
+;; distance from the Nth corner (A B C D), and the first header containing
+;; any entry of *hdr-name* is the point name.  With no name header the
+;; first column is taken.
+(setq abcdef:*hdr-dist* '("FROM A" "FROM B" "FROM C" "FROM D"))
+(setq abcdef:*hdr-name* '("NAME" "POINT" "LABEL"))
+
+;; The report file is the sheet's name with its extension replaced by
+;; this, written beside the sheet.
+(setq abcdef:*report-suffix* "_ABCDEF_report.txt")
+
+;; ---- reading dirty values --------------------------------------------------
+
+;; A reading with no foot mark whose value is more than *apos-over* times
+;; the rectangle's diagonal, and whose feet end in a 1, had its foot mark
+;; scanned as that 1 ("101-10" is 10'-10"): the 1 is dropped and the
+;; repair logged.  A value still over *impossible* times the diagonal
+;; after that cannot be a distance to a corner and is left blank (and
+;; logged).  Both are ratios; 1.0 would be the diagonal itself.
+(setq abcdef:*apos-over*  1.05)
+(setq abcdef:*impossible* 1.1)
+
+;; The denominators an inch fraction may have.  A slash-less digit run
+;; like "314" is rebuilt as the one fraction over one of these it could
+;; be (3/4), so a denominator not listed here is never invented.
+(setq abcdef:*fractions* '(2 4 8 16 32))
+
+;; The correction log writes each repaired value back as feet-inches to
+;; the nearest 1/*log-denom* of an inch, reduced (476.75 -> 39'-8 3/4").
+;; A whole number, a power of two.
+(setq abcdef:*log-denom* 32)
+
+;; ---- numerical -------------------------------------------------------------
+;; These only matter to the solver's arithmetic and should not need
+;; touching.
+
+;; Two lengths closer than this are the same length; also the shortest
+;; radius the solver will divide by.  In inches.
+(setq abcdef:*fuzz* 1e-9)
+
+;; The least-squares fit: at most *solve-iters* Gauss-Newton steps, done
+;; when a step moves the point under *solve-step* inches in both X and Y;
+;; a normal-matrix determinant under *solve-singular* (or a linear-seed
+;; determinant under *seed-singular*) means the tapes do not constrain
+;; the point and the fit stops where it is.
+(setq abcdef:*solve-iters*    60)
+(setq abcdef:*solve-step*     1e-7)
+(setq abcdef:*solve-singular* 1e-12)
+(setq abcdef:*seed-singular*  1e-9)
+
+;; The corner self-check accepts a side or diagonal within this many
+;; inches of what W and H say it should be.
+(setq abcdef:*frame-tol* 0.001)
 
 ;;; --------------------------------------------------------------------------
 ;;;  String helpers
@@ -230,7 +448,7 @@
                  (abcdef:alldigits num) (abcdef:alldigits den))
           (progn
             (setq ni (atoi num) di (atoi den))
-            (if (and (member di '(2 4 8 16 32)) (> ni 0) (< ni di))
+            (if (and (member di abcdef:*fractions*) (> ni 0) (< ni di))
               (setq best (strcat num "/" den)))))))
     (setq k (1+ k)))
   best)
@@ -324,7 +542,7 @@
       ;; --- foot mark scanned as a "1" ------------------------------------
       ;; e.g. 10'-10" -> "101-10": with no real ' and a value past the
       ;; diagonal, a trailing 1 on the feet was the apostrophe; drop it.
-      (if (and maxd (null p) (> val (* maxd 1.05))
+      (if (and maxd (null p) (> val (* maxd abcdef:*apos-over*))
                (> (strlen ftstr) 1)
                (= (substr ftstr (strlen ftstr) 1) "1"))
         (progn
@@ -333,23 +551,24 @@
                 abcdef:*dirty* T)))
       (if neg (setq val (- val)))
       ;; --- final sanity: non-positive or still impossible -> unreadable --
-      (if (or (<= val 0.0) (and maxd (> val (* maxd 1.1))))
+      (if (or (<= val 0.0)
+              (and maxd (> val (* maxd abcdef:*impossible*))))
         (progn (setq abcdef:*dirty* T) nil)
         val))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Format inches back to a feet-inch string (for the correction log), to the
-;;;  nearest 1/32", reduced.  e.g. 476.75 -> 39'-8 3/4"
+;;;  nearest 1/abcdef:*log-denom*", reduced.  e.g. 476.75 -> 39'-8 3/4"
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:in->ftin (v / neg feet whole frac n den ft s)
+(defun abcdef:in->ftin (v / neg feet whole n den per s)
   (setq neg (< v 0.0) v (abs v))
-  (setq n (fix (+ (* v 32.0) 0.5)))      ; total 1/32" units, rounded
-  (setq feet (fix (/ n 384)))            ; 384 = 32*12
-  (setq n (- n (* feet 384)))
-  (setq whole (fix (/ n 32)))
-  (setq n (- n (* whole 32)))            ; leftover 1/32 units, 0..31
-  (setq den 32)
+  (setq den abcdef:*log-denom* per (* den 12))
+  (setq n (fix (+ (* v den) 0.5)))       ; total 1/den" units, rounded
+  (setq feet (fix (/ n per)))            ; per = those units in a foot
+  (setq n (- n (* feet per)))
+  (setq whole (fix (/ n den)))
+  (setq n (- n (* whole den)))           ; leftover 1/den units
   (while (and (> n 0) (= (rem n 2) 0)) (setq n (/ n 2) den (/ den 2)))
   (setq s (strcat (itoa feet) "'-" (itoa whole)))
   (if (> n 0) (setq s (strcat s " " (itoa n) "/" (itoa den))))
@@ -390,26 +609,26 @@
               sac (+ sac (* a cc)) sbc (+ sbc (* b cc)))
         (setq i (1+ i)))
       (setq det (- (* saa sbb) (* sab sab)))
-      (if (> (abs det) 1e-9)
+      (if (> (abs det) abcdef:*seed-singular*)
         (setq x (/ (- (* sac sbb) (* sbc sab)) det)
               y (/ (- (* saa sbc) (* sab sac)) det))
         (setq x cx y cy)))                    ; degenerate -> centre
     (setq x cx y cy))                         ; only 2 circles -> centre seed
   ;; ---- Gauss-Newton refinement ------------------------------------------
   (setq iter 0)
-  (while (< iter 60)
+  (while (< iter abcdef:*solve-iters*)
     (setq jaa 0.0 jab 0.0 jbb 0.0 ga 0.0 gb 0.0 i 0)
     (while (< i n)
       (setq c (nth i corners) d (nth i dists))
       (setq dx (- x (car c)) dy (- y (cadr c)) r (sqrt (+ (* dx dx) (* dy dy))))
-      (if (< r 1e-9) (setq r 1e-9))
+      (if (< r abcdef:*fuzz*) (setq r abcdef:*fuzz*))
       (setq jx (/ dx r) jy (/ dy r) f (- r d))
       (setq jaa (+ jaa (* jx jx)) jab (+ jab (* jx jy)) jbb (+ jbb (* jy jy))
             ga (+ ga (* jx f)) gb (+ gb (* jy f)))
       (setq i (1+ i)))
     (setq det (- (* jaa jbb) (* jab jab)))
-    (if (< (abs det) 1e-12)
-      (setq iter 60)                          ; singular -> stop
+    (if (< (abs det) abcdef:*solve-singular*)
+      (setq iter abcdef:*solve-iters*)        ; singular -> stop
       (progn
         (setq ddx (/ (- (- (* ga jbb)) (- (* gb jab)))
                      det)
@@ -417,7 +636,9 @@
                      det))
         ;; ddx = -(ga*jbb - gb*jab)/det ; ddy = -(jaa*gb - jab*ga)/det
         (setq x (+ x ddx) y (+ y ddy))
-        (if (and (< (abs ddx) 1e-7) (< (abs ddy) 1e-7)) (setq iter 60))))
+        (if (and (< (abs ddx) abcdef:*solve-step*)
+                 (< (abs ddy) abcdef:*solve-step*))
+          (setq iter abcdef:*solve-iters*))))
     (setq iter (1+ iter)))
   ;; ---- residuals ---------------------------------------------------------
   (setq res '() rms 0.0 i 0)
@@ -482,6 +703,28 @@
         (list (list bx by))
         (list (list (- bx (* h uy)) (+ by (* h ux)))
               (list (+ bx (* h uy)) (- by (* h ux))))))))
+
+;; The mirror of (X Y) in the line through CA and CB.
+;;
+;; Two circles cross twice, so two tapes fix a point twice over - once
+;; each side of the line joining the corners they came from - and the two
+;; answers fit those tapes to exactly the same hundredth.  Which one is
+;; taken is settled by the seed, and the seed is the middle of the frame,
+;; which sits ON the line for a pair of opposite corners: there the two
+;; answers are equidistant from it and the pick is a coin toss.  So the
+;; question worth asking is not which root was chosen but whether the
+;; other one was a real possibility, and that is what this computes.
+(defun abcdef:mirror-pt (x y ca cb / ux uy d tt vx vy)
+  (setq ux (- (car cb) (car ca)) uy (- (cadr cb) (cadr ca))
+        d  (sqrt (+ (* ux ux) (* uy uy))))
+  (if (< d abcdef:*fuzz*)
+    (list x y)                           ; the same corner twice
+    (progn
+      (setq ux (/ ux d) uy (/ uy d)
+            vx (- x (car ca)) vy (- y (cadr ca))
+            tt (* 2.0 (+ (* vx ux) (* vy uy))))
+      (list (+ (car ca) (- (* tt ux) vx))
+            (+ (cadr ca) (- (* tt uy) vy))))))
 
 ;; T when (X Y) is inside RECT - (xmin ymin xmax ymax) - allowing TOL of
 ;; slop on every side.
@@ -689,9 +932,10 @@
                 (setq nr (caddr trial))))))
      (if (and bs
               (<= br abcdef:*fit-ok*)
-              (< br (* 0.5 rms))
+              (< br (* abcdef:*drop-gain* rms))
               nr
-              (> nr (max (* 3.0 br) (+ br 0.25))))   ; the runner-up must lose
+              (> nr (max (* abcdef:*drop-ratio* br)      ; the runner-up
+                         (+ br abcdef:*drop-margin*))))   ; must lose
        (list best bs (abcdef:missing av bs))
        (list f av nil)))))
 
@@ -737,8 +981,19 @@
   (setq f (abcdef:fit av rect seed))
   (if f (list f av nil)))
 
+;; T when the row was placed by exactly two tapes AND the mirror answer
+;; those same two tapes allow also lands inside the frame - i.e. the sheet
+;; does not say which of the two the point is.
+(defun abcdef:mirror-amb-p (used x y rect / m)
+  (if (/= (length used) 2)
+    nil
+    (progn
+      (setq m (abcdef:mirror-pt x y (cadr (nth 0 used)) (cadr (nth 1 used))))
+      (and (> (abcdef:d2p (list x y) m) abcdef:*edge-tol*)
+           (abcdef:inside-p (car m) (cadr m) rect 0.0)))))
+
 ;; Run one row under the chosen method.  Returns
-;;   (X Y RMS USED DROPPED SPREAD CUT SNAP URMS)
+;;   (X Y RMS USED DROPPED SPREAD CUT SNAP URMS MIRROR)
 ;; or nil when the row has too little to place.
 ;;
 ;; RMS is scored against every tape the sheet gave, URMS against only the
@@ -765,7 +1020,8 @@
       (setq sp  (abcdef:spread used rect seed (list x y))
             cut (abcdef:best-cut x y used))
       (list x y (abcdef:rms-at av x y) used dropped sp cut (caddr c)
-            (abcdef:rms-at used x y)))))
+            (abcdef:rms-at used x y)
+            (abcdef:mirror-amb-p used x y rect)))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Confidence
@@ -785,26 +1041,28 @@
 ;;;  repair is a judgement even when the evidence for it was good.
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:confidence (used rms spread cut dropped / p)
+(defun abcdef:confidence (used rms spread cut dropped mirror / p)
   (setq p 100.0)
-  (cond ((>= used 4) (setq p (- p  0.0)))
-        ((= used 3)  (setq p (- p  8.0)))
-        (T           (setq p (- p 26.0))))
-  (setq p (- p (min 55.0 (* 110.0 rms))))
-  (if spread (setq p (- p (min 20.0 (* 12.0 spread)))))
-  (cond ((< cut 20.0) (setq p (- p 22.0)))
-        ((< cut 35.0) (setq p (- p 10.0)))
-        ((< cut 50.0) (setq p (- p  3.0))))
-  (if dropped (setq p (- p 6.0)))
+  (cond ((= used 3) (setq p (- p abcdef:*conf-three*)))
+        ((< used 3) (setq p (- p abcdef:*conf-two*))))
+  (setq p (- p (min abcdef:*conf-fit-max* (* abcdef:*conf-fit* rms))))
+  (if spread
+    (setq p (- p (min abcdef:*conf-spread-max*
+                      (* abcdef:*conf-spread* spread)))))
+  (cond ((< cut abcdef:*cut-bad*)  (setq p (- p abcdef:*conf-cut-bad*)))
+        ((< cut abcdef:*cut-poor*) (setq p (- p abcdef:*conf-cut-poor*)))
+        ((< cut abcdef:*cut-fair*) (setq p (- p abcdef:*conf-cut-fair*))))
+  (if dropped (setq p (- p abcdef:*conf-drop*)))
+  (if mirror (setq p (- p abcdef:*conf-mirror*)))
   (max 1.0 (min 99.0 p)))
 
 ;; The word that goes with a confidence number.
 (defun abcdef:grade (pct)
-  (cond ((>= pct 90.0) "HIGH")
-        ((>= pct 75.0) "GOOD")
-        ((>= pct 60.0) "FAIR")
-        ((>= pct 40.0) "WEAK")
-        (T             "POOR")))
+  (cond ((>= pct abcdef:*grade-high*) "HIGH")
+        ((>= pct abcdef:*grade-good*) "GOOD")
+        ((>= pct abcdef:*grade-fair*) "FAIR")
+        ((>= pct abcdef:*grade-weak*) "WEAK")
+        (T                            "POOR")))
 
 
 ;;; --------------------------------------------------------------------------
@@ -864,9 +1122,8 @@
 ;;;  is why nothing else drawn here goes on the POINTS layer.
 ;;; --------------------------------------------------------------------------
 
-(setq abcdef:*point-layer* "POINTS")   ; where the survey points land
-(setq abcdef:*point-block* "ab_pt")    ; the block every fitter reads
-(setq abcdef:*point-tag*   "number")   ; its point-number attribute
+;; (The layer, block and attribute names are Tunables at the top of the
+;; file, next to the colour the layer is created with.)
 
 ;; Make sure ab_pt exists, building it the way the office template has it
 ;; when the drawing has never seen one.  (Same definition XFTCONV creates
@@ -956,15 +1213,20 @@
                      "Text"))) '()))
   (if (vl-catch-all-error-p res) "" (abcdef:cellstr res)))
 
-;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd.
-(defun abcdef:col-of (up)
-  (cond ((vl-string-search "FROM A" up) 'a)
-        ((vl-string-search "FROM B" up) 'b)
-        ((vl-string-search "FROM C" up) 'c)
-        ((vl-string-search "FROM D" up) 'd)
-        ((or (vl-string-search "NAME" up) (vl-string-search "POINT" up)
-             (vl-string-search "LABEL" up)) 'name)
-        (T nil)))
+;; Classify a header cell (already upper-cased) as 'name / 'a / 'b / 'c / 'd
+;; by the words in abcdef:*hdr-dist* and abcdef:*hdr-name*: the Nth
+;; distance word wins over a name word, and the first match wins.
+(defun abcdef:col-of (up / kind i w)
+  (setq kind nil i 0)
+  (foreach w abcdef:*hdr-dist*
+    (if (and (null kind) (vl-string-search (strcase w) up))
+      (setq kind (cond ((= i 0) 'a) ((= i 1) 'b) ((= i 2) 'c) (T 'd))))
+    (setq i (1+ i)))
+  (if (null kind)
+    (foreach w abcdef:*hdr-name*
+      (if (and (null kind) (vl-string-search (strcase w) up))
+        (setq kind 'name))))
+  kind)
 
 ;; nth (1-based) element of a list, or "" when the index is nil / out of range.
 (defun abcdef:nth-field (lst idx)
@@ -1218,7 +1480,7 @@
                      (list "B-C (diagonal)" bx by cx cy dg))
     (setq d (sqrt (+ (expt (- (nth 3 chk) (nth 1 chk)) 2)
                      (expt (- (nth 4 chk) (nth 2 chk)) 2))))
-    (if (and (null bad) (> (abs (- d (nth 5 chk))) 0.001))
+    (if (and (null bad) (> (abs (- d (nth 5 chk))) abcdef:*frame-tol*))
       (setq bad (strcat (car chk) " measures " (rtos d 2 2)
                         "\" but should be " (rtos (nth 5 chk) 2 2) "\""))))
   bad)
@@ -1229,7 +1491,7 @@
 (defun abcdef:corner-ang (px py qx qy rx ry / ux uy vx vy cross dot)
   (setq ux (- qx px) uy (- qy py) vx (- rx px) vy (- ry py))
   (setq cross (- (* ux vy) (* uy vx)) dot (+ (* ux vx) (* uy vy)))
-  (if (and (< (abs cross) 1e-12) (< (abs dot) 1e-12))
+  (if (and (< (abs cross) abcdef:*fuzz*) (< (abs dot) abcdef:*fuzz*))
     0.0
     (* 180.0 (/ (atan (abs cross) dot) pi))))
 
@@ -1258,7 +1520,7 @@
 ;; beside SHEET.  Returns the path written, or nil - a report that cannot
 ;; be saved is worth a note, never worth losing the plot over.
 (defun abcdef:write-report (sheet lines / path fp ln)
-  (setq path (abcdef:sibling sheet "_ABCDEF_report.txt"))
+  (setq path (abcdef:sibling sheet abcdef:*report-suffix*))
   (setq fp (vl-catch-all-apply 'open (list path "w")))
   (if (or (vl-catch-all-error-p fp) (null fp))
     nil
@@ -1304,7 +1566,8 @@
 (defun c:ABCDEF (/ *error* undo-open file rows base bpx bpy W H method
                     Ax Ay Bx By Cx Cy Dx Dy th
                     good bad r nm din d k rr av loc x y rms used dropped
-                    sp cut snap urms pct gr rect seed tags tg tx ty placed p
+                    sp cut snap urms mirr pct gr rect seed tags tg tx ty
+                    placed p
                     flag totn tots n3 swapcd tmp angs chk rstr rl
                     stage done mark ss rep line nby4 nby3 nby2 ndrop
                     nlow path)
@@ -1334,7 +1597,7 @@
       ;; ---- get the spreadsheet ------------------------------------------
       ((= stage 1)
        (setq file (getfiled "Select points spreadsheet"
-                            "" "xlsx;xls;xlsm;csv" 16))
+                            "" abcdef:*file-types* 16))
        (if (null file)
          (setq done 'quit)
          (progn
@@ -1421,8 +1684,8 @@
                 (setq n3 (1+ n3)))))
           (setq swapcd nil)
           (if (and (> n3 0)
-                   (> totn (* 0.5 n3))        ; poor fit as labelled ...
-                   (< tots (* 0.25 totn)))    ; ... and 4x better swapped
+                   (> totn (* abcdef:*swap-min* n3))      ; poor as labelled
+                   (< tots (* abcdef:*swap-ratio* totn))) ; far better swapped
             (progn
               (setq swapcd T)
               (setq tmp Cx Cx Dx Dx tmp)
@@ -1433,7 +1696,8 @@
                 "\" swapped vs " (rtos (/ totn n3) 2 3) "\" as labelled)."
                 "\n     This sheet labels C = bottom-RIGHT and D = bottom-LEFT;"
                 "\n     C and D have been placed that way to match the data."))))
-          (if (and (> n3 0) (> (if swapcd tots totn) (* 1.0 n3)))
+          (if (and (> n3 0)
+                   (> (if swapcd tots totn) (* abcdef:*poor-fit* n3)))
             (progn
               (princ (strcat
                 "\n\n  ** WARNING: the distances fit the rectangle poorly (avg fit "
@@ -1449,12 +1713,12 @@
                 "\nsheet's values.  Points ARE plotted, but the report"
                 "\ngrades every one of them and flags the doubtful."))))
           ;; ---- layers & sizing --------------------------------------------
-          (abcdef:layer "ABCDEF-FRAME"  1)     ; red
-          (abcdef:layer "ABCDEF-WARN"   1)     ; red - notes on doubtful fits
-          (abcdef:layer abcdef:*point-layer* 2) ; yellow - the survey itself
+          (abcdef:layer abcdef:*frame-layer* abcdef:*frame-color*)
+          (abcdef:layer abcdef:*warn-layer*  abcdef:*warn-color*)
+          (abcdef:layer abcdef:*point-layer* abcdef:*point-color*)
           (abcdef:ensure-block)
-          (setq th (/ (max W H) 120.0))        ; text height
-          (if (< th 0.5) (setq th 0.5))
+          (setq th (/ (max W H) abcdef:*text-div*))   ; text height
+          (if (< th abcdef:*text-min*) (setq th abcdef:*text-min*))
           ;; ---- draw the rectangle + corner tags ---------------------------
           ;; perimeter order TL -> TR -> BR -> BL, by position (so the frame
           ;; stays a rectangle no matter which naming the sheet used).
@@ -1462,16 +1726,19 @@
                         (list (+ bpx W) bpy)
                         (list (+ bpx W) (- bpy H))
                         (list bpx (- bpy H))
-                        "ABCDEF-FRAME")
+                        abcdef:*frame-layer*)
           ;; corner name tags, offset outward from whichever corner each
           ;; letter ended up on.
           (setq tags (list (list "A" Ax Ay) (list "B" Bx By)
                            (list "C" Cx Cy) (list "D" Dx Dy)))
           (foreach tg tags
-            (setq tx (if (> (cadr tg)  (+ bpx (* 0.5 W))) th (* -1 th))
-                  ty (if (> (caddr tg) (- bpy (* 0.5 H))) th (* -1.6 th)))
+            (setq tx (* th (if (> (cadr tg) (+ bpx (* 0.5 W)))
+                             abcdef:*tag-gap* (- abcdef:*tag-gap*)))
+                  ty (* th (if (> (caddr tg) (- bpy (* 0.5 H)))
+                             abcdef:*tag-gap* (- abcdef:*tag-drop*))))
             (abcdef:text (list (+ (cadr tg) tx) (+ (caddr tg) ty))
-                         (* th 1.4) (car tg) "ABCDEF-FRAME"))
+                         (* th abcdef:*tag-scale*) (car tg)
+                         abcdef:*frame-layer*))
           ;; ---- plot each measured point -----------------------------------
           ;; RECT is the frame every solution is held inside; SEED is its
           ;; middle, which is where an ambiguous two-tape crossing starts
@@ -1495,8 +1762,10 @@
                       rms  (nth 2 loc) used    (nth 3 loc)
                       dropped (nth 4 loc)
                       sp   (nth 5 loc) cut     (nth 6 loc)
-                      snap (nth 7 loc) urms    (nth 8 loc))
-                (setq pct (abcdef:confidence (length used) urms sp cut dropped)
+                      snap (nth 7 loc) urms    (nth 8 loc)
+                      mirr (nth 9 loc))
+                (setq pct (abcdef:confidence (length used) urms sp cut
+                                             dropped mirr)
                       gr  (abcdef:grade pct))
                 ;; signed leftover error against each supplied tape, in sheet
                 ;; order A B C D ("--" = not measured) - what each tape still
@@ -1513,7 +1782,7 @@
                 ;; the report that scrolls away
                 (setq flag "")
                 (if (> rms abcdef:*fit-bad*) (setq flag "  **CHECK"))
-                (if (> snap 0.001)
+                (if (> snap abcdef:*snap-show*)
                   (setq flag (strcat flag "  (snapped "
                                      (rtos snap 2 2) "\" into frame)")))
                 (if dropped
@@ -1525,12 +1794,18 @@
                 (if (and (null dropped) (= (length used) 4)
                          (> rms abcdef:*fit-ok*))
                   (setq flag (strcat flag "  (tapes disagree, none provably wrong)")))
-                (if (or (> rms abcdef:*fit-bad*) (< pct 60.0)
-                        (> snap abcdef:*edge-tol*))
+                ;; two tapes from opposite corners answer twice, and both
+                ;; answers are in the pool - the sheet cannot say which
+                (if mirr
+                  (setq flag (strcat flag "  (mirror pair, two answers fit"
+                                          " - needs a third tape)")))
+                (if (or (> rms abcdef:*fit-bad*) (< pct abcdef:*conf-check*)
+                        (> snap abcdef:*edge-tol*) mirr)
                   (progn
                     (setq nlow (1+ nlow))
-                    (abcdef:text (list (+ x (* th 0.6)) (+ y (* th 0.6)))
-                                 th (strcat nm " " gr) "ABCDEF-WARN")))
+                    (abcdef:text (list (+ x (* th abcdef:*note-off*))
+                                       (+ y (* th abcdef:*note-off*)))
+                                 th (strcat nm " " gr) abcdef:*warn-layer*)))
                 (cond ((>= (length used) 4) (setq nby4 (1+ nby4)))
                       ((= (length used) 3)  (setq nby3 (1+ nby3)))
                       (T                    (setq nby2 (1+ nby2))))
@@ -1590,8 +1865,8 @@
           (setq rep (abcdef:say rep (strcat
             "  " (itoa nlow) " point(s) want checking"
             " (FIT over " (rtos abcdef:*fit-bad* 2 2)
-            "\", confidence under 60%, or snapped over "
-            (rtos abcdef:*edge-tol* 2 2) "\").")))
+            "\", confidence under " (rtos abcdef:*conf-check* 2 0)
+            "%, or snapped over " (rtos abcdef:*edge-tol* 2 2) "\").")))
           (setq rep (abcdef:say rep ""))
           (setq rep (abcdef:say rep
             "  TAPES  how many of the four distances the sheet gave."))
@@ -1616,7 +1891,13 @@
           (setq rep (abcdef:say rep
             "         check nothing, so a 2-tape point is capped well short"))
           (setq rep (abcdef:say rep
-            "         of certainty however neatly the circles crossed."))
+            "         of certainty however neatly the circles crossed.  A"))
+          (setq rep (abcdef:say rep
+            "         pair measured from OPPOSITE corners answers twice"))
+          (setq rep (abcdef:say rep
+            "         over, both answers inside the frame; that row is"))
+          (setq rep (abcdef:say rep
+            "         marked \"mirror pair\" and needs a third tape."))
           ;; ---- confirm the frame really is a rectangle --------------------
           ;; measure the corner angles from the coordinates that were drawn,
           ;; rather than asserting them - so a future corner-math regression

@@ -10,6 +10,32 @@
 ;;;  knows nothing about any routine beyond its name.
 ;;; ====================================================================
 
+;;; -------------------- tunables ----------------------------------------
+;;;  Exactly one table is meant to be edited here, and the three things
+;;;  that look like knobs are not.
+;;;
+;;;  calofin:*commands*, just below, is the probe list: every command
+;;;  the palette can show, so the palette can grey the ones this
+;;;  session has not loaded.  tools/check_registry.py holds it to
+;;;  LAZPANEL's roster and to the palette's generated catalog, so a
+;;;  name added to one and not the others fails make check.
+;;;
+;;;  NOT knobs, and why:
+;;;
+;;;    "NA", the ";" and "=" separators, and distof's modes (4, then 2)
+;;;    inside calofin:answer, calofin:kvsplit and calofin:kvunpack are
+;;;    CALOFIN-LIB.lsp's contract, copied here only because the palette
+;;;    must work at the standalone tier, where the library is not
+;;;    loaded.  tests/test_palette_wire.py holds each copy to the
+;;;    library's body character for character: change them in the
+;;;    library and re-copy, never here alone, or the two surfaces read
+;;;    the same box differently.
+;;;
+;;;    The registry keys the palette remembers things under -- pins and
+;;;    recents, the last accepted sheet per chart -- are LAZPANEL's,
+;;;    LAZFORM's, LAZSPA's and LAZSTEP's own, and each lives in that
+;;;    file's tunables block.  This file has none of its own.
+
 ;; Every command the palette can show.  A name here that is not loaded
 ;; is simply reported as missing, so the list is safe to keep ahead of
 ;; whatever a given machine has.  One group per palette group, in the
@@ -42,7 +68,8 @@
     "CDCREATE" "CDCALLOUT" "BPCALLOUT"
     ;; Points
     "ABCDEF" "ALTABCDEF" "XYPLOT" "ABFIND" "ABMOVE" "PERPPTS" "CPERPPTS"
-    "XFTCONV" "POINTRENAMER" "CONSTELLATION" "SOCONV" "VSCONV"
+    "XFTCONV" "XFTRECONV" "POINTRENAMER" "CONSTELLATION"
+    "SOCONV" "SORECONV" "VSCONV" "VSRECONV"
     "DRONE" "TYDRN" "TYLERDRONESUITE"
     ;; deprecated but still shipped standalone (lisp/standards_checker/)
     "MATCHSTD" "ACADY-SCAN"))
@@ -127,7 +154,11 @@
 (defun calofin:unreadable (measures / out v)
   (foreach p measures
     (setq v (cdr p))
-    (if (and (/= (calofin:trim (if v v "")) "")
+    ;; only TEXT can be unreadable.  A number reads; nil is an empty
+    ;; box, which is unanswered rather than unreadable; and anything
+    ;; else is not a box's contents at all and is left alone
+    (if (and (= (type v) 'STR)
+             (/= (calofin:trim v) "")
              (eq (calofin:answer v) 'SKIP))
         (setq out (cons (car p) out))))
   (reverse out))
@@ -178,10 +209,15 @@
 ;;  lists that the reader above would turn into 'SKIP and drop.  Run a
 ;;  "Rectangle" through a measurement reader and the shape stops
 ;;  travelling.
-(defun calofin:form (literals measures / out a)
+(defun calofin:form (literals measures / out a v)
   (setq out (reverse literals))
   (foreach p measures
-    (setq a (calofin:answer (cdr p)))
+    (setq v (cdr p))
+    ;; a value that is already a number is an answer and not text to
+    ;; read: the reader would hand it to strlen and die.  The palette
+    ;; never sends one -- MeasurePair always quotes -- but the wire is
+    ;; an entry point, and an entry point takes what it is given
+    (setq a (if (numberp v) v (calofin:answer v)))
     (if (not (eq a 'SKIP)) (setq out (cons (cons (car p) a) out))))
   (reverse out))
 
@@ -193,11 +229,16 @@
   ;; the SYMBOL is what apply wants, not the function value behind it:
   ;; (apply 'pool:run-with-answers (list form)) is the idiom, and it is
   ;; also the only spelling that survives a name defined after this
-  ;; file was loaded
-  (setq sym (read fn))
+  ;; file was loaded.  FN may arrive as either -- the palette sends the
+  ;; string, a Lisp caller would more naturally quote the symbol
+  (setq sym (if (= (type fn) 'STR) (read fn) fn))
   (cond
     ((null (eval sym))
-     (princ (strcat "\n" fn " is not loaded in this drawing."))
+     ;; princ, not strcat: FN may be the symbol, and strcat takes only
+     ;; strings -- naming it in the message must not be what breaks
+     (princ "\n")
+     (princ sym)
+     (princ " is not loaded in this drawing.")
      (princ))
     (t (apply sym (list (calofin:form literals measures))))))
 

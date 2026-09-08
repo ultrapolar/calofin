@@ -10,13 +10,18 @@ LINGUTTER.lsp is loaded into the AutoLISP VM and run against a drawing
 built entity by entity.
 
 It also carries a PORT.  LINGUTTER is a standalone file and cannot call
-into PADDLE.lsp, so lg:arcdata / lg:area / lg:ent-segs / lg:chain are
-copies of paddle--arcdata / --area / --ent-segs / --chain.  A port
-drifts silently -- COVERCHECK sat on PADDLE's old corner tolerance for
-several revisions -- so both files are loaded into one session and the
-two implementations are run on the same geometry.  When PADDLE's
-chaining changes, port the change into LINGUTTER.lsp and this goes
-green again.
+into PADDLE.lsp, so lg:arcdata / lg:area / lg:ent-segs and the vertex
+readers are copies of paddle--arcdata / --area / --ent-segs and theirs.
+A port drifts silently -- COVERCHECK sat on PADDLE's old corner
+tolerance for several revisions -- so both files are loaded into one
+session and the two implementations are run on the same geometry.  When
+PADDLE's segment reading changes, port the change into LINGUTTER.lsp and
+this goes green again.  (--chain is not ported: chaining finds a loop,
+which is the guess the outer-face walk exists to stop making.)
+
+P11 and P12 are the contingencies: the knobs set wrong, and the knob
+block itself -- every knob above the first defun, explained at the knob,
+with working state kept out of it.
 
 Usage:  python3 tests/test_lingutter.py
         CALOFIN_LISP_ROOT=shared python3 tests/test_lingutter.py
@@ -713,6 +718,175 @@ vm.loads('(sssetfirst nil tst-ss)')
 got = vm.loads('(sslength (ssget "_I" \'((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))')
 check("P10 PADDLE.lsp asks for its selection with an _I probe first",
       '(ssget "_I"' in open(PADDLE).read() and int(got) == 1, got)
+
+
+# ------------------------------------------- P11. the knobs, misconfigured
+
+print("== P11. the knobs survive being set wrong ==")
+
+# THE UNDO CONTINGENCY.  _Begin is guarded by UNDOCTL because opening a
+# group with undo control off errors out of the command -- and _End was
+# not, so the command closed a group it had never opened.  A drawing
+# with UNDO Control None is the whole of the repro.
+vm, d = keepvm()
+vm.loads('(setq lg:*runpaddle* nil)')
+vm.sysvars['UNDOCTL'] = 0
+try:
+    vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+    check("P11 undo control off: the command still finishes", True)
+    check("P11 ...the gut still happens",
+          len(alive_of(vm, 'LWPOLYLINE')) == 1, alive_of(vm, 'LWPOLYLINE'))
+    check("P11 ...and it opens no group it cannot close",
+          not [c for c in vm.commands if c[:1] == ['_.UNDO']], vm.commands)
+except LispError as e:
+    check("P11 undo control off: the command still finishes", False, str(e))
+
+# and with undo recording, still exactly one group -- the guard must not
+# have cost the undo group the tool promises
+vm, d = keepvm()
+vm.loads('(setq lg:*runpaddle* nil)')
+vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+pairs = [c[:2] for c in vm.commands]
+check("P11 undo recording: still exactly one group",
+      pairs.count(['_.UNDO', '_Begin']) == 1
+      and pairs.count(['_.UNDO', '_End']) == 1, vm.commands)
+
+# lg:ladder is what makes the rest of these safe: sorted, junk dropped,
+# and never empty
+vm = newvm()
+check("P11 lg:ladder sorts a ladder typed loosest-first",
+      flat(vm.loads('(progn (setq lg:*snaps* (list 24.0 6.0 0.05))'
+                    ' (lg:ladder))')) == [0.05, 6.0, 24.0])
+check("P11 lg:ladder drops what is not a tolerance",
+      flat(vm.loads('(progn (setq lg:*snaps* (list "x" -5 0.0 6.0 0.05))'
+                    ' (lg:ladder))')) == [0.05, 6.0])
+rungs = flat(vm.loads('(progn (setq lg:*snaps* nil) (lg:ladder))'))
+check("P11 an empty ladder becomes no snapping, not no ladder",
+      len(rungs) == 1 and rungs[0] > 0 and rungs[0] < 1e-3, rungs)
+
+# THE SILENT ONE.  A ladder typed loosest-first used to heal a 3-unit gap
+# at the 24 rung and report that nothing had been moved, because "tight"
+# was whatever happened to be first.  A moved corner is the one thing
+# this tool promises never to be quiet about.
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200, gap=3.0)
+vm.loads('(setq lg:*snaps* (list 24.0 6.0 0.05))')
+vts, tol, short = perim(vm)
+check("P11 a ladder typed loosest-first still names the rung that worked",
+      tol == 6.0, tol)
+check("P11 ...and traces the same outline", vts is not None and len(vts) == 4,
+      loop_xy(vts or []))
+
+# an empty ladder must not send a pool that was drawn closed to the hull
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200)
+vm.loads('(setq lg:*snaps* nil)')
+vts, tol, short = perim(vm)
+check("P11 an empty ladder still traces an outline drawn closed",
+      vts is not None and len(vts) == 4 and str(tol).upper() != "HULL",
+      (tol, loop_xy(vts or [])))
+
+# ...and the report it prints on the hull path reads the ladder too: with
+# an empty one that was (rtos nil), which is an error, not a report
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200, gap=100.0)
+vm.loads('(setq lg:*snaps* nil)')
+try:
+    vm.loads('(lg:report (lg:analyze (ssget "_X")))')
+    out = "".join(str(x) for x in vm.printed)
+    check("P11 an empty ladder still reports the wrap instead of erroring",
+          "wrapped" in out and "convex hull" in out, out[-200:])
+except LispError as e:
+    check("P11 an empty ladder still reports the wrap instead of erroring",
+          False, str(e))
+
+# the remaining knobs degrade rather than break
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200)
+vm.loads('(setq lg:*cover* 8.0)')       # 800%: nothing can ever cover it
+vts, tol, short = perim(vm)
+check("P11 a cover no exterior can meet warns, and still answers",
+      vts is not None and short, (tol, short))
+
+vm, d = keepvm()
+vm.loads('(setq lg:*ontol* -1.0)')
+res = analyze(vm)
+check("P11 a negative on-perimeter tolerance keeps no perimeter dim",
+      res['nperim'] == 0, res['nperim'])
+check("P11 ...and the styled-anywhere ones are still kept",
+      res['nany'] == 2, res['nany'])
+
+vm, d = keepvm()
+vm.loads('(setq lg:*runpaddle* nil)')
+vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
+vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+out = "".join(str(x) for x in vm.printed)
+check("P11 lg:*runpaddle* nil guts without padding",
+      len(alive_of(vm, 'LWPOLYLINE')) == 1 and "STUB-PADDLE-RAN" not in out)
+check("P11 ...and says why it stopped", "lg:*runpaddle*" in out, out[-200:])
+
+
+# ------------------------------------- P12. the knobs are where they say
+
+print("== P12. every knob is at the top, and explained ==")
+
+SRC = open(LINGUTTER, encoding="utf-8").read()
+SRC_LINES = SRC.splitlines()
+KNOBS = ["lg:*poollayer*", "lg:*poolcolor*", "lg:*anystyles*",
+         "lg:*perimstyles*", "lg:*keeplayers*", "lg:*skiplayers*",
+         "lg:*ontol*", "lg:*snaps*", "lg:*cover*", "lg:*runpaddle*"]
+
+
+def setq_line(name):
+    for i, ln in enumerate(SRC_LINES):
+        if ln.startswith("(setq " + name):
+            return i
+    return None
+
+
+first_defun = next(i for i, ln in enumerate(SRC_LINES)
+                   if ln.startswith("(defun "))
+missing = [k for k in KNOBS if setq_line(k) is None]
+check("P12 every documented knob is really set in the file", not missing,
+      missing)
+late = [k for k in KNOBS if setq_line(k) is not None
+        and setq_line(k) > first_defun]
+check("P12 every knob is set above the first defun", not late, late)
+
+# each knob carries its own explanation, on its line or the ones under it
+unexplained = []
+for k in KNOBS:
+    i = setq_line(k)
+    if i is None:
+        continue
+    block = SRC_LINES[i]
+    j = i + 1
+    while j < len(SRC_LINES) and SRC_LINES[j].lstrip().startswith(";"):
+        block += " " + SRC_LINES[j]
+        j += 1
+    # the ';' remark has to say something, not just close the line
+    if ";" not in block or len(block.split(";", 1)[1].strip()) < 20:
+        unexplained.append(k)
+check("P12 every knob carries an explanation at the knob", not unexplained,
+      unexplained)
+
+# and the block holds knobs only -- working state has to be out of it,
+# not merely last in it, or a drafter reading the block top to bottom
+# takes it for one more thing to set.  A section rule between the two is
+# what "out of it" means here.
+sysold = setq_line("lg:*sysold*")
+last_knob = max(setq_line(k) for k in KNOBS if setq_line(k) is not None)
+check("P12 working state is not sitting in the knob block",
+      sysold is None
+      or any(ln.startswith(";;; ---")
+             for ln in SRC_LINES[last_knob:sysold]),
+      f"lg:*sysold* at {sysold}, last knob at {last_knob}")
+
+# the header's tunable list and the knobs cannot drift apart
+header = SRC.split(";;;  Notes", 1)[0]
+check("P12 the header documents every knob",
+      all(k in header for k in KNOBS),
+      [k for k in KNOBS if k not in header])
 
 
 print()

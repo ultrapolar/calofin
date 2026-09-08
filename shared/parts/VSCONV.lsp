@@ -6,6 +6,8 @@
 ;;; Commands:  VSCONV     convert the import - highlight it first, or
 ;;;                       press Enter and take every VS layer in the
 ;;;                       drawing
+;;;            VSRECONV   put a converted import back on the VS layers,
+;;;                       style overrides and all
 ;;;            VSCONVVER  print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -54,9 +56,29 @@
 ;;; work cannot be converted twice.  Locked layers among those touched
 ;;; are unlocked for the run and re-locked afterwards, on the error path
 ;;; too, and the whole run is one undo group.
+;;;
+;;; VSRECONV PUTS ALL OF IT BACK.  U undoes a run still in the session;
+;;; VSRECONV undoes one that was saved and reopened -- which is when a
+;;; sheet turns out to have been converted by mistake, or has to go
+;;; back to whoever exported it.  Every object VSCONV moves carries a
+;;; RECORD in its own xdata: the layer it came off and that layer's
+;;; colour, the colour, linetype and lineweight the BYLAYER forcing
+;;; overwrote, and -- for a dimension -- the style name it had AND the
+;;; whole ACAD/DSTYLE override block, kept verbatim as the xdata items
+;;; it already was, so the text height and arrow size the export wrote
+;;; come back exactly as they went in.  Both halves of the dimension
+;;; step are undone, or the revert would leave the dimensions drawing
+;;; in a style they never had.
+;;;
+;;; ONE THING THE REVERT SPELLS OUT rather than restores: an object
+;;; that arrived carrying NO colour, linetype or lineweight of its own
+;;; comes back carrying an explicit ByLayer -- 256, "ByLayer", -1 --
+;;; where it had the absent group that means the same thing.  It draws
+;;; and plots identically, and a DXF diff of the before and after says
+;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.1")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -94,6 +116,12 @@
       *vsconv-dim-xdata* "ACAD")     ; the application whose style
                                      ; overrides are removed with them;
                                      ; nil leaves the overrides on
+
+;; The record VSRECONV reads back, and the application it lives under.
+;; nil converts exactly as before and writes nothing down, so the run
+;; can only be undone by U; the tests drive both ways.
+(setq *vsconv-record*    t
+      *vsconv-xdata-app* "VSCONV")
 
 ;; ---------------------------------------------------------------
 ;; Helpers
@@ -178,19 +206,178 @@
     (append alist (list (cons key 1)))))
 
 ;; One dimension onto the shop style, overrides and all.  The style name
-;; is DXF group 3 and can simply be written; the overrides are xdata
-;; under the "ACAD" application, and an application name handed to
-;; entmod with NO data after it is how xdata is deleted.  The group has
-;; to be there and empty for that: an entmod list that simply omits it
-;; leaves the xdata exactly where it was.
-(defun vsconv:restyle-dim (ent style app / ed x)
-  (setq ed (if app (entget ent (list app)) (entget ent)))
+;; is DXF group 3 and can simply be written; the overrides come off
+;; through vsconv:xdel, which deletes ONE application's xdata and
+;; leaves every other application's where it is -- this file's own
+;; record among them, since it is written before this runs.
+(defun vsconv:restyle-dim (ent style app / ed)
+  (setq ed (entget ent))
   (if (assoc 3 ed)
-    (setq ed (subst (cons 3 style) (assoc 3 ed) ed)))
-  (if (and app (setq x (assoc -3 ed)))
-    (setq ed (subst (list -3 (list app)) x ed)))
-  (entmod ed)
+    (entmod (subst (cons 3 style) (assoc 3 ed) ed)))
+  (if app (vsconv:xdel ent app))
   (entupd ent))
+
+
+;; ---------------------------------------------------------------
+;; The record
+;; ---------------------------------------------------------------
+;; Nine xdata items in a fixed order, and then -- for a dimension --
+;; the export's own override block copied straight in behind them.
+;; xdata groups are typed, so there is no grammar here to get wrong: a
+;; layer name carrying a "|" (an xref-dependent one does) travels as
+;; itself, and the overrides travel as the xdata items they already
+;; are rather than as a rendering of them.
+;;
+;;   0  1000  "VSCONV"                the marker
+;;   1  1000  the version that wrote it
+;;   2  1000  the layer it came off
+;;   3  1000  its linetype, before the BYLAYER forcing
+;;   4  1000  its dimension style, "" for anything but a dimension
+;;   5  1070  that layer's own colour, for a source layer since PURGEd
+;;   6  1070  its colour,     before the forcing
+;;   7  1070  its lineweight, before the forcing
+;;   8  1070  1 when an override block follows, else 0
+;;   9+       that block, item for item, braces and all
+;;
+;; The block is already brace-balanced where it stands, so it needs no
+;; wrapper of its own -- and must not be given one, because AutoCAD
+;; refuses xdata whose braces do not balance.
+
+;; NOT A KNOB: the number of items in the fixed part above, which
+;; vsconv:read indexes into and after which the override block starts.
+;; Changing it does not change the record's shape, it stops the reader
+;; agreeing with the writer.
+(setq *vsconv-record-len* 9)
+
+;; APP's items onto ENT, leaving every OTHER application's xdata alone.
+;;
+;; (entget ent) with no application list carries no xdata at all in
+;; AutoCAD, so there this is the plain append the rest of the tree
+;; writes.  The VM the tests run on hands back every group it holds,
+;; xdata included, so the -3 already there is merged with rather than
+;; doubled -- an entity cannot carry two of them, and assoc would only
+;; ever find the first.
+(defun vsconv:xput (ent app items / ed x apps)
+  (setq ed   (entget ent)
+        x    (assoc -3 ed)
+        apps (if x
+               (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x))
+               '()))
+  (setq apps (append apps (list (cons app items))))
+  (entmod (if x
+            (subst (cons -3 apps) x ed)
+            (append ed (list (cons -3 apps)))))
+)
+
+;; APP's items off ENT.  The application name goes back with NO data
+;; after it, which is how xdata is deleted: an entmod list that simply
+;; omits the application leaves its xdata exactly where it was.
+(defun vsconv:xdel (ent app / ed x apps)
+  (setq ed (entget ent (list app))
+        x  (assoc -3 ed))
+  (if x
+    (progn
+      (setq apps (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x)))
+      (setq apps (append apps (list (list app))))
+      (entmod (subst (cons -3 apps) x ed))))
+)
+
+;; The items ENT carries under APP, or nil.  An application entry with
+;; nothing after it is one xdel has emptied, and reads as no items --
+;; which is what it is.
+(defun vsconv:xget (ent app / x a)
+  (setq x (assoc -3 (entget ent (list app))))
+  (if x (setq a (assoc app (cdr x))))
+  (if (and a (cdr a)) (cdr a))
+)
+
+;; LST with its first N items dropped.
+(defun vsconv:tail (lst n)
+  (while (and lst (> n 0)) (setq lst (cdr lst) n (1- n)))
+  lst
+)
+
+;; The colour to re-create a source layer with, read off the layer
+;; while it is still there.  A layer that is switched OFF carries the
+;; colour negated; the record keeps the colour and not the off-ness, so
+;; a layer VSRECONV has to re-create comes back visible.
+(defun vsconv:layer-color (name / tb c)
+  (setq tb (tblsearch "LAYER" name)
+        c  (if tb (cdr (assoc 62 tb))))
+  (if (and c (/= c 0)) (abs c) *vsconv-default-color*)
+)
+
+;; Written BEFORE the move and before the restyle, which is the only
+;; moment the object still carries everything the record is about.
+(defun vsconv:stamp (ent lay / obj typ sty ovr)
+  (regapp *vsconv-xdata-app*)
+  (setq obj (vlax-ename->vla-object ent)
+        typ (cdr (assoc 0 (entget ent))))
+  ;; only a DIMENSION has a style to lose or overrides to lose it to,
+  ;; and group 3 means something else entirely on an MTEXT
+  (if (= "DIMENSION" typ)
+    (setq sty (cdr (assoc 3 (entget ent)))
+          ovr (if *vsconv-dim-xdata* (vsconv:xget ent *vsconv-dim-xdata*))))
+  (vsconv:xput ent *vsconv-xdata-app*
+    (append (list (cons 1000 *vsconv-xdata-app*)
+                  (cons 1000 *vsconv-version*)
+                  (cons 1000 lay)
+                  (cons 1000 (vla-get-Linetype obj))
+                  (cons 1000 (if sty sty ""))
+                  (cons 1070 (vsconv:layer-color lay))
+                  (cons 1070 (vla-get-Color obj))
+                  (cons 1070 (vla-get-Lineweight obj))
+                  (cons 1070 (if ovr 1 0)))
+            (if ovr ovr '())))
+)
+
+;; (source-layer layer-colour colour linetype lineweight style
+;;  overrides) off one object, or nil when it carries no record of ours.
+(defun vsconv:read (ent / items)
+  (setq items (vsconv:xget ent *vsconv-xdata-app*))
+  (if (and items
+           (<= *vsconv-record-len* (length items))
+           (= *vsconv-xdata-app* (cdr (nth 0 items))))
+    (list (cdr (nth 2 items))
+          (cdr (nth 5 items))
+          (cdr (nth 6 items))
+          (cdr (nth 3 items))
+          (cdr (nth 7 items))
+          (cdr (nth 4 items))
+          (if (= 1 (cdr (nth 8 items)))
+            (vsconv:tail items *vsconv-record-len*))))
+)
+
+;; NAME added to LST unless a spelling of it is in there already; the
+;; order is first-seen, which is the order the report reads in.
+(defun vsconv:add (name lst)
+  (if (member (strcase name) (mapcar 'strcase lst))
+    lst
+    (append lst (list name)))
+)
+
+;; The colour to re-create source layer LAY with: the one the record
+;; kept from the layer itself, off the first object that came off it.
+;; An existing layer is never recoloured -- ensure-layer only ever uses
+;; this when the layer has to be made -- so a drawing that still has
+;; its export layers keeps their colours whatever the record says.
+(defun vsconv:color-for (lay recs / out r)
+  (foreach r recs
+    (if (and (null out) (= (strcase (nth 1 r)) (strcase lay)))
+      (setq out (nth 2 r))))
+  (if out out *vsconv-default-color*)
+)
+
+;; Every (ename . record) in SS, in drawing order.
+(defun vsconv:recorded (ss / i ent rec out)
+  (setq i 0 out '())
+  (while (< i (sslength ss))
+    (setq ent (ssname ss i))
+    (if (and (entget ent) (setq rec (vsconv:read ent)))
+      (setq out (cons (cons ent rec) out)))
+    (setq i (1+ i)))
+  (reverse out)
+)
 
 ;; ---------------------------------------------------------------
 ;; Main command
@@ -275,6 +462,10 @@
                   dest (vsconv:dest lay))
             (if dest
               (progn
+                ;; the record first: after the move and the restyle the
+                ;; object no longer carries the layer, the properties or
+                ;; the overrides it is about
+                (if *vsconv-record* (vsconv:stamp ent lay))
                 (setq obj (vlax-ename->vla-object ent))
                 (vla-put-Layer obj dest)
                 (vsconv:force-bylayer obj)
@@ -337,11 +528,134 @@
       (if empty
         (princ (strcat "\n  now empty: " (vsconv:namelist (reverse empty))
                        " - PURGE them when you are ready; VSCONV leaves"
-                       " them so one U backs the whole run out")))))
+                       " them so one U backs the whole run out")))
+      (if (> n-moved 0)
+        (if *vsconv-record*
+          (princ "\n  VSRECONV puts it all back, overrides and all.")
+          (princ (strcat "\n  *vsconv-record* is off, so nothing was written"
+                         " down - only U undoes this run."))))))
 
   ;; A mark is still open on the "nothing to convert" path above.
   (if mark-open
     (progn (vla-EndUndoMark doc) (setq mark-open nil)))
+  (princ))
+
+(defun c:VSRECONV (/ *error* doc unlocked mark-open ss recs r ent obj ed
+                     lay srcs offs tally missing done n n-dim)
+
+  ;; VSCONV's handler, for the same reasons (STANDARDS 5).
+  (defun *error* (msg)
+    (if unlocked (vl-catch-all-apply 'vsconv:relock-layers (list unlocked)))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nVSRECONV error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
+        missing  '()
+        n-dim    0)
+
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+
+  ;; No layer filter here, where VSCONV has one.  A converted object is
+  ;; on POOL / POINTS / DIMENSION, which is where this office's own
+  ;; drawing lives too -- so the record is what says which objects came
+  ;; from an export, and nothing else is touched whatever is selected.
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
+      (setq ss (ssget))
+      (if (null ss)
+        (setq ss (ssget "_X")))))
+
+  (setq recs (if ss (vsconv:recorded ss)))
+
+  (if recs
+    (progn
+      ;; the layers it goes back ONTO, and the layers it comes OFF.  A
+      ;; destination of the revert is an output layer, so it is created
+      ;; when the conversion's own PURGE advice was taken -- with the
+      ;; colour the record kept from the layer itself.
+      (setq srcs '() offs '())
+      (foreach r recs
+        (setq lay  (nth 1 r)
+              srcs (vsconv:add lay srcs)
+              offs (vsconv:add (cdr (assoc 8 (entget (car r)))) offs)))
+      (foreach lay srcs
+        (cal:ensure-layer lay (vsconv:color-for lay recs)))
+      (setq unlocked (vsconv:unlock-layers (append srcs offs) doc))
+
+      (foreach r recs
+        (setq ent  (car r)
+              obj  (vlax-ename->vla-object ent)
+              done T)
+        (vla-put-Layer obj (nth 1 r))
+        (vla-put-Color obj (nth 3 r))
+        (vla-put-Lineweight obj (nth 5 r))
+        (if (or (member (strcase (nth 4 r)) '("BYLAYER" "BYBLOCK"))
+                (tblsearch "LTYPE" (nth 4 r)))
+          (vla-put-Linetype obj (nth 4 r))
+          (setq missing (vsconv:add (nth 4 r) missing)
+                done    nil))
+        ;; the dimension step, both halves: the style name back in
+        ;; group 3, and the override block back under its own
+        ;; application exactly as it was lifted
+        (if (and (nth 6 r) (/= "" (nth 6 r)))
+          (progn
+            (setq ed (entget ent))
+            (if (assoc 3 ed)
+              (entmod (subst (cons 3 (nth 6 r)) (assoc 3 ed) ed)))
+            (if (and (nth 7 r) *vsconv-dim-xdata*)
+              (vsconv:xput ent *vsconv-dim-xdata* (nth 7 r)))
+            (entupd ent)
+            (setq n-dim (1+ n-dim))))
+        ;; The record goes with the move it described -- but only when
+        ;; the move is FINISHED.  An object whose linetype could not be
+        ;; come back to keeps its record, so loading the linetype and
+        ;; running VSRECONV again really does finish it; deleting it
+        ;; here would make that advice a lie.
+        (if done (vsconv:xdel ent *vsconv-xdata-app*))
+        (setq tally (vsconv:bump (strcase (nth 1 r)) tally)))
+
+      (vsconv:relock-layers unlocked)
+      (setq unlocked nil)))
+
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
+
+  (if recs
+    (progn
+      (setq n (length recs))
+      (princ (strcat "\nVSRECONV done: " (itoa n)
+                     " object(s) put back on the export's own layers."))
+      ;; in the table's own order, as VSCONV reports it
+      (foreach r *vsconv-map*
+        (if (setq lay (assoc (strcase (car r)) tally))
+          (princ (strcat "\n  " (cdr r) ": " (itoa (cdr lay))
+                         " -> " (car r)))))
+      (if (> n-dim 0)
+        (princ (strcat "\n  " (itoa n-dim) " dimension(s) back on their own"
+                       " style"
+                       (if *vsconv-dim-xdata*
+                         (strcat ", " *vsconv-dim-xdata*
+                                 " style overrides restored")
+                         ""))))
+      (if missing
+        (princ (strcat "\n  Linetype " (vsconv:namelist missing)
+                       " is no longer loaded, so those objects kept BYLAYER"
+                       " - LINETYPE-load it and run VSRECONV again to finish"
+                       " them."))))
+    (progn
+      (princ "\nVSRECONV: nothing here carries a VSCONV record - nothing moved.")
+      (princ "\n  It undoes a VSCONV run, and only from the record VSCONV")
+      (princ "\n  leaves on every object it moves.  A drawing converted with")
+      (princ "\n  *vsconv-record* off, or by hand, carries none - U is the")
+      (princ "\n  only way back from those.")))
   (princ))
 
 (defun c:VSCONVVER ()
@@ -349,5 +663,5 @@
   (princ))
 
 (princ (strcat "\nVSCONV " *vsconv-version*
-               " loaded.  Type VSCONV to run."))
+               " loaded.  Type VSCONV to run, VSRECONV to undo one."))
 (princ)

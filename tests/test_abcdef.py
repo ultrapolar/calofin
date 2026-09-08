@@ -47,7 +47,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 import lispvm  # noqa: E402
-from lispvm import VM, LispError, Sym  # noqa: E402
+from lispvm import VM, Dot, LispError, Sym  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 #: always the lisp/ path -- VM.load remaps it to shared/parts/ when
@@ -78,7 +78,14 @@ STUBS = r'''
 (defun getfiled (title dflt ext flags) "C:\\jobs\\survey.csv")
 (defun alert (s) (setq *alert* s))
 (defun sssetfirst (a b) (setq *preselect* b))
-(defun open (path mode) (setq *rpt-path* path *rpt* '()) 'FP)
+(setq *csv* '() *no-write* nil)
+(defun open (path mode)
+  (if (= mode "r")
+    (progn (setq *csv-left* *csv*) 'FPR)
+    (if *no-write* nil (progn (setq *rpt-path* path *rpt* '()) 'FP))))
+(defun read-line (fp / l)
+  (if *csv-left*
+    (progn (setq l (car *csv-left*) *csv-left* (cdr *csv-left*)) l)))
 (defun write-line (s fp) (setq *rpt* (cons s *rpt*)) s)
 (defun close (fp) nil)
 '''
@@ -98,24 +105,85 @@ def tapes(x, y):
     return [quarter(math.hypot(x - cx, y - cy)) for cx, cy in CORNERS]
 
 
-def run(rows, method="Auto", answer="No", with_abhd=False):
-    """Drive c:ABCDEF over ROWS -- (name, [dA,dB,dC,dD]) with None for a
-    blank cell -- and hand back the VM for inspection."""
+def lstr(v):
+    """A python string as a LISP string literal."""
+    return '"' + v.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def rowsrc(rows):
+    return " ".join(
+        '(list %s %s)' % (lstr(nm),
+                          " ".join('nil' if d is None else repr(d) for d in ds))
+        for nm, ds in rows)
+
+
+def fresh(pre=''):
     vm = VM()
     lispvm.BUILTINS[Sym('vl-cmdf')] = lispvm.BUILTINS[Sym('command')]
     vm.loads(STUBS)
+    if pre:
+        vm.loads(pre)
     vm.load(LSP)
+    return vm
+
+
+def run(rows, method="Auto", answer="No", with_abhd=False,
+        script=None, pre='', post='', csv=None):
+    """Drive c:ABCDEF over ROWS -- (name, [dA,dB,dC,dD]) with None for a
+    blank cell -- and hand back the VM for inspection.
+
+    SCRIPT replaces the default answer queue outright (for the Back and
+    cancel paths); PRE runs before the file is loaded and POST after it
+    (for a drawing to plot into, or a tunable to change); CSV leaves the
+    command's OWN sheet reader in place and feeds it those lines."""
+    vm = fresh(pre)
     if with_abhd:
         vm.loads('(defun c:ABHD () nil)')
-    body = " ".join(
-        '(list "%s" %s)' % (nm, " ".join('nil' if d is None else repr(d)
-                                         for d in ds))
-        for nm, ds in rows)
-    # the sheet reader itself is Excel COM and file I/O, neither of which
-    # is what these tests are about; the rows go in directly
-    vm.loads("(defun abcdef:read-file (file maxd) (list %s))" % body)
-    vm.run('c:ABCDEF', [WSTR, HSTR, method, [0.0, 0.0, 0.0], answer])
+    if csv is None:
+        # the sheet reader itself is Excel COM and file I/O, neither of
+        # which is what most of these tests are about; the rows go in
+        # directly
+        vm.loads("(defun abcdef:read-file (file maxd) (list %s))"
+                 % rowsrc(rows))
+    else:
+        vm.loads("(setq *csv* '(%s))" % " ".join(lstr(l) for l in csv))
+    if post:
+        vm.loads(post)
+    vm.run('c:ABCDEF', script if script is not None
+           else [WSTR, HSTR, method, [0.0, 0.0, 0.0], answer])
     return vm
+
+
+def said(vm):
+    return "".join(vm.printed)
+
+
+def grp(d, code):
+    for pair in d:
+        if isinstance(pair, Dot) and pair.a == code:
+            return pair.b
+        if isinstance(pair, list) and pair and pair[0] == code:
+            return pair[1] if len(pair) == 2 else pair[1:]
+    return None
+
+
+def ents(vm, etype):
+    return [vm.entdata[e] for e in vm.entities
+            if e not in vm.deleted and grp(vm.entdata[e], 0) == etype]
+
+
+def layer_flags(vm, name):
+    return grp(vm.recdata[vm.tablerecs['LAYER'][name.upper()]], 70) or 0
+
+
+def layer_color(vm, name):
+    return grp(vm.recdata[vm.tablerecs['LAYER'][name.upper()]], 62)
+
+
+def layer_src(name, color, flags=0):
+    return ('(entmake (list \'(0 . "LAYER") \'(100 . "AcDbSymbolTableRecord")'
+            ' \'(100 . "AcDbLayerTableRecord") \'(2 . "%s") \'(70 . %d)'
+            ' \'(62 . %d) \'(6 . "Continuous")))' % (name, flags, color))
 
 
 def report(vm):
@@ -439,6 +507,494 @@ def test_the_view_reset_survives_its_own_catch():
           and ['_.zoom', '_Extents'] in vm.commands)
 
 
+# ============================================================ contingencies ==
+#
+# Everything above drives the happy path with the sheet handed in as a
+# list.  What follows is the rest of a real run: the file itself, the
+# questions, the drawing it plots into, and every way the run can be cut
+# short.  These are the paths a drafter hits on a bad afternoon, and the
+# ones that were read by eye rather than executed.
+
+#: the dirty forms a scanned or re-typed field sheet comes back in
+PARSER_CASES = [
+    ('12\'-3 1/2"', 147.5),
+    ("34'-4 1 /4", 412.25),        # fraction split by a stray space
+    ('20\'-7 1/ 4"', 247.25),      # ...on the other side of the slash
+    ('20\'-7 1 / 4"', 247.25),     # ...both sides
+    ('20\'-7 114"', 247.25),       # "/" scanned as a "1"
+    ('28-7"', 343.0),              # missing foot mark
+    ('101-10"', 130.0),            # foot mark scanned as a "1"
+    ("26' -8\"", 320.0),
+    ('1 1\'-IO 1/2"', 142.5),      # split feet, letters for digits
+    ("9'", 108.0),
+    ('3 1/2"', 3.5),
+]
+
+
+def parse(vm, raw, maxd=514.0):
+    return vm.eval(lispvm.parse_all(
+        '(abcdef:ftin->in %s %s)' % (lstr(raw), maxd))[0])
+
+
+def test_the_parser_reads_a_scanned_sheet():
+    print("\nthe feet-inch parser, on the sheets it actually gets")
+    vm = fresh()
+    for raw, want in PARSER_CASES:
+        got = parse(vm, raw)
+        check("%-18s -> %s" % (lstr(raw), want),
+              isinstance(got, float) and abs(got - want) < 1e-9)
+    for raw in ('600\'-0"', '-4\'-0"', '', 'not a number', '0'):
+        check("%-18s is refused rather than guessed at" % lstr(raw),
+              parse(vm, raw) is lispvm.NIL)
+    check("a plausible reading keeps its digits", parse(vm, '41-10"') == 502.0)
+
+
+#: the shipped sample sheet, as the command's own reader sees it
+SHEET = [
+    "POINT NAME,DIST FROM A,DIST FROM B,DIST FROM C,DIST FROM D",
+    'N1,34\'-4 1 /4,"38\'-5""","16\'-11""","24\'-1 1/2"""',
+    'P,12\'-7 1/2,"27\'-6 1 /2""","17\'-5 1 /2""","30\'-0 3/4"""',
+    ',,,,',
+]
+
+
+def test_the_command_reads_its_own_csv():
+    print("\nthe CSV reader: quoted cells, blanks, and the repair log")
+    vm = run(None, csv=SHEET)
+    got = placed(vm)
+    check("both named rows were read and placed", set(got) == {"N1", "P"},
+          )
+    check("the nameless row is not a point", len(got) == 2)
+    check("the split fractions were repaired and logged",
+          "dirty values cleaned before import" in said(vm))
+    check("...and the log writes back what it made of them",
+          "34'-4 1/4\"" in said(vm))
+    check("every point landed inside the frame",
+          all(-0.001 <= x <= W + 0.001 and -H - 0.001 <= y <= 0.001
+              for x, y in got.values()))
+
+
+def test_columns_are_found_in_any_order():
+    print("\nthe columns are found by their headers, in any order")
+    a = run(None, csv=SHEET[:2])
+    b = run(None, csv=[
+        "DIST FROM D,DIST FROM C,POINT NAME,DIST FROM B,DIST FROM A",
+        '"24\'-1 1/2""","16\'-11""",N1,"38\'-5""",34\'-4 1 /4'])
+    pa, pb = placed(a)["N1"], placed(b)["N1"]
+    check("the same row placed identically either way",
+          math.hypot(pa[0] - pb[0], pa[1] - pb[1]) < 1e-6)
+
+
+def test_a_sheet_with_nothing_usable_draws_nothing():
+    print("\na sheet with no rows in it plots nothing and says so")
+    vm = run(None, csv=[SHEET[0]], script=[WSTR, HSTR, "Auto", [0.0, 0.0, 0.0]])
+    check("nothing at all was drawn", not vm.entities)
+    check("and it says so", "No usable rows found" in said(vm))
+
+
+# ------------------------------------------------------- asking and backing --
+
+def test_back_walks_the_whole_question_chain():
+    print("\nBack at any question re-opens the one before it")
+    vm = run([("P", tapes(120.0, -60.0))],
+             script=[WSTR, "B", WSTR, HSTR, "Back", HSTR, "Auto",
+                     "Back", "Least", [0.0, 0.0, 0.0], "No"])
+    asked = [q for q, _ in vm.prompts]
+    check("the width was asked twice", sum('A-B' in q for q in asked) == 2)
+    check("the height was asked three times",
+          sum('A-C' in q for q in asked) == 3)
+    check("the method was asked three times",
+          sum('placed?' in q for q in asked) == 3)
+    check("the last answer is the one that counted",
+          any('method : Least' in l for l in report(vm)))
+    check("and the run still plotted", len(placed(vm)) == 1)
+
+
+def test_back_at_the_first_dimension_returns_to_the_file_dialog():
+    print("\nBack at the first dimension re-opens the file dialog")
+    vm = run([("P", tapes(120.0, -60.0))],
+             script=["B", WSTR, HSTR, "Auto", [0.0, 0.0, 0.0], "No"])
+    check("the dialog was opened twice",
+          said(vm).count("--- Rectangle A(top-left)") == 2)
+    check("and the run completed", len(placed(vm)) == 1)
+
+
+def test_back_at_the_base_point_reopens_the_method():
+    print("\nBack at the insertion point re-opens the method question")
+    vm = run([("P", tapes(120.0, -60.0))],
+             script=[WSTR, HSTR, "Auto", "Back", "Mean", [0.0, 0.0, 0.0],
+                     "No"])
+    check("the method was re-asked and the new answer used",
+          any('method : Mean' in l for l in report(vm)))
+
+
+def test_the_method_question_is_asked_in_the_house_format():
+    print("\nthe method question follows the house prompt format")
+    vm = run([("P", tapes(120.0, -60.0))],
+             script=[WSTR, HSTR, None, [0.0, 0.0, 0.0], "No"])
+    q = [q for q, _ in vm.prompts if 'placed?' in q][0]
+    check("it is a question, with the bracket a click can send",
+          '[Auto/Furthest/Mean/Least/Back]' in q, )
+    check("...and its default is shown", '<Auto>' in q)
+    check("Enter takes that default",
+          any('method : Auto' in l for l in report(vm)))
+    check("it ends colon-space", q.endswith(': '))
+
+
+def test_a_bad_dimension_is_re_asked():
+    print("\na dimension that is not a positive length is re-asked")
+    vm = run([("P", tapes(120.0, -60.0))],
+             script=["", "-5'", "0", WSTR, HSTR, "Auto", [0.0, 0.0, 0.0],
+                     "No"])
+    check("it kept asking until it got one", len(placed(vm)) == 1)
+    check("and said why each time",
+          said(vm).count("enter a positive dimension") == 3)
+
+
+def test_enter_at_the_base_point_takes_the_origin():
+    print("\nEnter at the insertion point takes 0,0")
+    vm = run([("P", tapes(120.0, -60.0))],
+             script=[WSTR, HSTR, "Auto", None, "No"])
+    verts = [tuple(v[1:3]) for v in ents(vm, 'LWPOLYLINE')[0]
+             if isinstance(v, list) and v[0] == 10]
+    check("corner A is at the origin", verts[0] == (0.0, 0.0))
+
+
+def test_cancel_in_the_dialog_draws_nothing():
+    print("\nCancel in the file dialog ends the run, quietly")
+    vm = fresh('(defun getfiled (t d e f) nil)')
+    vm.loads("(defun abcdef:read-file (file maxd) nil)")
+    vm.run('c:ABCDEF', [])
+    check("nothing drawn", not vm.entities)
+    check("no question was asked", not vm.prompts)
+    check("and it says it was cancelled", "Cancelled" in said(vm))
+
+
+# ---------------------------------------------- the sheet's own labelling --
+
+def test_a_clockwise_sheet_is_noticed_and_swapped():
+    print("\na sheet labelled C bottom-RIGHT is noticed, swapped and named")
+    truth = [("P1", 120.0, -60.0), ("P2", 300.0, -40.0), ("P3", 200.0, -150.0),
+             ("P4", 60.0, -200.0), ("P5", 400.0, -220.0)]
+    # the same survey written the other way round: the C and D columns
+    # exchanged, which is exactly what a clockwise-labelled sheet holds
+    rows = []
+    for nm, x, y in truth:
+        d = tapes(x, y)
+        rows.append((nm, [d[0], d[1], d[3], d[2]]))
+    vm = run(rows)
+    check("the swap is detected and said out loud", "C/D NOTE" in said(vm))
+    check("...and recorded in the report",
+          any('C/D read swapped' in l for l in report(vm)))
+    worst = max(math.hypot(placed(vm)[nm][0] - x, placed(vm)[nm][1] - y)
+                for nm, x, y in truth)
+    check("every point still lands where it really is (%.3f\")" % worst,
+          worst < 0.25)
+
+
+def test_a_correctly_labelled_sheet_is_left_alone():
+    print("\n...and a correctly labelled one is not touched")
+    truth = [("P1", 120.0, -60.0), ("P2", 300.0, -40.0), ("P3", 200.0, -150.0),
+             ("P4", 60.0, -200.0), ("P5", 400.0, -220.0)]
+    vm = run([(nm, tapes(x, y)) for nm, x, y in truth])
+    check("no swap note", "C/D NOTE" not in said(vm))
+    check("no swap in the report",
+          not any('C/D read swapped' in l for l in report(vm)))
+
+
+def test_a_sheet_that_fits_the_rectangle_badly_raises_an_alert():
+    print("\na sheet that fits the rectangle badly warns, and still plots")
+    # every row a foot out on every tape, in directions no single point
+    # can satisfy.  No swap fixes that, so either the dimensions or the
+    # sheet is wrong and the drafter has to be told before they draft
+    # over it.  (Six inches is NOT enough: the least-squares fit absorbs
+    # it to about 0.9" a row, under the threshold, and the per-point
+    # confidence column carries it instead -- which is the design.)
+    rows = []
+    for nm, x, y in (("P1", 120.0, -60.0), ("P2", 300.0, -40.0),
+                     ("P3", 200.0, -150.0), ("P4", 60.0, -200.0)):
+        d = tapes(x, y)
+        rows.append((nm, [d[0] + 12.0, d[1] - 12.0, d[2] + 12.0,
+                          d[3] - 12.0]))
+    vm = run(rows)
+    check("the command line warns", "fit the rectangle poorly" in said(vm))
+    check("and so does an alert the drafter cannot miss",
+          'POORLY' in (vm.globals.get(Sym('*alert*')) or ''))
+    check("the points are still plotted", len(placed(vm)) == 4)
+    check("...and every one of them graded",
+          all('%' in row(vm, nm) for nm, _, _ in
+              (("P1", 0, 0), ("P2", 0, 0), ("P3", 0, 0), ("P4", 0, 0))))
+
+
+def test_a_mirror_pair_is_named_rather_than_guessed_at():
+    print("\ntwo tapes from OPPOSITE corners answer twice, and say so")
+    # A and D are opposite corners under the Z order.  The mirror of the
+    # answer across the A-D line fits the SAME two tapes to the same
+    # hundredth and lands inside the frame too, so the sheet does not say
+    # which of the two the point is -- and the seed that breaks the tie
+    # sits exactly between them.
+    x, y = 300.0, -40.0
+    d = tapes(x, y)
+    vm = run([("P", [d[0], None, None, d[3]])])
+    ln = row(vm, "P")
+    check("the point is still plotted", len(placed(vm)) == 1)
+    check("but the row is named a mirror pair", 'mirror pair' in ln, )
+    check("...and told what would settle it", 'third tape' in ln)
+    check("it is counted among the points wanting checking",
+          any('1 point(s) want checking' in l for l in report(vm)))
+    pct, _ = conf_of(ln)
+    check("and it cannot read as a confident point (%s%%)" % pct, pct < 50)
+    # an ADJACENT pair is fixed by its frame and must not be flagged
+    quiet = run([("Q", [d[0], d[1], None, None])])
+    check("an adjacent pair is not flagged",
+          'mirror pair' not in row(quiet, "Q"))
+
+
+# ------------------------------------------------- the drawing it plots into --
+
+def test_the_corner_self_check_refuses_to_plot_a_bad_frame():
+    print("\na frame that is not the entered rectangle stops the run")
+    vm = fresh()
+    ok = vm.eval(lispvm.parse_all(
+        '(abcdef:frame-check 0.0 0.0 %r 0.0 0.0 %r %r %r %r %r)'
+        % (W, -H, W, -H, W, H))[0])
+    check("the documented corner layout is accepted", ok is lispvm.NIL)
+    bad = vm.eval(lispvm.parse_all(
+        '(abcdef:frame-check 0.0 0.0 %r 0.0 %r %r %r %r %r %r)'
+        % (W, 2 * W, -H, W, -H, W, H))[0])
+    check("the parallelogram that failed in the field is rejected (%s)" % bad,
+          isinstance(bad, str) and bad)
+    # end to end: when the check fails, NOTHING is drawn
+    vm = run([("P", tapes(120.0, -60.0))],
+             post='(defun abcdef:frame-check (a b c d e f g h w y)'
+                  ' "A-B measures 1.00\\" but should be 2.00\\"")',
+             script=[WSTR, HSTR, "Auto", [0.0, 0.0, 0.0]])
+    check("nothing at all is drawn", not vm.entities)
+    check("the abort is on the command line", "ABORT" in said(vm))
+    check("...and in an alert",
+          'self-check FAILED' in (vm.globals.get(Sym('*alert*')) or ''))
+
+
+def test_a_frozen_or_locked_output_layer_is_repaired():
+    print("\nan output layer that is off, frozen or locked is restored")
+    vm = run([("P", tapes(120.0, -60.0))],
+             pre=layer_src('POINTS', -2, 1 | 4))
+    check("POINTS is thawed and unlocked",
+          not layer_flags(vm, 'POINTS') & (1 | 4))
+    check("and switched back on", layer_color(vm, 'POINTS') == 2)
+    check("and the drafter is told it had to be",
+          'POINTS was off, frozen or locked' in said(vm))
+    check("the survey really did land on it", len(placed(vm)) == 1)
+
+
+def test_the_point_block_is_made_once_and_reused():
+    print("\nab_pt is created when the drawing has never seen one, then reused")
+    vm = run([("P", tapes(120.0, -60.0))])
+    check("the block was created", 'ab_pt' in vm.tables.get('BLOCK', set()))
+    check("and the drafter told", 'was not in this drawing' in said(vm))
+    # a drawing that already has one is left alone
+    have = ('(entmake (list \'(0 . "BLOCK") \'(2 . "ab_pt") \'(70 . 2)'
+            ' \'(10 0.0 0.0 0.0) \'(3 . "ab_pt") \'(1 . "")))'
+            '(entmake \'((0 . "ENDBLK")))')
+    vm = run([("P", tapes(120.0, -60.0))], pre=have)
+    check("an existing block is reused silently",
+          'was not in this drawing' not in said(vm))
+
+
+def test_a_second_import_hands_abhd_only_its_own_points():
+    print("\na second import in one drawing does not sweep up the first")
+    # a survey already in the drawing, as the previous import left it
+    prior = ('(entmake (list \'(0 . "INSERT") \'(8 . "POINTS") \'(66 . 1)'
+             ' \'(2 . "ab_pt") \'(10 5.0 -5.0 0.0)))'
+             '(entmake (list \'(0 . "SEQEND") \'(8 . "POINTS")))')
+    rows = [("1", tapes(120.0, -60.0)), ("2", tapes(300.0, -40.0))]
+    vm = run(rows, answer="Yes", with_abhd=True, pre=prior)
+    ss = vm.globals.get(Sym('*preselect*'))
+    check("ABHD is started", ['_.ABHD'] in vm.commands)
+    check("with this run's two points only, not the earlier three",
+          ss is not None and len(ss) - 1 == 2, )
+
+
+def test_the_report_file_failing_does_not_lose_the_plot():
+    print("\na report that cannot be written costs the note, not the plot")
+    vm = run([("P", tapes(120.0, -60.0))], post='(setq *no-write* T)')
+    check("the points are plotted anyway", len(placed(vm)) == 1)
+    check("and the failure is reported, not swallowed",
+          'could not be written' in said(vm))
+
+
+# ------------------------------------------------------- the run's manners --
+
+def test_one_undo_group_opened_and_closed():
+    print("\nthe whole plot is one undo group")
+    vm = run([("P", tapes(120.0, -60.0))])
+    marks = [c for c in vm.commands if c and c[0] == '_.UNDO']
+    check("opened once and closed once",
+          marks == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']])
+
+
+def test_no_undo_group_when_undo_is_off():
+    print("\nwith UNDO off, no group is opened -- _Begin would error")
+    vm = fresh()
+    vm.sysvars['UNDOCTL'] = 4                 # bit 1 clear: undo disabled
+    vm.loads("(defun abcdef:read-file (file maxd) (list %s))"
+             % rowsrc([("P", tapes(120.0, -60.0))]))
+    vm.run('c:ABCDEF', [WSTR, HSTR, "Auto", [0.0, 0.0, 0.0], "No"])
+    check("no undo command was issued",
+          not [c for c in vm.commands if c and c[0] == '_.UNDO'])
+    check("but the point was still plotted", len(placed(vm)) == 1)
+
+
+def test_esc_partway_through_goes_through_the_handler():
+    print("\nEsc partway through is handled, and closes the group")
+    def esc(vm):
+        raise LispError('Function cancelled', vm)
+    for where, script in (("the height", [WSTR, esc]),
+                          ("the method", [WSTR, HSTR, esc]),
+                          ("the base point", [WSTR, HSTR, "Auto", esc])):
+        vm = fresh()
+        vm.handle_errors = True
+        vm.loads("(defun abcdef:read-file (file maxd) (list %s))"
+                 % rowsrc([("P", tapes(120.0, -60.0))]))
+        before = dict(vm.sysvars)
+        vm.run('c:ABCDEF', script)
+        check("Esc at %s reached the handler, once" % where,
+              list(vm.handled_errors) == ['Function cancelled'])
+        check("...leaving every setting as it was",
+              {k: v for k, v in vm.sysvars.items() if before.get(k) != v} == {})
+        check("...and saying nothing about an error",
+              not re.search(r'\berror\b', said(vm), re.I))
+        # run() itself refuses to return with an undo group still open
+
+
+def test_the_version_is_announced():
+    print("\nthe command says which build it is")
+    vm = run([("P", tapes(120.0, -60.0))])
+    ver = vm.globals.get(Sym('*abcdef-version*'))
+    check("on load", ("ABCDEF.lsp rev %s loaded" % ver) in said(vm))
+    check("and at the top of the run", ("\nABCDEF %s\n" % ver) in said(vm))
+    check("and at the top of the report",
+          any(("ABCDEF %s results" % ver) in l for l in report(vm)))
+
+
+# -------------------------------------------------------------- the knobs --
+
+def test_every_knob_is_live():
+    print("\nthe tunables at the top of the file really are the knobs")
+    d = tapes(300.0, -40.0)
+    clean = tapes(120.0, -60.0)
+
+    vm = run([("P", clean)], post='(setq abcdef:*frame-layer* "F2"'
+                                  ' abcdef:*warn-layer* "W2"'
+                                  ' abcdef:*point-layer* "P2"'
+                                  ' abcdef:*frame-color* 5'
+                                  ' abcdef:*point-color* 6)')
+    check("the layer names are knobs", {'F2', 'W2', 'P2'} <= vm.tables['LAYER'])
+    check("so are the colours they are created with",
+          (layer_color(vm, 'F2'), layer_color(vm, 'P2')) == (5, 6))
+    check("and the survey follows the point layer",
+          all(grp(e, 8) == 'P2' for e in ents(vm, 'INSERT')))
+
+    vm = run([("P", clean)], post='(setq abcdef:*point-block* "my_pt"'
+                                  ' abcdef:*point-tag* "num")')
+    check("the block and its attribute are knobs",
+          'my_pt' in vm.tables.get('BLOCK', set())
+          and grp(ents(vm, 'ATTRIB')[0], 2) == 'num')
+
+    base = run([("P", clean)])
+    big = run([("P", clean)], post='(setq abcdef:*text-div* 30.0)')
+    hb = grp(ents(base, 'ATTRIB')[0], 40)
+    hg = grp(ents(big, 'ATTRIB')[0], 40)
+    check("*text-div* sets the text height (%.2f -> %.2f)" % (hb, hg),
+          hg > hb * 3.0)
+    tiny = run([("P", clean)], post='(setq abcdef:*text-div* 1.0e6'
+                                    ' abcdef:*text-min* 3.0)')
+    check("*text-min* is the floor under it",
+          abs(grp(ents(tiny, 'ATTRIB')[0], 40) - 3.0) < 1e-9)
+
+    # *fit-bad*: what counts as a row to flag
+    bad = list(d)
+    bad[2] += 0.4
+    loose = run([("P", bad)], post='(setq abcdef:*fit-bad* 5.0)')
+    tight = run([("P", bad)], post='(setq abcdef:*fit-bad* 0.01)')
+    check("*fit-bad* decides what is flagged **CHECK",
+          '**CHECK' not in row(loose, "P") and '**CHECK' in row(tight, "P"))
+
+    # *fit-ok*: whether Auto goes looking for a tape to drop at all
+    six = list(d)
+    six[2] += 6.0
+    kept = run([("P", six)], post='(setq abcdef:*fit-ok* 100.0)')
+    check("*fit-ok* is the fit Auto is content with",
+          used_of(row(kept, "P")) == 'ABCD')
+    dropped = run([("P", six)])
+    check("...and under it the bad tape is dropped",
+          used_of(row(dropped, "P")) == 'ABD')
+
+    # *drop-ratio* / *drop-margin*: how sure the evidence has to be
+    strict = run([("P", six)], post='(setq abcdef:*drop-ratio* 1.0e6)')
+    check("*drop-ratio* can refuse a drop the evidence does not carry",
+          used_of(row(strict, "P")) == 'ABCD')
+
+    # *edge-tol*: how far outside the frame counts as rounding.  A point
+    # three tenths of an inch out fits and grades well, so the tunable is
+    # the ONLY thing deciding whether it wants checking.
+    near = tapes(-0.3, -100.0)
+    lax = run([("OUT", near)])
+    strict = run([("OUT", near)], post='(setq abcdef:*edge-tol* 0.1)')
+    check("*edge-tol* decides when a snap stops being rounding",
+          '(snapped' in row(lax, "OUT")
+          and '0 point(s) want checking' in "".join(report(lax))
+          and '1 point(s) want checking' in "".join(report(strict)))
+    check("...and the summary quotes the value it used",
+          any('snapped over 0.10' in l for l in report(strict)))
+
+    # confidence and grades
+    hi = run([("P", clean)], post='(setq abcdef:*grade-high* 1.0)')
+    lo = run([("P", clean)], post='(setq abcdef:*grade-high* 99.5)')
+    check("*grade-high* moves the word beside the number",
+          conf_of(row(hi, "P"))[1] == 'HIGH'
+          and conf_of(row(lo, "P"))[1] != 'HIGH')
+    two = run([("P", [clean[0], clean[1], None, None])])
+    two2 = run([("P", [clean[0], clean[1], None, None])],
+               post='(setq abcdef:*conf-two* 0.0)')
+    check("*conf-two* is what a bare pair costs",
+          conf_of(row(two2, "P"))[0] > conf_of(row(two, "P"))[0])
+
+    # the swap detector, and the poor-fit alert
+    quiet = run([("P", clean), ("Q", d), ("R", tapes(200.0, -150.0))],
+                post='(setq abcdef:*swap-min* 1.0e-9'
+                     ' abcdef:*swap-ratio* 1.0e9)')
+    check("*swap-min* / *swap-ratio* arm the C/D detector",
+          "C/D NOTE" in said(quiet))
+    shout = run([("P", clean)], post='(setq abcdef:*poor-fit* 1.0e-9)')
+    check("*poor-fit* arms the badly-fitting-sheet alert",
+          'POORLY' in (shout.globals.get(Sym('*alert*')) or ''))
+
+    # the sheet
+    vm = fresh()
+    vm.loads('(setq abcdef:*hdr-dist* (list "OFF A" "OFF B" "OFF C" "OFF D")'
+             ' abcdef:*hdr-name* (list "STATION"))')
+    kinds = [vm.eval(lispvm.parse_all('(abcdef:col-of %s)' % lstr(h))[0])
+             for h in ("OFF A", "STATION", "DIST FROM A")]
+    check("*hdr-dist* / *hdr-name* name the columns",
+          [str(k) for k in kinds[:2]] == ['a', 'name']
+          and kinds[2] is lispvm.NIL)
+    rpt = run([("P", clean)], post='(setq abcdef:*report-suffix* "_X.txt")')
+    check("*report-suffix* names the report file",
+          rpt.globals.get(Sym('*rpt-path*')) == r'C:\jobs\survey_X.txt')
+
+    # the parser
+    vm = fresh()
+    vm.loads('(setq abcdef:*fractions* (list 2))')
+    check("*fractions* bounds the fraction rebuild",
+          abs(parse(vm, '20\'-7 114"') - (20 * 12 + 7 + 114)) < 1e-9)
+    vm = fresh()
+    vm.loads('(setq abcdef:*log-denom* 4)')
+    check("*log-denom* rounds the correction log",
+          vm.eval(lispvm.parse_all('(abcdef:in->ftin 476.78)')[0])
+          == "39'-8 3/4\"")
+
+
 def main():
     tier = os.environ.get('CALOFIN_LISP_ROOT') or 'lisp/ (standalone)'
     print("abcdef.lsp runtime tests -- tier: %s" % tier)
@@ -457,7 +1013,32 @@ def main():
                test_report_file_is_written_beside_the_sheet,
                test_points_are_the_survey_points_abhd_reads,
                test_abhd_handoff,
-               test_the_view_reset_survives_its_own_catch):
+               test_the_view_reset_survives_its_own_catch,
+               test_the_parser_reads_a_scanned_sheet,
+               test_the_command_reads_its_own_csv,
+               test_columns_are_found_in_any_order,
+               test_a_sheet_with_nothing_usable_draws_nothing,
+               test_back_walks_the_whole_question_chain,
+               test_back_at_the_first_dimension_returns_to_the_file_dialog,
+               test_back_at_the_base_point_reopens_the_method,
+               test_the_method_question_is_asked_in_the_house_format,
+               test_a_bad_dimension_is_re_asked,
+               test_enter_at_the_base_point_takes_the_origin,
+               test_cancel_in_the_dialog_draws_nothing,
+               test_a_clockwise_sheet_is_noticed_and_swapped,
+               test_a_correctly_labelled_sheet_is_left_alone,
+               test_a_sheet_that_fits_the_rectangle_badly_raises_an_alert,
+               test_a_mirror_pair_is_named_rather_than_guessed_at,
+               test_the_corner_self_check_refuses_to_plot_a_bad_frame,
+               test_a_frozen_or_locked_output_layer_is_repaired,
+               test_the_point_block_is_made_once_and_reused,
+               test_a_second_import_hands_abhd_only_its_own_points,
+               test_the_report_file_failing_does_not_lose_the_plot,
+               test_one_undo_group_opened_and_closed,
+               test_no_undo_group_when_undo_is_off,
+               test_esc_partway_through_goes_through_the_handler,
+               test_the_version_is_announced,
+               test_every_knob_is_live):
         try:
             fn()
         except LispError as e:
