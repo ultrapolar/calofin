@@ -21,6 +21,7 @@ that was current - which is exactly what these rules are made of.
 
 import math
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -684,5 +685,430 @@ assert isinstance(vm.globals['seen'], list) and vm.globals['seen'], \
     vm.globals['seen']
 print('   the probe selection reached ad:dimstairs; nothing was asked')
 
+
+
+print('== undo switched off in the drawing: run anyway, quietly ==')
+#: UNDOCTL bit 1 clear is "undo is not recording".  Every command asks
+#: before opening a group, because _Begin errors out of the command
+#: when undo is off -- but the close was unconditional, so the run that
+#: correctly skipped _Begin then ran _End on nothing and finished
+#: through its own error handler ("AutoDim error: ..."), having drawn
+#: the dims.  Both halves are guarded now.
+UNDO_OFF = [
+    ('c:AUTODIM',         lambda ents: [None, ents]),
+    ('c:STAIRDIM',        lambda ents: [None, None]),
+    ('c:FLOORDIM',        lambda ents: [None]),
+    ('c:AUTODIMSIDEPOV',  lambda ents: [None, ents]),
+]
+for cmd, script in UNDO_OFF:
+    vm = fresh()
+    vm.handle_errors = True
+    vm.sysvars['UNDOCTL'] = 0                    # undo not recording
+    vm.sysvars['DIMTXT'] = 0.125
+    vm.sysvars['DIMSCALE'] = 48
+    ents = draw(vm, FLIGHT)
+    vm.run(cmd, script(ents))
+    said = [s for s in vm.printed if 'error' in s.lower()]
+    assert not vm.handled_errors, (cmd, vm.handled_errors)
+    assert not said, (cmd, said)
+    assert not [c for c in vm.commands if c and c[0] == '_.UNDO'], \
+        (cmd, [c for c in vm.commands if c and c[0] == '_.UNDO'])
+    print('   %-18s no group opened, none closed, nothing said'
+          % cmd[2:])
+
+# and the work still happens -- it is the undo grouping that is skipped,
+# not the dimensioning
+vm = fresh()
+vm.handle_errors = True
+vm.sysvars['UNDOCTL'] = 0
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+ents = draw(vm, FLIGHT)
+vm.run('c:AUTODIM', [None, ents])
+assert len(dims(vm)) == 4, dims(vm)
+print('   the flight is still dimensioned, all 4 of them')
+
+
+print('== only a dim with two extension line origins blocks a place ==')
+#: A DIMENSION is read out of the drawing as "this place is taken" from
+#: its groups 13, 14 and 10.  An ANGULAR dim carries all three as well
+#: -- for the first of the two lines it measures -- so a corner angle
+#: was read as a dim across that line, and the side's own dimension was
+#: skipped in favour of it.  Group 70's low bits say which kind it is.
+vm = fresh()
+vm.loads('(entmake (list (cons 0 "DIMENSION") (cons 410 "Model") '
+         '(cons 70 2) (cons 13 (list 0.0 0.0 0.0)) '
+         '(cons 14 (list 60.0 0.0 0.0)) (cons 10 (list 30.0 -10.0 0.0))))')
+rescan(vm)
+assert vm.loads('ad:*dims*') is None, vm.loads('ad:*dims*')
+assert aligned(vm, (0, 0), (60, 0), (30, -12)) == 1
+assert vm.loads('ad:*skipped*') == 0
+print('   an angular dim on that side no longer swallows the side dim')
+
+# a rotated (0) and an aligned (1) one still do, and a radius dim (4)
+# is read by the radius test rather than this one
+for kind in (0, 1):
+    vm = fresh()
+    vm.loads('(entmake (list (cons 0 "DIMENSION") (cons 410 "Model") '
+             '(cons 70 %d) (cons 13 (list 0.0 0.0 0.0)) '
+             '(cons 14 (list 60.0 0.0 0.0)) (cons 10 (list 30.0 -12.0 0.0))))'
+             % kind)
+    rescan(vm)
+    assert aligned(vm, (0, 0), (60, 0), (30, -12)) == 0, kind
+print('   a linear or aligned dim there still does')
+
+# a dim already in the drawing with no group 70 at all is still read as
+# linear -- that is what AutoCAD's own linear dims look like to entget
+# when the flag is defaulted
+vm = fresh()
+vm.loads('(entmake (list (cons 0 "DIMENSION") (cons 410 "Model") '
+         '(cons 13 (list 0.0 0.0 0.0)) (cons 14 (list 60.0 0.0 0.0)) '
+         '(cons 10 (list 30.0 -12.0 0.0))))')
+rescan(vm)
+assert aligned(vm, (0, 0), (60, 0), (30, -12)) == 0
+print('   one with no kind flag at all is taken as linear, as before')
+
+
+print('== every knob is at the top of the file, and explained ==')
+#: The claim this section makes is structural: a setting is a top-level
+#: (setq ad:*...*) ABOVE the first defun, with a comment beside it --
+#: so the whole of what a drawing might want changed is in one place,
+#: and a knob added later cannot quietly land in the middle of the code.
+SRC = open(_probe._remap_root(LSP)).read()
+LINES = SRC.splitlines()
+first_defun = next(i for i, l in enumerate(LINES) if l.startswith('(defun'))
+knob_lines = [i for i, l in enumerate(LINES) if l.startswith('(setq ad:*')]
+assert knob_lines, 'no settings found at all'
+late = [LINES[i] for i in knob_lines if i > first_defun]
+assert not late, late
+print('   all %d top-level settings sit above the first defun'
+      % len(knob_lines))
+
+KNOBS = sorted(set(re.findall(r'^\(setq (ad:\*[a-z-]+\*)', SRC, re.M)))
+STATE = {'ad:*dims*', 'ad:*rads*', 'ad:*skipped*', 'ad:*curstyle*',
+         'ad:*homestyle*'}
+SETTINGS = [k for k in KNOBS if k not in STATE]
+assert len(SETTINGS) >= 20, SETTINGS
+# every setting carries an explanation: a ; comment on its own line or
+# on the line after it
+for k in SETTINGS:
+    i = next(n for n, l in enumerate(LINES) if l.startswith('(setq ' + k))
+    near = ' '.join(LINES[i:i + 2])
+    assert ';' in near, (k, near)
+print('   each of the %d settings carries a comment beside it'
+      % len(SETTINGS))
+
+# the per-run state is separated from the settings, and is not
+# something a drawing is invited to change
+for k in STATE:
+    assert k in SRC, k
+assert 'per-run state (not settings)' in SRC
+print('   the per-run state is marked as state, not as a setting')
+
+# ...and the tool's README documents every one of them, so the table a
+# drafter reads cannot fall behind the file
+README = os.path.join(os.path.dirname(__file__), '..', 'lisp', 'autodim',
+                      'README.md')
+doc = open(README).read()
+undocumented = [k for k in SETTINGS if k not in doc]
+assert not undocumented, undocumented
+print('   and README.md documents all %d' % len(SETTINGS))
+
+
+print('== the distances are inches, and follow the drawing units ==')
+vm = fresh()
+assert vm.loads('(ad:inches 12.0)') == 12.0
+assert vm.loads('(ad:dupetol)') == 0.0625
+vm.sysvars['INSUNITS'] = 4                       # a millimetre drawing
+assert round(vm.loads('(ad:inches 12.0)'), 4) == 304.8
+assert round(vm.loads('(ad:dupetol)'), 4) == 1.5875
+assert round(vm.loads('(ad:styfor 300.0 ad:*style-plan*)') == 'STANDARD INCHES'
+             and 1 or 0) == 1                    # 300mm is under a foot
+assert vm.loads('(ad:styfor 305.0 ad:*style-plan*)') == 'SIDE STANDARD'
+print('   a millimetre drawing gets a real foot, not 12mm')
+
+
+print('== each knob changes the thing it says it changes ==')
+
+def knobbed(setqs):
+    """A fresh run with those settings changed."""
+    vm = fresh()
+    vm.sysvars['DIMTXT'] = 0.125
+    vm.sysvars['DIMSCALE'] = 48
+    vm.loads(setqs)
+    return vm
+
+# ---- the styles, and the length that picks the short one
+vm = knobbed('(setq ad:*style-plan* "STANDARD")')
+assert aligned(vm, (0, 0), (60, 0), (30, -12)) == 1
+assert dims(vm)[0][0] == 'STANDARD', dims(vm)
+print('   ad:*style-plan*   retargets the perimeter and stair dims')
+
+vm = knobbed('(setq ad:*short-under* 24.0)')
+assert vm.loads('(ad:styfor 18.0 ad:*style-plan*)') == 'STANDARD INCHES'
+assert vm.loads('(ad:styfor 30.0 ad:*style-plan*)') == 'SIDE STANDARD'
+print('   ad:*short-under*  moves the cut between the two styles')
+
+vm = knobbed('(setq ad:*short-under* nil)')
+assert vm.loads('(ad:styfor 3.0 ad:*style-plan*)') == 'SIDE STANDARD'
+print('   ad:*short-under*  nil switches the length rule off entirely')
+
+vm = knobbed('(setq ad:*style-short* "STANDARD")')
+assert vm.loads('(ad:styfor 3.0 ad:*style-plan*)') == 'STANDARD'
+print('   ad:*style-short*  retargets what a sub-foot dim goes in')
+
+# ---- how far out things sit
+vm = knobbed('(setq ad:*text-gap* 4.0)')
+assert vm.loads('(ad:dimoff)') == 24.0           # 4 x 0.125 x 48
+print('   ad:*text-gap*     scales the stand-off with the text height')
+
+vm = knobbed('(setq ad:*perim-clear* 36.0)')
+vm.loads(PERIM)
+vm.loads('(entmake (list (cons 0 "LINE") (cons 10 (list 0.0 0.0 0.0)) '
+         '(cons 11 (list 60.0 0.0 0.0))))')
+vm.script = [list(vm.entities)]
+vm.loads('(setq SS (ssget))')
+assert vm.loads('(ad:dimperim SS)') == 1
+assert [round(v, 6) for v in dims(vm)[0][3]] == [30.0, 36.0], dims(vm)   # 36" out, not 12"
+print('   ad:*perim-clear*  pushes the perimeter dims further out')
+
+vm = knobbed('(setq ad:*overall-gap* 60.0)')
+vm.loads(PLANBOX)
+assert vm.loads('(ad:overall (list "<ss>"))') == 2
+wide, tall = dims(vm)
+assert wide[3] == (60.0, 147.0), wide            # 87 + 60
+assert tall[3] == (-75.0, 36.0), tall            # -15 - 60
+print('   ad:*overall-gap*  moves both overall dims out together')
+
+# ad:*near-dims*: a dim far from the plan is not one of its dims.  With
+# the margin wide open it counts, and pushes the overall width out.
+def overall_top(near):
+    vm = knobbed('(setq ad:*near-dims* %.1f)' % near)
+    vm.loads('(defun ad:ssbox (ss) (list (list 0.0 0.0 0.0) '
+             '(list 120.0 72.0 0.0)))'
+             '(defun cal:bbox-ss (ss) (list (list 0.0 0.0 0.0) '
+             '(list 120.0 72.0 0.0)))')
+    # a dim of another plan, 20ft above this one
+    vm.loads('(entmake (list (cons 0 "DIMENSION") (cons 410 "Model") '
+             '(cons 70 0) (cons 3 "STANDARD") '
+             '(cons 13 (list 0.0 312.0 0.0)) '
+             '(cons 14 (list 120.0 312.0 0.0)) '
+             '(cons 10 (list 60.0 312.0 0.0))))')
+    rescan(vm)
+    vm.loads('(ad:overall (list "<ss>"))')
+    return [d for d in dims(vm) if d[1] == (0.0, 72.0)][0][3][1]
+
+assert overall_top(48.0) == 96.0, overall_top(48.0)     # 72 + 24, its own box
+assert overall_top(480.0) == 336.0, overall_top(480.0)  # 312 + 24, cleared it
+print('   ad:*near-dims*    decides which dims the overall has to clear')
+
+# ---- the Typ. rule
+n, got = perim(segs=[((0, 0), (60, 0)), ((0, 40), (60, 40))])
+assert n == 1 and got == [('<> Typ.', 60.0)], (n, got)
+
+
+def perim_knobbed(setqs, segs=(), arcs=()):
+    """perim(), with settings changed before the run."""
+    vm = fresh()
+    vm.sysvars['DIMTXT'] = 0.125
+    vm.sysvars['DIMSCALE'] = 48
+    vm.loads(setqs)
+    for (x1, y1), (x2, y2) in segs:
+        vm.loads('(entmake (list (cons 0 "LINE") '
+                 '(cons 10 (list %.4f %.4f 0.0)) '
+                 '(cons 11 (list %.4f %.4f 0.0))))' % (x1, y1, x2, y2))
+    for (cx, cy), r in arcs:
+        vm.loads('(entmake (list (cons 0 "CIRCLE") '
+                 '(cons 10 (list %.4f %.4f 0.0)) (cons 40 %.4f)))'
+                 % (cx, cy, r))
+    vm.script = [list(vm.entities)]
+    vm.loads('(setq SS (ssget))')
+    vm.loads(PERIM)
+    n = vm.loads('(ad:dimperim SS)')
+    notes = [(c[c.index('_T') + 1] if '_T' in c else '')
+             for c in vm.commands
+             if c and c[0] in ('_.DIMALIGNED', '_.DIMRADIUS')]
+    return n, notes
+
+TWO_EQUAL = [((0, 0), (60, 0)), ((0, 40), (60, 40))]
+n, notes = perim_knobbed('(setq ad:*typ-lines* nil)', segs=TWO_EQUAL)
+assert n == 2 and notes == ['', ''], (n, notes)
+print('   ad:*typ-lines*    nil dimensions every side where it is')
+
+n, notes = perim_knobbed('(setq ad:*typ-lines* 3)', segs=TWO_EQUAL)
+assert n == 2 and notes == ['', ''], (n, notes)
+n, notes = perim_knobbed('(setq ad:*typ-lines* 3)',
+                         segs=TWO_EQUAL + [((0, 80), (60, 80))])
+assert n == 1 and notes == ['<> Typ.'], (n, notes)
+print('   ad:*typ-lines*    3 waits for a third equal side')
+
+n, notes = perim_knobbed('(setq ad:*typ-curves* 2)',
+                         arcs=[((0, 0), 18.0), ((80, 0), 18.0)])
+assert n == 1 and notes == ['<> Typ.'], (n, notes)
+print('   ad:*typ-curves*   2 makes a matching pair of arcs enough')
+
+n, notes = perim_knobbed('(setq ad:*typ-note* " TYP")', segs=TWO_EQUAL)
+assert notes == ['<> TYP'], notes
+print('   ad:*typ-note*     is the wording that goes on it')
+
+# ---- one dimension per place
+vm = knobbed('(setq ad:*same-line* 36.0)')
+assert aligned(vm, (0, 0), (60, 0), (30, -12)) == 1
+assert aligned(vm, (0, 0), (60, 0), (30, -36)) == 0    # 2ft out: now the same
+print('   ad:*same-line*    widens what counts as the same dim line')
+
+vm = knobbed('(setq ad:*same-pt* 6.0)')
+assert aligned(vm, (0, 0), (60, 0), (30, -12)) == 1
+assert aligned(vm, (3, 0), (57, 0), (30, -12)) == 0    # 3" off: now the same
+print('   ad:*same-pt*      widens what counts as the same place')
+
+# ---- the side-view test
+vm = fresh()
+vm.loads('(setq ad:*steps-min-risers* 4)')
+draw(vm, FLIGHT)
+vm.script = [list(vm.entities)]
+vm.loads('(setq SS (ssget))')
+assert vm.loads('(ad:stepprofile-p SS)') is None
+print('   ad:*steps-min-risers* 4 stops a three-step flight reading as one')
+
+vm = fresh()
+vm.loads('(setq ad:*steps-square* 1.0)')          # every segment must be square
+draw(vm, FLIGHT + [((36, -30), (60, -40))])       # a sloping floor at its foot
+vm.script = [list(vm.entities)]
+vm.loads('(setq SS (ssget))')
+assert vm.loads('(ad:stepprofile-p SS)') is None
+print('   ad:*steps-square* 1.0 refuses the sloping floor at the foot')
+
+vm = fresh()
+vm.loads('(setq ad:*steps-wall* 0.3)')            # a low bar for "back wall"
+draw(vm, FLIGHT)
+vm.script = [list(vm.entities)]
+vm.loads('(setq SS (ssget))')
+assert vm.loads('(ad:stepprofile-p SS)') is None  # every riser is now a wall
+print('   ad:*steps-wall*   decides what is a back wall and not a riser')
+
+# ---- where a recognised flight is dimensioned
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+vm.loads('(setq ad:*steps-side* -1.0)')           # to the LEFT of the flight
+ents = draw(vm, FLIGHT)
+vm.run('c:AUTODIM', [None, ents])
+placed = dims(vm)
+assert len(placed) == 4, placed
+assert [d[3][0] for d in placed] == [-24.0, -24.0, -24.0, -48.0], placed
+print('   ad:*steps-side*   -1.0 puts the depths left of the flight')
+
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+vm.loads('(setq ad:*steps-clear* 48.0)')
+ents = draw(vm, FLIGHT)
+vm.run('c:AUTODIM', [None, ents])
+assert [d[3][0] for d in dims(vm)] == [72.0, 72.0, 72.0, 120.0], dims(vm)
+print('   ad:*steps-clear*  sets how far clear of the flight they sit')
+
+# ---- AUTODIMSIDEPOV's layer
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+vm.loads('(setq ad:*steps-layer* "MY DIMS")')
+ents = draw(vm, FLIGHT)
+vm.run('c:AUTODIMSIDEPOV', [None, ents])
+assert vm.layer_of(vm.entities[-1]) == 'MY DIMS', vm.layer_of(vm.entities[-1])
+assert vm.sysvars['CLAYER'] == '0'                # and put back afterwards
+print('   ad:*steps-layer*  names the layer AUTODIMSIDEPOV draws on')
+
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+vm.loads('(setq ad:*steps-layer* nil)')
+ents = draw(vm, FLIGHT)
+vm.run('c:AUTODIMSIDEPOV', [None, ents])
+assert vm.layer_of(vm.entities[-1]) == '0', vm.layer_of(vm.entities[-1])
+assert 'MY DIMS' not in vm.tables['LAYER']
+print('   ad:*steps-layer*  nil leaves them on the current layer')
+
+# ---- the geometry fuzz
+vm = knobbed('(setq ad:*square-tol* 0.2)')        # ~11 degrees off square
+draw(vm, [((0, 0), (0, -10)), ((0, -10), (12, -10)),
+          ((12, -10), (12.5, -20)),               # a riser leaning 3 degrees
+          ((12.5, -20), (24, -20)), ((24, -20), (24, -30)),
+          ((24, -30), (36, -30))])
+vm.script = [list(vm.entities)]
+vm.loads('(setq SS (ssget))')
+assert vm.loads('(ad:stepprofile-p SS)'), 'a leaning riser should pass here'
+vm = fresh()
+draw(vm, [((0, 0), (0, -10)), ((0, -10), (12, -10)),
+          ((12, -10), (12.5, -20)),
+          ((12.5, -20), (24, -20)), ((24, -20), (24, -30)),
+          ((24, -30), (36, -30))])
+vm.script = [list(vm.entities)]
+vm.loads('(setq SS (ssget))')
+assert vm.loads('(ad:stepprofile-p SS)') is None
+print('   ad:*square-tol*   how far off square a segment may still be')
+
+# ---- the entity types the tool looks at
+vm = fresh()
+vm.loads('(setq ad:*plan-types* "LINE")')
+assert vm.loads('(car (ad:geomfilter))') == Dot(0, 'LINE')
+print('   ad:*plan-types*   is the filter both selections are made with')
+
+
+print('== contingencies: the odd drawing, and the empty one ==')
+# nothing highlighted: AUTODIM says so and stops, with no group left open
+vm = fresh()
+vm.handle_errors = True
+vm.run('c:AUTODIM', [None, None])
+assert any('Nothing highlighted' in s for s in vm.printed), vm.printed
+assert not dims(vm) and not vm.handled_errors
+print('   nothing highlighted: it says so and stops')
+
+# a plan of one line: a perimeter of one side, no stairs, no overall dim
+# pair to speak of -- and no crash on the degenerate box
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+vm.loads(PERIM)
+vm.loads('(entmake (list (cons 0 "LINE") (cons 10 (list 0.0 0.0 0.0)) '
+         '(cons 11 (list 60.0 0.0 0.0))))')
+vm.script = [list(vm.entities)]
+vm.loads('(setq SS (ssget))')
+assert vm.loads('(ad:dimperim SS)') == 1
+print('   a plan of a single line: one dim, no crash')
+
+# a zero-length segment is never dimensioned
+vm = fresh()
+assert aligned(vm, (10, 10), (10, 10), (10, 20)) == 0
+assert vm.loads('(ad:putlinear (list 10.0 10.0 0.0) (list 10.0 10.0 0.0) '
+                '(list 10.0 20.0 0.0) "_V" ad:*style-plan*)') == 0
+assert not dims(vm)
+print('   a zero-length span is not dimensioned, either way of asking')
+
+# a riser shorter than the fuzz is not a riser
+vm = fresh()
+draw(vm, [((0, 0), (0, -0.00001)), ((0, -0.00001), (12, -0.00001))])
+vm.script = [list(vm.entities)]
+vm.loads('(setq SS (ssget))')
+assert vm.loads('(ad:risers SS)') is None or vm.loads('(ad:risers SS)') == []
+print('   a riser shorter than the fuzz is not counted as one')
+
+# the drawing has none of the three styles: everything falls back to
+# what was current, and nothing is left in a style the drawing lacks
+vm = fresh(styles={'STANDARD'})
+vm.sysvars['DIMSTYLE'] = 'STANDARD'
+vm.script = [None]
+vm.loads('(ad:begin)')
+assert aligned(vm, (0, 0), (60, 0), (30, -12)) == 1
+assert aligned(vm, (0, 40), (8, 40), (4, 52)) == 1
+assert {d[0] for d in dims(vm)} == {'STANDARD'}, dims(vm)
+print('   a drawing with only STANDARD: every dim falls back to it')
+
+# INSUNITS unset (0, unitless) is treated as inches, not as no units
+vm = fresh()
+vm.sysvars['INSUNITS'] = 0
+assert vm.loads('(ad:onefoot)') == 12.0
+assert vm.loads('(ad:styfor 6.0 ad:*style-plan*)') == 'STANDARD INCHES'
+print('   INSUNITS unset: inches assumed, the length rule still works')
 
 print('ALL AUTODIM CHECKS PASSED')
