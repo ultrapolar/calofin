@@ -1139,9 +1139,20 @@ previous style is always restored right afterwards:
   style. A dim inside a `SIDE STANDARD` block **keeps that style even
   under 24"** — the reference shows a 19" `S1` in `SIDE STANDARD`,
   not in inches.
+* **The floor dims keep the standard style under 24" too** — the whole
+  BOTTOM phase: the `H/G/F/E` and `M/L/K` hopper chains, the sport
+  bottom's `E2/F2/G/F1/E1`, and the section depths `C` / `D` / `C2`.
+  Same mechanism as the sheet letters, a block rather than a
+  measurement (`pool:*flooron*`, opened by `pool:dimflbeg`): a section
+  is one chain of runs that adds up to the pool, and an 18" `H` set in
+  inches beside a 23'6" `F` set in feet is the one thing a crew reads
+  wrong. `POOLSIDE` draws those same floor dims on their own and
+  switches style for none of them, so a section drawn either way comes
+  out the same. (The six-sided hopper's `W`/`L1`/`X` are secondary
+  sheet letters, so they are `SIDE STANDARD` and stay so.)
 * **`STANDARD INCHES`** — **every other dimension measuring under 2'
-  (24")**: corner radii and cut faces, short hopper offsets,
-  profile depths. A dimension of exactly 2' stays in the current
+  (24")**: corner radii and cut faces, and any other small **plan**
+  dim. A dimension of exactly 2' stays in the current
   style (`STANDARD`, or `CROSS DIMENSIONS` inside a cross-dim block) —
   the cutover is *under* 24", not *at or under*, and it is read with a
   millionth of an inch of slack so that holds for a **2 ft corner**:
