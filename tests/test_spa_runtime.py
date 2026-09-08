@@ -193,11 +193,11 @@ def test_back_out_of_the_offset_reopens_the_offer():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
               'Yes', '90',
+              'No',                # no auto-hinge (asked before drawing)
               'Yes', 'Offset',
               'Back',              # back out of the lap
               'Yes', 'Dims',       # ... and switch method
-              78.0, None,          # water's edge overalls
-              'No'],               # no auto-hinge
+              78.0, None],         # water's edge overalls
              'rect/back-out-of-offset')
     assert outline(vm, 'POOL'), "the second outline was never drawn"
 
@@ -223,8 +223,8 @@ def test_each_outline_is_one_closed_entity():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
               'Yes', '90',
-              'Yes', 'Offset', 3.0,
-              'No'],
+              'No',                # no auto-hinge
+              'Yes', 'Offset', 3.0],
              'bounded/two-outlines')
     for layer in ('COVER', 'POOL'):
         pls = drawn(vm, 'LWPOLYLINE', layer)
@@ -275,6 +275,12 @@ def dxf0(vm, e):
     return None
 
 
+def stray_arcs(vm):
+    """ARCs anywhere but the mini-model's layer: a radius callout's
+    scaffold arc that was not taken away again."""
+    return [d for d in drawn(vm, 'ARC') if d.get(8) != 'SPA-NOTES']
+
+
 def test_radius_callout_is_handed_an_arc():
     """DIMRADIUS answers "Select arc or circle:", and it means it.
 
@@ -301,7 +307,9 @@ def test_radius_callout_is_handed_an_arc():
         assert dxf0(vm, e) == 'ARC', (
             "DIMRADIUS was handed a %s, which AutoCAD refuses to dimension"
             % dxf0(vm, e))
-    assert not drawn(vm, 'ARC'), (
+    # the mini-model beside the report draws its radius corners as arcs
+    # on SPA-NOTES; those are the picture, not the scaffold
+    assert not stray_arcs(vm), (
         "the arc built to hang the dimension on was left in the drawing")
 
 
@@ -311,14 +319,14 @@ def test_radius_callout_on_both_outlines():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
               'Yes', 'Radius', 8.0,
-              'Yes', 'Offset', 3.0,
-              'No'],
+              'No',                # no auto-hinge
+              'Yes', 'Offset', 3.0],
              'radius/two-outlines')
     calls = dimcalls(vm, '_.DIMRADIUS')
     assert len(calls) == 2, calls          # one Typ. callout per outline
     for c in calls:
         assert dxf0(vm, selected(c)) == 'ARC', c
-    assert not drawn(vm, 'ARC'), "a temporary arc was left behind"
+    assert not stray_arcs(vm), "a temporary arc was left behind"
     for layer in ('COVER', 'POOL'):
         assert len(drawn(vm, 'LWPOLYLINE', layer)) == 1, layer
 
@@ -367,8 +375,8 @@ def test_mm_at_a_typed_prompt():
     vm = run([None, 'Coversize', 'Rectangle', None,
               84.0, None,
               'Yes', '90',
-              'Yes', 'Offset', '76.2mm',   # 76.2 mm = 3 in
-              'No'],
+              'No',                        # no auto-hinge
+              'Yes', 'Offset', '76.2mm'],  # 76.2 mm = 3 in
              'mm/lap')
     vs, _ = plverts(vm, 'POOL')
     xs = [v[0] for v in vs]
@@ -400,11 +408,11 @@ def test_five_piece_hinge_arrangement():
     vm = run([None, 'Coversize', 'Rectangle', None,
               230.0, 60.0,          # 230/48 -> 5 pieces
               'Yes', '90',
-              'No',                 # no second outline
-              'Yes',                # auto-hinge
+              'Yes',                # auto-hinge -- asked before the draw
               'No',                 # no spillaway
               None,                 # no details block
-              '4-3'],               # taper
+              '4-3',                # taper
+              'No'],                # no second outline
              'hinge/5-piece')
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge',
                                 'Velcro Hinge', 'Hinge'], hinge_labels(vm)
@@ -414,7 +422,7 @@ def test_three_piece_hinge_arrangement():
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,          # 140/48 -> 3 pieces
               'Yes', '90',
-              'No', 'Yes', 'No', None, '4-3'],
+              'Yes', 'No', None, '4-3', 'No'],
              'hinge/3-piece')
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge'], hinge_labels(vm)
 
@@ -424,11 +432,12 @@ def test_back_in_the_spillaway_loop():
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,
               'Yes', '90',
-              'No', 'Yes',
+              'Yes',
               'Yes', 'Wall', 'Top', 20.0,   # commit one
               'Back',                        # ... and take it back
               'No',
-              None, '4-3'],
+              None, '4-3',
+              'No'],                         # no second outline
              'hinge/spillaway-back')
     rows = [p for p, _ in vm.prompts]
     assert any('spillaway' in p.lower() for p in rows)
@@ -453,7 +462,7 @@ def test_thermolight_style_all_velcro():
     vm = run([None, 'Coversize', 'Rectangle', None,
               230.0, 60.0,
               'Yes', '90',
-              'No', 'Yes', 'No', None, '1-3/8'],
+              'Yes', 'No', None, '1-3/8', 'No'],
              'hinge/thermolight-taper')
     assert hinge_labels(vm), "no hinges drawn"
 
@@ -487,6 +496,207 @@ def test_corner_size_over_the_cap_is_still_refused():
              'corner/radius-over-the-cap')
     assert len([s for s in vm.printed if 'Too large' in s]) == 1, \
         [s for s in vm.printed if 'Too large' in s]
+
+
+# ---------------------------------------------------------- mini-model
+
+def letters(vm):
+    """The corner-letter TEXTs on SPA-NOTES, keyed by letter."""
+    out = {}
+    for d in drawn(vm, 'TEXT', 'SPA-NOTES'):
+        t = str(d.get(1, ''))
+        if len(t) == 1 and t.isalpha():
+            out.setdefault(t, []).append(d[10])
+    return out
+
+
+def notes_lines(vm):
+    return [d for d in drawn(vm, 'LINE', 'SPA-NOTES')]
+
+
+def test_corner_letters_are_off_the_drawing_and_on_the_mini_model():
+    """A B C D are drawn ONCE each, beside the report -- not in the
+    corners of the spa itself, where they used to crowd the dimensions
+    and the hinge labels."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'Yes', '90',
+              'No', 'No'],
+             'mini/rect')
+    lb = letters(vm)
+    assert sorted(lb) == ['A', 'B', 'C', 'D'], sorted(lb)
+    for k, pts in lb.items():
+        assert len(pts) == 1, (k, pts)
+    # the drawing itself ends at x = 84; the report starts a yard past it
+    for k, pts in lb.items():
+        assert pts[0][0] > 84.0 + 36.0, (k, pts[0])
+    # and the letters sit on a mini outline, not on nothing
+    mini = [d for d in notes_lines(vm) if d[10][0] > 84.0 + 36.0]
+    assert len(mini) >= 4, len(mini)
+
+
+def test_the_mini_model_carries_the_corner_treatments():
+    """A radius corner is an ARC on the mini-model, so the small copy
+    reads as the shape that was drawn."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, None,
+              'Yes', 'Radius', 12.0,
+              'No', 'No'],
+             'mini/radius')
+    arcs = [d for d in drawn(vm, 'ARC', 'SPA-NOTES')]
+    assert len(arcs) == 4, len(arcs)
+
+
+def test_octagon_letters_are_on_the_mini_model_too():
+    vm = run([None, 'Coversize', 'OCtagon', None,
+              95.0, None,
+              'NA', 'NA', 'NA', 'NA', 'NA',
+              'No', 'No'],
+             'mini/octagon')
+    lb = letters(vm)
+    assert sorted(lb) == list('ABCDEFGH'), sorted(lb)
+    for k, pts in lb.items():
+        assert pts[0][0] > 95.0 + 36.0, (k, pts[0])
+
+
+def test_round_mini_model_has_a_body_and_no_letters():
+    """A round spa has no corners, so its mini-model carries no
+    letters -- but it is still drawn, beside the report."""
+    vm = run([None, 'Coversize', 'ROund', None, 84.0, 'No', 'No'],
+             'mini/round')
+    assert letters(vm) == {}, letters(vm)
+    minis = [d for d in drawn(vm, 'CIRCLE', 'SPA-NOTES')
+             if d[10][0] > 84.0 + 36.0]
+    assert len(minis) == 1, len(minis)
+
+
+def test_not_given_row_reads_na_in_both_columns():
+    """Nothing was measured and nothing was built to a size, so the
+    row records only that the sheet never said -- as POOL's does."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'No', 'NotGiven', '90', '90', '90',
+              'No', 'No'],
+             'mini/notgiven-row')
+    rows = drawn(vm, 'TEXT', 'SPA-NOTES')
+    lbl = [d for d in rows if d.get(1) == 'CORNER A NOTGIVEN']
+    assert len(lbl) == 1, [d.get(1) for d in rows]
+    y = lbl[0][10][1]
+    same_row = sorted(str(d.get(1)) for d in rows
+                      if abs(d[10][1] - y) < 1e-9 and d is not lbl[0])
+    assert same_row == ['-', 'N/A', 'N/A'], same_row
+
+
+# ------------------------------------------- the quarter turn for a spillway
+
+def cover_size(vm):
+    vs, _ = plverts(vm, 'COVER')
+    xs = [v[0] for v in vs]
+    ys = [v[1] for v in vs]
+    return (max(xs) - min(xs), max(ys) - min(ys))
+
+
+def hinge_xs(vm):
+    return sorted(d[10][0] for d in drawn(vm, 'MTEXT', 'TEXT')
+                  if d.get(1) in ('Hinge', 'Velcro Hinge'))
+
+
+def test_hinge_questions_come_before_the_draw():
+    """The auto-hinge offer, the spillaways and the taper are all asked
+    before the second-outline offer -- nothing on the screen can be
+    turned, so they have to be."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              140.0, 60.0,
+              'Yes', '90',
+              'Yes', 'No', None, '4-3',
+              'No'],
+             'turn/order')
+    ps = [p for p, _ in vm.prompts]
+    hinge = next(i for i, p in enumerate(ps) if 'Auto-hinge' in p)
+    second = next(i for i, p in enumerate(ps) if 'as well' in p)
+    assert hinge < second, ps
+    assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge'], hinge_labels(vm)
+
+
+def test_a_spillway_no_hinge_can_dodge_turns_the_spa():
+    """100 x 60 with a 60" spillway across the TOP wall: every hinge
+    station lands in the zone whichever count is tried, so the spa is
+    turned a quarter turn and the spillway comes to rest on a side wall
+    where a north-south hinge cannot meet it."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              100.0, 60.0,
+              'Yes', '90',
+              'Yes',                        # auto-hinge
+              'Yes', 'Wall', 'Top', 60.0,   # right across the top wall
+              'No',
+              None, '4-3',
+              'No'],
+             'turn/top-wall')
+    w, l = cover_size(vm)
+    assert abs(w - 60.0) < 1e-9 and abs(l - 100.0) < 1e-9, (w, l)
+    txt = [d[1] for d in drawn(vm, 'TEXT', 'SPA-NOTES')]
+    assert any('CLEAR OF THE SPILLWAY' in t for t in txt), txt
+    # the report says where the spillway ended up on the drawing
+    assert any('SPILLWAY TOP WALL (DRAWN RIGHT)' in t for t in txt), txt
+    # and the hinge that is drawn is nowhere near a zone
+    assert hinge_xs(vm), "no hinge drawn"
+    assert not any('COULD NOT ALL BE AVOIDED' in t for t in txt), txt
+
+
+def test_a_side_wall_spillway_leaves_the_spa_alone():
+    """The same spillway on the LEFT wall never meets a north-south
+    hinge, so there is nothing to turn away from."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              100.0, 60.0,
+              'Yes', '90',
+              'Yes',
+              'Yes', 'Wall', 'Left', 60.0,
+              'No',
+              None, '4-3',
+              'No'],
+             'turn/left-wall')
+    w, l = cover_size(vm)
+    assert abs(w - 100.0) < 1e-9 and abs(l - 60.0) < 1e-9, (w, l)
+    txt = [d[1] for d in drawn(vm, 'TEXT', 'SPA-NOTES')]
+    assert not any('QUARTER TURN' in t for t in txt), txt
+
+
+def test_a_spillway_the_hinges_already_clear_turns_nothing():
+    """A 20" spillway centred on the top wall of a 100 x 60 cover sits
+    between the two hinge stations, so both ways round lay out perfectly
+    and the long-overall rule keeps the drawing."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              100.0, 60.0,
+              'Yes', '90',
+              'Yes',
+              'Yes', 'Wall', 'Top', 20.0,
+              'No',
+              None, '4-3',
+              'No'],
+             'turn/no-need')
+    w, l = cover_size(vm)
+    assert abs(w - 100.0) < 1e-9 and abs(l - 60.0) < 1e-9, (w, l)
+    txt = [d[1] for d in drawn(vm, 'TEXT', 'SPA-NOTES')]
+    assert not any('QUARTER TURN' in t for t in txt), txt
+    assert not any('COULD NOT ALL BE AVOIDED' in t for t in txt), txt
+
+
+def test_a_turned_spa_still_reports_its_letters():
+    """The letters travel with their corners, so the mini-model of a
+    turned spa reads back against the report."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              60.0, 100.0,          # typed the tall way round
+              'No', 'Radius', 6.0, '90', '90', '90',
+              'No', 'No'],
+             'turn/letters')
+    lb = letters(vm)
+    assert sorted(lb) == ['A', 'B', 'C', 'D'], sorted(lb)
+    # the turn is a quarter turn CLOCKWISE, so the corner that was
+    # bottom-left (A, the radius one) is now top-left on the mini-model
+    xs = sorted(v[0][0] for v in lb.values())
+    ys = sorted(v[0][1] for v in lb.values())
+    assert lb['A'][0][0] == xs[0], lb          # leftmost...
+    assert lb['A'][0][1] == ys[-1], lb         # ...and topmost
 
 
 if __name__ == '__main__':

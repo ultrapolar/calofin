@@ -1003,8 +1003,9 @@ def same(a, b, label):
 # The scripts below are SPA's real prompt order, the same one
 # tests/test_spa_form.py drives: the Spa Cover Details block pick, the
 # mode, the shape, the base point, the measurements, the corners, the
-# offer of the second outline and the auto-hinge gate.  The form answers
-# everything except the block pick and the base point.
+# auto-hinge gate (asked before anything is drawn, so a spillaway can
+# still turn the spa) and the offer of the second outline.  The form
+# answers everything except the block pick and the base point.
 CASES = [
     ("Rectangle",
      [("mode", "1"), ("w", "84"), ("l", "72"),
@@ -1065,7 +1066,7 @@ print("== a filled cover block drives both outlines ==")
 # the same spa with the cover added by Offset -- second, method and the
 # lap all come off the form, and the auto-hinge gate with them
 cv_prompts = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
-              "No", "90", "90", "90", "90", "Yes", "Offset", 3.0, "No"]
+              "No", "90", "90", "90", "90", "No", "Yes", "Offset", 3.0]
 cv_typing = [("mode", "1"), ("w", "84"), ("l", "72"),
              ("cornera", "1"), ("cornerb", "1"), ("cornerc", "1"),
              ("cornerd", "1"),
@@ -1078,7 +1079,7 @@ print("   %d entities; both outlines from one chart" % len(ents))
 
 # and by Dims, where the second overalls are the ones that travel
 cd_prompts = [None, "Coversize", "Rectangle", (0, 0), 84.0, 72.0,
-              "No", "90", "90", "90", "90", "Yes", "Dims", 78.0, 66.0, "No"]
+              "No", "90", "90", "90", "90", "No", "Yes", "Dims", 78.0, 66.0]
 cd_typing = [("mode", "2"), ("w", "84"), ("l", "72"),
              ("cornera", "1"), ("cornerb", "1"), ("cornerc", "1"),
              ("cornerd", "1"),

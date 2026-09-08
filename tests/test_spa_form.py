@@ -340,10 +340,10 @@ print("== 10. second / method / gap / autohinge from the form ==")
 
 CVR_PROMPTS = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
                "No", "90", "90", "90", "90",
+               "No",                    # no auto-hinge (asked first)
                "Yes",                   # draw the cover as well
                "Offset",                # take it from
-               3.0,                     # the lap
-               "No"]                    # no auto-hinge
+               3.0]                     # the lap
 CVR_FORM = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
                 (w . 84.0) (l . 72.0)
                 (cornera-ty . "90") (cornerb-ty . "90")
@@ -371,11 +371,11 @@ print("== 11. grade/taper from the form: no taper prompt ==")
 
 GT_PROMPTS = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
               "No", "90", "90", "90", "90",
-              "No",                     # no second outline
-              "Yes",                    # auto-hinge
+              "Yes",                    # auto-hinge -- asked before the draw
               "No",                     # no spillaway
               None,                     # the block, offered again -- skip
-              "4-2"]                    # the taper, typed
+              "4-2",                    # the taper, typed
+              "No"]                     # no second outline
 GT_FORM = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
                (w . 84.0) (l . 72.0)
                (cornera-ty . "90") (cornerb-ty . "90")

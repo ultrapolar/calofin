@@ -380,6 +380,7 @@ lisp/smartfillet/SMARTFILLET.lsp|c:smartfillet|setq-global|*error*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*advice*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*base*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*dotlt*
+lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*spillturn*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*turned*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*valnotes*
 lisp/spacheck/SPACHECK.lsp|spachk:demo|setq|undo-open
@@ -722,6 +723,7 @@ shared/parts/TUTORIALPOOL.lsp|tutorial:run|setq-global|pool:*smallwarned*
 shared/parts/TUTORIALSPA.lsp|tut:demo|setq-global|spa:*advice*
 shared/parts/TUTORIALSPA.lsp|tut:demo|setq-global|spa:*base*
 shared/parts/TUTORIALSPA.lsp|tut:demo|setq-global|spa:*dotlt*
+shared/parts/TUTORIALSPA.lsp|tut:demo|setq-global|spa:*spillturn*
 shared/parts/TUTORIALSPA.lsp|tut:demo|setq-global|spa:*turned*
 shared/parts/TUTORIALSPA.lsp|tut:demo|setq-global|spa:*valnotes*
 shared/parts/abhd.lsp|c:abhd|setq-global|*error*

@@ -42,6 +42,47 @@ test, and the four defects that turned up on the way closed.
 
 ### Added
 
+- **`SPA` puts the corner letters on a mini-model, and turns a quarter
+  turn to get its hinges clear of a spillway** (`SPA.LSP` 090826 REV16,
+  `TUTORIALSPA.LSP` 090826 REV11). Two moves `POOL` had already made,
+  written for SPA on the one August branch the consolidation had passed
+  over (`spa-mini-version-layout`, 26 August): its corner-vocabulary
+  half was re-done on the trunk the next day, and its other half never
+  arrived. It is ported here by hand, against the tunables block and
+  the form store SPA has grown since.
+
+  The corner letters no longer sit on the corners of the full-size
+  drawing, where they crowd the dimensions, the corner callouts and the
+  hinge labels. They go on a small copy of the outline beside the
+  report table, with the treatments in place -- a radius corner is an
+  arc on it, a cut is its face -- so the report's rows still read back
+  against a picture of the shape. Rectangle, octagon and round all get
+  one; a round spa has no corners, so its carries no letters and is
+  there to say which way round it lies. `spa:*map-gap*` and
+  `spa:*map-size*` place it, and it lives on `SPA-NOTES` with the rest
+  of the annotation.
+
+  Hinges run north-south, so a spillway on the top or the bottom wall
+  stands in the way of every one of them, while the same spillway on a
+  side wall cannot touch any. When the spa laid out the way the
+  long-overall rule wants cannot get a hinge clear and the other way
+  round can, the spillway wins and the spa is turned -- scored on the
+  same three things the hinge layout is scored on (dodging every zone,
+  fitting the foam length, an acceptable piece count), so the turn is
+  never taken at the price of a hinge that overruns the foam. The
+  drawing says which turn it took and why, and the spillway's report
+  row is named as it was measured with where it ended up added:
+  `SPILLWAY TOP WALL (DRAWN RIGHT)`.
+
+  That is why the hinge questions -- the offer, the spillaways, the
+  grade and taper -- are now asked as soon as the spa is measured,
+  BEFORE a line is drawn: nothing already on the screen can be turned.
+  The hinges themselves are still drawn at the end, on whichever
+  outline they belong to. The form keys are unchanged and keyed, so
+  `LAZSPA` and the palette need nothing; the scripted tests answer in
+  the new order. A `NotGiven` corner's report row now reads N/A in both
+  columns, as `POOL`'s does.
+
 - **`XFTRECONV`** (`lisp/xftconv/`, with `XFTCONV` at v1.14) puts a
   converted survey back: the marker and the name text the swap erased,
   the leftover text the purge took, the `ab_pt` block off again, and
