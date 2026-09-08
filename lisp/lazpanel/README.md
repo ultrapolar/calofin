@@ -373,6 +373,24 @@ carries it along with every tool it lists. The button toolbar appears
 on load; type `LAZPANEL` to open the panel directly, or `LAZBUTTON` to
 re-summon the button, or `LAZPIN` to choose the pinned tools.
 
+## Tunables
+
+Every one is a plain literal in the **tunables block at the top of
+`LAZPANEL.lsp`**; nothing further down the file is meant to be edited
+to tune the panel. The captions and the page layout are editable too,
+but they live beside the code that reads them because they *are* the
+panel rather than settings of it -- and `tools/check_registry.py --fix`
+maintains them.
+
+| Global | Default | What it sets |
+| --- | --- | --- |
+| `lzp:*findname*` | `"Find"` | the Find page's tab title. Find is a page but NOT a group -- it stays out of `lzp:*groups*` -- so renaming it here is safe and adding it to a group is not |
+| `lzp:*tbname*` | `"LazPanel"` | the screen-button toolbar's name, as the CUI lists it |
+| `lzp:*poskey*` | `"LazPanel_Pos"` | where the panel remembers its position between restarts: a value in the AutoCAD profile, which is always writable where the registry may not be |
+| `lzp:*pinkey*` | `"HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel"` | where pins and recents live. **The VB palette reads the same key**, so a drafter has one set of pins whichever surface they pinned from -- change it here and in `ui/calofin_net/PaletteMemory.vb` together |
+| `lzp:*pinbudget*` | `84` | how wide a row of pinned or recent buttons may be, in DCL character cells. A ceiling, not a preference: DCL does not scroll, and a row past the screen's width stops the dialog opening at all |
+| `lzp:*reclimit*` | `5` | how many recently launched tools are remembered. The palette keeps the same number (`PaletteMemory.RecentLimit`) |
+
 ## Assumptions
 
 - The system temp folder is writable -- `vl-filename-mktemp` decides
