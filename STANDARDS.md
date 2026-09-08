@@ -805,6 +805,14 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
   tracks `undo-open` and closes only a group it opened, in the
   canonical casing (an error before the `_Begin` used to run `_End` on
   nothing, erroring inside the error handler).
+* ~~The same class in the step family~~ **DONE** (2026-09-08) -- all
+  six of `CORNERSTP`/`HEMISTEP`/`NORMIESTEP` and their three tutorials
+  opened the group only when `UNDOCTL` said undo was recording and then
+  closed it flat, so a drawing with UNDO off ended every run on `_End`
+  with no group open.  Their handlers had it right all along; the
+  success path now reads the same `undo-open` flag.
+  `tests/test_steps_settings.py` runs all six with `UNDOCTL` bit 1
+  clear.
 * ~~BPCALLOUT's `*break,` wildcard typo~~ **DONE** -- and the whole
   cancel test is now ONE canonical spelling repo-wide, with
   `cal:error-cancel-p` / `cal:undobegin` / `cal:undoend` in the
