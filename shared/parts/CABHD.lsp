@@ -199,7 +199,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.8")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v1.9")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -366,6 +366,50 @@
                                     ; outrank pretty radii
 (setq *CAB-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
                                     ; chaining exploded segments
+(setq *CAB-FLOAT-GAIN*   2)          ; an arc that floats between the
+                                    ; points (its middle on no survey
+                                    ; point) is taken only when it
+                                    ; covers at least this many more
+                                    ; points than the longest arc that
+                                    ; passes exactly through one
+(setq *CAB-DROP-GAIN*    2)          ; and every point given up must buy
+                                    ; at least this many more points of
+                                    ; span, or it is held after all
+(setq *CAB-ON-FRAC*      0.25)       ; the on-the-shape threshold scales
+                                    ; with the distance typed: this
+                                    ; fraction of it, or *CAB-ON-EPS*,
+                                    ; whichever is larger.  If 4 inches
+                                    ; of error is accepted, a point an
+                                    ; inch off is plainly still ON the
+                                    ; shape - counting it as a miss
+                                    ; would burn the whole allowance on
+                                    ; the first span
+(setq *CAB-ANCHOR-EPS*   (* 2.0 *CAB-FIT-EPS*)) ; an arc "passes
+                                    ; through" an interior survey point
+                                    ; when the point sits within this
+                                    ; of it - twice the fit epsilon, so
+                                    ; a nice-radius snap of a hair
+                                    ; still counts as anchored
+(setq *CAB-CAP-RELAX*    1.4)        ; when a fit needs more curves
+                                    ; than the cap allows, the whole
+                                    ; run is refitted with the distance
+                                    ; multiplied by this, again and
+                                    ; again, until the cap holds.
+                                    ; Nearer 1 = finer steps, more
+                                    ; refits, a result closer to the cap
+(setq *CAB-CAP-TRIES*    40)         ; ...and at most this many refits;
+                                    ; the fewest-curves result seen is
+                                    ; kept when the cap is still unmet
+(setq *CAB-BULGE-CLAMP*  1.373)      ; the half-angle a tangent-window
+                                    ; edge, or a span's own permitted
+                                    ; turn, may reach (radians): its
+                                    ; tangent is a bulge of about 5, an
+                                    ; arc sweeping some 314 degrees.
+                                    ; Keeps U-turn geometry finite
+(setq *CAB-STRAIGHT-R*   1.0e6)      ; an arc whose radius reaches this
+                                    ; is a straight line for every
+                                    ; practical purpose: it is not
+                                    ; snapped to a nice radius
 (if (null *CAB-TOL*) (setq *CAB-TOL* 1.0)) ; default tolerance, 1 inch
 ;; *CAB-MAX-ARCS* : cap on the number of curved segments in the output;
 ;; nil = no cap.  The command prompts for it (Enter keeps the current
@@ -714,7 +758,7 @@
   (setq r0   (cab:bulge-radius a b bl)
         h    (/ (cal:dist a b) 2.0)
         best nil)
-  (if (and r0 (< r0 1.0e6))       ; a huge radius is basically straight
+  (if (and r0 (< r0 *CAB-STRAIGHT-R*))       ; a huge radius is basically straight
     (foreach tier *CAB-NICE-RADII*
       (if (null best)
         (progn
@@ -1162,8 +1206,8 @@
 (defun cab:tang-window (te a b wf / tt phi alo ahi lo hi)
   (setq tt  (* *CAB-TANG-TOL* wf)
         phi (cal:signed-dang te (angle a b))
-        alo (max (min (/ (- phi tt) 2.0) 1.373) -1.373)
-        ahi (max (min (/ (+ phi tt) 2.0) 1.373) -1.373)
+        alo (max (min (/ (- phi tt) 2.0) *CAB-BULGE-CLAMP*) (- *CAB-BULGE-CLAMP*))
+        ahi (max (min (/ (+ phi tt) 2.0) *CAB-BULGE-CLAMP*) (- *CAB-BULGE-CLAMP*))
         lo  (cal:tan alo)
         hi  (cal:tan ahi))
   (if (<= lo hi) (cons lo hi) (cons hi lo)))
@@ -1174,8 +1218,8 @@
 (defun cab:end-window (ts0 a b wf / tt psi alo ahi lo hi)
   (setq tt  (* *CAB-TANG-TOL* wf)
         psi (cal:signed-dang (angle a b) ts0)
-        alo (max (min (/ (- psi tt) 2.0) 1.373) -1.373)
-        ahi (max (min (/ (+ psi tt) 2.0) 1.373) -1.373)
+        alo (max (min (/ (- psi tt) 2.0) *CAB-BULGE-CLAMP*) (- *CAB-BULGE-CLAMP*))
+        ahi (max (min (/ (+ psi tt) 2.0) *CAB-BULGE-CLAMP*) (- *CAB-BULGE-CLAMP*))
         lo  (cal:tan alo)
         hi  (cal:tan ahi))
   (if (<= lo hi) (cons lo hi) (cons hi lo)))
@@ -1239,7 +1283,7 @@
 ;; far as they turn, plus *CAB-ARC-SLACK*.  A span between two
 ;; neighbours covers no turn, so it gets the slack alone.
 (defun cab:max-bulge (a b qs)
-  (cal:tan (min (/ (+ (cab:span-turn a b qs) *CAB-ARC-SLACK*) 4.0) 1.373)))
+  (cal:tan (min (/ (+ (cab:span-turn a b qs) *CAB-ARC-SLACK*) 4.0) *CAB-BULGE-CLAMP*)))
 
 ;; Clamp bulge B to +/- MX.
 (defun cab:cap-b (b mx)
@@ -1384,7 +1428,7 @@
   ;; an arc that floats between the points has to earn its keep:
   ;; only take it when it covers at least 2 more points than the
   ;; longest arc that passes exactly through a point
-  (if (and bstx best (< (car best) (+ (car bstx) 2)))
+  (if (and bstx best (< (car best) (+ (car bstx) *CAB-FLOAT-GAIN*)))
     (setq best bstx))
   best)
 
@@ -1495,7 +1539,7 @@
         (if (and alt
                  (> (nth 4 alt) 0)
                  (>= (car alt) (+ (if best (car best) 1)
-                                  (* 2 (nth 4 alt)))))
+                                  (* *CAB-DROP-GAIN* (nth 4 alt)))))
           (setq best alt))))
     (if (null best)
       ;; Stub to the very next point.  One stub carries the incoming
@@ -1545,14 +1589,14 @@
               dev0 (cab:span-dev a bnd bl qs)
               anch (and qs
                         (<= (cab:span-min a bnd bl qs)
-                            (* 2.0 *CAB-FIT-EPS*)))
+                            *CAB-ANCHOR-EPS*))
               sn   (cab:snap-arc a bnd bl qs
                                 (max dev0 *CAB-SNAP-EPS*) left win))
         (if (and sn
                  (<= (abs (car sn)) (cab:max-bulge a bnd qs))
                  (or (not anch)
                      (<= (cab:span-min a bnd (car sn) qs)
-                         (* 2.0 *CAB-FIT-EPS*))))
+                         *CAB-ANCHOR-EPS*)))
           (setq best (list len (car sn) (cdr sn) win (nth 4 best))))
         (setq stub nil)))
     (setq len  (car best)
@@ -1584,7 +1628,7 @@
 ;; threshold is bound here so it tracks this pass's tolerance.
 (defun cab:fit-pass (tour tol left drop pro / segs k1 sl te0 segs2
                                              cab-on-eps)
-  (setq cab-on-eps (max *CAB-ON-EPS* (* 0.25 tol))
+  (setq cab-on-eps (max *CAB-ON-EPS* (* *CAB-ON-FRAC* tol))
         segs      (cab:span-loop tour tol left drop nil pro)
         k1        (cab:seam-kink segs))
   (if (> k1 (+ *CAB-TANG-TOL* 0.001))
@@ -1621,8 +1665,8 @@
   (if maxarcs
     (progn
       (setq tol2 tol tries 0)
-      (while (and (> (cab:arc-count segs) maxarcs) (< tries 40))
-        (setq tol2  (* tol2 1.4)
+      (while (and (> (cab:arc-count segs) maxarcs) (< tries *CAB-CAP-TRIES*))
+        (setq tol2  (* tol2 *CAB-CAP-RELAX*)
               tries (1+ tries)
               segs2 (cab:fit-pass tour tol2 1000000 drop nil))
         (if (< (cab:arc-count segs2) (cab:arc-count segs))
@@ -1706,7 +1750,7 @@
 ;; T when R is a whole multiple of one of the *CAB-NICE-RADII* tiers.
 (defun cab:nice-radius-p (r / found tier q)
   (setq found nil)
-  (if (and r (< r 1.0e6))
+  (if (and r (< r *CAB-STRAIGHT-R*))
     (foreach tier *CAB-NICE-RADII*
       (setq q (/ r tier))
       (if (< (abs (- q (fix (+ q 0.5)))) 1.0e-6) (setq found T))))
@@ -1962,7 +2006,7 @@
                                                 ns i te ts kk mk nk
                                                 hw hq cab-on-eps)
   ;; report against the same on-the-shape threshold the fit used
-  (setq cab-on-eps (max *CAB-ON-EPS* (* 0.25 tol)))
+  (setq cab-on-eps (max *CAB-ON-EPS* (* *CAB-ON-FRAC* tol)))
   (progn
       ;; -- segment mix, nice radii, arcs anchored on a point --------
       (setq nl 0 na 0 nice 0 onpt 0)
@@ -1979,7 +2023,7 @@
             (foreach q pts
               (if (and (> (cal:dist q (car s)) *CAB-EXACT-EPS*)
                        (> (cal:dist q (cadr s)) *CAB-EXACT-EPS*)
-                       (<= (cab:seg-dist q s) (* 2.0 *CAB-FIT-EPS*)))
+                       (<= (cab:seg-dist q s) *CAB-ANCHOR-EPS*))
                 (setq inner T)))
             (if inner (setq onpt (1+ onpt))))))
       ;; -- how the survey points landed ------------------------------
@@ -2192,7 +2236,7 @@
                (cal:ceil (* *CAB-DROP-PCT*
                            (length (if tour tour pts)))))
         cab-miss-left left
-        cab-on-eps    (max *CAB-ON-EPS* (* 0.25 ftol)))
+        cab-on-eps    (max *CAB-ON-EPS* (* *CAB-ON-FRAC* ftol)))
   (if tour
     (cab:coarse-loop tour ftol cap left drop (not (= mode "few")))
     (cab:guided-fit loop pts dpts tol ftol left drop cap)))
@@ -2256,7 +2300,7 @@
   (cal:ensure-layer *CAB-OUT-LAYER* 3)
   ;; every candidate is judged against the distance the user typed, so
   ;; "off the line" means the same thing in all three rows
-  (setq onv (max *CAB-ON-EPS* (* 0.25 tol)))
+  (setq onv (max *CAB-ON-EPS* (* *CAB-ON-FRAC* tol)))
   ;; label height: a twentieth of the shape, so it reads at any zoom
   (setq bb  (cab:bbox pts)
         hgt (/ (max (- (caddr bb) (car bb))

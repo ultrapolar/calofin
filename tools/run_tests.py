@@ -48,7 +48,7 @@ EXPECTED_FAILURES = {}
 SLOW = {
     "test_fitabhd.py", "test_pool_runtime.py", "test_pool_form.py",
     "test_oasis.py", "test_cabhd.py", "test_lazform.py", "test_pool_fit.py",
-    "test_abhd_runtime.py",
+    "test_abhd_runtime.py", "test_abhd_contingencies.py",
 }
 
 #: A slow file gets longer before it is called hung: test_fitabhd.py

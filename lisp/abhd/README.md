@@ -24,21 +24,26 @@ every rule or as a drawn on-screen demo.
 
 ## Two files, one lisp
 
-The folder carries the same program twice, byte for byte:
+The same program ships twice, byte for byte:
 
-* **`abhd.lsp`** — the static name, for APPLOAD / autoload stacks
-  that must never change.
-* **`ABHD_MMDDYY_REV##.lsp`** (e.g. `ABHD_081926_REV05.lsp`) — the
-  versioned twin, renamed with every iteration, so you can tell at a
-  glance which revision is sitting in a colleague's stack.
+* **`lisp/abhd/abhd.lsp`** — the static name and the file you edit,
+  for APPLOAD / autoload stacks that must never change.
+* **`releases/abhd_MMDDYY_REV##.lsp`** (e.g.
+  `releases/abhd_090826_REV15.lsp`) — the dated twin, renamed with
+  every iteration, so you can tell at a glance which revision is
+  sitting in a colleague's stack.
 
-Both announce their version on load (`ABHD 081926 REV05 loaded.`),
+Both announce their version on load (`ABHD 090826 REV15 loaded.`),
 taken from `pf:*version*` at the top of the file. When revising:
-edit `abhd.lsp`, bump `pf:*version*` to the new date and REV, delete
-the old twin and copy `abhd.lsp` to the new name. The test suite
-fails if the twins differ, if there is more than one versioned file,
-or if the file name and `pf:*version*` disagree — the convention
-enforces itself.
+edit `abhd.lsp`, bump `pf:*version*` to the new date and REV, then
+**regenerate** — `python3 tools/release_lisp.py` writes the new dated
+twin and prunes the old one, and `python3 tools/mirror_shared.py abhd`
+plus `python3 tools/build_shared_bundle.py` bring the grouped build
+along. Never edit anything under `releases/` by hand; it is generated,
+and `tools/check_standards.py` fails a stale or hand-edited copy. The
+test suite fails too if the twins differ, if there is more than one
+dated copy, or if the file name and `pf:*version*` disagree — the
+convention enforces itself.
 
 ## TUTORIALABHD — the guided introduction
 
@@ -220,17 +225,78 @@ draw the most curves — or the fewest — would be asking a question and
 then overruling the answer. See
 [Pick the one that looks right](#pick-the-one-that-looks-right).
 
-All thresholds are constants at the top of `abhd.lsp`
-(`*PF-MISS-PCT*`, `*PF-ON-EPS*`, `*PF-SNAP-EPS*`, `*PF-CORNER-ANG*`,
-`*PF-NICE-RADII*`, `*PF-TANG-TOL*`, `*PF-ARC-SLACK*`, `*PF-DROP-PCT*`,
-`*PF-DROP-MULT*`), as are the layer names
-(`*PF-POOL-LAYER*`, `*PF-POINT-LAYER*`, `*PF-OUT-LAYER*`). The
+Every one of these is a named constant in the configuration block at
+the top of `abhd.lsp` — see [Tunables](#tunables). The
 defaults were calibrated against a real hand-drawn as-built trace
 (55 `ab_pt` points, 37×16 ft pool, ~20″ point spacing). On that
 survey the automatic fit uses **19 arcs where the hand trace used
 23**, stays within about an inch of it everywhere, puts **9 of 10
 arcs through a survey point**, and lands **three-quarters of its
 radii on whole feet, half feet or inches** (the hand trace: 1 of 23).
+
+## Tunables
+
+**Everything modifiable is in one block at the top of `abhd.lsp`**,
+above the `end of configuration` rule, with a comment on each saying
+what moving it does. Nothing below that rule is meant to be edited to
+change behaviour: if a number in the body reads like a setting, it
+belongs up there. The block is in three groups.
+
+**1. Drawing setup** — what ABHD reads and where it writes.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `*PF-POOL-LAYER*` / `*PF-POOL-COLOUR*` | `"POOL"` / 4 | Layer of the drawn guide, and where the kept fit, the bottom and its dims land |
+| `*PF-POINT-LAYER*` / `*PF-POINT-COLOUR*` | `"POINTS"` / 7 | Layer of plain survey `POINT`s (`ab_pt` blocks count on any layer) |
+| `*PF-POINT-BLOCK*` | `"ab_pt"` | Block whose inserts are survey points |
+| `*PF-PT-TAG*` | `"number"` | Attribute tag carrying the point number |
+| `*PF-OUT-LAYER*` / `*PF-OUT-COLOUR*` | `"POOL-FIT"` / 3 | Layer the three candidates preview on |
+| `*PF-MISS-LAYER*` / `*PF-MISS-COLOUR*` | `"FGStep"` / 1 | Layer for the unheld-point rings and their list |
+| `*PF-MISS-RADIUS*` / `*PF-HOLD-RADIUS*` | `4.0` / half of it | Ring sizes: a miss / corner / omitted point, and a held point |
+| `*PF-WALL-LAYER*` / `*PF-WALL-COLOUR*` | `"POOL-WALLS"` / 8 | Layer for the dashed declaration markers |
+| `*PF-BOTTOM-LAYER*` | `"POOL-BOTTOM"` | Legacy: where older versions put the bottom. Nothing is written there now — `ADAB` only skips it when reading a selection |
+| `*PF-MARK-LTYPE*` / `*PF-STUB-LTYPE*` | `"DASHED"` / `"DASHED2"` | Linetype of those markers, and of the deep-break stubs |
+| `*PF-DIM-FTIN*` / `*PF-DIM-IN*` | `"SIDE DIMENSION"` / `"STANDARD INCHES"` | Dim style picked by how an offset was typed |
+| `*PF-DIM-OFF*` | `12.0` | How far off the deep break the K/L/M string sits |
+| `*PF-LABEL-FRAC*` | `20.0` | On-screen text height = the shape's larger extent ÷ this |
+| `*PF-DEFAULT-FIT*` | `"2"` | The candidate `Enter` keeps at the choose prompt |
+| `*PF-SLOW-NOTE*` | `150` | Above this many points it warns the fit will take a while |
+| `*PF-COMPARE*` | 3 rows | The three aims, their colours and their wording |
+
+**2. Fitter tuning** — how the perimeter and the bottom come out.
+`*PF-TOL*`, `*PF-MAX-ARCS*` and `*PF-HOP-OFF*` are the three answers a
+session remembers; they are seeded here and then asked each run.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `*PF-TOL-MAX*` | `2.0` | Hard ceiling on the max-distance prompt (2″) |
+| `*PF-MISS-PCT*` | `0.15` | Standard share of points allowed off (rounded up) |
+| `*PF-ON-EPS*` / `*PF-ON-FRAC*` | `0.25` / `0.25` | Within this — or this fraction of the distance typed, whichever is larger — counts as ON the line |
+| `*PF-TIGHT-TOL*` | `0.01` | What the "tight" candidate fits to |
+| `*PF-FIT-EPS*` / `*PF-ANCHOR-EPS*` | `0.01` / twice it | Split a guided arc that misses by more; how near an arc must pass to count as anchored on a point |
+| `*PF-CORNER-ANG*` | 45° | Turning more than this is a sharp corner |
+| `*PF-NICE-RADII*` | `(12.0 6.0 1.0)` | Radius snap increments: feet, half feet, inches |
+| `*PF-SNAP-EPS*` | `0.02` | How far a nice-radius snap may move a covered point |
+| `*PF-TANG-TOL*` / `*PF-TANG-STEPS*` | 8° / `(1.0 1.25 1.5)` | The tangency window, and how it stretches before a stub |
+| `*PF-ARC-SLACK*` | 60° | How much further than its points turn an arc may sweep |
+| `*PF-FLOAT-GAIN*` | `2` | Extra points a floating arc must cover to beat an exact one |
+| `*PF-DROP-PCT*` / `*PF-DROP-MULT*` / `*PF-DROP-GAIN*` | `0.10` / `2.0` / `2` | The give-up budget: how many, how plainly off, and how much span each must buy |
+| `*PF-CAP-RELAX*` / `*PF-CAP-TRIES*` | `1.4` / `40` | How the curve cap's refits relax the distance, and how often |
+| `*PF-PICK-WARN*` | `3.0` | A pick further than this × the distance from any point is called out |
+| `*PF-PICKUP-EPS*` | `3.0` | How near the loop a point must sit for `ADAB` to take it as one of its own |
+| `*PF-BOTTOM-STEP*` / `*PF-BOTTOM-FIT*` | `6.0` / `0.25` | Hopper sampling step, and how far a sample may sit off the arcs drawn through it |
+
+**3. Guards** — limits that keep the maths finite and the searches
+bounded. Named so each is defined once and can be read, not because
+they want changing: `*PF-EXACT-EPS*` (0.001, "the same point"),
+`*PF-CHAIN-FUZZ*` (1e-4, endpoint matching), `*PF-THIN-EPS*` (0.01,
+folded samples), `*PF-BULGE-CLAMP*` (1.373 rad), `*PF-STRAIGHT-R*`
+(1e6, a radius that is a straight line) and `*PF-2OPT-PASSES*` (40).
+
+The fitter tuning is shared: `LHD` and `CABHD` carry the same span
+fitter word for word under `*LH-` and `*CAB-`, and
+`tests/test_laser_fit.py` and `tests/test_cabhd.py` compare it code
+for code — so a fitter knob changed in one has to change in all three.
 
 ## Usage
 
@@ -670,12 +736,29 @@ dimension-style rules, and the same clean-up on `ESC`.
 
 ## Checking it still works
 
-Run **`python3 tests/test_pool_fit.py`** from the repository root. It
-is a Python mirror of the same geometry and fitting logic, so the
-algorithm can be regression tested outside AutoCAD, and it also parses
-`abhd.lsp` to verify the parentheses balance, that no function is
-called undefined or defined-but-unused, and that the tuning constants
-in both files still agree.
+Three suites, from the repository root, none of which needs AutoCAD:
+
+* **`python3 tests/test_pool_fit.py`** — a Python mirror of the same
+  geometry and fitting logic, so the algorithm can be regression
+  tested outside AutoCAD. It also parses `abhd.lsp` to verify the
+  parentheses balance, that no function is called undefined or
+  defined-but-unused, and that every tuning constant in the two files
+  still agrees.
+* **`python3 tests/test_abhd_runtime.py`** — loads `abhd.lsp` itself
+  into `tests/lispvm.py` and compares the real fitter against that
+  mirror segment for segment, so a change made to one side and not the
+  other dies there.
+* **`python3 tests/test_abhd_contingencies.py`** — drives `ABHD`,
+  `ABHDCOVER` and `ADAB` through the paths a *bad* drawing takes: the
+  empty selection, two points, a perimeter with a gap, a SPLINE, a
+  tilted UCS, a distance past the ceiling, a percentage over 100, a
+  pick nowhere near a survey point, a break picked twice on one point,
+  a bottom cancelled halfway, and a `Redo` that omits a point and puts
+  it back. Each is read for the message a drafter is meant to act on,
+  and for the drawing being left as it was found.
+
+Prefix any of them with `CALOFIN_LISP_ROOT=shared` to run the same
+checks against the grouped build.
 
 ## Troubleshooting
 

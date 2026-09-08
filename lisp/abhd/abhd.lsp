@@ -154,68 +154,115 @@
 ;;; stubs dashed).
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-(setq pf:*version*      "090126 REV14") ; announced on load.  The
+;;; ===================================================================
+;;; CONFIGURATION  --  every knob the tool has, in one place
+;;; -------------------------------------------------------------------
+;;; Nothing below the "end of configuration" rule is meant to be edited
+;;; to change how ABHD behaves: if a number in the body still reads
+;;; like a setting, it belongs up here.  Three groups, in the order a
+;;; drafter is likely to need them:
+;;;
+;;;   1. DRAWING SETUP  - what the tool reads and where it writes: the
+;;;      layer names and colours, the point block and its tag, the
+;;;      linetypes, the dimension styles, and how the candidate pick
+;;;      and its on-screen labels look.
+;;;   2. FITTER TUNING  - the distances, shares, angles and gains that
+;;;      decide how the perimeter and the bottom come out.  Calibrated
+;;;      against a real hand-drawn as-built trace; each entry says what
+;;;      moving it does.  The same span fitter lives in LHD (*LH-*) and
+;;;      CABHD (*CAB-*) word for word and the tests hold the three
+;;;      equal, so a fitter knob changed here is changed there too.
+;;;   3. GUARDS  - limits that keep the maths finite and the searches
+;;;      bounded.  Named so each is defined once and can be read, not
+;;;      because it wants changing.
+;;;
+;;; Drawing units are inches throughout.  Three values are remembered
+;;; from run to run (the max distance, the curve cap, the hopper
+;;; offset): those are set only when unset, so reloading the file does
+;;; not forget them.  The practice pool TUTORIALABHD draws is fixed on
+;;; purpose and has no knobs.
+;;; ===================================================================
+
+;; ---- 1. DRAWING SETUP ----------------------------------------------
+(setq pf:*version*      "090826 REV15") ; announced on load.  The
                                     ; versioned twin of this file is
-                                    ; named ABHD_<MMDDYY>_REV<##>.lsp
+                                    ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
                                     ; is in a colleague's stack; bump
                                     ; this with every revision and
-                                    ; re-copy the file so the twins
-                                    ; stay identical (the tests check
-                                    ; the name, the match, and this)
-;; Cover mode: the pool-bottom question in pf:bottom answers No without
-;; being asked, so a cover sheet is fitted to its perimeter and stops
-;; there.  Set by ABHDCOVER, cleared on both exits from c:ABHD; nil for
-;; a typed ABHD, always.
+                                    ; regenerate releases/ (the tests
+                                    ; check the name, the match, and
+                                    ; this)
+;; Run state, not a setting: cover mode.  The pool-bottom question in
+;; pf:bottom answers No without being asked, so a cover sheet is fitted
+;; to its perimeter and stops there.  Set by ABHDCOVER, cleared on both
+;; exits from c:ABHD; nil for a typed ABHD, always.
 (setq abhd:*nobottom* nil)
 
+;; Layers.  Each is created if missing, in the colour beside it; one
+;; that already exists keeps its own colour but is thawed, unlocked and
+;; switched on so a run is never invisible.  Colours are AutoCAD colour
+;; indices (1 red, 2 yellow, 3 green, 4 cyan, 7 white, 8 grey).
 (setq *PF-POOL-LAYER*   "POOL")     ; layer holding the drawn perimeter
+                                    ; guide, and where the kept fit,
+                                    ; the bottom and its dims end up
+(setq *PF-POOL-COLOUR*  4)          ; ...its colour when ABHD creates it
 (setq *PF-POINT-LAYER*  "POINTS")   ; layer holding the survey points
+                                    ; as plain POINT entities (ab_pt
+                                    ; blocks count on ANY layer)
+(setq *PF-POINT-COLOUR* 7)          ; ...its colour; only the tutorial
+                                    ; ever creates it, for the practice
+                                    ; survey
 (setq *PF-POINT-BLOCK*  "ab_pt")    ; block name whose INSERTs mark survey
                                     ; points; the block's insertion point
                                     ; is taken as the point location
-(setq *PF-OUT-LAYER*    "POOL-FIT") ; layer the fitted polyline goes on
+(setq *PF-PT-TAG*       "number")   ; attribute tag on the point block
+                                    ; holding the surveyed point number,
+                                    ; used to label it as "Pt.17"; a
+                                    ; block without it is numbered in
+                                    ; selection order
+(setq *PF-OUT-LAYER*    "POOL-FIT") ; layer the three candidate fits
+                                    ; preview on, with their labels
+(setq *PF-OUT-COLOUR*   3)          ; ...its colour when ABHD creates it
+                                    ; (each candidate carries its own,
+                                    ; see *PF-COMPARE* below)
 (setq *PF-MISS-LAYER*   "FGStep")   ; layer the "could not hold this
                                     ; point" circles and their list go
                                     ; on.  This may well be a layer you
                                     ; already use, so ABHD stamps the
                                     ; objects it makes and only ever
                                     ; erases its own (see pf:tag-mine)
-(setq *PF-MISS-RADIUS*  4.0)        ; radius of those circles (4 inches)
-(setq *PF-PT-TAG*       "number")   ; attribute tag on the point block
-                                    ; holding the surveyed point number,
-                                    ; used to label it as "Pt.17"
+(setq *PF-MISS-COLOUR*  1)          ; ...its colour when ABHD creates it
+(setq *PF-MISS-RADIUS*  4.0)        ; radius of those circles (4 inches);
+                                    ; also the ring on a declared corner
+                                    ; and on a point omitted at a Redo
+(setq *PF-HOLD-RADIUS*  (* 0.5 *PF-MISS-RADIUS*)) ; the ring on a HELD
+                                    ; point - half size, so it reads
+                                    ; apart from a corner ring.  Worked
+                                    ; out from the line above as the
+                                    ; file loads
 (setq *PF-WALL-LAYER*   "POOL-WALLS"); layer the dashed markers for
-                                    ; user-declared straight walls go on
-(setq *PF-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
-                                    ; prompt (2 inches): further than
-                                    ; that and the line is no longer a
-                                    ; trace of the points
+                                    ; declared straight walls, corners
+                                    ; and held points go on (scaffolding:
+                                    ; swept when the command ends)
+(setq *PF-WALL-COLOUR*  8)          ; ...its colour when ABHD creates it
 (setq *PF-BOTTOM-LAYER* "POOL-BOTTOM") ; legacy: where earlier versions
                                     ; of this command put the bottom
                                     ; geometry and dims.  Everything
                                     ; goes on *PF-POOL-LAYER* now, but
                                     ; ADAB still skips this layer when
                                     ; reading a selection
-(setq *PF-BOTTOM-STEP*  6.0)        ; sampling step for the hopper
-                                    ; offset curve (6 inches keeps it
-                                    ; smooth without a heavy polyline)
-(setq *PF-BOTTOM-FIT*   0.25)       ; merging those samples into long
-                                    ; arcs may leave no sample further
-                                    ; than this off the drawn curve (a
-                                    ; quarter inch - invisible at pool
-                                    ; scale, a big cut in arc count)
-(setq *PF-PICKUP-EPS*   3.0)        ; a survey point within this of the
-                                    ; selected perimeter counts as one
-                                    ; of ITS points when ADAB gathers
-                                    ; or trims them (3 in - genuine
-                                    ; edge points sit within the fit
-                                    ; tolerance, depth shots and deck
-                                    ; points are feet away)
-(if (null *PF-HOP-OFF*) (setq *PF-HOP-OFF* 18.0)) ; default hopper
-                                    ; offset (18 in), remembered per
-                                    ; session like the tolerance
+(setq *PF-MARK-LTYPE*   "DASHED")   ; linetype of the wall markers and
+                                    ; the corner / held / omitted rings.
+                                    ; A linetype the drawing already has
+                                    ; is used as it is; a name it lacks
+                                    ; is created with a plain dashed
+                                    ; pattern (pf:ensure-dashed, dashes
+                                    ; sized for an inch drawing)
+(setq *PF-STUB-LTYPE*   "DASHED2")  ; linetype of the two deep-break
+                                    ; stubs (wall to hopper corner);
+                                    ; created the same way, with
+                                    ; half-size dashes
 (setq *PF-DIM-FTIN* "SIDE DIMENSION") ; dimension style stamped on the
                                     ; offset dims NOT anchored to a
                                     ; break point (hopper back, slope
@@ -231,6 +278,27 @@
                                     ; hopper-to-wall) sits this far off
                                     ; the deep break line (a foot), on
                                     ; the shallow-end side
+(setq *PF-LABEL-FRAC*   20.0)       ; the on-screen candidate labels
+                                    ; ("1", "2", "3" with their figures)
+                                    ; and the list of unheld points are
+                                    ; sized to the survey: text height =
+                                    ; the shape's larger extent divided
+                                    ; by this.  Smaller = bigger text
+(setq *PF-DEFAULT-FIT*  "2")        ; the candidate Enter keeps at the
+                                    ; choose prompt - "1" (tight), "2"
+                                    ; (as asked) or "3" (few).  The
+                                    ; standard is "2" (STANDARDS
+                                    ; section 3, multi-fit pick).
+                                    ; Anything else would leave Enter
+                                    ; keeping no fit at all, silently,
+                                    ; so a slip here is corrected on
+                                    ; the next line rather than found
+                                    ; in the drawing
+(if (not (member *PF-DEFAULT-FIT* '("1" "2" "3")))
+  (setq *PF-DEFAULT-FIT* "2"))
+(setq *PF-SLOW-NOTE*    150)        ; above this many distinct points
+                                    ; the command says the ordering and
+                                    ; fitting will take a little while
 (setq *PF-COMPARE*                  ; the three candidate fits offered:
   '(("tight" 1 "red"    "most curves - least error")
     ("asked" 2 "yellow" "as asked")
@@ -243,7 +311,7 @@
                                     ;   "tight" - accuracy above all: it
                                     ;     fits to *PF-TIGHT-TOL*, lets no
                                     ;     point miss and ignores both the
-                                    ;     distance typed at step 2 and
+                                    ;     distance typed at step 1 and
                                     ;     the curve cap, so it draws the
                                     ;     most curves and the least error
                                     ;   "asked" - the settings exactly as
@@ -256,27 +324,68 @@
                                     ;     long as that distance permits
                                     ; Colours and wording are yours to
                                     ; edit; the three mode names are not
-(setq *PF-TIGHT-TOL*    0.01)       ; the "tight" candidate's accuracy
-                                    ; target (units) - what it fits to
-                                    ; instead of the distance typed at
-                                    ; step 2, or that distance when it
-                                    ; happens to be tighter still
-(setq *PF-EXACT-EPS*    0.001)      ; "exactly on" threshold (units)
-(setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
-                                    ; points by more than this, split it
-                                    ; into several arcs that hit exactly
-(setq *PF-ON-EPS*       0.25)       ; a point within this of the result
-                                    ; counts as ON it; only points off by
-                                    ; more than this eat into the miss
-                                    ; allowance below.  Calibrated from a
-                                    ; hand-drawn reference trace: ~87% of
-                                    ; its points sat within a quarter inch
+
+;; ---- 2. FITTER TUNING ----------------------------------------------
+;; Remembered for the session - asked each run, Enter keeps the last
+;; answer - so these two are only seeded here, never reset by a reload:
+(if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; the max distance a point may
+                                    ; sit from the fitted line, as first
+                                    ; offered at step 1 in a fresh
+                                    ; session (1 inch)
+(if (null *PF-HOP-OFF*) (setq *PF-HOP-OFF* 18.0)) ; default hopper
+                                    ; offset (18 in); the first offset
+                                    ; typed in a run becomes the next
+                                    ; run's default
+;; *PF-MAX-ARCS* : cap on the number of curved segments in the output;
+;; nil = no cap.  The command prompts for it (Enter keeps the current
+;; value, "None" removes the cap) and remembers it for the session,
+;; like *PF-TOL*.  Nothing to set here - it is nil until asked.
+(setq *PF-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
+                                    ; prompt (2 inches): further than
+                                    ; that and the line is no longer a
+                                    ; trace of the points
 (setq *PF-MISS-PCT*     0.15)       ; share of the points (rounded UP to
                                     ; a whole point) that may sit off the
                                     ; result by up to the tolerance
                                     ; (about an inch by default) - this
                                     ; slack is what buys longer spans and
-                                    ; fewer curves
+                                    ; fewer curves.  Step 2 offers it;
+                                    ; the answer is per run, on purpose
+(setq *PF-ON-EPS*       0.25)       ; a point within this of the result
+                                    ; counts as ON it; only points off by
+                                    ; more than this eat into the miss
+                                    ; allowance above.  Calibrated from a
+                                    ; hand-drawn reference trace: ~87% of
+                                    ; its points sat within a quarter inch
+(setq *PF-ON-FRAC*      0.25)       ; ...and that threshold scales with
+                                    ; the distance typed: this fraction
+                                    ; of it, whichever of the two is the
+                                    ; larger.  If 4 inches of error is
+                                    ; accepted, a point an inch off is
+                                    ; plainly still ON the shape;
+                                    ; counting it as a miss would burn
+                                    ; the whole allowance on the first
+                                    ; span and starve the rest of the
+                                    ; loop into single-point stubs
+(setq *PF-TIGHT-TOL*    0.01)       ; the "tight" candidate's accuracy
+                                    ; target (units) - what it fits to
+                                    ; instead of the distance typed at
+                                    ; step 1, or that distance when it
+                                    ; happens to be tighter still
+(setq *PF-FIT-EPS*      0.01)       ; if a single arc misses any of its
+                                    ; points by more than this, split it
+                                    ; into several arcs that hit exactly
+                                    ; (guided mode)
+(setq *PF-ANCHOR-EPS*   (* 2.0 *PF-FIT-EPS*)) ; an arc "passes through"
+                                    ; an interior survey point when the
+                                    ; point sits within this of it -
+                                    ; twice the fit epsilon, so a
+                                    ; nice-radius snap of a hair still
+                                    ; counts as anchored.  Worked out
+                                    ; from *PF-FIT-EPS* as the file
+                                    ; loads, so edit that one and this
+                                    ; follows; set it here to break the
+                                    ; tie
 (setq *PF-CORNER-ANG*   (/ pi 4.0)) ; a point that turns more than this
                                     ; (45 deg) is a sharp corner: it may
                                     ; start or end a span but never gets
@@ -293,6 +402,12 @@
                                     ; still holds the points; only when
                                     ; none does is the free-fit ("weird")
                                     ; radius kept.
+(setq *PF-SNAP-EPS*     0.02)       ; a nice-radius snap may move the
+                                    ; covered points at most this far
+                                    ; beyond where they already sat, and
+                                    ; it may never pull an arc off its
+                                    ; anchor point entirely - the points
+                                    ; outrank pretty radii
 (setq *PF-TANG-TOL* (/ pi 22.5))    ; wiggle room from perfect
                                     ; tangency at each joint between two
                                     ; arcs (8 degrees).  Being ON the
@@ -334,6 +449,14 @@
                                     ; near the semicircles this fitter
                                     ; used to draw when a tangent got
                                     ; away from it.
+(setq *PF-FLOAT-GAIN*   2)          ; an arc that floats between the
+                                    ; points (its middle on no survey
+                                    ; point) has to earn its keep: it is
+                                    ; taken only when it covers at least
+                                    ; this many more points than the
+                                    ; longest arc that passes exactly
+                                    ; through one.  Whole points; 2
+                                    ; keeps floaters about 1 arc in 10
 (setq *PF-DROP-PCT*     0.10)       ; share of the points (rounded UP)
                                     ; the fit may give up on entirely:
                                     ; left further off than the max
@@ -342,8 +465,8 @@
                                     ; spent only where the walk would
                                     ; otherwise shatter into one-point
                                     ; stubs, and only when each point
-                                    ; given up buys at least two more
-                                    ; points of span - a stray shot is
+                                    ; given up buys enough span (see
+                                    ; *PF-DROP-GAIN*) - a stray shot is
                                     ; worth less than the shape, but
                                     ; the points at large outrank both.
                                     ; Declared corners, wall points and
@@ -362,19 +485,83 @@
                                     ; it the fit would give up the tip
                                     ; of a sparsely shot pool to save
                                     ; one segment.
-(setq *PF-SNAP-EPS*     0.02)       ; a nice-radius snap may move the
-                                    ; covered points at most this far
-                                    ; beyond where they already sat, and
-                                    ; it may never pull an arc off its
-                                    ; anchor point entirely - the points
-                                    ; outrank pretty radii
+(setq *PF-DROP-GAIN*    2)          ; and every point given up must buy
+                                    ; at least this many more points of
+                                    ; span, or it is held after all.
+                                    ; Whole points
+(setq *PF-CAP-RELAX*    1.4)        ; when a fit needs more curves than
+                                    ; the cap allows, the whole loop is
+                                    ; refitted with the distance
+                                    ; multiplied by this, again and
+                                    ; again, until the cap holds.
+                                    ; Nearer 1 = finer steps, more
+                                    ; refits, a result closer to the
+                                    ; cap; larger = coarser and quicker
+(setq *PF-CAP-TRIES*    40)         ; ...and at most this many refits;
+                                    ; the fewest-curves result seen is
+                                    ; kept when the cap is still not
+                                    ; met.  40 steps of 1.4 let the
+                                    ; distance grow about 700,000-fold,
+                                    ; so a cap unmet by then is
+                                    ; genuinely unreachable
+(setq *PF-PICK-WARN*    3.0)        ; a picked point (wall end, corner,
+                                    ; held point, break point, slope
+                                    ; waypoint) snaps to the nearest
+                                    ; survey point; one picked further
+                                    ; than this many times the max
+                                    ; distance from any is still snapped
+                                    ; but called out, in case the wrong
+                                    ; point was meant
+(setq *PF-PICKUP-EPS*   3.0)        ; a survey point within this of the
+                                    ; selected perimeter counts as one
+                                    ; of ITS points when ADAB gathers
+                                    ; or trims them (3 in - genuine
+                                    ; edge points sit within the fit
+                                    ; tolerance, depth shots and deck
+                                    ; points are feet away)
+(setq *PF-BOTTOM-STEP*  6.0)        ; sampling step for the hopper
+                                    ; offset curve (6 inches keeps it
+                                    ; smooth without a heavy polyline);
+                                    ; also how far a slope waypoint may
+                                    ; sit from its side of the pool
+(setq *PF-BOTTOM-FIT*   0.25)       ; merging those samples into long
+                                    ; arcs may leave no sample further
+                                    ; than this off the drawn curve (a
+                                    ; quarter inch - invisible at pool
+                                    ; scale, a big cut in arc count)
+
+;; ---- 3. GUARDS ------------------------------------------------------
+(setq *PF-EXACT-EPS*    0.001)      ; "exactly on" threshold (units):
+                                    ; two points closer than this are
+                                    ; the same point - duplicates
+                                    ; collapse, picks match, held and
+                                    ; declared points are found by it
 (setq *PF-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
-                                    ; chaining exploded segments
-(if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; default tolerance, 1 inch
-;; *PF-MAX-ARCS* : cap on the number of curved segments in the output;
-;; nil = no cap.  The command prompts for it (Enter keeps the current
-;; value, "None" removes the cap) and remembers it for the session,
-;; like *PF-TOL*.
+                                    ; chaining exploded segments into
+                                    ; one closed loop
+(setq *PF-THIN-EPS*     0.01)       ; consecutive samples of an offset
+                                    ; curve closer than this (a
+                                    ; hundredth) collapse to one - a
+                                    ; tight offset can fold neighbouring
+                                    ; samples onto each other
+(setq *PF-BULGE-CLAMP*  1.373)      ; the half-angle a tangent-window
+                                    ; edge, or a span's own permitted
+                                    ; turn, may reach (radians): its
+                                    ; tangent is a bulge of about 5, an
+                                    ; arc sweeping some 314 degrees.
+                                    ; Keeps U-turn geometry finite;
+                                    ; anything real sits far below it
+(setq *PF-STRAIGHT-R*   1.0e6)      ; an arc whose radius reaches this
+                                    ; is a straight line for every
+                                    ; practical purpose: it is not
+                                    ; snapped to a nice radius and is
+                                    ; not reported as sitting on one
+(setq *PF-2OPT-PASSES*  40)         ; the automatic point ordering
+                                    ; uncrosses its loop with 2-opt
+                                    ; passes until one improves nothing,
+                                    ; or this many have run - a bound
+                                    ; on the search, not a target
+;; ---- end of configuration ------------------------------------------
 
 ;; ---- small 2D vector helpers ---------------------------------------
 (defun pf:2d (p) (list (car p) (cadr p)))
@@ -768,7 +955,7 @@
   (setq r0   (pf:bulge-radius a b bl)
         h    (/ (pf:dist a b) 2.0)
         best nil)
-  (if (and r0 (< r0 1.0e6))       ; a huge radius is basically straight
+  (if (and r0 (< r0 *PF-STRAIGHT-R*))       ; a huge radius is basically straight
     (foreach tier *PF-NICE-RADII*
       (if (null best)
         (progn
@@ -919,7 +1106,7 @@
         n    (length tour)
         pass 0
         improved T)
-  (while (and improved (< pass 40))
+  (while (and improved (< pass *PF-2OPT-PASSES*))
     (setq improved nil pass (1+ pass) i 0)
     (while (< i (1- n))
       (setq j (1+ i))
@@ -1061,8 +1248,8 @@
 (defun pf:tang-window (te a b wf / tt phi alo ahi lo hi)
   (setq tt  (* *PF-TANG-TOL* wf)
         phi (pf:signed-dang te (angle a b))
-        alo (max (min (/ (- phi tt) 2.0) 1.373) -1.373)
-        ahi (max (min (/ (+ phi tt) 2.0) 1.373) -1.373)
+        alo (max (min (/ (- phi tt) 2.0) *PF-BULGE-CLAMP*) (- *PF-BULGE-CLAMP*))
+        ahi (max (min (/ (+ phi tt) 2.0) *PF-BULGE-CLAMP*) (- *PF-BULGE-CLAMP*))
         lo  (pf:tan alo)
         hi  (pf:tan ahi))
   (if (<= lo hi) (cons lo hi) (cons hi lo)))
@@ -1073,8 +1260,8 @@
 (defun pf:end-window (ts0 a b wf / tt psi alo ahi lo hi)
   (setq tt  (* *PF-TANG-TOL* wf)
         psi (pf:signed-dang (angle a b) ts0)
-        alo (max (min (/ (- psi tt) 2.0) 1.373) -1.373)
-        ahi (max (min (/ (+ psi tt) 2.0) 1.373) -1.373)
+        alo (max (min (/ (- psi tt) 2.0) *PF-BULGE-CLAMP*) (- *PF-BULGE-CLAMP*))
+        ahi (max (min (/ (+ psi tt) 2.0) *PF-BULGE-CLAMP*) (- *PF-BULGE-CLAMP*))
         lo  (pf:tan alo)
         hi  (pf:tan ahi))
   (if (<= lo hi) (cons lo hi) (cons hi lo)))
@@ -1138,7 +1325,7 @@
 ;; far as they turn, plus *PF-ARC-SLACK*.  A span between two
 ;; neighbours covers no turn, so it gets the slack alone.
 (defun pf:max-bulge (a b qs)
-  (pf:tan (min (/ (+ (pf:span-turn a b qs) *PF-ARC-SLACK*) 4.0) 1.373)))
+  (pf:tan (min (/ (+ (pf:span-turn a b qs) *PF-ARC-SLACK*) 4.0) *PF-BULGE-CLAMP*)))
 
 ;; Clamp bulge B to +/- MX.
 (defun pf:cap-b (b mx)
@@ -1283,7 +1470,7 @@
   ;; an arc that floats between the points has to earn its keep:
   ;; only take it when it covers at least 2 more points than the
   ;; longest arc that passes exactly through a point
-  (if (and bstx best (< (car best) (+ (car bstx) 2)))
+  (if (and bstx best (< (car best) (+ (car bstx) *PF-FLOAT-GAIN*)))
     (setq best bstx))
   best)
 
@@ -1394,7 +1581,7 @@
         (if (and alt
                  (> (nth 4 alt) 0)
                  (>= (car alt) (+ (if best (car best) 1)
-                                  (* 2 (nth 4 alt)))))
+                                  (* *PF-DROP-GAIN* (nth 4 alt)))))
           (setq best alt))))
     (if (null best)
       ;; Stub to the very next point.  One stub carries the incoming
@@ -1444,14 +1631,14 @@
               dev0 (pf:span-dev a bnd bl qs)
               anch (and qs
                         (<= (pf:span-min a bnd bl qs)
-                            (* 2.0 *PF-FIT-EPS*)))
+                            *PF-ANCHOR-EPS*))
               sn   (pf:snap-arc a bnd bl qs
                                 (max dev0 *PF-SNAP-EPS*) left win))
         (if (and sn
                  (<= (abs (car sn)) (pf:max-bulge a bnd qs))
                  (or (not anch)
                      (<= (pf:span-min a bnd (car sn) qs)
-                         (* 2.0 *PF-FIT-EPS*))))
+                         *PF-ANCHOR-EPS*)))
           (setq best (list len (car sn) (cdr sn) win (nth 4 best))))
         (setq stub nil)))
     (setq len  (car best)
@@ -1483,7 +1670,7 @@
 ;; threshold is bound here so it tracks this pass's tolerance.
 (defun pf:fit-pass (tour tol left drop pro / segs k1 sl te0 segs2
                                              pf-on-eps)
-  (setq pf-on-eps (max *PF-ON-EPS* (* 0.25 tol))
+  (setq pf-on-eps (max *PF-ON-EPS* (* *PF-ON-FRAC* tol))
         segs      (pf:span-loop tour tol left drop nil pro)
         k1        (pf:seam-kink segs))
   (if (> k1 (+ *PF-TANG-TOL* 0.001))
@@ -1520,8 +1707,8 @@
   (if maxarcs
     (progn
       (setq tol2 tol tries 0)
-      (while (and (> (pf:arc-count segs) maxarcs) (< tries 40))
-        (setq tol2  (* tol2 1.4)
+      (while (and (> (pf:arc-count segs) maxarcs) (< tries *PF-CAP-TRIES*))
+        (setq tol2  (* tol2 *PF-CAP-RELAX*)
               tries (1+ tries)
               segs2 (pf:fit-pass tour tol2 1000000 drop nil))
         (if (< (pf:arc-count segs2) (pf:arc-count segs))
@@ -1635,7 +1822,7 @@
 ;; T when R is a whole multiple of one of the *PF-NICE-RADII* tiers.
 (defun pf:nice-radius-p (r / found tier q)
   (setq found nil)
-  (if (and r (< r 1.0e6))
+  (if (and r (< r *PF-STRAIGHT-R*))
     (foreach tier *PF-NICE-RADII*
       (setq q (/ r tier))
       (if (< (abs (- q (fix (+ q 0.5)))) 1.0e-6) (setq found T))))
@@ -1657,7 +1844,7 @@
 ;; colour and the preview layer both belonged to the comparison - the
 ;; result belongs with the pool.
 (defun pf:set-bylayer (en / ed)
-  (pf:ensure-layer *PF-POOL-LAYER* 4)
+  (pf:ensure-layer *PF-POOL-LAYER* *PF-POOL-COLOUR*)
   (setq ed (entget en)
         ed (subst (cons 8 *PF-POOL-LAYER*) (assoc 8 ed) ed))
   (if (assoc 62 ed) (setq ed (subst '(62 . 256) (assoc 62 ed) ed)))
@@ -1764,10 +1951,10 @@
 ;; calls).  Dash lengths are in drawing units - sized for an inch
 ;; drawing, so the dashes read at pool scale.
 (defun pf:ensure-dashed ()
-  (if (not (tblsearch "LTYPE" "DASHED"))
+  (if (not (tblsearch "LTYPE" *PF-MARK-LTYPE*))
     (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLinetypeTableRecord")
-                   '(2 . "DASHED") '(70 . 0)
+                   (cons 2 *PF-MARK-LTYPE*) '(70 . 0)
                    '(3 . "Dashed __ __ __ __ __")
                    '(72 . 65) '(73 . 2) '(40 . 18.0)
                    '(49 . 12.0) '(74 . 0)
@@ -1776,9 +1963,9 @@
 ;; Draw the dashed ring marking a user-declared sharp corner.
 (defun pf:draw-corner-marker (p)
   (pf:ensure-dashed)
-  (pf:ensure-layer *PF-WALL-LAYER* 8)
+  (pf:ensure-layer *PF-WALL-LAYER* *PF-WALL-COLOUR*)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                  (cons 8 *PF-WALL-LAYER*) '(6 . "DASHED")
+                  (cons 8 *PF-WALL-LAYER*) (cons 6 *PF-MARK-LTYPE*)
                   '(100 . "AcDbCircle")
                   (cons 10 (list (car p) (cadr p) 0.0))
                   (cons 40 *PF-MISS-RADIUS*))))
@@ -1787,19 +1974,19 @@
 ;; half the miss-ring radius, so it reads apart from corner rings.
 (defun pf:draw-hold-marker (p)
   (pf:ensure-dashed)
-  (pf:ensure-layer *PF-WALL-LAYER* 8)
+  (pf:ensure-layer *PF-WALL-LAYER* *PF-WALL-COLOUR*)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                  (cons 8 *PF-WALL-LAYER*) '(6 . "DASHED")
+                  (cons 8 *PF-WALL-LAYER*) (cons 6 *PF-MARK-LTYPE*)
                   '(100 . "AcDbCircle")
                   (cons 10 (list (car p) (cadr p) 0.0))
-                  (cons 40 (* 0.5 *PF-MISS-RADIUS*)))))
+                  (cons 40 *PF-HOLD-RADIUS*))))
 
 ;; Draw the dashed marker for a user-declared straight wall.
 (defun pf:draw-wall-marker (p1 p2)
   (pf:ensure-dashed)
-  (pf:ensure-layer *PF-WALL-LAYER* 8)
+  (pf:ensure-layer *PF-WALL-LAYER* *PF-WALL-COLOUR*)
   (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                  (cons 8 *PF-WALL-LAYER*) '(6 . "DASHED")
+                  (cons 8 *PF-WALL-LAYER*) (cons 6 *PF-MARK-LTYPE*)
                   '(100 . "AcDbLine")
                   (cons 10 (list (car p1) (cadr p1) 0.0))
                   (cons 11 (list (car p2) (cadr p2) 0.0)))))
@@ -1859,7 +2046,7 @@
   (pf:purge-mine *PF-MISS-LAYER*)
   (if bad
     (progn
-      (pf:ensure-layer *PF-MISS-LAYER* 1)
+      (pf:ensure-layer *PF-MISS-LAYER* *PF-MISS-COLOUR*)
       ;; rings on the points themselves
       (foreach q bad
         (pf:tag-mine
@@ -1907,7 +2094,7 @@
                                                 ns i te ts kk mk nk
                                                 hw hq pf-on-eps)
   ;; report against the same on-the-shape threshold the fit used
-  (setq pf-on-eps (max *PF-ON-EPS* (* 0.25 tol)))
+  (setq pf-on-eps (max *PF-ON-EPS* (* *PF-ON-FRAC* tol)))
   (progn
       ;; -- segment mix, nice radii, arcs anchored on a point --------
       (setq nl 0 na 0 nice 0 onpt 0)
@@ -1924,7 +2111,7 @@
             (foreach q pts
               (if (and (> (pf:dist q (car s)) *PF-EXACT-EPS*)
                        (> (pf:dist q (cadr s)) *PF-EXACT-EPS*)
-                       (<= (pf:seg-dist q s) (* 2.0 *PF-FIT-EPS*)))
+                       (<= (pf:seg-dist q s) *PF-ANCHOR-EPS*))
                 (setq inner T)))
             (if inner (setq onpt (1+ onpt))))))
       ;; -- how the survey points landed ------------------------------
@@ -2137,7 +2324,7 @@
                (pf:ceil (* *PF-DROP-PCT*
                            (length (if tour tour pts)))))
         pf-miss-left left
-        pf-on-eps    (max *PF-ON-EPS* (* 0.25 ftol)))
+        pf-on-eps    (max *PF-ON-EPS* (* *PF-ON-FRAC* ftol)))
   (if tour
     (pf:coarse-loop tour ftol cap left drop (not (= mode "few")))
     (pf:guided-fit loop pts dpts tol ftol left drop cap)))
@@ -2181,15 +2368,15 @@
                    / prior vars v e ent lab st onv segs bad allbad first
                      i pick idx keep ce bb hgt sel picked keyed pr res)
   (setq prior (pf:prior-fits))
-  (pf:ensure-layer *PF-OUT-LAYER* 3)
+  (pf:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
   ;; every candidate is judged against the distance the user typed, so
   ;; "off the line" means the same thing in all three rows
-  (setq onv (max *PF-ON-EPS* (* 0.25 tol)))
+  (setq onv (max *PF-ON-EPS* (* *PF-ON-FRAC* tol)))
   ;; label height: a twentieth of the shape, so it reads at any zoom
   (setq bb  (pf:bbox pts)
         hgt (/ (max (- (caddr bb) (car bb))
                     (- (cadddr bb) (cadr bb)))
-               20.0))
+               *PF-LABEL-FRAC*))
   (if (<= hgt 0.0) (setq hgt 1.0))
   (setq pf-phase "building the three candidate fits"
         vars     nil
@@ -2288,11 +2475,16 @@
       (princ "\n  Redo refits with new settings, and lets you omit points first.")
       (initget "1 2 3 All None Redo")
       (setq pick (getkword
-                   "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: "))
+                   (strcat "\n  Keep which fit - click one, or"
+                           " [1/2/3/All/None/Redo] <"
+                           *PF-DEFAULT-FIT* ">: ")))
       (if (null pick)
-        ;; no keyword typed: give them a click, and fall back to 2
+        ;; no keyword typed: give them a click, and fall back to the
+        ;; standing default
         (progn
-          (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+          (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
+                                    " Enter for " *PF-DEFAULT-FIT*
+                                    "): ")))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -2303,9 +2495,10 @@
                 (setq i (1+ i)))
               (if (null pick)
                 (progn
-                  (princ "\n  (that is not one of the three - keeping 2)")
-                  (setq pick "2"))))
-            (setq pick "2"))))
+                  (princ (strcat "\n  (that is not one of the three -"
+                                 " keeping " *PF-DEFAULT-FIT* ")"))
+                  (setq pick *PF-DEFAULT-FIT*))))
+            (setq pick *PF-DEFAULT-FIT*))))
       ;; anything not explicitly kept stays registered as scaffolding
       ;; and is swept when the command ends
       (cond
@@ -2525,10 +2718,10 @@
 ;; Make sure the DASHED2 linetype (the half-size dashes marking the
 ;; underwater break stubs) exists - pure entmake, like pf:ensure-dashed.
 (defun pf:ensure-dashed2 ()
-  (if (not (tblsearch "LTYPE" "DASHED2"))
+  (if (not (tblsearch "LTYPE" *PF-STUB-LTYPE*))
     (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLinetypeTableRecord")
-                   '(2 . "DASHED2") '(70 . 0)
+                   (cons 2 *PF-STUB-LTYPE*) '(70 . 0)
                    '(3 . "Dashed (.5x) _ _ _ _ _")
                    '(72 . 65) '(73 . 2) '(40 . 9.0)
                    '(49 . 6.0) '(74 . 0)
@@ -2678,7 +2871,7 @@
   (if (null q)
     p
     (progn
-      (if (> (pf:dist p q) (* 3.0 *PF-TOL*))
+      (if (> (pf:dist p q) (* *PF-PICK-WARN* *PF-TOL*))
         (princ "\n  (picked well away from any survey point - snapped to the nearest one)"))
       q)))
 
@@ -2894,7 +3087,7 @@
 ;; offset can fold neighbouring samples onto each other.
 (defun pf:thin-run (pts / out prev q)
   (foreach q pts
-    (if (or (null prev) (> (pf:dist prev q) 0.01))
+    (if (or (null prev) (> (pf:dist prev q) *PF-THIN-EPS*))
       (setq out (cons q out) prev q)))
   (reverse out))
 
@@ -2940,15 +3133,15 @@
       (if (and (cadr lines) (entget (cadr lines)))
         (entdel (cadr lines)))
       (pf:ensure-dashed2)
-      (pf:ensure-layer *PF-POOL-LAYER* 4)
+      (pf:ensure-layer *PF-POOL-LAYER* *PF-POOL-COLOUR*)
       (setq made (cons (pf:temp-add (pf:tag-mine
-                         (pf:make-line dp1 e1 nil "DASHED2")))
+                         (pf:make-line dp1 e1 nil *PF-STUB-LTYPE*)))
                        made)
             made (cons (pf:temp-add (pf:tag-mine
                          (pf:make-line e1 e2 nil nil)))
                        made)
             made (cons (pf:temp-add (pf:tag-mine
-                         (pf:make-line e2 dp2 nil "DASHED2")))
+                         (pf:make-line e2 dp2 nil *PF-STUB-LTYPE*)))
                        made))
       ;; the hopper outline: the dense samples merge into as few long
       ;; arcs as hold the shape, the back anchor kept as a vertex so
@@ -3043,7 +3236,11 @@
                                                  *PF-DIM-IN*)
                                                nil))
                            wdims))
-        (setq e (pf:make-dim (car q) (cadr q) (caddr q) (cadddr q)))
+        ;; stamped like everything else this command draws: the file's
+        ;; rule is that only ABHD's own objects are ever erased again,
+        ;; and a dimension it made is one of its own
+        (setq e (pf:tag-mine
+                  (pf:make-dim (car q) (cadr q) (caddr q) (cadddr q))))
         (if e
           (setq made (cons (pf:temp-add e) made))
           (setq dimfail T)))
@@ -3241,7 +3438,7 @@
                 ;; they stay scaffolding until the whole flow lands.
                 ;; A re-commit (after a Back) sweeps the old pair first.
                 (foreach e lines (pf:temp-kill e))
-                (pf:ensure-layer *PF-POOL-LAYER* 4)
+                (pf:ensure-layer *PF-POOL-LAYER* *PF-POOL-COLOUR*)
                 (setq lines (list (pf:temp-add (pf:tag-mine
                                     (pf:make-line sp1 sp2 nil nil)))
                                   (pf:temp-add (pf:tag-mine
@@ -3801,8 +3998,8 @@
           ((< (pf:dist w1 w2) *PF-EXACT-EPS*)
            (princ "\n  (both ends of a declared wall landed on the same survey point - that wall is ignored)"))
           (T
-           (if (or (> (pf:dist (car w) w1) (* 3.0 tol))
-                   (> (pf:dist (cadr w) w2) (* 3.0 tol)))
+           (if (or (> (pf:dist (car w) w1) (* *PF-PICK-WARN* tol))
+                   (> (pf:dist (cadr w) w2) (* *PF-PICK-WARN* tol)))
              (princ "\n  (a declared wall end was picked well away from any survey point - snapped to the nearest one)"))
            (setq pf-walls (cons (list w1 w2) pf-walls)))))
       (setq pf-walls (reverse pf-walls))
@@ -3812,7 +4009,7 @@
         (setq w1 (pf:nearest w dpts))
         (if w1
           (progn
-            (if (> (pf:dist w w1) (* 3.0 tol))
+            (if (> (pf:dist w w1) (* *PF-PICK-WARN* tol))
               (princ "\n  (a declared corner was picked well away from any survey point - snapped to the nearest one)"))
             (setq pf-corners (cons w1 pf-corners)))))
       (setq pf-corners (reverse pf-corners))
@@ -3823,12 +4020,12 @@
         (setq w1 (pf:nearest w dpts))
         (if w1
           (progn
-            (if (> (pf:dist w w1) (* 3.0 tol))
+            (if (> (pf:dist w w1) (* *PF-PICK-WARN* tol))
               (princ "\n  (a held point was picked well away from any survey point - snapped to the nearest one)"))
             (if (not (pf:memb w1 pf-holds))
               (setq pf-holds (cons w1 pf-holds))))))
       (setq pf-holds (reverse pf-holds))
-      (if (> (length dpts) 150)
+      (if (> (length dpts) *PF-SLOW-NOTE*)
         (princ (strcat "\nABHD: " (itoa (length dpts))
                        " points - ordering and fitting will take a"
                        " little while, please wait...")))
@@ -4213,7 +4410,7 @@
 ;; CP, drawn as POINTs on the points layer and numbered like ab_pt
 ;; blocks would be.  Returns the points in walking order.
 (defun pf:tut-survey (cp / n i tt r p out)
-  (pf:ensure-layer *PF-POINT-LAYER* 7)
+  (pf:ensure-layer *PF-POINT-LAYER* *PF-POINT-COLOUR*)
   (setq n 44 i 0 out nil)
   (while (< i n)
     (setq tt  (* 2.0 pi (/ (float i) n))
@@ -4350,6 +4547,12 @@
   (if (null cp)
     (princ "\n  (no spot picked - tutorial ended, nothing drawn)")
     (progn
+      ;; the demo draws its captions, its candidates and its labels on
+      ;; the preview layer, and entmake onto a layer the drawing does
+      ;; not have fails - so a first-time drawing, which is exactly who
+      ;; runs a tutorial, got an empty tour.  pf:compare gates the same
+      ;; layer for the same reason
+      (pf:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
       (setq cp   (pf:2d cp)
             npt  0
             tour (pf:tut-survey cp)
@@ -4422,12 +4625,17 @@
             sp1 (pf:curve-near s1 kept) sp2 (pf:curve-near s2 kept)
             dp1 (pf:curve-near d1 kept) dp2 (pf:curve-near d2 kept)
             back (pf:hopper-back dp1 dp2 sp1 sp2 dpts))
-      (pf:ensure-layer *PF-POOL-LAYER* 4)
+      (pf:ensure-layer *PF-POOL-LAYER* *PF-POOL-COLOUR*)
+      ;; where the drawing stood BEFORE the break lines: the walk below
+      ;; has to start behind them, because bottom-draw takes them out
+      ;; of the registry along with its own output.  Started after them
+      ;; instead, the shallow break line was dropped and never picked
+      ;; back up - so a swept demo left one line on the POOL layer
+      (setq q (entlast))
       (setq lines (list (pf:temp-add (pf:tag-mine
                           (pf:make-line sp1 sp2 nil nil)))
                         (pf:temp-add (pf:tag-mine
                           (pf:make-line dp1 dp2 nil nil)))))
-      (setq q (entlast))
       (pf:bottom-draw kept sp1 sp2 dp1 dp2 back 12.0 12.0 18.0 nil
                       lines (list T nil))
       ;; bottom-draw promotes its output out of the scaffolding

@@ -55,7 +55,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v1.9")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.0")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -156,6 +156,50 @@
                                     ; beyond where they already sat
 (setq *LH-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
                                     ; chaining sketch segments
+(setq *LH-FLOAT-GAIN*   2)          ; an arc that floats between the
+                                    ; points (its middle on no survey
+                                    ; point) is taken only when it
+                                    ; covers at least this many more
+                                    ; points than the longest arc that
+                                    ; passes exactly through one
+(setq *LH-DROP-GAIN*    2)          ; and every point given up must buy
+                                    ; at least this many more points of
+                                    ; span, or it is held after all
+(setq *LH-ON-FRAC*      0.25)       ; the on-the-shape threshold scales
+                                    ; with the distance typed: this
+                                    ; fraction of it, or *LH-ON-EPS*,
+                                    ; whichever is larger.  If 4 inches
+                                    ; of error is accepted, a point an
+                                    ; inch off is plainly still ON the
+                                    ; shape - counting it as a miss
+                                    ; would burn the whole allowance on
+                                    ; the first span
+(setq *LH-ANCHOR-EPS*   (* 2.0 *LH-FIT-EPS*)) ; an arc "passes
+                                    ; through" an interior survey point
+                                    ; when the point sits within this
+                                    ; of it - twice the fit epsilon, so
+                                    ; a nice-radius snap of a hair
+                                    ; still counts as anchored
+(setq *LH-CAP-RELAX*    1.4)        ; when a fit needs more curves
+                                    ; than the cap allows, the whole
+                                    ; run is refitted with the distance
+                                    ; multiplied by this, again and
+                                    ; again, until the cap holds.
+                                    ; Nearer 1 = finer steps, more
+                                    ; refits, a result closer to the cap
+(setq *LH-CAP-TRIES*    40)         ; ...and at most this many refits;
+                                    ; the fewest-curves result seen is
+                                    ; kept when the cap is still unmet
+(setq *LH-BULGE-CLAMP*  1.373)      ; the half-angle a tangent-window
+                                    ; edge, or a span's own permitted
+                                    ; turn, may reach (radians): its
+                                    ; tangent is a bulge of about 5, an
+                                    ; arc sweeping some 314 degrees.
+                                    ; Keeps U-turn geometry finite
+(setq *LH-STRAIGHT-R*   1.0e6)      ; an arc whose radius reaches this
+                                    ; is a straight line for every
+                                    ; practical purpose: it is not
+                                    ; snapped to a nice radius
 (if (null *LH-TOL*)   (setq *LH-TOL* 1.0))      ; default tolerance
 (if (null *LH-SHAPE*) (setq *LH-SHAPE* "Closed")) ; closed or open,
                                     ; remembered per session
@@ -462,7 +506,7 @@
   (setq r0   (lh:bulge-radius a b bl)
         h    (/ (cal:dist a b) 2.0)
         best nil)
-  (if (and r0 (< r0 1.0e6))       ; a huge radius is basically straight
+  (if (and r0 (< r0 *LH-STRAIGHT-R*))       ; a huge radius is basically straight
     (foreach tier *LH-NICE-RADII*
       (if (null best)
         (progn
@@ -714,8 +758,8 @@
 (defun lh:tang-window (te a b wf / tt phi alo ahi lo hi)
   (setq tt  (* *LH-TANG-TOL* wf)
         phi (cal:signed-dang te (angle a b))
-        alo (max (min (/ (- phi tt) 2.0) 1.373) -1.373)
-        ahi (max (min (/ (+ phi tt) 2.0) 1.373) -1.373)
+        alo (max (min (/ (- phi tt) 2.0) *LH-BULGE-CLAMP*) (- *LH-BULGE-CLAMP*))
+        ahi (max (min (/ (+ phi tt) 2.0) *LH-BULGE-CLAMP*) (- *LH-BULGE-CLAMP*))
         lo  (cal:tan alo)
         hi  (cal:tan ahi))
   (if (<= lo hi) (cons lo hi) (cons hi lo)))
@@ -726,8 +770,8 @@
 (defun lh:end-window (ts0 a b wf / tt psi alo ahi lo hi)
   (setq tt  (* *LH-TANG-TOL* wf)
         psi (cal:signed-dang (angle a b) ts0)
-        alo (max (min (/ (- psi tt) 2.0) 1.373) -1.373)
-        ahi (max (min (/ (+ psi tt) 2.0) 1.373) -1.373)
+        alo (max (min (/ (- psi tt) 2.0) *LH-BULGE-CLAMP*) (- *LH-BULGE-CLAMP*))
+        ahi (max (min (/ (+ psi tt) 2.0) *LH-BULGE-CLAMP*) (- *LH-BULGE-CLAMP*))
         lo  (cal:tan alo)
         hi  (cal:tan ahi))
   (if (<= lo hi) (cons lo hi) (cons hi lo)))
@@ -789,7 +833,7 @@
 ;; far as they turn, plus *LH-ARC-SLACK*.  A span between two
 ;; neighbours covers no turn, so it gets the slack alone.
 (defun lh:max-bulge (a b qs)
-  (cal:tan (min (/ (+ (lh:span-turn a b qs) *LH-ARC-SLACK*) 4.0) 1.373)))
+  (cal:tan (min (/ (+ (lh:span-turn a b qs) *LH-ARC-SLACK*) 4.0) *LH-BULGE-CLAMP*)))
 
 ;; Clamp bulge B to +/- MX.
 (defun lh:cap-b (b mx)
@@ -934,7 +978,7 @@
   ;; an arc that floats between the points has to earn its keep:
   ;; only take it when it covers at least 2 more points than the
   ;; longest arc that passes exactly through a point
-  (if (and bstx best (< (car best) (+ (car bstx) 2)))
+  (if (and bstx best (< (car best) (+ (car bstx) *LH-FLOAT-GAIN*)))
     (setq best bstx))
   best)
 
@@ -1046,7 +1090,7 @@
         (if (and alt
                  (> (nth 4 alt) 0)
                  (>= (car alt) (+ (if best (car best) 1)
-                                  (* 2 (nth 4 alt)))))
+                                  (* *LH-DROP-GAIN* (nth 4 alt)))))
           (setq best alt))))
     (if (null best)
       ;; Stub to the very next point.  One stub carries the incoming
@@ -1096,14 +1140,14 @@
               dev0 (lh:span-dev a bnd bl qs)
               anch (and qs
                         (<= (lh:span-min a bnd bl qs)
-                            (* 2.0 *LH-FIT-EPS*)))
+                            *LH-ANCHOR-EPS*))
               sn   (lh:snap-arc a bnd bl qs
                                 (max dev0 *LH-SNAP-EPS*) left win))
         (if (and sn
                  (<= (abs (car sn)) (lh:max-bulge a bnd qs))
                  (or (not anch)
                      (<= (lh:span-min a bnd (car sn) qs)
-                         (* 2.0 *LH-FIT-EPS*))))
+                         *LH-ANCHOR-EPS*)))
           (setq best (list len (car sn) (cdr sn) win (nth 4 best))))
         (setq stub nil)))
     (setq len  (car best)
@@ -1214,7 +1258,7 @@
         (if (and alt
                  (> (nth 4 alt) 0)
                  (>= (car alt) (+ (if best (car best) 1)
-                                  (* 2 (nth 4 alt)))))
+                                  (* *LH-DROP-GAIN* (nth 4 alt)))))
           (setq best alt))))
     (if (null best)
       ;; stub to the very next point.  One stub carries the incoming
@@ -1247,14 +1291,14 @@
               dev0 (lh:span-dev a bnd bl qs)
               anch (and qs
                         (<= (lh:span-min a bnd bl qs)
-                            (* 2.0 *LH-FIT-EPS*)))
+                            *LH-ANCHOR-EPS*))
               sn   (lh:snap-arc a bnd bl qs
                                 (max dev0 *LH-SNAP-EPS*) left win))
         (if (and sn
                  (<= (abs (car sn)) (lh:max-bulge a bnd qs))
                  (or (not anch)
                      (<= (lh:span-min a bnd (car sn) qs)
-                         (* 2.0 *LH-FIT-EPS*))))
+                         *LH-ANCHOR-EPS*)))
           (setq best (list len (car sn) (cdr sn) win (nth 4 best))))
         (setq stub nil)))
     (setq len  (car best)
@@ -1284,7 +1328,7 @@
 ;; threshold is bound here so it tracks this pass's tolerance.
 (defun lh:fit-pass (tour tol left drop pro / segs k1 sl te0 segs2
                                              lh-on-eps)
-  (setq lh-on-eps (max *LH-ON-EPS* (* 0.25 tol))
+  (setq lh-on-eps (max *LH-ON-EPS* (* *LH-ON-FRAC* tol))
         segs      (lh:span-loop tour tol left drop nil pro)
         k1        (lh:seam-kink segs))
   (if (> k1 (+ *LH-TANG-TOL* 0.001))
@@ -1299,7 +1343,7 @@
 ;; One full OPEN fit.  A single walk is the whole job: there is no
 ;; seam to close, so the seam-kink re-run has nothing to do here.
 (defun lh:fit-pass-open (tour tol left drop pro / lh-on-eps)
-  (setq lh-on-eps (max *LH-ON-EPS* (* 0.25 tol)))
+  (setq lh-on-eps (max *LH-ON-EPS* (* *LH-ON-FRAC* tol)))
   (lh:span-path tour tol left drop pro))
 
 ;; Points-only / ordering-sketch fit: arcs on the points, joints
@@ -1328,8 +1372,8 @@
   (if maxarcs
     (progn
       (setq tol2 tol tries 0)
-      (while (and (> (lh:arc-count segs) maxarcs) (< tries 40))
-        (setq tol2  (* tol2 1.4)
+      (while (and (> (lh:arc-count segs) maxarcs) (< tries *LH-CAP-TRIES*))
+        (setq tol2  (* tol2 *LH-CAP-RELAX*)
               tries (1+ tries)
               segs2 (lh:fit-pass tour tol2 1000000 drop nil))
         (if (< (lh:arc-count segs2) (lh:arc-count segs))
@@ -1345,8 +1389,8 @@
   (if maxarcs
     (progn
       (setq tol2 tol tries 0)
-      (while (and (> (lh:arc-count segs) maxarcs) (< tries 40))
-        (setq tol2  (* tol2 1.4)
+      (while (and (> (lh:arc-count segs) maxarcs) (< tries *LH-CAP-TRIES*))
+        (setq tol2  (* tol2 *LH-CAP-RELAX*)
               tries (1+ tries)
               segs2 (lh:fit-pass-open tour tol2 1000000 drop nil))
         (if (< (lh:arc-count segs2) (lh:arc-count segs))
@@ -1431,7 +1475,7 @@
 ;; T when R is a whole multiple of one of the *LH-NICE-RADII* tiers.
 (defun lh:nice-radius-p (r / found tier q)
   (setq found nil)
-  (if (and r (< r 1.0e6))
+  (if (and r (< r *LH-STRAIGHT-R*))
     (foreach tier *LH-NICE-RADII*
       (setq q (/ r tier))
       (if (< (abs (- q (fix (+ q 0.5)))) 1.0e-6) (setq found T))))
@@ -1667,7 +1711,7 @@
                     sumo no nice onpt inner ns nj i te ts kk mk nk
                     hw hq lh-on-eps)
   ;; report against the same on-the-shape threshold the fit used
-  (setq lh-on-eps (max *LH-ON-EPS* (* 0.25 tol)))
+  (setq lh-on-eps (max *LH-ON-EPS* (* *LH-ON-FRAC* tol)))
   (progn
       ;; -- segment mix, nice radii, arcs anchored on a point --------
       (setq nl 0 na 0 nice 0 onpt 0)
@@ -1683,7 +1727,7 @@
             (foreach q pts
               (if (and (> (cal:dist q (car s)) *LH-EXACT-EPS*)
                        (> (cal:dist q (cadr s)) *LH-EXACT-EPS*)
-                       (<= (lh:seg-dist q s) (* 2.0 *LH-FIT-EPS*)))
+                       (<= (lh:seg-dist q s) *LH-ANCHOR-EPS*))
                 (setq inner T)))
             (if inner (setq onpt (1+ onpt))))))
       ;; -- how the scanned points landed ------------------------------
@@ -1837,7 +1881,7 @@
                      res)
   (setq prior (lh:prior-fits))
   (cal:ensure-layer *LH-OUT-LAYER* 3)
-  (setq onv (max *LH-ON-EPS* (* 0.25 tol)))
+  (setq onv (max *LH-ON-EPS* (* *LH-ON-FRAC* tol)))
   (setq bb  (lh:bbox pts)
         hgt (/ (max (- (caddr bb) (car bb))
                     (- (cadddr bb) (cadr bb)))

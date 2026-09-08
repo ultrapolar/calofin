@@ -108,6 +108,15 @@ does not have to close - an open sketch orders an open run.
 * Declared-stretch and corner markers go on `POOL-WALLS`, dashed, and
   clear themselves when the command ends.
 
+Its **fitter knobs are shared with ABHD**: the span fitter is ABHD's,
+carried over word for word, so every tuning constant it reads exists
+under all three prefixes (`*PF-`, `*LH-`, `*CAB-`) at the same value --
+the tangency window and its stretch steps, the arc slack, the give-up
+budget and what a written-off point must buy, the curve cap's relaxing
+refits, the bulge clamp. `tests/test_laser_fit.py` and
+`tests/test_cabhd.py` compare that fitter code for code against
+`abhd.lsp`, so a knob moved in one file has to move in all three.
+
 ## Version banner and releases
 
 `lhd.lsp` carries the auto-stamped banner `(setq *lh-version* "v1.1")`
