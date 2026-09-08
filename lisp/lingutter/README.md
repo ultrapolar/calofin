@@ -152,13 +152,27 @@ needs different names.
 | `lg:*keeplayers*` | `nil` | layers left alone entirely |
 | `lg:*skiplayers*` | `("DEFPOINTS" "DIMENSION")` | layers the perimeter is never traced from |
 | `lg:*ontol*` | `1.0` | how far a dim's attachment point may sit off the perimeter and still count as on it |
-| `lg:*snaps*` | `(0.05 6.0 24.0)` | the snap ladder: how far apart two ends may be and still count as one point, tried in order |
+| `lg:*snaps*` | `(0.05 6.0 24.0)` | the snap ladder: how far apart two ends may be and still count as one point, tried tightest first |
 | `lg:*cover*` | `0.8` | how much of the highlight's extent a traced exterior must span before it is believed |
 | `lg:*runpaddle*` | `T` | `nil` to stop after the gut |
 
 The style lists are wildcards, so `lg:*anystyles*` catches a drawing
 whose style is spelled `CROSS DIM` and one spelled `CROSS DIMENSIONS`;
 case is folded, because `wcmatch` does not.
+
+They all live in one block at the top of `LINGUTTER.lsp`, above the
+first `defun`, each with its explanation on the line — nothing settable
+is anywhere else in the file, and nothing in that block is working
+state. `tests/test_lingutter.py` checks that, so it stays true.
+
+**The ladder's order is not yours to get right.** `lg:ladder` sorts
+`lg:*snaps*` tightest-first and drops anything that is not a tolerance
+above zero, because the walk climbs it a rung at a time and calls the
+first rung *"nothing had to be moved"*. Typed loosest-first, an
+unsorted ladder would heal a 24" gap and report that nothing moved —
+the one thing this tool promises never to be quiet about. Set to
+nothing usable, it means no snapping at all rather than no walk at all,
+so an outline drawn closed still traces.
 
 ## Notes & limitations
 
@@ -198,13 +212,19 @@ case is folded, because `wcmatch` does not.
   undefined function. `tools/check_lisp.py` lists `c:PADDLE` under
   *undefined fns* for the same reason — it is a deliberate reference out
   of the file, guarded at the call site.
-* `lg:arcdata`, `lg:area`, `lg:ent-segs` and `lg:chain` are **a port of
-  PADDLE's** `paddle--arcdata`, `--area`, `--ent-segs` and `--chain`.
+* `lg:arcdata`, `lg:area`, `lg:lwverts`, `lg:plverts`, `lg:vts->segs`
+  and `lg:ent-segs` are **a port of PADDLE's** `paddle--arcdata`,
+  `--area`, `--lwverts`, `--plverts`, `--vts->segs` and `--ent-segs`.
   A standalone file cannot call into another one, so the copies are
   pinned by a parity test rather than by good intentions (below).
-  `lg:chain` differs in one deliberate way: PADDLE counts the open
-  chains and throws them away, LINGUTTER keeps them, because a perimeter
-  drawn with one missed snap is still the perimeter.
+  PADDLE's `--chain` is **not** ported: chaining segments end to end
+  finds *a* loop, which is exactly the guess this tool exists to stop
+  making. The outer-face walk reads those segments instead.
+* The whole run is **one undo group**, so a single `U` puts the drawing
+  back — in a drawing that is recording undo. With undo control off
+  there is no group to open, so the gut still happens but a `U` will
+  not take it back in one step. The command opens no group it cannot
+  close either way.
 * `CLAYER`, `CMDECHO` and `OSMODE` in force before the command are
   restored afterwards, whether the run finishes, errors, or is cancelled
   with Esc — and before `PADDLE` starts, so it runs from the user's own
