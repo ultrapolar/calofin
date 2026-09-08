@@ -135,4 +135,49 @@ assert any(" <Yes>: " in p or " <No>: " in p for p, _ in vm.prompts), \
     [p for p, _ in vm.prompts]
 print("   Enter repeated every keyword answer; reports identical")
 
+
+# ----------------------------------------------------------------------
+# The TUNABLES block: one place to change anything, every knob in it
+# explained, every knob read when the command RUNS, and every knob
+# named in the README.
+# ----------------------------------------------------------------------
+print("== the tunables block ==")
+
+import re as _re
+_SRC = open(LSP, encoding='ascii').read()   # also asserts pure ASCII
+_lines = _SRC.splitlines()
+_start = next(i for i, l in enumerate(_lines) if l.startswith(';;;  TUNABLES'))
+_end = next(i for i, l in enumerate(_lines) if l.startswith(';;;  END TUNABLES'))
+_state = {'*lin:log*', '*lin:prev*'}
+_outside = [l for i, l in enumerate(_lines)
+            if l.startswith('(setq lin:*') and not _start < i < _end
+            and not any(k in l for k in _state)]
+assert not _outside, _outside
+
+
+def _explained(i):
+    if _re.search(r'\)\s*;', _lines[i]):
+        return True
+    j = i - 1
+    while j >= 0 and _lines[j].strip():
+        if _lines[j].lstrip().startswith(';;'):
+            return True
+        j -= 1
+    return False
+
+
+_undoc = [l for i, l in enumerate(_lines[_start:_end], _start)
+          if l.startswith('(setq lin:*') and not _explained(i)]
+assert not _undoc, _undoc
+KNOBS = [k for k in _re.findall(r'^\(setq (lin:\*[a-z-]+\*)', _SRC, _re.M)
+         if k not in _state]
+_vm = VM()
+_vm.load(LSP)
+assert all(_vm.loads(k) is not None for k in KNOBS), KNOBS
+_readme = open(os.path.join(os.path.dirname(LSP), 'README.md')).read()
+assert not [k for k in KNOBS if k not in _readme], \
+    [k for k in KNOBS if k not in _readme]
+print(f"   {len(KNOBS)} knobs, all inside the block, all explained, all in the README")
+
+
 print("\nALL LINCHECK SCENARIOS PASSED")
