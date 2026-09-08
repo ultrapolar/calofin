@@ -82,6 +82,15 @@ All at the top of `CABHD.lsp`; the key ones:
 | `*CAB-NICE-RADII*` | `(12.0 6.0 1.0)` | Radius snap increments: feet, half feet, inches |
 | `*CAB-TIGHT-TOL*` | `0.01` | What the "tight" candidate fits to |
 
+Its **fitter knobs are shared with ABHD**: the span fitter is ABHD's,
+carried over word for word, so every tuning constant it reads exists
+under all three prefixes (`*PF-`, `*LH-`, `*CAB-`) at the same value --
+the tangency window and its stretch steps, the arc slack, the give-up
+budget and what a written-off point must buy, the curve cap's relaxing
+refits, the bulge clamp. `tests/test_laser_fit.py` and
+`tests/test_cabhd.py` compare that fitter code for code against
+`abhd.lsp`, so a knob moved in one file has to move in all three.
+
 ## Notes & limitations
 
 * The point number is read as the first run of digits in the label:

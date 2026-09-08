@@ -988,13 +988,51 @@ def _substr(vm, a):
     return s[start - 1:start - 1 + ln]
 
 
+#: an architectural / engineering distance: feet, inches, a fraction, in
+#: any of the spellings AutoCAD accepts -- 3', 3'6, 3'-6", 42, 42-1/2",
+#: 1/2.  Anchored at both ends, so trailing junk is not a distance.
+_ARCH = re.compile(r'''^\s*(?P<sign>[-+]?)\s*
+                     (?:(?P<feet>\d+(?:\.\d+)?)\s*'\s*)?
+                     (?:-?\s*(?P<inch>\d+(?:\.\d+)?)(?!\s*/))?
+                     (?:\s*-?\s*(?P<num>\d+)\s*/\s*(?P<den>\d+))?
+                     \s*(?:"|\'\')?\s*$''', re.X)
+
+
 @bi('distof')
 def _distof(vm, a):
-    """(distof string [mode]) -- nil when the text is not a distance."""
+    """(distof string [mode]) -- nil when the text is not a distance.
+
+    Modes 3 and 4 are engineering and architectural, and in those
+    AutoCAD really does read the feet-and-inches spellings back --
+    which is the whole reason a routine asks in mode 4 and then falls
+    back to mode 2 (LAZFORM, LAZSTEP, ABHD's hopper offsets).  Reading
+    only the leading number here made 3'6 come back as 3, so every
+    feet-inch answer in the tree was being tested at a twelfth of its
+    size, silently.  The other modes keep the lenient leading-number
+    read, because several tools use (distof s 2) as their "is this text
+    a number?" test and a stricter one would reclassify drawing text."""
     try:
-        m = re.match(r'\s*[-+]?(\d+\.?\d*|\.\d+)', str(a[0]))
-        return float(m.group(0)) if m else NIL
+        s = str(a[0])
     except (TypeError, ValueError):
+        return NIL
+    mode = int(a[1]) if len(a) > 1 and isinstance(a[1], (int, float)) else 2
+    if mode in (3, 4):
+        m = _ARCH.match(s)
+        if not m or not (m.group('feet') or m.group('inch')
+                         or m.group('num')):
+            return NIL
+        v = 12.0 * float(m.group('feet') or 0)
+        v += float(m.group('inch') or 0)
+        if m.group('num'):
+            den = float(m.group('den'))
+            if den == 0:
+                return NIL
+            v += float(m.group('num')) / den
+        return -v if m.group('sign') == '-' else v
+    m = re.match(r'\s*[-+]?(\d+\.?\d*|\.\d+)', s)
+    try:
+        return float(m.group(0)) if m else NIL
+    except ValueError:
         return NIL
 
 
@@ -1347,21 +1385,68 @@ def _filt_pairs(a):
     return None
 
 
-def _filt_hit(vm, e, pairs):
-    """Does one entity pass a DXF filter list?  String values match the
-    way AutoCAD's do -- case-insensitively and through wcmatch, so a
-    layer filter of "border" finds an entity on "BORDER" and "COVER*"
-    finds them all.  Everything else compares straight."""
-    for code, want in pairs:
-        got = _dxf(vm, e, code)
-        if isinstance(want, str):
-            if not isinstance(got, str):
-                return False
-            if _wcmatch(vm, [got.upper(), want.upper()]) is NIL:
-                return False
-        elif got != want:
+def _filt_one(vm, e, code, want):
+    """One (code . value) test.  String values match the way AutoCAD's
+    do -- case-insensitively and through wcmatch, so a layer filter of
+    "border" finds an entity on "BORDER" and "COVER*" finds them all.
+    Everything else compares straight."""
+    got = _dxf(vm, e, code)
+    if isinstance(want, str):
+        if not isinstance(got, str):
             return False
-    return True
+        return _wcmatch(vm, [got.upper(), want.upper()]) is not NIL
+    return got == want
+
+
+#: how a -4 grouping operator combines the tests inside it.  <NOT takes
+#: exactly one operand in AutoCAD, so "none of them" is the same thing.
+_FILT_JOIN = {'OR': any, 'AND': all, 'NOT': lambda r: not any(r),
+              'XOR': lambda r: sum(1 for x in r if x) == 1}
+
+
+def _filt_eval(vm, e, pairs, i=0, stop=None):
+    """(does the entity pass?, next index) over a filter list, honouring
+    the -4 grouping operators.
+
+    Without these a filter list is one long AND, which is not what
+    ABHD's ADAB asks for: its point sweep is an <OR of three <AND
+    groups, and read as an AND it matches nothing at all -- so the
+    command would look like it found no survey points when the drawing
+    is full of them.  An unknown or unbalanced operator raises rather
+    than quietly matching, because a filter that silently selects the
+    wrong set is the failure this exists to catch."""
+    out = []
+    while i < len(pairs):
+        code, want = pairs[i]
+        if code == -4:
+            op = str(want).upper()
+            if op.startswith('<'):
+                if op[1:] not in _FILT_JOIN:
+                    raise LispError("ssget: unknown filter operator %r"
+                                    % want, vm)
+                val, i = _filt_eval(vm, e, pairs, i + 1, op[1:])
+                out.append(val)
+                continue
+            if op.endswith('>'):
+                if stop is None or op[:-1] != stop:
+                    raise LispError("ssget: %r closes no open filter group"
+                                    % want, vm)
+                return _FILT_JOIN[stop](out), i + 1
+            # a relational operator ("<", ">=", "*") constrains the NEXT
+            # pair's comparison; nothing in this tree uses one on a
+            # selection filter, so it is passed over rather than guessed
+            i += 1
+            continue
+        out.append(_filt_one(vm, e, code, want))
+        i += 1
+    if stop is not None:
+        raise LispError("ssget: filter group <%s is never closed" % stop, vm)
+    return all(out), i
+
+
+def _filt_hit(vm, e, pairs):
+    """Does one entity pass a DXF filter list?"""
+    return _filt_eval(vm, e, pairs)[0]
 
 
 @bi('ssget')

@@ -216,6 +216,24 @@ test, and the four defects that turned up on the way closed.
   and found the moment something did: the clamp added to `cst:askcount`
   above. The local is `tofix` now, with a comment saying why.
 
+- **`TUTORIALABHD`'s demo never created the layer it drew on.** Its
+  captions, its three candidate outlines and their labels all go on
+  `POOL-FIT`, and `entmake` onto a layer the drawing does not have
+  fails -- so on a first-time drawing, which is exactly who runs a
+  tutorial, the tour drew nothing at all. It gates the layer now, the
+  way `pf:compare` always has.
+
+- **A swept ABHD demo left a line on the `POOL` layer.** The walk that
+  re-registers the bottom's output as scaffolding started *after* the
+  two break lines, and `pf:bottom-draw` takes those out of the registry
+  along with its own output -- so the shallow break line was dropped
+  and never picked back up, and "Swept -- the drawing is as it was" was
+  not quite true. The walk starts behind them now.
+
+- **The pool bottom's dimensions were the one thing ABHD drew without
+  its own stamp**, against the rule in its own header that everything
+  it creates carries one and only stamped objects are ever erased.
+
 ### Changed
 
 - **OASIS puts every knob at the top** -- all forty of them, in one
@@ -385,6 +403,36 @@ test, and the four defects that turned up on the way closed.
   swaps away. `tests/test_tunables.py` carries the file now, so the
   next knob cannot land underneath the block.
 
+- **ABHD puts every knob at the top too** (`abhd.lsp` at 090826
+  REV15), in one tunables block of 53 settings in three groups --
+  drawing setup, fitter tuning, guards -- each with a sentence on what
+  moving it does. A dozen were bare numbers in the body: the
+  on-the-shape share of the tolerance (`*PF-ON-FRAC*`), the curve cap's
+  relaxing refits and their bound (`*PF-CAP-RELAX*`, `*PF-CAP-TRIES*`),
+  what a floating arc and a written-off point each have to buy
+  (`*PF-FLOAT-GAIN*`, `*PF-DROP-GAIN*`), the bulge clamp
+  (`*PF-BULGE-CLAMP*`), the layer colours, the marker linetypes
+  (`*PF-MARK-LTYPE*`, `*PF-STUB-LTYPE*`), the pick-warning multiple,
+  the label height, the slow-survey note, the default fit and the
+  radius past which an arc is straight. Every value is unchanged.
+
+  What a run WRITES is state, not a knob, and moved out of the block
+  the way OASIS's hopper offset did: `*PF-TOL*`, `*PF-MAX-ARCS*` and
+  `*PF-HOP-OFF*` are the answers a session remembers, and they sit in a
+  `session memory and run state` section under it. `*PF-DEFAULT-FIT*`
+  is corrected to `"2"` if it is set to anything but 1, 2 or 3 --
+  otherwise a slip there would leave Enter keeping no fit at all,
+  silently.
+
+  The same constants land in `LHD` (v2.0) and `CABHD` (v1.9) at the
+  same values: those two carry ABHD's span fitter word for word and
+  `tests/test_laser_fit.py` and `tests/test_cabhd.py` compare it code
+  for code, so a fitter knob changed in one has to change in all three.
+  ABHD is not in `tests/test_tunables.py` yet: its knobs are spelled
+  `*PF-NAME*` rather than `pf:*name*`, and that rename is a coordinated
+  pass over three tools and four suites (the block says so, at the top,
+  where someone looking for the omission will be).
+
 ### Checks and tests
 
 - `tests/test_xftconv.py` honours `CALOFIN_LISP_ROOT` -- its docstring
@@ -424,6 +472,24 @@ test, and the four defects that turned up on the way closed.
   knob at the top moved and shown to move what it says. Both tiers.
 - `tests/test_tunables.py` takes `CONSTELLATION` into `FILES`, which is
   what holds its block and its README table together from here on.
+
+- `tests/test_abhd_contingencies.py` drives `ABHD`, `ABHDCOVER` and
+  `ADAB` through the paths a bad drawing takes -- no points, two
+  points, five duplicates, a gap, a `SPLINE`, a tilted UCS, a distance
+  past the ceiling, a percentage over 100, a pick nowhere near a survey
+  point, a break picked twice on one point, a bottom cancelled halfway,
+  a `Redo` that omits a point and puts it back -- and runs
+  `TUTORIALABHD`, which nothing had ever executed. 65 checks in 13
+  sections, at both tiers, each reading the message the path prints and
+  what it left in the drawing. The last section holds the block itself.
+
+- Two gaps in `tests/lispvm.py` the suite could not have been honest
+  without. `ssget` ignored the `-4` grouping operators, so ADAB's
+  automatic point sweep -- an `<OR` of three `<AND` groups -- matched
+  nothing at all; and `distof` read only the leading number, so `3'6`
+  came back as **3** in every feet-and-inches answer in the tree,
+  `LAZFORM`'s and `LAZSTEP`'s included, which is the whole reason they
+  try mode 4 before mode 2.
 
 ### Notes
 

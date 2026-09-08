@@ -38,7 +38,13 @@ FIT_EPS = 0.01                     # *PF-FIT-EPS*
 CORNER_ANG = math.pi / 4.0         # *PF-CORNER-ANG*
 TANG_TOL = math.pi / 22.5          # *PF-TANG-TOL*
 NICE_RADII = (12.0, 6.0, 1.0)      # *PF-NICE-RADII*
-ANG_CAP = 1.373                    # window-edge clamp, atan(5)
+ANG_CAP = 1.373                    # *PF-BULGE-CLAMP*
+ON_FRAC = 0.25                     # *PF-ON-FRAC*
+FLOAT_GAIN = 2                     # *PF-FLOAT-GAIN*
+DROP_GAIN = 2                      # *PF-DROP-GAIN*
+CAP_RELAX = 1.4                    # *PF-CAP-RELAX*
+CAP_TRIES = 40                     # *PF-CAP-TRIES*
+TWO_OPT_PASSES = 40                # *PF-2OPT-PASSES*
 BOTTOM_STEP = 6.0                  # *PF-BOTTOM-STEP*
 HOP_OFF = 18.0                     # *PF-HOP-OFF* (default)
 PICKUP_EPS = 3.0                   # *PF-PICKUP-EPS*
@@ -196,7 +202,7 @@ _ON_EPS = ON_EPS
 
 
 def on_eps_for(tol):
-    return max(ON_EPS, 0.25 * tol)
+    return max(ON_EPS, ON_FRAC * tol)
 
 
 def span_misses(a, b, bul, qs):
@@ -455,7 +461,7 @@ def grow_span(tour, pos, te, ts0, sharp, nogrow, lim, tol, left, dlim,
             break
     # a floating arc must cover at least 2 more points than the
     # longest arc that passes through one
-    if best_exact and best and best[0] < best_exact[0] + 2:
+    if best_exact and best and best[0] < best_exact[0] + FLOAT_GAIN:
         best = best_exact
     return best
 
@@ -548,7 +554,7 @@ def span_loop(tour, tol, left, te0=None, prorate=True, walls=None,
             # below), so the comparison always has a floor to beat and
             # a span can never give up every point it covers
             if (alt and alt[4] > 0
-                    and alt[0] >= (best[0] if best else 1) + 2 * alt[4]):
+                    and alt[0] >= (best[0] if best else 1) + DROP_GAIN * alt[4]):
                 best = alt
         if best is None:
             # Stub to the very next point.  One stub carries the
@@ -658,8 +664,8 @@ def coarse_loop(tour, tol, maxarcs, allowance, walls=None,
     if maxarcs is not None:
         tol2 = tol
         tries = 0
-        while arc_count(segs) > maxarcs and tries < 40:
-            tol2 *= 1.4
+        while arc_count(segs) > maxarcs and tries < CAP_TRIES:
+            tol2 *= CAP_RELAX
             tries += 1
             segs2, _ = fit_pass(tour, tol2, 10 ** 9, False, walls, corners,
                                 holds, drops)
@@ -680,7 +686,7 @@ def order_points(pts):
         cur = best
     n = len(tour)
     improved, passes = True, 0
-    while improved and passes < 40:
+    while improved and passes < TWO_OPT_PASSES:
         improved, passes = False, passes + 1
         for i in range(n - 1):
             for j in range(i + 1, n):
@@ -1994,6 +2000,17 @@ def test_constants_match_lisp():
     assert float(setq_value("BOTTOM-FIT")) == BOTTOM_FIT
     assert float(setq_value("TIGHT-TOL")) == TIGHT_TOL
     assert float(setq_value("DROP-PCT")) == DROP_PCT
+    # the knobs the fitter reads by name since v REV15: each was a bare
+    # number in the body, and each is mirrored above, so the two can
+    # drift the moment one side is edited alone
+    assert float(setq_value("ON-FRAC")) == ON_FRAC
+    assert float(setq_value("BULGE-CLAMP")) == ANG_CAP
+    assert float(setq_value("CAP-RELAX")) == CAP_RELAX
+    assert int(setq_value("CAP-TRIES")) == CAP_TRIES
+    assert int(setq_value("FLOAT-GAIN")) == FLOAT_GAIN
+    assert int(setq_value("DROP-GAIN")) == DROP_GAIN
+    assert int(setq_value("2OPT-PASSES")) == TWO_OPT_PASSES
+    assert float(setq_value("DROP-MULT")) == DROP_MULT
     # the three candidate aims, in the order they are drawn and numbered
     m = re.search(r"\(setq \*PF-COMPARE\*[^']*'\((.*?)\)\)\)", src,
                   re.S)

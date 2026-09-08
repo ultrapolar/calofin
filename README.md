@@ -374,6 +374,12 @@ python3 tests/test_oasis_form.py      # OASIS driven from a filled-in sheet
 python3 tests/test_pool_fit.py        # ABHD
 python3 tests/test_abhd_runtime.py    # ABHD's fitter run in lispvm,
                                       #   against the mirror above
+python3 tests/test_abhd_contingencies.py
+                                      # ABHD and ADAB driven through the
+                                      #   paths a bad drawing takes: no
+                                      #   points, a gap, a SPLINE, a
+                                      #   tilted UCS, a cancelled bottom,
+                                      #   a Redo that omits and restores
 python3 tests/test_abcurcheck.py      # ABCURCHECK, run in lispvm
 python3 tests/test_cabhd.py           # CABHD, run in lispvm
 python3 tests/test_abpcheck.py        # ABPCHECK over drawings with known
