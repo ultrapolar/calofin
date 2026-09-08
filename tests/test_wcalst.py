@@ -23,6 +23,7 @@ import math
 import os
 import re
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 from lispvm import VM, LispError, Dot  # noqa: E402
@@ -92,10 +93,42 @@ def band(vm):
 def newvm():
     vm = VM()
     vm.load(LSP)
-    for L in (layer('NEAR', 1), layer('FAR', 4), layer('RUNG', 2)):
+    for L in (layer('NEAR', 1), layer('FAR', 4), layer('RUNG', 2),
+              layer('MARK', 6)):
         vm.loads(L)
     vm.sysvars['CLAYER'] = 'NEAR'
     return vm
+
+
+def air_pts(vm):
+    """Every (x, y) WCALST drew on the cut layer."""
+    out = []
+    for e in vm.entities:
+        d = vm.entdata.get(e, [])
+        if grp(d, 8) != 'AIR-B':
+            continue
+        for code in (10, 11):
+            v = grp(d, code)
+            if isinstance(v, list) and len(v) >= 2:
+                out.append((v[0], v[1]))
+        if grp(d, 0) == 'LWPOLYLINE':
+            for q in d:
+                if isinstance(q, Dot) and q.a == 10 and isinstance(q.b, list):
+                    out.append((q.b[0], q.b[1]))
+    return out
+
+
+def edge_ys(vm):
+    """y of each variant's straightened edge: the long horizontal line
+    on the cut layer that every other point of that variant hangs under."""
+    ys = []
+    for e in vm.entities:
+        d = vm.entdata.get(e, [])
+        if grp(d, 0) == 'LINE' and grp(d, 8) == 'AIR-B':
+            a, b = grp(d, 10), grp(d, 11)
+            if abs(a[1] - b[1]) < 1e-9 and abs(a[0] - b[0]) > 1.0:
+                ys.append(a[1])
+    return sorted(ys, reverse=True)
 
 
 def label_ys(vm):
@@ -244,6 +277,195 @@ check("the probe took the band; the selection was never asked",
       sum(p == 'ssget' for p, _ in vm.prompts) == 1 and
       'target <1%: 8 dart(s)' in ''.join(vm.printed),
       repr(vm.prompts))
+
+
+# ----------------------------------------------------------------------
+# 6. undo switched off in the drawing (UNDOCTL bit 1 clear)
+# ----------------------------------------------------------------------
+# The _Begin is guarded -- opening a group with undo off errors out of
+# the command -- but the _End was not, so the whole run drew its two
+# layouts and then died on the last command it issued, with the error
+# on screen and no way to take the drawing back.
+print("undo switched off")
+
+vm = newvm()
+vm.sysvars['UNDOCTL'] = 0
+ents, pick = band(vm)
+vm.run('c:WCALST', [None, ents, pick, None, None, None])
+txt = ''.join(vm.printed)
+check("the band still develops with undo off",
+      'target <1%: 8 dart(s), 0 insert(s)' in txt, txt[-300:])
+check("no undo group is opened or closed",
+      [c for c in vm.commands if c] == [], repr(vm.commands))
+check("and nothing errored", 'WCALST error' not in txt, txt[-300:])
+
+# ----------------------------------------------------------------------
+# 7. a band that closes on itself
+# ----------------------------------------------------------------------
+# Tracing takes the straightest continuation, and on a ring that is
+# always the next segment round: the walk lapped until the 5000-segment
+# backstop and reported a developed length of 694,662 - a thousand laps
+# - after four minutes of walking.  It stops at the node it set out
+# from now, taking that closing segment, so a ring develops as itself.
+print("a closed ring")
+
+vm = newvm()
+RING, RN, RFAR = 18, 200.0, 176.0
+ang = [math.radians(20 * i) for i in range(RING)]
+near = [(RN * math.cos(a), RN * math.sin(a)) for a in ang]
+far = [(RFAR * math.cos(a), RFAR * math.sin(a)) for a in ang]
+ents = []
+for i in range(RING):
+    j = (i + 1) % RING
+    for src in (line(near[i], near[j], 'NEAR'), line(far[i], far[j], 'FAR'),
+                line(near[i], far[i], 'RUNG')):
+        before = len(vm.entities)
+        vm.loads(src)
+        ents.extend(vm.entities[before:])
+mid = [(near[0][0] + near[1][0]) / 2.0, (near[0][1] + near[1][1]) / 2.0, 0.0]
+t0 = time.time()
+vm.run('c:WCALST', [None, ents, [ents[0], mid], None, None, None])
+elapsed = time.time() - t0
+txt = ''.join(vm.printed)
+circ = RING * 2 * RN * math.sin(math.radians(10))
+check("the ring develops to its own circumference, once",
+      f'developed length {circ:.2f}' in txt, txt[-300:])
+check("and the walk is bounded, not a lap count", elapsed < 30,
+      f'{elapsed:.1f}s')
+
+# ----------------------------------------------------------------------
+# 8. a line that touches the chain but is not a rung
+# ----------------------------------------------------------------------
+# A datum line or a cut mark crossing the chain leaves it as steeply as
+# a rung does.  Counted as one it moved the median width, the vote that
+# says which side the far edge is on, and - through the middle rung,
+# which is where the far side is picked up - which layer the far side
+# was taken to be on: the whole FAR side was redrawn as loose reference
+# marks and the bottom line rebuilt from the rung feet alone.
+print("a stray line touching the chain")
+
+vm = newvm()
+ents, pick = band(vm)
+before = len(vm.entities)
+vm.loads(line((0.0, 200.0), (0.0, 230.0), 'MARK'))   # outward, off the band
+stray = vm.entities[before:]
+vm.run('c:WCALST', [None, ents + stray, pick, None, None, None])
+txt = ''.join(vm.printed)
+check("a segment leaving the chain the wrong way is not a rung",
+      'developed length 417.68, band width 24.00' in txt and
+      'target <1%: 8 dart(s), 0 insert(s)' in txt, txt[-300:])
+check("and the far side is still developed as the far side",
+      'bottom before 367.56' in txt and
+      'reference mark' not in txt, txt[-300:])
+
+# ----------------------------------------------------------------------
+# 9. the median rung is the median, duplicates and all
+# ----------------------------------------------------------------------
+# vl-sort DROPS items that compare equal (LISPLAB lesson 2).  A band
+# whose rungs are mostly one length and flare at one end therefore had
+# its width read off the deduped list: five 20s and two 30s sorted to
+# (20 30), and the median of that is the flare, not the band.
+print("the median rung length")
+
+vm = newvm()
+ents = []
+
+
+def mk(src):
+    before = len(vm.entities)
+    vm.loads(src)
+    ents.extend(vm.entities[before:])
+
+
+XS = [0.0, 40.0, 80.0, 120.0, 160.0, 200.0, 240.0]
+DEPTH = [20.0, 20.0, 20.0, 20.0, 20.0, 30.0, 30.0]      # flared at one end
+for i in range(len(XS) - 1):
+    mk(line((XS[i], 0.0), (XS[i + 1], 0.0), 'NEAR'))
+    mk(line((XS[i], -DEPTH[i]), (XS[i + 1], -DEPTH[i + 1]), 'FAR'))
+for x, d in zip(XS, DEPTH):
+    mk(line((x, 0.0), (x, -d), 'RUNG'))
+vm.run('c:WCALST', [None, ents, [ents[0], [20.0, 0.0, 0.0]], None, None, None])
+check("the width is the middle rung, not the widest",
+      'band width 20.00' in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+
+# ----------------------------------------------------------------------
+# 10. a cut never crosses the edge it is measured from
+# ----------------------------------------------------------------------
+# The apex rule with a tile height is "tile + clearance below the edge,
+# but a clearance clear of the foot".  On a band shallower than the
+# clearance itself both halves go negative, and the dart was drawn with
+# its apex ABOVE the straightened edge - a V cut clean through the
+# strip.  A half-inch-deep band with a 6" tile is the extreme of it.
+print("a shallow band under a tall tile")
+
+vm = newvm()
+ents = []
+STEP, NSEG = math.radians(10), 12
+near = [(200.0 * math.cos(0.5 + STEP * i), 200.0 * math.sin(0.5 + STEP * i))
+        for i in range(NSEG + 1)]
+far = [(199.5 * math.cos(0.5 + STEP * i), 199.5 * math.sin(0.5 + STEP * i))
+       for i in range(NSEG + 1)]
+for i in range(NSEG):
+    mk(line(near[i], near[i + 1], 'NEAR'))
+    mk(line(far[i], far[i + 1], 'FAR'))
+for i in range(NSEG + 1):
+    mk(line(near[i], far[i], 'RUNG'))
+mid = [(near[0][0] + near[1][0]) / 2.0, (near[0][1] + near[1][1]) / 2.0, 0.0]
+vm.run('c:WCALST', [None, ents, [ents[0], mid], None, 6.0, None])
+tops = edge_ys(vm)
+above = [p for p in air_pts(vm) if p[1] > tops[0] + 1e-6]
+check("nothing is drawn above the straightened edge",
+      len(tops) == 2 and not above, repr(above[:4]))
+check("the darts were still cut", 'dart(s)' in ''.join(vm.printed))
+
+# ----------------------------------------------------------------------
+# 11. the tunables are the tunables: retune one, the drawing moves
+# ----------------------------------------------------------------------
+print("the tunables")
+
+vm = newvm()
+vm.loads('(setq wc:*stack-f* 9.0)')
+ents, pick = band(vm)
+vm.run('c:WCALST', [None, ents, pick, None, None, None])
+ys = label_ys(vm)
+check("wc:*stack-f* sets the gap between the two drawings",
+      len(ys) == 2 and abs((ys[0] - ys[1]) - 9 * 24.0) < 1e-6, repr(ys))
+
+vm = newvm()
+vm.loads('(setq wc:*cut-layer* "WC-CUTS")')
+ents, pick = band(vm)
+vm.run('c:WCALST', [None, ents, pick, None, None, None])
+check("wc:*cut-layer* is where the cuts land",
+      'WC-CUTS' in vm.tables['LAYER'] and
+      any(grp(vm.entdata.get(e, []), 8) == 'WC-CUTS' for e in vm.entities),
+      repr(sorted(vm.tables['LAYER'])))
+
+vm = newvm()
+vm.loads('(setq wc:*maxfeat* 5)')
+ents, pick = band(vm)
+vm.run('c:WCALST', [None, ents, pick, None, None, None])
+asked = [p for p, _ in vm.prompts]
+check("wc:*maxfeat* is the cap prompt's default, and the cap it applies",
+      any('Maximum darts + inserts [Back] <5>' in p for p in asked) and
+      '(max 5)' in ''.join(vm.printed), repr(asked))
+
+# ----------------------------------------------------------------------
+# 12. every tunable is declared at the top, and says what it is for
+# ----------------------------------------------------------------------
+print("the tunables block")
+
+head = SRC.split('(defun ')[0]
+declared = set(re.findall(r'\(setq (wc:\*[\w*-]+\*)', head))
+used = set(re.findall(r'(wc:\*[\w*-]+\*)', SRC))
+check("no tunable is set below the first defun",
+      not (used - declared), repr(sorted(used - declared)))
+check("the block carries them all", len(declared) >= 30, str(len(declared)))
+undocumented = [g for g in declared
+                if not re.search(r'\(setq ' + re.escape(g) + r'\s+\S+\s*;',
+                                 head)]
+check("and every one of them is commented on its own line",
+      not undocumented, repr(sorted(undocumented)))
 
 # ----------------------------------------------------------------------
 print()

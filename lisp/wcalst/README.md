@@ -23,16 +23,22 @@ reaches a minimum useful width, and the total is capped (default
 
 Sizing rules:
 
-* **Darts are at most 4" wide on the bottom line** — a larger
-  correction is split into several ≤ 4" darts at consecutive rungs.
-* **Insert slivers are 1" wide at the top**, the gap width at the
-  bottom, and their sides are about 1" longer than the slit they go
-  into (extra to trim on fitting).
+* **Darts are at most 4" wide on the bottom line** (`wc:*dart-cap*`) —
+  a larger correction is split into several ≤ 4" darts at consecutive
+  rungs.
+* **Insert slivers are 1" wide at the top** (`wc:*sliver-top*`), the
+  gap width at the bottom, and their sides are about 1" longer than
+  the slit they go into (`wc:*sliver-extra*` — extra to trim on
+  fitting).
 * The release threshold auto-refines (never exceeding the feature cap)
   until the after-cuts residual — bottom line as drawn, minus dart
   widths, plus insert gaps, versus the original bottom line — is
-  **under 1 %**. If the cap is too low to get there, the summary flags
-  `** OVER TARGET **`; allow more darts+inserts and rerun.
+  **under 1 %** (`wc:*target*`). If the cap is too low to get there,
+  the summary flags `** OVER TARGET **`; allow more darts+inserts and
+  rerun.
+
+Every number above is a named tunable at the top of `wcalst.lsp`; see
+[Tunables](#tunables).
 
 ## Usage
 
@@ -43,21 +49,23 @@ Sizing rules:
    nothing in the selection is modified).
 4. *Click the long side to STRAIGHTEN* — click directly on one of the
    two long sides.
-5. *Maximum darts + inserts <20>* — Enter to accept.
-6. *Tile height along the straightened edge <none>* — height (in
+5. *Maximum darts + inserts [Back] <20>* — Enter to accept. The
+   default is `wc:*maxfeat*`.
+6. *Tile height along the straightened edge [Back] <none>* — height (in
    drawing units/inches) of the tile that will sit along the
    straightened edge. Darts and inserts then only come up the width to
-   `width − (tile height + 1")`, i.e. they stop 1" clear of the tile.
-   Enter skips the rule and uses the default stop line (42 % of the
-   local band depth below the straightened edge). Where the band is
-   locally too shallow for the tile zone, the cut is clamped to the
-   deepest 20 % of the local depth so it stays a valid cut.
-7. *Window the STAIR section(s) if any <none>* — window-select the part
-   of the band that wraps around stairs (Enter if there are none).
-   Inside that section the developed bottom line is drawn as clean
-   steps: consecutive points are grouped into level treads (split
-   where the depth jumps, slivers narrower than a real tread absorbed)
-   joined by short risers — instead of the smoothed curve.
+   `width − (tile height + 1")`, i.e. they stop 1" clear of the tile
+   (`wc:*tile-clear*`). Enter skips the rule and uses the default stop
+   line (42 % of the local band depth below the straightened edge,
+   `wc:*apex-f*`); a negative answer is read as Enter. Where the band
+   is locally too shallow to hold that clearance, the apex is held at
+   20 % of the local depth below the straightened edge
+   (`wc:*apex-min-f*`) rather than being pushed through it.
+7. *Window the STAIR section(s) if any (Enter = none)* — window-select
+   the part of the band that wraps around stairs (Enter if there are
+   none). That section is developed as one rigid piece, so every tread
+   length and riser rise is kept exactly; see
+   [Stair sections](#stair-sections).
 
 **Two developed drawings** are placed below the lowest point of the
 selection, one under the other, each labelled and with its own summary:
@@ -88,8 +96,7 @@ begins. Treads come out level with their exact lengths, every riser
 keeps its exact rise, and matching steps up/down stay equal — the
 bottom line wraps the stairs with zero length distortion (validated
 segment-by-segment against a hand-drawn example). Several separate
-stair sections can be windowed in one selection. Windowing the section at the STAIR prompt goes further
-and redraws it as ideal treads and risers.
+stair sections can be windowed in one selection.
 
 **Darts are not placed inside a windowed stair section** — the stairs
 are laid out rigidly and their darts are meant to be added by hand
@@ -137,8 +144,36 @@ correct position on the flattened strip (marks further than about 1.75×
 the band width from the straightened side are dropped as unrelated).
 
 Darts and insert slits stop at 42 % of the local band depth below the
-straightened edge, so a solid hinge of material always remains along
-the straight side (matches shop practice for this kind of piece).
+straightened edge (`wc:*apex-f*`), so a solid hinge of material always
+remains along the straight side (matches shop practice for this kind
+of piece).
+
+## Tunables
+
+Every number the routine works to is a named global in one commented
+block at the top of `wcalst.lsp` — layers and their creation colours,
+the angles the tracing works to, what still counts as a band, the cut
+sizes, where the two drawings land, and how the figures are written.
+Each carries a one-line note saying what it does and what moving it
+costs, so retuning is done there rather than by hunting through the
+body. `setq` any of them after loading (from a startup file, say) and
+the next run uses the new value.
+
+The ones most worth knowing:
+
+| Global | Default | What it sets |
+| --- | --- | --- |
+| `wc:*cut-layer*` / `wc:*cut-color*` | `"AIR-B"` / 1 | where the straight edge, band ends, dart legs, slits and slivers are drawn (the colour only if the layer has to be created) |
+| `wc:*dim-layer*` / `wc:*dim-color*` | `"DIMENSION"` / 3 | end height dims, the variant labels and the summary |
+| `wc:*maxfeat*` | 20 | default answer to the darts+inserts cap |
+| `wc:*dart-cap*` | 4.0 | widest mouth one dart may open |
+| `wc:*target*` | 0.01 | the residual the refining variant aims under, and what `** OVER TARGET **` is measured against |
+| `wc:*tile-clear*` | 1.0 | how far a cut clears the tile, and the far edge |
+| `wc:*apex-f*` / `wc:*apex-min-f*` | 0.42 / 0.20 | where a cut stops with no tile height given, and the closest it may ever come to the straightened edge |
+| `wc:*trace-turn*` | 1.0472 (60°) | sharpest turn the trace of a long side will follow |
+| `wc:*rung-turn*` | 0.7854 (45°) | how steeply a segment must leave the chain to be a rung |
+| `wc:*near-f*` | 1.75 | how far off the chain (× band width) a point may sit and still belong to this band |
+| `wc:*drop-f*` / `wc:*stack-f*` | 1.5 / 5.0 | where the first drawing lands below the selection, and the second below it |
 
 ## How it works
 
@@ -163,11 +198,20 @@ the straight side (matches shop practice for this kind of piece).
 
 ## Limitations
 
-* The band must be an open strip (not a closed ring). Plain ladder
-  rungs, diagonal bracing and full triangulated (mesh-style) strips
-  all work — connectors are told apart from the long sides by
-  direction, so the sides just need to be traceable as the
-  "straightest" path through the network.
+* The band is meant to be an open strip. A closed ring is handled
+  rather than refused: the trace stops at the node it set out from, so
+  the ring develops as itself, cut open at the segment you clicked.
+  Plain ladder rungs, diagonal bracing and full triangulated
+  (mesh-style) strips all work — connectors are told apart from the
+  long sides by direction, so the sides just need to be traceable as
+  the "straightest" path through the network.
+* A line that touches one of the long sides and runs off across it —
+  a datum line, a cut mark — crosses the chain as steeply as a rung
+  does. Only those leaving on the same side as the majority are taken
+  as rungs, so a mark on the far side of the chain from the band no
+  longer moves the measured width. A mark that touches the band is
+  treated as part of it and is not carried into the developed strip;
+  keep reference marks clear of the two long sides.
 * Arcs/circles are not accepted — the band must be drawn from straight
   segments (as ladder bands produced by field measurement normally
   are). Curved sides made of many short segments are exactly what the
