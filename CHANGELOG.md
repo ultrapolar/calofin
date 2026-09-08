@@ -8,6 +8,12 @@ which set of them shipped together. The release name lives in
 
 ## v3.6 -- 2026-09-08
 
+Two passes that landed together, and they are the same idea twice: a
+value somebody has to be able to reach has to be somewhere they can find
+it. One pass put every tool's settings in a block at the top of its
+file; the other gave every converter a way back that survives a save,
+which is the same thing said about a conversion.
+
 Every converter gains a reverter. `XFTCONV`, `SOCONV` and `VSCONV` each
 read somebody else's export and turn it into a drawing this office can
 work on; until now the only way back was `U`, which is good for as long
@@ -309,6 +315,99 @@ in run in the VM at both tiers.
   `POOLSIDE`, `LAZSPA` and `LAZSTEP`, `Points` was missing
   `POINTRENAMER`, `CONSTELLATION` and `TYLERDRONESUITE`, and `Checking`
   was missing `ABPCHECK`.
+
+A pass over the ten live checkers, one at a time: every value a drafter
+might want to change moved to a `TUNABLES` block at the top of its file,
+each with a comment saying what it controls, its units, and what raising
+or lowering it does. Three of them were bugs rather than untidiness.
+
+### Changed -- the ten checkers
+
+- **Every checker now opens with one tunables block** -- `CHECK` (v1.7),
+  `DIMCHECK` (v1.13), `LINFINCHECK` (v2.9), `COVERCHECK` (v1.12),
+  `SPACHECK` (v1.13), `ABPCHECK` (v1.5), `ABCURCHECK` (v1.4),
+  `LINCHECK` (v1.4), `LINTXTCHK` (v1.5), `CCPRECHECK` (v1.4) -- and each
+  suite asserts three things about it: no knob is set anywhere else in
+  the file, none is missing an explanation, and the README's Tunables
+  table names them all. Those tables are generated off the block itself,
+  headings and prose included, so the two cannot disagree.
+
+  The block also states the contract the files never used to: every knob
+  is read when the command RUNS, so a `setq` typed at the command line
+  takes effect on the next run. The suites drive that -- a raised
+  tolerance forgiving the gap it used to shift, a renamed report layer,
+  feet-and-inches distances, a widened planarity gate auditing a tilted
+  arc, a direction bucket narrowed under a pair's 0.2 degrees.
+
+- **`DIMCHECK`, `LINFINCHECK` and `COVERCHECK` share one shape.** The
+  three are siblings (~40 helper names and 1,200-1,400 identical lines
+  pairwise), so the same values were buried in the same helpers: the
+  report-sizing cluster, the reading-order row band, the marker size,
+  the overlap direction bucket and entity list, the distance format and
+  three numerical guards. The sizing constants were typed twice in each
+  file -- once in the review command, once in the scan -- so a report
+  that came out the wrong size had to be fixed in two places or in
+  neither.
+
+- **Colour words follow the colour knobs.** The reports said "recolored
+  red" and "(magenta)" whatever the knobs held. `DIMCHECK`'s attention
+  pattern matched on the word MAGENTA, which is what forced it; it
+  matches on ENDPOINT(S) MOVED now -- what the line means rather than
+  what colour it came out -- so every colour word in the review, the
+  report and the tutorial is the colour actually used.
+
+- **`SPACHECK`'s grade, taper and short-name vocabularies are tables.**
+  Three `cond`s spelling out words that have to agree with the foam and
+  hardware tables above them; a shop whose blocks say "Deluxe FRP" adds
+  a row instead of editing a cond.
+
+### Fixed -- three of those were bugs, not untidiness
+
+- **`SPACHECK` could pass a sheet with no border.** The title-block
+  finding was decided by looking for the word `OK` in its own sentence,
+  and the "NO BORDER found on layer 'X'" sentence names the layer -- so
+  a border layer called `TB-OK` read as a pass. `spachk:title-verdict`
+  returns a flag beside its sentence now and the audit reads the flag.
+
+- **`ABCURCHECK`'s `Remove` ignored `acc:*snap-dist*`.** It dropped the
+  declaration nearest the pick however far away that pick landed, so a
+  stray click anywhere in the drawing removed one. It honours the snap
+  distance, as the declare pick always did. Its index also prints its
+  weights' actual sum rather than a typed `/ 100`.
+
+- **`LINTXTCHK`'s layout parameters could not be changed either way.**
+  The README said they were "set near the top of `LINTXTCHK.lsp` and are
+  easy to tweak"; they were locals of the command, so editing one meant
+  a trip inside the defun and a `setq` typed at the command line was
+  overwritten the moment the command started. Height, spacing, indent,
+  the bullet and the 26-line checklist are globals now, and the done
+  message names the height it actually used.
+
+  Six of the ten join `tests/test_tunables.py`, the repo-wide rule the
+  same release introduced, so one test now holds them to it: every knob
+  inside its block, none stray outside it, none re-assigned, each saying
+  what changing it does, and each a row in its README's table carrying
+  the default it really has -- 304 knobs over 13 files. The four that
+  cannot join yet are the ones still spelling their globals
+  `*tool-name*` rather than `tool:*name*`, which that test's namespace
+  pattern cannot see; their own suites carry the same assertions.
+
+  Two knobs had to stop being two things at once to get there.
+  `abp:*limit*` was a default the command overwrote with whatever you
+  last answered, so it read as a setting while being state; the knob is
+  the default now and `abp:*asked*` is the answer. `SPACHECK`'s three
+  demo/sysvar globals moved out of the block for the same reason.
+
+### Not changed, on purpose
+
+- The questions `LINCHECK` and `CCPRECHECK` ask. For those two the
+  wording, the order and which answer opens which follow-up are one
+  thing, held in the code; a table of prompts split from the branching
+  that reads them would be two places to keep in step instead of one.
+  Their blocks carry how each walk TALKS -- the tick, the separators,
+  the report's box, the Back synonyms each file had written out twice.
+- The deprecated acady matcher (`lisp/standards_checker/`), which
+  `STANDARDS.md` keeps as-is.
 
 ## v3.5 -- 2026-09-02
 

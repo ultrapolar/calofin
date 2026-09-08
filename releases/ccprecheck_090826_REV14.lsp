@@ -26,8 +26,61 @@
 ;;; Helpers
 ;;; ------------------------------------------------------------------
 
-(setq *ccprecheck-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *ccprecheck-version* "v1.4")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
+
+;;; ======================================================================
+;;;  TUNABLES -- every value CCPRECHECK reads that someone might want
+;;;  to change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line, because every knob is read when the command runs,
+;;;  not when the file loads.
+;;;
+;;;  What is NOT here, on purpose: the Tech Flow Chart itself.  This
+;;;  tool IS that chart -- which question is asked, which answer opens
+;;;  which branch, and what each branch tells you to do are one thing,
+;;;  held in the chk: functions below.  A table of prompts split from
+;;;  the branching that reads them would be two places to keep in step
+;;;  instead of one, and the branching is the part that is hard to get
+;;;  right.  The knobs here are how the walk TALKS, not where it goes.
+;;; ----------------------------------------------------------------------
+
+;; -- how the summary reads -----------------------------------------------
+
+;; The summary is printed to the command line when the walk finishes,
+;; one line per thing answered or noted.  These are the pieces it is
+;; built from: what marks an instruction the walk gave you, what marks
+;; something you confirmed, and the two separators -- between a
+;; question and the answer picked, and between a confirmation and the
+;; value typed against it.
+(setq chk:*note-mark*    "NOTE: ")
+(setq chk:*confirm-mark* "CONFIRMED: ")
+(setq chk:*ans-sep*      " -> ")
+(setq chk:*val-sep*      " = ")
+
+;; A note is echoed to the command line as it is given, behind this.
+(setq chk:*note-echo*    "\n  >> ")
+
+;; The summary's own furniture: its opening and closing rules, and the
+;; indent every line inside it carries.
+(setq chk:*sum-open*   "\n\n--- Checklist summary ---")
+(setq chk:*sum-close*  "\n--- End of checklist ---\n")
+(setq chk:*sum-indent* "  ")
+
+;; -- what a typed answer may say -----------------------------------------
+
+;; A getstring prompt cannot take initget keywords, so "go back a step"
+;; has to be typed like a note.  These are the words that mean it,
+;; matched case-blind and whole; add a synonym and every typed prompt
+;; takes it.  (The keyword prompts get Back and Undo from initget
+;; instead, which is a separate list by necessity.)
+(setq chk:*back-words* '("B" "BACK" "U" "UNDO"))
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  The two globals below are STATE, not knobs: what
+;;;  one walk of the chart has collected so far.
 
 (setq *chk:log* nil)   ; collected checklist lines for the summary
 
@@ -37,6 +90,7 @@
                        ; still Enter through, never an answer by itself,
                        ; so a re-run over the same job is Enter-Enter
                        ; down the unchanged questions
+;;; ======================================================================
 
 ;; Record a line for the final summary.
 (defun chk:log (msg)
@@ -58,13 +112,13 @@
 ;; T when a typed string means "go back a step" - getstring prompts
 ;; cannot take initget keywords, so Back is typed like a note.
 (defun chk:back-word (s)
-  (member (strcase s) '("B" "BACK" "U" "UNDO"))
+  (member (strcase s) chk:*back-words*)
 )
 
 ;; Print an instruction/note to the command line and log it.
 (defun chk:note (msg)
-  (princ (strcat "\n  >> " msg))
-  (chk:log (strcat "NOTE: " msg))
+  (princ (strcat chk:*note-echo* msg))
+  (chk:log (strcat chk:*note-mark* msg))
   msg
 )
 
@@ -91,7 +145,7 @@
   (if (member ans '("Back" "Undo"))
     'CHK-BACK
     (progn (setq *chk:prev* (cons (cons prompt ans) *chk:prev*))
-           (chk:log (strcat prompt " -> " ans)) ans)
+           (chk:log (strcat prompt chk:*ans-sep* ans)) ans)
   )
 )
 
@@ -111,8 +165,8 @@
                                  " or press Enter): ")))
   (cond
     ((and back (chk:back-word val)) 'CHK-BACK)
-    ((= val "") (chk:log (strcat "CONFIRMED: " item)) val)
-    (T (chk:log (strcat "CONFIRMED: " item " = " val)) val)
+    ((= val "") (chk:log (strcat chk:*confirm-mark* item)) val)
+    (T (chk:log (strcat chk:*confirm-mark* item chk:*val-sep* val)) val)
   )
 )
 
@@ -589,11 +643,11 @@
     nil
   )
   ;; Summary of everything answered / noted along the way
-  (princ "\n\n--- Checklist summary ---")
+  (princ chk:*sum-open*)
   (foreach line *chk:log*
-    (princ (strcat "\n  " line))
+    (princ (strcat "\n" chk:*sum-indent* line))
   )
-  (princ "\n--- End of checklist ---\n")
+  (princ chk:*sum-close*)
   (princ)
 )
 

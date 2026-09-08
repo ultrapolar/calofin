@@ -208,7 +208,7 @@ check("only the two shifted dims leave a construction line",
 
 txt = ''.join(vm.printed)
 check("the run says how many points it treated as anchors",
-      '1 point(s) carry more than one dimension - treated as anchors'
+      '1 point(s) carry 2 or more dimensions - treated as anchors'
       ' and left alone.' in txt, txt[-500:])
 check("the tally counts 4 checked, 2 shifted",
       'Dimensions: 4 checked, 2 shifted onto nearest object (red)' in txt,
@@ -364,6 +364,186 @@ check("the probe took it; the highlight was never asked",
       repr(vm.prompts))
 
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# 8. the tunables are honoured after load.  The TUNABLES block promises
+#    that every knob is read when the command runs, so a (setq ...) at
+#    the command line changes the next run; each knob is exercised
+#    here through the behaviour it is supposed to change, and the
+#    report's wording is checked to follow the colour knobs rather
+#    than say "red" whatever they hold.
+# ----------------------------------------------------------------------
+print("tunables honoured after load")
+
+vm = newvm()
+vm.loads('(setq *cfchk-tol* 1.0)')
+ents = made(vm, LINE)
+ents += made(vm, dim("K1", (20.0, 0.0), (60.0, 0.5)))
+vm.run('c:CHECK', [None, ents])
+txt = ''.join(vm.printed)
+check("*cfchk-tol* raised to 1.0: the 0.5 gap counts as attached",
+      near(grp(vm.entdata[ents[-1]], 14), (60.0, 0.5)) and
+      grp(vm.entdata[ents[-1]], 62) is None and
+      'Dimensions: 1 checked, 0 shifted' in txt, txt[-300:])
+check("and the summary echoes the tolerance it ran with",
+      'attachment tolerance 1.000000' in txt, txt[-300:])
+
+vm = newvm()
+vm.loads('(setq *cfchk-dim-color* 4 *cfchk-arc-color* 5)')
+ents = made(vm, LINE)
+ents += made(vm, dim("K2", (20.0, 0.0), (60.0, 0.5)))
+ents += made(vm, arc("K3", (65.0, -20.0), math.hypot(35.0, 20.0),
+                     (30.0, 0.0), (100.0, 0.0)))
+vm.run('c:CHECK', [None, ents])
+txt = ''.join(vm.printed)
+check("*cfchk-dim-color* / *cfchk-arc-color*: the entities take the new colours",
+      grp(vm.entdata[ents[1]], 62) == 4 and grp(vm.entdata[ents[2]], 62) == 5,
+      repr((grp(vm.entdata[ents[1]], 62), grp(vm.entdata[ents[2]], 62))))
+check("and the report says cyan and blue, never red or magenta",
+      'recolored cyan.' in txt and 'recolored blue.' in txt and
+      'shifted onto nearest object (cyan)' in txt and
+      'snapped (blue)' in txt and
+      'recolored red' not in txt and '(red)' not in txt and
+      'magenta' not in txt, txt[-600:])
+
+vm = newvm()
+vm.loads('(setq *cfchk-dim-color* 41)')
+ents = made(vm, LINE)
+ents += made(vm, dim("K4", (20.0, 0.0), (60.0, 0.5)))
+vm.run('c:CHECK', [None, ents])
+check("a colour with no name is reported by its number",
+      'recolored colour 41.' in ''.join(vm.printed) and
+      grp(vm.entdata[ents[-1]], 62) == 41, ''.join(vm.printed)[-300:])
+
+vm = newvm()
+vm.loads('(setq *cfchk-constr-layer* "MY-CHECK" *cfchk-constr-color* 5)')
+ents = made(vm, LINE)
+ents += made(vm, dim("K5", (20.0, 0.0), (60.0, 0.5)))
+vm.run('c:CHECK', [None, ents])
+xl = xlines(vm)
+rec = vm.loads('(tblsearch "LAYER" "MY-CHECK")')
+check("*cfchk-constr-layer* / *cfchk-constr-color*: the XLINE lands on the"
+      " renamed layer, created in the new colour, and the note names it",
+      len(xl) == 1 and xl[0][2] == 'MY-CHECK' and grp(rec, 62) == 5 and
+      'are on layer MY-CHECK.' in ''.join(vm.printed), repr((xl, rec)))
+
+vm = newvm()
+vm.loads("(setq *cfchk-dim-types* '(1))")
+ents = made(vm, LINE)
+# a ROTATED dimension (type 0) with a stray point is no longer audited
+ents += made(vm, dim("K6", (20.0, 0.0), (60.0, 0.5))
+             .replace("'(70 . 1)", "'(70 . 0)"))
+vm.run('c:CHECK', [None, ents])
+check("*cfchk-dim-types* without 0: a rotated dimension is skipped, not shifted",
+      near(grp(vm.entdata[ents[-1]], 14), (60.0, 0.5)) and
+      grp(vm.entdata[ents[-1]], 62) is None and
+      'Dimensions: 0 checked, 0 shifted onto nearest object (red),'
+      ' 1 unsupported type skipped' in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+
+vm = newvm()
+vm.loads('(setq *cfchk-anchor-min* 3)')
+ents = made(vm, LINE)
+ents += made(vm, dim("K7", (10.0, 0.0), (140.0, 30.0)))
+ents += made(vm, dim("K8", (90.0, 0.0), (140.0, 30.0)))
+vm.run('c:CHECK', [None, ents])
+p7, p8 = grp(vm.entdata[ents[1]], 14), grp(vm.entdata[ents[2]], 14)
+check("*cfchk-anchor-min* 3: two dims at a corner no longer make an anchor,"
+      " so both are pulled down onto the line",
+      abs(p7[1]) < TOL and abs(p8[1]) < TOL and
+      'treated as anchors' not in ''.join(vm.printed) and
+      'Dimensions: 2 checked, 2 shifted' in ''.join(vm.printed),
+      repr((p7, p8)))
+
+vm = newvm()
+vm.loads('(setq *cfchk-anchor-tol* 0.2)')
+ents = made(vm, LINE)
+ents += made(vm, dim("K9", (10.0, 0.0), (140.0, 30.0)))
+ents += made(vm, dim("K10", (90.0, 0.0), (140.1, 30.1)))   # 0.14 apart
+vm.run('c:CHECK', [None, ents])
+check("*cfchk-anchor-tol* 0.2: two corners 0.14 apart count as one anchor",
+      near(grp(vm.entdata[ents[1]], 14), (140.0, 30.0)) and
+      '1 point(s) carry 2 or more dimensions' in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+
+vm = newvm()
+vm.loads('(setq *cfchk-dist-prec* 1 *cfchk-tol-prec* 2)')
+ents = made(vm, LINE)
+ents += made(vm, dim("K11", (20.0, 0.0), (60.0, 0.5)))
+vm.run('c:CHECK', [None, ents])
+check("*cfchk-dist-prec* / *cfchk-tol-prec*: distances print at the asked places",
+      'point 2 shifted 0.5 ' in ''.join(vm.printed) and
+      'attachment tolerance 0.00)' in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+
+vm = newvm()
+vm.loads('(setq *cfchk-dist-mode* 4 *cfchk-dist-prec* 4)')
+ents = made(vm, LINE)
+ents += made(vm, dim("K12", (20.0, 0.0), (60.0, 0.5)))
+vm.run('c:CHECK', [None, ents])
+check("*cfchk-dist-mode* 4: the shift prints in feet and inches",
+      'point 2 shifted 0\'-0 1/2"' in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+
+vm = newvm()
+vm.loads("(setq *cfchk-curve-types* '(\"ARC\"))")
+ents = made(vm, LINE)
+ents += made(vm, dim("K13", (20.0, 0.0), (60.0, 0.5)))
+vm.run('c:CHECK', [None, ents])
+check("*cfchk-curve-types* without LINE: a line is no longer something to"
+      " attach to, so the guard stops the run",
+      not [c for c in vm.commands if c] and
+      near(grp(vm.entdata[ents[-1]], 14), (60.0, 0.5)), repr(vm.commands))
+
+vm = newvm()
+vm.loads('(setq *cfchk-planar-eps* 2.0)')
+ents = made(vm, LINE)
+ents += made(vm, arc("K14", (65.0, -20.0), math.hypot(35.0, 20.0),
+                     (30.0, 0.0), (100.0, 0.0),
+                     extra=" '(210 0.5 0.0 1.0)"))
+vm.run('c:CHECK', [None, ents])
+check("*cfchk-planar-eps* widened: a tilted arc is audited instead of skipped",
+      'Arcs: 1 checked, 1 with endpoint(s) snapped' in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+
+# ----------------------------------------------------------------------
+# 9. the TUNABLES block is where every knob lives: no *cfchk-* global
+#    is set anywhere else at top level, and each one carries a comment
+# ----------------------------------------------------------------------
+print("the tunables block")
+
+lines = SRC.splitlines()
+start = next(i for i, l in enumerate(lines) if l.startswith(';;;  TUNABLES'))
+end = next(i for i, l in enumerate(lines) if l.startswith(';;;  END TUNABLES'))
+check("the block opens and closes", 0 < start < end)
+outside = [l for i, l in enumerate(lines)
+           if l.startswith('(setq *cfchk-') and not start < i < end]
+check("no *cfchk-* knob is set outside the block", not outside, repr(outside))
+def explained(i):
+    """A knob is explained by a trailing remark, or by the ;;-prose at
+    the head of the paragraph it sits in - knobs that share one
+    explanation are grouped under it deliberately."""
+    if re.search(r'\)\s*;', lines[i]):
+        return True
+    j = i - 1
+    while j >= 0 and lines[j].strip():
+        if lines[j].lstrip().startswith(';;'):
+            return True
+        j -= 1
+    return False
+
+
+undocumented = [l for i, l in enumerate(lines[start:end], start)
+                if l.startswith('(setq *cfchk-') and not explained(i)]
+check("every knob carries an explanation", not undocumented, repr(undocumented))
+knobs = re.findall(r'^\(setq (\*cfchk-[a-z-]+\*)', SRC, re.M)
+vm = newvm()
+check("every knob loads bound (a torn edit would leave one nil)",
+      all(vm.loads(k) is not None for k in knobs), repr(knobs))
+readme = open(os.path.join(HERE, '..', 'lisp', 'check', 'README.md')).read()
+missing = [k for k in knobs if k not in readme]
+check("and the README's Tunables table names every knob", not missing,
+      repr(missing))
+
 print()
 if FAILS:
     print(f"{len(FAILS)} FAILED: " + ", ".join(FAILS))

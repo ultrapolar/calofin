@@ -63,6 +63,35 @@ re-routes the walk. The first question has nothing to go back to.
 | --- | --- |
 | `CCPRECHECK` | Walk the flowchart and print the summary |
 
+## Tunables
+
+Every value CCPRECHECK reads that you might want to change sits in one
+`TUNABLES` block at the top of `ccprecheck.lsp`, each with a comment saying
+what it does, its units, and what raising or lowering it changes. Edit
+the value and APPLOAD the file again, or type the `setq` at the command
+line to try a value for one session -- every knob is read when the
+command runs, not when the file loads.
+
+The tables below are the block, read off it:
+
+**How the summary reads**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `chk:*note-mark*` | `"NOTE: "` | The summary is printed to the command line when the walk finishes, one line per thing answered or noted. These are the pieces it is built from: what marks an instruction the walk gave you, what marks something you confirmed, and the two separators -- between a question and the answer picked, and between a confirmation and the value typed against it |
+| `chk:*confirm-mark*` | `"CONFIRMED: "` | The summary is printed to the command line when the walk finishes, one line per thing answered or noted. These are the pieces it is built from: what marks an instruction the walk gave you, what marks something you confirmed, and the two separators -- between a question and the answer picked, and between a confirmation and the value typed against it |
+| `chk:*ans-sep*` | `" -> "` | The summary is printed to the command line when the walk finishes, one line per thing answered or noted. These are the pieces it is built from: what marks an instruction the walk gave you, what marks something you confirmed, and the two separators -- between a question and the answer picked, and between a confirmation and the value typed against it |
+| `chk:*val-sep*` | `" = "` | The summary is printed to the command line when the walk finishes, one line per thing answered or noted. These are the pieces it is built from: what marks an instruction the walk gave you, what marks something you confirmed, and the two separators -- between a question and the answer picked, and between a confirmation and the value typed against it |
+| `chk:*note-echo*` | `"\n  >> "` | A note is echoed to the command line as it is given, behind this |
+| `chk:*sum-open*` | `"\n\n--- Checklist summary ---"` | The summary's own furniture: its opening and closing rules, and the indent every line inside it carries |
+| `chk:*sum-close*` | `"\n--- End of checklist ---\n"` | The summary's own furniture: its opening and closing rules, and the indent every line inside it carries |
+| `chk:*sum-indent*` | `"  "` | The summary's own furniture: its opening and closing rules, and the indent every line inside it carries |
+
+**What a typed answer may say**
+
+| Global | Default | Meaning |
+| --- | --- | --- |
+| `chk:*back-words*` | `'("B" "BACK" "U" "UNDO")` | A getstring prompt cannot take initget keywords, so "go back a step" has to be typed like a note. These are the words that mean it, matched case-blind and whole; add a synonym and every typed prompt takes it. (The keyword prompts get Back and Undo from initget instead, which is a separate list by necessity.) |
 ## Assumptions
 
 * The flowchart's questions, keyword sets and notes are fixed in the

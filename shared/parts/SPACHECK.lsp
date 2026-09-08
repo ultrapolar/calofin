@@ -113,13 +113,32 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.12")
+(setq *spacheck-version* "v1.13")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
 (vl-load-com)
 
-;;; -------------------- tunables ----------------------------------------
+;;; ======================================================================
+;;;  TUNABLES -- every value SPACHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq spachk:*meas-tol* 0.125) -- because
+;;;  every knob is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey, 256 ByLayer).
+;;;
+;;;  Several of these are SPA's values, not SPACHECK's own: the audit
+;;;  measures a drawing against what SPA draws, so if SPA moves, the
+;;;  matching knob here moves with it or the audit reports the drawing
+;;;  wrong.  Each one says so.
+;;; ----------------------------------------------------------------------
+
+;; -- layers ------------------------------------------------------------
 
 ;; Layers SPA draws on -- the audit is only as right as these are.
 (setq spachk:*lay-cover*  "COVER")      ; the cover outline and the hinges
@@ -169,22 +188,20 @@
 (setq spachk:*meas-tol*   0.0625)    ; 1/16" -- a fractional dim rounds
 (setq spachk:*pt-tol*     1.0e-4)
 
-;; Marking and report.
-(setq spachk:*sysold*      nil)      ; saved sysvars, restored on the way out
-(setq spachk:*demo-ents*   nil)      ; what TUTORIALSPACHECK's demo drew
-;; The demo opens an undo group and switches the dimension style, but
-;; the handler that must undo both lives in c:TUTORIALSPACHECK, a
-;; different defun that cannot see spachk:demo's locals -- so both bits
-;; of state are module globals, like the ent list above.
-(setq spachk:*odstyle*     nil)      ; the dim style the demo switched off
-(setq spachk:*grey-color*  8)
-(setq spachk:*flag-color*  1)        ; red: what you confirmed is wrong
-(setq spachk:*report-layer* "SPACHECK-REPORT")
-(setq spachk:*report-color* 3)
+;; -- marking and report colours ----------------------------------------
+
+(setq spachk:*grey-color*  8)        ; ACI: reserved for fading, unused today
+(setq spachk:*flag-color*  1)        ; ACI: what you confirmed is wrong (red)
+(setq spachk:*advice-color* 4)       ; ACI: advice, not a failure (cyan)
 (setq spachk:*green-scale* 0.75)     ; all-clear text height vs the red
-(setq spachk:*advice-color* 4)       ; cyan: advice, not a failure
+
+;; The layer the report MTEXT goes on, created on first use; the colour
+;; applies only then, so a layer already in the drawing keeps its own.
+(setq spachk:*report-layer* "SPACHECK-REPORT")
+(setq spachk:*report-color* 3)       ; ACI (green)
 (setq spachk:*report-chars* 48.0)    ; report column width, in text heights
-(setq spachk:*zoom-margin* 0.75)
+(setq spachk:*zoom-margin* 0.75)   ; empty space around a zoomed item
+
 
 ;; Foam sheets, copied from SPA (spa:*foamtab*) so the audit measures
 ;; against the same rules the drawing was built to:
@@ -212,6 +229,119 @@
     (list "STANDARD"    '(OVER 120.0) '(OVER 108.0) '(OVER 120.0))
     (list "ULTRA"       '(OVER 108.0) '(NEVER)      '(OVER 96.0))
     (list "THERMOLIGHT" '(ALWAYS)     '(NEVER)      '(NEVER))))
+
+;; A piece count this high or higher is the table's top row ("5 = 5+").
+(setq spachk:*hallow-max* 5)       ; pieces
+
+;; -- reading the drawing -----------------------------------------------
+
+;; The details block's two attribute tags, and how their values are
+;; recognised.  GRADE and TAPER are matched as SUBSTRINGS of the
+;; upper-cased value, first match winning, so "Ultra FRP" reads as
+;; ULTRA; a value matching nothing takes the default grade.  Every
+;; canonical name here must appear in *foamtab* and *hardtab* above, or
+;; the audit has a grade it can recognise but not measure against.
+(setq spachk:*grade-tag*  "GRADE")
+(setq spachk:*taper-tag*  "TAPER")
+(setq spachk:*grade-words*
+      '(("ECON"   . "ECONOMY")
+        ("ULTRA"  . "ULTRA")
+        ("FRP"    . "ULTRA")
+        ("THERMO" . "THERMOLIGHT")))
+(setq spachk:*grade-default* "STANDARD")  ; the grade a value matching nothing takes
+;; ...and the taper vocabulary, matched the same way; an unrecognised
+;; taper measures against no foam row at all rather than the wrong one.
+(setq spachk:*taper-words*
+      '(("3-2" . "3-2") ("4-2" . "4-2") ("4-3" . "4-3")
+        ("5-3" . "5-3") ("5-4" . "5-4") ("3-3" . "3-3")
+        ("3/8" . "1-3/8")))
+
+;; The short grade names the report prints, keyed by the canonical name.
+(setq spachk:*grade-short*
+      '(("ECONOMY" . "ECO") ("STANDARD" . "STD")
+        ("ULTRA" . "ULTRA") ("THERMOLIGHT" . "THERMO")))
+
+;; Entity types, by the job each does in the audit: what may be an
+;; outline at all, which of those are closed by their nature rather
+;; than by a flag, and what counts as loose (unbounded) output -- which
+;; on the cover layer is also what a hinge is drawn as.
+(setq spachk:*outline-types* '("LWPOLYLINE" "POLYLINE" "CIRCLE" "ELLIPSE"))
+(setq spachk:*closed-types*  '("CIRCLE" "ELLIPSE"))
+(setq spachk:*loose-types*   '("LINE" "ARC"))
+
+;; Dimension subtypes whose span can be measured, by the low three bits
+;; of DXF group 70: 0 = rotated, 1 = aligned.
+(setq spachk:*linear-types*  '(0 1))
+
+;; The word SPA labels a Velcro hinge with.  The arrangement audit
+;; finds those labels by it, so it has to be the word SPA writes.
+(setq spachk:*velcro-word*   "Velcro")
+
+;; -- how the report is sized and placed --------------------------------
+
+;; The report is scaled to the drawing, exactly as the check family's
+;; siblings do it.  WIDE: on a wide, short sheet the reference height is
+;; at least this fraction of the width.  LEAD: MTEXT line pitch as a
+;; multiple of text height.  HMAX/HMIN: divisors clamping the height --
+;; never taller than reference/HMAX, never shorter than reference/HMIN,
+;; so a smaller number is a looser bound.  HFALL: the height used when
+;; there is nothing to scale against.  GAP: space between drawing and
+;; report, as a fraction of the drawing's width.
+(setq spachk:*report-wide*  0.25)
+(setq spachk:*report-lead*  1.66)
+(setq spachk:*report-hmax*  30.0)
+(setq spachk:*report-hmin*  200.0)
+(setq spachk:*report-hfall* 2.5)   ; drawing units
+(setq spachk:*report-gap*   0.05)
+
+;; Gap between the main sheet and the DIMENSION AUDIT column beside it,
+;; in text heights.
+(setq spachk:*col-gap*      2.0)
+
+;; The title is written this many times the base height, and a section
+;; heading gets this much blank line above it.  Both are used twice:
+;; once to draw, once to guess how many lines the sheet will run to --
+;; HEAD is the allowance for the title, date, verdict and legend, and
+;; HDG-LINES for a heading plus its gap.
+(setq spachk:*title-scale*  1.5)
+(setq spachk:*hdg-gap*      0.4)
+(setq spachk:*head-lines*   4.5)
+(setq spachk:*hdg-lines*    1.4)
+(setq spachk:*dim-head*     2.5)   ; the same allowance for the audit column
+
+;; Findings are indented under their heading by this string.
+(setq spachk:*row-indent*   "  ")
+
+;; -- the date the sheet must carry -------------------------------------
+
+;; The sheet's date is written and read in this order, with this
+;; separator: change both together, and remember the audit rewrites a
+;; wrong date into this form.
+(setq spachk:*date-sep*     "/")
+(setq spachk:*date-order*   '(month day year))
+
+;; -- numerical guards (rarely changed) ---------------------------------
+
+;; A border edge shorter than this has no measurable size, and a
+;; bounding box smaller than this has nothing to scale a report to.
+(setq spachk:*tiny*         1.0e-6)   ; drawing units
+
+;; How close a foam sheet's dimension must come to the table's before
+;; it counts as that sheet -- foam is cut to the inch, so this is
+;; slack for a drawing's rounding, not a tolerance on the foam.
+(setq spachk:*foam-slack*   0.01)     ; drawing units
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  What follows is STATE, not settings: what one run
+;;;  has to remember while it runs.  The tutorial's
+;;;  demo opens an undo group and switches the dimension style, but the
+;;;  handler that must undo both lives in c:TUTORIALSPACHECK, a
+;;;  different defun that cannot see spachk:demo's locals -- so both
+;;;  bits of state are module globals, as is the sysvar snapshot.
+(setq spachk:*sysold*      nil)      ; saved sysvars, restored on the way out
+(setq spachk:*demo-ents*   nil)      ; what TUTORIALSPACHECK's demo drew
+(setq spachk:*odstyle*     nil)      ; the dim style the demo switched off
+;;; ======================================================================
 
 ;;; -------------------- small helpers -----------------------------------
 
@@ -262,16 +392,16 @@
 (defun spachk:small (s)
   (strcat "{\\H" (rtos spachk:*green-scale* 2 2) "x;" s "}"))
 
-;; The report's title line: half again the base height.
+;; The report's title line, at *title-scale* times the base height.
 (defun spachk:big (s)
-  (strcat "{\\H1.5x;" s "}"))
+  (strcat "{\\H" (rtos spachk:*title-scale* 2 2) "x;" s "}"))
 
 ;; A section heading: underlined, with a thin blank line above it so
 ;; the sections read as blocks.  The braces scope both codes, and the
-;; \P inside the first group is a paragraph break at 0.4x height --
-;; a narrow gap, not a full empty line.
+;; \P inside the first group is a paragraph break at *hdg-gap* of the
+;; height -- a narrow gap, not a full empty line.
 (defun spachk:hdg (s)
-  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+  (strcat "{\\H" (rtos spachk:*hdg-gap* 2 2) "x;\\P}{\\L" s "}"))
 
 ;; Findings are indented two spaces under their heading; the indent
 ;; sits INSIDE the colour/height wrap so a problem row still starts
@@ -321,7 +451,7 @@
        (>= (- (cadadr outer) (cadadr inner)) (- slack))))
 
 (defun spachk:closed-p (ent / f)
-  (cond ((member (spachk:etype ent) '("CIRCLE" "ELLIPSE")) t)
+  (cond ((member (spachk:etype ent) spachk:*closed-types*) t)
         ((= (spachk:etype ent) "LWPOLYLINE")
          (setq f (spachk:dxf 70 ent))
          (and f (numberp f) (= 1 (logand 1 f))))
@@ -335,8 +465,7 @@
       (setq e (ssname ss i) i (1+ i))
       (if (and (entget e)
                (spachk:on-layer-p e layer)
-               (member (spachk:etype e)
-                       '("LWPOLYLINE" "POLYLINE" "CIRCLE" "ELLIPSE")))
+               (member (spachk:etype e) spachk:*outline-types*))
         (setq out (cons e out)))))
   (reverse out))
 
@@ -349,7 +478,7 @@
       (setq e (ssname ss i) i (1+ i))
       (if (and (entget e)
                (spachk:on-layer-p e layer)
-               (member (spachk:etype e) '("LINE" "ARC")))
+               (member (spachk:etype e) spachk:*loose-types*))
         (setq out (cons e out)))))
   (reverse out))
 
@@ -384,26 +513,25 @@
        (setq fallback e))))
   (if best best fallback))
 
-(defun spachk:tapernorm (v / u)
-  (setq u (strcase v))
-  (cond ((spachk:has u "3-2") "3-2")
-        ((spachk:has u "4-2") "4-2")
-        ((spachk:has u "4-3") "4-3")
-        ((spachk:has u "5-3") "5-3")
-        ((spachk:has u "5-4") "5-4")
-        ((spachk:has u "3-3") "3-3")
-        ((spachk:has u "3/8") "1-3/8")))
-
-(defun spachk:gradenorm (v / u)
+;; The first word of TABLE the upper-cased value contains, or nil.
+;; Order matters: the table is walked top to bottom, first hit winning.
+(defun spachk:vocab (v table / u hit p)
   (setq u (strcase (if v v "")))
-  (cond ((spachk:has u "ECON") "ECONOMY")
-        ((or (spachk:has u "ULTRA") (spachk:has u "FRP")) "ULTRA")
-        ((spachk:has u "THERMO") "THERMOLIGHT")
-        (t "STANDARD")))
+  (foreach p table
+    (if (and (not hit) (spachk:has u (strcase (car p))))
+      (setq hit (cdr p))))
+  hit)
 
-(defun spachk:gradeshort (g)
-  (cond ((= g "ECONOMY") "ECO") ((= g "STANDARD") "STD")
-        ((= g "ULTRA") "ULTRA") (t "THERMO")))
+(defun spachk:tapernorm (v)
+  (spachk:vocab v spachk:*taper-words*))
+
+(defun spachk:gradenorm (v / g)
+  (setq g (spachk:vocab v spachk:*grade-words*))
+  (if g g spachk:*grade-default*))
+
+(defun spachk:gradeshort (g / p)
+  (setq p (assoc g spachk:*grade-short*))
+  (if p (cdr p) g))
 
 ;;; -------------------- dimensions --------------------------------------
 
@@ -430,7 +558,7 @@
 ;; the whole audit down over one malformed entity.
 (defun spachk:linear-p (ent / f)
   (setq f (spachk:dxf 70 ent))
-  (and f (numberp f) (member (logand 7 f) '(0 1))))
+  (and f (numberp f) (member (logand 7 f) spachk:*linear-types*)))
 
 ;; The dimension line's own location (DXF 10).
 (defun spachk:dim-loc (ent) (spachk:dxf 10 ent))
@@ -490,38 +618,41 @@
 
 ;; A spa sheet's title block is exactly spachk:*title-frac* of the liner
 ;; block.  Returns the report sentence.
+;; (sentence . T when the title block is right).  The FLAG is what
+;; decides the finding: reading the sentence for the word "OK" made a
+;; border layer with OK in its name pass a sheet that has no border.
 (defun spachk:title-verdict (bb / bw bh tw th sw sh sc)
   (setq tw (* spachk:*title-frac* spachk:*liner-w*)
         th (* spachk:*title-frac* spachk:*liner-h*))
   (if (null bb)
-    (strcat "NO BORDER found on layer '" spachk:*border-layer* "'")
+    (cons (strcat "NO BORDER found on layer '" spachk:*border-layer* "'") nil)
     (progn
       (setq bw (spachk:bw bb) bh (spachk:bh bb))
-      (if (or (<= bw 1.0e-6) (<= bh 1.0e-6))
-        "border has no measurable size"
+      (if (or (<= bw spachk:*tiny*) (<= bh spachk:*tiny*))
+        (cons "border has no measurable size" nil)
         (progn
           (setq sw (/ bw tw) sh (/ bh th) sc (min sw sh))
           (cond
             ;; out of proportion is wrong whatever its size
             ((> (abs (- sw sh)) (* spachk:*border-tol* (max sw sh)))
-             (strcat (rtos bw) " x " (rtos bh)
+             (cons (strcat (rtos bw) " x " (rtos bh)
                      " - STRETCHED out of proportion (" (rtos sw 2 3)
                      "x wide but " (rtos sh 2 3) "x tall); a spa title"
-                     " block is " (rtos tw) " x " (rtos th)))
+                     " block is " (rtos tw) " x " (rtos th)) nil))
             ;; the size the user asked for by name
             ((and (> sc (- 1.0 spachk:*border-tol*))
                   (< sc (+ 1.0 spachk:*border-tol*)))
-             (strcat (rtos bw) " x " (rtos bh) " - "
+             (cons (strcat (rtos bw) " x " (rtos bh) " - "
                      (rtos spachk:*title-frac* 2 2)
-                     "x the liner block, OK"))
+                     "x the liner block, OK") t))
             (t
-             (strcat (rtos bw) " x " (rtos bh) " is "
+             (cons (strcat (rtos bw) " x " (rtos bh) " is "
                      (rtos (* sc spachk:*title-frac*) 2 3)
                      "x the liner block "
                      (rtos spachk:*liner-w*) " x " (rtos spachk:*liner-h*)
                      " - a spa title block must be exactly "
                      (rtos spachk:*title-frac* 2 2) "x it ("
-                     (rtos tw) " x " (rtos th) ")"))))))))
+                     (rtos tw) " x " (rtos th) ")") nil))))))))
 
 ;; Everything on the border layer, from the selection when it holds the
 ;; border and from the whole drawing when it does not.
@@ -644,7 +775,7 @@
     (progn
       (setq bc (cal:bbox-ent cov) bw (cal:bbox-ent wat))
       (if (and bc bw)
-        (if (spachk:inside-p bw bc 1.0e-6)
+        (if (spachk:inside-p bw bc spachk:*tiny*)
           (setq rows (list (spachk:row
                              (strcat "Cover vs water's edge: cover "
                                      (rtos (spachk:bw bc)) " x "
@@ -945,7 +1076,7 @@
         (setq maxrun (max maxrun
                           (abs (- (cadr (spachk:dxf 11 e))
                                   (cadr (spachk:dxf 10 e)))))))
-      (if (and fl (> maxrun (+ fl 0.01)))
+      (if (and fl (> maxrun (+ fl spachk:*foam-slack*)))
         (setq rows (append rows
                     (list (spachk:row
                             (strcat "Foam length: longest hinge "
@@ -970,7 +1101,7 @@
             (setq maxpiece (max maxpiece (- (car (spachk:dxf 10 e)) prev))
                   prev (car (spachk:dxf 10 e))))
           (setq maxpiece (max maxpiece (- (caadr bb) prev)))
-          (if (> maxpiece (+ fw 0.01))
+          (if (> maxpiece (+ fw spachk:*foam-slack*))
             (setq rows (append rows
                         (list (spachk:row
                                 (strcat "Foam width: widest piece "
@@ -992,7 +1123,7 @@
       (setq want (spachk:hingetypes n allvel)
             got (mapcar '(lambda (e)
                            (if (spachk:has (spachk:hinge-label e labels)
-                                           "Velcro")
+                                           spachk:*velcro-word*)
                                "V" "H"))
                         sorted))
       (if (equal want got)
@@ -1047,12 +1178,12 @@
 
 ;;; --- 6. the title block -------------------------------------------------
 
-(defun spachk:audit-title (ss / bb s)
+(defun spachk:audit-title (ss / bb v)
   (setq bb (spachk:border-box ss)
-        s  (spachk:title-verdict bb))
+        v  (spachk:title-verdict bb))
   (spachk:res
-    (list (spachk:row (strcat "Title block: " s)
-                      (if (spachk:has s "OK") nil 1)))
+    (list (spachk:row (strcat "Title block: " (car v))
+                      (if (cdr v) nil 1)))
     nil))
 
 ;;; --- feet-and-inch text -------------------------------------------------
@@ -1468,22 +1599,26 @@
   ;; head is title (1.5) + date + verdict (1.2) + legend; a heading
   ;; row is one line plus the 0.4 gap above it.  The dimension column
   ;; is counted the same way, and the taller column drives the height.
-  (setq nlin 4.5)
+  (setq nlin spachk:*head-lines*)
   (foreach r rows
-    (setq nlin (+ nlin (cond ((spachk:lvl-p r 3) 1.4)
+    (setq nlin (+ nlin (cond ((spachk:lvl-p r 3) spachk:*hdg-lines*)
                              ((spachk:row-lvl r) 1.0)
                              (t spachk:*green-scale*)))))
-  (setq ndim (+ 2.5 (if drows (length drows) 1)))
+  (setq ndim (+ spachk:*dim-head* (if drows (length drows) 1)))
   (if (and (not lite) (> ndim nlin)) (setq nlin ndim))
-  (if (and bb (> (max (spachk:bw bb) (spachk:bh bb)) 1.0e-8))
+  (if (and bb (> (max (spachk:bw bb) (spachk:bh bb)) spachk:*tiny*))
     (progn
-      (setq ref (max (spachk:bh bb) (* 0.25 (spachk:bw bb)))
-            h   (/ ref (* 1.66 nlin)))
-      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-    (setq h 2.5))
+      (setq ref (max (spachk:bh bb)
+                     (* spachk:*report-wide* (spachk:bw bb)))
+            h   (/ ref (* spachk:*report-lead* nlin)))
+      (if (> h (/ ref spachk:*report-hmax*))
+        (setq h (/ ref spachk:*report-hmax*)))
+      (if (< h (/ ref spachk:*report-hmin*))
+        (setq h (/ ref spachk:*report-hmin*))))
+    (setq h spachk:*report-hfall*))
   (setq ins (if bb
-                (list (+ (caadr bb) (* 0.05 (max (spachk:bw bb) 1.0)))
+                (list (+ (caadr bb)
+                         (* spachk:*report-gap* (max (spachk:bw bb) 1.0)))
                       (cadadr bb) 0.0)
                 (list 0.0 0.0 0.0)))
   ;; the head: a large title, the date and version small under it, a
@@ -1533,7 +1668,8 @@
   ;; the DIMENSION AUDIT column, to the right of the main sheet
   (if (not lite)
     (progn
-      (setq ins2 (list (+ (car ins) (* (+ spachk:*report-chars* 2.0) h))
+      (setq ins2 (list (+ (car ins)
+                          (* (+ spachk:*report-chars* spachk:*col-gap*) h))
                        (cadr ins) 0.0)
             txt  (strcat "{\\H1.2x;DIMENSION AUDIT}"
                          "\\P"

@@ -26390,53 +26390,147 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.4")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
-;; ---- configuration ---------------------------------------------------
+;;; ======================================================================
+;;;  TUNABLES -- every value ABCURCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq acc:*kink-tol* 5.0) -- because every
+;;;  knob is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); angles are DEGREES here even though the code works in
+;;;  radians; colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey).
+;;;
+;;;  The tangent bands are ABHD's, not this file's: the two commands
+;;;  have to agree on what smooth means, and tests/test_abcurcheck.py
+;;;  fails if they part company.  Move them only when ABHD's move.
+;;; ----------------------------------------------------------------------
+
+;; -- where the marks go -------------------------------------------------
 
 (setq acc:*mark-layer*   "POOL-CONT")  ; findings and declarations go here
 (setq acc:*comb-layer*   "POOL-COMB")  ; the curvature comb goes here
-(setq acc:*fuzz*         1.0e-4)       ; endpoint-matching fuzz, as ABHD's
-                                       ; *PF-CHAIN-FUZZ*: closer than this
-                                       ; and two ends are the same point
-(setq acc:*tangent-eps*  0.5)          ; deg - at or under this a joint is
-                                       ; tangent
-(setq acc:*kink-tol*     8.0)          ; deg - ABHD's *PF-TANG-TOL*: the
-                                       ; most a joint may turn and still
-                                       ; read as smooth
-(setq acc:*corner-ang*   45.0)         ; deg - ABHD's *PF-CORNER-ANG*:
-                                       ; over this it is a corner, not a
-                                       ; kink
-(setq acc:*micro-len*    3.0)          ; a segment shorter than this (3
-                                       ; inches) is a micro-segment: the
-                                       ; signature of a traced outline
-(setq acc:*micro-share*  0.10)         ; share of the perimeter sitting in
-                                       ; micro-segments that costs the
-                                       ; whole noise score
-(setq acc:*close-tol*    5.0)          ; deg - how far the signed turning
-                                       ; total may sit off 360 before the
-                                       ; loop is called self-crossing
-(setq acc:*snap-dist*    6.0)          ; how near a declaration pick must
-                                       ; land to a joint to claim it
-(setq acc:*mark-radius*  4.0)          ; radius of the finding rings
-(setq acc:*cross-max*    300)          ; skip the O(n^2) crossing scan
-                                       ; above this many segments, and say
-                                       ; so rather than pretend it ran
-(setq acc:*comb-step*    12.0)         ; one comb tooth per foot of run
-(setq acc:*comb-max*     24.0)         ; length of the tooth at the
-                                       ; tightest curvature in the loop
-(setq acc:*excess-free*  0.35)         ; turning excess a freeform pool is
-                                       ; allowed before the noise score
-                                       ; starts to fall...
-(setq acc:*excess-cap*   1.00)         ; ...and where it reaches zero
-(setq acc:*w-integrity*  40.0)         ; index weights: G0 is pass/fail,
-(setq acc:*w-tangency*   35.0)         ; tangency scales with the total
-(setq acc:*w-noise*      25.0)         ; undeclared kink, noise with the
-                                       ; micro share and turning excess
+(setq acc:*mark-color*   3)            ; ACI: the marks layer (green)
+(setq acc:*comb-color*   4)            ; ACI: the comb layer (cyan)
+(setq acc:*gap-color*    1)            ; ACI: a gap, or the kink band (red)
+(setq acc:*corner-color* 2)            ; ACI: an undeclared corner (yellow)
+(setq acc:*decl-color*   3)            ; ACI: a declared break (green)
 
+;; Everything ABCURCHECK draws carries xdata under this name, so a
+;; rescue erases only its own work off a layer the drawing may already
+;; be using.  Renaming it orphans what earlier runs left behind --
+;; including the declarations a later run is supposed to remember.
+(setq acc:*appid*        "ABCURCHECK")
+
+;; The dashed linetype declarations are ringed with, and its pattern:
+;; dash, gap, and the total the two must add up to.  It is created at
+;; pool scale so the dashes read on a 40-foot perimeter.
+(setq acc:*dash-name*    "DASHED")
+(setq acc:*dash-on*      12.0)         ; drawing units of dash
+(setq acc:*dash-off*     6.0)          ; ...and of gap
+;; -- G0: is the loop closed at all -------------------------------------
+
+;; Closer than this and two ends are the same point -- ABHD's
+;; *PF-CHAIN-FUZZ*.  Raising it forgives sloppier joins; a gap over it
+;; is a finding in its own right and the worst thing the grade can
+;; carry.
+(setq acc:*fuzz*         1.0e-4)       ; drawing units
+
+;; The signed turning of a simple closed loop is 360 degrees.  This is
+;; how far off that the total may sit before the loop is called
+;; self-crossing.
+(setq acc:*close-tol*    5.0)          ; degrees
+
+;; The crossing scan compares every segment with every other, so it is
+;; skipped above this many segments -- and the report says it was
+;; skipped rather than pretending it ran.
+(setq acc:*cross-max*    300)          ; segments
+
+;; -- G1: how sharply a joint may turn ----------------------------------
+
+;; At or under this a joint is TANGENT -- the two sides run on into
+;; each other and there is nothing to report.
+(setq acc:*tangent-eps*  0.5)          ; degrees
+
+;; The most a joint may turn and still read as smooth, and the angle
+;; over which it stops being a kink and becomes a corner.  Both are
+;; ABHD's (*PF-TANG-TOL* and *PF-CORNER-ANG*): the 8-45 band is the one
+;; a fabricator finds in the bead, which is why it leads the grade.
+;; Move them only when ABHD's move -- the test fails if they part.
+(setq acc:*kink-tol*     8.0)          ; degrees
+(setq acc:*corner-ang*   45.0)         ; degrees
+
+;; -- noise: what a traced outline leaves behind ------------------------
+
+;; A segment shorter than this is a micro-segment, the signature of an
+;; outline traced by hand rather than drawn.
+(setq acc:*micro-len*    3.0)          ; drawing units
+
+;; The share of the perimeter sitting in micro-segments that costs the
+;; whole noise score.  Lower it and a lightly traced outline is
+;; punished harder.
+(setq acc:*micro-share*  0.10)         ; fraction of the perimeter
+
+;; A freeform pool turns more than 360 degrees in total because it
+;; weaves; FREE is the excess it is owed before the noise score starts
+;; to fall, and CAP is where that score reaches zero.  These two are
+;; the values most worth recalibrating against real drawings.
+(setq acc:*excess-free*  0.35)         ; turns beyond one full turn
+(setq acc:*excess-cap*   1.00)         ; ...and where it reaches zero
+
+;; -- the 0-100 index ---------------------------------------------------
+
+;; What each half of the check is worth.  The three are summed and
+;; printed as the denominator, so they need not add to 100 -- but the
+;; grade word is set by the single worst thing found, not by the index,
+;; and these weights do not move it.
+(setq acc:*w-integrity*  40.0)         ; G0: gaps, doubles, crossings
+(setq acc:*w-tangency*   35.0)         ; the kink and corner bands
+(setq acc:*w-noise*      25.0)         ; micro share and turning excess
+
+;; -- picking and marking ------------------------------------------------
+
+;; How near a pick must land to a joint to declare it -- or, on Remove,
+;; to drop the declaration nearest the pick.
+(setq acc:*snap-dist*    6.0)          ; drawing units
+
+;; Radius of the rings drawn round a finding or a declaration.
+(setq acc:*mark-radius*  4.0)          ; drawing units
+
+;; -- the curvature comb -------------------------------------------------
+
+;; One comb tooth per this much run, and the length of the tooth at the
+;; tightest curvature in the loop -- every other tooth is scaled
+;; against that one, so the comb is a picture of relative curvature.
+(setq acc:*comb-step*    12.0)         ; drawing units per tooth
+(setq acc:*comb-max*     24.0)         ; drawing units at the tightest bend
+
+;; -- the finding labels -------------------------------------------------
+
+;; Label text is sized against the perimeter, so it reads the same on a
+;; 20-foot spa and a 60-foot pool: perimeter/DIV, but never under MIN.
+(setq acc:*label-min*    4.0)          ; drawing units
+(setq acc:*label-div*    200.0)        ; perimeter divided by this
+
+;; -- numerical guards (rarely changed) ---------------------------------
+
+;; A curvature below this is straight, so the comb is not drawn at all;
+;; a tooth shorter than this is not drawn either.
+(setq acc:*flat-curv*    1.0e-12)      ; 1/drawing units
+(setq acc:*flat-tooth*   1.0e-6)       ; drawing units
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  The sysvar list and its snapshot below are not
+;;;  knobs: they are what the run puts back on the way out.
 (setq acc:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
 ;; Local copies of the generic library helpers, as the standalone tier
@@ -27076,7 +27170,12 @@
         ix (acc:index res))
   (princ (strcat "\n\n  GRADE  " (cal:pad (car g) 10)
                  "set by: " (cadr g)))
-  (princ (strcat "\n  Index  " (cal:pad (strcat (itoa (car ix)) " / 100") 10)
+  (princ (strcat "\n  Index  "
+                 (cal:pad (strcat (itoa (car ix)) " / "
+                                  (itoa (fix (+ acc:*w-integrity*
+                                                acc:*w-tangency*
+                                                acc:*w-noise*))))
+                          10)
                  "(integrity " (itoa (cadr ix))
                  ", tangency " (itoa (caddr ix))
                  ", noise " (itoa (cadddr ix)) ")"))
@@ -27089,14 +27188,15 @@
 ;; calls).  Dash lengths are in drawing units - sized for an inch
 ;; drawing, so the dashes read at pool scale.
 (defun acc:ensure-dashed ()
-  (if (not (tblsearch "LTYPE" "DASHED"))
+  (if (not (tblsearch "LTYPE" acc:*dash-name*))
     (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLinetypeTableRecord")
-                   '(2 . "DASHED") '(70 . 0)
+                   (cons 2 acc:*dash-name*) '(70 . 0)
                    '(3 . "Dashed __ __ __ __ __")
-                   '(72 . 65) '(73 . 2) '(40 . 18.0)
-                   '(49 . 12.0) '(74 . 0)
-                   '(49 . -6.0) '(74 . 0)))))
+                   '(72 . 65) '(73 . 2)
+                   (cons 40 (+ acc:*dash-on* acc:*dash-off*))
+                   (cons 49 acc:*dash-on*) '(74 . 0)
+                   (cons 49 (- acc:*dash-off*)) '(74 . 0)))))
 
 ;; ---- "this one is mine" stamping -------------------------------------
 ;; ABCURCHECK draws onto layers the drawing may already be using, so it
@@ -27108,15 +27208,15 @@
 (defun acc:tag (en kind / ed)
   (if en
     (progn
-      (regapp "ABCURCHECK")
+      (regapp acc:*appid*)
       (setq ed (entget en))
-      (entmod (append ed (list (list -3 (list "ABCURCHECK"
+      (entmod (append ed (list (list -3 (list acc:*appid*
                                               (cons 1000 kind))))))))
   en)
 
 (defun acc:kind (en / x)
-  (setq x (assoc -3 (entget en '("ABCURCHECK"))))
-  (if x (cdr (assoc 1000 (cdr (assoc "ABCURCHECK" (cdr x)))))))
+  (setq x (assoc -3 (entget en (list acc:*appid*))))
+  (if x (cdr (assoc 1000 (cdr (assoc acc:*appid* (cdr x)))))))
 
 ;; Erase this command's own objects of one KIND on a layer, leaving
 ;; anything the user drew there alone.  Returns how many went.
@@ -27173,24 +27273,25 @@
 ;; drawing and the answer list can never disagree.
 (defun acc:draw-declared (declared / p)
   (acc:ensure-dashed)
-  (cal:ensure-layer acc:*mark-layer* 3)
+  (cal:ensure-layer acc:*mark-layer* acc:*mark-color*)
   (acc:purge acc:*mark-layer* "DECL")
   (foreach p declared
-    (acc:tag (acc:ring p acc:*mark-radius* 3 T) "DECL")))
+    (acc:tag (acc:ring p acc:*mark-radius* acc:*decl-color* T) "DECL")))
 
 ;; Ring and label every undeclared finding.  Only what fails is marked:
 ;; a ring on all 47 joints of a normal polyline says nothing, and a
 ;; drawing nobody can read is a check nobody runs.
 (defun acc:draw-marks (res / h col lab n j)
-  (cal:ensure-layer acc:*mark-layer* 3)
+  (cal:ensure-layer acc:*mark-layer* acc:*mark-color*)
   (acc:purge acc:*mark-layer* "MARK")
-  (setq h (max 4.0 (/ (acc:val "perim" res) 200.0))
+  (setq h (max acc:*label-min*
+               (/ (acc:val "perim" res) acc:*label-div*))
         n 0)
   (foreach j (acc:offenders res)
     (setq col (if (or (>= (acc:j-gap j) acc:*fuzz*)
                       (= (acc:j-band j) "kink"))
-                1     ; red - a gap, or the 8-45 deg band that hurts
-                2)    ; yellow - a corner nobody declared
+                acc:*gap-color*      ; a gap, or the band that hurts
+                acc:*corner-color*)  ; a corner nobody declared
           lab (if (>= (acc:j-gap j) acc:*fuzz*)
                 (strcat "gap " (rtos (acc:j-gap j) 2 3))
                 (strcat (rtos (acc:deg (abs (acc:j-ang j))) 2 1) "%%d"))
@@ -27233,14 +27334,14 @@
         kmax 0.0)
   (foreach pr segs
     (setq kmax (max kmax (abs (acc:seg-curv pr)))))
-  (if (< kmax 1.0e-12)
+  (if (< kmax acc:*flat-curv*)
     (progn
       (princ "\n  The comb was not drawn: this perimeter is all straight"
              )
       (princ "\n  lines, so every tooth would have zero length.")
       0)
     (progn
-      (cal:ensure-layer acc:*comb-layer* 4)
+      (cal:ensure-layer acc:*comb-layer* acc:*comb-color*)
       (acc:purge acc:*comb-layer* "MARK")
       (setq scale (/ acc:*comb-max* kmax)
             tips  (acc:comb-tips segs scale)
@@ -27250,7 +27351,7 @@
         ;; a zero-length tooth on a straight run would be a degenerate
         ;; line, so only real teeth are drawn - the envelope still runs
         ;; through the curve there, which is what flat should look like
-        (if (> (cal:dist (car pr) (cadr pr)) 1.0e-6)
+        (if (> (cal:dist (car pr) (cadr pr)) acc:*flat-tooth*)
           (acc:tag
             (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
                             (cons 8 acc:*comb-layer*) '(100 . "AcDbLine")
@@ -27307,7 +27408,8 @@
              (setq p (cal:2d p) best nil bd nil)
              (foreach q declared
                (setq d (cal:dist p q))
-               (if (or (null bd) (< d bd)) (setq bd d best q)))
+               (if (and (<= d acc:*snap-dist*) (or (null bd) (< d bd)))
+                 (setq bd d best q)))
              (if best
                (setq declared (acc:remove best declared))
                (princ "\n  Nothing declared to drop."))))))
@@ -27543,33 +27645,126 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.4")
+(setq *abpcheck-version* "v1.5")
 
-;;; -------------------- tunables ----------------------------------------
+;;; ======================================================================
+;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq abp:*limit* 0.5) -- because every knob
+;;;  is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
+
+;; -- where the survey points are ---------------------------------------
 
 ;; Where the survey points live, and what a point block calls its
 ;; number -- ABHD's *PF-POINT-LAYER* / *PF-POINT-BLOCK* / *PF-PT-TAG*.
+;; An ab_pt block counts as a point wherever it sits, so the layer only
+;; matters for bare POINT entities.
 (setq abp:*pt-layer* "POINTS")    ; layer holding the survey points
 (setq abp:*pt-block* "ab_pt")     ; block name whose INSERTs mark points
 (setq abp:*pt-tag*   "number")    ; the attribute carrying the number
 
-;; How far off the nearest line is too far.  The command asks, Enter
-;; takes what is here, and the answer is remembered for the session.
-(setq abp:*limit* 1.0)            ; 1 inch
+;; What the highlight is allowed to hand the command: the points, the
+;; geometry they are measured against, and the two curve types that are
+;; counted rather than measured so the report can say they were left
+;; out.  A type dropped from here is never seen at all; a type added
+;; that abp:ent-segs cannot break into segments is silently ignored.
+(setq abp:*filter*
+  '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE")))
+
+;; The curve types the segment math does not cover.  They are counted
+;; and named in the report rather than measured against, because
+;; guessing would report a point sitting ON a spline as off the line.
+(setq abp:*uncovered-types* '("SPLINE" "ELLIPSE"))
+
+;; -- what counts as too far --------------------------------------------
+
+;; How far off the nearest line is too far.  The command asks every
+;; run and Enter takes the offered value, so this is the default the
+;; FIRST run of a session offers; what you answer is remembered in
+;; abp:*asked* below and offered from then on.  Lower it and more
+;; points are called too far.
+(setq abp:*limit* 1.0)            ; drawing units (1 inch)
 
 ;; Two points closer than this are the same shot, not two.
-(setq abp:*exact-eps* 1.0e-6)
+(setq abp:*exact-eps* 1.0e-6)     ; drawing units
 
+;; How far an entity's extrusion normal (DXF 210) may lean from world
+;; +Z before it is counted as "not in the world plane" and left out of
+;; the measurement.  0.999 is about 2.6 degrees of tilt.
+(setq abp:*plane-min* 0.999)      ; cosine of the tilt, so nearer 1 is stricter
+
+;; -- marking and report ------------------------------------------------
+
+;; The two layers ABPCHECK writes on, created on first use.  It never
+;; clears a layer wholesale: everything it draws carries xdata under
+;; the APPID below, and only stamped objects are erased again -- so
+;; ABPCHECKRESCUE is safe on a layer the drawing already uses.
 (setq abp:*miss-layer*   "ABPCHECK-MISS")
-(setq abp:*miss-color*   1)       ; red: the points that are too far off
+(setq abp:*miss-color*   1)       ; ACI: the points that are too far off (red)
 (setq abp:*report-layer* "ABPCHECK-REPORT")
-(setq abp:*report-color* 3)
-(setq abp:*flag-color*   1)       ; red rows
-(setq abp:*advice-color* 4)       ; cyan: advice, not a failure
+(setq abp:*report-color* 3)       ; ACI (green)
+(setq abp:*appid*        "ABPCHECK")  ; renaming this orphans earlier runs
+
+(setq abp:*flag-color*   1)       ; ACI: rows over the limit (red)
+(setq abp:*advice-color* 4)       ; ACI: advice, not a failure (cyan)
 (setq abp:*green-scale*  0.75)    ; height of a row that checked out
 (setq abp:*report-chars* 48.0)    ; report column width, in text heights
 (setq abp:*ring-scale*   1.2)     ; ring radius, in report text heights
-(setq abp:*clear-shown*  10)      ; how many within-limit points are listed
+
+;; How many within-limit points are listed before the rest are summed
+;; up in one line, so a 200-point survey does not write 200 rows.
+(setq abp:*clear-shown*  10)      ; rows
+
+;; The report is scaled to the drawing, as the check family's siblings
+;; do it.  WIDE: on a wide, short sheet the reference height is at
+;; least this fraction of the width.  LEAD: MTEXT line pitch as a
+;; multiple of text height.  HMAX/HMIN: divisors clamping the height --
+;; never taller than reference/HMAX, never shorter than reference/HMIN,
+;; so a smaller number is a looser bound.  HFALL: the height used when
+;; there is nothing to scale against.  GAP: space between drawing and
+;; report, as a fraction of the drawing's width.
+(setq abp:*report-wide*  0.25)
+(setq abp:*report-lead*  1.66)
+(setq abp:*report-hmax*  30.0)
+(setq abp:*report-hmin*  200.0)
+(setq abp:*report-hfall* 2.5)     ; drawing units
+(setq abp:*report-gap*   0.05)
+
+;; The title is written this many times the base height, and a section
+;; heading gets this much blank line above it.  HEAD-LINES is the
+;; allowance for title, date, verdict and legend when guessing how long
+;; the sheet will run; HDG-LINES is a heading plus its gap.
+(setq abp:*title-scale*  1.5)
+(setq abp:*hdg-gap*      0.4)
+(setq abp:*head-lines*   4.5)
+(setq abp:*hdg-lines*    1.4)
+
+;; Findings are indented under their heading by this string.
+(setq abp:*row-indent*   "  ")
+
+;; Distances in the report go through (rtos d mode prec): mode 4 is
+;; architectural (feet-inches), so 1.875 reads 0'-1 7/8"; prec is how
+;; many ways the inch is split, as a power of two (4 = sixteenths).
+;; This is the shape the report was asked for -- see the header.
+(setq abp:*dist-mode*    4)       ; rtos mode
+(setq abp:*dist-prec*    4)       ; 2^4 = sixteenths of an inch
+
+;; A bounding box smaller than this has nothing to scale a report to.
+(setq abp:*tiny*         1.0e-8)  ; drawing units
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  What follows is STATE, not settings: what one run
+;;;  has to put back, and what the session remembers you answered.
+(setq abp:*asked*        nil)     ; the limit you last answered, this session
+;;; ======================================================================
 
 ;;; -------------------- generic helpers ----------------------------------
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
@@ -27786,10 +27981,10 @@
               ext (cdr (assoc 210 ed)))
         (if (or (= lay (strcase abp:*miss-layer*))
                 (= lay (strcase abp:*report-layer*))
-                (assoc -3 (entget en '("ABPCHECK"))))
+                (assoc -3 (entget en (list abp:*appid*))))
           (setq nmine (1+ nmine))
           (progn
-            (if (and ext (< (abs (caddr ext)) 0.999))
+            (if (and ext (< (abs (caddr ext)) abp:*plane-min*))
               (setq nocs (1+ nocs)))
             (cond
               ;; ab_pt blocks are survey points wherever they sit
@@ -27821,7 +28016,7 @@
                                  pts))))
               ;; the segment math does not cover these, and guessing
               ;; would report a point sitting ON a spline as off the line
-              ((member typ '("SPLINE" "ELLIPSE")) (setq nspl (1+ nspl)))
+              ((member typ abp:*uncovered-types*) (setq nspl (1+ nspl)))
               (T (setq segs (append segs (abp:ent-segs en))))))))))
   (list (cal:dedupe (reverse pts) abp:*exact-eps*)
         segs nspl nocs nmine))
@@ -27858,30 +28053,39 @@
 
 ;; The report's title line: half again the base height.
 (defun abp:big (s)
-  (strcat "{\\H1.5x;" s "}"))
+  (strcat "{\\H" (rtos abp:*title-scale* 2 2) "x;" s "}"))
 
 ;; A section heading: underlined, with a thin blank line above it so
 ;; the sections read as blocks.
 (defun abp:hdg (s)
-  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+  (strcat "{\\H" (rtos abp:*hdg-gap* 2 2) "x;\\P}{\\L" s "}"))
 
 ;; Findings are indented two spaces under their heading; the indent
 ;; sits INSIDE the colour/height wrap so a row still starts with its
 ;; colour code.
-(defun abp:render (r)
+;; The word for an ACI colour, so the legend names the colour actually
+;; used instead of saying "red" whatever abp:*flag-color* holds.
+(defun abp:color-name (aci / q)
+  (setq q (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if q (cdr q) (strcat "colour " (itoa aci))))
+
+(defun abp:render (r / i)
+  (setq i abp:*row-indent*)
   (cond ((abp:lvl-p r 3) (abp:hdg (abp:row-txt r)))
-        ((abp:lvl-p r 1) (abp:red (strcat "  " (abp:row-txt r))))
-        ((abp:lvl-p r 2) (abp:cyan (strcat "  " (abp:row-txt r))))
-        (t (abp:small (strcat "  " (abp:row-txt r))))))
+        ((abp:lvl-p r 1) (abp:red (strcat i (abp:row-txt r))))
+        ((abp:lvl-p r 2) (abp:cyan (strcat i (abp:row-txt r))))
+        (t (abp:small (strcat i (abp:row-txt r))))))
 
 ;; The one finding line, the shape the report was asked for:
 ;;     Pt. 17    closest line is 0'-1 7/8" away
 (defun abp:finding (q)
   (strcat "Pt. " (cal:pad (abp:pt-name (cdr q)) 6)
-          "closest line is " (rtos (car q) 4 4) " away"))
+          "closest line is " (abp:dstr (car q)) " away"))
 
 ;; Distance as the report writes it, for prose (the limit, mostly).
-(defun abp:dstr (d) (rtos d 4 4))
+(defun abp:dstr (d) (rtos d abp:*dist-mode* abp:*dist-prec*))
 
 ;; The findings, worst first: everything over the limit under one
 ;; heading, then the near misses under another, capped so a 200-point
@@ -27953,20 +28157,20 @@
           ((abp:lvl-p r 2) (setq nadv (1+ nadv)))))
   ;; height: the head is title (1.5) + date + verdict (1.2) + legend; a
   ;; heading row is one line plus the 0.4 gap above it
-  (setq nlin 4.5)
+  (setq nlin abp:*head-lines*)
   (foreach r rows
-    (setq nlin (+ nlin (cond ((abp:lvl-p r 3) 1.4)
+    (setq nlin (+ nlin (cond ((abp:lvl-p r 3) abp:*hdg-lines*)
                              ((abp:row-lvl r) 1.0)
                              (t abp:*green-scale*)))))
-  (if (and bb (> (max (abp:bw bb) (abp:bh bb)) 1.0e-8))
+  (if (and bb (> (max (abp:bw bb) (abp:bh bb)) abp:*tiny*))
     (progn
-      (setq ref (max (abp:bh bb) (* 0.25 (abp:bw bb)))
-            h   (/ ref (* 1.66 nlin)))
-      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-    (setq h 2.5))
+      (setq ref (max (abp:bh bb) (* abp:*report-wide* (abp:bw bb)))
+            h   (/ ref (* abp:*report-lead* nlin)))
+      (if (> h (/ ref abp:*report-hmax*)) (setq h (/ ref abp:*report-hmax*)))
+      (if (< h (/ ref abp:*report-hmin*)) (setq h (/ ref abp:*report-hmin*))))
+    (setq h abp:*report-hfall*))
   (setq ins (if bb
-                (list (+ (caddr bb) (* 0.05 (max (abp:bw bb) 1.0)))
+                (list (+ (caddr bb) (* abp:*report-gap* (max (abp:bw bb) 1.0)))
                       (cadddr bb) 0.0)
                 (list 0.0 0.0 0.0)))
   ;; the head: a large title, the date and version small under it, the
@@ -27993,8 +28197,9 @@
                       (strcat "Too far = more than " (abp:dstr limit)
                               " off the nearest line.  Read-only scan -"
                               " nothing you drew was changed.  Too far in "
-                              (abp:red "red")
-                              ", advice in " (abp:cyan "cyan")
+                              (abp:red (abp:color-name abp:*flag-color*))
+                              ", advice in "
+                              (abp:cyan (abp:color-name abp:*advice-color*))
                               "; points that check out are smaller."))))
   (foreach r rows
     (setq txt (strcat txt "\\P" (abp:render r))))
@@ -28011,10 +28216,10 @@
 (defun abp:tag-mine (en / ed)
   (if en
     (progn
-      (regapp "ABPCHECK")
+      (regapp abp:*appid*)
       (setq ed (entget en))
-      (entmod (append ed (list (list -3 (list "ABPCHECK"
-                                              (cons 1000 "ABPCHECK"))))))))
+      (entmod (append ed (list (list -3 (list abp:*appid*
+                                              (cons 1000 abp:*appid*))))))))
   en)
 
 ;; Erase only ABPCHECK's own objects on a layer; anything the user drew
@@ -28029,7 +28234,7 @@
           (setq i 0)
           (repeat (sslength ss)
             (setq en (ssname ss i))
-            (if (assoc -3 (entget en '("ABPCHECK")))
+            (if (assoc -3 (entget en (list abp:*appid*)))
               (progn (entdel en) (setq n (1+ n))))
             (setq i (1+ i)))))))
   n)
@@ -28061,12 +28266,6 @@
   (if v v dflt))
 
 ;;; -------------------- the commands ------------------------------------
-
-;; The selection filter: the points and the geometry they are measured
-;; against, plus the two curve types that are counted rather than
-;; measured, so the report can say they were left out.
-(setq abp:*filter*
-  '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE")))
 
 (defun c:ABPCHECK ( / *error* undo-open ss got pts segs nspl nocs nmine
                       keyed rows bb res h nring)
@@ -28124,24 +28323,27 @@
                         " against - include the drawn geometry in the"
                         " selection.")))
         (T
-         (setq abp:*limit*
+         ;; offer what you answered last, or the knob's default the
+         ;; first time this session -- the knob itself stays the
+         ;; default it was set to and is never written over
+         (setq abp:*asked*
                (abp:asklimit "How far off the line is too far?"
-                             abp:*limit*))
+                             (if abp:*asked* abp:*asked* abp:*limit*)))
          (setq keyed (abp:measure pts segs)
-               rows  (abp:rows keyed abp:*limit* nspl nocs)
+               rows  (abp:rows keyed abp:*asked* nspl nocs)
                bb    (abp:bbox pts)
-               res   (abp:write-report rows bb abp:*limit*)
+               res   (abp:write-report rows bb abp:*asked*)
                h     (caddr res)
-               nring (abp:ring keyed abp:*limit* h))
+               nring (abp:ring keyed abp:*asked* h))
          (princ (strcat "\n" (itoa (length pts)) " point(s) measured"
                         " against " (itoa (length segs)) " segment(s)."))
          (if (> (car res) 0)
            (princ (strcat "\n" (itoa (car res)) " point(s) more than "
-                          (abp:dstr abp:*limit*) " off the nearest line - "
+                          (abp:dstr abp:*asked*) " off the nearest line - "
                           (itoa nring) " ringed on layer "
                           abp:*miss-layer* "."))
            (princ (strcat "\nAll clear - every point is within "
-                          (abp:dstr abp:*limit*) " of a line.")))
+                          (abp:dstr abp:*asked*) " of a line.")))
          (princ (strcat "\nReport written on layer " abp:*report-layer*
                         ".  ABPCHECKRESCUE removes both."))))))
   (command "_.UNDO" "_End")
@@ -35515,8 +35717,61 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *ccprecheck-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *ccprecheck-version* "v1.4")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
+
+;;; ======================================================================
+;;;  TUNABLES -- every value CCPRECHECK reads that someone might want
+;;;  to change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line, because every knob is read when the command runs,
+;;;  not when the file loads.
+;;;
+;;;  What is NOT here, on purpose: the Tech Flow Chart itself.  This
+;;;  tool IS that chart -- which question is asked, which answer opens
+;;;  which branch, and what each branch tells you to do are one thing,
+;;;  held in the chk: functions below.  A table of prompts split from
+;;;  the branching that reads them would be two places to keep in step
+;;;  instead of one, and the branching is the part that is hard to get
+;;;  right.  The knobs here are how the walk TALKS, not where it goes.
+;;; ----------------------------------------------------------------------
+
+;; -- how the summary reads -----------------------------------------------
+
+;; The summary is printed to the command line when the walk finishes,
+;; one line per thing answered or noted.  These are the pieces it is
+;; built from: what marks an instruction the walk gave you, what marks
+;; something you confirmed, and the two separators -- between a
+;; question and the answer picked, and between a confirmation and the
+;; value typed against it.
+(setq chk:*note-mark*    "NOTE: ")
+(setq chk:*confirm-mark* "CONFIRMED: ")
+(setq chk:*ans-sep*      " -> ")
+(setq chk:*val-sep*      " = ")
+
+;; A note is echoed to the command line as it is given, behind this.
+(setq chk:*note-echo*    "\n  >> ")
+
+;; The summary's own furniture: its opening and closing rules, and the
+;; indent every line inside it carries.
+(setq chk:*sum-open*   "\n\n--- Checklist summary ---")
+(setq chk:*sum-close*  "\n--- End of checklist ---\n")
+(setq chk:*sum-indent* "  ")
+
+;; -- what a typed answer may say -----------------------------------------
+
+;; A getstring prompt cannot take initget keywords, so "go back a step"
+;; has to be typed like a note.  These are the words that mean it,
+;; matched case-blind and whole; add a synonym and every typed prompt
+;; takes it.  (The keyword prompts get Back and Undo from initget
+;; instead, which is a separate list by necessity.)
+(setq chk:*back-words* '("B" "BACK" "U" "UNDO"))
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  The two globals below are STATE, not knobs: what
+;;;  one walk of the chart has collected so far.
 
 (setq *chk:log* nil)   ; collected checklist lines for the summary
 
@@ -35526,6 +35781,7 @@
                        ; still Enter through, never an answer by itself,
                        ; so a re-run over the same job is Enter-Enter
                        ; down the unchanged questions
+;;; ======================================================================
 
 ;; Record a line for the final summary.
 (defun chk:log (msg)
@@ -35546,8 +35802,8 @@
 
 ;; Print an instruction/note to the command line and log it.
 (defun chk:note (msg)
-  (princ (strcat "\n  >> " msg))
-  (chk:log (strcat "NOTE: " msg))
+  (princ (strcat chk:*note-echo* msg))
+  (chk:log (strcat chk:*note-mark* msg))
   msg
 )
 
@@ -35574,7 +35830,7 @@
   (if (member ans '("Back" "Undo"))
     'CHK-BACK
     (progn (setq *chk:prev* (cons (cons prompt ans) *chk:prev*))
-           (chk:log (strcat prompt " -> " ans)) ans)
+           (chk:log (strcat prompt chk:*ans-sep* ans)) ans)
   )
 )
 
@@ -35594,8 +35850,8 @@
                                  " or press Enter): ")))
   (cond
     ((and back (cal:back-word-p val)) 'CHK-BACK)
-    ((= val "") (chk:log (strcat "CONFIRMED: " item)) val)
-    (T (chk:log (strcat "CONFIRMED: " item " = " val)) val)
+    ((= val "") (chk:log (strcat chk:*confirm-mark* item)) val)
+    (T (chk:log (strcat chk:*confirm-mark* item chk:*val-sep* val)) val)
   )
 )
 
@@ -36072,11 +36328,11 @@
     nil
   )
   ;; Summary of everything answered / noted along the way
-  (princ "\n\n--- Checklist summary ---")
+  (princ chk:*sum-open*)
   (foreach line *chk:log*
-    (princ (strcat "\n  " line))
+    (princ (strcat "\n" chk:*sum-indent* line))
   )
-  (princ "\n--- End of checklist ---\n")
+  (princ chk:*sum-close*)
   (princ)
 )
 
@@ -37002,10 +37258,12 @@
 ;;;     anchor. A dimension with a stray
 ;;;     definition point gets:
 ;;;       - a construction line (XLINE) drawn through its two dimmed
-;;;         points on layer CHECK-CONSTRUCTION (yellow),
+;;;         points on the construction layer (CHECK-CONSTRUCTION,
+;;;         yellow, by default),
 ;;;       - the stray point shifted onto the closest point of the
 ;;;         closest object,
-;;;       - its color changed to red so you can see it was shifted.
+;;;       - its color changed (red by default) so you can see it was
+;;;         shifted.
 ;;;
 ;;;  2. Arcs: each arc endpoint must sit at the END of another object.
 ;;;       - On an object but not at its end -> endpoint moved to the
@@ -37014,7 +37272,7 @@
 ;;;         of any object in the selection (or, when every nearby
 ;;;         object is closed, the closest point on the closest one).
 ;;;     A moved arc is re-fitted through its fixed end, its old
-;;;     midpoint and the new end, then recolored magenta.
+;;;     midpoint and the new end, then recolored (magenta by default).
 ;;;
 ;;;  Everything runs inside one UNDO group; a single U reverts every
 ;;;  change CHECK made. Tunables are just below.
@@ -37024,25 +37282,120 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.7")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
 
-;; --- tunables ------------------------------------------------------
-(setq *cfchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
-(setq *cfchk-dim-color*    1)       ; red: dimensions whose points were shifted
-(setq *cfchk-arc-color*    6)       ; magenta: arcs whose endpoints were snapped
-(setq *cfchk-constr-layer* "CHECK-CONSTRUCTION")
-(setq *cfchk-constr-color* 2)       ; yellow
-(setq *cfchk-anchor-tol*   1.0e-4)  ; how close two dimension points must be to count as the same spot
-(setq *cfchk-anchor-min*   2)       ; that many dimensions meeting there make it an anchor
+;;; ======================================================================
+;;;  TUNABLES -- every value CHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the number or string, save, and APPLOAD the
+;;;  file again.  To try a value for one session only, type the setq at
+;;;  the command line -- e.g. (setq *cfchk-tol* 0.001) -- because every
+;;;  knob is read when CHECK runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
 
-;; entity types dimensions and arc ends may attach to
+;; -- what counts as attached ------------------------------------------
+
+;; A dimension point or an arc end that sits within this distance of
+;; an object is ATTACHED and left alone.  It is also the smallest shift
+;; CHECK will make, so raising it forgives bigger gaps AND suppresses
+;; the small corrections it would otherwise apply; lowering it makes
+;; the audit stricter on both counts.
+(setq *cfchk-tol*          1.0e-4)  ; drawing units
+
+;; Two dimensions measuring to the same spot make it an ANCHOR: a point
+;; that is left exactly where it is, geometry under it or not, and that
+;; a stray point nearer to it than to any line is shifted onto.  This
+;; is how close two definition points must be to count as one spot.
+;; Raising it merges nearby but distinct points into one anchor, which
+;; then stops them being corrected.
+(setq *cfchk-anchor-tol*   1.0e-4)  ; drawing units
+
+;; ...and how many dimensions must meet there.  2 is the everyday case
+;; (the pair of dims pinning a hypotenuse corner).  1 or 0 would make
+;; every definition point its own anchor and silently switch the
+;; dimension audit off, so keep it at 2 or more.
+(setq *cfchk-anchor-min*   2)       ; dimensions meeting at one spot
+
+;; Entity types a dimension point or an arc end may attach to.  Every
+;; name must be a curve AutoCAD can measure to (vlax-curve-*); a type
+;; that is not is tolerated but never matches.
 (setq *cfchk-curve-types*
       '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
 
+;; Which kinds of dimension are audited, by the low three bits of DXF
+;; group 70: 0 = rotated (horizontal / vertical), 1 = aligned.  The
+;; other kinds -- angular (2, 5), diameter (3), radius (4), ordinate
+;; (6) -- have no pair of definition points to shift and are counted
+;; as "unsupported type skipped".
+(setq *cfchk-dim-types*    '(0 1))
+
+;; -- what CHECK draws and recolours -----------------------------------
+
+(setq *cfchk-dim-color*    1)       ; ACI: dimensions whose points were shifted (red)
+(setq *cfchk-arc-color*    6)       ; ACI: arcs whose endpoints were snapped (magenta)
+
+;; Construction lines (XLINEs) through the ORIGINAL points of every
+;; shifted dimension go on this layer, created on first use; delete or
+;; freeze the layer when the review is done.  The colour is applied
+;; only when CHECK creates the layer -- a layer already in the drawing
+;; keeps its own colour, and the XLINEs draw ByLayer.
+(setq *cfchk-constr-layer* "CHECK-CONSTRUCTION")
+(setq *cfchk-constr-color* 2)       ; ACI (yellow)
+
+;; -- how the report reads ---------------------------------------------
+
+;; Distances in the command-line report go through (rtos d mode prec):
+;; mode 2 is decimal, 3 engineering, 4 architectural (feet-inches);
+;; prec is decimal places (for mode 4: the inch is split 2^prec ways).
+;; The tolerance is echoed with more places than a shift because it is
+;; usually smaller than one.
+(setq *cfchk-dist-mode*    2)       ; rtos mode
+(setq *cfchk-dist-prec*    4)       ; places for a shift or snap distance
+(setq *cfchk-tol-prec*     6)       ; places for the tolerance in the summary
+
+;; -- numerical guards (rarely changed) --------------------------------
+
+;; Two points closer than this are the SAME point: no construction
+;; line is drawn through them, an arc is never re-fitted onto its own
+;; other end, and a snap target that close to that end is passed over.
+;; Only a drawing at an extreme scale should need this moved.
+(setq *cfchk-same-pt*      1e-8)    ; drawing units
+
+;; An ARC is only audited when its extrusion normal (DXF 210) is within
+;; this of world +Z; a tilted or mirrored (0 0 -1) arc is counted as
+;; "non-planar skipped" instead of being re-fitted in the wrong plane.
+(setq *cfchk-planar-eps*   1e-9)    ; dimensionless (normal components)
+
+;; Not knobs, on purpose: the collinearity guard inside
+;; cfchk:circumcenter (1e-12) and the Continuous linetype
+;; cfchk:ensure-layer gives a new layer.  Both helpers are library
+;; bodies -- the grouped build takes them from CALOFIN-LIB.lsp -- so a
+;; value changed here would be honoured by one build and not the other.
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  CHECK keeps no state between runs.
+;;; ======================================================================
+
 ;; --- small helpers -------------------------------------------------
+
+;; A distance as the report prints it (see *cfchk-dist-mode*).
+(defun cfchk:dist (d)
+  (rtos d *cfchk-dist-mode* *cfchk-dist-prec*))
+
+;; The word for an ACI colour, so the report follows the colour knobs
+;; instead of saying "red" whatever *cfchk-dim-color* is set to.
+(defun cfchk:color-name (aci / p)
+  (setq p (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if p (cdr p) (strcat "colour " (itoa aci))))
 
 (defun cfchk:set-color (ent color / ed old)
   (setq ed  (entget ent)
@@ -37055,7 +37408,7 @@
 (defun cfchk:make-xline (p1 p2 / len)
   ;; infinite construction line through p1-p2 on the check layer
   (setq len (distance p1 p2))
-  (if (> len 1e-8)
+  (if (> len *cfchk-same-pt*)
     (entmake (list '(0 . "XLINE")
                    '(100 . "AcDbEntity")
                    (cons 8 *cfchk-constr-layer*)
@@ -37112,14 +37465,14 @@
   ;; only arcs drawn in the world XY plane are handled
   (setq n (cdr (assoc 210 ed)))
   (or (null n)
-      (and (< (abs (car n)) 1e-9)
-           (< (abs (cadr n)) 1e-9)
+      (and (< (abs (car n)) *cfchk-planar-eps*)
+           (< (abs (cadr n)) *cfchk-planar-eps*)
            (> (caddr n) 0.0))))
 
 (defun cfchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed)
   ;; re-fit the arc through its fixed end, its old midpoint and the
   ;; target point; returns T on success
-  (if (and (> (distance target fixed) 1e-8)
+  (if (and (> (distance target fixed) *cfchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
       (setq r  (distance c target)
@@ -37145,7 +37498,7 @@
   ;; CHECK shifts); nil for every other kind of dimension
   (setq ed    (entget ent)
         dtype (logand 7 (cdr (assoc 70 ed))))
-  (if (member dtype '(0 1))
+  (if (member dtype *cfchk-dim-types*)
     (progn
       (setq p13 (cdr (assoc 13 ed))
             p14 (cdr (assoc 14 ed)))
@@ -37209,7 +37562,7 @@
 (defun cfchk:check-dim (ent cands anchors / ed dtype p13 p14 d1 d2)
   (setq ed    (entget ent)
         dtype (logand 7 (cdr (assoc 70 ed))))
-  (if (member dtype '(0 1))                 ; rotated/linear or aligned
+  (if (member dtype *cfchk-dim-types*)      ; rotated/linear or aligned
     (progn
       (setq p13 (cdr (assoc 13 ed))         ; the two dimmed points
             p14 (cdr (assoc 14 ed))
@@ -37221,9 +37574,10 @@
           (cfchk:set-color ent *cfchk-dim-color*)
           (entupd ent)
           (princ (strcat "\n  Dimension " (cdr (assoc 5 ed)) ":"
-                         (if d1 (strcat " point 1 shifted " (rtos d1 2 4)) "")
-                         (if d2 (strcat " point 2 shifted " (rtos d2 2 4)) "")
-                         " onto the nearest object or anchor; recolored red."))
+                         (if d1 (strcat " point 1 shifted " (cfchk:dist d1)) "")
+                         (if d2 (strcat " point 2 shifted " (cfchk:dist d2)) "")
+                         " onto the nearest object or anchor; recolored "
+                         (cfchk:color-name *cfchk-dim-color*) "."))
           'fixed)
         'ok))
     'skipped))
@@ -37247,7 +37601,8 @@
     ((<= (caddr near) *cfchk-tol*)          ; endpoint sits on an object...
      (setq ends (cfchk:curve-ends (car near)))
      ;; never snap onto the arc's own other endpoint
-     (setq ends (vl-remove-if '(lambda (q) (< (distance q other) 1e-8)) ends))
+     (setq ends (vl-remove-if '(lambda (q) (< (distance q other) *cfchk-same-pt*))
+                              ends))
      (cond
        ((null ends) nil)                    ; closed curve: no ends to demand
        ((vl-some '(lambda (q) (<= (distance p q) *cfchk-tol*)) ends)
@@ -37258,7 +37613,7 @@
           (distance p target)))))
     (t                                      ; floating: closest end anywhere,
      (setq target (cfchk:nearest-end p ent cands))
-     (if (or (null target) (< (distance target other) 1e-8))
+     (if (or (null target) (< (distance target other) *cfchk-same-pt*))
        (setq target (cadr near)))           ; else closest point on closest object
      (if (cfchk:rebuild-arc ent which other mid target)
        (distance p target)))))
@@ -37273,9 +37628,10 @@
         (progn
           (cfchk:set-color ent *cfchk-arc-color*)
           (princ (strcat "\n  Arc " (cdr (assoc 5 ed)) ":"
-                         (if d1 (strcat " start snapped " (rtos d1 2 4)) "")
-                         (if d2 (strcat " end snapped " (rtos d2 2 4)) "")
-                         " to nearest object end; recolored magenta."))
+                         (if d1 (strcat " start snapped " (cfchk:dist d1)) "")
+                         (if d2 (strcat " end snapped " (cfchk:dist d2)) "")
+                         " to nearest object end; recolored "
+                         (cfchk:color-name *cfchk-arc-color*) "."))
           'fixed)
         'ok))
     'skipped))
@@ -37336,7 +37692,8 @@
         (setq anchors (cfchk:shared-anchors dims))
         (if anchors
           (princ (strcat "\n" (itoa (length anchors))
-                         " point(s) carry more than one dimension - treated"
+                         " point(s) carry " (itoa *cfchk-anchor-min*)
+                         " or more dimensions - treated"
                          " as anchors and left alone.")))
         (foreach e dims
           (setq res (cfchk:check-dim e cands anchors))
@@ -37352,14 +37709,17 @@
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n--- CHECK complete (attachment tolerance "
-                       (rtos *cfchk-tol* 2 6) ") ---"
+                       (rtos *cfchk-tol* *cfchk-dist-mode* *cfchk-tol-prec*)
+                       ") ---"
                        "\nDimensions: " (itoa (+ ndf ndo)) " checked, "
-                       (itoa ndf) " shifted onto nearest object (red)"
+                       (itoa ndf) " shifted onto nearest object ("
+                       (cfchk:color-name *cfchk-dim-color*) ")"
                        (if (> nds 0)
                          (strcat ", " (itoa nds) " unsupported type skipped")
                          "")
                        "\nArcs: " (itoa (+ naf nao)) " checked, "
-                       (itoa naf) " with endpoint(s) snapped (magenta)"
+                       (itoa naf) " with endpoint(s) snapped ("
+                       (cfchk:color-name *cfchk-arc-color*) ")"
                        (if (> nas 0)
                          (strcat ", " (itoa nas) " non-planar skipped")
                          "")
@@ -44440,8 +44800,10 @@
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
-;;;         Enter / M  ->  MOVE it onto the nearest object (green +)
-;;;         K          ->  KEEP it exactly where you drew it (red X);
+;;;         Enter / M  ->  MOVE it onto the nearest object (the +
+;;;                        marker, green by default)
+;;;         K          ->  KEEP it exactly where you drew it (the X
+;;;                        marker, red by default);
 ;;;                        the point is put back and nothing changes
 ;;;         P          ->  PICK the spot yourself
 ;;;     A point TWO OR MORE DIMENSIONS measure to is an ANCHOR and is
@@ -44621,66 +44983,279 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.11")
+(setq *cchk-version* "v1.12")
 
-;; --- tunables ------------------------------------------------------
-(setq *cchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
-(setq *cchk-grey-color*   8)       ; grey used to fade out everything not under review
-(setq *cchk-flag-color*   1)       ; red: dimensions you answered "No" to
-(setq *cchk-arc-color*    6)       ; magenta: arcs whose endpoints were moved
-(setq *cchk-olap-color*   4)       ; cyan: merged or flagged overlapping lines
-(setq *cchk-olap-fuzz*    1.0e-4)  ; max sideways offset that still counts as "same line"
+;;; ======================================================================
+;;;  TUNABLES -- every value COVERCHECK reads that someone might want
+;;;  to change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq *cchk-tol* 0.001) -- because every knob
+;;;  is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); angles in degrees where said so; colours are ACI numbers
+;;;  (1 red, 2 yellow, 3 green, 4 cyan, 5 blue, 6 magenta, 7 white,
+;;;  8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
 
-;; dimension styles are reviewed in this order; styles not listed
-;; come afterwards ("whatever else is left"), still left-to-right
-(setq *cchk-style-order*
-      '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
-;; every dimension belongs on this layer; CDIM is the command that
-;; moves the strays there, and is what the report tells you to run
-(setq *cchk-dim-layer*   "DIMENSION")
-;; the sheet's title block, and the attribute in it carrying the date;
-;; the date must read today, written MM/DD/YYYY
-(setq *cchk-title-block* "Tech Title")  ; spaces optional in the name
-(setq *cchk-date-tag*    "Date")
-(setq *cchk-dimfix-cmd*  "CDIM")
-(setq *cchk-constr-layer* "COVERCHECK-CONSTRUCTION")
-(setq *cchk-constr-color* 2)       ; yellow
-(setq *cchk-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
-(setq *cchk-block-depth*  3)       ; how many levels of nested blocks to search for names/text
-(setq *cchk-orig-color*   1)       ; red X: where you drew the point
-(setq *cchk-sugg-color*   3)       ; green +: where COVERCHECK would move it
-(setq *cchk-report-layer* "COVERCHECK-REPORT")
-(setq *cchk-report-color* 3)       ; green
-(setq *cchk-zoom-margin*  0.75)    ; empty space around the zoomed item (fraction of its size)
-(setq *cchk-report-chars* 45.0)    ; report column width, in text heights
-(setq *cchk-ask-all-arc-ends* nil) ; T = confirm EVERY arc endpoint, even already-attached ones
-(setq *cchk-anchor-tol*   1.0e-4)  ; how close two dimension points must be to count as the same spot
-(setq *cchk-anchor-min*   2)       ; that many dimensions meeting there make it an anchor
+;; -- the cover rules: what is drawn, and where ------------------------
 
-;; entity types dimension points and arc ends may attach to
+;; The pool outline and, when one is drawn, the cover.  Both are read
+;; for their ByLayer properties, so these are layer names the shop's
+;; template already uses.
+(setq *cchk-pool-layer*   "POOL")
+(setq *cchk-cover-layer*  "COVER")
+
+;; When no cover is drawn the sheet has to say which size IS shown.
+;; Both notes together is an error -- a sheet shows one or the other.
+(setq *cchk-pool-note*    "Pool Size Shown")
+(setq *cchk-spa-note*     "Spa Size Shown")
+
+;; The block carrying Overlap and Spacing, the block a replacement
+;; drawing has to carry, and the linetype names that read as dashed.
+(setq *cchk-details-block* "Cover Details")
+(setq *cchk-repl-block*   "Replacement Disclaimer")
+(setq *cchk-dashed-pat*   "*DASH*,*HIDDEN*")   ; wcmatch, case-blind
+
+;; -- the cover rules: overlap and spacing -----------------------------
+
+;; The only overlaps that exist, in inches.  A drawing carrying
+;; anything else is wrong, not merely unusual.
+(setq *cchk-overlap-vals* '(12.0 15.0 18.0))
+
+;; Water area decides which: under SMALL -> 12" overlap and 5x5
+;; spacing, over LARGE -> 18" and 3x3, between the two -> 15" and 4x4.
+;; Move the breakpoints and the whole rule moves with them.
+(setq *cchk-area-small*   1200.0)  ; square feet
+(setq *cchk-area-large*   2000.0)  ; square feet
+
+;; -- the cover rules: pads --------------------------------------------
+
+;; Pads are suggested at this size (PADDLE's big pad), and these block
+;; names, on this layer, count as a pad that is already there.
+(setq *cchk-pad-size*     36.0)    ; drawing units
+(setq *cchk-pad-blocks*   '("Pad36x36" "Pad24x24"))
+(setq *cchk-pads-layer*   "PADS")
+
+;; A pad centre within this of a spot (Chebyshev distance -- the pad is
+;; a square) already covers it, so no second pad is suggested.
+(setq *cchk-pad-near*     18.0)    ; drawing units
+
+;; The largest concave radius that still needs pads: a gentler curve
+;; than 4'-6" does not pull the cover in hard enough to want one.
+(setq *cchk-pad-maxrad*   54.0)    ; drawing units
+
+;; A joint bending less than CORNERTOL is semi-straight rather than an
+;; inside corner; a whole arc bending less than ARCTOL is semi-straight
+;; too.  Both are PADDLE's, and tests/test_covercheck_pads.py fails if
+;; the two tools part company -- change them together.
+(setq *cchk-pad-cornertol* (/ (* 30.0 pi) 180.0))  ; 30 degrees, in radians
+(setq *cchk-pad-arctol*   (/ (* 10.0 pi) 180.0))   ; 10 degrees, in radians
+
+;; The widest gap that still chains two ends of an exploded outline
+;; into one loop.  Raising it closes sloppier outlines and can chain
+;; two separate runs together.
+(setq *cchk-chain-fuzz*   0.05)    ; drawing units
+
+;; -- the sheet's title block ------------------------------------------
+
+;; The title block and the attribute in it carrying the date; the date
+;; must read today, written MM/DD/YYYY.  Spaces in the block name are
+;; optional when it is searched for.
+(setq *cchk-title-block*  "Tech Title")
+(setq *cchk-date-tag*     "Date")
+
+;; How many levels of nested block to search when looking for a name or
+;; a piece of text.  Raising it finds text buried deeper, at the cost of
+;; a slower sweep.
+(setq *cchk-block-depth*  3)       ; levels
+
+;; The layer TUTORIALCOVERCHECK draws its non-pool demo geometry on.
+(setq *cchk-tut-layer*    "TUTORIAL-COVERCHECK-DEMO")
+
+;; -- what counts as attached, and what counts as one spot -------------
+
+;; A dimension point or an arc end within this distance of an object is
+;; ATTACHED and is not questioned.  It has three more jobs: the
+;; smallest move worth asking about, the shortest overlap worth
+;; reporting, and the shortest segment admitted to overlap detection.
+;; Raising it asks fewer questions on all four counts.
+(setq *cchk-tol*           1.0e-4)  ; drawing units
+
+;; How close two dimension points must be to count as the same spot...
+(setq *cchk-anchor-tol*    1.0e-4)  ; drawing units
+
+;; ...and how many dimensions must meet there to make it an ANCHOR: a
+;; point left as drawn, geometry under it or not (the pair of dims
+;; pinning a hypotenuse corner is the everyday case).  1 would make
+;; every point an anchor and switch the dimension audit off.
+(setq *cchk-anchor-min*    2)       ; dimensions meeting at one spot
+
+;; Entity types a dimension point or an arc end may attach to.  Each
+;; must be a curve AutoCAD can measure to (vlax-curve-*).
 (setq *cchk-curve-types*
       '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
 
-;; --- cover tunables ------------------------------------------------
-(setq *cchk-pool-layer*  "POOL")   ; layer the pool outline is drawn on (ByLayer properties)
-(setq *cchk-cover-layer* "COVER")  ; layer a drawn cover lives on
-(setq *cchk-pool-note*   "Pool Size Shown") ; note demanded when no cover is drawn
-(setq *cchk-spa-note*    "Spa Size Shown")  ; the pool note's spa counterpart - both together is an error
-(setq *cchk-details-block* "Cover Details") ; block carrying Overlap & Spacing
-(setq *cchk-overlap-vals* '(12.0 15.0 18.0)) ; the only overlaps that exist
-(setq *cchk-area-small*  1200.0)   ; sq ft: under this -> 12" overlap, 5x5
-(setq *cchk-area-large*  2000.0)   ; sq ft: over this -> 18" overlap, 3x3
-(setq *cchk-pad-size*    36.0)     ; pads are suggested at 36" (PADDLE's big pad)
-(setq *cchk-pad-blocks*  '("Pad36x36" "Pad24x24")) ; blocks that count as an existing pad
-(setq *cchk-pads-layer*  "PADS")   ; layer existing pads sit on
-(setq *cchk-pad-near*    18.0)     ; a pad center within this (Chebyshev) covers a spot
-(setq *cchk-pad-maxrad*  54.0)     ; 4'-6": largest concave radius needing pads (PADDLE)
-(setq *cchk-chain-fuzz*  0.05)     ; max gap when chaining an exploded outline
-(setq *cchk-pad-cornertol* (/ (* 30.0 pi) 180.0)) ; 30 deg: a joint bending this little is semi-straight, not an inside corner (PADDLE)
-(setq *cchk-pad-arctol*  (/ (* 10.0 pi) 180.0)) ; 10 deg: a whole arc bending this little is semi-straight too (PADDLE)
-(setq *cchk-repl-block*  "Replacement Disclaimer") ; block demanded on replacement drawings
-(setq *cchk-dashed-pat*  "*DASH*,*HIDDEN*") ; linetype names that count as dashed
-(setq *cchk-tut-layer*   "TUTORIAL-COVERCHECK-DEMO") ; layer for TUTORIALCOVERCHECK's non-pool demo geometry
+;; T = confirm EVERY arc endpoint, even ones already attached.
+(setq *cchk-ask-all-arc-ends* nil)
+
+;; -- overlapping lines --------------------------------------------------
+
+;; How far apart two parallel lines may sit and still be called the
+;; same line.  Raising it calls more near-misses an overlap.
+(setq *cchk-olap-fuzz*     1.0e-4)  ; drawing units, sideways offset
+
+;; Two segments are only tested for overlap when their directions are
+;; within this of each other.  It is a bucketing shortcut, not a rule:
+;; keep it comfortably wider than the angle *cchk-olap-fuzz* implies
+;; over a segment's length, or a genuine overlap is never compared.
+(setq *cchk-olap-dirtol*   0.5)     ; degrees
+
+;; Entity types whose straight segments take part in overlap detection.
+;; Arcs, circles and splines have no straight run to overlap, which is
+;; why this is a shorter list than *cchk-curve-types*.
+(setq *cchk-olap-types*    '("LINE" "LWPOLYLINE" "POLYLINE"))
+
+;; -- review order ------------------------------------------------------
+
+;; Dimension styles are reviewed in this order; styles not listed come
+;; afterwards ("whatever else is left"), still left-to-right.  Matching
+;; is by exact name, case-blind.
+(setq *cchk-style-order*
+      '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
+
+;; Every dimension belongs on this layer; DIMFIX-CMD is the command
+;; that moves the strays there, and is what the report tells you to run.
+(setq *cchk-dim-layer*     "DIMENSION")
+(setq *cchk-dimfix-cmd*    "CDIM")
+
+;; Within a style, dimensions are reviewed row by row.  Two dimensions
+;; count as the same ROW when their midpoints are within this fraction
+;; of the selection's height.  Raise it and a whole sheet becomes one
+;; row (pure left-to-right); lower it and near-level dims split apart.
+(setq *cchk-row-band*      0.05)    ; fraction of the selection's height
+(setq *cchk-row-flat*      1.0)     ; ...and the band for a selection with no height
+
+;; -- colours -----------------------------------------------------------
+
+(setq *cchk-grey-color*    8)       ; ACI: everything not under review, faded (grey)
+(setq *cchk-flag-color*    1)       ; ACI: what you answered "No" to (red)
+(setq *cchk-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *cchk-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
+(setq *cchk-orig-color*    1)       ; ACI: the X marking where you drew the point (red)
+(setq *cchk-sugg-color*    3)       ; ACI: the + marking where COVERCHECK would put it (green)
+(setq *cchk-point-color*   2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+
+;; The command line and the report name these colours as they use them,
+;; so a colour changed here is described correctly rather than still
+;; being called red.
+
+;; -- the two layers ----------------------------------------------------
+
+;; The construction XLINE through a moved dimension's original points,
+;; and the report MTEXT.  Both layers are created on first use; the
+;; colour applies only then, so a layer already in the drawing keeps
+;; its own.
+(setq *cchk-constr-layer*  "COVERCHECK-CONSTRUCTION")
+(setq *cchk-constr-color*  2)       ; ACI (yellow)
+(setq *cchk-report-layer*  "COVERCHECK-REPORT")
+(setq *cchk-report-color*  3)       ; ACI (green)
+
+;; -- how the report is sized and placed --------------------------------
+
+;; All-clear lines are written at this fraction of the height the red
+;; attention lines get, so problems stand out.  1.0 = same size.
+(setq *cchk-green-scale*   0.75)
+
+;; Report column width, in text heights.
+(setq *cchk-report-chars*  45.0)
+
+;; The report is scaled to the drawing: its text height is chosen so
+;; the whole report is about as tall as the drawing.  On a wide, short
+;; sheet that would give a tiny report, so the reference height is at
+;; least this fraction of the drawing's WIDTH.
+(setq *cchk-report-wide*   0.25)
+
+;; MTEXT line pitch as a multiple of text height, used to turn a line
+;; count into a height.  AutoCAD's default single spacing is 1.66.
+(setq *cchk-report-lead*   1.66)
+
+;; ...then the height is clamped: never taller than reference/HMAX,
+;; never shorter than reference/HMIN.  Both are DIVISORS, so a smaller
+;; number is a looser bound.
+(setq *cchk-report-hmax*   30.0)
+(setq *cchk-report-hmin*   200.0)
+
+;; The height used when the selection has no extents to scale against
+;; (DIMTXT x DIMSCALE is tried first).
+(setq *cchk-report-hfall*  2.5)     ; drawing units
+
+;; Gap between the drawing and the report, as a fraction of the
+;; drawing's width, and the margin left around the closing zoom.
+(setq *cchk-report-gap*    0.05)
+(setq *cchk-zoom-out*      0.05)
+
+;; Empty space around ONE item when the review zooms to it, as a
+;; fraction of its size.
+(setq *cchk-zoom-margin*   0.75)
+
+;; Half-size of the X and + markers drawn while you answer, as a
+;; fraction of the current view height -- so they stay the same size on
+;; screen however far you are zoomed in.
+(setq *cchk-mark-size*     0.02)    ; fraction of VIEWSIZE
+
+;; A report line is rendered red and full-size when it matches this
+;; pattern (wcmatch, case-blind; comma separates alternatives).  These
+;; are the words the report's own notes use for something that needs
+;; looking at -- reword a note and its word belongs here too, or the
+;; line quietly stops being red.
+(setq *cchk-attn-words*
+      "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*,*NEEDS UPDATING*,*UPDATED TO*")
+
+;; Distances in prompts and the report go through (rtos d mode prec):
+;; mode 2 is decimal, 3 engineering, 4 architectural (feet-inches);
+;; prec is decimal places (for mode 4: the inch is split 2^prec ways).
+;; The dimension's own MEASUREMENT is not formatted here -- it follows
+;; the drawing's LUNITS/LUPREC, which is what the drafter reads on the
+;; sheet.
+(setq *cchk-dist-mode*     2)       ; rtos mode
+(setq *cchk-dist-prec*     4)       ; decimal places
+
+;; -- numerical guards (rarely changed) --------------------------------
+
+;; Two points closer than this are the SAME point: no construction line
+;; is drawn through them, no joining line between an X and a +, and an
+;; arc is never re-fitted onto its own other end.
+(setq *cchk-same-pt*       1e-8)    ; drawing units
+
+;; How far an arc's extrusion normal (DXF 210) may lean from world +Z
+;; and still be audited; beyond it the arc is skipped rather than
+;; re-fitted in the wrong plane.
+(setq *cchk-planar-eps*    1e-9)    ; dimensionless (normal components)
+
+;; Below this a polyline bulge is treated as straight, so the edge
+;; joins overlap detection, and three points are too collinear to fit
+;; an arc through.
+(setq *cchk-flat-eps*      1e-12)
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  COVERCHECK keeps no state between runs: everything
+;;;  a run remembers is a local of the command, and what it leaves in
+;;;  the drawing is xdata under the "COVERCHECK" APPID.
+;;; ======================================================================
+
+;; A distance as the prompts and the report print it.
+(defun cchk:dist (d)
+  (rtos d *cchk-dist-mode* *cchk-dist-prec*))
+
+;; The word for an ACI colour, so a message naming a colour follows the
+;; knob instead of saying "red" whatever the knob holds.
+(defun cchk:color-name (aci / q)
+  (setq q (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if q (cdr q) (strcat "colour " (itoa aci))))
 
 ;; --- safety: xdata tags, colour stash, layer locks -----------------
 
@@ -44810,7 +45385,7 @@
   ;; infinite construction line through p1-p2 on the check layer,
   ;; tagged so reruns and COVERCHECKRESCUE can clear it
   (setq len (distance p1 p2))
-  (if (and (> len 1e-8)
+  (if (and (> len *cchk-same-pt*)
            (entmake (list '(0 . "XLINE")
                           '(100 . "AcDbEntity")
                           (cons 8 *cchk-constr-layer*)
@@ -44913,27 +45488,27 @@
 (defun cchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *cchk-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (- (cadr p) s)) (list (+ (car p) s) (+ (cadr p) s)) col 1)
   (grdraw (list (- (car p) s) (+ (cadr p) s)) (list (+ (car p) s) (- (cadr p) s)) col 1))
 
 (defun cchk:mark-plus (pt col / p s)
   ;; upright cross - marks WHERE COVERCHECK WOULD PUT IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *cchk-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
 (defun cchk:mark-point (pt)
   ;; both strokes, for a point that is simply being pointed out
-  (cchk:mark-x pt 2)
-  (cchk:mark-plus pt 2))
+  (cchk:mark-x pt *cchk-point-color*)
+  (cchk:mark-plus pt *cchk-point-color*))
 
 (defun cchk:confirm-move (label orig sugg what / ans newp)
   ;; The point has been put where COVERCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
-  ;; which: a red X where you drew it, a green + where we would move
-  ;; it, joined by a line. WHAT names what the green + sits on, so a
+  ;; which: an X where you drew it, a + where we would move
+  ;; it, joined by a line. WHAT names what the + sits on, so a
   ;; move onto a shared anchor point does not claim to be an object.
   ;; Returns
   ;;   'move - take our suggestion
@@ -44941,13 +45516,14 @@
   ;;   <point> - a spot you picked yourself (current UCS)
   (cchk:mark-x    orig *cchk-orig-color*)
   (cchk:mark-plus sugg *cchk-sugg-color*)
-  (if (> (distance orig sugg) 1e-8)
+  (if (> (distance orig sugg) *cchk-same-pt*)
     (grdraw (trans orig 0 1) (trans sugg 0 1) *cchk-sugg-color* 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (cchk:ptstr orig)
-                 "  (red X)"
+                 "  (" (cchk:color-name *cchk-orig-color*) " X)"
                  "\n    Move = onto " what " " (cchk:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "  (" (cchk:color-name *cchk-sugg-color*) " +), "
+                 (cchk:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
@@ -44956,7 +45532,9 @@
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
     (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
-                                    " <Move to the green +>: ")))
+                                    " <Move to the "
+                                    (cchk:color-name *cchk-sugg-color*)
+                                    " +>: ")))
        (if newp newp 'move))))
 
 (defun cchk:mtext (ins height width text layer / e)
@@ -44966,9 +45544,9 @@
 
 (defun cchk:attn-p (s)
   ;; T when a report line describes something questionable or that
-  ;; needs looking over / fixing, so the report renders it in red
-  (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*,*NEEDS UPDATING*,*UPDATED TO*"))
+  ;; needs looking over / fixing, so the report renders it in red.
+  ;; The words are *cchk-attn-words*, at the top of the file.
+  (wcmatch (strcase s) (strcase *cchk-attn-words*)))
 
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -45351,17 +45929,18 @@
       (foreach l diml
         (setq ndim (+ ndim (if (cchk:attn-p l) 1.0 *cchk-green-scale*))))))
   (setq nlin (max nmain ndim))
-  (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+  (if (and minx (> (max (- maxy miny) (- maxx minx)) *cchk-same-pt*))
     (progn
-      (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-            h   (/ ref (* 1.66 nlin)))
-      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+      (setq ref (max (- maxy miny) (* *cchk-report-wide* (- maxx minx)))
+            h   (/ ref (* *cchk-report-lead* nlin)))
+      (if (> h (/ ref *cchk-report-hmax*)) (setq h (/ ref *cchk-report-hmax*)))
+      (if (< h (/ ref *cchk-report-hmin*)) (setq h (/ ref *cchk-report-hmin*))))
     (progn
       (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-      (if (or (null h) (<= h 0.0)) (setq h 2.5))))
+      (if (or (null h) (<= h 0.0)) (setq h *cchk-report-hfall*))))
   (setq ins (if minx
-              (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+              (list (+ maxx (* *cchk-report-gap* (max (- maxx minx) 1.0)))
+                    maxy 0.0)
               (list 0.0 0.0 0.0)))
   ;; --- the main sheet
   (setq txt (strcat (cchk:big title)
@@ -45438,14 +46017,14 @@
   ;; only arcs drawn in the world XY plane are handled
   (setq n (cdr (assoc 210 ed)))
   (or (null n)
-      (and (< (abs (car n)) 1e-9)
-           (< (abs (cadr n)) 1e-9)
+      (and (< (abs (car n)) *cchk-planar-eps*)
+           (< (abs (cadr n)) *cchk-planar-eps*)
            (> (caddr n) 0.0))))
 
 (defun cchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
   ;; target point; returns T on success
-  (if (and (> (distance target fixed) 1e-8)
+  (if (and (> (distance target fixed) *cchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
       (setq r  (distance c target)
@@ -45523,7 +46102,7 @@
   ;; only genuinely collinear neighbours are ever tested. Segments of
   ;; the same entity are skipped (a polyline meeting itself is not a
   ;; duplicate), as are pairs already found through another segment.
-  (setq atol  (* 0.5 (/ pi 180.0))              ; 0.5 deg is ample at this fuzz
+  (setq atol  (* *cchk-olap-dirtol* (/ pi 180.0))
         fams  nil
         pairs nil
         seen  nil)
@@ -45584,7 +46163,8 @@
 (defun cchk:seg-ent (s) (caddr s))
 
 (defun cchk:ocs->wcs (p nz)
-  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1e-9))) (trans p nz 0) p))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) *cchk-planar-eps*)))
+    (trans p nz 0) p))
 
 (defun cchk:lwpoly-segs (ent / ed nz elev vs bl cls n i segs g)
   ;; straight edges of an LWPOLYLINE; bulged (arc) edges are skipped
@@ -45607,10 +46187,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *cchk-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *cchk-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -45630,10 +46210,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *cchk-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *cchk-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -45642,6 +46222,7 @@
   (setq ed (entget ent)
         et (cdr (assoc 0 ed)))
   (cond
+    ((not (member et *cchk-olap-types*)) nil)
     ((= et "LINE")       (list (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed)) ent)))
     ((= et "LWPOLYLINE") (cchk:lwpoly-segs ent))
     ((= et "POLYLINE")   (cchk:heavy-poly-segs ent))))
@@ -46033,7 +46614,7 @@
              (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
-                            " is " (rtos dsug 2 4) " away."))
+                            " is " (cchk:dist dsug) " away."))
              (setq ans (cchk:confirm-move label pt sugg what))
              (cond
                ((eq ans 'move)
@@ -46108,7 +46689,10 @@
     (progn
       (setq ok (eq ok 'yes))
       (setq note (strcat
-                   (if ok "OK" "FLAGGED to fix (red)")
+                   (if ok
+                     "OK"
+                     (strcat "FLAGGED to fix ("
+                             (cchk:color-name *cchk-flag-color*) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -46142,7 +46726,8 @@
     ((<= (caddr near) *cchk-tol*)             ; endpoint sits on an object...
      (setq ends (cchk:curve-ends (car near)))
      ;; never snap onto the arc's own other endpoint
-     (setq ends (vl-remove-if '(lambda (q) (< (distance q other) 1e-8)) ends))
+     (setq ends (vl-remove-if
+                  '(lambda (q) (< (distance q other) *cchk-same-pt*)) ends))
      (cond
        ((null ends) nil)                      ; closed curve: no ends to demand
        ((vl-some '(lambda (q) (<= (distance p q) *cchk-tol*)) ends)
@@ -46150,7 +46735,7 @@
        (t (cchk:closest-of p ends))))         ; ...but mid-object: closest end
     (t                                        ; floating: closest end anywhere,
      (setq target (cchk:nearest-end p ent cands))
-     (if (or (null target) (< (distance target other) 1e-8))
+     (if (or (null target) (< (distance target other) *cchk-same-pt*))
        (cadr near)                            ; else closest point on closest object
        target))))
 
@@ -46182,7 +46767,7 @@
      (if (cchk:move-arc-end ent which target)
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
-                        (rtos (distance p target) 2 4) " away."))
+                        (cchk:dist (distance p target)) " away."))
          (setq ans (cchk:confirm-move label p target "the object end"))
          (cond
            ((eq ans 'move)
@@ -46251,10 +46836,12 @@
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
-                (strcat (itoa (length moved)) " endpoint(s) moved (magenta), "
+                (strcat (itoa (length moved)) " endpoint(s) moved ("
+                        (cchk:color-name *cchk-arc-color*) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
-                              " endpoint(s) moved (magenta)"))
+                              " endpoint(s) moved ("
+                              (cchk:color-name *cchk-arc-color*) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -46313,18 +46900,25 @@
         ((= ans "Merge")
          (cchk:merge-lines la lb info)
          (cchk:set-color ea *cchk-olap-color*)
-         (princ "\n  Merged into one line (cyan).")
-         (list label "merged into one line (cyan)" 'merged ea))
+         (princ (strcat "\n  Merged into one line ("
+                        (cchk:color-name *cchk-olap-color*) ")."))
+         (list label
+               (strcat "merged into one line ("
+                       (cchk:color-name *cchk-olap-color*) ")")
+               'merged ea))
         ((= ans "Flag")
          (cchk:set-color ea *cchk-olap-color*)
          (cchk:set-color eb *cchk-olap-color*)
-         (princ "\n  Flagged to fix (cyan).")
+         (princ (strcat "\n  Flagged to fix ("
+                        (cchk:color-name *cchk-olap-color*) ")."))
          (list label
-               (if (cchk:whole-line-p la)
-                 (if (= (strcase lay1) (strcase lay2))
-                   "flagged to fix (cyan)"
-                   "different layers - flagged to fix (cyan)")
-                 "polyline edge - flagged to fix (cyan)")
+               (strcat
+                 (if (cchk:whole-line-p la)
+                   (if (= (strcase lay1) (strcase lay2))
+                     "flagged to fix ("
+                     "different layers - flagged to fix (")
+                   "polyline edge - flagged to fix (")
+                 (cchk:color-name *cchk-olap-color*) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -47291,9 +47885,9 @@
 
         ;; march order for the dimensions: style groups first
         ;; (*cchk-style-order*), then row by row, left to right
-        (setq rowtol (if (and miny maxy (> (- maxy miny) 1e-8))
-                       (* 0.05 (- maxy miny))
-                       1.0))
+        (setq rowtol (if (and miny maxy (> (- maxy miny) *cchk-same-pt*))
+                       (* *cchk-row-band* (- maxy miny))
+                       *cchk-row-flat*))
         (setq dims (cchk:sort-dims dims rowtol))
 
         ;; spots two or more dimensions measure to are anchors: a
@@ -47527,7 +48121,8 @@
         ;; --- show the drawing plus the report -----------------------
         (if minx
           (progn
-            (setq m (* 0.05 (max (- maxx minx) (- maxy miny) 1.0)))
+            (setq m (* *cchk-zoom-out*
+                       (max (- maxx minx) (- maxy miny) 1.0)))
             (command "_.ZOOM" "_Window"
                      (trans (list (- minx m) (- miny m) 0.0) 0 1)
                      (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
@@ -47638,7 +48233,8 @@
      (foreach e (if lite
                   nil
                   (cchk:sort-dims dims (if (and miny maxy)
-                                         (* 0.05 (- maxy miny)) 1.0)))
+                                         (* *cchk-row-band* (- maxy miny))
+                                         *cchk-row-flat*)))
        (setq ed  (entget e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
@@ -47664,10 +48260,10 @@
                  ((and dq (or (null near) (< dq (caddr near))))
                   (setq bad (append bad (list (strcat (car s)
                                                       " off the shared anchor by "
-                                                      (rtos dq 2 4))))))
+                                                      (cchk:dist dq))))))
                  (near
                   (setq bad (append bad (list (strcat (car s) " off by "
-                                                      (rtos (caddr near) 2 4)))))))))))
+                                                      (cchk:dist (caddr near))))))))))))
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
@@ -48520,8 +49116,10 @@
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
-;;;         Enter / M  ->  MOVE it onto the nearest object (green +)
-;;;         K          ->  KEEP it exactly where you drew it (red X);
+;;;         Enter / M  ->  MOVE it onto the nearest object (the +
+;;;                        marker, green by default)
+;;;         K          ->  KEEP it exactly where you drew it (the X
+;;;                        marker, red by default);
 ;;;                        the point is put back and nothing changes
 ;;;         P          ->  PICK the spot yourself
 ;;;     A point TWO OR MORE DIMENSIONS measure to is an ANCHOR and is
@@ -48608,7 +49206,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.12")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.13")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -48616,34 +49214,203 @@
   (princ (strcat "\nDIMCHECK " *dchk-version*))
   (princ))
 
-;; --- tunables ------------------------------------------------------
-(setq *dchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
-(setq *dchk-grey-color*   8)       ; grey used to fade out everything not under review
-(setq *dchk-flag-color*   1)       ; red: dimensions you answered "No" to
-(setq *dchk-arc-color*    6)       ; magenta: arcs whose endpoints were moved
-(setq *dchk-olap-color*   4)       ; cyan: merged or flagged overlapping lines
-(setq *dchk-olap-fuzz*    1.0e-4)  ; max sideways offset that still counts as "same line"
-(setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
-(setq *dchk-constr-color* 2)       ; yellow
-(setq *dchk-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
-(setq *dchk-orig-color*   1)       ; red X: where you drew the point
-(setq *dchk-sugg-color*   3)       ; green +: where DIMCHECK would move it
-(setq *dchk-report-layer* "DIMCHECK-REPORT")
-(setq *dchk-report-color* 3)       ; green
-(setq *dchk-zoom-margin*  0.75)    ; empty space around the zoomed item (fraction of its size)
-(setq *dchk-report-chars* 45.0)    ; report column width, in text heights
-(setq *dchk-ask-all-arc-ends* nil) ; T = confirm EVERY arc endpoint, even already-attached ones
-(setq *dchk-anchor-tol*   1.0e-4)  ; how close two dimension points must be to count as the same spot
-(setq *dchk-anchor-min*   2)       ; that many dimensions meeting there make it an anchor
+;;; ======================================================================
+;;;  TUNABLES -- every value DIMCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq *dchk-tol* 0.001) -- because every knob
+;;;  is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); angles in degrees where said so; colours are ACI numbers
+;;;  (1 red, 2 yellow, 3 green, 4 cyan, 5 blue, 6 magenta, 7 white,
+;;;  8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
 
-;; dimension styles are reviewed in this order; styles not listed
-;; come afterwards ("whatever else is left"), still left-to-right
+;; -- what counts as attached, and what counts as one spot -------------
+
+;; A dimension point or an arc end within this distance of an object is
+;; ATTACHED and is not questioned.  It has three more jobs: the
+;; smallest move worth asking about, the shortest overlap worth
+;; reporting, and the shortest segment admitted to overlap detection.
+;; Raising it asks fewer questions on all four counts.
+(setq *dchk-tol*          1.0e-4)  ; drawing units
+
+;; How close two dimension points must be to count as the same spot...
+(setq *dchk-anchor-tol*   1.0e-4)  ; drawing units
+
+;; ...and how many dimensions must meet there to make it an ANCHOR: a
+;; point left as drawn, geometry under it or not (the pair of dims
+;; pinning a hypotenuse corner is the everyday case).  1 would make
+;; every point an anchor and switch the dimension audit off.
+(setq *dchk-anchor-min*   2)       ; dimensions meeting at one spot
+
+;; Entity types a dimension point or an arc end may attach to.  Each
+;; must be a curve AutoCAD can measure to (vlax-curve-*).
+(setq *dchk-curve-types*
+      '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
+
+;; T = confirm EVERY arc endpoint, even ones already attached.
+(setq *dchk-ask-all-arc-ends* nil)
+
+;; -- overlapping lines --------------------------------------------------
+
+;; How far apart two parallel lines may sit and still be called the
+;; same line.  Raising it calls more near-misses an overlap.
+(setq *dchk-olap-fuzz*    1.0e-4)  ; drawing units, sideways offset
+
+;; Two segments are only tested for overlap when their directions are
+;; within this of each other.  It is a bucketing shortcut, not a rule:
+;; keep it comfortably wider than the angle *dchk-olap-fuzz* implies
+;; over a segment's length, or a genuine overlap is never compared.
+(setq *dchk-olap-dirtol*  0.5)     ; degrees
+
+;; Entity types whose straight segments take part in overlap detection.
+;; Arcs, circles and splines have no straight run to overlap, which is
+;; why this is a shorter list than *dchk-curve-types*.
+(setq *dchk-olap-types*
+      '("LINE" "LWPOLYLINE" "POLYLINE"))
+
+;; -- review order ------------------------------------------------------
+
+;; Dimension styles are reviewed in this order; styles not listed come
+;; afterwards ("whatever else is left"), still left-to-right.  Matching
+;; is by exact name, case-blind.
 (setq *dchk-style-order*
       '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
 
-;; entity types dimension points and arc ends may attach to
-(setq *dchk-curve-types*
-      '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
+;; Within a style, dimensions are reviewed row by row.  Two dimensions
+;; count as the same ROW when their midpoints are within this fraction
+;; of the selection's height.  Raise it and a whole sheet becomes one
+;; row (pure left-to-right); lower it and near-level dims split apart.
+(setq *dchk-row-band*     0.05)    ; fraction of the selection's height
+(setq *dchk-row-flat*     1.0)     ; ...and the band for a selection with no height
+
+;; -- colours -----------------------------------------------------------
+
+(setq *dchk-grey-color*   8)       ; ACI: everything not under review, faded (grey)
+(setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
+(setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
+(setq *dchk-orig-color*   1)       ; ACI: the X marking where you drew the point (red)
+(setq *dchk-sugg-color*   3)       ; ACI: the + marking where DIMCHECK would put it (green)
+(setq *dchk-point-color*  2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+
+;; The command line and the report name these colours as they use them,
+;; so a colour changed here is described correctly rather than still
+;; being called red.
+
+;; -- the two layers ----------------------------------------------------
+
+;; The construction XLINE through a moved dimension's original points,
+;; and the report MTEXT.  Both layers are created on first use; the
+;; colour applies only then, so a layer already in the drawing keeps
+;; its own.
+(setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
+(setq *dchk-constr-color* 2)       ; ACI (yellow)
+(setq *dchk-report-layer* "DIMCHECK-REPORT")
+(setq *dchk-report-color* 3)       ; ACI (green)
+
+;; -- how the report is sized and placed --------------------------------
+
+;; All-clear lines are written at this fraction of the height the red
+;; attention lines get, so problems stand out.  1.0 = same size.
+(setq *dchk-green-scale*  0.75)
+
+;; Report column width, in text heights.
+(setq *dchk-report-chars* 45.0)
+
+;; ...and the width of TUTORIALDIMCHECK's reference sheet, which is
+;; prose rather than a column of findings and so runs wider.
+(setq *dchk-sheet-chars*  70.0)
+
+;; The report is scaled to the drawing: its text height is chosen so
+;; the whole report is about as tall as the drawing.  On a wide, short
+;; sheet that would give a tiny report, so the reference height is at
+;; least this fraction of the drawing's WIDTH.
+(setq *dchk-report-wide*  0.25)
+
+;; MTEXT line pitch as a multiple of text height, used to turn a line
+;; count into a height.  AutoCAD's default single spacing is 1.66.
+(setq *dchk-report-lead*  1.66)
+
+;; ...then the height is clamped, so a three-line report on a big sheet
+;; is not gigantic and a 200-line one is still readable: never taller
+;; than reference/HMAX, never shorter than reference/HMIN.
+(setq *dchk-report-hmax*  30.0)
+(setq *dchk-report-hmin*  200.0)
+
+;; The height used when the selection has no extents to scale against
+;; (DIMCHECK tries DIMTXT x DIMSCALE first and falls back to this;
+;; DIMSCAN uses it directly).
+(setq *dchk-report-hfall* 2.5)     ; drawing units
+
+;; Gap between the drawing and the report, as a fraction of the
+;; drawing's width, and the margin left around the closing zoom.
+(setq *dchk-report-gap*   0.05)
+(setq *dchk-zoom-out*     0.05)
+
+;; Empty space around ONE item when the review zooms to it, as a
+;; fraction of its size.
+(setq *dchk-zoom-margin*  0.75)
+
+;; Half-size of the X and + markers drawn while you answer, as a
+;; fraction of the current view height -- so they stay the same size on
+;; screen however far you are zoomed in.
+(setq *dchk-mark-size*    0.02)    ; fraction of VIEWSIZE
+
+;; A report line is rendered red and full-size when it matches this
+;; pattern (wcmatch, case-blind; comma separates alternatives).  These
+;; are the words the report's own notes use for something that needs
+;; looking at -- reword a note and its word belongs here too, or the
+;; line quietly stops being red.
+(setq *dchk-attn-words*
+      "*FLAGGED*,*SKIPPED*,*ENDPOINT(S) MOVED*,*ASSOCIATIVE*,*NOT ATTACHED*,*OVERLAP*")
+
+;; Distances in prompts and the report go through (rtos d mode prec):
+;; mode 2 is decimal, 3 engineering, 4 architectural (feet-inches);
+;; prec is decimal places (for mode 4: the inch is split 2^prec ways).
+;; The dimension's own MEASUREMENT is not formatted here -- it follows
+;; the drawing's LUNITS/LUPREC, which is what the drafter reads on the
+;; sheet.
+(setq *dchk-dist-mode*    2)       ; rtos mode
+(setq *dchk-dist-prec*    4)       ; decimal places
+
+;; -- numerical guards (rarely changed) --------------------------------
+
+;; Two points closer than this are the SAME point: no construction line
+;; is drawn through them, no joining line between an X and a +, and an
+;; arc is never re-fitted onto its own other end.
+(setq *dchk-same-pt*      1e-8)    ; drawing units
+
+;; How far an arc's extrusion normal (DXF 210) may lean from world +Z
+;; and still be audited; beyond it the arc is "not in world XY plane -
+;; skipped" rather than re-fitted in the wrong plane.
+(setq *dchk-planar-eps*   1e-9)    ; dimensionless (normal components)
+
+;; Below this a polyline bulge is treated as straight, so the edge
+;; joins overlap detection, and three points are too collinear to fit
+;; an arc through.
+(setq *dchk-flat-eps*     1e-12)
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  DIMCHECK keeps no state between runs: everything a
+;;;  run remembers is a local of the command, and what it leaves in the
+;;;  drawing is xdata under the "DIMCHECK" APPID.
+;;; ======================================================================
+
+;; A distance as the prompts and the report print it.
+(defun dchk:dist (d)
+  (rtos d *dchk-dist-mode* *dchk-dist-prec*))
+
+;; The word for an ACI colour, so a message naming a colour follows the
+;; knob instead of saying "red" whatever the knob holds.
+(defun dchk:color-name (aci / p)
+  (setq p (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if p (cdr p) (strcat "colour " (itoa aci))))
 
 ;; --- safety: xdata tags, colour stash, layer locks -----------------
 
@@ -48773,7 +49540,7 @@
   ;; infinite construction line through p1-p2 on the check layer,
   ;; tagged so reruns and DIMCHECKRESCUE can clear it
   (setq len (distance p1 p2))
-  (if (and (> len 1e-8)
+  (if (and (> len *dchk-same-pt*)
            (entmake (list '(0 . "XLINE")
                           '(100 . "AcDbEntity")
                           (cons 8 *dchk-constr-layer*)
@@ -48827,7 +49594,7 @@
   best)
 
 (defun dchk:ptstr (p)
-  (strcat "(" (rtos (car p) 2 4) ", " (rtos (cadr p) 2 4) ")"))
+  (strcat "(" (dchk:dist (car p)) ", " (dchk:dist (cadr p)) ")"))
 
 (defun dchk:zoom-ent (ent / bb p1 p2 m)
   ;; zoom the current view onto ent with some breathing room
@@ -48874,27 +49641,27 @@
 (defun dchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *dchk-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (- (cadr p) s)) (list (+ (car p) s) (+ (cadr p) s)) col 1)
   (grdraw (list (- (car p) s) (+ (cadr p) s)) (list (+ (car p) s) (- (cadr p) s)) col 1))
 
 (defun dchk:mark-plus (pt col / p s)
   ;; upright cross - marks WHERE DIMCHECK WOULD PUT IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *dchk-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
 (defun dchk:mark-point (pt)
   ;; both strokes, for a point that is simply being pointed out
-  (dchk:mark-x pt 2)
-  (dchk:mark-plus pt 2))
+  (dchk:mark-x pt *dchk-point-color*)
+  (dchk:mark-plus pt *dchk-point-color*))
 
 (defun dchk:confirm-move (label orig sugg what / ans newp)
   ;; The point has been put where DIMCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
-  ;; which: a red X where you drew it, a green + where we would move
-  ;; it, joined by a line. WHAT names what the green + sits on, so a
+  ;; which: an X where you drew it, a + where we would move
+  ;; it, joined by a line. WHAT names what the + sits on, so a
   ;; move onto a shared anchor point does not claim to be an object.
   ;; Returns
   ;;   'move - take our suggestion
@@ -48902,13 +49669,14 @@
   ;;   <point> - a spot you picked yourself (current UCS)
   (dchk:mark-x    orig *dchk-orig-color*)
   (dchk:mark-plus sugg *dchk-sugg-color*)
-  (if (> (distance orig sugg) 1e-8)
+  (if (> (distance orig sugg) *dchk-same-pt*)
     (grdraw (trans orig 0 1) (trans sugg 0 1) *dchk-sugg-color* 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (dchk:ptstr orig)
-                 "  (red X)"
+                 "  (" (dchk:color-name *dchk-orig-color*) " X)"
                  "\n    Move = onto " what " " (dchk:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "  (" (dchk:color-name *dchk-sugg-color*) " +), "
+                 (dchk:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
@@ -48917,7 +49685,9 @@
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
     (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
-                                    " <Move to the green +>: ")))
+                                    " <Move to the "
+                                    (dchk:color-name *dchk-sugg-color*)
+                                    " +>: ")))
        (if newp newp 'move))))
 
 (defun dchk:mtext (ins height width text layer / e)
@@ -48934,8 +49704,7 @@
 (defun dchk:attn-p (s)
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
-  (wcmatch (strcase s)
-    "*FLAGGED*,*SKIPPED*,*MAGENTA*,*ASSOCIATIVE*,*NOT ATTACHED*,*OVERLAP*"))
+  (wcmatch (strcase s) (strcase *dchk-attn-words*)))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -48953,14 +49722,14 @@
   ;; only arcs drawn in the world XY plane are handled
   (setq n (cdr (assoc 210 ed)))
   (or (null n)
-      (and (< (abs (car n)) 1e-9)
-           (< (abs (cadr n)) 1e-9)
+      (and (< (abs (car n)) *dchk-planar-eps*)
+           (< (abs (cadr n)) *dchk-planar-eps*)
            (> (caddr n) 0.0))))
 
 (defun dchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
   ;; target point; returns T on success
-  (if (and (> (distance target fixed) 1e-8)
+  (if (and (> (distance target fixed) *dchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
       (setq r  (distance c target)
@@ -49045,7 +49814,8 @@
 (defun dchk:seg-ent (s) (caddr s))
 
 (defun dchk:ocs->wcs (p nz)
-  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1e-9))) (trans p nz 0) p))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) *dchk-planar-eps*)))
+    (trans p nz 0) p))
 
 (defun dchk:lwpoly-segs (ent / ed nz elev vs bl cls n i segs g)
   ;; straight edges of an LWPOLYLINE; bulged (arc) edges are skipped
@@ -49068,10 +49838,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *dchk-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *dchk-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -49091,10 +49861,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *dchk-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *dchk-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -49103,6 +49873,7 @@
   (setq ed (entget ent)
         et (cdr (assoc 0 ed)))
   (cond
+    ((not (member et *dchk-olap-types*)) nil)
     ((= et "LINE")       (list (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed)) ent)))
     ((= et "LWPOLYLINE") (dchk:lwpoly-segs ent))
     ((= et "POLYLINE")   (dchk:heavy-poly-segs ent))))
@@ -49141,7 +49912,7 @@
   ;; only genuinely collinear neighbours are ever tested. Segments of
   ;; the same entity are skipped (a polyline meeting itself is not a
   ;; duplicate), as are pairs already found through another segment.
-  (setq atol  (* 0.5 (/ pi 180.0))              ; 0.5 deg is ample at this fuzz
+  (setq atol  (* *dchk-olap-dirtol* (/ pi 180.0))
         fams  nil
         pairs nil
         seen  nil)
@@ -49364,7 +50135,7 @@
              (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
-                            " is " (rtos dsug 2 4) " away."))
+                            " is " (dchk:dist dsug) " away."))
              (setq ans (dchk:confirm-move label pt sugg what))
              (cond
                ((eq ans 'move)
@@ -49439,7 +50210,10 @@
     (progn
       (setq ok (eq ok 'yes))
       (setq note (strcat
-                   (if ok "OK" "FLAGGED to fix (red)")
+                   (if ok
+                     "OK"
+                     (strcat "FLAGGED to fix ("
+                             (dchk:color-name *dchk-flag-color*) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -49473,7 +50247,8 @@
     ((<= (caddr near) *dchk-tol*)             ; endpoint sits on an object...
      (setq ends (dchk:curve-ends (car near)))
      ;; never snap onto the arc's own other endpoint
-     (setq ends (vl-remove-if '(lambda (q) (< (distance q other) 1e-8)) ends))
+     (setq ends (vl-remove-if
+                  '(lambda (q) (< (distance q other) *dchk-same-pt*)) ends))
      (cond
        ((null ends) nil)                      ; closed curve: no ends to demand
        ((vl-some '(lambda (q) (<= (distance p q) *dchk-tol*)) ends)
@@ -49481,7 +50256,7 @@
        (t (dchk:closest-of p ends))))         ; ...but mid-object: closest end
     (t                                        ; floating: closest end anywhere,
      (setq target (dchk:nearest-end p ent cands))
-     (if (or (null target) (< (distance target other) 1e-8))
+     (if (or (null target) (< (distance target other) *dchk-same-pt*))
        (cadr near)                            ; else closest point on closest object
        target))))
 
@@ -49513,7 +50288,7 @@
      (if (dchk:move-arc-end ent which target)
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
-                        (rtos (distance p target) 2 4) " away."))
+                        (dchk:dist (distance p target)) " away."))
          (setq ans (dchk:confirm-move label p target "the object end"))
          (cond
            ((eq ans 'move)
@@ -49582,10 +50357,12 @@
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
-                (strcat (itoa (length moved)) " endpoint(s) moved (magenta), "
+                (strcat (itoa (length moved)) " endpoint(s) moved ("
+                        (dchk:color-name *dchk-arc-color*) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
-                              " endpoint(s) moved (magenta)"))
+                              " endpoint(s) moved ("
+                              (dchk:color-name *dchk-arc-color*) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -49644,18 +50421,25 @@
         ((= ans "Merge")
          (dchk:merge-lines la lb info)
          (dchk:set-color ea *dchk-olap-color*)
-         (princ "\n  Merged into one line (cyan).")
-         (list label "merged into one line (cyan)" 'merged ea))
+         (princ (strcat "\n  Merged into one line ("
+                        (dchk:color-name *dchk-olap-color*) ")."))
+         (list label
+               (strcat "merged into one line ("
+                       (dchk:color-name *dchk-olap-color*) ")")
+               'merged ea))
         ((= ans "Flag")
          (dchk:set-color ea *dchk-olap-color*)
          (dchk:set-color eb *dchk-olap-color*)
-         (princ "\n  Flagged to fix (cyan).")
+         (princ (strcat "\n  Flagged to fix ("
+                        (dchk:color-name *dchk-olap-color*) ")."))
          (list label
-               (if (dchk:whole-line-p la)
-                 (if (= (strcase lay1) (strcase lay2))
-                   "flagged to fix (cyan)"
-                   "different layers - flagged to fix (cyan)")
-                 "polyline edge - flagged to fix (cyan)")
+               (strcat
+                 (if (dchk:whole-line-p la)
+                   (if (= (strcase lay1) (strcase lay2))
+                     "flagged to fix ("
+                     "different layers - flagged to fix (")
+                   "polyline edge - flagged to fix (")
+                 (dchk:color-name *dchk-olap-color*) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -49780,9 +50564,9 @@
 
         ;; march order for the dimensions: style groups first
         ;; (*dchk-style-order*), then row by row, left to right
-        (setq rowtol (if (and miny maxy (> (- maxy miny) 1e-8))
-                       (* 0.05 (- maxy miny))
-                       1.0))
+        (setq rowtol (if (and miny maxy (> (- maxy miny) *dchk-same-pt*))
+                       (* *dchk-row-band* (- maxy miny))
+                       *dchk-row-flat*))
         (setq dims (dchk:sort-dims dims rowtol))
 
         ;; spots two or more dimensions measure to are anchors: a
@@ -49962,24 +50746,30 @@
         ;; --- report on the right side, to scale with the drawing ----
         ;; text height picked from the drawing's extents so the whole
         ;; report roughly matches the drawing's height (MTEXT line
-        ;; spacing is ~1.66 x text height), clamped so a short report
-        ;; is not gigantic nor a long one unreadably small
+        ;; pitch is *dchk-report-lead* x text height), clamped by
+        ;; *dchk-report-hmax*/-hmin so a short report is not gigantic
+        ;; nor a long one unreadably small
         ;; all-clear lines are shorter, so weight them when sizing
         (setq nlin 3.0)                          ; title, legend, separator
         (foreach l lines
           (setq nlin (+ nlin (if (dchk:attn-p l) 1.0 *dchk-green-scale*))))
         (setq nlin (+ nlin (* 3.0 *dchk-green-scale*)))   ; the header dashboard
-        (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+        (if (and minx (> (max (- maxy miny) (- maxx minx)) *dchk-same-pt*))
           (progn
-            (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-                  h   (/ ref (* 1.66 nlin)))
-            (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-            (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+            (setq ref (max (- maxy miny)
+                           (* *dchk-report-wide* (- maxx minx)))
+                  h   (/ ref (* *dchk-report-lead* nlin)))
+            (if (> h (/ ref *dchk-report-hmax*))
+              (setq h (/ ref *dchk-report-hmax*)))
+            (if (< h (/ ref *dchk-report-hmin*))
+              (setq h (/ ref *dchk-report-hmin*))))
           (progn
             (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-            (if (or (null h) (<= h 0.0)) (setq h 2.5))))
+            (if (or (null h) (<= h 0.0)) (setq h *dchk-report-hfall*))))
         (setq ins (if minx
-                    (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+                    (list (+ maxx (* *dchk-report-gap*
+                                     (max (- maxx minx) 1.0)))
+                          maxy 0.0)
                     (list 0.0 0.0 0.0)))
         ;; header dashboard: each line carries a "needs attention" flag
         ;; so a category with anything to look over turns red
@@ -50027,7 +50817,7 @@
         ;; --- show the drawing plus the report -----------------------
         (if minx
           (progn
-            (setq m (* 0.05 (max (- maxx minx) (- maxy miny) 1.0)))
+            (setq m (* *dchk-zoom-out* (max (- maxx minx) (- maxy miny) 1.0)))
             (command "_.ZOOM" "_Window"
                      (trans (list (- minx m) (- miny m) 0.0) 0 1)
                      (trans (list (+ (car ins) (* *dchk-report-chars* h) m)
@@ -50041,7 +50831,8 @@
         (princ (strcat "\n\n--- DIMCHECK complete ---"
                        "\nDimensions: " (itoa (length dims)) " checked, "
                        (itoa ndok) " correct, "
-                       (itoa ndflag) " flagged to fix (red)"
+                       (itoa ndflag) " flagged to fix ("
+                       (dchk:color-name *dchk-flag-color*) ")"
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
@@ -50051,11 +50842,13 @@
                          "")
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
-                       (itoa nasnap) " endpoint(s), magenta)"
+                       (itoa nasnap) " endpoint(s), "
+                       (dchk:color-name *dchk-arc-color*) ")"
                        "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
                        (if olaps
                          (strcat ", " (itoa nomerged) " merged, "
-                                 (itoa noflag) " flagged (cyan), "
+                                 (itoa noflag) " flagged ("
+                                 (dchk:color-name *dchk-olap-color*) "), "
                                  (itoa noleft) " left as drawn")
                          "")
                        "\nReport placed on the right side of the drawing (layer "
@@ -50118,7 +50911,9 @@
            anchors (dchk:shared-anchors dims))
 
      ;; --- dimensions: report stray definition points, move nothing
-     (foreach e (dchk:sort-dims dims (if (and miny maxy) (* 0.05 (- maxy miny)) 1.0))
+     (foreach e (dchk:sort-dims dims (if (and miny maxy)
+                                       (* *dchk-row-band* (- maxy miny))
+                                       *dchk-row-flat*))
        (setq ed  (entget e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
@@ -50144,10 +50939,10 @@
                  ((and dq (or (null near) (< dq (caddr near))))
                   (setq bad (append bad (list (strcat (car s)
                                                       " off the shared anchor by "
-                                                      (rtos dq 2 4))))))
+                                                      (dchk:dist dq))))))
                  (near
                   (setq bad (append bad (list (strcat (car s) " off by "
-                                                      (rtos (caddr near) 2 4)))))))))))
+                                                      (dchk:dist (caddr near))))))))))))
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
@@ -50215,15 +51010,20 @@
      (foreach l lines
        (setq nlin (+ nlin (if (dchk:attn-p l) 1.0 *dchk-green-scale*))))
      (setq nlin (+ nlin (* 3.0 *dchk-green-scale*)))
-     (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+     (if (and minx (> (max (- maxy miny) (- maxx minx)) *dchk-same-pt*))
        (progn
-         (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-               h   (/ ref (* 1.66 nlin)))
-         (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-         (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-       (setq h 2.5))
+         (setq ref (max (- maxy miny)
+                        (* *dchk-report-wide* (- maxx minx)))
+               h   (/ ref (* *dchk-report-lead* nlin)))
+         (if (> h (/ ref *dchk-report-hmax*))
+           (setq h (/ ref *dchk-report-hmax*)))
+         (if (< h (/ ref *dchk-report-hmin*))
+           (setq h (/ ref *dchk-report-hmin*))))
+       (setq h *dchk-report-hfall*))
      (setq ins (if minx
-                 (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+                 (list (+ maxx (* *dchk-report-gap*
+                                  (max (- maxx minx) 1.0)))
+                       maxy 0.0)
                  (list 0.0 0.0 0.0)))
      (setq txt (strcat "DIMSCAN REPORT - " (cal:datestr)
                        "  [DIMCHECK " *dchk-version* "]"
@@ -50269,7 +51069,9 @@
     "     then left to right, top to bottom inside each group."
     "   Every other object greys out; the one under review is zoomed to."
     "   A definition point not touching any object: you choose"
-    "     Move (green +, onto the nearest object) / Keep (red X, exactly"
+    (strcat "     Move (" (dchk:color-name *dchk-sugg-color*)
+            " +, onto the nearest object) / Keep ("
+            (dchk:color-name *dchk-orig-color*) " X, exactly")
     "     where you drew it) / Pick your own spot."
     (strcat "   A point "
             (if (= *dchk-anchor-min* 2) "two" (itoa *dchk-anchor-min*))
@@ -50409,8 +51211,14 @@
       (if (cal:ask-yn "\n  Write a read-only DIMSCAN report for the practice drawing?" "Yes")
         (progn
           (princ "\n  Running DIMSCAN - it changes nothing, it only reports.")
-          (princ "\n  (In the report, RED lines at full size are the problems;")
-          (princ "\n   green lines at three-quarter size are the all-clears.)")
+          (princ (strcat "\n  (In the report, "
+                         (strcase (dchk:color-name *dchk-flag-color*))
+                         " lines at full size are the problems;"))
+          (princ (strcat "\n   "
+                         (dchk:color-name *dchk-report-color*)
+                         " lines at "
+                         (rtos (* 100.0 *dchk-green-scale*) 2 0)
+                         "% size are the all-clears.)"))
           (dchk:tut-pause
             (strcat "DIMSCAN will ask you to highlight - window the practice\n"
                     "  drawing (or press Enter for the whole drawing). The report\n"
@@ -50468,10 +51276,11 @@
           (setq ins (getpoint "\n  Pick the top-left corner for the sheet: "))
           (if ins
             (progn
-              (setq h   (getdist (strcat "\n  Text height <" (rtos 2.5) ">: "))
-                    h   (if h h 2.5)
+              (setq h   (getdist (strcat "\n  Text height <"
+                                        (rtos *dchk-report-hfall*) ">: "))
+                    h   (if h h *dchk-report-hfall*)
                     ins (trans ins 1 0))
-              (dchk:mtext ins h (* 70.0 h)
+              (dchk:mtext ins h (* *dchk-sheet-chars* h)
                           (dchk:join (dchk:tut-checklist) "\\P")
                           *dchk-report-layer*)
               (princ "\n  Reference sheet placed (one U removes it)."))
@@ -60068,8 +60877,64 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.4")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
+
+;;; ======================================================================
+;;;  TUNABLES -- every value LINCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line, because every knob is read when the command runs,
+;;;  not when the file loads.
+;;;
+;;;  What is NOT here, on purpose: the checklist's questions.  This
+;;;  tool IS its questions -- their wording, their order and which
+;;;  answer opens which follow-up are one thing, held in the lin:
+;;;  functions below, and a table of prompts split from the branching
+;;;  that reads them would be two places to keep in step instead of
+;;;  one.  The knobs here are how the checklist TALKS, not what it asks.
+;;; ----------------------------------------------------------------------
+
+;; -- how the report reads ------------------------------------------------
+
+;; The report is printed to the command line, one line per item.  These
+;; are the pieces every line is built from: the tick that marks a done
+;; item, what separates an item from a note typed against it, and what
+;; separates a question from the answer picked.
+(setq lin:*tick*     "[x] ")
+(setq lin:*note-sep* " -- ")
+(setq lin:*ans-sep*  " -> ")
+
+;; A cross dimension is logged indented under its heading by this.
+(setq lin:*indent*   "    ")
+
+;; A section heading, in the report and on the command line.  The two
+;; differ on purpose: the report's is quieter, since it is read as a
+;; block rather than watched as it goes by.
+(setq lin:*head-in*  "== ")
+(setq lin:*head-out* "==")
+(setq lin:*head-echo-in*  "=== ")
+(setq lin:*head-echo-out* "===")
+
+;; The banner the printed report is boxed in, and its title.  RULE is
+;; drawn as-is, so its width is what sets the box's; the title is
+;; centred inside a line of the same character.
+(setq lin:*rule*     "############################################")
+(setq lin:*title*    "#          LINER CHECKLIST REPORT          #")
+
+;; -- what a typed answer may say -----------------------------------------
+
+;; A getstring prompt cannot take initget keywords, so "go back a step"
+;; has to be typed like a note.  These are the words that mean it,
+;; matched case-blind and whole; add a synonym and every typed prompt
+;; takes it.
+(setq lin:*back-words* '("B" "BACK" "U" "UNDO"))
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  The two globals below are STATE, not knobs: what
+;;;  one run of the checklist has collected so far.
 
 (setq *lin:log* nil)   ; collected report lines
 
@@ -60079,6 +60944,7 @@
                        ; still Enter through, never an answer by itself,
                        ; so a re-run over the same job is Enter-Enter
                        ; down the unchanged questions
+;;; ======================================================================
 
 ;; Record a line for the report.
 (defun lin:log (msg)
@@ -60099,9 +60965,9 @@
 
 ;; Section header - printed to the command line and added to the report.
 (defun lin:head (title)
-  (princ (strcat "\n\n=== " title " ==="))
+  (princ (strcat "\n\n" lin:*head-echo-in* title lin:*head-echo-out*))
   (lin:log "")
-  (lin:log (strcat "== " title " =="))
+  (lin:log (strcat lin:*head-in* title lin:*head-out*))
 )
 
 ;; Simple check-off item.  Shows the item, waits for the tech to press
@@ -60114,8 +60980,8 @@
                                  ", or type a note): ")))
   (cond
     ((and back (cal:back-word-p val)) 'LIN-BACK)
-    ((= val "") (lin:log (strcat "[x] " item)) val)
-    (T (lin:log (strcat "[x] " item " -- " val)) val)
+    ((= val "") (lin:log (strcat lin:*tick* item)) val)
+    (T (lin:log (strcat lin:*tick* item lin:*note-sep* val)) val)
   )
 )
 
@@ -60139,7 +61005,7 @@
   (if (member ans '("Back" "Undo"))
     'LIN-BACK
     (progn (setq *lin:prev* (cons (cons prompt ans) *lin:prev*))
-           (lin:log (strcat "[x] " prompt " -> " ans)) ans)
+           (lin:log (strcat lin:*tick* prompt lin:*ans-sep* ans)) ans)
   )
 )
 
@@ -60410,25 +61276,25 @@
          )
        ))
       ((= entry "") (setq done T))
-      (T (setq n (1+ n)) (lin:log (strcat "    " entry)))
+      (T (setq n (1+ n)) (lin:log (strcat lin:*indent* entry)))
     )
   )
   (if (eq done 'LIN-BACK)
     'LIN-BACK
-    (progn (if (= n 0) (lin:log "    (none provided)")) n)
+    (progn (if (= n 0) (lin:log (strcat lin:*indent* "(none provided)"))) n)
   )
 )
 
 ;; Print the collected report.
 (defun lin:report ()
   (princ "\n\n")
-  (princ "############################################")
-  (princ "\n#          LINER CHECKLIST REPORT          #")
-  (princ "\n############################################")
+  (princ lin:*rule*)
+  (princ (strcat "\n" lin:*title*))
+  (princ (strcat "\n" lin:*rule*))
   (foreach line *lin:log*
     (princ (strcat "\n" line))
   )
-  (princ "\n############################################")
+  (princ (strcat "\n" lin:*rule*))
   (princ "\n")
   (princ)
 )
@@ -60478,8 +61344,10 @@
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
-;;;         Enter / M  ->  MOVE it onto the nearest object (green +)
-;;;         K          ->  KEEP it exactly where you drew it (red X);
+;;;         Enter / M  ->  MOVE it onto the nearest object (the +
+;;;                        marker, green by default)
+;;;         K          ->  KEEP it exactly where you drew it (the X
+;;;                        marker, red by default);
 ;;;                        the point is put back and nothing changes
 ;;;         P          ->  PICK the spot yourself
 ;;;     A point TWO OR MORE DIMENSIONS measure to is an ANCHOR and is
@@ -60724,7 +61592,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.8")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.9")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -60732,67 +61600,275 @@
   (princ (strcat "\nLINFINCHECK " *lfc-version*))
   (princ))
 
-;; --- tunables ------------------------------------------------------
-(setq *lfc-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
-(setq *lfc-grey-color*   8)       ; grey used to fade out everything not under review
-(setq *lfc-flag-color*   1)       ; red: dimensions you answered "No" to
-(setq *lfc-arc-color*    6)       ; magenta: arcs whose endpoints were moved
-(setq *lfc-olap-color*   4)       ; cyan: merged or flagged overlapping lines
-(setq *lfc-olap-fuzz*    1.0e-4)  ; max sideways offset that still counts as "same line"
-(setq *lfc-step-maxgap*  18.0)    ; steps: max tread spacing (drawing units; 18 = 18" when 1 unit = 1")
-(setq *lfc-step-minlines* 3)      ; steps: how many stacked parallel lines look like steps
-(setq *lfc-bench-minlines* 2)     ; side view: a bench profile is only two treads deep
-(setq *lfc-step-angtol*  1.0)     ; steps: parallelism tolerance (degrees)
-(setq *lfc-bead-layer*   "Bead Track") ; layer bead track must be drawn on
-(setq *lfc-bead-dist*    18.0)    ; how close bead track must be to plan-view steps (units)
-(setq *lfc-title-block*  "Tech Title") ; title block holding the wall height (spaces optional)
-(setq *lfc-wallht-tag*   "WallHt")     ; attribute tag carrying the wall height
-(setq *lfc-date-tag*     "Date")       ; attribute tag carrying the drawing date
-(setq *lfc-height-tol*   0.25)    ; steps height vs WallHt: allowed difference (units)
-(setq *lfc-min-wallht*   1.0)     ; a WallHt below this is NONSENSICAL (0'' walls do not exist)
-(setq *lfc-ask-phrase*   "Wall height") ; the question text expected when WallHt is "?"
-;; the generic Step Attachment block lists every option with a box; if
+;;; ======================================================================
+;;;  TUNABLES -- every value LINFINCHECK reads that someone might want
+;;;  to change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq *lfc-tol* 0.001) -- because every knob
+;;;  is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); angles in degrees where said so; colours are ACI numbers
+;;;  (1 red, 2 yellow, 3 green, 4 cyan, 5 blue, 6 magenta, 7 white,
+;;;  8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
+
+;; -- the liner rules: steps -------------------------------------------
+
+;; Treads are found as stacked parallel lines.  MAXGAP is the widest
+;; spacing that still reads as one flight (raise it for a drawing with
+;; deeper treads); MINLINES is how many stacked lines make a staircase
+;; in plan; BENCH-MINLINES the same in the side view, where a bench
+;; profile is only two treads deep; ANGTOL how far from parallel two
+;; treads may sit.
+(setq *lfc-step-maxgap*   18.0)    ; drawing units
+(setq *lfc-step-minlines* 3)       ; lines
+(setq *lfc-bench-minlines* 2)      ; lines
+(setq *lfc-step-angtol*   1.0)     ; degrees
+
+;; Bead track: the layer it belongs on, and how close to the plan-view
+;; steps it has to run before it counts as tracking them.
+(setq *lfc-bead-layer*    "Bead Track")
+(setq *lfc-bead-dist*     18.0)    ; drawing units
+
+;; The generic Step Attachment block lists every option with a box; if
 ;; ALL of them are still showing, nobody picked one, and the drawing
-;; must carry the question note instead
+;; must carry the question note instead.
 (setq *lfc-attach-options*
       '("Bead" "Flaps" "Rod Pockets" "No Attachment"))
 (setq *lfc-secured-phrase* "to be secured")
 
-;; dimension styles are reviewed in this order; styles not listed
-;; come afterwards ("whatever else is left"), still left-to-right
-(setq *lfc-style-order*
-      '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
-;; every dimension belongs on this layer; CDIM is the command that
-;; moves the strays there, and is what the report tells you to run
-(setq *lfc-dim-layer*   "DIMENSION")
-(setq *lfc-dimfix-cmd*  "CDIM")
-(setq *lfc-constr-layer* "LINFINCHECK-CONSTRUCTION")
-(setq *lfc-constr-color* 2)       ; yellow
-(setq *lfc-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
-(setq *lfc-block-depth*  3)       ; how many levels of nested blocks to search for names/text
-(setq *lfc-orig-color*   1)       ; red X: where you drew the point
-(setq *lfc-sugg-color*   3)       ; green +: where LINFINCHECK would move it
-;; title block border: nominal 58'-8" x 45'-3 5/8", or a scaled-UP multiple
-(setq *lfc-border-layer* "border")
-(setq *lfc-border-w*     704.0)   ; 58'-8"     in drawing units (1 unit = 1 inch)
-(setq *lfc-border-h*     543.625) ; 45'-3 5/8" in drawing units
-(setq *lfc-border-tol*   0.005)   ; 0.5% slack on both the scale and the aspect ratio
-(setq *lfc-fgstep-words*          ; a fiberglass step shows up under any of these
-      '("Fiberglass Step" "FG Step"))
-;; a liner pattern field carrying one of these was never really filled
-;; in ("Not Supplied", "#ERROR") - LINFINCHECK wipes it back to blank
-(setq *lfc-badwords*     '("NOT" "ERROR"))
-(setq *lfc-report-layer* "LINFINCHECK-REPORT")
-(setq *lfc-report-color* 3)       ; green
-(setq *lfc-zoom-margin*  0.75)    ; empty space around the zoomed item (fraction of its size)
-(setq *lfc-report-chars* 45.0)    ; report column width, in text heights
-(setq *lfc-ask-all-arc-ends* nil) ; T = confirm EVERY arc endpoint, even already-attached ones
-(setq *lfc-anchor-tol*   1.0e-4)  ; how close two dimension points must be to count as the same spot
-(setq *lfc-anchor-min*   2)       ; that many dimensions meeting there make it an anchor
+;; A fiberglass step shows up under any of these names.
+(setq *lfc-fgstep-words*  '("Fiberglass Step" "FG Step"))
 
-;; entity types dimension points and arc ends may attach to
+;; -- the liner rules: the title block ---------------------------------
+
+;; The title block holding the wall height and the sheet date, and the
+;; two attribute tags inside it.  Spaces in the block name are optional
+;; when it is searched for.
+(setq *lfc-title-block*   "Tech Title")
+(setq *lfc-wallht-tag*    "WallHt")
+(setq *lfc-date-tag*      "Date")
+
+;; The step height and WallHt may differ by this much before the report
+;; says to check the wall height...
+(setq *lfc-height-tol*    0.25)    ; drawing units
+
+;; ...and a WallHt below this is NONSENSICAL rather than merely wrong
+;; (0" walls do not exist).
+(setq *lfc-min-wallht*    1.0)     ; drawing units
+
+;; The question text expected in the drawing when WallHt reads "?".
+(setq *lfc-ask-phrase*    "Wall height")
+
+;; A liner pattern field carrying one of these words was never really
+;; filled in ("Not Supplied", "#ERROR") -- LINFINCHECK takes that phrase,
+;; and only that phrase, back out.  Matching is case-blind on whole
+;; words.
+(setq *lfc-badwords*      '("NOT" "ERROR"))
+
+;; -- the liner rules: the drawing border ------------------------------
+
+;; The title block border is nominally 58'-8" x 45'-3 5/8", or a
+;; scaled-UP whole multiple of it, on this layer.  TOL is the slack
+;; allowed on both the scale factor and the aspect ratio.
+(setq *lfc-border-layer*  "border")
+(setq *lfc-border-w*      704.0)   ; 58'-8"     in drawing units
+(setq *lfc-border-h*      543.625) ; 45'-3 5/8" in drawing units
+(setq *lfc-border-tol*    0.005)   ; 0.5%, as a fraction
+
+;; How many levels of nested block to search when looking for a name or
+;; a piece of text.  Raising it finds text buried deeper, at the cost of
+;; a slower sweep.
+(setq *lfc-block-depth*   3)       ; levels
+
+;; -- what counts as attached, and what counts as one spot -------------
+
+;; A dimension point or an arc end within this distance of an object is
+;; ATTACHED and is not questioned.  It has three more jobs: the
+;; smallest move worth asking about, the shortest overlap worth
+;; reporting, and the shortest segment admitted to overlap detection.
+;; Raising it asks fewer questions on all four counts.
+(setq *lfc-tol*           1.0e-4)  ; drawing units
+
+;; How close two dimension points must be to count as the same spot...
+(setq *lfc-anchor-tol*    1.0e-4)  ; drawing units
+
+;; ...and how many dimensions must meet there to make it an ANCHOR: a
+;; point left as drawn, geometry under it or not (the pair of dims
+;; pinning a hypotenuse corner is the everyday case).  1 would make
+;; every point an anchor and switch the dimension audit off.
+(setq *lfc-anchor-min*    2)       ; dimensions meeting at one spot
+
+;; Entity types a dimension point or an arc end may attach to.  Each
+;; must be a curve AutoCAD can measure to (vlax-curve-*).
 (setq *lfc-curve-types*
       '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
+
+;; T = confirm EVERY arc endpoint, even ones already attached.
+(setq *lfc-ask-all-arc-ends* nil)
+
+;; -- overlapping lines --------------------------------------------------
+
+;; How far apart two parallel lines may sit and still be called the
+;; same line.  Raising it calls more near-misses an overlap.
+(setq *lfc-olap-fuzz*     1.0e-4)  ; drawing units, sideways offset
+
+;; Two segments are only tested for overlap when their directions are
+;; within this of each other.  It is a bucketing shortcut, not a rule:
+;; keep it comfortably wider than the angle *lfc-olap-fuzz* implies
+;; over a segment's length, or a genuine overlap is never compared.
+(setq *lfc-olap-dirtol*   0.5)     ; degrees
+
+;; Entity types whose straight segments take part in overlap detection.
+;; Arcs, circles and splines have no straight run to overlap, which is
+;; why this is a shorter list than *lfc-curve-types*.
+(setq *lfc-olap-types*    '("LINE" "LWPOLYLINE" "POLYLINE"))
+
+;; -- review order ------------------------------------------------------
+
+;; Dimension styles are reviewed in this order; styles not listed come
+;; afterwards ("whatever else is left"), still left-to-right.  Matching
+;; is by exact name, case-blind.
+(setq *lfc-style-order*
+      '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
+
+;; Every dimension belongs on this layer; DIMFIX-CMD is the command
+;; that moves the strays there, and is what the report tells you to run.
+(setq *lfc-dim-layer*     "DIMENSION")
+(setq *lfc-dimfix-cmd*    "CDIM")
+
+;; Within a style, dimensions are reviewed row by row.  Two dimensions
+;; count as the same ROW when their midpoints are within this fraction
+;; of the selection's height.  Raise it and a whole sheet becomes one
+;; row (pure left-to-right); lower it and near-level dims split apart.
+(setq *lfc-row-band*      0.05)    ; fraction of the selection's height
+(setq *lfc-row-flat*      1.0)     ; ...and the band for a selection with no height
+
+;; -- colours -----------------------------------------------------------
+
+(setq *lfc-grey-color*    8)       ; ACI: everything not under review, faded (grey)
+(setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
+(setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
+(setq *lfc-orig-color*    1)       ; ACI: the X marking where you drew the point (red)
+(setq *lfc-sugg-color*    3)       ; ACI: the + marking where LINFINCHECK would put it (green)
+(setq *lfc-point-color*   2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+
+;; The command line and the report name these colours as they use them,
+;; so a colour changed here is described correctly rather than still
+;; being called red.
+
+;; -- the two layers ----------------------------------------------------
+
+;; The construction XLINE through a moved dimension's original points,
+;; and the report MTEXT.  Both layers are created on first use; the
+;; colour applies only then, so a layer already in the drawing keeps
+;; its own.
+(setq *lfc-constr-layer*  "LINFINCHECK-CONSTRUCTION")
+(setq *lfc-constr-color*  2)       ; ACI (yellow)
+(setq *lfc-report-layer*  "LINFINCHECK-REPORT")
+(setq *lfc-report-color*  3)       ; ACI (green)
+
+;; -- how the report is sized and placed --------------------------------
+
+;; All-clear lines are written at this fraction of the height the red
+;; attention lines get, so problems stand out.  1.0 = same size.
+(setq *lfc-green-scale*   0.75)
+
+;; Report column width, in text heights, and the width of the
+;; tutorial's reference sheet, which is prose rather than a column of
+;; findings and so runs wider.
+(setq *lfc-report-chars*  45.0)
+(setq *lfc-sheet-chars*   70.0)
+
+;; The report is scaled to the drawing: its text height is chosen so
+;; the whole report is about as tall as the drawing.  On a wide, short
+;; sheet that would give a tiny report, so the reference height is at
+;; least this fraction of the drawing's WIDTH.
+(setq *lfc-report-wide*   0.25)
+
+;; MTEXT line pitch as a multiple of text height, used to turn a line
+;; count into a height.  AutoCAD's default single spacing is 1.66.
+(setq *lfc-report-lead*   1.66)
+
+;; ...then the height is clamped: never taller than reference/HMAX,
+;; never shorter than reference/HMIN.  Both are DIVISORS, so a smaller
+;; number is a looser bound.
+(setq *lfc-report-hmax*   30.0)
+(setq *lfc-report-hmin*   200.0)
+
+;; The height used when the selection has no extents to scale against
+;; (DIMTXT x DIMSCALE is tried first), and the default offered for the
+;; tutorial's reference sheet.
+(setq *lfc-report-hfall*  2.5)     ; drawing units
+
+;; Gap between the drawing and the report, as a fraction of the
+;; drawing's width, and the margin left around the closing zoom.
+(setq *lfc-report-gap*    0.05)
+(setq *lfc-zoom-out*      0.05)
+
+;; Empty space around ONE item when the review zooms to it, as a
+;; fraction of its size.
+(setq *lfc-zoom-margin*   0.75)
+
+;; Half-size of the X and + markers drawn while you answer, as a
+;; fraction of the current view height -- so they stay the same size on
+;; screen however far you are zoomed in.
+(setq *lfc-mark-size*     0.02)    ; fraction of VIEWSIZE
+
+;; A report line is rendered red and full-size when it matches this
+;; pattern (wcmatch, case-blind; comma separates alternatives).  These
+;; are the words the report's own notes use for something that needs
+;; looking at -- reword a note and its word belongs here too, or the
+;; line quietly stops being red.
+(setq *lfc-attn-words*
+      "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*,*NEEDS UPDATING*,*UPDATED TO*")
+
+;; Distances in prompts and the report go through (rtos d mode prec):
+;; mode 2 is decimal, 3 engineering, 4 architectural (feet-inches);
+;; prec is decimal places (for mode 4: the inch is split 2^prec ways).
+;; The dimension's own MEASUREMENT is not formatted here -- it follows
+;; the drawing's LUNITS/LUPREC, which is what the drafter reads on the
+;; sheet.
+(setq *lfc-dist-mode*     2)       ; rtos mode
+(setq *lfc-dist-prec*     4)       ; decimal places
+
+;; -- numerical guards (rarely changed) --------------------------------
+
+;; Two points closer than this are the SAME point: no construction line
+;; is drawn through them, no joining line between an X and a +, and an
+;; arc is never re-fitted onto its own other end.
+(setq *lfc-same-pt*       1e-8)    ; drawing units
+
+;; How far an arc's extrusion normal (DXF 210) may lean from world +Z
+;; and still be audited; beyond it the arc is skipped rather than
+;; re-fitted in the wrong plane.
+(setq *lfc-planar-eps*    1e-9)    ; dimensionless (normal components)
+
+;; Below this a polyline bulge is treated as straight, so the edge
+;; joins overlap detection, and three points are too collinear to fit
+;; an arc through.
+(setq *lfc-flat-eps*      1e-12)
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  LINFINCHECK keeps no state between runs: everything
+;;;  a run remembers is a local of the command, and what it leaves in
+;;;  the drawing is xdata under the "LINFINCHECK" APPID.
+;;; ======================================================================
+
+;; A distance as the prompts and the report print it.
+(defun lfc:dist (d)
+  (rtos d *lfc-dist-mode* *lfc-dist-prec*))
+
+;; The word for an ACI colour, so a message naming a colour follows the
+;; knob instead of saying "red" whatever the knob holds.
+(defun lfc:color-name (aci / q)
+  (setq q (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if q (cdr q) (strcat "colour " (itoa aci))))
 
 ;; --- safety: xdata tags, colour stash, layer locks -----------------
 
@@ -60922,7 +61998,7 @@
   ;; infinite construction line through p1-p2 on the check layer,
   ;; tagged so reruns and LINFINCHECKRESCUE can clear it
   (setq len (distance p1 p2))
-  (if (and (> len 1e-8)
+  (if (and (> len *lfc-same-pt*)
            (entmake (list '(0 . "XLINE")
                           '(100 . "AcDbEntity")
                           (cons 8 *lfc-constr-layer*)
@@ -60976,7 +62052,7 @@
   best)
 
 (defun lfc:ptstr (p)
-  (strcat "(" (rtos (car p) 2 4) ", " (rtos (cadr p) 2 4) ")"))
+  (strcat "(" (lfc:dist (car p)) ", " (lfc:dist (cadr p)) ")"))
 
 (defun lfc:zoom-ent (ent / bb p1 p2 m)
   ;; zoom the current view onto ent with some breathing room
@@ -61023,21 +62099,21 @@
 (defun lfc:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *lfc-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (- (cadr p) s)) (list (+ (car p) s) (+ (cadr p) s)) col 1)
   (grdraw (list (- (car p) s) (+ (cadr p) s)) (list (+ (car p) s) (- (cadr p) s)) col 1))
 
 (defun lfc:mark-plus (pt col / p s)
   ;; upright cross - marks WHERE LINFINCHECK WOULD PUT IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *lfc-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
 (defun lfc:mark-point (pt)
   ;; both strokes, for a point that is simply being pointed out
-  (lfc:mark-x pt 2)
-  (lfc:mark-plus pt 2))
+  (lfc:mark-x pt *lfc-point-color*)
+  (lfc:mark-plus pt *lfc-point-color*))
 
 (defun lfc:progress (what n total)
   (princ (strcat "\r  [" (itoa n) "/" (itoa total) "] " what "          ")))
@@ -61045,8 +62121,8 @@
 (defun lfc:confirm-move (label orig sugg what / ans newp)
   ;; The point has been put where LINFINCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
-  ;; which: a red X where you drew it, a green + where we would move
-  ;; it, joined by a line. WHAT names what the green + sits on, so a
+  ;; which: an X where you drew it, a + where we would move
+  ;; it, joined by a line. WHAT names what the + sits on, so a
   ;; move onto a shared anchor point does not claim to be an object.
   ;; Returns
   ;;   'move - take our suggestion
@@ -61054,13 +62130,14 @@
   ;;   <point> - a spot you picked yourself (current UCS)
   (lfc:mark-x    orig *lfc-orig-color*)
   (lfc:mark-plus sugg *lfc-sugg-color*)
-  (if (> (distance orig sugg) 1e-8)
+  (if (> (distance orig sugg) *lfc-same-pt*)
     (grdraw (trans orig 0 1) (trans sugg 0 1) *lfc-sugg-color* 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (lfc:ptstr orig)
-                 "  (red X)"
+                 "  (" (lfc:color-name *lfc-orig-color*) " X)"
                  "\n    Move = onto " what " " (lfc:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "  (" (lfc:color-name *lfc-sugg-color*) " +), "
+                 (lfc:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
@@ -61069,7 +62146,9 @@
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
     (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
-                                    " <Move to the green +>: ")))
+                                    " <Move to the "
+                                    (lfc:color-name *lfc-sugg-color*)
+                                    " +>: ")))
        (if newp newp 'move))))
 
 (defun lfc:mtext (ins height width text layer / e)
@@ -61134,9 +62213,9 @@
 
 (defun lfc:attn-p (s)
   ;; T when a report line describes something questionable or that
-  ;; needs looking over / fixing, so the report renders it in red
-  (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*,*NEEDS UPDATING*,*UPDATED TO*"))
+  ;; needs looking over / fixing, so the report renders it in red.
+  ;; The words are *lfc-attn-words*, at the top of the file.
+  (wcmatch (strcase s) (strcase *lfc-attn-words*)))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -61362,17 +62441,18 @@
       (foreach l diml
         (setq ndim (+ ndim (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))))
   (setq nlin (max nmain ndim))
-  (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+  (if (and minx (> (max (- maxy miny) (- maxx minx)) *lfc-same-pt*))
     (progn
-      (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-            h   (/ ref (* 1.66 nlin)))
-      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+      (setq ref (max (- maxy miny) (* *lfc-report-wide* (- maxx minx)))
+            h   (/ ref (* *lfc-report-lead* nlin)))
+      (if (> h (/ ref *lfc-report-hmax*)) (setq h (/ ref *lfc-report-hmax*)))
+      (if (< h (/ ref *lfc-report-hmin*)) (setq h (/ ref *lfc-report-hmin*))))
     (progn
       (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-      (if (or (null h) (<= h 0.0)) (setq h 2.5))))
+      (if (or (null h) (<= h 0.0)) (setq h *lfc-report-hfall*))))
   (setq ins (if minx
-              (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+              (list (+ maxx (* *lfc-report-gap* (max (- maxx minx) 1.0)))
+                    maxy 0.0)
               (list 0.0 0.0 0.0)))
   ;; --- the main sheet
   (setq txt (strcat (lfc:big title)
@@ -61449,14 +62529,14 @@
   ;; only arcs drawn in the world XY plane are handled
   (setq n (cdr (assoc 210 ed)))
   (or (null n)
-      (and (< (abs (car n)) 1e-9)
-           (< (abs (cadr n)) 1e-9)
+      (and (< (abs (car n)) *lfc-planar-eps*)
+           (< (abs (cadr n)) *lfc-planar-eps*)
            (> (caddr n) 0.0))))
 
 (defun lfc:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
   ;; target point; returns T on success
-  (if (and (> (distance target fixed) 1e-8)
+  (if (and (> (distance target fixed) *lfc-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
       (setq r  (distance c target)
@@ -61534,7 +62614,7 @@
   ;; only genuinely collinear neighbours are ever tested. Segments of
   ;; the same entity are skipped (a polyline meeting itself is not a
   ;; duplicate), as are pairs already found through another segment.
-  (setq atol  (* 0.5 (/ pi 180.0))              ; 0.5 deg is ample at this fuzz
+  (setq atol  (* *lfc-olap-dirtol* (/ pi 180.0))
         fams  nil
         pairs nil
         seen  nil)
@@ -61597,7 +62677,8 @@
 (defun lfc:seg-ent (s) (caddr s))
 
 (defun lfc:ocs->wcs (p nz)
-  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1e-9))) (trans p nz 0) p))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) *lfc-planar-eps*)))
+    (trans p nz 0) p))
 
 (defun lfc:lwpoly-segs (ent / ed nz elev vs bl cls n i segs g)
   ;; straight edges of an LWPOLYLINE; bulged (arc) edges are skipped
@@ -61620,10 +62701,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *lfc-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *lfc-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -61643,10 +62724,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *lfc-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *lfc-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -61655,6 +62736,7 @@
   (setq ed (entget ent)
         et (cdr (assoc 0 ed)))
   (cond
+    ((not (member et *lfc-olap-types*)) nil)
     ((= et "LINE")       (list (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed)) ent)))
     ((= et "LWPOLYLINE") (lfc:lwpoly-segs ent))
     ((= et "POLYLINE")   (lfc:heavy-poly-segs ent))))
@@ -62611,7 +63693,7 @@
              (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
-                            " is " (rtos dsug 2 4) " away."))
+                            " is " (lfc:dist dsug) " away."))
              (setq ans (lfc:confirm-move label pt sugg what))
              (cond
                ((eq ans 'move)
@@ -62686,7 +63768,10 @@
     (progn
       (setq ok (eq ok 'yes))
       (setq note (strcat
-                   (if ok "OK" "FLAGGED to fix (red)")
+                   (if ok
+                     "OK"
+                     (strcat "FLAGGED to fix ("
+                             (lfc:color-name *lfc-flag-color*) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -62720,7 +63805,8 @@
     ((<= (caddr near) *lfc-tol*)             ; endpoint sits on an object...
      (setq ends (lfc:curve-ends (car near)))
      ;; never snap onto the arc's own other endpoint
-     (setq ends (vl-remove-if '(lambda (q) (< (distance q other) 1e-8)) ends))
+     (setq ends (vl-remove-if
+                  '(lambda (q) (< (distance q other) *lfc-same-pt*)) ends))
      (cond
        ((null ends) nil)                      ; closed curve: no ends to demand
        ((vl-some '(lambda (q) (<= (distance p q) *lfc-tol*)) ends)
@@ -62728,7 +63814,7 @@
        (t (lfc:closest-of p ends))))         ; ...but mid-object: closest end
     (t                                        ; floating: closest end anywhere,
      (setq target (lfc:nearest-end p ent cands))
-     (if (or (null target) (< (distance target other) 1e-8))
+     (if (or (null target) (< (distance target other) *lfc-same-pt*))
        (cadr near)                            ; else closest point on closest object
        target))))
 
@@ -62760,7 +63846,7 @@
      (if (lfc:move-arc-end ent which target)
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
-                        (rtos (distance p target) 2 4) " away."))
+                        (lfc:dist (distance p target)) " away."))
          (setq ans (lfc:confirm-move label p target "the object end"))
          (cond
            ((eq ans 'move)
@@ -62829,10 +63915,12 @@
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
-                (strcat (itoa (length moved)) " endpoint(s) moved (magenta), "
+                (strcat (itoa (length moved)) " endpoint(s) moved ("
+                        (lfc:color-name *lfc-arc-color*) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
-                              " endpoint(s) moved (magenta)"))
+                              " endpoint(s) moved ("
+                              (lfc:color-name *lfc-arc-color*) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -62891,18 +63979,25 @@
         ((= ans "Merge")
          (lfc:merge-lines la lb info)
          (lfc:set-color ea *lfc-olap-color*)
-         (princ "\n  Merged into one line (cyan).")
-         (list label "merged into one line (cyan)" 'merged ea))
+         (princ (strcat "\n  Merged into one line ("
+                        (lfc:color-name *lfc-olap-color*) ")."))
+         (list label
+               (strcat "merged into one line ("
+                       (lfc:color-name *lfc-olap-color*) ")")
+               'merged ea))
         ((= ans "Flag")
          (lfc:set-color ea *lfc-olap-color*)
          (lfc:set-color eb *lfc-olap-color*)
-         (princ "\n  Flagged to fix (cyan).")
+         (princ (strcat "\n  Flagged to fix ("
+                        (lfc:color-name *lfc-olap-color*) ")."))
          (list label
-               (if (lfc:whole-line-p la)
-                 (if (= (strcase lay1) (strcase lay2))
-                   "flagged to fix (cyan)"
-                   "different layers - flagged to fix (cyan)")
-                 "polyline edge - flagged to fix (cyan)")
+               (strcat
+                 (if (lfc:whole-line-p la)
+                   (if (= (strcase lay1) (strcase lay2))
+                     "flagged to fix ("
+                     "different layers - flagged to fix (")
+                   "polyline edge - flagged to fix (")
+                 (lfc:color-name *lfc-olap-color*) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -63042,9 +64137,9 @@
 
         ;; march order for the dimensions: style groups first
         ;; (*lfc-style-order*), then row by row, left to right
-        (setq rowtol (if (and miny maxy (> (- maxy miny) 1e-8))
-                       (* 0.05 (- maxy miny))
-                       1.0))
+        (setq rowtol (if (and miny maxy (> (- maxy miny) *lfc-same-pt*))
+                       (* *lfc-row-band* (- maxy miny))
+                       *lfc-row-flat*))
         (setq dims (lfc:sort-dims dims rowtol))
 
         ;; spots two or more dimensions measure to are anchors: a
@@ -63835,7 +64930,8 @@
         ;; --- show the drawing plus the report -----------------------
         (if minx
           (progn
-            (setq m (* 0.05 (max (- maxx minx) (- maxy miny) 1.0)))
+            (setq m (* *lfc-zoom-out*
+                       (max (- maxx minx) (- maxy miny) 1.0)))
             (command "_.ZOOM" "_Window"
                      (trans (list (- minx m) (- miny m) 0.0) 0 1)
                      (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
@@ -63963,7 +65059,8 @@
      (foreach e (if lite
                   nil
                   (lfc:sort-dims dims (if (and miny maxy)
-                                        (* 0.05 (- maxy miny)) 1.0)))
+                                        (* *lfc-row-band* (- maxy miny))
+                                        *lfc-row-flat*)))
        (setq ed  (entget e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
@@ -63989,10 +65086,10 @@
                  ((and dq (or (null near) (< dq (caddr near))))
                   (setq bad (append bad (list (strcat (car s)
                                                       " off the shared anchor by "
-                                                      (rtos dq 2 4))))))
+                                                      (lfc:dist dq))))))
                  (near
                   (setq bad (append bad (list (strcat (car s) " off by "
-                                                      (rtos (caddr near) 2 4)))))))))))
+                                                      (lfc:dist (caddr near))))))))))))
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
@@ -64636,10 +65733,11 @@
           (setq ins (getpoint "\n  Pick the top-left corner for the sheet: "))
           (if ins
             (progn
-              (setq h   (getdist (strcat "\n  Text height <" (rtos 2.5) ">: "))
-                    h   (if h h 2.5)
+              (setq h   (getdist (strcat "\n  Text height <"
+                                        (rtos *lfc-report-hfall*) ">: "))
+                    h   (if h h *lfc-report-hfall*)
                     ins (trans ins 1 0))
-              (lfc:mtext ins h (* 70.0 h)
+              (lfc:mtext ins h (* *lfc-sheet-chars* h)
                           (lfc:join (lfc:tut-checklist) "\\P")
                           *lfc-report-layer*)
               (princ "\n  Reference sheet placed (one U removes it)."))
@@ -64676,8 +65774,9 @@
 ;;; --------------------------------------------------------------------------
 ;;; Places the vinyl pool-liner drawing checklist into the current drawing as
 ;;; a column of individual TEXT entities (one entity per line) starting at a
-;;; point the user picks.  Text height is 12" and the lines are spaced out
-;;; vertically automatically.  Sub-items are indented under their parent.
+;;; point the user picks.  The text height, the line spacing, the indent
+;;; and the checklist itself are the tunables below.  Sub-items are
+;;; indented under their parent.
 ;;;
 ;;; Usage:  APPLOAD this file (or add it to your startup suite), then type
 ;;;         LINTXTCHK and pick the top-left point for the checklist.
@@ -64687,10 +65786,86 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.5")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
-(defun c:LINTXTCHK ( / *error* items height spacing indent osm pt
+;;; ======================================================================
+;;;  TUNABLES -- everything about this checklist that someone might want
+;;;  to change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq ltc:*height* 6.0) -- because every knob
+;;;  is read when the command runs, not when the file loads.  (They
+;;;  used to be locals of the command, which meant neither route
+;;;  worked: changing one needed a trip inside the defun, and a setq
+;;;  typed at the command line was overwritten the moment the command
+;;;  started.)
+;;; ----------------------------------------------------------------------
+
+;; -- how the column is laid out ----------------------------------------
+
+;; Text height, in drawing units (1 unit = 1 inch on the shop's
+;; sheets).  The next two are multiples of it, so changing this alone
+;; rescales the whole block and keeps its proportions.
+(setq ltc:*height*   12.0)
+
+;; Vertical distance between lines, and the horizontal indent per
+;; sub-level, both as multiples of the text height.  1.6 leaves a
+;; comfortable gap; under about 1.2 the lines start to touch.
+(setq ltc:*spacing*  1.6)
+(setq ltc:*indent*   1.5)
+
+;; What every line is prefixed with.  "" gives a plain column,
+;; "[ ] " gives boxes to tick.
+(setq ltc:*bullet*   "- ")
+
+;; -- the checklist itself ------------------------------------------------
+
+;; Each entry is (indent-level . "line text").  Level 0 is a main item,
+;; 1 a sub-item indented under the one above it; a deeper level simply
+;; indents further.  Inner double quotes and inch marks are escaped
+;; with a backslash.
+;;
+;; This is the shop's checklist, so it is content rather than a
+;; setting -- but it sits here, at the top, because editing it is why
+;; most people open this file.  Add, remove or reword a line and the
+;; count in the done message follows on its own.
+(setq ltc:*items*
+  (list
+    (cons 0 "Read all WSN (White Screen Notes), Notes from Merlin, and Customer Info")
+    (cons 1 "Does this job actually require a Tech drawing?")
+    (cons 0 "Verify Finished Wall Ht & Pool Depth")
+    (cons 1 "Finished Wall Ht should be a single value, or \"Varies\" if needed")
+    (cons 0 "Place liner pattern block (GLP) - Delete \"Not Supplied\" text")
+    (cons 0 "Verify the type of pool bead, or overlap for AG, etc")
+    (cons 0 "Pool perimeter & overall dims")
+    (cons 0 "Verify orientation: Shallow end to the RIGHT of page")
+    (cons 0 "Report ALL cross dimensions provided by customer")
+    (cons 0 "Pool corners with dimensions")
+    (cons 1 "Look out special mfgrs like Esther Williams (3x3, 5x5) or Foxx (37\" Deep)")
+    (cons 0 "Look for special bottom conditions:")
+    (cons 1 "Does the shallow end have a Cove?")
+    (cons 1 "Does the pool have a Safety Ledge?")
+    (cons 1 "Did the customer provide various depths for the bottom?")
+    (cons 1 "Does the pool require a side view?")
+    (cons 0 "Are hopper corners radius?")
+    (cons 0 "Did you draw trowel lines accurately?")
+    (cons 0 "Are steps / bench Fiberglass?")
+    (cons 1 "Place FGS note or draw step outline if dimensions were provided")
+    (cons 1 "Is the step Straight or Radius? Ask if not given")
+    (cons 0 "Are steps / bench Vinyl-covered?")
+    (cons 1 "Verify step corner type & dimensions")
+    (cons 1 "Place Step Attachment block - is the attachment type provided?")
+    (cons 1 "Place side views for all steps and benches")
+    (cons 0 "Did you scale the titleblock? REDVIEW!")
+  )
+)
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  LINTXTCHK keeps no state between runs.
+;;; ======================================================================
+
+(defun c:LINTXTCHK ( / *error* height spacing indent osm pt
                        startx y z x lvl txt undo-open )
 
   (defun *error* (msg)
@@ -64702,44 +65877,9 @@
       (princ (strcat "\nLINTXTCHK error: " msg)))
     (princ))
 
-  ;; --- the checklist -------------------------------------------------------
-  ;; Each entry is (indent-level . "line text").  Level 0 = main item,
-  ;; level 1 = sub-item.  Inner double quotes and inch marks are escaped.
-  (setq items
-    (list
-      (cons 0 "Read all WSN (White Screen Notes), Notes from Merlin, and Customer Info")
-      (cons 1 "Does this job actually require a Tech drawing?")
-      (cons 0 "Verify Finished Wall Ht & Pool Depth")
-      (cons 1 "Finished Wall Ht should be a single value, or \"Varies\" if needed")
-      (cons 0 "Place liner pattern block (GLP) - Delete \"Not Supplied\" text")
-      (cons 0 "Verify the type of pool bead, or overlap for AG, etc")
-      (cons 0 "Pool perimeter & overall dims")
-      (cons 0 "Verify orientation: Shallow end to the RIGHT of page")
-      (cons 0 "Report ALL cross dimensions provided by customer")
-      (cons 0 "Pool corners with dimensions")
-      (cons 1 "Look out special mfgrs like Esther Williams (3x3, 5x5) or Foxx (37\" Deep)")
-      (cons 0 "Look for special bottom conditions:")
-      (cons 1 "Does the shallow end have a Cove?")
-      (cons 1 "Does the pool have a Safety Ledge?")
-      (cons 1 "Did the customer provide various depths for the bottom?")
-      (cons 1 "Does the pool require a side view?")
-      (cons 0 "Are hopper corners radius?")
-      (cons 0 "Did you draw trowel lines accurately?")
-      (cons 0 "Are steps / bench Fiberglass?")
-      (cons 1 "Place FGS note or draw step outline if dimensions were provided")
-      (cons 1 "Is the step Straight or Radius? Ask if not given")
-      (cons 0 "Are steps / bench Vinyl-covered?")
-      (cons 1 "Verify step corner type & dimensions")
-      (cons 1 "Place Step Attachment block - is the attachment type provided?")
-      (cons 1 "Place side views for all steps and benches")
-      (cons 0 "Did you scale the titleblock? REDVIEW!")
-    )
-  )
-
-  ;; --- layout parameters ---------------------------------------------------
-  (setq height  12.0)            ; text height  = 12"
-  (setq spacing (* height 1.6))  ; automatic vertical distance between lines
-  (setq indent  (* height 1.5))  ; horizontal indent per sub-level
+  (setq height  ltc:*height*
+        spacing (* height ltc:*spacing*)
+        indent  (* height ltc:*indent*))
 
   (setq osm (getvar "OSMODE"))
   (setq pt (getpoint "\nPick top-left point for LINTXTCHK checklist: "))
@@ -64748,7 +65888,7 @@
     (progn
       (setvar "OSMODE" 0)                 ; drop osnaps while placing text
       ;; one undo group around the column - a U after LINTXTCHK takes
-      ;; back all 26 lines at once instead of one entity per U
+      ;; the whole checklist back at once instead of one entity per U
       ;; only when undo is recording - _Begin in a drawing with UNDO
       ;; off (bit 1 of UNDOCTL clear) errors out of the command
       (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -64758,7 +65898,7 @@
       (setq startx (car pt)
             y      (cadr pt)
             z      (if (caddr pt) (caddr pt) 0.0))
-      (foreach item items
+      (foreach item ltc:*items*
         (setq lvl (car item)
               txt (cdr item)
               x   (+ startx (* indent lvl)))
@@ -64767,8 +65907,8 @@
             '(0 . "TEXT")
             (cons 10 (list x y z))        ; insertion point (baseline, left)
             (cons 11 (list x y z))
-            (cons 40 height)             ; 12" text
-            (cons 1 (strcat "- " txt))   ; each line is its own entity
+            (cons 40 height)                   ; ltc:*height*
+            (cons 1 (strcat ltc:*bullet* txt))  ; one entity per line
             '(72 . 0)                     ; horizontal justify: left
             '(73 . 0)                     ; vertical justify:   baseline
           )
@@ -64778,8 +65918,9 @@
       (setvar "OSMODE" osm)
       (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
-      (princ (strcat "\n" (itoa (length items))
-                     " checklist lines placed at 12\" text."))
+      (princ (strcat "\n" (itoa (length ltc:*items*))
+                     " checklist lines placed at "
+                     (rtos height 2 0) "\" text."))
     )
     (princ "\nLINTXTCHK cancelled.")
   )
@@ -69943,13 +71084,32 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.12")
+(setq *spacheck-version* "v1.13")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
 (vl-load-com)
 
-;;; -------------------- tunables ----------------------------------------
+;;; ======================================================================
+;;;  TUNABLES -- every value SPACHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq spachk:*meas-tol* 0.125) -- because
+;;;  every knob is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey, 256 ByLayer).
+;;;
+;;;  Several of these are SPA's values, not SPACHECK's own: the audit
+;;;  measures a drawing against what SPA draws, so if SPA moves, the
+;;;  matching knob here moves with it or the audit reports the drawing
+;;;  wrong.  Each one says so.
+;;; ----------------------------------------------------------------------
+
+;; -- layers ------------------------------------------------------------
 
 ;; Layers SPA draws on -- the audit is only as right as these are.
 (setq spachk:*lay-cover*  "COVER")      ; the cover outline and the hinges
@@ -69999,22 +71159,20 @@
 (setq spachk:*meas-tol*   0.0625)    ; 1/16" -- a fractional dim rounds
 (setq spachk:*pt-tol*     1.0e-4)
 
-;; Marking and report.
-(setq spachk:*sysold*      nil)      ; saved sysvars, restored on the way out
-(setq spachk:*demo-ents*   nil)      ; what TUTORIALSPACHECK's demo drew
-;; The demo opens an undo group and switches the dimension style, but
-;; the handler that must undo both lives in c:TUTORIALSPACHECK, a
-;; different defun that cannot see spachk:demo's locals -- so both bits
-;; of state are module globals, like the ent list above.
-(setq spachk:*odstyle*     nil)      ; the dim style the demo switched off
-(setq spachk:*grey-color*  8)
-(setq spachk:*flag-color*  1)        ; red: what you confirmed is wrong
-(setq spachk:*report-layer* "SPACHECK-REPORT")
-(setq spachk:*report-color* 3)
+;; -- marking and report colours ----------------------------------------
+
+(setq spachk:*grey-color*  8)        ; ACI: reserved for fading, unused today
+(setq spachk:*flag-color*  1)        ; ACI: what you confirmed is wrong (red)
+(setq spachk:*advice-color* 4)       ; ACI: advice, not a failure (cyan)
 (setq spachk:*green-scale* 0.75)     ; all-clear text height vs the red
-(setq spachk:*advice-color* 4)       ; cyan: advice, not a failure
+
+;; The layer the report MTEXT goes on, created on first use; the colour
+;; applies only then, so a layer already in the drawing keeps its own.
+(setq spachk:*report-layer* "SPACHECK-REPORT")
+(setq spachk:*report-color* 3)       ; ACI (green)
 (setq spachk:*report-chars* 48.0)    ; report column width, in text heights
-(setq spachk:*zoom-margin* 0.75)
+(setq spachk:*zoom-margin* 0.75)   ; empty space around a zoomed item
+
 
 ;; Foam sheets, copied from SPA (spa:*foamtab*) so the audit measures
 ;; against the same rules the drawing was built to:
@@ -70042,6 +71200,119 @@
     (list "STANDARD"    '(OVER 120.0) '(OVER 108.0) '(OVER 120.0))
     (list "ULTRA"       '(OVER 108.0) '(NEVER)      '(OVER 96.0))
     (list "THERMOLIGHT" '(ALWAYS)     '(NEVER)      '(NEVER))))
+
+;; A piece count this high or higher is the table's top row ("5 = 5+").
+(setq spachk:*hallow-max* 5)       ; pieces
+
+;; -- reading the drawing -----------------------------------------------
+
+;; The details block's two attribute tags, and how their values are
+;; recognised.  GRADE and TAPER are matched as SUBSTRINGS of the
+;; upper-cased value, first match winning, so "Ultra FRP" reads as
+;; ULTRA; a value matching nothing takes the default grade.  Every
+;; canonical name here must appear in *foamtab* and *hardtab* above, or
+;; the audit has a grade it can recognise but not measure against.
+(setq spachk:*grade-tag*  "GRADE")
+(setq spachk:*taper-tag*  "TAPER")
+(setq spachk:*grade-words*
+      '(("ECON"   . "ECONOMY")
+        ("ULTRA"  . "ULTRA")
+        ("FRP"    . "ULTRA")
+        ("THERMO" . "THERMOLIGHT")))
+(setq spachk:*grade-default* "STANDARD")  ; the grade a value matching nothing takes
+;; ...and the taper vocabulary, matched the same way; an unrecognised
+;; taper measures against no foam row at all rather than the wrong one.
+(setq spachk:*taper-words*
+      '(("3-2" . "3-2") ("4-2" . "4-2") ("4-3" . "4-3")
+        ("5-3" . "5-3") ("5-4" . "5-4") ("3-3" . "3-3")
+        ("3/8" . "1-3/8")))
+
+;; The short grade names the report prints, keyed by the canonical name.
+(setq spachk:*grade-short*
+      '(("ECONOMY" . "ECO") ("STANDARD" . "STD")
+        ("ULTRA" . "ULTRA") ("THERMOLIGHT" . "THERMO")))
+
+;; Entity types, by the job each does in the audit: what may be an
+;; outline at all, which of those are closed by their nature rather
+;; than by a flag, and what counts as loose (unbounded) output -- which
+;; on the cover layer is also what a hinge is drawn as.
+(setq spachk:*outline-types* '("LWPOLYLINE" "POLYLINE" "CIRCLE" "ELLIPSE"))
+(setq spachk:*closed-types*  '("CIRCLE" "ELLIPSE"))
+(setq spachk:*loose-types*   '("LINE" "ARC"))
+
+;; Dimension subtypes whose span can be measured, by the low three bits
+;; of DXF group 70: 0 = rotated, 1 = aligned.
+(setq spachk:*linear-types*  '(0 1))
+
+;; The word SPA labels a Velcro hinge with.  The arrangement audit
+;; finds those labels by it, so it has to be the word SPA writes.
+(setq spachk:*velcro-word*   "Velcro")
+
+;; -- how the report is sized and placed --------------------------------
+
+;; The report is scaled to the drawing, exactly as the check family's
+;; siblings do it.  WIDE: on a wide, short sheet the reference height is
+;; at least this fraction of the width.  LEAD: MTEXT line pitch as a
+;; multiple of text height.  HMAX/HMIN: divisors clamping the height --
+;; never taller than reference/HMAX, never shorter than reference/HMIN,
+;; so a smaller number is a looser bound.  HFALL: the height used when
+;; there is nothing to scale against.  GAP: space between drawing and
+;; report, as a fraction of the drawing's width.
+(setq spachk:*report-wide*  0.25)
+(setq spachk:*report-lead*  1.66)
+(setq spachk:*report-hmax*  30.0)
+(setq spachk:*report-hmin*  200.0)
+(setq spachk:*report-hfall* 2.5)   ; drawing units
+(setq spachk:*report-gap*   0.05)
+
+;; Gap between the main sheet and the DIMENSION AUDIT column beside it,
+;; in text heights.
+(setq spachk:*col-gap*      2.0)
+
+;; The title is written this many times the base height, and a section
+;; heading gets this much blank line above it.  Both are used twice:
+;; once to draw, once to guess how many lines the sheet will run to --
+;; HEAD is the allowance for the title, date, verdict and legend, and
+;; HDG-LINES for a heading plus its gap.
+(setq spachk:*title-scale*  1.5)
+(setq spachk:*hdg-gap*      0.4)
+(setq spachk:*head-lines*   4.5)
+(setq spachk:*hdg-lines*    1.4)
+(setq spachk:*dim-head*     2.5)   ; the same allowance for the audit column
+
+;; Findings are indented under their heading by this string.
+(setq spachk:*row-indent*   "  ")
+
+;; -- the date the sheet must carry -------------------------------------
+
+;; The sheet's date is written and read in this order, with this
+;; separator: change both together, and remember the audit rewrites a
+;; wrong date into this form.
+(setq spachk:*date-sep*     "/")
+(setq spachk:*date-order*   '(month day year))
+
+;; -- numerical guards (rarely changed) ---------------------------------
+
+;; A border edge shorter than this has no measurable size, and a
+;; bounding box smaller than this has nothing to scale a report to.
+(setq spachk:*tiny*         1.0e-6)   ; drawing units
+
+;; How close a foam sheet's dimension must come to the table's before
+;; it counts as that sheet -- foam is cut to the inch, so this is
+;; slack for a drawing's rounding, not a tolerance on the foam.
+(setq spachk:*foam-slack*   0.01)     ; drawing units
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  What follows is STATE, not settings: what one run
+;;;  has to remember while it runs.  The tutorial's
+;;;  demo opens an undo group and switches the dimension style, but the
+;;;  handler that must undo both lives in c:TUTORIALSPACHECK, a
+;;;  different defun that cannot see spachk:demo's locals -- so both
+;;;  bits of state are module globals, as is the sysvar snapshot.
+(setq spachk:*sysold*      nil)      ; saved sysvars, restored on the way out
+(setq spachk:*demo-ents*   nil)      ; what TUTORIALSPACHECK's demo drew
+(setq spachk:*odstyle*     nil)      ; the dim style the demo switched off
+;;; ======================================================================
 
 ;;; -------------------- small helpers -----------------------------------
 
@@ -70092,16 +71363,16 @@
 (defun spachk:small (s)
   (strcat "{\\H" (rtos spachk:*green-scale* 2 2) "x;" s "}"))
 
-;; The report's title line: half again the base height.
+;; The report's title line, at *title-scale* times the base height.
 (defun spachk:big (s)
-  (strcat "{\\H1.5x;" s "}"))
+  (strcat "{\\H" (rtos spachk:*title-scale* 2 2) "x;" s "}"))
 
 ;; A section heading: underlined, with a thin blank line above it so
 ;; the sections read as blocks.  The braces scope both codes, and the
-;; \P inside the first group is a paragraph break at 0.4x height --
-;; a narrow gap, not a full empty line.
+;; \P inside the first group is a paragraph break at *hdg-gap* of the
+;; height -- a narrow gap, not a full empty line.
 (defun spachk:hdg (s)
-  (strcat "{\\H0.4x;\\P}{\\L" s "}"))
+  (strcat "{\\H" (rtos spachk:*hdg-gap* 2 2) "x;\\P}{\\L" s "}"))
 
 ;; Findings are indented two spaces under their heading; the indent
 ;; sits INSIDE the colour/height wrap so a problem row still starts
@@ -70151,7 +71422,7 @@
        (>= (- (cadadr outer) (cadadr inner)) (- slack))))
 
 (defun spachk:closed-p (ent / f)
-  (cond ((member (spachk:etype ent) '("CIRCLE" "ELLIPSE")) t)
+  (cond ((member (spachk:etype ent) spachk:*closed-types*) t)
         ((= (spachk:etype ent) "LWPOLYLINE")
          (setq f (spachk:dxf 70 ent))
          (and f (numberp f) (= 1 (logand 1 f))))
@@ -70165,8 +71436,7 @@
       (setq e (ssname ss i) i (1+ i))
       (if (and (entget e)
                (spachk:on-layer-p e layer)
-               (member (spachk:etype e)
-                       '("LWPOLYLINE" "POLYLINE" "CIRCLE" "ELLIPSE")))
+               (member (spachk:etype e) spachk:*outline-types*))
         (setq out (cons e out)))))
   (reverse out))
 
@@ -70179,7 +71449,7 @@
       (setq e (ssname ss i) i (1+ i))
       (if (and (entget e)
                (spachk:on-layer-p e layer)
-               (member (spachk:etype e) '("LINE" "ARC")))
+               (member (spachk:etype e) spachk:*loose-types*))
         (setq out (cons e out)))))
   (reverse out))
 
@@ -70214,26 +71484,25 @@
        (setq fallback e))))
   (if best best fallback))
 
-(defun spachk:tapernorm (v / u)
-  (setq u (strcase v))
-  (cond ((spachk:has u "3-2") "3-2")
-        ((spachk:has u "4-2") "4-2")
-        ((spachk:has u "4-3") "4-3")
-        ((spachk:has u "5-3") "5-3")
-        ((spachk:has u "5-4") "5-4")
-        ((spachk:has u "3-3") "3-3")
-        ((spachk:has u "3/8") "1-3/8")))
-
-(defun spachk:gradenorm (v / u)
+;; The first word of TABLE the upper-cased value contains, or nil.
+;; Order matters: the table is walked top to bottom, first hit winning.
+(defun spachk:vocab (v table / u hit p)
   (setq u (strcase (if v v "")))
-  (cond ((spachk:has u "ECON") "ECONOMY")
-        ((or (spachk:has u "ULTRA") (spachk:has u "FRP")) "ULTRA")
-        ((spachk:has u "THERMO") "THERMOLIGHT")
-        (t "STANDARD")))
+  (foreach p table
+    (if (and (not hit) (spachk:has u (strcase (car p))))
+      (setq hit (cdr p))))
+  hit)
 
-(defun spachk:gradeshort (g)
-  (cond ((= g "ECONOMY") "ECO") ((= g "STANDARD") "STD")
-        ((= g "ULTRA") "ULTRA") (t "THERMO")))
+(defun spachk:tapernorm (v)
+  (spachk:vocab v spachk:*taper-words*))
+
+(defun spachk:gradenorm (v / g)
+  (setq g (spachk:vocab v spachk:*grade-words*))
+  (if g g spachk:*grade-default*))
+
+(defun spachk:gradeshort (g / p)
+  (setq p (assoc g spachk:*grade-short*))
+  (if p (cdr p) g))
 
 ;;; -------------------- dimensions --------------------------------------
 
@@ -70260,7 +71529,7 @@
 ;; the whole audit down over one malformed entity.
 (defun spachk:linear-p (ent / f)
   (setq f (spachk:dxf 70 ent))
-  (and f (numberp f) (member (logand 7 f) '(0 1))))
+  (and f (numberp f) (member (logand 7 f) spachk:*linear-types*)))
 
 ;; The dimension line's own location (DXF 10).
 (defun spachk:dim-loc (ent) (spachk:dxf 10 ent))
@@ -70320,38 +71589,41 @@
 
 ;; A spa sheet's title block is exactly spachk:*title-frac* of the liner
 ;; block.  Returns the report sentence.
+;; (sentence . T when the title block is right).  The FLAG is what
+;; decides the finding: reading the sentence for the word "OK" made a
+;; border layer with OK in its name pass a sheet that has no border.
 (defun spachk:title-verdict (bb / bw bh tw th sw sh sc)
   (setq tw (* spachk:*title-frac* spachk:*liner-w*)
         th (* spachk:*title-frac* spachk:*liner-h*))
   (if (null bb)
-    (strcat "NO BORDER found on layer '" spachk:*border-layer* "'")
+    (cons (strcat "NO BORDER found on layer '" spachk:*border-layer* "'") nil)
     (progn
       (setq bw (spachk:bw bb) bh (spachk:bh bb))
-      (if (or (<= bw 1.0e-6) (<= bh 1.0e-6))
-        "border has no measurable size"
+      (if (or (<= bw spachk:*tiny*) (<= bh spachk:*tiny*))
+        (cons "border has no measurable size" nil)
         (progn
           (setq sw (/ bw tw) sh (/ bh th) sc (min sw sh))
           (cond
             ;; out of proportion is wrong whatever its size
             ((> (abs (- sw sh)) (* spachk:*border-tol* (max sw sh)))
-             (strcat (rtos bw) " x " (rtos bh)
+             (cons (strcat (rtos bw) " x " (rtos bh)
                      " - STRETCHED out of proportion (" (rtos sw 2 3)
                      "x wide but " (rtos sh 2 3) "x tall); a spa title"
-                     " block is " (rtos tw) " x " (rtos th)))
+                     " block is " (rtos tw) " x " (rtos th)) nil))
             ;; the size the user asked for by name
             ((and (> sc (- 1.0 spachk:*border-tol*))
                   (< sc (+ 1.0 spachk:*border-tol*)))
-             (strcat (rtos bw) " x " (rtos bh) " - "
+             (cons (strcat (rtos bw) " x " (rtos bh) " - "
                      (rtos spachk:*title-frac* 2 2)
-                     "x the liner block, OK"))
+                     "x the liner block, OK") t))
             (t
-             (strcat (rtos bw) " x " (rtos bh) " is "
+             (cons (strcat (rtos bw) " x " (rtos bh) " is "
                      (rtos (* sc spachk:*title-frac*) 2 3)
                      "x the liner block "
                      (rtos spachk:*liner-w*) " x " (rtos spachk:*liner-h*)
                      " - a spa title block must be exactly "
                      (rtos spachk:*title-frac* 2 2) "x it ("
-                     (rtos tw) " x " (rtos th) ")"))))))))
+                     (rtos tw) " x " (rtos th) ")") nil))))))))
 
 ;; Everything on the border layer, from the selection when it holds the
 ;; border and from the whole drawing when it does not.
@@ -70474,7 +71746,7 @@
     (progn
       (setq bc (cal:bbox-ent cov) bw (cal:bbox-ent wat))
       (if (and bc bw)
-        (if (spachk:inside-p bw bc 1.0e-6)
+        (if (spachk:inside-p bw bc spachk:*tiny*)
           (setq rows (list (spachk:row
                              (strcat "Cover vs water's edge: cover "
                                      (rtos (spachk:bw bc)) " x "
@@ -70775,7 +72047,7 @@
         (setq maxrun (max maxrun
                           (abs (- (cadr (spachk:dxf 11 e))
                                   (cadr (spachk:dxf 10 e)))))))
-      (if (and fl (> maxrun (+ fl 0.01)))
+      (if (and fl (> maxrun (+ fl spachk:*foam-slack*)))
         (setq rows (append rows
                     (list (spachk:row
                             (strcat "Foam length: longest hinge "
@@ -70800,7 +72072,7 @@
             (setq maxpiece (max maxpiece (- (car (spachk:dxf 10 e)) prev))
                   prev (car (spachk:dxf 10 e))))
           (setq maxpiece (max maxpiece (- (caadr bb) prev)))
-          (if (> maxpiece (+ fw 0.01))
+          (if (> maxpiece (+ fw spachk:*foam-slack*))
             (setq rows (append rows
                         (list (spachk:row
                                 (strcat "Foam width: widest piece "
@@ -70822,7 +72094,7 @@
       (setq want (spachk:hingetypes n allvel)
             got (mapcar '(lambda (e)
                            (if (spachk:has (spachk:hinge-label e labels)
-                                           "Velcro")
+                                           spachk:*velcro-word*)
                                "V" "H"))
                         sorted))
       (if (equal want got)
@@ -70877,12 +72149,12 @@
 
 ;;; --- 6. the title block -------------------------------------------------
 
-(defun spachk:audit-title (ss / bb s)
+(defun spachk:audit-title (ss / bb v)
   (setq bb (spachk:border-box ss)
-        s  (spachk:title-verdict bb))
+        v  (spachk:title-verdict bb))
   (spachk:res
-    (list (spachk:row (strcat "Title block: " s)
-                      (if (spachk:has s "OK") nil 1)))
+    (list (spachk:row (strcat "Title block: " (car v))
+                      (if (cdr v) nil 1)))
     nil))
 
 ;;; --- feet-and-inch text -------------------------------------------------
@@ -71298,22 +72570,26 @@
   ;; head is title (1.5) + date + verdict (1.2) + legend; a heading
   ;; row is one line plus the 0.4 gap above it.  The dimension column
   ;; is counted the same way, and the taller column drives the height.
-  (setq nlin 4.5)
+  (setq nlin spachk:*head-lines*)
   (foreach r rows
-    (setq nlin (+ nlin (cond ((spachk:lvl-p r 3) 1.4)
+    (setq nlin (+ nlin (cond ((spachk:lvl-p r 3) spachk:*hdg-lines*)
                              ((spachk:row-lvl r) 1.0)
                              (t spachk:*green-scale*)))))
-  (setq ndim (+ 2.5 (if drows (length drows) 1)))
+  (setq ndim (+ spachk:*dim-head* (if drows (length drows) 1)))
   (if (and (not lite) (> ndim nlin)) (setq nlin ndim))
-  (if (and bb (> (max (spachk:bw bb) (spachk:bh bb)) 1.0e-8))
+  (if (and bb (> (max (spachk:bw bb) (spachk:bh bb)) spachk:*tiny*))
     (progn
-      (setq ref (max (spachk:bh bb) (* 0.25 (spachk:bw bb)))
-            h   (/ ref (* 1.66 nlin)))
-      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-    (setq h 2.5))
+      (setq ref (max (spachk:bh bb)
+                     (* spachk:*report-wide* (spachk:bw bb)))
+            h   (/ ref (* spachk:*report-lead* nlin)))
+      (if (> h (/ ref spachk:*report-hmax*))
+        (setq h (/ ref spachk:*report-hmax*)))
+      (if (< h (/ ref spachk:*report-hmin*))
+        (setq h (/ ref spachk:*report-hmin*))))
+    (setq h spachk:*report-hfall*))
   (setq ins (if bb
-                (list (+ (caadr bb) (* 0.05 (max (spachk:bw bb) 1.0)))
+                (list (+ (caadr bb)
+                         (* spachk:*report-gap* (max (spachk:bw bb) 1.0)))
                       (cadadr bb) 0.0)
                 (list 0.0 0.0 0.0)))
   ;; the head: a large title, the date and version small under it, a
@@ -71363,7 +72639,8 @@
   ;; the DIMENSION AUDIT column, to the right of the main sheet
   (if (not lite)
     (progn
-      (setq ins2 (list (+ (car ins) (* (+ spachk:*report-chars* 2.0) h))
+      (setq ins2 (list (+ (car ins)
+                          (* (+ spachk:*report-chars* spachk:*col-gap*) h))
                        (cadr ins) 0.0)
             txt  (strcat "{\\H1.2x;DIMENSION AUDIT}"
                          "\\P"

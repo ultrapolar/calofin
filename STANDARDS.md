@@ -398,9 +398,22 @@ rule rather than a fact about the constant.
 
 State (`nil`-initialized, written as the tool runs) is not a knob and
 does not go in the block; hoisting it there advertises an initial value
-as a setting. `tests/test_tunables.py` holds all of this for the four
-GUI files -- the panel and the three chart forms, whose knobs the VB
-palette shares -- and it is the pattern for any tool that grows one.
+as a setting. A value that is BOTH -- ABPCHECK's limit, a default the
+command offers and then remembers what you answered -- splits in two:
+the knob keeps the default and is never written, and the answer is
+state under its own name. `tests/test_tunables.py` holds all of this
+for the files listed in it -- the four GUI files, whose knobs the VB
+palette shares, the two point plotters, AutoDim, and six of the check
+family -- and it is the pattern for any tool that grows one.
+
+The check family rules its block off with a banner naming itself at
+both ends rather than a single `;;; ---` line; in a four-thousand-line
+file the closing marker is worth having, and `test_tunables.py` takes
+the marker pair per file for exactly that reason. Its four remaining
+files (`CHECK`, `DIMCHECK`, `LINFINCHECK`, `COVERCHECK`) still spell
+their globals `*tool-name*` rather than `tool:*name*`, which that test
+cannot see; their own suites carry the same assertions until the
+rename happens.
 
 **Commands.** `(defun c:TOOLNAME ...)` -- `c:` lowercase, name
 uppercase. Secondary commands by fixed suffix:
