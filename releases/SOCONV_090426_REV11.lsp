@@ -44,19 +44,23 @@
 ;;; dim by hand while making it.  That is an edit, not a rule, and it
 ;;; is not in here.)
 ;;;
-;;; Locked layers among those touched are unlocked for the run and
-;;; re-locked afterwards, on the error path too; the destination layers
-;;; are created if the drawing does not have them, and thawed and
-;;; switched on if it does.  The whole run is one undo group.
+;;; A locked SOURCE layer is unlocked for the run and re-locked
+;;; afterwards, on the error path too.  The destination layers are
+;;; output layers: only the ones the selection actually reaches are
+;;; created, and one that exists but is frozen, locked or off is
+;;; repaired for good, with a line saying so (STANDARDS 5).  The whole
+;;; run is one undo group.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.1")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
 
 ;; ---------------------------------------------------------------
-;; Configuration
+;; Configuration - every knob the tool has, each one explained.
+;; Nothing below this block is meant to be edited for a shop's own
+;; conventions.
 ;; ---------------------------------------------------------------
 
 ;; The conversion itself, one row per rule:
@@ -95,13 +99,16 @@
     ("TEXT"      . 4)
     ("DIMENSION" . 141)))
 
-(setq *soconv-default-color* 7)   ; a destination not named above
+;; The colour for a destination the table above does not name - what a
+;; retuned *soconv-map* row pointing at a new layer gets.  7 is white.
+(setq *soconv-default-color* 7)
 
 ;; nil, and a moved object keeps every property it arrived with, which
 ;; is what the sample conversion does.  T instead forces colour,
-;; linetype and lineweight to BYLAYER on the way past, the way DRONE
-;; and TYDRN do -- so the import takes the destination layer's own
-;; appearance and nothing overrides it later.
+;; linetype and lineweight to BYLAYER on the way past, the way DRONE,
+;; TYDRN and VSCONV do -- so the import takes the destination layer's
+;; own appearance and nothing overrides it later.  VSCONV carries the
+;; same switch with the opposite default, because ITS sample restyles.
 (setq *soconv-force-bylayer* nil)
 
 ;; ---------------------------------------------------------------

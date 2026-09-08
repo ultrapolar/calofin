@@ -8,6 +8,18 @@ the bounding boxes ride the VM's own vla-getboundingbox.  Geometry is
 NOT rescaled by the VM's command logger, so the x12 is asserted off
 vm.commands, exactly as the tool issues it.
 
+CALOFIN_LISP_ROOT=shared runs the same script over the grouped twin in
+shared/parts/ (with the library loaded first) -- the docstring said so
+from the start, but the path was hard-wired to lisp/, so the twin was
+only ever load-checked.  The releases/ twin is compared against the
+lisp/ source at either tier, since that is what it is a twin of.
+
+The contingencies at the bottom are the ones a survey brings in: undo
+switched off in the drawing, an import already in inches, a plain POINT
+where the X should be, MTEXT and justified names, each settings switch
+in its non-default position, a frozen POINTS, a missing text style, an
+error mid-run and both flavours in one highlight.
+
 Script shape: [None, [ents]] -- the leading None answers the pickfirst
 probe (ssget "_I"), the list answers the interactive highlight.  Enter
 there falls back to an (ssget "_X") sweep of the current tab, which
@@ -26,7 +38,11 @@ sys.path.insert(0, os.path.dirname(__file__))
 from lispvm import VM, Dot, LispError  # noqa: E402
 
 HERE = os.path.dirname(__file__)
-LSP = os.path.join(HERE, '..', 'lisp', 'xftconv', 'xftconv.lsp')
+ROOT = os.environ.get('CALOFIN_LISP_ROOT', 'lisp')
+LISP_SRC = os.path.join(HERE, '..', 'lisp', 'xftconv', 'xftconv.lsp')
+LSP = (os.path.join(HERE, '..', 'shared', 'parts', 'xftconv.lsp')
+       if ROOT == 'shared' else LISP_SRC)
+LIB = os.path.join(HERE, '..', 'shared', 'parts', 'CALOFIN-LIB.lsp')
 RELEASES = os.path.join(HERE, '..', 'releases')
 
 FAILS = []
@@ -175,6 +191,8 @@ def made(vm, src):
 
 def newvm(fixtures=()):
     vm = VM()
+    if ROOT == 'shared':
+        vm.load(LIB)
     vm.load(LSP)
     for f in fixtures:
         vm.loads(f)
@@ -199,7 +217,8 @@ def inserts(vm):
 # ----------------------------------------------------------------------
 print("statics")
 
-SRC = open(LSP, encoding="ascii").read()   # also asserts pure ASCII
+SRC = open(LISP_SRC, encoding="ascii").read()   # also asserts pure ASCII
+open(LSP, encoding="ascii").read()              # ...and the tier under test
 
 m = re.search(r'\*xft-version\*\s+"v(\d+)\.(\d+)"', SRC)
 check("version banner present", m is not None)
@@ -447,6 +466,319 @@ ents = made(vm, circle("POOL_POINTS", 1.0, 2.0)) + made(vm, dot_name(1.0, 2.0, "
 vm.run('c:XFTCONV', [None, ents])
 check("a locked layer with none of the selection on it does not stop it",
       inserts(vm) == [(1.0, 2.0, "C1")], repr(inserts(vm)))
+
+# ----------------------------------------------------------------------
+# 9. undo switched off in the drawing: no group is opened, so none may
+#    be closed.  The success path used to close one unconditionally and
+#    died on it -- through the handler, after the swap had already run.
+# ----------------------------------------------------------------------
+print("undo off: the run neither opens nor closes a group")
+
+vm = newvm([LAYERS])
+vm.handle_errors = True
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P3"))
+vm.sysvars['UNDOCTL'] = 0
+vm.run('c:XFTCONV', [None, ents])
+check("the swap still happened", inserts(vm) == [(0.0, 0.5, "3")],
+      repr(inserts(vm)))
+check("no _.UNDO command at all was issued",
+      not [c for c in vm.commands if c and c[0] == '_.UNDO'],
+      repr(vm.commands))
+check("and the run ended clean rather than through the handler",
+      vm.handled_errors == [] and vm.error_mode_depth == 0
+      and 'XFTCONV error' not in ''.join(vm.printed),
+      repr(vm.handled_errors))
+
+# ----------------------------------------------------------------------
+# 10. *xft-scale* 1.0: an import already in inches is not scaled
+# ----------------------------------------------------------------------
+print("*xft-scale* 1.0 skips the SCALE step")
+
+vm = newvm([LAYERS])
+vm.loads('(setq *xft-scale* 1.0)')
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P3"))
+vm.run('c:XFTCONV', [None, ents])
+check("no SCALE was issued",
+      not [c for c in vm.commands if c and c[0] == '_.SCALE'],
+      repr(vm.commands))
+check("but the swap went ahead", inserts(vm) == [(0.0, 0.5, "3")],
+      repr(inserts(vm)))
+
+# ----------------------------------------------------------------------
+# 11. some exports drop a plain POINT where the X should be
+# ----------------------------------------------------------------------
+print("a POINT on the marker layer is a marker")
+
+POINT_MARKER = """
+  (entmake (list '(0 . "POINT") '(100 . "AcDbEntity")
+                 '(8 . "LEICA_POINT") '(410 . "Model") '(100 . "AcDbPoint")
+                 '(10 5.0 5.0 0.0)))"""
+
+vm = newvm([LAYERS])
+ents = made(vm, POINT_MARKER) + made(vm, name_text(5.1, 5.5, "P11"))
+vm.run('c:XFTCONV', [None, ents])
+check("the POINT became a block carrying the number",
+      inserts(vm) == [(5.0, 5.0, "11")], repr(inserts(vm)))
+check("and the POINT itself is gone", all(e in vm.deleted for e in ents))
+
+# ----------------------------------------------------------------------
+# 12. an MTEXT name: formatting codes come off, and it sits at its
+#     insertion point (group 11 is a direction on MTEXT, not a point)
+# ----------------------------------------------------------------------
+print("an MTEXT name is read through its formatting codes")
+
+
+def mtext_name(x, y, s, h=1.0):
+    return f"""
+  (entmake (list '(0 . "MTEXT") '(100 . "AcDbEntity")
+                 '(8 . "LEICA_POINT_NAME") '(410 . "Model")
+                 '(100 . "AcDbMText")
+                 '(10 {x} {y} 0.0) '(40 . {h}) '(11 1.0 0.0 0.0)
+                 '(1 . "{s}")))"""
+
+
+vm = newvm([LAYERS])
+ents = made(vm, marker(0.0, 0.5))
+ents += made(vm, mtext_name(0.2, 1.0, "\\\\A1;{\\\\fArial;P7}"))
+vm.run('c:XFTCONV', [None, ents])
+check("the number came out from under the codes",
+      inserts(vm) == [(0.0, 0.5, "7")], repr(inserts(vm)))
+
+# ----------------------------------------------------------------------
+# 13. a justified TEXT really sits at its alignment point (group 11):
+#     the insertion point is put 40 units away, out of any reach
+# ----------------------------------------------------------------------
+print("a justified name is located by its alignment point")
+
+
+def justified_name(ax, ay, s, h=1.0):
+    return f"""
+  (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                 '(8 . "LEICA_POINT_NAME") '(410 . "Model") '(100 . "AcDbText")
+                 '(10 {ax - 40.0} {ay} 0.0) '(11 {ax} {ay} 0.0)
+                 '(40 . {h}) '(72 . 1) '(1 . "{s}")))"""
+
+
+vm = newvm([LAYERS])
+ents = made(vm, marker(0.0, 0.5)) + made(vm, justified_name(0.0, 1.0, "P12"))
+vm.run('c:XFTCONV', [None, ents])
+check("the name was found through group 11, not group 10",
+      inserts(vm) == [(0.0, 0.5, "12")], repr(inserts(vm)))
+
+# ----------------------------------------------------------------------
+# 14. *xft-purge-text* nil keeps what the swap did not use
+# ----------------------------------------------------------------------
+print("*xft-purge-text* nil keeps the leftover text")
+
+vm = newvm([LAYERS])
+vm.loads('(setq *xft-purge-text* nil)')
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
+stray = made(vm, name_text(50.0, 50.0, "P77"))
+vm.run('c:XFTCONV', [None, ents + stray])
+check("the name a point used is erased in the swap regardless",
+      all(e in vm.deleted for e in ents), repr(vm.deleted))
+check("the stray text survives", not any(e in vm.deleted for e in stray))
+check("and the report claims no sweep",
+      'leftover text' not in ''.join(vm.printed), ''.join(vm.printed)[-200:])
+
+# ----------------------------------------------------------------------
+# 15. the letter prefix: one switch per flavour, opposite defaults
+# ----------------------------------------------------------------------
+print("*xft-strip-prefix* and *xft-dot-strip-prefix*")
+
+vm = newvm([LAYERS])
+vm.loads('(setq *xft-strip-prefix* nil)')
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
+vm.run('c:XFTCONV', [None, ents])
+check("with the Leica switch off the label goes in whole",
+      inserts(vm) == [(0.0, 0.5, "P9")], repr(inserts(vm)))
+
+vm = newvm([DOT_LAYERS])
+vm.loads('(setq *xft-dot-strip-prefix* T)')
+ents = made(vm, circle("POOL_POINTS", 1.0, 2.0))
+ents += made(vm, dot_name(1.0, 2.0, "C1"))
+vm.run('c:XFTCONV', [None, ents])
+check("with the trace switch on the label loses its family letter",
+      inserts(vm) == [(1.0, 2.0, "1")], repr(inserts(vm)))
+
+# ----------------------------------------------------------------------
+# 16. *xft-column-tol* is how wide "the same column" is.  Section 2 has
+#     P9 at dx 0.2 beating the nearer P8 on the column rule; a tolerance
+#     of a tenth of a text height puts them both off-column, and then
+#     the nearer one wins.
+# ----------------------------------------------------------------------
+print("*xft-column-tol* is the width of the same-column rule")
+
+vm = newvm([LAYERS])
+vm.loads('(setq *xft-column-tol* 0.1)')
+ents = made(vm, marker(0.0, 0.5))
+ents += made(vm, name_text(0.2, 1.0, "P9"))
+ents += made(vm, name_text(0.51, 0.5, "P8"))
+vm.run('c:XFTCONV', [None, ents])
+check("P9 is off-column now, so the nearer P8 wins",
+      [v for _x, _y, v in inserts(vm)] == ["8"], repr(inserts(vm)))
+
+# ----------------------------------------------------------------------
+# 17. *xft-block-layer-color*: what a POINTS the drawing lacked is
+#     created with -- and never applied to one it already has
+# ----------------------------------------------------------------------
+print("*xft-block-layer-color* colours a POINTS the drawing lacked")
+
+vm = newvm([LAYERS])
+vm.loads('(setq *xft-block-layer-color* 3)')
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
+vm.run('c:XFTCONV', [None, ents])
+rec = vm.tablerecs['LAYER']['POINTS']
+check("POINTS was created in that colour", grp(vm.recdata[rec], 62) == 3,
+      repr(vm.recdata[rec]))
+
+POINTS_RED = """
+  (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                 '(100 . "AcDbLayerTableRecord")
+                 '(2 . "POINTS") '(70 . 0) '(62 . 1)
+                 '(6 . "Continuous")))"""
+
+vm = newvm([LAYERS, POINTS_RED])
+vm.loads('(xft:ensure-block)')           # the template's block, present
+vm.printed = []
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
+vm.run('c:XFTCONV', [None, ents])
+rec = vm.tablerecs['LAYER']['POINTS']
+check("an existing POINTS keeps its own colour",
+      grp(vm.recdata[rec], 62) == 1, repr(vm.recdata[rec]))
+check("and nothing was reported created or repaired",
+      'created it' not in ''.join(vm.printed)
+      and 'was off, frozen or locked' not in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+
+# ----------------------------------------------------------------------
+# 18. a frozen, switched-off POINTS is an output layer: repaired for
+#     the run, with a line saying so (a LOCKED one refuses, section 5)
+# ----------------------------------------------------------------------
+print("a frozen, switched-off POINTS is repaired for the run")
+
+POINTS_FROZEN_OFF = """
+  (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                 '(100 . "AcDbLayerTableRecord")
+                 '(2 . "POINTS") '(70 . 1) '(62 . -6)
+                 '(6 . "Continuous")))"""
+
+vm = newvm([LAYERS, POINTS_FROZEN_OFF])
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
+vm.run('c:XFTCONV', [None, ents])
+rec = vm.tablerecs['LAYER']['POINTS']
+check("POINTS is thawed and switched on",
+      not ((grp(vm.recdata[rec], 70) or 0) & 1)
+      and grp(vm.recdata[rec], 62) == 6, repr(vm.recdata[rec]))
+check("and the run said so",
+      'POINTS was off, frozen or locked' in ''.join(vm.printed),
+      ''.join(vm.printed)[-300:])
+check("the swap went ahead onto it", inserts(vm) == [(0.0, 0.5, "9")],
+      repr(inserts(vm)))
+
+# ----------------------------------------------------------------------
+# 19. the attribute's text style: the named one when the drawing has
+#     it, the current TEXTSTYLE when it does not
+# ----------------------------------------------------------------------
+print("the attribute style falls back to TEXTSTYLE")
+
+
+def attribs(vm):
+    out = []
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        d = vm.entdata.get(e, [])
+        if grp(d, 0) == 'ATTRIB':
+            out.append((grp(d, 7), grp(d, 40)))
+    return out
+
+
+vm = newvm([LAYERS])
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
+vm.run('c:XFTCONV', [None, ents])
+check('no "Attributes" style in the drawing: TEXTSTYLE (STANDARD) is used',
+      attribs(vm) == [('STANDARD', 4.0)], repr(attribs(vm)))
+
+STYLE_ATTR = """
+  (entmake (list '(0 . "STYLE") '(100 . "AcDbSymbolTableRecord")
+                 '(100 . "AcDbTextStyleTableRecord")
+                 '(2 . "Attributes") '(70 . 0) '(40 . 0.0) '(41 . 1.0)
+                 '(50 . 0.0) '(71 . 0) '(3 . "romans.shx") '(4 . "")))"""
+
+vm = newvm([LAYERS, STYLE_ATTR])
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
+vm.run('c:XFTCONV', [None, ents])
+check("with the style present the attribute is written in it",
+      attribs(vm) == [('Attributes', 4.0)], repr(attribs(vm)))
+
+# ----------------------------------------------------------------------
+# 20. an error mid-run reaches the command's own handler, which puts
+#     the settings back, closes the group it opened and pops the mode
+# ----------------------------------------------------------------------
+print("an error mid-run: restore, close the group, pop the mode")
+
+vm = newvm([LAYERS])
+vm.handle_errors = True
+vm.sysvars['OSMODE'] = 4133
+vm.sysvars['CMDECHO'] = 1
+# the insert blows up on an unbound function, the way a typo or a
+# missing helper dies at the command line
+vm.loads('(defun xft:insert (pt num) (xft:no-such-helper pt num))')
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
+vm.run('c:XFTCONV', [None, ents])
+check("aborted through *error*, not a crash",
+      len(vm.handled_errors) == 1
+      and 'undefined function' in vm.handled_errors[0],
+      repr(vm.handled_errors))
+check("the group the run opened was closed by the handler",
+      [c for c in vm.commands if c and c[0] == '_.UNDO']
+      == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']],
+      repr(vm.commands))
+check("settings restored and the error mode popped",
+      vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1
+      and vm.error_mode_depth == 0 and vm.error_mode_underflow == 0,
+      repr((vm.sysvars['OSMODE'], vm.error_mode_depth)))
+check("reported under the tool's name, with the U hint",
+      any('XFTCONV error:' in s for s in vm.printed)
+      and any('use U to roll the run back' in s for s in vm.printed),
+      repr(vm.printed[-3:]))
+
+# ----------------------------------------------------------------------
+# 21. both flavours in one highlight -- which no real import does -- is
+#     swept, because the Leica half's noise is the reason to sweep
+# ----------------------------------------------------------------------
+print("a selection holding both flavours is swept")
+
+vm = newvm([LAYERS, DOT_LAYERS])
+ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
+ents += made(vm, circle("POOL_POINTS", 20.0, 20.0))
+ents += made(vm, dot_name(20.0, 20.0, "C1"))
+caps = made(vm, caption(20.0, 25.0, "Deep End"))
+vm.run('c:XFTCONV', [None, ents + caps])
+check("both markers became blocks, each read its own way",
+      sorted(v for _x, _y, v in inserts(vm)) == ["9", "C1"],
+      repr(inserts(vm)))
+check("and the trace caption went with the Leica sweep, as documented",
+      all(e in vm.deleted for e in caps), repr(caps))
+
+# ----------------------------------------------------------------------
+# 22. the setup and version commands
+# ----------------------------------------------------------------------
+print("XFTCONV-SETUP and XFTCONVVER")
+
+vm = newvm()
+vm.run('c:XFTCONV-SETUP', [])
+check("SETUP creates the layer and the block without a conversion",
+      'POINTS' in vm.tables['LAYER'] and 'ab_pt' in vm.tables['BLOCK']
+      and 'are ready' in ''.join(vm.printed), ''.join(vm.printed)[-200:])
+check("and issues no command", not [c for c in vm.commands if c])
+
+vm = newvm()
+vm.run('c:XFTCONVVER', [])
+check("XFTCONVVER prints the loaded version",
+      any(re.search(r'XFTCONV v\d+\.\d+', s) for s in vm.printed),
+      repr(vm.printed))
 
 # ----------------------------------------------------------------------
 print()

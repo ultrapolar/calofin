@@ -6,6 +6,71 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.6 -- 2026-09-04
+
+The three converters -- `XFTCONV`, `SOCONV`, `VSCONV`, the column the
+panel's Pool and Spa pages lead with -- read through together: every
+knob a shop might turn moved to the top of its file with an explanation
+beside it, and the contingencies a survey brings in run in the VM at
+both tiers.
+
+### Fixed
+
+- **`XFTCONV`** (v1.13) died in a drawing with undo recording switched
+  off (`UNDO` `Control` `None`). The `_.UNDO _Begin` was already behind
+  a check of `UNDOCTL`, but the `_End` on the success path was not, so
+  the run swapped every point and then errored out through its handler
+  on the group it never opened. Both ends of the group sit behind the
+  one flag now, as the handler's close always did.
+- **`VSCONV`** (v1.1) created every destination layer -- `POOL`,
+  `POINTS`, `DIMENSION` -- before it had looked at the selection, so an
+  export with nothing dimensioned left an empty `DIMENSION` behind and a
+  highlight of the anchors alone created `POOL` for nothing. It plans
+  the run first now, the way `SOCONV` always did: only the destinations
+  the selection reaches are created, and only the source layers it takes
+  from are unlocked. The same plan fixed the done line's `now empty`
+  list, which walked every VS layer present rather than the ones the run
+  took objects off -- so that already-empty `4 Dimensions` was named as
+  something to purge by a run that never touched it.
+
+### Changed
+
+- **Every knob at the top, explained.** `XFTCONV`'s settings block is
+  rewritten one setting per form with a paragraph each -- what it is,
+  when to change it, what depends on it -- and three values that were
+  buried in the code joined it: `*xft-block-layer-color*` (the `6` that
+  a missing `POINTS` was created with, in two places), `*xft-strip-prefix*`
+  (the Leica flavour's letter strip, hard-wired `T` where the trace
+  flavour had a switch) and `*xft-column-tol*` (the half text height
+  that decides "same column" in the name matching). `VSCONV` gained
+  `*vsconv-force-bylayer*` (default `T`), the switch `SOCONV` already
+  had with the opposite default -- each tool's default is what its
+  sample export does, and the two files now say so about each other.
+  `SOCONV`'s block, already complete, has the same header and its
+  default colour explained. The per-tool READMEs' tables follow.
+- The three headers say precisely what happens to a locked layer: a
+  locked **source** is unlocked for the run and re-locked, on the error
+  path too; a destination is an output layer, repaired for good with a
+  line saying so (STANDARDS 5). The READMEs and tests had it right; the
+  headers claimed re-locking for both.
+
+### Checks and tests
+
+- `tests/test_xftconv.py` honours `CALOFIN_LISP_ROOT` -- its docstring
+  promised a shared-tier run from the start, but the path was hard-wired
+  to `lisp/`, so the grouped twin was only ever load-checked. `make
+  parity` now runs the converter at both tiers like its two siblings.
+- Contingency sections in all three suites: undo switched off, an
+  import already in inches, a plain `POINT` for a marker, MTEXT and
+  justified names, each settings switch in its non-default position, a
+  frozen and switched-off destination repaired rather than drawn onto
+  blind, the attribute style falling back to `TEXTSTYLE`, an error
+  mid-run through `XFTCONV`'s handler, both flavours in one highlight,
+  `XFTCONV-SETUP`; `VSCONV`'s and `SOCONV`'s retuned tables and default
+  colour, `VSCONV`'s `*vsconv-dim-xdata*` `nil`, an export with nothing
+  dimensioned, and a `SOCONV` highlight carrying nothing of the
+  export's.
+
 ## v3.5 -- 2026-09-02
 
 `SOCONV`'s sibling, written the same way: from a before/after the shop

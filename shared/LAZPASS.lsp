@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.5, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.6, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -71348,19 +71348,23 @@
 ;;; dim by hand while making it.  That is an edit, not a rule, and it
 ;;; is not in here.)
 ;;;
-;;; Locked layers among those touched are unlocked for the run and
-;;; re-locked afterwards, on the error path too; the destination layers
-;;; are created if the drawing does not have them, and thawed and
-;;; switched on if it does.  The whole run is one undo group.
+;;; A locked SOURCE layer is unlocked for the run and re-locked
+;;; afterwards, on the error path too.  The destination layers are
+;;; output layers: only the ones the selection actually reaches are
+;;; created, and one that exists but is frozen, locked or off is
+;;; repaired for good, with a line saying so (STANDARDS 5).  The whole
+;;; run is one undo group.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.1")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
 
 ;; ---------------------------------------------------------------
-;; Configuration
+;; Configuration - every knob the tool has, each one explained.
+;; Nothing below this block is meant to be edited for a shop's own
+;; conventions.
 ;; ---------------------------------------------------------------
 
 ;; The conversion itself, one row per rule:
@@ -71399,13 +71403,16 @@
     ("TEXT"      . 4)
     ("DIMENSION" . 141)))
 
-(setq *soconv-default-color* 7)   ; a destination not named above
+;; The colour for a destination the table above does not name - what a
+;; retuned *soconv-map* row pointing at a new layer gets.  7 is white.
+(setq *soconv-default-color* 7)
 
 ;; nil, and a moved object keeps every property it arrived with, which
 ;; is what the sample conversion does.  T instead forces colour,
-;; linetype and lineweight to BYLAYER on the way past, the way DRONE
-;; and TYDRN do -- so the import takes the destination layer's own
-;; appearance and nothing overrides it later.
+;; linetype and lineweight to BYLAYER on the way past, the way DRONE,
+;; TYDRN and VSCONV do -- so the import takes the destination layer's
+;; own appearance and nothing overrides it later.  VSCONV carries the
+;; same switch with the opposite default, because ITS sample restyles.
 (setq *soconv-force-bylayer* nil)
 
 ;; ---------------------------------------------------------------
@@ -71621,8 +71628,9 @@
 ;;;
 ;;;   1. LAYERS - every object on a source layer moves to the layer
 ;;;      *vsconv-map* pairs it with, with color, linetype and lineweight
-;;;      forced to BYLAYER so the moved geometry takes the destination
-;;;      layer's own appearance rather than carrying the exporter's:
+;;;      forced to BYLAYER (*vsconv-force-bylayer*) so the moved geometry
+;;;      takes the destination layer's own appearance rather than
+;;;      carrying the exporter's:
 ;;;
 ;;;        "1 Perimeter"  -> POOL       the outline
 ;;;        "2 Coping"     -> POOL       the coping band
@@ -71655,19 +71663,24 @@
 ;;; Scope is what you highlight; Enter at the prompt takes every object
 ;;; on a source layer, drawing-wide.  Either way only the source layers
 ;;; in the table are touched, so a sheet that already carries converted
-;;; work cannot be converted twice.  Locked layers among those touched
-;;; are unlocked for the run and re-locked afterwards, on the error path
-;;; too, and the whole run is one undo group.
+;;; work cannot be converted twice.  A locked SOURCE layer is unlocked
+;;; for the run and re-locked afterwards, on the error path too.  The
+;;; destination layers are output layers: only the ones the selection
+;;; actually reaches are created, and one that exists but is frozen,
+;;; locked or off is repaired for good, with a line saying so (STANDARDS
+;;; 5).  The whole run is one undo group.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.1")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
 (vl-load-com)
 
 ;; ---------------------------------------------------------------
-;; Configuration
+;; Configuration - every knob the tool has, each one explained.
+;; Nothing below this block is meant to be edited for a shop's own
+;; conventions.
 ;; ---------------------------------------------------------------
 
 ;; source layer -> destination layer.  The conversion IS this table: an
@@ -71686,18 +71699,40 @@
 ;; The color a destination layer is CREATED with, when the drawing does
 ;; not carry it yet.  A drawing that has the layer already keeps its own
 ;; color: this is a conversion, not a restyling of the office template.
+;; Only the destinations a run actually reaches are created, so a
+;; survey with no dimensions in it leaves no empty DIMENSION behind.
 (setq *vsconv-colors*
       '(("POOL"      . 4)      ; cyan, as the rest of the tree creates it
         ("POINTS"    . 6)      ; magenta - the pink the points show in
         ("DIMENSION" . 141)))  ; as CUSTBLOCK creates it
 
-(setq *vsconv-default-color* 7)      ; a destination the table above
-                                     ; does not name
+;; The color for a destination the table above does not name - what a
+;; retuned *vsconv-map* row pointing at a new layer gets.  7 is white.
+(setq *vsconv-default-color* 7)
 
-(setq *vsconv-dim-style* "STANDARD"  ; the style the dimensions land in
-      *vsconv-dim-xdata* "ACAD")     ; the application whose style
-                                     ; overrides are removed with them;
-                                     ; nil leaves the overrides on
+;; T, and every moved object has its color, linetype and lineweight set
+;; to BYLAYER on the way past, so it takes the destination layer's own
+;; appearance and nothing overrides it later.  That is the point of the
+;; conversion - the VS export sets none of the three on purpose - and
+;; the sample the tool was written from does it.  nil moves the layer
+;; and leaves every other property as it arrived, which is what SOCONV
+;; does by default because THAT export's sample does; the two tools
+;; carry the same switch with opposite defaults, each for its export.
+(setq *vsconv-force-bylayer* T)
+
+;; The dimension style every converted dimension is put on.  If the
+;; drawing has no style by this name the dimensions still move layer,
+;; but keep the export's style AND its overrides - the style is what
+;; would have replaced them - and the run says so once.
+(setq *vsconv-dim-style* "STANDARD")
+
+;; The xdata application whose style overrides come off each dimension
+;; with the restyle.  AutoCAD keeps a dimension's per-object overrides
+;; (text height, arrow size, decimals) as DSTYLE xdata under "ACAD",
+;; and an override outranks the style it sits on, so leaving them would
+;; keep the export's look under the shop's style name.  nil leaves the
+;; overrides on and changes only the style name.
+(setq *vsconv-dim-xdata* "ACAD")
 
 ;; ---------------------------------------------------------------
 ;; Helpers
@@ -71726,15 +71761,10 @@
   (vla-put-Linetype obj "ByLayer")
   (vla-put-Lineweight obj acLnWtByLayer))
 
-;; The source layers, the destination layers (once each, in the order
-;; the table names them), and the color one is created with.
+;; The source layers the table names, and the color a destination is
+;; created with.
 (defun vsconv:sources ()
   (mapcar 'car *vsconv-map*))
-
-(defun vsconv:dests ( / out p)
-  (foreach p *vsconv-map*
-    (if (not (member (cdr p) out)) (setq out (cons (cdr p) out))))
-  (reverse out))
 
 (defun vsconv:color (name / p)
   (if (setq p (assoc (strcase name) (mapcar '(lambda (q)
@@ -71775,6 +71805,28 @@
 (defun vsconv:empty-p (lay)
   (null (ssget "_X" (list (cons 8 lay)))))
 
+;; What THIS selection touches, without touching anything: the source
+;; layers it takes from and the destinations it writes to, each once,
+;; in first-seen order.  Returns (sources destinations) - both nil for
+;; an empty selection.  Sizing the run to the selection is what keeps a
+;; highlight of the anchors alone from creating POOL and DIMENSION, or
+;; from unlocking a perimeter layer it never reads.
+(defun vsconv:plan (ss / i lay dest froms tos)
+  (if ss
+    (progn
+      (setq i 0)
+      (while (< i (sslength ss))
+        (setq lay  (cdr (assoc 8 (entget (ssname ss i))))
+              dest (vsconv:dest lay))
+        (if dest
+          (progn
+            (if (not (member (strcase lay) (mapcar 'strcase froms)))
+              (setq froms (append froms (list lay))))
+            (if (not (member dest tos))
+              (setq tos (append tos (list dest))))))
+        (setq i (1+ i)))))
+  (list froms tos))
+
 ;; KEY's count in an alist, one higher.
 (defun vsconv:bump (key alist / p)
   (if (setq p (assoc key alist))
@@ -71799,8 +71851,8 @@
 ;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
-(defun c:VSCONV (/ *error* doc unlocked mark-open srcs dests here
-                   filter ss i ent ed lay dest obj dims empty p
+(defun c:VSCONV (/ *error* doc unlocked mark-open srcs here plan froms
+                   reached filter ss i ent ed lay dest obj dims empty p
                    tally n-moved n-dim)
 
   ;; The handler is LOCAL to this command (STANDARDS 5), as DRONE's and
@@ -71823,7 +71875,6 @@
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
         srcs     (vsconv:sources)
-        dests    (vsconv:dests)
         here     (vsconv:present srcs)
         tally    nil
         dims     nil
@@ -71845,10 +71896,6 @@
       (princ "\n  already, or the export names its layers differently now")
       (princ "\n  and *vsconv-map* is what needs editing."))
     (progn
-      ;; The destinations have to exist, and be usable, before anything
-      ;; is moved onto them.
-      (foreach lay dests (cal:ensure-layer lay (vsconv:color lay)))
-
       ;; ------------------------------------------------------------
       ;; What to convert: the highlight, else a prompt, Enter = every
       ;; object on a source layer anywhere in the drawing.
@@ -71862,12 +71909,23 @@
           (setq ss (ssget filter))
           (if (null ss) (setq ss (ssget "_X" filter)))))
 
+      ;; The destinations have to exist, and be usable, before anything
+      ;; is moved onto them -- but only the ones THIS selection reaches:
+      ;; a survey with no dimensions in it does not want an empty
+      ;; DIMENSION layer created for it, and a highlight of the anchors
+      ;; alone wants POINTS and nothing else.
+      (setq plan    (vsconv:plan ss)
+            froms   (car plan)
+            reached (cadr plan))
+      (foreach lay reached (cal:ensure-layer lay (vsconv:color lay)))
+
       ;; Unlock every layer the run is about to touch -- the sources it
-      ;; takes from and the destinations it writes to.
-      (setq unlocked (vsconv:unlock-layers (append here dests) doc))
+      ;; takes from and the destinations it writes to, both sized to
+      ;; the selection.
+      (setq unlocked (vsconv:unlock-layers (append froms reached) doc))
 
       ;; ------------------------------------------------------------
-      ;; 1. The layer move, everything BYLAYER
+      ;; 1. The layer move, everything BYLAYER when asked (the default)
       ;; ------------------------------------------------------------
       (if ss
         (progn
@@ -71881,7 +71939,7 @@
               (progn
                 (setq obj (vlax-ename->vla-object ent))
                 (vla-put-Layer obj dest)
-                (vsconv:force-bylayer obj)
+                (if *vsconv-force-bylayer* (vsconv:force-bylayer obj))
                 (setq tally   (vsconv:bump (strcase lay) tally)
                       n-moved (1+ n-moved))
                 ;; the dimensions are collected rather than restyled
@@ -71934,9 +71992,15 @@
                          (strcat ", " *vsconv-dim-xdata*
                                  " style overrides removed")
                          ""))))
+      ;; Only the layers this run actually took objects OFF can have
+      ;; been emptied by it, so froms is what is walked rather than
+      ;; every source layer present: an export with nothing dimensioned
+      ;; carries an empty "4 Dimensions" in before the run, and naming
+      ;; it here would send the drafter to purge a layer this run never
+      ;; touched.
       (setq empty nil)
       (if (> n-moved 0)
-        (foreach lay here
+        (foreach lay froms
           (if (vsconv:empty-p lay) (setq empty (cons lay empty)))))
       (if empty
         (princ (strcat "\n  now empty: " (vsconv:namelist (reverse empty))
@@ -73211,67 +73275,170 @@
 ;;;       throw the survey's annotation away with the noise.
 ;;;
 ;;;  Non-text geometry is scaled and otherwise left alone.  The whole
-;;;  run is one UNDO step.
+;;;  run is one UNDO step - in a drawing that records undo, that is; with
+;;;  UNDO Control set to None it runs without a group rather than dying
+;;;  on the group it could not open.
 ;;; ===================================================================
 
 
 
 ;;; -------------------------------------------------------------------
-;;;  SETTINGS - edit these if the export or the template ever changes
+;;;  SETTINGS - every knob the tool has, each one explained.  Edit here
+;;;  if the export or the template ever changes; nothing below this
+;;;  section is meant to be touched for a shop's own conventions.
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.12") ; printed on load and at command start so a
+(setq *xft-version* "v1.13") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
-(setq
-  *xft-scale*        12.0                 ; scale factor applied to the selection
-  *xft-marker-layer* "LEICA_POINT"        ; layer of the X marker (wildcards ok)
-  *xft-name-layer*   "LEICA_POINT_NAME"   ; layer of the point name text
-  *xft-block*        "ab_pt"              ; block that replaces the marker
-  *xft-block-layer*  "POINTS"             ; layer the block is inserted on
-  *xft-att-tag*      "number"             ; attribute tag holding the number
-  *xft-att-style*    "Attributes"         ; text style for the attribute
-  *xft-att-height*   4.0                  ; attribute height (as shown on the sample)
-  *xft-att-offset*   '(0.8697246 -3.5316825) ; attribute offset from the point
-  *xft-name-reach*   6.0                  ; name search radius = this x text height
-  *xft-fuzz*         1e-4                 ; tolerance for "same point"
-  *xft-purge-text*   t                    ; erase every TEXT/MTEXT left in the
-                                          ; selection once the points are done
-)
+;; --- what happens to the whole selection ---------------------------
 
-;; The site-trace flavour.  Same feet, same block out the other end, but
-;; the marker is a small CIRCLE instead of an X and it appears on three
-;; purpose layers rather than one - POOL_POINTS for the pool corners,
-;; BREAK_LINES for the shallow/deep breaks, CROSS_MEASUREMENTS for the
-;; ends of the diagonals.  A corner is therefore drawn twice, once per
-;; layer; xft:collect groups by location, so the two circles become the
-;; one block.
-;;
-;; The name text sits ON the centre rather than above it, which is why
-;; the reach here is a fraction of a text height where the Leica one is
-;; six of them: it only has to forgive an exporter that nudges the label,
-;; and a tight reach is what keeps a break line's own caption ("Deep
-;; End") from being read as a point number.
-;;
-;; The purge stays OFF for this flavour, too.  Its text is not all point
-;; names - the break lines and the diagonals are captioned - so erasing
-;; every leftover TEXT would take the survey's annotation with it.  The
-;; name text a point actually used is erased either way, in the swap.
-;;
-;; And the letter stays on the name.  Leica calls every point "P<n>", so
-;; the P is noise and "P22" -> "22" loses nothing.  The trace's letter is
-;; the point's family - C for a pool corner, S for a shallow-end break, D
-;; for a deep-end one - and the numbers restart per family.  Strip it and
-;; C1, S1 and D1 all become "1": three different points wearing one
-;; number, in the attribute every downstream tool labels them from.
-(setq
-  *xft-dot-layer*        "POOL_POINTS,BREAK_LINES,CROSS_MEASUREMENTS"
-                                          ; layers the circle markers sit on
-  *xft-dot-name-layer*   "TEXT"           ; layer of the point name text
-  *xft-dot-reach*        1.0              ; name search radius = this x text height
-  *xft-dot-purge-text*   nil              ; captions are not noise - see above
-  *xft-dot-strip-prefix* nil              ; keep "C1"/"S1"/"D1" whole - see above
-)
+(setq *xft-scale* 12.0)
+;; Scale factor applied to EVERYTHING highlighted, about the middle of
+;; its bounding box, before any point is read.  12 is feet -> inches,
+;; which is how both exports arrive.  1.0 skips the SCALE step entirely
+;; (an import that is already in inches); any other factor is applied
+;; as given.  Every distance below that is NOT counted in text heights
+;; is measured AFTER this scale, in drawing units.
+
+;; --- the block every marker becomes ---------------------------------
+
+(setq *xft-block* "ab_pt")
+;; The block that replaces each marker: the template's point block, the
+;; one ABHD, POINTRENAMER and the rest of the build read.  If it is
+;; missing from the drawing (a bare DXF rather than the template),
+;; xft:ensure-block builds a copy - a POINT at the origin plus the
+;; attribute below - and says so.  That fallback definition is written
+;; to match the template and is not a setting.
+
+(setq *xft-block-layer* "POINTS")
+;; The layer the block is inserted on.  Created if missing; thawed,
+;; unlocked and switched on if it is there but unusable (STANDARDS 5),
+;; with a line saying so.  A LOCKED one is the exception: locks stop
+;; the run by name before anything is touched, because the swap has to
+;; erase as well as insert.
+
+(setq *xft-block-layer-color* 6)
+;; The colour *xft-block-layer* is CREATED with when the drawing has
+;; not got it.  An existing layer is never recoloured, so this only
+;; ever shows on a bare drawing.  6 is magenta - the pink the survey
+;; points show in, and the number SOCONV, VSCONV and DRONE create
+;; POINTS with, so the converters agree on a bare drawing.
+
+(setq *xft-att-tag* "number")
+;; The attribute tag inside the block that receives the point number.
+;; The template's ab_pt calls it "number", and every downstream tool
+;; that labels points reads that tag - change it only with them.
+
+(setq *xft-att-style* "Attributes")
+;; The text style the attribute is written in.  If the drawing has no
+;; style by this name the current TEXTSTYLE is used instead, quietly -
+;; a missing style must not stop a conversion.
+
+(setq *xft-att-height* 4.0)
+;; The attribute's text height, in drawing units AFTER the scale - 4.0
+;; is what the sample drawing shows.  It is written into each ATTRIB,
+;; so a fixed-height style does not change it.
+
+(setq *xft-att-offset* '(0.8697246 -3.5316825))
+;; Where the attribute sits relative to the point: (dx dy) in drawing
+;; units after the scale, as measured off the sample drawing - a little
+;; right of and below the marker, so the number never sits on the dot.
+
+;; --- the Leica XFT flavour ------------------------------------------
+;; An X of two crossing LINEs (or a plain POINT) on *xft-marker-layer*,
+;; with the name stacked above it as TEXT / MTEXT on *xft-name-layer*.
+
+(setq *xft-marker-layer* "LEICA_POINT")
+;; The layer the X markers sit on.  A wcmatch pattern - "*" and ","
+;; work - so "LEICA_POINT,LEICA_PT" would read two exports' worth.
+
+(setq *xft-name-layer* "LEICA_POINT_NAME")
+;; The layer the point-name text sits on.  Also a wcmatch pattern.  It
+;; is tested BEFORE the marker layer, so a name layer whose name also
+;; matches *xft-marker-layer* is still read as names, not markers.
+
+(setq *xft-name-reach* 6.0)
+;; How far from a marker its name may sit, counted in that name's own
+;; text heights (so the scale leaves it alone).  Leica stacks the name
+;; a deliberate distance above the X - about 2.5 heights up - and the
+;; layer already rules the rest of the drawing out, so six is generous
+;; without reaching the next point over.
+
+(setq *xft-strip-prefix* T)
+;; T takes the letter prefix off a Leica name: "P22" -> "22".  Leica
+;; calls every point "P<n>", so the P is noise and nothing is lost.
+;; nil puts the label in as it stands, MTEXT codes stripped and the
+;; ends trimmed.  The site trace has its own switch below, and for a
+;; reason given there, the opposite default.
+
+(setq *xft-purge-text* T)
+;; T erases every TEXT / MTEXT still in the selection once the swap is
+;; done: a Leica export writes nothing but point names, so what is left
+;; is import noise (including names that found no marker).  nil keeps
+;; it.  Highlight only the import, or turn this off, when the selection
+;; carries text you want.
+
+;; --- the site-trace flavour -----------------------------------------
+;; Same feet, same block out the other end, but the marker is a small
+;; CIRCLE instead of an X and it appears on three purpose layers rather
+;; than one - POOL_POINTS for the pool corners, BREAK_LINES for the
+;; shallow/deep breaks, CROSS_MEASUREMENTS for the ends of the
+;; diagonals.  A corner is therefore drawn twice, once per layer;
+;; xft:collect groups by location, so the two circles become one block.
+
+(setq *xft-dot-layer* "POOL_POINTS,BREAK_LINES,CROSS_MEASUREMENTS")
+;; The layers the circle markers sit on - a wcmatch comma list, so a
+;; trace that adds a fourth point layer is one more name here.
+
+(setq *xft-dot-name-layer* "TEXT")
+;; The layer the trace writes its point names on.  It is the general
+;; text layer, shared with the captions on its break lines and
+;; diagonals ("Deep End", "Diagonal 1") - the reach below is what
+;; tells the two apart, not the layer.
+
+(setq *xft-dot-reach* 1.0)
+;; How far from a circle its name may sit, in text heights.  The name
+;; sits ON the centre rather than above it, which is why this is one
+;; height where the Leica reach is six: it only has to forgive an
+;; exporter that nudges the label, and a tight reach is what keeps a
+;; break line's own caption from being read as a point number.  Widen
+;; it and "Deep End" - justified onto the middle of its break line, in
+;; the same column as both of its endpoints - becomes a point.
+
+(setq *xft-dot-strip-prefix* nil)
+;; nil keeps a trace name whole: "C1" stays "C1".  The letter is the
+;; point's family - C for a pool corner, S for a shallow-end break, D
+;; for a deep-end one - and the numbers restart per family, so
+;; stripping it would leave C1, S1 and D1 all reading "1": three points
+;; wearing one number in the attribute every downstream tool labels
+;; them from.  T strips it the way the Leica flavour does.
+
+(setq *xft-dot-purge-text* nil)
+;; nil leaves the trace's leftover text alone, because it is not all
+;; point names: the break lines and the diagonals are captioned, and a
+;; sweep would take the survey's annotation with the noise.  The name
+;; text a point actually used is erased either way, in the swap.  T
+;; sweeps, as the Leica flavour does.  A selection holding both
+;; flavours - which no real import does - is swept if EITHER switch
+;; is on, because the Leica half's noise is the reason to sweep.
+
+;; --- matching tolerances, both flavours -----------------------------
+
+(setq *xft-column-tol* 0.5)
+;; Both exports put the name in the marker's column - Leica stacks it
+;; above, the trace lands it on the centre - so a name whose X is
+;; within this many of its own text heights of the marker's X wins
+;; over a name that is merely nearer.  That is what keeps a tight
+;; cluster of points from stealing each other's tags.  Failing a
+;; same-column name, nearest-within-reach wins; a name is used once.
+
+(setq *xft-fuzz* 1e-4)
+;; How close two marker centres have to be, in drawing units after the
+;; scale, to count as the same point.  The two LINEs of an X share an
+;; exact midpoint and a corner's two circles an exact centre, so this
+;; only has to absorb floating-point noise; widen it only if an export
+;; starts landing its duplicate markers a measurable distance apart.
 
 (vl-load-com)   ; getboundingbox, for the middle of the selection
 
@@ -73527,9 +73694,10 @@
 ;;
 ;; Both exports put the name in the marker's column - the Leica one
 ;; stacks it above, the site trace lands it on the centre - so a name in
-;; the same column wins over a merely closer one.  That is what keeps a
-;; tight cluster of points from stealing each other's tags.  Failing
-;; that, nearest-within-reach wins, and a name is used once.
+;; the same column (its X within *xft-column-tol* text heights of the
+;; marker's) wins over a merely closer one.  That is what keeps a tight
+;; cluster of points from stealing each other's tags.  Failing that,
+;; nearest-within-reach wins, and a name is used once.
 ;;
 ;; STRIP says whether the name's letter prefix comes off ("P22" -> "22")
 ;; or the whole label goes in as it stands; either way MTEXT formatting
@@ -73548,10 +73716,13 @@
     (foreach nm names
       (if (not (nth 4 nm))
         (progn
+          ;; a text with no height (or 0) still needs a reach: one unit
           (setq txth (if (and (nth 2 nm) (> (nth 2 nm) 0.0)) (nth 2 nm) 1.0)
                 lim  (* reach txth)
                 d    (cal:d2 ctr (car nm))
-                rank (if (<= (abs (- (car (car nm)) (car ctr))) (* 0.5 txth)) 0 1))
+                rank (if (<= (abs (- (car (car nm)) (car ctr)))
+                             (* *xft-column-tol* txth))
+                       0 1))
           (if (and (< d (* lim lim))
                    (or (not best)
                        (< rank bestr)
@@ -73667,14 +73838,16 @@
           (setvar "CMDECHO" 0)
           (setvar "OSMODE" 0)
           ;; only when undo is recording - _Begin in a drawing with UNDO
-          ;; off (bit 1 of UNDOCTL clear) errors out of the command
+          ;; off (bit 1 of UNDOCTL clear) errors out of the command, and
+          ;; so does the _End at the bottom, which is why both sit
+          ;; behind the undone flag (the handler's close always did)
           (if (= 1 (logand 1 (getvar "UNDOCTL")))
             (progn
               (command "_.UNDO" "_Begin")
               (setq undone t)))
 
           ;; ---- 0. the layer and the block have to be there --------
-          (cal:ensure-layer *xft-block-layer* 6)
+          (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
           (xft:ensure-block)
 
           ;; ---- 1. scale x12 about the middle of what was picked ---
@@ -73737,7 +73910,8 @@
           )
 
           ;; ---- 3/4. name each marker, block in, marker out -------
-          (setq r      (xft:swap markers names *xft-name-reach* T)
+          (setq r      (xft:swap markers names *xft-name-reach*
+                                 *xft-strip-prefix*)
                 nmade  (car r)
                 nblank (cadr r))
           (setq r      (xft:swap dots dotnames *xft-dot-reach*
@@ -73775,7 +73949,7 @@
             )
           )
 
-          (command "_.UNDO" "_End")
+          (if undone (command "_.UNDO" "_End"))
           (setq undone nil)
           (xft:restore)
 
@@ -73805,7 +73979,7 @@
 ;;; -------------------------------------------------------------------
 
 (defun c:XFTCONV-SETUP ()
-  (cal:ensure-layer *xft-block-layer* 6)
+  (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
   (xft:ensure-block)
   (princ (strcat "\nLayer \"" *xft-block-layer* "\" and block \"" *xft-block* "\" are ready."))
   (princ)
@@ -82520,7 +82694,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.5 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.6 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 
