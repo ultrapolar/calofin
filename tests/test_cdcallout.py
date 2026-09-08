@@ -11,28 +11,21 @@ tie and re-asks FROM; None at the FROM prompt ends the command.
 Typed 'b'/'undo' answers
 exercise the shared Back convention.  The "_X" point sweep takes no
 scripted answer: ssget "_X" reads the drawing and never prompts, so the
-points the scenario builds with ab_pt are what it finds.
+points the scenario builds with ab_pt are what it finds.  A callable
+in the script is called at its prompt -- that is how a scenario presses
+Esc.
 Run: python3 tests/test_cdcallout.py
+     CALOFIN_LISP_ROOT=shared python3 tests/test_cdcallout.py
 """
 
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, LispError, Ent, Dot, Sym, BUILTINS, NIL  # noqa: E402
+from lispvm import VM, LispError, Ent, Dot  # noqa: E402
 
 LSP = os.path.join(os.path.dirname(__file__), '..',
                    'lisp', 'cdcallout', 'CDCALLOUT.lsp')
-
-
-def _distof(vm, a):
-    try:
-        return float(a[0])
-    except (TypeError, ValueError):
-        return NIL
-
-
-BUILTINS[Sym('distof')] = _distof
 
 
 def newvm(styles=("CROSS DIMENSIONS",)):
@@ -45,16 +38,17 @@ def newvm(styles=("CROSS DIMENSIONS",)):
     return vm
 
 
-def ab_pt(vm, x, y, number, layer='POINTS'):
-    """An ab_pt INSERT followed by its number ATTRIB, as in a drawing."""
+def ab_pt(vm, x, y, number, layer='POINTS', block='ab_pt', tag='number'):
+    """A point-block INSERT followed by its number ATTRIB, as in a
+    drawing.  number None = a block carrying no attribute at all."""
     e = Ent()
     vm.entities.append(e)
-    vm.entdata[e] = [Dot(0, 'INSERT'), Dot(8, layer), Dot(2, 'ab_pt'),
+    vm.entdata[e] = [Dot(0, 'INSERT'), Dot(8, layer), Dot(2, block),
                      [10, float(x), float(y), 0.0]]
     if number is not None:
         att = Ent()
         vm.entities.append(att)
-        vm.entdata[att] = [Dot(0, 'ATTRIB'), Dot(2, 'number'),
+        vm.entdata[att] = [Dot(0, 'ATTRIB'), Dot(2, tag),
                            Dot(1, str(number))]
     return e
 
@@ -81,6 +75,20 @@ def dims(vm):
         if d.get(0) == 'DIMENSION':
             out.append(d)
     return out
+
+
+def undo_calls(vm):
+    return [c[1] for c in vm.commands if c and c[0] == '_.UNDO']
+
+
+def layer_rec(vm, name):
+    return {g.a: g.b for g in vm.recdata[vm.tablerecs['LAYER'][name.upper()]]
+            if isinstance(g, Dot)}
+
+
+def esc(vm):
+    """The drafter presses Esc at this prompt."""
+    raise LispError('Function cancelled', vm)
 
 
 def dim_ents(vm):
@@ -288,6 +296,119 @@ def test_no_local_shadows_a_function():
     print("ok  no shadow    -> no local hides a function the file calls")
 
 
+def test_esc_restores_state_and_closes_group():
+    """Esc at the FROM prompt with one dimension drawn: the handler puts
+    DIMSTYLE, CLAYER, OSMODE and CMDECHO back, closes the undo group it
+    opened (the dim stays -- one U takes it), and says nothing about an
+    error.  No other suite reaches this handler: on an empty drawing
+    the command stops before its first prompt."""
+    vm = newvm()
+    vm.handle_errors = True
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
+    run(vm, ['1', '2', esc], 'Esc at FROM')
+    assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+    assert vm.sysvars['DIMSTYLE'] == 'STANDARD'
+    assert vm.sysvars['CLAYER'] == '0'
+    assert vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1
+    assert undo_calls(vm) == ['_Begin', '_End'], vm.commands
+    assert not any('error' in p.lower() for p in vm.printed), vm.printed
+    assert len(dims(vm)) == 1
+    print("ok  Esc at FROM  -> state restored, group closed, no error text")
+
+
+def test_undo_off():
+    """UNDOCTL with bit 1 clear: no group is opened -- and, the half
+    v1.8 got wrong, none is closed either.  An _End with no group open
+    is an error in the VM, as the stray UNDO prompt is in AutoCAD."""
+    vm = newvm()
+    vm.sysvars['UNDOCTL'] = 0
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
+    run(vm, ['1', '2', None], 'undo off')
+    assert undo_calls(vm) == [], vm.commands
+    assert len(dims(vm)) == 1
+    assert vm.sysvars['CLAYER'] == '0' and vm.sysvars['DIMSTYLE'] == 'STANDARD'
+    print("ok  undo off     -> no _.UNDO at all, the dim still drawn")
+
+
+def test_undo_group_wraps_the_run():
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
+    run(vm, ['1', '2', None], 'undo group')
+    assert undo_calls(vm) == ['_Begin', '_End'], vm.commands
+    print("ok  undo group   -> one _Begin before the dims, one _End after")
+
+
+def test_duplicate_number_first_wins():
+    """A drawing carrying the same number twice: the first block found
+    is the one dimensioned to, every time -- never a coin toss."""
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7), ab_pt(vm, 100, 0, 8)]
+    run(vm, ['7', '8', None], 'duplicate')
+    ds = dims(vm)
+    assert len(ds) == 1 and ds[0][13] == [0.0, 0.0, 0.0], ds
+    print("ok  duplicate    -> the first Pt.7 in the drawing is the one used")
+
+
+def test_layer_repaired_and_coloured():
+    """DIMENSION frozen, locked and off is thawed, unlocked and switched
+    on before the dim is drawn; a missing DIMENSION is created in
+    cdo:*layer-color*, 7 by default."""
+    vm = newvm()
+    vm.loads('(entmake (list \'(0 . "LAYER") \'(100 . "AcDbSymbolTableRecord")'
+             ' \'(100 . "AcDbLayerTableRecord") \'(2 . "DIMENSION")'
+             ' \'(70 . 5) \'(62 . -7) \'(6 . "Continuous")))')
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
+    run(vm, ['1', '2', None], 'repair')
+    rec = layer_rec(vm, 'DIMENSION')
+    assert rec[70] == 0 and rec[62] == 7, rec
+    assert dims(vm)[0][8] == 'DIMENSION'
+    assert any('was off, frozen or locked' in p for p in vm.printed), \
+        vm.printed
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
+    run(vm, ['1', '2', None], 'default colour')
+    assert layer_rec(vm, 'DIMENSION')[62] == 7, layer_rec(vm, 'DIMENSION')
+    vm = newvm()
+    vm.loads('(setq cdo:*layer-color* 3)')
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)]
+    run(vm, ['1', '2', None], 'colour knob')
+    assert layer_rec(vm, 'DIMENSION')[62] == 3, layer_rec(vm, 'DIMENSION')
+    print("ok  layer        -> DIMENSION repaired when unusable, created in"
+          " the knob's colour")
+
+
+def test_point_classifier():
+    """What counts as a survey point is the cdo:*point-block* /
+    cdo:*point-layer* / cdo:*pt-tag* trio: an ab_pt INSERT anywhere,
+    any INSERT on POINTS, a block with no number tag lending its first
+    numeric attribute -- and a block that is neither is no point, so
+    its number names nothing."""
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 1, layer='SURVEY'),               # ab_pt elsewhere
+           ab_pt(vm, 100, 0, 2, block='MON'),                 # other block, POINTS
+           ab_pt(vm, 100, 100, 3, block='MON', tag='PNT'),    # numeric fallback
+           ab_pt(vm, 0, 100, 4, layer='OTHER', block='MON')]  # not a point
+    run(vm, ['1', '2', '2', '3', '3', '4', None, None], 'classifier')
+    ds = dims(vm)
+    assert len(ds) == 2, ds                        # 3 -> 4 named nothing
+    assert ds[1][13] == [100.0, 0.0, 0.0] and ds[1][14] == [100.0, 100.0, 0.0]
+    assert any('No point numbered "4"' in p for p in vm.printed), vm.printed
+    print("ok  classifier   -> ab_pt anywhere, any INSERT on POINTS, numeric"
+          " fallback tag; a stray block is not a point")
+
+
+def test_same_spot_tolerance():
+    """Two points within cdo:*exact-eps* of each other sit on the same
+    spot: the tie is refused, TO is re-asked, nothing is drawn."""
+    vm = newvm()
+    pts = [ab_pt(vm, 0, 0, 1), ab_pt(vm, 0.0005, 0, 2), ab_pt(vm, 100, 0, 3)]
+    run(vm, ['1', '2', '3', None], 'same spot')
+    ds = dims(vm)
+    assert len(ds) == 1 and ds[0][14] == [100.0, 0.0, 0.0], ds
+    assert any('sit on the same spot' in p for p in vm.printed), vm.printed
+    print("ok  same spot    -> a tie shorter than cdo:*exact-eps* is refused")
+
+
 if __name__ == '__main__':
     test_one_dim()
     test_rinse_repeat()
@@ -301,5 +422,12 @@ if __name__ == '__main__':
     test_back_reasks_previous_prompt()
     test_no_points()
     test_no_carry_over_between_runs()
+    test_esc_restores_state_and_closes_group()
+    test_undo_off()
+    test_undo_group_wraps_the_run()
+    test_duplicate_number_first_wins()
+    test_layer_repaired_and_coloured()
+    test_point_classifier()
+    test_same_spot_tolerance()
     test_no_local_shadows_a_function()
     print("all CDCALLOUT tests passed")

@@ -31,9 +31,12 @@
 ;;; Point numbers are typed the way they read in the drawing: "35",
 ;;; "Pt.35", "pt 35", "#35" and "035" all name the same point -- the
 ;;; number is matched against the "number" attribute on the survey
-;;; point blocks (the same classifier BPCALLOUT and LHD use: an
-;;; "ab_pt" INSERT on any layer, any other INSERT on the POINTS
-;;; layer, or a plain POINT on the POINTS layer).
+;;; point blocks: an "ab_pt" INSERT on any layer, or any other INSERT
+;;; on the POINTS layer.  That is BPCALLOUT's and LHD's classifier
+;;; minus its third kind -- a plain POINT carries no attribute, so it
+;;; has no number to be asked for by, and this tool only ever names
+;;; points.  A block whose number cannot be read is left out for the
+;;; same reason.
 ;;;
 ;;; A number that names no point in the drawing is reported and the
 ;;; prompt re-asks -- nothing is drawn from a typo.  The whole run is
@@ -49,28 +52,60 @@
 ;;; drawing started from the wrong template is obvious instead of
 ;;; silently producing wrong-looking dims (CDCREATE's rule, kept).
 ;;;
+;;; Every knob - style, layer and its colour, the dimension-line
+;;; offset, the same-spot tolerance, what counts as a survey point - is
+;;; in the configuration block right below, each with its explanation.
+;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *cdcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.8")   ; announced on load; release_lisp.py
+;; Every knob the routine has, in one place, so nothing below this
+;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;; it after loading from a startup file.  Distances are DRAWING UNITS.
+(setq *cdcallout-version* "v1.9")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
-(setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
-(setq cdo:*layer*       "DIMENSION")        ; layer the dims land on
+;; -- how the dimensions land (CDCREATE's and POOL's convention)
+(setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style the dims
+                                    ; are drawn in.  NOT invented when
+                                    ; the drawing lacks it: the dims
+                                    ; then take the current style and
+                                    ; the run says so, because a wrong
+                                    ; template should be obvious, not
+                                    ; papered over
+(setq cdo:*layer*       "DIMENSION") ; layer the dims land on, ByLayer
+                                    ; (colour, linetype and lineweight
+                                    ; overrides stripped).  Created when
+                                    ; the drawing lacks it; thawed,
+                                    ; unlocked and switched on when it
+                                    ; is there but unusable
+(setq cdo:*layer-color* 7)          ; ACI colour that layer is CREATED
+                                    ; with (7 = white/black).  A layer
+                                    ; already in the drawing keeps its
+                                    ; own
 (setq cdo:*offset*      0.0)        ; distance the dimension line is
-                                    ; pushed off the tie it measures,
-                                    ; drawing units (0.0 = right
-                                    ; inbetween, on the tie itself --
-                                    ; CDCREATE's convention)
-(setq *CDO-POINT-BLOCK* "ab_pt")    ; block name whose INSERTs mark
+                                    ; pushed off the tie it measures.
+                                    ; 0.0 = right inbetween, on the tie
+                                    ; itself (CDCREATE's convention);
+                                    ; positive = to the left of the
+                                    ; FROM->TO direction, negative = to
+                                    ; the right
+(setq cdo:*exact-eps*   0.001)      ; two survey points closer than
+                                    ; this sit on the same spot: the
+                                    ; tie is refused, nothing to measure
+;; -- what counts as a survey point.  The classifier is shared with
+;;    BPCALLOUT and LHD: change it in all three or the tools disagree
+(setq cdo:*point-block* "ab_pt")    ; block name whose INSERTs mark
                                     ; points wherever they sit
-(setq *CDO-POINT-LAYER* "POINTS")   ; layer whose POINTs/INSERTs are
-                                    ; always points
-(setq *CDO-PT-TAG*      "number")   ; attribute tag on the point block
-                                    ; naming the point, as in "Pt.17"
+(setq cdo:*point-layer* "POINTS")   ; layer whose INSERTs are always
+                                    ; points, whatever block they are
+(setq cdo:*pt-tag*      "number")   ; attribute tag on the point block
+                                    ; naming the point.  A block without
+                                    ; it lends its first attribute that
+                                    ; reads as a number instead
 
 ;; ---- point lookup --------------------------------------------------
 
@@ -88,11 +123,11 @@
               ed (entget en)
               p  (cdr (assoc 10 ed)))
         (if (or (= (strcase (cdr (assoc 2 ed)))
-                   (strcase *CDO-POINT-BLOCK*))
+                   (strcase cdo:*point-block*))
                 (= (strcase (cdr (assoc 8 ed)))
-                   (strcase *CDO-POINT-LAYER*)))
+                   (strcase cdo:*point-layer*)))
           (progn
-            (setq nm (cal:block-number en *CDO-PT-TAG*))
+            (setq nm (cal:block-number en cdo:*pt-tag*))
             (if (and nm (/= nm ""))
               (setq out (cons (cons (list (car p) (cadr p) 0.0) nm)
                               out)))))
@@ -179,7 +214,7 @@
 
 ;; make that layer current, creating or repairing it on the way
 (defun cdo:setlayer (name)
-  (setvar "CLAYER" (cdo:ensure-layer name 7)))
+  (setvar "CLAYER" (cdo:ensure-layer name cdo:*layer-color*)))
 
 ;; restore a dimension style by name when the drawing has it;
 ;; returns T when the style was set
@@ -315,7 +350,7 @@
              ((null (setq b (cdo:find-point s2 cands)))
               (princ (strcat "\n  No point numbered \"" s2
                              "\" in the drawing -- nothing drawn.")))
-             ((< (distance (car a) (car b)) 1e-9)
+             ((< (distance (car a) (car b)) cdo:*exact-eps*)
               (princ (strcat "\n  Pt." (cdr a) " and Pt." (cdr b)
                              " sit on the same spot -- nothing to"
                              " measure.")))
@@ -345,7 +380,7 @@
       (setvar "CLAYER"  ocl)
       (setvar "OSMODE"  oos)
       (setvar "CMDECHO" oce)
-      (command "_.UNDO" "_End")
+      (if grouped (command "_.UNDO" "_End"))
       (setq grouped nil)
 
       (princ (strcat "\nCDCALLOUT: " (itoa made) " cross dimension"

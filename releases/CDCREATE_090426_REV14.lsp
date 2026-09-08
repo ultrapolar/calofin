@@ -38,23 +38,11 @@
 ;;;    Command: CDCREATE
 ;;;    Command: CDCREATEVER      prints the version
 ;;;
-;;;  Tunables (setq them after loading if a drawing needs different
-;;;  names, e.g. in a startup file):
-;;;    cdc:*style*   dimension style to use   ("CROSS DIMENSIONS")
-;;;    cdc:*layer*   layer to create dims on  ("DIMENSION")
-;;;    cdc:*offset*  distance the dimension line is pushed off the
-;;;                  line it measures, drawing units (0.0 = on it)
-;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
-;;;    cdc:*skipdimmed*  T to leave a tie that is dimensioned already,
-;;;                  nil to dimension it again anyway
-;;;    cdc:*dupetol* how close two extension line origins have to be to
-;;;                  count as the same point; nil = a sixteenth of an
-;;;                  inch in the drawing's own units
-;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
-;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
-;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
-;;;                  before the text goes to its bottom end instead of
-;;;                  its right-hand one
+;;;  Tunables: every knob -- style, layer and its colour, the offset,
+;;;  the text-position rule, erase / skip-dimensioned / same-point
+;;;  tolerance -- sits in the configuration block right after this
+;;;  header, each with its explanation.  (setq ...) one after loading,
+;;;  in a startup file say, when a drawing needs different names.
 ;;;
 ;;;  Notes
 ;;;    * Only LINE entities are dimensioned.  Anything else in the
@@ -80,19 +68,70 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-(setq *cdcreate-version* "v1.3")   ; announced on load; release_lisp.py
+;; ---- configuration -------------------------------------------------
+;; Every knob the routine has, in one place, so nothing below this
+;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;; it after loading from a startup file.  Distances are DRAWING UNITS.
+(setq *cdcreate-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
-
-(setq cdc:*style*  "CROSS DIMENSIONS")
-(setq cdc:*layer*  "DIMENSION")
-(setq cdc:*offset* 0.0)
-(setq cdc:*erase*  t)
-(setq cdc:*textpos* 0.8)
-(setq cdc:*vertang* 15.0)
-(setq cdc:*skipdimmed* t)
-(setq cdc:*dupetol* nil)           ; nil = 1/16" in the drawing's units
-(setq cdc:*sysold*  nil)           ; sysvar snapshot, live only mid-run
+;; -- how the dimensions land (POOL's convention for its cross dims)
+(setq cdc:*style*  "CROSS DIMENSIONS") ; dimension style the dims are
+                                   ; drawn in.  NOT invented when the
+                                   ; drawing lacks it: the dims then
+                                   ; take the current style and the run
+                                   ; says so, because a wrong template
+                                   ; should be obvious, not papered over
+(setq cdc:*layer*  "DIMENSION")    ; layer the dims land on, ByLayer
+                                   ; (colour, linetype and lineweight
+                                   ; overrides stripped).  Created when
+                                   ; the drawing lacks it; thawed,
+                                   ; unlocked and switched on when it is
+                                   ; there but unusable
+(setq cdc:*layer-color* 7)         ; ACI colour that layer is CREATED
+                                   ; with (7 = white/black).  A layer
+                                   ; already in the drawing keeps its own
+(setq cdc:*offset* 0.0)            ; distance the dimension line is
+                                   ; pushed off the line it measures.
+                                   ; 0.0 = on the line itself; positive
+                                   ; = to the left of the line's own
+                                   ; start->end direction, negative = to
+                                   ; the right
+;; -- where the text sits
+(setq cdc:*textpos* 0.8)           ; position of the text along the
+                                   ; dimension line, as a fraction of
+                                   ; its length measured from the far
+                                   ; end toward the right-hand (or
+                                   ; bottom) end: 0.5 = centred, and no
+                                   ; text move at all; 1.0 = right at
+                                   ; that end; 0.8 = 80% of the way
+(setq cdc:*vertang* 15.0)          ; degrees off vertical within which
+                                   ; a line counts as standing up, so
+                                   ; its text goes to the BOTTOM end
+                                   ; rather than the right-hand one
+                                   ; (where "right-hand" would be a
+                                   ; coin toss).  0.0 = only a dead-
+                                   ; vertical line, 90.0 = every line
+;; -- what happens to the lines
+(setq cdc:*erase*  t)              ; T erases each line once its
+                                   ; dimension is drawn - the tie is the
+                                   ; dimension now; nil keeps them.  A
+                                   ; line that got no dimension is never
+                                   ; erased either way
+(setq cdc:*skipdimmed* t)          ; T leaves a line alone when some
+                                   ; dimension in model space already
+                                   ; runs between its two ends - either
+                                   ; way round, any style or layer; nil
+                                   ; dimensions it again anyway
+(setq cdc:*dupetol* nil)           ; how close two extension-line
+                                   ; origins have to be to count as the
+                                   ; same point, drawing units.  nil =
+                                   ; a sixteenth of an inch in the
+                                   ; drawing's own units (read off
+                                   ; INSUNITS, so 1.5875 in a mm drawing)
+;; -- run state, not a knob: cdc:syssave's snapshot of the sysvars the
+;;    run moves, live only mid-run and nil between runs.  Leave it be.
+(setq cdc:*sysold*  nil)
 
 ;;; -------------------- helpers ------------------------------------
 
@@ -376,7 +415,7 @@
             (progn
               (command "_.UNDO" "_Begin")
               (setq undo-open T)))
-          (setvar "CLAYER" (cdc:ensure-layer cdc:*layer* 7))
+          (setvar "CLAYER" (cdc:ensure-layer cdc:*layer* cdc:*layer-color*))
           (setq havestyle (cdc:setstyle cdc:*style*))
           (if (not havestyle)
             (princ (strcat "\n** This drawing has no \"" cdc:*style*
@@ -423,7 +462,7 @@
 
           ;; -- 5. put the drawing back the way it was
           (cdc:restyle odim)
-          (command "_.UNDO" "_End")
+          (if undo-open (command "_.UNDO" "_End"))
           (setq undo-open nil)
 
           (princ (strcat "\n" (itoa made) " cross dimension"

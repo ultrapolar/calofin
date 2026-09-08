@@ -36,9 +36,11 @@ end, in the **`CROSS DIMENSIONS`** dimension style, on the
    `nil` to keep them.
 
 The whole run is one undo group, so a single `U` puts the lines back and
-takes the dimensions away. The dimension style, current layer,
-`CMDECHO` and `OSMODE` in force before the command are restored
-afterwards, whether the run finishes, errors, or is cancelled with Esc.
+takes the dimensions away. (With UNDO switched off in the drawing no
+group is opened — or closed — and the run still works.) The dimension
+style, current layer, `CMDECHO` and `OSMODE` in force before the command
+are restored afterwards, whether the run finishes, errors, or is
+cancelled with Esc.
 
 ## Install & run
 
@@ -54,19 +56,36 @@ afterwards, whether the run finishes, errors, or is cancelled with Esc.
 
 ## Tunables
 
-`setq` these after loading (in a startup file, say) when a drawing needs
-different names:
+Every knob sits in the configuration block at the top of `CDCREATE.lsp`,
+each with its explanation beside it. Change a value there, or `setq` it
+after loading (in a startup file, say) when a drawing needs different
+names:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `cdc:*style*` | `"CROSS DIMENSIONS"` | Dimension style the new dims get |
-| `cdc:*layer*` | `"DIMENSION"` | Layer the new dims are created on |
+| `cdc:*style*` | `"CROSS DIMENSIONS"` | Dimension style the new dims get — never invented; a missing one is reported and the current style used |
+| `cdc:*layer*` | `"DIMENSION"` | Layer the new dims are created on — created when missing, thawed / unlocked / switched on when unusable |
+| `cdc:*layer-color*` | `7` | ACI colour a *created* `DIMENSION` layer gets; an existing layer keeps its own |
 | `cdc:*offset*` | `0.0` | How far the dimension line is pushed perpendicular to the line it measures, in drawing units. `0.0` puts it on the line |
 | `cdc:*erase*` | `T` | Erase each line once its dimension is drawn. `nil` keeps the lines |
 | `cdc:*skipdimmed*` | `T` | Leave a tie whose two points already carry a dimension. `nil` dimensions it again anyway |
 | `cdc:*dupetol*` | `nil` | How close two extension-line origins have to be to count as the same point. `nil` means a sixteenth of an inch in the drawing's own units (`INSUNITS`) |
 | `cdc:*textpos*` | `0.8` | Where the text sits along the dimension: `0.0` the far end, `0.5` centred (no text move at all), `1.0` the right/bottom end |
 | `cdc:*vertang*` | `15.0` | How near vertical, in degrees, a line has to stand before its text goes to the bottom end rather than the right-hand one |
+
+## Revisions
+
+`CDCREATE.lsp` carries the auto-stamped banner
+`(setq *cdcreate-version* "v1.4")` that `tools/release_lisp.py` reads;
+run it after any change and the dated twin
+`releases/CDCREATE_MMDDYY_REV14.lsp` regenerates itself. Bump the banner
+with every revision.
+
+* **v1.4** — every knob sits in one configuration block at the top of
+  the file, each with its explanation beside it (the header's tunables
+  list, which said less, is gone), and the layer colour joined them.
+  Fixed: with UNDO switched off in the drawing the run closed an undo
+  group it had never opened.
 
 ## Notes & limitations
 
@@ -119,6 +138,8 @@ drawing, a drawing with no `CROSS DIMENSIONS` style, a hostile
 `DIMLAYER`, a non-zero offset, ties drawn on `POOL` and `POINTS`,
 `cdc:*erase*` switched off, a frozen/locked/off `DIMENSION` layer,
 already-dimensioned ties (either way round, inside one run, across two
-runs, and at the edge of the tolerance), and the text-end rule on flat, steep, near-vertical and either-way-round
-lines. `CALOFIN_LISP_ROOT=shared python3 tests/test_cdcreate.py` runs
-the same suite against the grouped build.
+runs, and at the edge of the tolerance), the text-end rule on flat,
+steep, near-vertical and either-way-round lines, UNDO switched off, the
+layer-colour and stand-up-angle knobs, and Esc at the highlight prompt.
+`CALOFIN_LISP_ROOT=shared python3 tests/test_cdcreate.py` runs the same
+suite against the grouped build.
