@@ -34761,11 +34761,11 @@
 ;;;
 ;;; Click every point that is bad, one after another, as many as you
 ;;; like; press Enter when done.  Each click:
-;;;   * snaps to the nearest survey point within *BP-SNAP* of the pick
+;;;   * snaps to the nearest survey point within bp:*snap* of the pick
 ;;;     (an "ab_pt" INSERT on any layer, any other INSERT on the POINTS
 ;;;     layer, or a plain POINT on the POINTS layer - the same
 ;;;     classifier the rest of the toolset uses),
-;;;   * draws a *BP-RADIUS* circle on the *BP-LAYER* layer centered on
+;;;   * draws a bp:*radius* circle on the bp:*layer* layer centered on
 ;;;     that point, and
 ;;;   * reads what the point is called from the block's "number"
 ;;;     attribute, the name the drawing itself carries.
@@ -34795,74 +34795,80 @@
 ;;; configuration block right below, each with its explanation.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-;; Every knob the routine has, in one place, so nothing below this
-;; block needs touching to adapt it.  Change a value here, or (setq ...)
-;; it after loading from a startup file.  Distances are DRAWING UNITS -
-;; inches in this shop's architectural drawings.
+;;; -------------------- version ---------------------------------------
 (setq *bpcallout-version* "v1.8")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
+
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS -
+;;; inches in this shop's architectural drawings.
+
 ;; -- where the marks go
-(setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
+(setq bp:*layer* "FGStep")          ; layer the rings and the callout
                                     ; text land on - the same layer LHD
                                     ; puts its miss rings on.  Created
                                     ; when the drawing lacks it; thawed,
                                     ; unlocked and switched on when it
                                     ; is there but unusable
-(setq *BP-LAYER-COLOR* 1)           ; ACI colour that layer is CREATED
+(setq bp:*layer-color* 1)           ; ACI colour that layer is CREATED
                                     ; with (1 = red).  A layer already
                                     ; in the drawing keeps its own
+
 ;; -- the rings
-(setq *BP-RADIUS*      5.0)         ; ring RADIUS (5" = a 10" circle);
+(setq bp:*radius* 5.0)              ; ring RADIUS (5" = a 10" circle);
                                     ; halve it if a 5" DIAMETER is
                                     ; wanted.  Also how far an un-ring
                                     ; click reaches: a click inside a
                                     ; ring that has no survey point
                                     ; under it removes that ring
-(setq *BP-SNAP*        12.0)        ; a pick within this of a survey
+(setq bp:*snap* 12.0)               ; a pick within this of a survey
                                     ; point rings THAT point - the
                                     ; nearest one when several qualify;
                                     ; farther away, the pick itself is
-                                    ; ringed and named *BP-UNKNOWN*
-(setq *BP-EXACT-EPS*   0.001)       ; two ring centres this close are
+                                    ; ringed and named bp:*unknown*
+(setq bp:*exact-eps* 0.001)         ; two ring centres this close are
                                     ; the same spot, so a second click
                                     ; on a ringed survey point un-rings
                                     ; it rather than ringing it twice
+
 ;; -- the callout text
-(setq *BP-TEXT-HGT*    6.0)         ; TEXT height of the callout
-(setq *BP-TEXT-GAP*    10.0)        ; Enter at the text prompt tucks the
+(setq bp:*text-hgt* 6.0)            ; TEXT height of the callout
+(setq bp:*text-gap* 10.0)           ; Enter at the text prompt tucks the
                                     ; callout this far to the right of
                                     ; AND below the last ring's centre
-(setq *BP-PT-PREFIX*   "Pt.")       ; how a point is named, in the
+(setq bp:*pt-prefix* "Pt.")         ; how a point is named, in the
                                     ; callout and on the command line:
                                     ; the prefix + its number, "Pt.12"
-(setq *BP-TAIL-ONE*    " is bad")   ; what follows the name when ONE
+(setq bp:*tail-one* " is bad")      ; what follows the name when ONE
                                     ; point was ringed: "Pt.12 is bad"
-(setq *BP-TAIL-MANY*   " are bad")  ; ...and when two or more were:
+(setq bp:*tail-many* " are bad")    ; ...and when two or more were:
                                     ; "Pt.12, Pt.15 and Pt.20 are bad"
-(setq *BP-UNKNOWN*     "?")         ; the number given to a ring with
+(setq bp:*unknown* "?")             ; the number given to a ring with
                                     ; no readable survey point under
                                     ; it, so it still reads "Pt.? is
                                     ; bad" rather than vanishing
+
 ;; -- what counts as a survey point.  The classifier is shared with
 ;;    LHD and CDCALLOUT: change it in all three or the tools disagree
-(setq *BP-POINT-BLOCK* "ab_pt")     ; block name whose INSERTs mark
+(setq bp:*point-block* "ab_pt")     ; block name whose INSERTs mark
                                     ; points wherever they sit
-(setq *BP-POINT-LAYER* "POINTS")    ; layer whose POINTs and INSERTs
+(setq bp:*point-layer* "POINTS")    ; layer whose POINTs and INSERTs
                                     ; are always points, whatever block
-(setq *BP-PT-TAG*      "number")    ; attribute tag on the point block
+(setq bp:*pt-tag* "number")         ; attribute tag on the point block
                                     ; naming the point.  A block without
                                     ; it lends its first attribute that
                                     ; reads as a number instead
 
-;; ---- helpers -------------------------------------------------------
+;;; -------------------- helpers ----------------------------------------
 
 ;; Every survey point in the drawing, as ((x y) . name) pairs.  What
-;; counts as a point matches LHD's classifier: an *BP-POINT-BLOCK*
-;; INSERT anywhere, any other INSERT on the *BP-POINT-LAYER* layer,
+;; counts as a point matches LHD's classifier: an bp:*point-block*
+;; INSERT anywhere, any other INSERT on the bp:*point-layer* layer,
 ;; or a plain POINT on that layer.  A point with no readable number
-;; is carried as *BP-UNKNOWN* ("?") so it can still be ringed and
+;; is carried as bp:*unknown* ("?") so it can still be ringed and
 ;; reported.
 (defun bp:collect-points (/ ss i en ed typ p nm out)
   (setq out nil
@@ -34878,30 +34884,30 @@
         (cond
           ((= typ "INSERT")
            (if (or (= (strcase (cdr (assoc 2 ed)))
-                      (strcase *BP-POINT-BLOCK*))
+                      (strcase bp:*point-block*))
                    (= (strcase (cdr (assoc 8 ed)))
-                      (strcase *BP-POINT-LAYER*)))
+                      (strcase bp:*point-layer*)))
              (progn
-               (setq nm (cal:block-number en *BP-PT-TAG*))
+               (setq nm (cal:block-number en bp:*pt-tag*))
                (setq out (cons (cons (list (car p) (cadr p))
                                      (if (and nm (/= nm "")) nm
-                                       *BP-UNKNOWN*))
+                                       bp:*unknown*))
                                out)))))
           ((= typ "POINT")
            (if (= (strcase (cdr (assoc 8 ed)))
-                  (strcase *BP-POINT-LAYER*))
-             (setq out (cons (cons (list (car p) (cadr p)) *BP-UNKNOWN*)
+                  (strcase bp:*point-layer*))
+             (setq out (cons (cons (list (car p) (cadr p)) bp:*unknown*)
                              out)))))
         (setq i (1+ i)))))
   out)
 
-;; The survey point nearest to pick PK, when one sits within *BP-SNAP*
+;; The survey point nearest to pick PK, when one sits within bp:*snap*
 ;; of it; nil otherwise.  Returns the ((x y) . name) pair.
 (defun bp:nearest-point (pk cands / best bd c d)
   (setq best nil bd nil)
   (foreach c cands
     (setq d (cal:dist pk (car c)))
-    (if (and (<= d *BP-SNAP*) (or (null bd) (< d bd)))
+    (if (and (<= d bp:*snap*) (or (null bd) (< d bd)))
       (setq best c bd d)))
   best)
 
@@ -34917,13 +34923,13 @@
 (defun bp:ringed-at (pk ctr picked snapped / hit bd q d)
   (setq hit nil)
   (foreach q picked
-    (if (< (cal:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
+    (if (< (cal:dist ctr (car q)) bp:*exact-eps*) (setq hit q)))
   (if (and (null hit) (not snapped))
     (progn                              ; nearest ring the pick sits in
       (setq bd nil)
       (foreach q picked
         (setq d (cal:dist pk (car q)))
-        (if (and (<= d *BP-RADIUS*) (or (null bd) (< d bd)))
+        (if (and (<= d bp:*radius*) (or (null bd) (< d bd)))
           (setq hit q bd d)))))
   hit)
 
@@ -34935,36 +34941,36 @@
 ;; The callout sentence: "Pt.12 is bad", "Pt.12 and Pt.15 are bad",
 ;; "Pt.12, Pt.15 and Pt.20 are bad" - commas between all but the last
 ;; pair, "and" before the last, is/are by count.  The name prefix and
-;; the two sentence tails are the *BP-PT-PREFIX* / *BP-TAIL-* knobs.
+;; the two sentence tails are the bp:*pt-prefix* / bp:*tail-* knobs.
 (defun bp:phrase (names / n s i)
   (setq n (length names))
   (cond
     ((= n 0) "")
-    ((= n 1) (strcat *BP-PT-PREFIX* (car names) *BP-TAIL-ONE*))
+    ((= n 1) (strcat bp:*pt-prefix* (car names) bp:*tail-one*))
     (T
-     (setq s (strcat *BP-PT-PREFIX* (car names)) i 1)
+     (setq s (strcat bp:*pt-prefix* (car names)) i 1)
      (while (< i (1- n))
-       (setq s (strcat s ", " *BP-PT-PREFIX* (nth i names))
+       (setq s (strcat s ", " bp:*pt-prefix* (nth i names))
              i (1+ i)))
-     (strcat s " and " *BP-PT-PREFIX* (nth (1- n) names)
-             *BP-TAIL-MANY*))))
+     (strcat s " and " bp:*pt-prefix* (nth (1- n) names)
+             bp:*tail-many*))))
 
 ;; Ring one bad point.
 (defun bp:draw-ring (ctr)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbCircle")
+                  (cons 8 bp:*layer*) '(100 . "AcDbCircle")
                   (cons 10 (list (car ctr) (cadr ctr) 0.0))
-                  (cons 40 *BP-RADIUS*))))
+                  (cons 40 bp:*radius*))))
 
 ;; Write the callout text at P.
 (defun bp:draw-text (p str)
   (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbText")
+                  (cons 8 bp:*layer*) '(100 . "AcDbText")
                   (cons 10 (list (car p) (cadr p) 0.0))
-                  (cons 40 *BP-TEXT-HGT*)
+                  (cons 40 bp:*text-hgt*)
                   (cons 1 str))))
 
-;; ---- command -------------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
@@ -34991,7 +34997,7 @@
   (setq cands (bp:collect-points))
   (if cands
     (princ (strcat "\n" (itoa (length cands)) " survey point(s) found;"
-                   " a click within " (rtos *BP-SNAP* 4 0)
+                   " a click within " (rtos bp:*snap* 4 0)
                    " snaps to the nearest one."))
     (princ (strcat "\nNo survey points found in the drawing - clicks"
                    " will be ringed where picked and named \"?\".")))
@@ -35002,24 +35008,24 @@
     (setq hit (bp:nearest-point pk cands))
     (if hit
       (setq ctr (car hit) nm (cdr hit))
-      (setq ctr (list (car pk) (cadr pk)) nm *BP-UNKNOWN*))
+      (setq ctr (list (car pk) (cadr pk)) nm bp:*unknown*))
     (setq old (bp:ringed-at pk ctr picked hit))
     (if old
       (progn                            ; reselecting a point undoes it
         (if (and (caddr old) (entget (caddr old)))
           (entdel (caddr old)))
         (setq picked (bp:drop-entry (caddr old) picked))
-        (princ (strcat "\n  " *BP-PT-PREFIX* (cadr old)
+        (princ (strcat "\n  " bp:*pt-prefix* (cadr old)
                        " un-ringed.")))
       (progn
-        (cal:ensure-layer *BP-LAYER* *BP-LAYER-COLOR*)
+        (cal:ensure-layer bp:*layer* bp:*layer-color*)
         (setq picked (cons (list ctr nm (bp:draw-ring ctr)) picked))
         (if hit
-          (princ (strcat "\n  " *BP-PT-PREFIX* nm " ringed."))
+          (princ (strcat "\n  " bp:*pt-prefix* nm " ringed."))
           (princ (strcat "\n  No survey point within "
-                         (rtos *BP-SNAP* 4 0)
+                         (rtos bp:*snap* 4 0)
                          " of the pick - ringed where clicked, as "
-                         *BP-PT-PREFIX* *BP-UNKNOWN* "."))))))
+                         bp:*pt-prefix* bp:*unknown* "."))))))
 
   (if (null picked)
     (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
@@ -35031,11 +35037,11 @@
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"
                                     " the last ring>: ")))
       (if (null txtpt)                          ; Enter: tuck it beside
-        (setq txtpt (list (+ (car lastpt) *BP-TEXT-GAP*)
-                          (- (cadr lastpt) *BP-TEXT-GAP*))))
+        (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
+                          (- (cadr lastpt) bp:*text-gap*))))
       (bp:draw-text txtpt phrase)
       (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
-                     " point(s) ringed on layer " *BP-LAYER*
+                     " point(s) ringed on layer " bp:*layer*
                      ";  \"" phrase "\""))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
@@ -35728,22 +35734,24 @@
 ;;; this file into releases/.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-;; Every knob the routine has, in one place, so nothing below this
-;; block needs touching to adapt it.  Change a value here, or (setq ...)
-;; it after loading from a startup file.  Distances are DRAWING UNITS.
+;;; -------------------- version ---------------------------------------
 (setq *cdcallout-version* "v1.9")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
+
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
 ;; -- how the dimensions land (CDCREATE's and POOL's convention)
-(setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style the dims
-                                    ; are drawn in.  NOT invented when
-                                    ; the drawing lacks it: the dims
-                                    ; then take the current style and
-                                    ; the run says so, because a wrong
-                                    ; template should be obvious, not
-                                    ; papered over
-(setq cdo:*layer*       "DIMENSION") ; layer the dims land on, ByLayer
+(setq cdo:*style* "CROSS DIMENSIONS") ; dimension style the dims are
+                                    ; drawn in.  NOT invented when the
+                                    ; drawing lacks it: the dims then
+                                    ; take the current style and the run
+                                    ; says so, because a wrong template
+                                    ; should be obvious, not papered over
+(setq cdo:*layer* "DIMENSION")      ; layer the dims land on, ByLayer
                                     ; (colour, linetype and lineweight
                                     ; overrides stripped).  Created when
                                     ; the drawing lacks it; thawed,
@@ -35753,28 +35761,29 @@
                                     ; with (7 = white/black).  A layer
                                     ; already in the drawing keeps its
                                     ; own
-(setq cdo:*offset*      0.0)        ; distance the dimension line is
+(setq cdo:*offset* 0.0)             ; distance the dimension line is
                                     ; pushed off the tie it measures.
                                     ; 0.0 = right inbetween, on the tie
                                     ; itself (CDCREATE's convention);
                                     ; positive = to the left of the
                                     ; FROM->TO direction, negative = to
                                     ; the right
-(setq cdo:*exact-eps*   0.001)      ; two survey points closer than
+(setq cdo:*exact-eps* 0.001)        ; two survey points closer than
                                     ; this sit on the same spot: the
                                     ; tie is refused, nothing to measure
+
 ;; -- what counts as a survey point.  The classifier is shared with
 ;;    BPCALLOUT and LHD: change it in all three or the tools disagree
 (setq cdo:*point-block* "ab_pt")    ; block name whose INSERTs mark
                                     ; points wherever they sit
 (setq cdo:*point-layer* "POINTS")   ; layer whose INSERTs are always
                                     ; points, whatever block they are
-(setq cdo:*pt-tag*      "number")   ; attribute tag on the point block
+(setq cdo:*pt-tag* "number")        ; attribute tag on the point block
                                     ; naming the point.  A block without
                                     ; it lends its first attribute that
                                     ; reads as a number instead
 
-;; ---- point lookup --------------------------------------------------
+;;; -------------------- point lookup ------------------------------------
 
 ;; Every NAMED survey point in the drawing, as ((x y z) . name) pairs.
 ;; What counts as a point matches BPCALLOUT/LHD; a point whose number
@@ -35831,7 +35840,7 @@
       (setq found c)))
   found)
 
-;; ---- dimension helpers (CDCREATE's conventions, kept) --------------
+;;; -------------------- dimension helpers (CDCREATE's, kept) ------------
 
 ;; midpoint of p1->p2, pushed perpendicular to the tie by dist
 ;; (dist 0.0 puts the dimension line straight inbetween, on the tie)
@@ -35913,7 +35922,7 @@
       (entupd en)
       t)))
 
-;; ---- the command ---------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call (the BPCALLOUT v1.0 lesson).
@@ -36148,21 +36157,24 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-;; Every knob the routine has, in one place, so nothing below this
-;; block needs touching to adapt it.  Change a value here, or (setq ...)
-;; it after loading from a startup file.  Distances are DRAWING UNITS.
+;;; -------------------- version ---------------------------------------
 (setq *cdcreate-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
+
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
 ;; -- how the dimensions land (POOL's convention for its cross dims)
-(setq cdc:*style*  "CROSS DIMENSIONS") ; dimension style the dims are
+(setq cdc:*style* "CROSS DIMENSIONS") ; dimension style the dims are
                                    ; drawn in.  NOT invented when the
                                    ; drawing lacks it: the dims then
                                    ; take the current style and the run
                                    ; says so, because a wrong template
                                    ; should be obvious, not papered over
-(setq cdc:*layer*  "DIMENSION")    ; layer the dims land on, ByLayer
+(setq cdc:*layer* "DIMENSION")     ; layer the dims land on, ByLayer
                                    ; (colour, linetype and lineweight
                                    ; overrides stripped).  Created when
                                    ; the drawing lacks it; thawed,
@@ -36177,6 +36189,7 @@
                                    ; = to the left of the line's own
                                    ; start->end direction, negative = to
                                    ; the right
+
 ;; -- where the text sits
 (setq cdc:*textpos* 0.8)           ; position of the text along the
                                    ; dimension line, as a fraction of
@@ -36192,13 +36205,14 @@
                                    ; (where "right-hand" would be a
                                    ; coin toss).  0.0 = only a dead-
                                    ; vertical line, 90.0 = every line
+
 ;; -- what happens to the lines
-(setq cdc:*erase*  t)              ; T erases each line once its
+(setq cdc:*erase* T)               ; T erases each line once its
                                    ; dimension is drawn - the tie is the
                                    ; dimension now; nil keeps them.  A
                                    ; line that got no dimension is never
                                    ; erased either way
-(setq cdc:*skipdimmed* t)          ; T leaves a line alone when some
+(setq cdc:*skipdimmed* T)          ; T leaves a line alone when some
                                    ; dimension in model space already
                                    ; runs between its two ends - either
                                    ; way round, any style or layer; nil
@@ -36209,6 +36223,11 @@
                                    ; a sixteenth of an inch in the
                                    ; drawing's own units (read off
                                    ; INSUNITS, so 1.5875 in a mm drawing)
+
+;;; -------------------- run state ---------------------------------------
+;;; Not a knob, and outside the block above on purpose: cdc:syssave
+;;; writes its snapshot of the sysvars the run moves here, and
+;;; cdc:sysrestore empties it again, so it is live only mid-run.
 
 ;;; -------------------- helpers ------------------------------------
 

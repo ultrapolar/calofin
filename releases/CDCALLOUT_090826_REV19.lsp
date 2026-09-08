@@ -58,22 +58,24 @@
 ;;; this file into releases/.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-;; Every knob the routine has, in one place, so nothing below this
-;; block needs touching to adapt it.  Change a value here, or (setq ...)
-;; it after loading from a startup file.  Distances are DRAWING UNITS.
+;;; -------------------- version ---------------------------------------
 (setq *cdcallout-version* "v1.9")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
+
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
 ;; -- how the dimensions land (CDCREATE's and POOL's convention)
-(setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style the dims
-                                    ; are drawn in.  NOT invented when
-                                    ; the drawing lacks it: the dims
-                                    ; then take the current style and
-                                    ; the run says so, because a wrong
-                                    ; template should be obvious, not
-                                    ; papered over
-(setq cdo:*layer*       "DIMENSION") ; layer the dims land on, ByLayer
+(setq cdo:*style* "CROSS DIMENSIONS") ; dimension style the dims are
+                                    ; drawn in.  NOT invented when the
+                                    ; drawing lacks it: the dims then
+                                    ; take the current style and the run
+                                    ; says so, because a wrong template
+                                    ; should be obvious, not papered over
+(setq cdo:*layer* "DIMENSION")      ; layer the dims land on, ByLayer
                                     ; (colour, linetype and lineweight
                                     ; overrides stripped).  Created when
                                     ; the drawing lacks it; thawed,
@@ -83,28 +85,29 @@
                                     ; with (7 = white/black).  A layer
                                     ; already in the drawing keeps its
                                     ; own
-(setq cdo:*offset*      0.0)        ; distance the dimension line is
+(setq cdo:*offset* 0.0)             ; distance the dimension line is
                                     ; pushed off the tie it measures.
                                     ; 0.0 = right inbetween, on the tie
                                     ; itself (CDCREATE's convention);
                                     ; positive = to the left of the
                                     ; FROM->TO direction, negative = to
                                     ; the right
-(setq cdo:*exact-eps*   0.001)      ; two survey points closer than
+(setq cdo:*exact-eps* 0.001)        ; two survey points closer than
                                     ; this sit on the same spot: the
                                     ; tie is refused, nothing to measure
+
 ;; -- what counts as a survey point.  The classifier is shared with
 ;;    BPCALLOUT and LHD: change it in all three or the tools disagree
 (setq cdo:*point-block* "ab_pt")    ; block name whose INSERTs mark
                                     ; points wherever they sit
 (setq cdo:*point-layer* "POINTS")   ; layer whose INSERTs are always
                                     ; points, whatever block they are
-(setq cdo:*pt-tag*      "number")   ; attribute tag on the point block
+(setq cdo:*pt-tag* "number")        ; attribute tag on the point block
                                     ; naming the point.  A block without
                                     ; it lends its first attribute that
                                     ; reads as a number instead
 
-;; ---- point lookup --------------------------------------------------
+;;; -------------------- point lookup ------------------------------------
 
 ;; The name carried by a point block, read from its cdo:*pt-tag*
 ;; attribute; when the block has no such attribute, the first
@@ -186,7 +189,7 @@
       (setq found c)))
   found)
 
-;; ---- dimension helpers (CDCREATE's conventions, kept) --------------
+;;; -------------------- dimension helpers (CDCREATE's, kept) ------------
 
 ;; midpoint of p1->p2, pushed perpendicular to the tie by dist
 ;; (dist 0.0 puts the dimension line straight inbetween, on the tie)
@@ -268,7 +271,7 @@
       (entupd en)
       t)))
 
-;; ---- the command ---------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call (the BPCALLOUT v1.0 lesson).

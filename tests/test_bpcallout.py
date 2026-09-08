@@ -266,9 +266,9 @@ def test_knobs_reach_the_output():
     them after loading: the wording, the unknown label, the text gap
     and height, the ring radius."""
     vm = newvm()
-    vm.loads('(setq *BP-PT-PREFIX* "Point " *BP-TAIL-ONE* " is off"'
-             ' *BP-TAIL-MANY* " are off" *BP-UNKNOWN* "??"'
-             ' *BP-TEXT-GAP* 3.0 *BP-RADIUS* 2.5 *BP-TEXT-HGT* 4.0)')
+    vm.loads('(setq bp:*pt-prefix* "Point " bp:*tail-one* " is off"'
+             ' bp:*tail-many* " are off" bp:*unknown* "??"'
+             ' bp:*text-gap* 3.0 bp:*radius* 2.5 bp:*text-hgt* 4.0)')
     ab_pt(vm, 0, 0, 12)
     run(vm, [(0.0, 0.0), (50.0, 0.0), None, None], 'knobs')
     circles = made(vm, 'CIRCLE')
@@ -283,7 +283,7 @@ def test_knobs_reach_the_output():
 def test_layer_repaired_and_coloured():
     """FGStep frozen, locked and off is thawed, unlocked and switched on
     before the first ring, and the run says so; a missing FGStep is
-    created in *BP-LAYER-COLOR*."""
+    created in bp:*layer-color*."""
     vm = newvm()
     vm.loads('(entmake (list \'(0 . "LAYER") \'(100 . "AcDbSymbolTableRecord")'
              ' \'(100 . "AcDbLayerTableRecord") \'(2 . "FGStep")'
@@ -301,7 +301,7 @@ def test_layer_repaired_and_coloured():
     run(vm, [(0.0, 0.0), None, None], 'default colour')
     assert layer_rec(vm, 'FGStep')[62] == 1, layer_rec(vm, 'FGStep')
     vm = newvm()
-    vm.loads('(setq *BP-LAYER-COLOR* 4)')
+    vm.loads('(setq bp:*layer-color* 4)')
     ab_pt(vm, 0, 0, 1)
     run(vm, [(0.0, 0.0), None, None], 'colour knob')
     assert layer_rec(vm, 'FGStep')[62] == 4, layer_rec(vm, 'FGStep')

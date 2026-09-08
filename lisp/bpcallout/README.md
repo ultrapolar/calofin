@@ -88,32 +88,34 @@ banner with every revision.
   line.
 * **v1.0** — first release.
 
-## Assumptions / configuration
+## Tunables
 
 Drawing units are assumed to be **inches** (architectural). Every knob
-sits in the configuration block at the top of `BPCALLOUT.lsp`, each
-with its explanation beside it; change a value there, or `setq` it
-after loading from a startup file:
+sits in the tunables block at the top of `BPCALLOUT.lsp`, each with its
+explanation beside it; change a value there, or `setq` it after loading
+from a startup file:
 
-| Knob | Default | Meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
-| `*BP-LAYER*` | `"FGStep"` | Layer the rings and the callout land on — created when missing, thawed / unlocked / switched on when unusable |
-| `*BP-LAYER-COLOR*` | `1` | ACI colour a *created* `FGStep` gets (red); an existing layer keeps its own |
-| `*BP-RADIUS*` | `5.0` | Ring **radius**; use `2.5` for a 5″ diameter. Also how far an un-ring click reaches on a `Pt.?` ring |
-| `*BP-SNAP*` | `12.0` | A pick within this of a survey point rings that point (the nearest when several qualify); farther away the pick itself is ringed as `Pt.?` |
-| `*BP-EXACT-EPS*` | `0.001` | Two ring centres this close are the same spot, so a second click on a ringed point un-rings it |
-| `*BP-TEXT-HGT*` | `6.0` | Callout text height |
-| `*BP-TEXT-GAP*` | `10.0` | Enter at the text prompt tucks the callout this far right of and below the last ring |
-| `*BP-PT-PREFIX*` | `"Pt."` | How a point is named: prefix + number, `Pt.12` |
-| `*BP-TAIL-ONE*` | `" is bad"` | What follows the name when one point was ringed |
-| `*BP-TAIL-MANY*` | `" are bad"` | …and when two or more were |
-| `*BP-UNKNOWN*` | `"?"` | The number given to a ring with no readable point under it |
-| `*BP-POINT-BLOCK*` | `"ab_pt"` | Block name whose INSERTs are points wherever they sit |
-| `*BP-POINT-LAYER*` | `"POINTS"` | Layer whose POINTs and INSERTs are always points |
-| `*BP-PT-TAG*` | `"number"` | Attribute naming the point; a block without it lends its first numeric attribute |
+| `bp:*layer*` | `"FGStep"` | Layer the rings and the callout land on — created when missing, thawed / unlocked / switched on when unusable |
+| `bp:*layer-color*` | `1` | ACI colour a *created* `FGStep` gets (red); an existing layer keeps its own |
+| `bp:*radius*` | `5.0` | Ring **radius**; use `2.5` for a 5″ diameter. Also how far an un-ring click reaches on a `Pt.?` ring |
+| `bp:*snap*` | `12.0` | A pick within this of a survey point rings that point (the nearest when several qualify); farther away the pick itself is ringed as `Pt.?` |
+| `bp:*exact-eps*` | `0.001` | Two ring centres this close are the same spot, so a second click on a ringed point un-rings it |
+| `bp:*text-hgt*` | `6.0` | Callout text height |
+| `bp:*text-gap*` | `10.0` | Enter at the text prompt tucks the callout this far right of and below the last ring |
+| `bp:*pt-prefix*` | `"Pt."` | How a point is named: prefix + number, `Pt.12` |
+| `bp:*tail-one*` | `" is bad"` | What follows the name when one point was ringed |
+| `bp:*tail-many*` | `" are bad"` | …and when two or more were |
+| `bp:*unknown*` | `"?"` | The number given to a ring with no readable point under it |
+| `bp:*point-block*` | `"ab_pt"` | Block name whose INSERTs are points wherever they sit |
+| `bp:*point-layer*` | `"POINTS"` | Layer whose POINTs and INSERTs are always points |
+| `bp:*pt-tag*` | `"number"` | Attribute naming the point; a block without it lends its first numeric attribute |
 
 The last three are the survey-point classifier `LHD` and `CDCALLOUT`
-share — change them in all three or the tools disagree.
+share — change them in all three or the tools disagree. (Before v1.8
+they were spelled `*BP-LAYER*`, `*BP-RADIUS*` and so on; a startup file
+that sets them needs the file's `bp:` prefix now.)
 
 ## Tests
 

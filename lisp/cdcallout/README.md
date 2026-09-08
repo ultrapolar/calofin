@@ -115,13 +115,13 @@ banner with every revision.
   mis-typed TO number now re-asks TO instead of restarting the round.
 * **v1.0** — first release.
 
-## Assumptions / configuration
+## Tunables
 
-Every knob sits in the configuration block at the top of
+Every knob sits in the tunables block at the top of
 `CDCALLOUT.lsp`, each with its explanation beside it; change a value
 there, or `setq` it after loading from a startup file:
 
-| Knob | Default | Meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `cdo:*style*` | `"CROSS DIMENSIONS"` | Dimension style the dims are drawn in — never invented; a missing one is reported and the current style used |
 | `cdo:*layer*` | `"DIMENSION"` | Layer the dims land on, ByLayer — created when missing, thawed / unlocked / switched on when unusable |

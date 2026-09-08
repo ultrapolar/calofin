@@ -1282,7 +1282,7 @@ TOOLS = {
         'swap': {},
         'drop_globals': [],
     },
-    # Layer creator and block-number with *BP-PT-TAG* passed as the
+    # Layer creator and block-number with bp:*pt-tag* passed as the
     # tag argument.
     # [verified: byte-identical except the legacy banner vs the twin on disk]
     'BPCALLOUT': {
@@ -1297,7 +1297,7 @@ TOOLS = {
         'drop_globals': [],
         'expand': {
             '(cal:block-number en)':
-                ['(cal:block-number en *BP-PT-TAG*)'],
+                ['(cal:block-number en bp:*pt-tag*)'],
         },
     },
 }

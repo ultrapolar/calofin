@@ -36,7 +36,8 @@ The four GUI files came first and check 6 is still theirs -- they are
 the ones whose knobs the VB palette shares.  Checks 1-5 are the general
 rule (STANDARDS.md section 5, "Tunables") and every file in FILES meets
 them; ``abcdef`` and ``ALTABCDEF`` joined when they grew blocks of their
-own.
+own, and ``BPCALLOUT`` / ``CDCALLOUT`` / ``CDCREATE`` when theirs were
+gathered into one.
 
 Run: python3 tests/test_tunables.py
 """
@@ -78,6 +79,17 @@ FILES = [
      ROOT / 'lisp' / 'abcdef' / 'README.md'),
     ('ALTABCDEF', ROOT / 'lisp' / 'altabcdef' / 'ALTABCDEF.lsp', 'altabcdef',
      ROOT / 'lisp' / 'altabcdef' / 'README.md'),
+    # the three callout/create tools, which joined for the same reason
+    # again: each kept SOME of its settings in a block at the top and
+    # the rest inline -- a ring colour, a text offset, the sentence a
+    # callout is built from -- so adapting one meant reading the file
+    # to find out what was adjustable at all.
+    ('BPCALLOUT', ROOT / 'lisp' / 'bpcallout' / 'BPCALLOUT.lsp', 'bp',
+     ROOT / 'lisp' / 'bpcallout' / 'README.md'),
+    ('CDCALLOUT', ROOT / 'lisp' / 'cdcallout' / 'CDCALLOUT.lsp', 'cdo',
+     ROOT / 'lisp' / 'cdcallout' / 'README.md'),
+    ('CDCREATE', ROOT / 'lisp' / 'cdcreate' / 'CDCREATE.lsp', 'cdc',
+     ROOT / 'lisp' / 'cdcreate' / 'README.md'),
 ]
 
 HEADER = ';;; -------------------- tunables '

@@ -56,7 +56,7 @@ cancelled with Esc.
 
 ## Tunables
 
-Every knob sits in the configuration block at the top of `CDCREATE.lsp`,
+Every knob sits in the tunables block at the top of `CDCREATE.lsp`,
 each with its explanation beside it. Change a value there, or `setq` it
 after loading (in a startup file, say) when a drawing needs different
 names:

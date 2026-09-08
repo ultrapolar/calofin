@@ -71,21 +71,24 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-;; Every knob the routine has, in one place, so nothing below this
-;; block needs touching to adapt it.  Change a value here, or (setq ...)
-;; it after loading from a startup file.  Distances are DRAWING UNITS.
+;;; -------------------- version ---------------------------------------
 (setq *cdcreate-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
+
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
 ;; -- how the dimensions land (POOL's convention for its cross dims)
-(setq cdc:*style*  "CROSS DIMENSIONS") ; dimension style the dims are
+(setq cdc:*style* "CROSS DIMENSIONS") ; dimension style the dims are
                                    ; drawn in.  NOT invented when the
                                    ; drawing lacks it: the dims then
                                    ; take the current style and the run
                                    ; says so, because a wrong template
                                    ; should be obvious, not papered over
-(setq cdc:*layer*  "DIMENSION")    ; layer the dims land on, ByLayer
+(setq cdc:*layer* "DIMENSION")     ; layer the dims land on, ByLayer
                                    ; (colour, linetype and lineweight
                                    ; overrides stripped).  Created when
                                    ; the drawing lacks it; thawed,
@@ -100,6 +103,7 @@
                                    ; = to the left of the line's own
                                    ; start->end direction, negative = to
                                    ; the right
+
 ;; -- where the text sits
 (setq cdc:*textpos* 0.8)           ; position of the text along the
                                    ; dimension line, as a fraction of
@@ -115,13 +119,14 @@
                                    ; (where "right-hand" would be a
                                    ; coin toss).  0.0 = only a dead-
                                    ; vertical line, 90.0 = every line
+
 ;; -- what happens to the lines
-(setq cdc:*erase*  t)              ; T erases each line once its
+(setq cdc:*erase* T)               ; T erases each line once its
                                    ; dimension is drawn - the tie is the
                                    ; dimension now; nil keeps them.  A
                                    ; line that got no dimension is never
                                    ; erased either way
-(setq cdc:*skipdimmed* t)          ; T leaves a line alone when some
+(setq cdc:*skipdimmed* T)          ; T leaves a line alone when some
                                    ; dimension in model space already
                                    ; runs between its two ends - either
                                    ; way round, any style or layer; nil
@@ -132,6 +137,11 @@
                                    ; a sixteenth of an inch in the
                                    ; drawing's own units (read off
                                    ; INSUNITS, so 1.5875 in a mm drawing)
+
+;;; -------------------- run state ---------------------------------------
+;;; Not a knob, and outside the block above on purpose: cdc:syssave
+;;; writes its snapshot of the sysvars the run moves here, and
+;;; cdc:sysrestore empties it again, so it is live only mid-run.
 
 ;;; -------------------- helpers ------------------------------------
 
