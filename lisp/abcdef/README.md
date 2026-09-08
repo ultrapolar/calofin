@@ -61,8 +61,24 @@ leniency is built in:
 | --- | --- |
 | 4 | fitted on all four; if that fit is poor and leaving **one** out settles the other three, that tape is dropped and the report names it |
 | 3 | least-squares fitted, sharing the leftover error across all three |
-| 2 | the two circles are crossed exactly and the root **inside** the rectangle is taken (the mirror root sits beyond a rectangle side) |
+| 2 | the two circles are crossed exactly and the root **inside** the rectangle is taken.  Measured from two *adjacent* corners the mirror root sits beyond a rectangle side, so there is only one candidate; measured from two *opposite* corners both roots are inside and fit identically, and that row is flagged `(mirror pair)` rather than guessed at — see below |
 | 0–1 | skipped, and named on the command line |
+
+### Two tapes from opposite corners
+
+Two circles meet twice, either side of the line joining the corners they
+came from.  For two **adjacent** corners that line is a side of the
+rectangle, so one root is inside the frame and the other is not, and the
+frame picks the answer.  For two **opposite** corners the line is a
+diagonal: both roots are inside, both fit the tapes to the same
+hundredth, and the seed that would break the tie sits exactly halfway
+between them.  The sheet genuinely does not say which of the two the
+point is.
+
+Such a row is plotted, flagged `(mirror pair, two answers fit - needs a
+third tape)`, counted among the points wanting checking, and graded down
+by `abcdef:*conf-mirror*`.  A third tape from any corner settles it
+outright.
 
 What it will **not** do is drop a tape it cannot prove is the bad one.
 Three tapes that disagree give no evidence about which of them is wrong —
@@ -194,6 +210,119 @@ sample sheet (`template.csv`) found three separate problems:
    run down with it — the one thing the catch was there to prevent. Fixed
    in `abcdef.lsp` and in `ALTABCDEF.lsp`, which had inherited it.
 
+## Tunables
+
+Every threshold, layer name, colour, size and tolerance is a named
+`(setq abcdef:*name* ...)` in one **tunables block** at the top of
+`abcdef.lsp`, between the version banner and the first `defun`, each with
+a sentence saying what changing it does. Nothing below that block carries
+a bare number, so changing behaviour never means reading the solver.
+
+Edit the file and `APPLOAD` it again, or `(setq abcdef:*name* value)` at
+the command line for one session. Distances are in inches.
+
+`tests/test_tunables.py` checks this table against the file itself -- every
+knob present, with the default it really has -- and `tests/test_abcdef.py`
+asserts each one is live, so a knob cannot quietly stop being wired to
+anything.
+
+### Where the tapes stop agreeing
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `abcdef:*fit-ok*` | `0.20` | at or under this RMS the tapes agree: Auto keeps every one and never looks for a bad reading |
+| `abcdef:*fit-bad*` | `0.50` | over this RMS the row is marked `**CHECK` and a note is written beside the point |
+| `abcdef:*edge-tol*` | `1.0` | how far outside the frame a point may land and still be rounding to snap back |
+| `abcdef:*snap-show*` | `0.001` | a snap smaller than this is arithmetic, not a finding, and is not reported |
+
+### Dropping a tape (the `Auto` method)
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `abcdef:*drop-gain*` | `0.5` | a dropped tape must improve the fit to under this share of the four-tape fit |
+| `abcdef:*drop-ratio*` | `3.0` | ...and the runner-up triple must fit at least this many times worse |
+| `abcdef:*drop-margin*` | `0.25` | ...and at least this many inches worse.  Raise either to drop tapes less readily |
+
+### Whole-sheet sanity
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `abcdef:*swap-min*` | `0.5` | average inches of fit per row, above which the C/D detector will consider a swap |
+| `abcdef:*swap-ratio*` | `0.25` | ...and the swapped fit has to be under this share of it.  Set `*swap-min*` very high to switch the detector off |
+| `abcdef:*poor-fit*` | `1.0` | average inches of fit per row, above which the whole sheet raises an alert |
+
+### The confidence column
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `abcdef:*conf-three*` | `8.0` | confidence taken off a point placed by three tapes |
+| `abcdef:*conf-two*` | `26.0` | ...and by only two, which cross-check nothing |
+| `abcdef:*conf-fit*` | `110.0` | confidence lost per inch of leftover fit error |
+| `abcdef:*conf-fit-max*` | `55.0` | ...capped here |
+| `abcdef:*conf-spread*` | `12.0` | confidence lost per inch the answer moves when one tape is dropped |
+| `abcdef:*conf-spread-max*` | `20.0` | ...capped here |
+| `abcdef:*cut-bad*` | `20.0` | a crossing angle under this many degrees is the worst band |
+| `abcdef:*cut-poor*` | `35.0` | ...under this, the middle band |
+| `abcdef:*cut-fair*` | `50.0` | ...under this, the mildest band; wider costs nothing |
+| `abcdef:*conf-cut-bad*` | `22.0` | confidence lost in the worst crossing band |
+| `abcdef:*conf-cut-poor*` | `10.0` | ...in the middle band |
+| `abcdef:*conf-cut-fair*` | `3.0` | ...in the mildest band |
+| `abcdef:*conf-drop*` | `6.0` | confidence lost because the row needed a tape dropped at all |
+| `abcdef:*conf-mirror*` | `25.0` | ...because two tapes from opposite corners fit two answers equally well |
+| `abcdef:*grade-high*` | `90.0` | confidence at or above this reads `HIGH` |
+| `abcdef:*grade-good*` | `75.0` | ...`GOOD` |
+| `abcdef:*grade-fair*` | `60.0` | ...`FAIR` |
+| `abcdef:*grade-weak*` | `40.0` | ...`WEAK`, and below it `POOR` |
+| `abcdef:*conf-check*` | `60.0` | under this confidence a point wants checking: counted in the summary and noted in the drawing |
+
+### What it draws
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `abcdef:*point-layer*` | `"POINTS"` | where the survey points land.  `ABHD` and the other fitters read this - change it only with them |
+| `abcdef:*point-block*` | `"ab_pt"` | the block every fitter looks for |
+| `abcdef:*point-tag*` | `"number"` | its point-number attribute |
+| `abcdef:*point-color*` | `2` | colour the point layer is created with (an existing layer keeps its own) |
+| `abcdef:*frame-layer*` | `"ABCDEF-FRAME"` | the rectangle and its corner letters |
+| `abcdef:*frame-color*` | `1` | ...the colour it is created with |
+| `abcdef:*warn-layer*` | `"ABCDEF-WARN"` | the notes beside doubtful points |
+| `abcdef:*warn-color*` | `1` | ...the colour it is created with |
+| `abcdef:*text-div*` | `120.0` | text height is the longer rectangle side divided by this |
+| `abcdef:*text-min*` | `0.5` | ...but never under this many inches |
+| `abcdef:*tag-scale*` | `1.4` | corner letters are this many text heights tall |
+| `abcdef:*tag-gap*` | `1.0` | how far a corner letter sits out from its corner, in text heights |
+| `abcdef:*tag-drop*` | `1.6` | ...how far below a bottom corner, which has to clear the letter height |
+| `abcdef:*note-off*` | `0.6` | how far up and right of a doubtful point its note sits, in text heights |
+
+### The sheet
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `abcdef:*file-types*` | `"xlsx;xls;xlsm;csv"` | what the file dialog offers |
+| `abcdef:*hdr-dist*` | `'("FROM A" "FROM B" "FROM C" "FROM D")` | header words naming the distance columns, in corner order A B C D |
+| `abcdef:*hdr-name*` | `'("NAME" "POINT" "LABEL")` | ...and the point-name column; the first header matching any of them wins |
+| `abcdef:*report-suffix*` | `"_ABCDEF_report.txt"` | the report file is the sheet's name with its extension replaced by this |
+
+### Reading dirty values
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `abcdef:*apos-over*` | `1.05` | a mark-less reading over this many times the diagonal had its foot mark scanned as a digit |
+| `abcdef:*impossible*` | `1.1` | ...and one still over this many times the diagonal is left blank as unreadable |
+| `abcdef:*fractions*` | `'(2 4 8 16 32)` | the denominators an inch fraction may have; one not listed is never invented |
+| `abcdef:*log-denom*` | `32` | the correction log rounds to 1/this of an inch |
+
+### Numerical
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `abcdef:*fuzz*` | `1e-9` | two lengths closer than this are the same length |
+| `abcdef:*solve-iters*` | `60` | most Gauss-Newton steps the fit will take |
+| `abcdef:*solve-step*` | `1e-7` | ...and the step size under which it is done |
+| `abcdef:*solve-singular*` | `1e-12` | a normal-matrix determinant under this means the tapes do not constrain the point |
+| `abcdef:*seed-singular*` | `1e-9` | ...the same for the linear seed |
+| `abcdef:*frame-tol*` | `0.001` | inches a side or diagonal may be out before the corner self-check aborts the run |
+
 ## Verification
 
 AutoLISP only runs inside AutoCAD, so two scripts stand in for it.
@@ -219,3 +348,13 @@ output and the ABHD handoff:
 python3 tests/test_abcdef.py
 CALOFIN_LISP_ROOT=shared python3 tests/test_abcdef.py   # the grouped build
 ```
+
+Beyond the arithmetic it drives the rest of a real run: the command's own
+CSV reader (quoted cells, columns in any order, the repair log), `Back`
+at every question in the chain, a cancelled file dialog, the C/D swap
+detector firing and staying quiet, the poor-fit alert, the mirror-pair
+flag, the corner self-check refusing to plot, a frozen or locked
+`POINTS` layer being restored, the `ab_pt` block being created once and
+reused, a second import in one drawing handing `ABHD` only its own
+points, a report file that cannot be written, `UNDO` switched off, an Esc
+at each prompt going through the handler, and every tunable being live.

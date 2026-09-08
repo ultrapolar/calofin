@@ -1015,6 +1015,45 @@ vm = run(["Insquare", "Rectangle"] + BASE +
 assert 'STANDARD INCHES' in vm.dimstyle_log, vm.dimstyle_log
 print("   24\" corners in STANDARD, 23 15/16\" still in STANDARD INCHES")
 
+print("== R15e. floor dims stay STANDARD however short they measure ==")
+# The BOTTOM phase is one chain of runs that adds up to the pool, so a
+# short member of it must not read in inches while its neighbours read
+# in feet: H, M and K are 18" here and the drawing HAS the small-dim
+# style.  (The under-24" rule is untouched for the PLAN -- R15.)
+vm = run(["Insquare", "Rectangle"] + BASE +
+         [480.0, 240.0, "Square",
+          "Yes", "Normal",
+          18.0, 90.0, 282.0, None,      # H G F -> E = 90
+          18.0, 204.0, None],           # M L -> K = 18
+         "R15e", dimstyles=("STANDARD INCHES",))
+assert 'STANDARD INCHES' not in vm.dimstyle_log, vm.dimstyle_log
+_small = [(d, s) for d, s in styled(vm) if d != 'R' and d < 24.0]
+assert len(_small) >= 3, _small                  # H, M and K at least
+assert all(s == 'STANDARD' for d, s in _small), _small
+# the run really did draw them -- the rule is "not in inches", not "not drawn"
+for _lbl, _want in (("HOP H", "18.00"), ("HOP M", "18.00"), ("HOP K", "18.00")):
+    assert reportrow(vm, _lbl)[2] == _want, (_lbl, reportrow(vm, _lbl))
+# and the flag does not outlive the run that set it
+assert vm.get(__import__('lispvm').Sym('pool:*flooron*')) is None, "flag leaked"
+print(f"   {len(_small)} sub-24\" floor dims, all in STANDARD, flag cleared")
+
+print("== R15f. the floor block is what does it, not the measurement ==")
+# The same 19" drawn inside and outside a floor block: inside it keeps
+# the current style, outside it switches to inches and comes back.
+vm = VM()
+vm.load(LSP)
+vm.tables['DIMSTYLE'].add("STANDARD INCHES")
+vm.loads("""
+  (defun testfloor ( / )
+    (pool:dimflbeg)
+    (pool:dimalg '(0.0 0.0) '(19.0 0.0) '(9.0 5.0))
+    (pool:dimflend)
+    (pool:dimalg '(0.0 0.0) '(19.0 0.0) '(9.0 5.0)))
+""")
+vm.run('testfloor', [])
+assert vm.dimstyle_log == ['STANDARD INCHES', 'STANDARD'], vm.dimstyle_log
+print("   inside the block no switch at all; outside it, inches as before")
+
 print("== R16. grecian Overall: WALL letters beat CORNER letters ==")
 # The field case from beforeaftergrecianoosexample.dxf.  A tape can be
 # held flat along T and V, so they are held true; S and S1 only locate

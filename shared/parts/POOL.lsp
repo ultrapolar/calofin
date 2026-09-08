@@ -123,7 +123,7 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "090126 REV22")
+(setq pool:*version* "090826 REV23")
 
 ;;; -------------------- adjustable constants --------------------------
 
@@ -186,6 +186,19 @@
 ;; ("SIDE STANDARD"), per the reference drawings.  A dim inside a
 ;; SIDE STANDARD block keeps that style even under 24 inches: the
 ;; reference sheets show a 19" S1 in SIDE STANDARD, not inches.
+;;
+;; The FLOOR dims keep their style under 24 inches too, for the same
+;; reason and by the same mechanism (pool:*flooron*, opened by
+;; pool:dimflbeg): the whole BOTTOM phase -- the H/G/F/E and M/L/K
+;; hopper chains, the sport bottom's E2/F2/G/F1/E1, and the section
+;; depths C / D / C2 -- reads as ONE chain of runs that adds up to
+;; the pool, and a 19" H in inches beside a 12'6" F in feet is the
+;; one thing a crew reads wrong.  POOLSIDE.lsp draws those same floor
+;; dims on their own and switches style for none of them, so a
+;; section drawn either way comes out the same.  (The six-sided
+;; hopper's W/L1/X are secondary sheet letters, so they are SIDE
+;; STANDARD and stay so.)
+;;
 ;; The cut-off is "UNDER 24 inches": a 2 ft corner is a STANDARD dim,
 ;; not an inches one.  It has to be read with a hair of tolerance,
 ;; because most of these lengths are not the number the crew typed --
@@ -204,6 +217,7 @@
 (setq pool:*crossstyle*  "CROSS DIMENSIONS")
 (setq pool:*sidestyle*   "SIDE STANDARD")
 (setq pool:*sideon*      nil)         ; a SIDE STANDARD block is open
+(setq pool:*flooron*     nil)         ; a floor-dims (BOTTOM) block is open
 (setq pool:*dimstyle0*   nil)         ; dim style current when POOL started
 ;; T = report lengths in feet-inches; set per run from the units the
 ;; DRAWING was in before POOL switched to architectural for its
@@ -406,15 +420,24 @@
 ;;; and the previous style comes straight back afterwards.  Every
 ;;; dimension the routine draws goes through pool:dimalg / pool:dimrot
 ;;; / pool:dimrad / pool:dimcorner1, so switching in those four covers
-;;; plan dims, hopper chain dims, corner treatments, radii and the
-;;; side-profile depths alike.  (Angular corner dims measure degrees,
-;;; not inches, so they are left alone.)
+;;; plan dims, corner treatments and radii alike.  (Angular corner
+;;; dims measure degrees, not inches, so they are left alone.)
+;;;
+;;; Two kinds of dimension are exempt, and each says so with a flag
+;;; rather than by measuring anything: a secondary sheet letter
+;;; (pool:*sideon*) and a floor dim (pool:*flooron*) -- the hopper
+;;; chains and the section depths of the BOTTOM phase, which stay in
+;;; the standard style however short a run comes out.
 
 (defun pool:dimsbegin (d / odim)
   ;; inside a SIDE STANDARD block the letter keeps that style however
   ;; small it is -- the reference sheets show a 19" S1 in SIDE
-  ;; STANDARD, not in inches
-  (if (and (< d (- pool:*smalldim* pool:*smallfuzz*)) (not pool:*sideon*))
+  ;; STANDARD, not in inches -- and inside a floor-dims block the run
+  ;; or depth keeps the standard style for the same reason: one member
+  ;; of a chain in inches while the rest read in feet is misread
+  (if (and (< d (- pool:*smalldim* pool:*smallfuzz*))
+           (not pool:*sideon*)
+           (not pool:*flooron*))
       (if (tblsearch "DIMSTYLE" pool:*smallstyle*)
           (progn
             (setq odim (getvar "DIMSTYLE"))
@@ -513,6 +536,23 @@
   (setq pool:*sideon* nil)
   (if (and odim (tblsearch "DIMSTYLE" odim))
       (command "_.-DIMSTYLE" "_Restore" odim)))
+
+;; Open / close a floor-dims block.  Everything the BOTTOM phase
+;; draws -- the hopper chains, the sport and six-sided letters, the
+;; section depths -- is dimensioned between these two, and the
+;; under-24" switch is suppressed for all of it (pool:*flooron*).
+;; Nothing is switched IN, so there is no previous style to hand back:
+;; a floor dim is drawn in whatever style the run is already in, which
+;; is the standard one unless the caller opened a block of its own
+;; (the six-sided hopper's W/L1/X open a SIDE STANDARD one, and keep
+;; that style).
+(defun pool:dimflbeg ()
+  (setq pool:*flooron* t)
+  nil)
+
+(defun pool:dimflend ()
+  (setq pool:*flooron* nil)
+  nil)
 
 ;; One aligned dim / radius dim in the SIDE STANDARD style.
 (defun pool:dimalgs (p1 p2 pt / od)
@@ -4571,6 +4611,7 @@
   ;; chain dimensions along the two centerlines, like the sheet
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" "DIMENSION")
+  (pool:dimflbeg)                   ; no under-24" switch below
   ;; M/L/K def points sit on the hopper edge; their dim line floats
   ;; 30" right via the 'voff vector
   (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
@@ -4607,6 +4648,7 @@
               (pool:dimalg (list (+ x0 h g f) y0) (list (+ x0 h g f) (- y0 c2))
                            (list (+ x0 h g f (* 0.3 doff)) (- y0 (* 0.5 c2))))
               (setq pool:*profents* (cons (entlast) pool:*profents*))))))
+  (pool:dimflend)
   (setvar "CLAYER" odl)
   (setq rows (list
     (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
@@ -4828,6 +4870,7 @@
   (pool:profdraw x0 y0 total wh brks "POOL" nil)
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" "DIMENSION")
+  (pool:dimflbeg)                   ; no under-24" switch below
   ;; plan chains, standard-hopper style
   (foreach tl (append (list (list 'pl 'pobl nil (member 0 hfx))
                             (list 'pobl 'pdfl nil (member 1 hfx)))
@@ -4848,6 +4891,7 @@
   (setq xd (if nopad (+ x0 e2 f2) (+ x0 e2 f2 (* 0.5 g))))
   (pool:dimalg (list xd y0) (list xd (- y0 hd))
                (list (+ xd (* 0.3 doff)) (- y0 (* 0.5 hd))))
+  (pool:dimflend)
   (setvar "CLAYER" odl)
   (setq rows (append
     (list (pool:vrow "SPT E2" e2r (distance (cadr (assoc 'pl gg)) (cadr (assoc 'pobl gg))) 0 hfx)
@@ -5141,6 +5185,7 @@
         (pool:hopovaldraw gg "POOL" nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" "DIMENSION")
+        (pool:dimflbeg)                   ; no under-24" switch below
         (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
                           (list 'phl 'phr nil (member 1 hfx))
                           (list 'phr 'pbrk nil (member 2 hfx))
@@ -5156,6 +5201,7 @@
                                 (if (caddr tl) (cadr (assoc 'voff gg))
                                     (list 0.0 0.0))))
           (if (cadddr tl) (pool:dimred)))
+        (pool:dimflend)
         (setvar "CLAYER" odl)
         (setq o (pool:circum (cadr (assoc 'ttop gg)) (cadr (assoc 'tip gg))
                              (cadr (assoc 'tbot gg)))
@@ -5480,6 +5526,7 @@
         (pool:hopgrecdraw gg "POOL" six nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" "DIMENSION")
+        (pool:dimflbeg)                   ; no under-24" switch below
         (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
                           (list 'phl 'phr nil (member 1 hfx))
                           (list 'phr 'pbrk nil (member 2 hfx))
@@ -5522,6 +5569,7 @@
                   (pool:dimalgs (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))
                                 (cal:mid (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))))
                   (if sixbad (pool:dimred)))))
+        (pool:dimflend)
         (setvar "CLAYER" odl)
         (setq rows (list
           (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
@@ -7670,8 +7718,11 @@
     (cal:sysrestore)
     ;; DIMSTYLE is read-only to setvar, so it is put back the only way
     ;; it can be: dying inside a small-dim, cross-dim or SIDE STANDARD
-    ;; block must not leave that style current in the user's drawing
-    (setq pool:*sideon* nil)
+    ;; block must not leave that style current in the user's drawing.
+    ;; The floor-dims flag switches no style, but a run that died with
+    ;; it set would draw the NEXT pool's plan with the rule off
+    (setq pool:*sideon* nil
+          pool:*flooron* nil)
     (pool:dimsend pool:*dimstyle0*)
     (pool:pvkill)
     ;; a form must never outlive the run it was given to: left behind,
@@ -7694,6 +7745,7 @@
         pool:*smallwarned* nil
         pool:*profents* nil
         pool:*sideon* nil
+        pool:*flooron* nil
         pool:*dimstyle0* (getvar "DIMSTYLE")
         ;; report lengths follow the units the DRAWING was in before
         ;; POOL switches to architectural for its prompts: a crew whose
