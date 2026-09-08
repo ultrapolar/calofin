@@ -40,6 +40,49 @@ used. Non-text geometry is scaled and otherwise left alone.
   them from. The trace's label therefore goes in whole. `*xft-dot-strip-prefix*`
   is the line that changes its mind.
 
+## Undoing it -- `XFTRECONV`
+
+`U` undoes a run while the session lasts. `XFTRECONV` undoes one that was
+saved, closed and reopened a week later -- which is when a survey turns out
+to have been converted twice, or converted at all by mistake.
+
+```
+Command: XFTRECONV
+Select the converted survey (Enter = everything in this space):
+2 "ab_pt" block(s) taken back off the survey.
+6 marker and text object(s) put back.
+```
+
+It can do that because **`XFTCONV` writes down what it erased**. Every block
+it inserts carries a record in its own xdata: the scale and the base point
+the run used, and the marker, the name text and any leftover text that went
+with them, group by group. Erasing alone would be nothing to work from -- an
+erased entity is gone for good once the drawing is saved, and the scale
+factor is not written on any object. `XFTRECONV` rebuilds what was erased,
+erases the block that replaced it, and scales the selection back by 1/12
+about the same base point.
+
+- **One conversion at a time.** Two runs have two base points, and one scale
+  back about either would leave the other survey wrong -- so a highlight
+  holding blocks from two runs is refused by name rather than half-reverted.
+  The runs are told apart by the scale and base each block carries.
+- **Scope is the highlight**, the same three ways `XFTCONV` takes it. Revert
+  part of a survey and only that part comes back; the rest stays converted.
+- **A coordinate comes back to 1e-8 of a drawing unit** -- a hundredth of a
+  micron on a survey in inches. The record writes coordinates through `rtos`
+  at `*xft-num-prec*` decimals, so one string keeps the whole record readable
+  in a DXF dump; the tests measure that figure rather than assuming it.
+- **A locked `POINTS` stops the run**, and the message names it, exactly as
+  `XFTCONV`'s does. A layer the rebuild writes *to* is an output layer and is
+  unlocked for good instead (STANDARDS 5) -- including one that was `PURGE`d
+  since the conversion, which is re-created.
+- **`*xft-record*` `nil` turns the record off.** `XFTCONV` then converts
+  exactly as before, says so in its done line, and `XFTRECONV` has nothing to
+  work from and says *that*.
+- What the record does **not** carry: an object's own xdata, its extension
+  dictionary and its reactors. A survey import has none, and a general entity
+  copier here would be claiming more than the tool can test.
+
 ## Install
 
 1. Put `xftconv.lsp` somewhere on your support file search path
@@ -132,6 +175,12 @@ shop's own conventions.
 | `*xft-dot-purge-text*` | `nil` | erase every text object left in the selection (trace flavour) |
 | `*xft-column-tol*` | `0.5` | how far off the marker's X, in text heights, a name still counts as "in its column" -- the rule that beats plain nearness |
 | `*xft-fuzz*` | `1e-4` | tolerance, after the scale, for "these two markers share a centre" |
+| `*xft-record*` | `t` | write the undo record `XFTRECONV` reads; `nil` converts exactly as before and writes nothing down, so the run can only be undone by `U` |
+| `*xft-xdata-app*` | `"XFTCONV"` | the xdata application the record lives under |
+| `*xft-num-prec*` | `8` | decimals a coordinate is written to -- 8 puts the round trip within 1e-8 of a drawing unit |
+| `*xft-rebuild-color*` | `7` | colour for a source layer `XFTRECONV` has to re-create because it was PURGED after the conversion; one still in the drawing keeps its own |
+| `*xft-keep-common*` | `(8 62 6 370 410)` | DXF groups the record carries whatever the entity type is |
+| `*xft-keep*` | one row per type | and the groups it carries per type -- what an export writes on the five kinds of object `XFTCONV` erases. An export that writes something else onto its markers is carried by adding its group code here |
 
 `XFTCONV-SETUP` is a separate command that only creates the layer and the block,
 if you want them in a drawing without running a conversion.
@@ -186,3 +235,8 @@ justified one, every settings switch in its non-default position, a frozen
 and switched-off `POINTS` repaired rather than drawn onto blind, the
 attribute style falling back to `TEXTSTYLE`, an error mid-run reaching the
 command's own handler, both flavours in one highlight, and `XFTCONV-SETUP`.
+
+Last come the record and the revert: the trace fixture is converted and
+`XFTRECONV` run over the result, which is where the 1e-8 figure above is
+measured -- that fixture's coordinates carry more decimals than the record
+writes down.

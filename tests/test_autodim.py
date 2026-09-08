@@ -130,6 +130,16 @@ assert len(dims(vm)) == 3, dims(vm)
 print('   2ft out, and the far side, are dims of their own')
 
 
+# a span of no length is not a dimension: the two origins would sit on
+# top of each other and AutoCAD would draw a dim reading 0
+vm = fresh()
+assert aligned(vm, (10, 10), (10, 10), (10, 22)) == 0
+assert vm.loads('(ad:putlinear (list 10.0 10.0 0.0) (list 10.0 10.0 0.0) '
+                '(list 10.0 22.0 0.0) "_V" ad:*style-plan*)') == 0
+assert not dims(vm) and vm.loads('ad:*skipped*') == 0
+print('   a zero-length span is not dimensioned, and is not a skip either')
+
+
 print('== the two overall dims ==')
 vm = fresh()
 # the plan is 10ft x 6ft; the dims around it already reach a foot
@@ -991,6 +1001,30 @@ for cmd, script in (('c:AUTODIM', [None, 'ENTS']),
     assert len(dims(vm)) == 4, (cmd, dims(vm))
     print('   %s: no group opened or closed, and it dimensions anyway'
           % cmd[2:])
+
+# the other two commands carry the same pair, and an unguarded close in
+# either would show up only as an error message over work it had just
+# done -- so they are driven here too, to the point of having nothing
+# to dimension
+for cmd, script in (('c:STAIRDIM', [None, None]),
+                    ('c:FLOORDIM', [None])):
+    vm = fresh()
+    vm.handle_errors = True
+    vm.sysvars['UNDOCTL'] = 0
+    vm.run(cmd, list(script))
+    assert undo_cmds(vm) == [], (cmd, vm.commands)
+    assert not vm.handled_errors, (cmd, vm.handled_errors)
+    assert not [p for p in vm.printed if 'error' in p.lower()], \
+        (cmd, vm.printed)
+    print('   %s: the same, and it says nothing about an error'
+          % cmd[2:])
+
+# with undo on, those two open and close exactly one group as well
+for cmd, script in (('c:STAIRDIM', [None, None]), ('c:FLOORDIM', [None])):
+    vm = fresh()
+    vm.run(cmd, list(script))
+    assert undo_cmds(vm) == ['_Begin', '_End'], (cmd, undo_cmds(vm))
+print('   with undo on: one group each, opened and closed')
 
 # and with undo on, every command opens exactly one and closes it
 for cmd in ('c:AUTODIM', 'c:AUTODIMSIDEPOV'):

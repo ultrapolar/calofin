@@ -23,8 +23,13 @@ README row rather than comparing the default in it.
   3. Every knob is a literal nothing re-assigns.  A state variable
      hoisted in by mistake would read as a setting when it is really an
      initial value, and setting it would look like it worked.
-  4. No knob-shaped global lives OUTSIDE the block.  The version banner
-     is the one exception, and it is checked to be exactly that.
+  4. No knob-shaped global lives OUTSIDE the block.  Two exceptions:
+     the version banner, which is checked to be exactly that, and a
+     constant that says `NOT A KNOB:` above itself WITH a reason -- the
+     record's delimiters are the grammar of an already-written record
+     and its subclass names are AutoCAD's own, and neither is a choice.
+     The reason is what is checked; a bare marker would be a way to opt
+     out of the rule rather than a fact about the constant.
   5. Every knob is a row in its README's Tunables table.
 
 Run: python3 tests/test_converter_tunables.py
@@ -96,22 +101,38 @@ def assignments(src):
 
     A paren walk rather than a line regex, because the tables are
     multi-line: a line-based reader sees `(setq *soconv-map*` with no
-    closing paren and drops the file's most important knob.  Names are
-    taken at paren depth 0 inside the form, which is where a setq's
-    targets sit and where a list value's contents do not.
+    closing paren and drops the file's most important knob.
+
+    And only names in a NAME position.  A setq alternates name, value,
+    name, value, and a knob is perfectly ordinary in a value position:
+    soconv:stamp reads `(setq obj (...) forced *soconv-force-bylayer*)`
+    to record whether the run forced BYLAYER.  Counting that as a write
+    calls the knob state and fails the file for using its own setting,
+    so the depth-0 tokens are counted off in pairs and only the even
+    ones are assignments -- a parenthesised value takes one slot like
+    any other, and a quote binds to the token after it rather than
+    taking a slot of its own.  (The same rule, and the same reason, as
+    tests/test_tunables.py's walker.)
     """
     out = []
     for m in re.finditer(r'\(setq\b', src):
         end = end_of_form(src, m.end())
-        body, depth = src[m.end():end], 0
-        for t in re.finditer(r'[()"; \n]|' + GLOBAL, body):
+        d = k = 0
+        for t in re.finditer(r'"(?:[^"\\]|\\.)*"|;[^\n]*|[()\']|[^\s()\'";]+',
+                             src[m.end():end - 1]):
             s = t.group(0)
             if s == '(':
-                depth += 1
+                if d == 0:
+                    k += 1                    # a list is one value slot
+                d += 1
             elif s == ')':
-                depth -= 1
-            elif s.startswith('*') and depth == 0:
-                out.append((s, m.start(), end))
+                d -= 1
+            elif d or s == "'" or s.startswith(';') or s.startswith('"'):
+                continue                      # nested, quote, comment
+            else:
+                if k % 2 == 0 and re.fullmatch(GLOBAL, s):
+                    out.append((s, m.start(), end))
+                k += 1
     return out
 
 
@@ -132,6 +153,20 @@ def why(src, start):
         said.insert(0, line.lstrip(';').strip())
         i = j
     return ' '.join(said).strip()
+
+
+MARK = 'NOT A KNOB:'
+
+
+def not_a_knob(src, at):
+    """The reason the constant assigned at AT gives for not being a
+    setting, or '' -- read from the comment block directly above it."""
+    head = src.rfind('\n\n', 0, at)
+    said = src[head + 1:at]
+    if MARK not in said:
+        return ''
+    return ' '.join(re.sub(r'^\s*;+', '', ln)
+                    for ln in said.split(MARK, 1)[1].splitlines()).strip()
 
 
 def table_names(readme):
@@ -198,10 +233,16 @@ for tool, path, banner, _readme in FILES:
     if tool not in BLOCKS:
         continue
     _src, _block, rest = BLOCKS[tool]
-    stray = [n for n, _s, _e in assignments(rest) if n != banner]
-    check("%s: nothing settable outside it" % tool, not stray, repr(stray))
-    check("%s: and the banner outside it is the version" % tool,
-          [n for n, _s, _e in assignments(rest)] == [banner],
+    outside = [(n, s) for n, s, _e in assignments(rest) if n != banner]
+    stray = [n for n, s in outside if not not_a_knob(rest, s)]
+    check("%s: nothing settable outside it" % tool, not stray,
+          "%r -- hoist it into the block, or say NOT A KNOB: and why"
+          % (stray,))
+    for name, at in outside:
+        check("%s %s says why it is not a knob" % (tool, name),
+              len(not_a_knob(rest, at)) > 20, repr(not_a_knob(rest, at)[:60]))
+    check("%s: the one unmarked global outside it is the version" % tool,
+          banner in [n for n, _s, _e in assignments(rest)],
           repr([n for n, _s, _e in assignments(rest)]))
 
 print("== 5. every knob is a row in the README's Tunables table ==")

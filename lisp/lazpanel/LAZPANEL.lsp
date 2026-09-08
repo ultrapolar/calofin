@@ -97,7 +97,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.11")
+(setq *lazpanel-version* "v3.12")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -264,6 +264,7 @@
     ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SOCONV"           "SO survey onto our layers")
+    ("SORECONV"         "SO conversion, undone")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
@@ -272,8 +273,10 @@
     ("TYDRN"            "Text + point tidy-up")
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
     ("VSCONV"           "VS export onto shop layers")
+    ("VSRECONV"         "VS conversion, undone")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Survey import cleanup")
+    ("XFTRECONV"        "Import cleanup, undone")
     ("XYPLOT"           "X/Y offset plot")
    ))
 
@@ -303,8 +306,11 @@
   '(("Pool"
      ("Converters"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       )
      ("Shape"
       "POOL"
@@ -351,6 +357,7 @@
       "STOCKCOVER"
       "CUSTBLOCK"
       "XFTCONV"
+      "XFTRECONV"
       )
      ("Points"
       "ABFIND"
@@ -374,8 +381,11 @@
      ("Spa"
      ("Converters"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       )
      ("Shape, dims & check"
       "SPA"
@@ -463,8 +473,11 @@
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"

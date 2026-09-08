@@ -70,6 +70,24 @@ def grp(d, code):
     return None
 
 
+def xdata(d, app):
+    """The items one application carries on an entity: [] when the
+    application is there and empty -- which is how xdata is deleted --
+    and None when it is not there at all.
+
+    Read per application rather than off the whole -3 group, because an
+    entity carries several: the export's own ACAD overrides, and the
+    record VSCONV writes to undo itself by."""
+    g = grp(d, -3)
+    if g is None:
+        return None
+    apps = [g] if (g and isinstance(g[0], str)) else g
+    for a in apps:
+        if a and a[0] == app:
+            return a[1:]
+    return None
+
+
 # ----------------------------------------------------------------------
 # the drawing, as the export hands it over
 # ----------------------------------------------------------------------
@@ -135,6 +153,12 @@ def survey(vm, dims=True):
     vm.loads(layer('POINTS', 6, LOCKED))
     vm.loads(layer('TEXT', 4))
     vm.loads(layer('DASHED', 7))
+    # ...and the LINETYPE of that name, which a drawing carrying objects
+    # drawn in it always has.  It matters to the revert and to nothing
+    # else: vla-put-Linetype refuses a linetype the drawing has not
+    # loaded, so a fixture without it can only ever exercise the
+    # could-not-finish path (which has a test of its own below).
+    vm.loads('(entmake \'((0 . "LTYPE") (2 . "DASHED")))')
     vm.loads(line('1 Perimeter', 0, 0, 100, 0))     # the outline
     vm.loads(line('1 Perimeter', 100, 0, 100, 50))
     vm.loads(poly('2 Coping', 0, 0))                # the coping band
@@ -231,7 +255,9 @@ check("POOL and DIMENSION were created for the run",
 check("the dimension is on the shop style",
       grp(dims[0], 3) == 'STANDARD', repr(grp(dims[0], 3)))
 check("and its style overrides went with the rename",
-      grp(dims[0], -3) == ['ACAD'], repr(grp(dims[0], -3)))
+      xdata(dims[0], 'ACAD') == [], repr(grp(dims[0], -3)))
+check("...while the record VSCONV writes to undo itself by is untouched",
+      xdata(dims[0], 'VSCONV'), repr(grp(dims[0], -3)))
 
 # locks: a SOURCE layer is unlocked for the run and put back; a
 # DESTINATION is an output layer, repaired for good (STANDARDS 5)
@@ -358,8 +384,7 @@ check("the dimension still moved layer", grp(d, 8) == 'DIMENSION')
 check("but kept the export's style rather than being given a fiction",
       grp(d, 3) == 'QCADDimStyle')
 check("its overrides were left on it too, since the style is what would"
-      " have replaced them", grp(d, -3)[0] == 'ACAD'
-      and len(grp(d, -3)) > 1, repr(grp(d, -3)))
+      " have replaced them", xdata(d, 'ACAD'), repr(grp(d, -3)))
 check("and the run says so once, not once per dimension",
       len([s for s in vm.printed
            if 'no "STANDARD INCHES" dimension style' in s]) == 1,
@@ -382,7 +407,8 @@ check("but the explicit colour, linetype and lineweight survived it",
       repr([(grp(d, 62), grp(d, 6), grp(d, 370)) for d in lines]))
 check("the dimension restyle does not depend on it",
       grp(ents(vm, 'DIMENSION')[0], 3) == 'STANDARD'
-      and grp(ents(vm, 'DIMENSION')[0], -3) == ['ACAD'])
+      and xdata(ents(vm, 'DIMENSION')[0], 'ACAD') == [],
+      repr(grp(ents(vm, 'DIMENSION')[0], -3)))
 
 # ----------------------------------------------------------------------
 # the xdata tunable
@@ -394,7 +420,7 @@ vm.run('c:VSCONV', [None, None])
 d = ents(vm, 'DIMENSION')[0]
 check("the style name changed", grp(d, 3) == 'STANDARD', repr(grp(d, 3)))
 check("the DSTYLE overrides are still on it",
-      grp(d, -3)[0] == 'ACAD' and len(grp(d, -3)) > 1, repr(grp(d, -3)))
+      xdata(d, 'ACAD'), repr(grp(d, -3)))
 check("and the report does not claim they were removed",
       any('1 dimension(s) -> STANDARD' in s and 'removed' not in s
           for s in vm.printed), repr(vm.printed[-6:]))
@@ -487,6 +513,221 @@ check("a plain cancel prints no error line",
 check("the layers were never unlocked, so nothing to relock",
       layer_flags(vm, '3.1 Anchors') & LOCKED and vm.lock_log == [],
       repr(vm.lock_log))
+
+# ----------------------------------------------------------------------
+# the record, and VSRECONV reading it back
+# ----------------------------------------------------------------------
+# The conversion is a layer move, a BYLAYER forcing and a dimension
+# restyle; U undoes all three while the session lasts, and nothing did
+# once the drawing had been saved.  So every object VSCONV moves
+# carries a record of what it was, the override block included, and
+# VSRECONV is the other direction.
+print("vsconv -- every converted object carries a record of what it was")
+
+
+def ename_where(vm, code, val):
+    """The first live entity whose group CODE reads VAL.
+
+    An ENAME, deliberately: entmod hands the VM a NEW alist for the
+    entity, so a data list captured before a run is the state it was in
+    then -- and writing the record IS an entmod.
+    """
+    for e in vm.entities:
+        if e not in vm.deleted and grp(vm.entdata[e], code) == val:
+            return e
+    return None
+
+
+def state(vm):
+    """Every live entity as what a round trip has to reproduce.
+
+    Colour, linetype and lineweight are read through their ByLayer
+    defaults, because that is what the round trip promises: an object
+    that arrived carrying NO colour of its own comes back carrying the
+    explicit 256 that means the same thing.  The spelling-out is
+    asserted on its own below; here it must not read as a difference.
+    """
+    out = []
+    for d in (vm.entdata[e] for e in vm.entities if e not in vm.deleted):
+        out.append((grp(d, 0), grp(d, 8),
+                    256 if grp(d, 62) is None else grp(d, 62),
+                    grp(d, 6) or 'ByLayer',
+                    -1 if grp(d, 370) is None else grp(d, 370),
+                    grp(d, 3), xdata(d, 'ACAD')))
+    return out
+
+
+vm = fresh()
+before = state(vm)
+dim_e = ename_where(vm, 0, 'DIMENSION')
+line_e = ename_where(vm, 6, 'DASHED')
+vm.run('c:VSCONV', [None, None])
+
+rec = xdata(vm.entdata[dim_e], 'VSCONV')
+check("the dimension's record names the tool, the version and its layer",
+      rec[0] == Dot(1000, 'VSCONV') and re.fullmatch(r'v\d+\.\d+', rec[1].b)
+      and rec[2] == Dot(1000, '4 Dimensions'), repr(rec[:3]))
+lrec = xdata(vm.entdata[line_e], 'VSCONV')
+check("...the properties the BYLAYER forcing overwrote",
+      lrec[3] == Dot(1000, 'DASHED') and lrec[6] == Dot(1070, 2)
+      and lrec[7] == Dot(1070, 35), repr(lrec[3:8]))
+check("...and its source layer's own colour, for one PURGEd later",
+      lrec[5] == Dot(1070, 7), repr(lrec[5]))
+check("...the style name the restyle took off",
+      rec[4] == Dot(1000, 'QCADDimStyle'), repr(rec[4]))
+check("...and the whole override block, item for item, braces and all",
+      rec[8] == Dot(1070, 1)
+      and rec[9:] == [Dot(1000, 'DSTYLE'), Dot(1002, '{'), Dot(1070, 171),
+                      Dot(1070, 3), Dot(1070, 141), Dot(1040, 2.5),
+                      Dot(1002, '}')], repr(rec[8:]))
+check("a non-dimension records no style and no overrides",
+      xdata(vm.entdata[line_e], 'VSCONV')[4] == Dot(1000, '')
+      and xdata(vm.entdata[line_e], 'VSCONV')[8] == Dot(1070, 0),
+      repr(xdata(vm.entdata[line_e], 'VSCONV')))
+check("the done line offers the way back", any(
+    'VSRECONV puts it all back' in s for s in vm.printed), repr(vm.printed[-3:]))
+
+print("vsconv -- VSRECONV puts the export back, overrides and all")
+vm.printed = []
+vm.run('c:VSRECONV', [None, None])
+
+check("every object is on the layer, colour and lineweight it arrived with",
+      state(vm) == before, "before %r\nafter  %r" % (before, state(vm)))
+check("an absent property comes back as the explicit ByLayer it meant",
+      (grp(vm.entdata[dim_e], 62), grp(vm.entdata[dim_e], 6),
+       grp(vm.entdata[dim_e], 370)) == (2, 'ByLayer', -1),
+      repr(vm.entdata[dim_e]))
+check("...while one that was explicit comes back exactly as it was",
+      (grp(vm.entdata[line_e], 62), grp(vm.entdata[line_e], 6),
+       grp(vm.entdata[line_e], 370)) == (2, 'DASHED', 35),
+      repr(vm.entdata[line_e]))
+check("the dimension is back on its own style",
+      grp(vm.entdata[dim_e], 3) == 'QCADDimStyle')
+check("...with the override block that decides its text height",
+      xdata(vm.entdata[dim_e], 'ACAD') ==
+      [Dot(1000, 'DSTYLE'), Dot(1002, '{'), Dot(1070, 171), Dot(1070, 3),
+       Dot(1070, 141), Dot(1040, 2.5), Dot(1002, '}')],
+      repr(xdata(vm.entdata[dim_e], 'ACAD')))
+check("and the record went with the move it described",
+      not [e for e in vm.entities
+           if e not in vm.deleted and xdata(vm.entdata[e], 'VSCONV')])
+check("the summary reads the table backwards", any(
+    'VSRECONV done: 7 object(s) put back' in s for s in vm.printed)
+    and any('POOL: 2 -> 1 Perimeter' in s for s in vm.printed)
+    and any('POINTS: 2 -> 3.1 Anchors' in s for s in vm.printed),
+    repr(vm.printed[-6:]))
+check("...and says the dimension step was undone too", any(
+    '1 dimension(s) back on their own style, ACAD style overrides restored'
+    in s for s in vm.printed), repr(vm.printed[-4:]))
+check("one undo mark, opened and closed",
+      vm.undo_marks == 0 and vm.undo_log[-2:] == ['start', 'end'],
+      repr(vm.undo_log))
+check("the global *error* is untouched", not error_global(vm))
+
+vm.printed = []
+vm.run('c:VSRECONV', [None, None])
+check("a second revert finds nothing and says what it undoes", any(
+    'nothing here carries a VSCONV record' in s for s in vm.printed)
+    and any('*vsconv-record* off' in s for s in vm.printed), repr(vm.printed))
+
+# ----------------------------------------------------------------------
+# the layers the conversion emptied, and the tool told you to purge
+# ----------------------------------------------------------------------
+print("vsconv -- a source layer purged on the tool's own advice is re-created")
+
+vm = fresh()
+vm.run('c:VSCONV', [None, None])
+for name in ('1 PERIMETER', '3.1 ANCHORS', '4 DIMENSIONS'):
+    vm.tables['LAYER'].discard(
+        next(n for n in vm.tables['LAYER'] if n.upper() == name))
+    vm.tablerecs['LAYER'].pop(name, None)
+check("the fixture really purged them",
+      not [n for n in vm.tables['LAYER'] if n.upper() == '1 PERIMETER'])
+vm.run('c:VSRECONV', [None, None])
+check("the objects are back on layers the drawing no longer had",
+      sorted(grp(d, 8) for d in ents(vm, 'POINT')) == ['3.1 Anchors'] * 2,
+      repr([grp(d, 8) for d in ents(vm, 'POINT')]))
+check("...re-created with the colour the record kept off the layer",
+      grp(vm.recdata[vm.tablerecs['LAYER']['1 PERIMETER']], 62) == 7,
+      repr(vm.recdata[vm.tablerecs['LAYER']['1 PERIMETER']]))
+
+# ----------------------------------------------------------------------
+# a linetype purged since the conversion
+# ----------------------------------------------------------------------
+print("vsconv -- a linetype that has been purged since leaves the job open")
+
+vm = fresh()
+line_e = ename_where(vm, 6, 'DASHED')
+vm.run('c:VSCONV', [None, None])
+vm.tables['LTYPE'].discard('DASHED')     # PURGEd between the two runs
+vm.printed = []
+vm.run('c:VSRECONV', [None, None])
+check("the layer and the colour still come back",
+      grp(vm.entdata[line_e], 8) == '1 Perimeter'
+      and grp(vm.entdata[line_e], 62) == 2, repr(vm.entdata[line_e]))
+check("the run names the linetype it could not load", any(
+    'Linetype DASHED is no longer loaded' in s for s in vm.printed),
+    repr(vm.printed[-3:]))
+check("and KEEPS those objects' records, so a later run can finish them",
+      len([e for e in vm.entities
+           if e not in vm.deleted and xdata(vm.entdata[e], 'VSCONV')]) == 3,
+      repr(len([e for e in vm.entities
+                if e not in vm.deleted and xdata(vm.entdata[e], 'VSCONV')])))
+
+# ----------------------------------------------------------------------
+# the record can be switched off
+# ----------------------------------------------------------------------
+print("vsconv -- *vsconv-record* nil converts and writes nothing down")
+
+vm = fresh()
+vm.loads('(setq *vsconv-record* nil)')
+vm.run('c:VSCONV', [None, None])
+check("the conversion still happens",
+      sorted(grp(d, 8) for d in ents(vm, 'POINT')) == ['POINTS'] * 2)
+check("but nothing carries a record",
+      not [e for e in vm.entities
+           if e not in vm.deleted and xdata(vm.entdata[e], 'VSCONV')])
+check("and the run says so rather than promising a revert", any(
+    '*vsconv-record* is off' in s for s in vm.printed), repr(vm.printed[-3:]))
+vm.printed = []
+vm.run('c:VSRECONV', [None, None])
+check("VSRECONV then moves nothing and explains why", any(
+    'nothing here carries a VSCONV record' in s for s in vm.printed)
+    and sorted(grp(d, 8) for d in ents(vm, 'POINT')) == ['POINTS'] * 2,
+    repr(vm.printed))
+
+# ----------------------------------------------------------------------
+# the cut-short paths, as VSCONV's own
+# ----------------------------------------------------------------------
+print("vsconv -- VSRECONV cut short reaches its own handler")
+
+vm = fresh()
+vm.run('c:VSCONV', [None, None])
+vm.handle_errors = True
+vm.loads('(defun vsconv:xdel (ent app) (vsconv:no-such-helper ent))')
+vm.run('c:VSRECONV', [None, None])
+check("the run is aborted through *error*, not a crash",
+      len(vm.handled_errors) == 1
+      and 'undefined function' in vm.handled_errors[0], repr(vm.handled_errors))
+check("the handler closed the mark it opened",
+      vm.undo_marks == 0 and vm.undo_log[-1] == 'end', repr(vm.undo_log))
+check("the error is reported under the reverter's name", any(
+    s.startswith('\nVSRECONV error:') for s in vm.printed), repr(vm.printed[-3:]))
+check("the global *error* is untouched afterwards", not error_global(vm))
+
+vm = fresh()
+vm.run('c:VSCONV', [None, None])
+vm.handle_errors = True
+was = state(vm)
+vm.printed = []
+vm.run('c:VSRECONV', [None, esc])
+check("Esc at the selection prompt is a quiet cancel",
+      vm.handled_errors and 'cancelled' in vm.handled_errors[0]
+      and not any('VSRECONV error' in s for s in vm.printed),
+      repr(vm.printed[-2:]))
+check("nothing was moved back", state(vm) == was)
+check("the mark opened before the prompt is closed",
+      vm.undo_marks == 0 and vm.undo_log[-1] == 'end', repr(vm.undo_log))
 
 # ----------------------------------------------------------------------
 if FAILS:

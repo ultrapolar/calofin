@@ -2,8 +2,10 @@
 ;;;  XFTCONV.lsp   -  survey import cleanup (Leica XFT / site trace)
 ;;;  AutoCAD 2018
 ;;;
-;;;  Command:  XFTCONV   - highlight the import, that is the only answer
-;;;                        it needs
+;;;  Commands:  XFTCONV    - highlight the import, that is the only
+;;;                          answer it needs
+;;;             XFTRECONV  - put a converted import back the way it
+;;;                          arrived
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
@@ -42,11 +44,29 @@
 ;;;  run is one UNDO step - in a drawing that records undo, that is; with
 ;;;  UNDO Control set to None it runs without a group rather than dying
 ;;;  on the group it could not open.
+;;;
+;;;  XFTRECONV undoes all of it.  U undoes a run that is still in the
+;;;  session; XFTRECONV undoes one that was saved and reopened a week
+;;;  later, which is when a survey turns out to have been converted
+;;;  twice or converted by mistake.  It can do that because XFTCONV
+;;;  writes down what it erased: every block it inserts carries a
+;;;  RECORD in its own xdata - the scale and the base point the run
+;;;  used, and the marker, the name text and any leftover text that
+;;;  went with them, group by group.  Erasing alone would not be
+;;;  enough to work from: an entdel'd entity is gone for good once the
+;;;  drawing is saved, and the scale factor is not written on anything.
+;;;
+;;;  So XFTRECONV rebuilds what the swap erased, erases the block that
+;;;  replaced it, and scales the selection back by 1/12 about the same
+;;;  base point - and a drawing that has been through both is the
+;;;  drawing that arrived.  *xft-record* is the one line that turns the
+;;;  record off; with it off XFTCONV still converts and XFTRECONV has
+;;;  nothing to work from and says so.
 ;;; ===================================================================
 
 
 
-(setq *xft-version* "v1.13") ; printed on load and at command start so a
+(setq *xft-version* "v1.14") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -204,10 +224,61 @@
 ;; starts landing its duplicate markers a measurable distance apart.
 (setq *xft-fuzz* 1e-4)
 
+;; --- the undo record XFTRECONV reads --------------------------------
+
+;; T writes a record into each block's xdata as it goes in, and that
+;; record is the only thing that lets XFTRECONV put the survey back
+;; once the drawing has been saved and reopened (U undoes a run still
+;; in the session).  nil converts exactly as this file did before the
+;; record existed and writes nothing down, so the run can then be
+;; undone by U and by nothing else.
+(setq *xft-record* T)
+
+;; The xdata application the record lives under.  Two drawings' records
+;; cannot collide, so this only wants changing if a shop already uses
+;; the name for something else; XFTRECONV reads whatever is set here,
+;; so a drawing converted under one name is not readable under another.
+(setq *xft-xdata-app* "XFTCONV")
+
+;; Decimals a coordinate is written to in the record.  8 puts the round
+;; trip within 1e-8 of a drawing unit -- a hundredth of a micron on a
+;; survey in inches -- which is what tests/test_xftconv.py measures.
+;; Fewer makes the rebuild coarser; more makes the record longer
+;; without making it truer, the number having come from a float.
+(setq *xft-num-prec* 8)
+
+;; The colour a source layer is re-created with when XFTRECONV has to
+;; rebuild one that was PURGED after the conversion.  A layer still in
+;; the drawing keeps its own colour, as everywhere else in the build,
+;; so this is only ever reached by a rebuild onto a layer that is gone.
+(setq *xft-rebuild-color* 7)
+
+;; Which DXF groups the record carries whatever the entity type is --
+;; layer, colour, linetype, lineweight, and the space it sits in.
+;; Dropping one here means XFTRECONV cannot put that property back.
+(setq *xft-keep-common* '(8 62 6 370 410))
+
+;; And the groups it carries per type: what an export writes on the
+;; five kinds of object XFTCONV erases.  An export that writes
+;; something else onto its markers -- a thickness, a transparency -- is
+;; carried by adding its group code to the right row, and nothing else
+;; in the file changes.  A code is read back as a point (10, 11), a
+;; real (39 40 41 50 51), an integer (62 66 70-73 370) or a string, by
+;; xft:group, so a code of a kind not in one of those four lists comes
+;; back as text.
+(setq *xft-keep*
+  '(("LINE"   (10 11))
+    ("POINT"  (10 50))
+    ("CIRCLE" (10 40))
+    ("TEXT"   (1 7 10 11 40 41 50 51 71 72 73))
+    ("MTEXT"  (1 3 7 10 40 41 50 71 72))))
+
 (vl-load-com)   ; getboundingbox, for the middle of the selection
 
 
-;;; -------------------- small helpers -----------------------------------
+;;; -------------------------------------------------------------------
+;;;  small helpers
+;;; -------------------------------------------------------------------
 
 (defun xft:mid (a b)
   (list (/ (+ (car a) (car b)) 2.0)
@@ -323,6 +394,271 @@
 
 
 ;;; -------------------------------------------------------------------
+;;;  the record - what XFTRECONV puts the survey back from
+;;; -------------------------------------------------------------------
+;;;  One string per block, in that block's own xdata.  It holds the
+;;;  entities the swap erased, written out group by group, and beside
+;;;  it as xdata reals the scale and the base point the run used - the
+;;;  two numbers no object in the drawing carries.
+;;;
+;;;  The grammar is one line: entities are separated by ";", their
+;;;  groups by "|", a group's code from its value by "=", and the parts
+;;;  of a point by ",".  Any of those - and the "\" that escapes them,
+;;;  which MTEXT formatting is full of - is backslash-escaped inside a
+;;;  value, so the string can be split a level at a time and a caption
+;;;  reading "1=2;3" is never read as structure.  Escapes come off at
+;;;  the leaf and nowhere earlier, which is why xft:split leaves them
+;;;  on.
+;;;
+;;;  Coordinates go through rtos at *xft-num-prec* decimals rather than
+;;;  as raw floats, because xdata carries strings and reals in separate
+;;;  groups and one string keeps the record readable in a DXF dump.  A
+;;;  round trip is therefore exact to 1e-8 of a drawing unit - a
+;;;  hundredth of a micron on a survey in inches - and not to the last
+;;;  bit of the float.  tests/test_xftconv.py measures exactly that, so
+;;;  the claim cannot rot.
+;;;
+;;;  Only the groups a rebuild needs are carried: what an export writes
+;;;  on the five entity types XFTCONV erases.  An object's own xdata,
+;;;  its extension dictionary and its reactors are NOT in the record and
+;;;  do not come back - a survey import has none, and inventing a
+;;;  general entity copier here would be claiming more than the tool
+;;;  can test.
+
+;; NOT A KNOB: these five characters are the grammar itself, and
+;; xft:esc, xft:split and xft:unesc all read this list -- but changing
+;; it changes what an ALREADY WRITTEN record means, so a drawing
+;; converted before the change could not be read after it.  The list is
+;; here so the three helpers cannot disagree about it, not so it can be
+;; edited.  (Which groups the record carries IS tunable: *xft-keep* is
+;; in the block at the top.)
+(setq *xft-delims* '("\\" ";" "|" "=" ","))
+
+;; NOT A KNOB: AutoCAD's own subclass names, which entmake wants and
+;; will not accept a substitute for.  A type is added here when it is
+;; added to *xft-keep*; neither name in a row is a choice.
+(setq *xft-subclass*
+  '(("LINE"   "AcDbLine")
+    ("POINT"  "AcDbPoint")
+    ("CIRCLE" "AcDbCircle")
+    ("TEXT"   "AcDbText")
+    ("MTEXT"  "AcDbMText")))
+
+(defun xft:esc (s / i n c out)
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c   (substr s i 1)
+          out (strcat out (if (member c *xft-delims*) (strcat "\\" c) c))
+          i   (1+ i)))
+  out
+)
+
+(defun xft:unesc (s / i n c out)
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (and (= c "\\") (< i n))
+      (setq out (strcat out (substr s (1+ i) 1)) i (+ i 2))
+      (setq out (strcat out c) i (1+ i))))
+  out
+)
+
+;; S split on every UNESCAPED sep.  The pieces keep their escapes -
+;; take them off with xft:unesc at the leaf, or a value that escaped a
+;; "=" would be split on it at the next level down.
+(defun xft:split (s sep / i n c out cur)
+  (setq out '() cur "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (cond
+      ((and (= c "\\") (< i n))
+       (setq cur (strcat cur c (substr s (1+ i) 1)) i (+ i 2)))
+      ((= c sep) (setq out (cons cur out) cur "" i (1+ i)))
+      (t (setq cur (strcat cur c) i (1+ i)))
+    )
+  )
+  (reverse (cons cur out))
+)
+
+(defun xft:atof (s) (if s (atof s) 0.0))
+
+(defun xft:r2s (v) (rtos v 2 *xft-num-prec*))
+
+;; A DXF value as text: a point is its three parts, a number is rtos'd
+;; or itoa'd, a string is itself.
+;;
+;; ESCAPING HAPPENS HERE, on the leaves, and nowhere above.  A point
+;; writes the "," between its parts itself, so a caller that escaped
+;; the whole result afterwards would escape that comma too -- and the
+;; split that reads it back, which only cuts on an UNESCAPED one, would
+;; hand the whole "x,y,z" back as the x and read the y as zero.  Only a
+;; string can carry a delimiter, so only a string is escaped.
+(defun xft:val2s (v)
+  (cond
+    ((null v) "")
+    ((= (type v) 'LIST)
+     (strcat (xft:r2s (car v)) "," (xft:r2s (cadr v)) ","
+             (xft:r2s (if (caddr v) (caddr v) 0.0))))
+    ((= (type v) 'STR) (xft:esc v))
+    ((= (type v) 'INT) (itoa v))
+    (t (xft:r2s v))
+  )
+)
+
+;; ...and back, the CODE saying which of the four it was.  S is still
+;; escaped, so a point is split before its parts are unescaped.
+(defun xft:group (code s / b)
+  (cond
+    ((member code '(10 11))
+     (setq b (mapcar 'xft:unesc (xft:split s ",")))
+     (cons code (list (xft:atof (car b)) (xft:atof (cadr b))
+                      (xft:atof (caddr b)))))
+    ((member code '(39 40 41 50 51)) (cons code (xft:atof (xft:unesc s))))
+    ((member code '(62 66 70 71 72 73 370)) (cons code (atoi (xft:unesc s))))
+    (t (cons code (xft:unesc s)))
+  )
+)
+
+;; One entity as one string, nil for a type the record does not carry.
+;; The alist is walked in ORDER rather than assoc'd group by group, so
+;; an MTEXT that spills its text across repeated group 3s keeps all of
+;; them.
+(defun xft:ser (en / ed typ codes p out)
+  (setq ed  (entget en)
+        typ (cdr (assoc 0 ed)))
+  (if (setq codes (cadr (assoc typ *xft-keep*)))
+    (progn
+      (setq codes (append codes *xft-keep-common*)
+            out   (strcat "0=" (xft:esc typ)))
+      (foreach p ed
+        (if (member (car p) codes)
+          (setq out (strcat out "|" (itoa (car p)) "="
+                            (xft:val2s (cdr p))))))
+      out
+    )
+  )
+)
+
+(defun xft:deser (spec / g bits ed)
+  (setq ed '())
+  (foreach g (xft:split spec "|")
+    (setq bits (xft:split g "="))
+    (if (cdr bits)
+      (setq ed (cons (xft:group (atoi (xft:unesc (car bits))) (cadr bits))
+                     ed))))
+  (reverse ed)
+)
+
+;; SPEC back into the drawing, or nil when it names a type the record
+;; does not carry.  The layer goes through ensure-layer: it is an output
+;; layer for this run, and a rebuild onto one that was PURGED after the
+;; conversion has to create it (STANDARDS 5).
+(defun xft:rebuild (spec / ed typ sub lay out p)
+  (setq ed  (xft:deser spec)
+        typ (cdr (assoc 0 ed))
+        sub (cadr (assoc typ *xft-subclass*))
+        lay (cdr (assoc 8 ed)))
+  (if (and typ sub)
+    (progn
+      (cal:ensure-layer (if lay lay "0") *xft-rebuild-color*)
+      (setq out (list (cons 0 typ) '(100 . "AcDbEntity")))
+      (foreach p ed
+        (if (member (car p) *xft-keep-common*)
+          (setq out (append out (list p)))))
+      (setq out (append out (list (cons 100 sub))))
+      (foreach p ed
+        (if (not (member (car p) (cons 0 *xft-keep-common*)))
+          (setq out (append out (list p)))))
+      (entmakex out)
+    )
+  )
+)
+
+;; SPEC appended to a payload, "" and nil both meaning nothing to add.
+(defun xft:join (payload spec)
+  (cond
+    ((or (null spec) (= spec "")) payload)
+    ((= payload "") spec)
+    (t (strcat payload ";" spec))
+  )
+)
+
+;; One xdata string holds 255 characters, so the payload travels in
+;; pieces and is joined back before it is read.  A cut can land between
+;; a backslash and what it escapes; nothing looks at a piece on its own,
+;; so it does not matter.
+(defun xft:chunks (s / out)
+  (setq out '())
+  (while (> (strlen s) 250)
+    (setq out (cons (substr s 1 250) out)
+          s   (substr s 251)))
+  (reverse (cons s out))
+)
+
+;; The record onto one block: the marker word and the version that
+;; wrote it, the scale and the WCS base point as reals, then the
+;; payload.  WCS because a base kept in the UCS of the day would be
+;; read back under whatever UCS the revert happens to run in.
+(defun xft:stamp (en base scale payload / items)
+  (regapp *xft-xdata-app*)
+  (setq items (append (list (cons 1000 *xft-xdata-app*)
+                            (cons 1000 *xft-version*)
+                            (cons 1040 scale)
+                            (cons 1040 (car base))
+                            (cons 1040 (cadr base))
+                            (cons 1040 (if (caddr base) (caddr base) 0.0)))
+                      (mapcar '(lambda (c) (cons 1000 c))
+                              (xft:chunks payload))))
+  (entmod (append (entget en)
+                  (list (list -3 (cons *xft-xdata-app* items)))))
+)
+
+;; ...and back: (version scale base payload), or nil when this entity
+;; carries no record of ours.
+(defun xft:record (en / x app strs nums p)
+  (setq x (assoc -3 (entget en (list *xft-xdata-app*))))
+  (if x (setq app (assoc *xft-xdata-app* (cdr x))))
+  (if app
+    (progn
+      (setq strs '() nums '())
+      (foreach p (cdr app)
+        (cond ((= (car p) 1000) (setq strs (cons (cdr p) strs)))
+              ((= (car p) 1040) (setq nums (cons (cdr p) nums)))))
+      (setq strs (reverse strs) nums (reverse nums))
+      (if (and (cdr strs) (= (car strs) *xft-xdata-app*)
+               (= 4 (length nums)))
+        (list (cadr strs)
+              (car nums)
+              (list (cadr nums) (caddr nums) (cadddr nums))
+              (if (cddr strs) (apply 'strcat (cddr strs)) "")))
+    )
+  )
+)
+
+;; The record nearest PT gains SPEC.  A leftover text belongs to no one
+;; marker, so it is kept by the point it sat closest to: revert part of
+;; a survey and the annotation that came back is the annotation that
+;; was next to it.
+(defun xft:attach (recs pt spec / best bestd d out r)
+  (if (or (null recs) (null spec) (= spec ""))
+    recs
+    (progn
+      (foreach r recs
+        (setq d (cal:d2 pt (cadr r)))
+        (if (or (null best) (< d bestd)) (setq best r bestd d)))
+      (setq out '())
+      (foreach r recs
+        (setq out (cons (if (eq r best)
+                          (list (car r) (cadr r) (xft:join (caddr r) spec))
+                          r)
+                        out)))
+      (reverse out)
+    )
+  )
+)
+
+
+;;; -------------------------------------------------------------------
 ;;;  drawing setup - make sure the layer, style and block are there
 ;;; -------------------------------------------------------------------
 
@@ -416,10 +752,11 @@
 ;;;  insert one replacement point
 ;;; -------------------------------------------------------------------
 
-(defun xft:insert (pt num / apt)
-  (setq apt (list (+ (car pt) (car  *xft-att-offset*))
-                  (+ (cadr pt) (cadr *xft-att-offset*))
-                  (caddr pt)))
+(defun xft:insert (pt num / apt prev en)
+  (setq apt  (list (+ (car pt) (car  *xft-att-offset*))
+                   (+ (cadr pt) (cadr *xft-att-offset*))
+                   (caddr pt))
+        prev (entlast))
   (entmake (list '(0 . "INSERT")
                  '(100 . "AcDbEntity")
                  (cons 8 *xft-block-layer*)
@@ -443,6 +780,16 @@
   (entmake (list '(0 . "SEQEND")
                  '(100 . "AcDbEntity")
                  (cons 8 *xft-block-layer*)))
+  ;; the block reference just made, handed back so the run can stamp
+  ;; its record on it.  entlast is no way to find it: the attributes
+  ;; and the SEQEND are subentities, so AutoCAD answers with the
+  ;; INSERT and the VM the tests run on answers with the SEQEND.  The
+  ;; walk starts from where the drawing ended before the sequence and
+  ;; takes the first INSERT, which is the same entity on both.
+  (setq en (if prev (entnext prev) (entnext)))
+  (while (and en (/= "INSERT" (cdr (assoc 0 (entget en)))))
+    (setq en (entnext en)))
+  en
 )
 
 
@@ -457,19 +804,23 @@
 ;; Both exports put the name in the marker's column - the Leica one
 ;; stacks it above, the site trace lands it on the centre - so a name in
 ;; the same column (its X within *xft-column-tol* text heights of the
-;; marker's) wins over a merely closer one.  That is what keeps a tight
-;; cluster of points from stealing each other's tags.  Failing that,
-;; nearest-within-reach wins, and a name is used once.
+;; marker's) wins over a merely closer one.  That is what keeps a
+;; tight cluster of points from stealing each other's tags.  Failing
+;; that, nearest-within-reach wins, and a name is used once.
 ;;
 ;; STRIP says whether the name's letter prefix comes off ("P22" -> "22")
 ;; or the whole label goes in as it stands; either way MTEXT formatting
 ;; codes are stripped and the result is trimmed.
 ;;
-;; Returns (made blank): how many blocks went in, and how many of those
-;; found no name and carry a blank number.
+;; Returns (made blank recs): how many blocks went in, how many of those
+;; found no name and carry a blank number, and one (ename centre
+;; payload) per block for the record XFTRECONV reads.  The payload is
+;; taken BEFORE anything is erased, which is the only moment the marker
+;; and its name text are still there to be read.
 (defun xft:swap (groups names reach strip / g nm ctr best bestd bestr rank
-                                            txth lim d num made blank e)
-  (setq made 0 blank 0)
+                                            txth lim d num made blank e
+                                            en spec recs)
+  (setq made 0 blank 0 recs '())
   (foreach g groups
     (setq ctr   (car g)
           best  nil
@@ -503,12 +854,18 @@
                          best names))
       (setq num "" blank (1+ blank))
     )
-    (xft:insert ctr num)
+    (setq spec "")
+    (if *xft-record*
+      (progn
+        (foreach e (cdr g) (setq spec (xft:join spec (xft:ser e))))
+        (if best (setq spec (xft:join spec (xft:ser (nth 3 best)))))))
+    (setq en (xft:insert ctr num))
     (foreach e (cdr g) (entdel e))
     (if best (entdel (nth 3 best)))
+    (if en (setq recs (cons (list en ctr spec) recs)))
     (setq made (1+ made))
   )
-  (list made blank)
+  (list made blank (reverse recs))
 )
 
 
@@ -517,8 +874,8 @@
 ;;; -------------------------------------------------------------------
 
 (defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone guard
-                     ss base i en ed typ locked
-                     markers names dots dotnames r
+                     ss base wbase i en ed typ locked
+                     markers names dots dotnames r recs
                      nmade nblank ndots nleft)
 
   (defun xft:restore ()
@@ -613,8 +970,12 @@
           (xft:ensure-block)
 
           ;; ---- 1. scale x12 about the middle of what was picked ---
-          ;; getboundingbox works in WCS, SCALE wants the current UCS
-          (setq base (trans (xft:centre ss) 0 1))
+          ;; getboundingbox works in WCS, SCALE wants the current UCS.
+          ;; The record keeps the WCS one: a base written down in the
+          ;; UCS of the day would be read back under whatever UCS the
+          ;; revert runs in, and land the survey somewhere else.
+          (setq wbase (xft:centre ss)
+                base  (trans wbase 0 1))
           (if (/= *xft-scale* 1.0)
             (progn
               (princ (strcat "\nScaling " (itoa (sslength ss)) " objects by "
@@ -675,12 +1036,14 @@
           (setq r      (xft:swap markers names *xft-name-reach*
                                  *xft-strip-prefix*)
                 nmade  (car r)
-                nblank (cadr r))
+                nblank (cadr r)
+                recs   (caddr r))
           (setq r      (xft:swap dots dotnames *xft-dot-reach*
                                  *xft-dot-strip-prefix*)
                 ndots  (car r)
                 nmade  (+ nmade ndots)
-                nblank (+ nblank (cadr r)))
+                nblank (+ nblank (cadr r))
+                recs   (append recs (caddr r)))
 
           ;; ---- 5. every other bit of text in the selection goes ---
           ;; the numbers now live in the block attributes, so anything
@@ -704,12 +1067,29 @@
                 (setq en (ssname ss i)
                       ed (entget en))
                 (if (and ed (member (cdr (assoc 0 ed)) '("TEXT" "MTEXT")))
-                  (progn (entdel en) (setq nleft (1+ nleft)))
+                  (progn
+                    ;; read before erasing, and kept by the block it
+                    ;; sat nearest: a leftover text belongs to no one
+                    ;; marker, so that is the only association there is
+                    (if *xft-record*
+                      (setq recs (xft:attach recs (xft:txtpt ed)
+                                             (xft:ser en))))
+                    (entdel en)
+                    (setq nleft (1+ nleft)))
                 )
                 (setq i (1+ i))
               )
             )
           )
+
+          ;; ---- 6. write the record down --------------------------
+          ;; Last, in one pass: the payloads are only complete once the
+          ;; purge above has handed its text to the blocks it belongs
+          ;; to, and stamping twice would mean reading each block's
+          ;; xdata back to append to it.
+          (if *xft-record*
+            (foreach r recs
+              (xft:stamp (car r) wbase *xft-scale* (caddr r))))
 
           (if undone (command "_.UNDO" "_End"))
           (setq undone nil)
@@ -727,9 +1107,215 @@
                            " had no name text nearby - inserted with a blank number.")))
           (if (> nleft 0)
             (princ (strcat "\n" (itoa nleft) " leftover text object(s) erased.")))
+          (if (and *xft-record* recs)
+            (princ "\nXFTRECONV puts all of it back - the blocks carry the record.")
+            (princ (strcat "\n*xft-record* is off, so nothing was written down -"
+                           " only U undoes this run.")))
           (princ)
         )
       )
+    )
+  )
+  (princ)
+)
+
+
+;;; -------------------------------------------------------------------
+;;;  XFTRECONV  -  the conversion, undone
+;;; -------------------------------------------------------------------
+;;;  Highlight the converted survey; every block in it that carries a
+;;;  record gives back the marker and the text it replaced, the block
+;;;  goes, and the whole highlight is scaled back by 1/12 about the
+;;;  base point the conversion used.
+;;;
+;;;  ONE RUN AT A TIME.  Two conversions have two base points, and one
+;;;  scale about one of them cannot undo both - so a highlight holding
+;;;  blocks from two runs is refused by name rather than half-reverted.
+;;;  The runs are told apart by the scale and base each block carries,
+;;;  which is exactly what the difference has to be for it to matter.
+
+;; The (ename version scale base payload) of every block in SS that
+;; carries a record of ours.
+(defun xft:records (ss / i en ed rec out)
+  (setq i 0 out '())
+  (while (< i (sslength ss))
+    (setq en (ssname ss i)
+          ed (entget en))
+    (if (and ed (= "INSERT" (cdr (assoc 0 ed)))
+             (setq rec (xft:record en)))
+      (setq out (cons (cons en rec) out)))
+    (setq i (1+ i))
+  )
+  (reverse out)
+)
+
+;; How many DIFFERENT conversions those records came from.  Two runs
+;; agreeing on scale and base to the fuzz are one run as far as the
+;; scale-back is concerned, which is the only thing this decides.
+(defun xft:runs (recs / out r key hit k)
+  (setq out '())
+  (foreach r recs
+    (setq key (list (nth 2 r) (nth 3 r)) hit nil)
+    (foreach k out
+      (if (and (not hit) (equal k key *xft-fuzz*)) (setq hit t)))
+    (if (not hit) (setq out (cons key out)))
+  )
+  (reverse out)
+)
+
+;; The locked layers in the way: the ones the blocks to be erased sit
+;; on.  A layer a rebuild writes TO is an output layer and goes through
+;; ensure-layer instead, which unlocks it for good and says so.
+(defun xft:locked-blocks (recs / lay out r)
+  (setq out '())
+  (foreach r recs
+    (setq lay (cdr (assoc 8 (entget (car r)))))
+    (if (and lay
+             (not (member (strcase lay) (mapcar 'strcase out)))
+             (xft:locked lay))
+      (setq out (cons lay out)))
+  )
+  (reverse out)
+)
+
+(defun c:XFTRECONV ( / *error* xft:restore oscm osos osclay undone guard
+                       ss recs runs locked r spec keep i en
+                       scale base nback nrebuilt)
+
+  (defun xft:restore ()
+    (if oscm   (setvar "CMDECHO" oscm))
+    (if osos   (setvar "OSMODE"  osos))
+    (if osclay (setvar "CLAYER"  osclay))
+    ;; popped on every way out, not in the handler alone -- see the
+    ;; same note in c:XFTCONV
+    (if *pop-error-mode* (*pop-error-mode*))
+  )
+
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nXFTRECONV error: " msg)))
+    (setq guard 0)
+    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+      (command)
+      (setq guard (1+ guard)))
+    (xft:restore)
+    (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (princ "\nNothing was left half done - use U to roll the run back.")
+    (princ)
+  )
+
+  (if *push-error-using-command* (*push-error-using-command*))
+
+  (setq oscm   (getvar "CMDECHO")
+        osos   (getvar "OSMODE")
+        osclay (getvar "CLAYER"))
+
+  (princ (strcat "\nXFTRECONV " *xft-version*
+                 " - put a converted survey back the way it arrived."))
+
+  ;; ---- selection, the same three ways XFTCONV takes it ------------
+  (setq ss (ssget "_I"))
+  (if (not ss)
+    (progn
+      (princ "\nSelect the converted survey (Enter = everything in this space): ")
+      (setq ss (ssget))))
+  (if (not ss)
+    (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
+  )
+
+  (cond
+    ((not ss)
+     (princ "\nNothing to work on.")
+     (xft:restore)
+     (princ))
+
+    ;; ---- nothing here was converted, or nothing wrote it down -----
+    ((not (setq recs (xft:records ss)))
+     (princ "\nNo converted points here - nothing carries an XFTCONV record.")
+     (princ "\n  XFTRECONV undoes an XFTCONV run, and only from the record")
+     (princ "\n  XFTCONV leaves on the blocks it inserts.  A survey converted")
+     (princ "\n  with *xft-record* off, or by hand, has none - U is the only")
+     (princ "\n  way back from those.")
+     (xft:restore)
+     (princ))
+
+    ;; ---- two runs cannot be undone by one scale -------------------
+    ((> (length (setq runs (xft:runs recs))) 1)
+     (princ (strcat "\nThis highlight holds points from " (itoa (length runs))
+                    " different XFTCONV runs."))
+     (princ "\n  Each was scaled about its own base point, and one scale back")
+     (princ "\n  cannot undo two - highlight one survey at a time.")
+     (xft:restore)
+     (princ))
+
+    ;; ---- a locked layer would refuse the erase --------------------
+    ((setq locked (xft:locked-blocks recs))
+     (princ (strcat "\nUnlock " (xft:namelist locked)
+                    " first, then run XFTRECONV again."))
+     (xft:restore)
+     (princ))
+
+    (t
+     (setvar "CMDECHO" 0)
+     (setvar "OSMODE" 0)
+     (if (= 1 (logand 1 (getvar "UNDOCTL")))
+       (progn
+         (command "_.UNDO" "_Begin")
+         (setq undone t)))
+
+     (setq scale    (nth 2 (car recs))
+           base     (nth 3 (car recs))
+           nback    0
+           nrebuilt 0)
+
+     ;; ---- 1. the markers and the text, back into the drawing ----
+     (setq keep (ssadd))
+     (foreach r recs
+       (foreach spec (xft:split (nth 4 r) ";")
+         (if (/= spec "")
+           (progn
+             (setq en (xft:rebuild spec))
+             (if en
+               (progn (ssadd en keep)
+                      (setq nrebuilt (1+ nrebuilt))))))
+       )
+       (entdel (car r))
+       (setq nback (1+ nback))
+     )
+
+     ;; ---- 2. what the scale-back applies to ---------------------
+     ;; everything rebuilt above, plus everything highlighted that is
+     ;; still there.  Built as its own set rather than reusing the
+     ;; highlight, and built AFTER the erase: a block's attributes are
+     ;; erased with it, and SCALE will not take a selection carrying
+     ;; entities that have gone out from under it.
+     (setq i 0)
+     (while (< i (sslength ss))
+       (setq en (ssname ss i))
+       (if (entget en) (ssadd en keep))
+       (setq i (1+ i))
+     )
+
+     ;; ---- 3. and back down to the units it arrived in ------------
+     (if (and (/= scale 0.0) (/= scale 1.0) (> (sslength keep) 0))
+       (progn
+         (princ (strcat "\nScaling " (itoa (sslength keep)) " objects back by 1/"
+                        (rtos scale 2 4) " about the conversion's own base ..."))
+         (command "_.SCALE" keep "" (trans base 0 1) (/ 1.0 scale))))
+
+     (command "_.UNDO" "_End")
+     (setq undone nil)
+     (xft:restore)
+
+     ;; ---- report -------------------------------------------------
+     (princ (strcat "\n" (itoa nback) " \"" *xft-block*
+                    "\" block(s) taken back off the survey."))
+     (princ (strcat "\n" (itoa nrebuilt)
+                    " marker and text object(s) put back."))
+     (if (= 0 nrebuilt)
+       (princ (strcat "\n  Their records carry no geometry - the run that"
+                      " wrote them found markers it could not read back.")))
+     (princ)
     )
   )
   (princ)
@@ -752,5 +1338,6 @@
   (princ))
 
 (princ (strcat "\nXFTCONV.lsp " *xft-version*
-               " loaded.  Type XFTCONV to scale a survey import and swap its points."))
+               " loaded.  Type XFTCONV to scale a survey import and swap"
+               " its points, XFTRECONV to put one back."))
 (princ)
