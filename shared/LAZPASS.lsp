@@ -13897,7 +13897,7 @@
 ;;; ever changing tangent, which is why the whole thing can be given as a
 ;;; handful of radii and two overall dimensions.
 ;;;
-;;; Four families come out of that, and the first question is which:
+;;; Five families come out of that, and the first question is which:
 ;;;
 ;;;   Center    three bulges -- left, right and one across the top,
 ;;;             centred -- joined by three reverse arcs.
@@ -13908,6 +13908,10 @@
 ;;;             sit INSIDE the big top circle, touching it from within,
 ;;;             and the outline hands straight over at each touch --
 ;;;             a SEAM, the one joint with nothing drawn between.
+;;;   NXTcloud  three lobes and four fillets, and the one shape whose
+;;;             ring meets a bulge TWICE: the centre lobe is walked
+;;;             under on the way out and over on the way back, so eight
+;;;             elements are cut from seven circles.
 ;;;
 ;;; The two families that come two ways get a second question of their
 ;;; own, asked straight after.  A cloud is one shape with two bottoms:
@@ -13918,7 +13922,7 @@
 ;;; touch it; on an ASYMMETRIC one the two unequal sides are given and
 ;;; the top circle is derived -- tangent to the top bound and both
 ;;; sides, its centre landing wherever those three contacts put it.
-;;; The pair of answers together names one of six rings.
+;;; The pair of answers together names one of seven rings.
 ;;;
 ;;;                        top bulge
 ;;;                      ___________                  ___________
@@ -14301,7 +14305,7 @@
 (setq oasis:*cmdguard*  10)
 (setq oasis:*ringguard* 4)
 
-;;; -------------------- the four shapes ----------------------------------
+;;; -------------------- the five shapes ----------------------------------
 ;;; Every one of them is a ring of BULGES -- circles pinned to the
 ;;; envelope -- with a JOINER between each consecutive pair.  A joiner is
 ;;; either a reverse arc of a radius the user gives, or, when both bulges
@@ -14361,12 +14365,12 @@
 (defun oasis:complex-p (ans)
   (= (nth 11 ans) "Complex"))
 
-;; The shape, resolved.  The first question offers four families --
-;; Center, TopRight, Cloud and Kidney -- and the two families that come
-;; two ways get a second question of their own, asked straight after: a
-;; cloud is one shape with two bottoms, a kidney one shape whose sides
-;; are either matched or not.  The pair of answers together names one of
-;; the six rings.
+;; The shape, resolved.  The first question offers five families --
+;; Center, TopRight, Cloud, Kidney and NXTcloud -- and the two families
+;; that come two ways get a second question of their own, asked straight
+;; after: a cloud is one shape with two bottoms, a kidney one shape
+;; whose sides are either matched or not.  The pair of answers together
+;; names one of the seven rings.
 (defun oasis:variant (ans)
   (cond ((= (nth 0 ans) "Cloud")
          (if (= (nth 10 ans) "Rounded") "RoundedBottom" "StraightBottom"))
