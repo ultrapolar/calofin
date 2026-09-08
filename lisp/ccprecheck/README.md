@@ -72,29 +72,26 @@ the value and APPLOAD the file again, or type the `setq` at the command
 line to try a value for one session -- every knob is read when the
 command runs, not when the file loads.
 
-What is deliberately not a knob is the Tech Flow Chart itself -- which
-question is asked, in what order, and which answer opens which
-follow-up. That is what this tool is, and it lives in the code
-below the block; splitting the prompts into a table away from the
-branching that reads them would be two things to keep in step
-instead of one.
-
 The tables below are the block, read off it:
 
 **How the summary reads**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `chk:*note-mark*` / `chk:*confirm-mark*` / `chk:*ans-sep*` / `chk:*val-sep*` | `"NOTE: "` / `"CONFIRMED: "` / `" -> "` / `" = "` | The summary is printed to the command line when the walk finishes, one line per thing answered or noted. These are the pieces it is built from: what marks an instruction the walk gave you, what marks something you confirmed, and the two separators -- between a question and the answer picked, and between a confirmation and the value typed against it |
+| `chk:*note-mark*` | `"NOTE: "` | The summary is printed to the command line when the walk finishes, one line per thing answered or noted. These are the pieces it is built from: what marks an instruction the walk gave you, what marks something you confirmed, and the two separators -- between a question and the answer picked, and between a confirmation and the value typed against it |
+| `chk:*confirm-mark*` | `"CONFIRMED: "` | The summary is printed to the command line when the walk finishes, one line per thing answered or noted. These are the pieces it is built from: what marks an instruction the walk gave you, what marks something you confirmed, and the two separators -- between a question and the answer picked, and between a confirmation and the value typed against it |
+| `chk:*ans-sep*` | `" -> "` | The summary is printed to the command line when the walk finishes, one line per thing answered or noted. These are the pieces it is built from: what marks an instruction the walk gave you, what marks something you confirmed, and the two separators -- between a question and the answer picked, and between a confirmation and the value typed against it |
+| `chk:*val-sep*` | `" = "` | The summary is printed to the command line when the walk finishes, one line per thing answered or noted. These are the pieces it is built from: what marks an instruction the walk gave you, what marks something you confirmed, and the two separators -- between a question and the answer picked, and between a confirmation and the value typed against it |
 | `chk:*note-echo*` | `"\n  >> "` | A note is echoed to the command line as it is given, behind this |
-| `chk:*sum-open*` / `chk:*sum-close*` / `chk:*sum-indent*` | `"\n\n--- Checklist summary ---"` / `"\n--- End of checklist ---\n"` / `"  "` | The summary's own furniture: its opening and closing rules, and the indent every line inside it carries |
+| `chk:*sum-open*` | `"\n\n--- Checklist summary ---"` | The summary's own furniture: its opening and closing rules, and the indent every line inside it carries |
+| `chk:*sum-close*` | `"\n--- End of checklist ---\n"` | The summary's own furniture: its opening and closing rules, and the indent every line inside it carries |
+| `chk:*sum-indent*` | `"  "` | The summary's own furniture: its opening and closing rules, and the indent every line inside it carries |
 
 **What a typed answer may say**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
 | `chk:*back-words*` | `'("B" "BACK" "U" "UNDO")` | A getstring prompt cannot take initget keywords, so "go back a step" has to be typed like a note. These are the words that mean it, matched case-blind and whole; add a synonym and every typed prompt takes it. (The keyword prompts get Back and Undo from initget instead, which is a separate list by necessity.) |
-
 ## Assumptions
 
 * The flowchart's questions, keyword sets and notes are fixed in the

@@ -100,7 +100,53 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.10")
+(setq *lazpanel-version* "v3.12")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.  Nothing below this block
+;;;  is meant to be edited to tune the panel.
+;;;
+;;;  Also editable, but living beside the code that reads them because
+;;;  they ARE the panel rather than settings of it:
+;;;    lzp:*captions*   one caption per command -- the only place they live
+;;;    lzp:*groups*     the pages, as columns of command names
+;;;  tools/check_registry.py --fix maintains both; the VB palette's
+;;;  catalog is generated from them (tools/gen_ui_data.py).
+
+;; The Find page's tab title.  Find is a page but not a group: it stays
+;; out of lzp:*groups* -- what Rest is computed against and what
+;; lzp:commands folds -- so renaming it here is safe and adding it to a
+;; group is not.
+(setq lzp:*findname* "Find")
+
+;; The screen-button toolbar's name, as the CUI lists it.
+(setq lzp:*tbname* "LazPanel")
+
+;; Where the panel remembers its position between restarts: a value in
+;; the AutoCAD profile (setenv), which is always writable where the
+;; registry may not be.
+(setq lzp:*poskey* "LazPanel_Pos")
+
+;; Where pins and recents live: one registry key, values "Pins" and
+;; "Recent", names joined with ";".  THE VB PALETTE READS THE SAME KEY
+;; (ui/calofin_net/PaletteMemory.vb) so a drafter has one set of pins
+;; whichever surface they pinned from.  Change it here and there
+;; together, or tests/test_palette_shell.py fails.
+(setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
+
+;; How wide, in DCL character cells, a row of pinned or recent buttons
+;; may be before the next button starts a new row.  DCL does not
+;; scroll: a row past the screen's width does not clip the page, it
+;; stops the dialog opening at all, so this is a ceiling and not a
+;; preference.  84 fits a laptop screen.
+(setq lzp:*pinbudget* 84)
+
+;; How many recently launched tools are remembered, newest first.  The
+;; palette keeps the same number (PaletteMemory.RecentLimit) and
+;; tests/test_palette_shell.py holds the two together.
+(setq lzp:*reclimit* 5)
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -221,6 +267,7 @@
     ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SOCONV"           "SO survey onto our layers")
+    ("SORECONV"         "SO conversion, undone")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
@@ -229,8 +276,10 @@
     ("TYDRN"            "Text + point tidy-up")
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
     ("VSCONV"           "VS export onto shop layers")
+    ("VSRECONV"         "VS conversion, undone")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Survey import cleanup")
+    ("XFTRECONV"        "Import cleanup, undone")
     ("XYPLOT"           "X/Y offset plot")
    ))
 
@@ -260,8 +309,11 @@
   '(("Pool"
      ("Converters"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       )
      ("Shape"
       "POOL"
@@ -308,6 +360,7 @@
       "STOCKCOVER"
       "CUSTBLOCK"
       "XFTCONV"
+      "XFTRECONV"
       )
      ("Points"
       "ABFIND"
@@ -331,8 +384,11 @@
      ("Spa"
      ("Converters"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       )
      ("Shape, dims & check"
       "SPA"
@@ -420,8 +476,11 @@
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -479,13 +538,11 @@
 ;; column layout and no roster of its own, it searches the whole one, so
 ;; it must stay out of lzp:*groups* -- which is what "Rest" is computed
 ;; against, what lzp:commands folds, and what lzp:dcl-one lays out.
-(setq lzp:*findname* "Find")
+;;  (lzp:*findname* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
-(setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
 (setq lzp:*pos* nil)              ; where the panel was last standing
-(setq lzp:*poskey* "LazPanel_Pos") ; ...in the profile, kept over a restart
 (setq lzp:*go* nil)               ; the group a tab click asked for
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
 (setq lzp:*iconstep* nil)         ; the COM call the icon write died on
@@ -497,7 +554,6 @@
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
 (setq lzp:*page* nil)             ; the page the panel reopens on
 (setq lzp:*pins* nil)             ; the pinned tools, in pin order
-(setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
 
 ;;; -------------------- roster access -----------------------------------
 
@@ -706,7 +762,7 @@
 ;;  So pins are packed greedily into as many rows as they need, with
 ;;  the Pin... button packed last like any other item.  Pin thirty
 ;;  tools and you get a tall panel, never a broken one.
-(setq lzp:*pinbudget* 84)
+;;  (lzp:*pinbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzp:pin-label (n) (strcat "    : button { label = \"" n
                                  "\"; key = \"pin_" n "\"; }"))
@@ -764,7 +820,7 @@
 ;;  Keys are "rec_", which cannot collide with the same tool's "pin_"
 ;;  button or with its own button further down the page.
 
-(setq lzp:*reclimit* 5)           ; how many are remembered
+;;  (lzp:*reclimit* itself is set in the TUNABLES block at the top of the file.)
 (setq lzp:*recent* nil)           ; most recent first
 
 ;; Everything remembered, minus what Pinned already shows.
@@ -1193,6 +1249,11 @@
 ;;  can be carried in an ordinary string, and MSXML turns that string
 ;;  into a real VT_UI1 array on the other side.  Both components ship
 ;;  with Windows, and the toolbar this icon goes on already needs COM.
+;;  NOT A KNOB: the alphabet is RFC 4648's, the same 64 characters on
+;;  both ends of the transfer.  It is a literal nothing re-assigns, so
+;;  it is shaped like a tunable and tests/test_tunables.py would ask
+;;  for it in the block at the top -- but reordering a character here
+;;  does not adjust anything, it decodes the icon to garbage.
 (setq lzp:*b64*
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
 

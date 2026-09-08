@@ -107,9 +107,11 @@
 
 ;; -- what counts as too far --------------------------------------------
 
-;; How far off the nearest line is too far.  The command asks, Enter
-;; takes what is here, and the answer is remembered for the session --
-;; so this is the FIRST-RUN default, not a cap.
+;; How far off the nearest line is too far.  The command asks every
+;; run and Enter takes the offered value, so this is the default the
+;; FIRST run of a session offers; what you answer is remembered in
+;; abp:*asked* below and offered from then on.  Lower it and more
+;; points are called too far.
 (setq abp:*limit* 1.0)            ; drawing units (1 inch)
 
 ;; Two points closer than this are the same shot, not two.
@@ -180,9 +182,9 @@
 (setq abp:*tiny*         1.0e-8)  ; drawing units
 
 ;;; ----------------------------------------------------------------------
-;;;  END TUNABLES.  The one thing kept between commands is the sysvar
-;;;  snapshot below, and abp:*limit*, which the command overwrites with
-;;;  whatever you last answered.
+;;;  END TUNABLES.  What follows is STATE, not settings: what one run
+;;;  has to put back, and what the session remembers you answered.
+(setq abp:*asked*        nil)     ; the limit you last answered, this session
 ;;; ======================================================================
 
 ;;; -------------------- generic helpers ----------------------------------
@@ -742,24 +744,27 @@
                         " against - include the drawn geometry in the"
                         " selection.")))
         (T
-         (setq abp:*limit*
+         ;; offer what you answered last, or the knob's default the
+         ;; first time this session -- the knob itself stays the
+         ;; default it was set to and is never written over
+         (setq abp:*asked*
                (abp:asklimit "How far off the line is too far?"
-                             abp:*limit*))
+                             (if abp:*asked* abp:*asked* abp:*limit*)))
          (setq keyed (abp:measure pts segs)
-               rows  (abp:rows keyed abp:*limit* nspl nocs)
+               rows  (abp:rows keyed abp:*asked* nspl nocs)
                bb    (abp:bbox pts)
-               res   (abp:write-report rows bb abp:*limit*)
+               res   (abp:write-report rows bb abp:*asked*)
                h     (caddr res)
-               nring (abp:ring keyed abp:*limit* h))
+               nring (abp:ring keyed abp:*asked* h))
          (princ (strcat "\n" (itoa (length pts)) " point(s) measured"
                         " against " (itoa (length segs)) " segment(s)."))
          (if (> (car res) 0)
            (princ (strcat "\n" (itoa (car res)) " point(s) more than "
-                          (abp:dstr abp:*limit*) " off the nearest line - "
+                          (abp:dstr abp:*asked*) " off the nearest line - "
                           (itoa nring) " ringed on layer "
                           abp:*miss-layer* "."))
            (princ (strcat "\nAll clear - every point is within "
-                          (abp:dstr abp:*limit*) " of a line.")))
+                          (abp:dstr abp:*asked*) " of a line.")))
          (princ (strcat "\nReport written on layer " abp:*report-layer*
                         ".  ABPCHECKRESCUE removes both."))))))
   (command "_.UNDO" "_End")

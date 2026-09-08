@@ -122,34 +122,58 @@ The tables below are the block, read off it:
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `spachk:*lay-cover*` / `spachk:*lay-water*` / `spachk:*lay-dim*` / `spachk:*lay-text*` / `spachk:*lay-notes*` | `"COVER"` / `"POOL"` / `"DIMENSION"` / `"TEXT"` / `"SPA-NOTES"` | Layers SPA draws on -- the audit is only as right as these are (the cover outline and the hinges; the water's edge outline; every dimension; the hinge labels; corner letters, mode note, report) |
+| `spachk:*lay-cover*` | `"COVER"` | Layers SPA draws on -- the audit is only as right as these are (the cover outline and the hinges) |
+| `spachk:*lay-water*` | `"POOL"` | Layers SPA draws on -- the audit is only as right as these are (the water's edge outline) |
+| `spachk:*lay-dim*` | `"DIMENSION"` | Layers SPA draws on -- the audit is only as right as these are (every dimension) |
+| `spachk:*lay-text*` | `"TEXT"` | Layers SPA draws on -- the audit is only as right as these are (the hinge labels) |
+| `spachk:*lay-notes*` | `"SPA-NOTES"` | Layers SPA draws on -- the audit is only as right as these are (corner letters, mode note, report) |
 | `spachk:*dimfix-cmd*` | `"CDIM"` | CDIM is the command that moves stray dimensions onto *lay-dim*, and is what the report tells you to run when it finds any |
-| `spachk:*techtitle-block*` / `spachk:*date-tag*` | `"Tech Title"` / `"Date"` | The sheet's title block, and the attribute in it carrying the date. This is the Tech Title BLOCK, not the drawn border section 7 checks (spaces optional in the name) |
-| `spachk:*ds-cover*` / `spachk:*ds-water*` | `"STANDARD INCHES"` / `"STANDARD INCHES 0.5"` | Dimension styles, one per outline (SPA's spa:*ds-cover* / *ds-water*) |
-| `spachk:*sfx-cover*` / `spachk:*sfx-water*` / `spachk:*sfx-lap*` | `"Cover Size"` / `"Water's Edge"` / `"Overlap"` | The notes SPA stacks under an overall's measurement |
-| `spachk:*topoff*` / `spachk:*dimoff*` / `spachk:*off-tol*` | `24.0` / `36.0` / `2.0` | SPA's standoffs (spa:*topoff* / *dimoff* / *flatoff*), and how far a dimension line may sit from them before it is worth reporting (2 ft: cover -> the TOP overall dim; 3 ft: cover -> the LEFT overall dim; inches of slack on either standoff) |
+| `spachk:*techtitle-block*` | `"Tech Title"` | The sheet's title block, and the attribute in it carrying the date. This is the Tech Title BLOCK, not the drawn border section 7 checks (spaces optional in the name) |
+| `spachk:*date-tag*` | `"Date"` | The sheet's title block, and the attribute in it carrying the date. This is the Tech Title BLOCK, not the drawn border section 7 checks |
+| `spachk:*ds-cover*` | `"STANDARD INCHES"` | Dimension styles, one per outline (SPA's spa:*ds-cover* / *ds-water*) |
+| `spachk:*ds-water*` | `"STANDARD INCHES 0.5"` | Dimension styles, one per outline (SPA's spa:*ds-cover* / *ds-water*) |
+| `spachk:*sfx-cover*` | `"Cover Size"` | The notes SPA stacks under an overall's measurement |
+| `spachk:*sfx-water*` | `"Water's Edge"` | The notes SPA stacks under an overall's measurement |
+| `spachk:*sfx-lap*` | `"Overlap"` | The notes SPA stacks under an overall's measurement |
+| `spachk:*topoff*` | `24.0` | SPA's standoffs (spa:*topoff* / *dimoff* / *flatoff*), and how far a dimension line may sit from them before it is worth reporting (2 ft: cover -> the TOP overall dim) |
+| `spachk:*dimoff*` | `36.0` | SPA's standoffs (spa:*topoff* / *dimoff* / *flatoff*), and how far a dimension line may sit from them before it is worth reporting (3 ft: cover -> the LEFT overall dim) |
+| `spachk:*off-tol*` | `2.0` | SPA's standoffs (spa:*topoff* / *dimoff* / *flatoff*), and how far a dimension line may sit from them before it is worth reporting (inches of slack on either standoff) |
 | `spachk:*details-block*` | `"Spa Cover Details"` | The block SPA reads the grade and taper out of |
-| `spachk:*liner-w*` / `spachk:*liner-h*` / `spachk:*title-frac*` / `spachk:*border-layer*` / `spachk:*border-tol*` | `704.0` / `543.625` / `0.6` / `"border"` / `0.005` | TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border-w* / *lfc-border-h*); a spa sheet's title block is exactly this fraction of it (58'-8"     in drawing units; 45'-3 5/8" in drawing units; spa title block = 0.6 x the liner; 0.5% slack on the factor and the aspect) |
-| `spachk:*meas-tol*` / `spachk:*pt-tol*` | `0.0625` / `1.0e-4` | How close a dimension's measurement must be to the geometry it spans, and how close a definition point must sit to the outline (1/16" -- a fractional dim rounds) |
+| `spachk:*liner-w*` | `704.0` | TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border-w* / *lfc-border-h*); a spa sheet's title block is exactly this fraction of it (58'-8"     in drawing units) |
+| `spachk:*liner-h*` | `543.625` | TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border-w* / *lfc-border-h*); a spa sheet's title block is exactly this fraction of it (45'-3 5/8" in drawing units) |
+| `spachk:*title-frac*` | `0.6` | TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border-w* / *lfc-border-h*); a spa sheet's title block is exactly this fraction of it (spa title block = 0.6 x the liner) |
+| `spachk:*border-layer*` | `"border"` | TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border-w* / *lfc-border-h*); a spa sheet's title block is exactly this fraction of it |
+| `spachk:*border-tol*` | `0.005` | TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border-w* / *lfc-border-h*); a spa sheet's title block is exactly this fraction of it (0.5% slack on the factor and the aspect) |
+| `spachk:*meas-tol*` | `0.0625` | How close a dimension's measurement must be to the geometry it spans, and how close a definition point must sit to the outline (1/16" -- a fractional dim rounds) |
+| `spachk:*pt-tol*` | `1.0e-4` | How close a dimension's measurement must be to the geometry it spans, and how close a definition point must sit to the outline |
 
 **Marking and report colours**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `spachk:*grey-color*` / `spachk:*flag-color*` / `spachk:*advice-color*` / `spachk:*green-scale*` | `8` / `1` / `4` / `0.75` | ACI: reserved for fading, unused today; ACI: what you confirmed is wrong (red); ACI: advice, not a failure (cyan); all-clear text height vs the red |
-| `spachk:*report-layer*` / `spachk:*report-color*` / `spachk:*report-chars*` / `spachk:*zoom-margin*` | `"SPACHECK-REPORT"` / `3` / `48.0` / `0.75` | The layer the report MTEXT goes on, created on first use; the colour applies only then, so a layer already in the drawing keeps its own (ACI (green); report column width, in text heights; empty space around a zoomed item) |
-| `spachk:*sysold*` / `spachk:*demo-ents*` / `spachk:*odstyle*` | `nil` / `nil` / `nil` | ; ---------------------------------------------------------------------- ; STATE, not knobs: what a run has to remember while it runs. The ; demo opens an undo group and switches the dimension style, but the ; handler that must undo both lives in c:TUTORIALSPACHECK, a ; different defun that cannot see spachk:demo's locals -- so both ; bits of state are module globals, as is the sysvar snapshot (saved sysvars, restored on the way out; what TUTORIALSPACHECK's demo drew; the dim style the demo switched off) |
-| `spachk:*foamtab*` | `(list` | Foam sheets, copied from SPA (spa:*foamtab*) so the audit measures against the same rules the drawing was built to: (grade taper ((foamWidth . foamLength) ...) (piece counts, 5 = 5+)) |
-| `spachk:*hardtab*` | `(list` | Hardware called for by the LONGEST hinge, per grade: (grade velcro doubleC holddown), each (OVER n) | (ALWAYS) | (NEVER) | (REQUEST) |
+| `spachk:*grey-color*` | `8` | ACI: reserved for fading, unused today |
+| `spachk:*flag-color*` | `1` | ACI: what you confirmed is wrong (red) |
+| `spachk:*advice-color*` | `4` | ACI: advice, not a failure (cyan) |
+| `spachk:*green-scale*` | `0.75` | all-clear text height vs the red |
+| `spachk:*report-layer*` | `"SPACHECK-REPORT"` | The layer the report MTEXT goes on, created on first use; the colour applies only then, so a layer already in the drawing keeps its own |
+| `spachk:*report-color*` | `3` | The layer the report MTEXT goes on, created on first use; the colour applies only then, so a layer already in the drawing keeps its own (ACI (green)) |
+| `spachk:*report-chars*` | `48.0` | The layer the report MTEXT goes on, created on first use; the colour applies only then, so a layer already in the drawing keeps its own (report column width, in text heights) |
+| `spachk:*zoom-margin*` | `0.75` | The layer the report MTEXT goes on, created on first use; the colour applies only then, so a layer already in the drawing keeps its own (empty space around a zoomed item) |
 | `spachk:*hallow-max*` | `5` | A piece count this high or higher is the table's top row ("5 = 5+") (pieces) |
 
 **Reading the drawing**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `spachk:*grade-tag*` / `spachk:*taper-tag*` / `spachk:*grade-words*` / `spachk:*grade-default*` / `spachk:*taper-words*` | `"GRADE"` / `"TAPER"` / `'(("ECON"   . "ECONOMY"` / `"STANDARD"` / `'(("3-2" . "3-2") ("4-2" . "4-2") ("4-3" . "4-3"` | The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as SUBSTRINGS of the upper-cased value, first match winning, so "Ultra FRP" reads as ULTRA; a value matching nothing takes the default grade. Every canonical name here must appear in *foamtab* and *hardtab* above, or the audit has a grade it can recognise but not measure against |
+| `spachk:*grade-tag*` | `"GRADE"` | The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as SUBSTRINGS of the upper-cased value, first match winning, so "Ultra FRP" reads as ULTRA; a value matching nothing takes the default grade. Every canonical name here must appear in *foamtab* and *hardtab* above, or the audit has a grade it can recognise but not measure against |
+| `spachk:*taper-tag*` | `"TAPER"` | The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as SUBSTRINGS of the upper-cased value, first match winning, so "Ultra FRP" reads as ULTRA; a value matching nothing takes the default grade. Every canonical name here must appear in *foamtab* and *hardtab* above, or the audit has a grade it can recognise but not measure against |
+| `spachk:*grade-words*` | `'(("ECON"   . "ECONOMY"` | The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as SUBSTRINGS of the upper-cased value, first match winning, so "Ultra FRP" reads as ULTRA; a value matching nothing takes the default grade. Every canonical name here must appear in *foamtab* and *hardtab* above, or the audit has a grade it can recognise but not measure against |
+| `spachk:*grade-default*` | `"STANDARD"` | The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as SUBSTRINGS of the upper-cased value, first match winning, so "Ultra FRP" reads as ULTRA; a value matching nothing takes the default grade. Every canonical name here must appear in *foamtab* and *hardtab* above, or the audit has a grade it can recognise but not measure against (the grade a value matching nothing takes) |
+| `spachk:*taper-words*` | `'(("3-2" . "3-2") ("4-2" . "4-2") ("4-3" . "4-3"` | ...and the taper vocabulary, matched the same way; an unrecognised taper measures against no foam row at all rather than the wrong one |
 | `spachk:*grade-short*` | `'(("ECONOMY" . "ECO") ("STANDARD" . "STD"` | The short grade names the report prints, keyed by the canonical name |
-| `spachk:*outline-types*` / `spachk:*closed-types*` / `spachk:*loose-types*` | `'("LWPOLYLINE" "POLYLINE" "CIRCLE" "ELLIPSE")` / `'("CIRCLE" "ELLIPSE")` / `'("LINE" "ARC")` | Entity types, by the job each does in the audit: what may be an outline at all, which of those are closed by their nature rather than by a flag, and what counts as loose (unbounded) output -- which on the cover layer is also what a hinge is drawn as |
+| `spachk:*outline-types*` | `'("LWPOLYLINE" "POLYLINE" "CIRCLE" "ELLIPSE")` | Entity types, by the job each does in the audit: what may be an outline at all, which of those are closed by their nature rather than by a flag, and what counts as loose (unbounded) output -- which on the cover layer is also what a hinge is drawn as |
+| `spachk:*closed-types*` | `'("CIRCLE" "ELLIPSE")` | Entity types, by the job each does in the audit: what may be an outline at all, which of those are closed by their nature rather than by a flag, and what counts as loose (unbounded) output -- which on the cover layer is also what a hinge is drawn as |
+| `spachk:*loose-types*` | `'("LINE" "ARC")` | Entity types, by the job each does in the audit: what may be an outline at all, which of those are closed by their nature rather than by a flag, and what counts as loose (unbounded) output -- which on the cover layer is also what a hinge is drawn as |
 | `spachk:*linear-types*` | `'(0 1)` | Dimension subtypes whose span can be measured, by the low three bits of DXF group 70: 0 = rotated, 1 = aligned |
 | `spachk:*velcro-word*` | `"Velcro"` | The word SPA labels a Velcro hinge with. The arrangement audit finds those labels by it, so it has to be the word SPA writes |
 
@@ -157,16 +181,26 @@ The tables below are the block, read off it:
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `spachk:*report-wide*` / `spachk:*report-lead*` / `spachk:*report-hmax*` / `spachk:*report-hmin*` / `spachk:*report-hfall*` / `spachk:*report-gap*` | `0.25` / `1.66` / `30.0` / `200.0` / `2.5` / `0.05` | The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width (drawing units) |
+| `spachk:*report-wide*` | `0.25` | The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
+| `spachk:*report-lead*` | `1.66` | The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
+| `spachk:*report-hmax*` | `30.0` | The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
+| `spachk:*report-hmin*` | `200.0` | The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
+| `spachk:*report-hfall*` | `2.5` | The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width (drawing units) |
+| `spachk:*report-gap*` | `0.05` | The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short sheet the reference height is at least this fraction of the width. LEAD: MTEXT line pitch as a multiple of text height. HMAX/HMIN: divisors clamping the height -- never taller than reference/HMAX, never shorter than reference/HMIN, so a smaller number is a looser bound. HFALL: the height used when there is nothing to scale against. GAP: space between drawing and report, as a fraction of the drawing's width |
 | `spachk:*col-gap*` | `2.0` | Gap between the main sheet and the DIMENSION AUDIT column beside it, in text heights |
-| `spachk:*title-scale*` / `spachk:*hdg-gap*` / `spachk:*head-lines*` / `spachk:*hdg-lines*` / `spachk:*dim-head*` | `1.5` / `0.4` / `4.5` / `1.4` / `2.5` | The title is written this many times the base height, and a section heading gets this much blank line above it. Both are used twice: once to draw, once to guess how many lines the sheet will run to -- HEAD is the allowance for the title, date, verdict and legend, and HDG-LINES for a heading plus its gap (the same allowance for the audit column) |
+| `spachk:*title-scale*` | `1.5` | The title is written this many times the base height, and a section heading gets this much blank line above it. Both are used twice: once to draw, once to guess how many lines the sheet will run to -- HEAD is the allowance for the title, date, verdict and legend, and HDG-LINES for a heading plus its gap |
+| `spachk:*hdg-gap*` | `0.4` | The title is written this many times the base height, and a section heading gets this much blank line above it. Both are used twice: once to draw, once to guess how many lines the sheet will run to -- HEAD is the allowance for the title, date, verdict and legend, and HDG-LINES for a heading plus its gap |
+| `spachk:*head-lines*` | `4.5` | The title is written this many times the base height, and a section heading gets this much blank line above it. Both are used twice: once to draw, once to guess how many lines the sheet will run to -- HEAD is the allowance for the title, date, verdict and legend, and HDG-LINES for a heading plus its gap |
+| `spachk:*hdg-lines*` | `1.4` | The title is written this many times the base height, and a section heading gets this much blank line above it. Both are used twice: once to draw, once to guess how many lines the sheet will run to -- HEAD is the allowance for the title, date, verdict and legend, and HDG-LINES for a heading plus its gap |
+| `spachk:*dim-head*` | `2.5` | The title is written this many times the base height, and a section heading gets this much blank line above it. Both are used twice: once to draw, once to guess how many lines the sheet will run to -- HEAD is the allowance for the title, date, verdict and legend, and HDG-LINES for a heading plus its gap (the same allowance for the audit column) |
 | `spachk:*row-indent*` | `"  "` | Findings are indented under their heading by this string |
 
 **The date the sheet must carry**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `spachk:*date-sep*` / `spachk:*date-order*` | `"/"` / `'(month day year)` | The sheet's date is written and read in this order, with this separator: change both together, and remember the audit rewrites a wrong date into this form |
+| `spachk:*date-sep*` | `"/"` | The sheet's date is written and read in this order, with this separator: change both together, and remember the audit rewrites a wrong date into this form |
+| `spachk:*date-order*` | `'(month day year)` | The sheet's date is written and read in this order, with this separator: change both together, and remember the audit rewrites a wrong date into this form |
 
 **Numerical guards (rarely changed)**
 
@@ -174,6 +208,11 @@ The tables below are the block, read off it:
 | --- | --- | --- |
 | `spachk:*tiny*` | `1.0e-6` | A border edge shorter than this has no measurable size, and a bounding box smaller than this has nothing to scale a report to (drawing units) |
 | `spachk:*foam-slack*` | `0.01` | How close a foam sheet's dimension must come to the table's before it counts as that sheet -- foam is cut to the inch, so this is slack for a drawing's rounding, not a tolerance on the foam (drawing units) |
+
+These carry a table or a list rather than a single value, so they are named here rather than tabled with a default:
+
+- `spachk:*foamtab*` -- Foam sheets, copied from SPA (spa:*foamtab*) so the audit measures against the same rules the drawing was built to: (grade taper ((foamWidth . foamLength) ...) (piece counts, 5 = 5+))
+- `spachk:*hardtab*` -- Hardware called for by the LONGEST hinge, per grade: (grade velcro doubleC holddown), each (OVER n) | (ALWAYS) | (NEVER) | (REQUEST)
 ## Assumptions
 
 * The drawing is in **inches**, as SPA draws it.

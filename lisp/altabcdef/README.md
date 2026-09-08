@@ -36,7 +36,8 @@ doesn't matter — the columns are found by their headers):
   inches and fraction may be separated by a space or a dash.
 * A blank distance cell just means "not measured from that corner" — the
   point is still plotted as long as **at least two** distances are given
-  (three or four give a stronger, unambiguous fix).
+  (three or four give a stronger, unambiguous fix — see *Two distances*
+  below for what "unambiguous" is doing there).
 * `.csv` is read **natively** (no Excel needed, and it avoids Excel silently
   turning entries like `28-11` or `7-0` into dates). `.xlsx`, `.xls` and
   `.xlsm` are read through Excel COM automation. A ready-to-fill
@@ -54,6 +55,7 @@ anything is parsed, each distance cell is scrubbed deterministically:
 | `20'-7 114"` | `20'-7 1/4"` | `114` is `1/4` with the `/` scanned as a `1` |
 | `1 1'-IO 1/2"` | `11'-10 1/2"` | stray space split the feet; `IO` is `10` (`I`→`1`, `O`→`0`) |
 | `201—4` | `20'-4"` | em-dash for the separator **and** foot mark as `1` |
+| `34'-4 1 /4"` | `34'-4 1/4"` | the fraction split by a stray space |
 
 The fixes applied:
 
@@ -62,6 +64,13 @@ The fixes applied:
 * **Missing foot mark** — a bare `28-7` is read as `28'-7"` (the dash marks the
   feet/inch split). A trailing `'` used where a `"` belongs is handled too.
 * **Stray spaces in the feet** — `1 1'` or `21 1-` collapse to `11'` / `21'`.
+* **A fraction split across a space** — `1 /4`, `1/ 4` and `1 / 4` all
+  rejoin to `1/4`. Without this the broken `/4` piece contributes nothing
+  and the fraction is silently lost, so `4 1/4"` reads as `5"`. (This was
+  `ABCDEF`'s repair and not this file's until now: the same field sheets
+  go through both commands, and `20'-7 1 / 4"` used to read here as
+  `20'-8"` — four and three-quarter inches long, with nothing to show for
+  it.)
 * **A `/` scanned as `1` inside a fraction** — a slash-less run of digits like
   `114`, `314` or `1116` is rebuilt into the one valid inch fraction it could
   be (`1/4`, `3/4`, `1/16`). This is unambiguous because the misread keeps the
@@ -98,6 +107,31 @@ size of that shared leftover error. For clean quarter-inch data it's
 usually well under `0.10"`. A noticeably larger value flags a bad reading
 (a typo, a mislabelled column, or a genuinely bad measurement).
 
+## Two distances, and the mirror
+
+Three or more distances fix a point outright and are least-squares
+fitted. **Two** are crossed exactly instead, as circles, and the root
+nearest the middle of the frame is taken.
+
+That matters more than it sounds. Two circles meet twice, either side of
+the line joining the corners they came from:
+
+* from two **adjacent** corners that line is a side of the rectangle, so
+  one root is inside the frame and the other is not — the frame picks the
+  answer;
+* from two **opposite** corners it is a diagonal: both roots are inside,
+  both fit the two distances to the same hundredth, and the sheet
+  genuinely does not say which of the two the point is. That row is
+  plotted and **named on the command line**, because a survey import must
+  not guess silently. A third distance from any corner settles it.
+
+Least-squares cannot do this job. On the diagonal both residual gradients
+point the same way, so the normal matrix is singular and the iteration
+stops where it started — and where it starts is the middle of the frame.
+Before this was fixed, a two-distance row from opposite corners plotted
+**at the centre of the rectangle**, with tens of inches of fit error and
+nothing but the RMS column to say so.
+
 ## Usage
 
 1. Load the lisp: *Manage ▸ Load Application* (`APPLOAD`), pick
@@ -120,12 +154,25 @@ then prints a results table with each point's coordinates, how many
 distances were used, and its fit error.
 
 The **frame is always a true rectangle** — `A-B` is drawn horizontal and
-`A-D` vertical, so every corner is exactly 90°, and it is built square to the
-world axes even if your current UCS is rotated. When it's finished the command
-resets the view to plan (top) and zooms to the drawing, because a flat
-rectangle looks like a *parallelogram* in a tilted 3D view — if yours looked
-skewed, the view was orbited off plan, not the geometry. (This only changes
-the view, never the geometry; type `PLAN` or orbit back any time.)
+`A-D` vertical, and it is built square to the world axes even if your
+current UCS is rotated.
+
+Both halves of that are now **checked rather than claimed**. Before
+anything is drawn the four corner coordinates are measured against the
+`A-B` and `A-D` you entered — all four sides and both diagonals — and a
+mismatch aborts the run with an alert instead of plotting every point
+against a frame that is not the one you asked for. Afterwards the four
+corner angles are measured off the drawn coordinates and printed as
+measured. (They used to be printed as the constant `90.00 deg`, which is
+a claim about the source rather than about your drawing; `ABCDEF` learned
+the difference the hard way, twice, when a stale copy of it drew a
+parallelogram and said it had not.)
+
+When it's finished the command resets the view to plan (top) and zooms to
+the drawing, because a flat rectangle looks like a *parallelogram* in a
+tilted 3D view — if yours looked skewed, the view was orbited off plan,
+not the geometry. (This only changes the view, never the geometry; type
+`PLAN` or orbit back any time.)
 
 ## Units
 
@@ -143,6 +190,90 @@ that can't, the step is skipped rather than risking a bad substitution, so
 the rest of the tool is unaffected. Should work unchanged on 2018 through the
 current release.
 
+## Tunables
+
+Every threshold, layer name, colour, size and tolerance is a named
+`(setq altabcdef:*name* ...)` in one **tunables block** at the top of
+`ALTABCDEF.lsp`, between the version banner and the first `defun`, each
+with a sentence saying what changing it does. Nothing below that block
+carries a bare number.
+
+Edit the file and `APPLOAD` it again, or `(setq altabcdef:*name* value)`
+at the command line for one session. Distances are in inches.
+
+The layer names are this command's own on purpose: `ABCDEF` plots onto the
+shared `POINTS` layer as `ab_pt` blocks that `ABHD` and the other fitters
+read, while this one draws plain markers, so pointing it at `POINTS` would
+leave entities there that those tools would try to fit a pool through.
+
+`tests/test_tunables.py` checks this table against the file itself -- every
+knob present, with the default it really has -- and
+`tests/test_altabcdef.py` asserts each one is live.
+
+### What it draws
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `altabcdef:*frame-layer*` | `"ALTABCDEF-FRAME"` | the rectangle and its corner letters |
+| `altabcdef:*frame-color*` | `1` | ...the colour it is created with (an existing layer keeps its own) |
+| `altabcdef:*point-layer*` | `"ALTABCDEF-POINTS"` | the point node and its marker circle |
+| `altabcdef:*point-color*` | `2` | ...the colour it is created with |
+| `altabcdef:*label-layer*` | `"ALTABCDEF-LABELS"` | the point names |
+| `altabcdef:*label-color*` | `3` | ...the colour it is created with |
+| `altabcdef:*text-div*` | `120.0` | text height is the longer rectangle side divided by this |
+| `altabcdef:*text-min*` | `0.5` | ...but never under this many inches |
+| `altabcdef:*marker-scale*` | `0.4` | marker circle radius, in text heights |
+| `altabcdef:*label-off*` | `1.4` | how far up and right of a point its name sits, in marker radii |
+| `altabcdef:*tag-scale*` | `1.4` | corner letters are this many text heights tall |
+| `altabcdef:*tag-gap*` | `1.0` | how far a corner letter sits out from its corner, in text heights |
+| `altabcdef:*tag-drop*` | `1.6` | ...how far below a bottom corner, which has to clear the letter height |
+
+### The sheet
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `altabcdef:*file-types*` | `"xlsx;xls;xlsm;csv"` | what the file dialog offers |
+| `altabcdef:*hdr-dist*` | `'("FROM A" "FROM B" "FROM C" "FROM D")` | header words naming the distance columns, in corner order A B C D |
+| `altabcdef:*hdr-name*` | `'("NAME" "POINT" "LABEL")` | ...and the point-name column; the first header matching any of them wins |
+| `altabcdef:*min-tapes*` | `2` | how many distances a row needs before it is plotted at all |
+
+### Reading dirty values
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `altabcdef:*apos-over*` | `1.05` | a mark-less reading over this many times the diagonal had its foot mark scanned as a digit |
+| `altabcdef:*impossible*` | `1.1` | ...and one still over this many times the diagonal is left blank as unreadable |
+| `altabcdef:*fractions*` | `'(2 4 8 16 32)` | the denominators an inch fraction may have; one not listed is never invented |
+| `altabcdef:*log-denom*` | `32` | the correction log rounds to 1/this of an inch |
+
+### Numerical
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `altabcdef:*fuzz*` | `1e-9` | two lengths closer than this are the same length |
+| `altabcdef:*solve-iters*` | `60` | most Gauss-Newton steps the fit will take (three or more distances) |
+| `altabcdef:*solve-step*` | `1e-7` | ...and the step size under which it is done |
+| `altabcdef:*solve-singular*` | `1e-12` | a normal-matrix determinant under this means the distances do not constrain the point |
+| `altabcdef:*seed-singular*` | `1e-9` | ...the same for the linear seed |
+| `altabcdef:*frame-tol*` | `0.001` | inches a side or diagonal may be out before the corner self-check aborts the run |
+| `altabcdef:*mirror-min*` | `1.0` | how far the mirror answer must sit from the one taken to count as a real second possibility |
+
+## Tests
+
+```
+python3 tests/test_altabcdef.py
+CALOFIN_LISP_ROOT=shared python3 tests/test_altabcdef.py   # grouped build
+```
+
+The whole command is driven in the repo's AutoLISP VM
+(`tests/lispvm.py`) against surveys whose true coordinates are known:
+the arithmetic under the clockwise corner order, the mirror pair, the
+parser (asserted case for case against `ABCDEF`'s, since both read the
+same handwriting), the command's own CSV reader, the frame it draws,
+`Back` at every question, a cancelled dialog, a sheet with nothing
+usable in it, a frozen or locked output layer, `UNDO` switched off, an
+Esc mid-run, the corner self-check, and every tunable.
+
 ## Notes & limitations
 
 * **CSV files need only AutoCAD** — they are parsed natively. Only `.xlsx` /
@@ -154,3 +285,11 @@ current release.
   dimensions, only with each other.
 * A point given fewer than two distances is skipped and listed in the
   report.
+* Two distances from **opposite** corners fit two points equally well;
+  the row is plotted and named, and only a third distance can say which
+  is right (see *Two distances, and the mirror*).
+* `ABCDEF` is the sister command for a sheet whose bottom corners are
+  labelled the other way round, and it is the one that has grown the
+  confidence report, the tape-dropping rules and the C/D detector. The
+  two conventions are not interchangeable — that is why they are two
+  commands.

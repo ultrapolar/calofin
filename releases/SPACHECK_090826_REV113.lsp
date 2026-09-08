@@ -199,15 +199,6 @@
 (setq spachk:*report-chars* 48.0)    ; report column width, in text heights
 (setq spachk:*zoom-margin* 0.75)   ; empty space around a zoomed item
 
-;;; ----------------------------------------------------------------------
-;;;  STATE, not knobs: what a run has to remember while it runs.  The
-;;;  demo opens an undo group and switches the dimension style, but the
-;;;  handler that must undo both lives in c:TUTORIALSPACHECK, a
-;;;  different defun that cannot see spachk:demo's locals -- so both
-;;;  bits of state are module globals, as is the sysvar snapshot.
-(setq spachk:*sysold*      nil)      ; saved sysvars, restored on the way out
-(setq spachk:*demo-ents*   nil)      ; what TUTORIALSPACHECK's demo drew
-(setq spachk:*odstyle*     nil)      ; the dim style the demo switched off
 
 ;; Foam sheets, copied from SPA (spa:*foamtab*) so the audit measures
 ;; against the same rules the drawing was built to:
@@ -254,7 +245,9 @@
         ("ULTRA"  . "ULTRA")
         ("FRP"    . "ULTRA")
         ("THERMO" . "THERMOLIGHT")))
-(setq spachk:*grade-default* "STANDARD")
+(setq spachk:*grade-default* "STANDARD")  ; the grade a value matching nothing takes
+;; ...and the taper vocabulary, matched the same way; an unrecognised
+;; taper measures against no foam row at all rather than the wrong one.
 (setq spachk:*taper-words*
       '(("3-2" . "3-2") ("4-2" . "4-2") ("4-3" . "4-3")
         ("5-3" . "5-3") ("5-4" . "5-4") ("3-3" . "3-3")
@@ -336,9 +329,15 @@
 (setq spachk:*foam-slack*   0.01)     ; drawing units
 
 ;;; ----------------------------------------------------------------------
-;;;  END TUNABLES.  What SPACHECK keeps between runs is the three STATE
-;;;  globals above (the sysvar snapshot and the tutorial's demo
-;;;  bookkeeping), not a knob among them.
+;;;  END TUNABLES.  What follows is STATE, not settings: what one run
+;;;  has to remember while it runs.  The tutorial's
+;;;  demo opens an undo group and switches the dimension style, but the
+;;;  handler that must undo both lives in c:TUTORIALSPACHECK, a
+;;;  different defun that cannot see spachk:demo's locals -- so both
+;;;  bits of state are module globals, as is the sysvar snapshot.
+(setq spachk:*sysold*      nil)      ; saved sysvars, restored on the way out
+(setq spachk:*demo-ents*   nil)      ; what TUTORIALSPACHECK's demo drew
+(setq spachk:*odstyle*     nil)      ; the dim style the demo switched off
 ;;; ======================================================================
 
 ;;; -------------------- small helpers -----------------------------------

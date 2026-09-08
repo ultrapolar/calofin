@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 71 of them across 159 buttons, because the pages come in two kinds
+-- 74 of them across 169 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both. (Both numbers are
 *checked*, not counted by hand: `tools/check_registry.py` computes them
 off the tree and `make check` fails when the prose disagrees.)
@@ -63,11 +63,11 @@ reach for them.
 | **Converters** | **Shape** | **Points** | **Steps** | **Dims & check** |
 | --- | --- | --- | --- | --- |
 | `XFTCONV` | `POOL` | `ABFIND` | `LAZSTEP` | `AUTODIM` |
-| `SOCONV` | `POOLSIDE` | `ABMOVE` | `CORNERSTP` | `LINFINCHECK` |
-| `VSCONV` | `LAZFORM` | `CDCREATE` | `HEMISTEP` | `LINFINSCAN` |
-|  | `LAZTXT` | `CDCALLOUT` | `NORMIESTEP` | `LITELINFINSCAN` |
-|  | `OASIS` | `BPCALLOUT` | `AUTOBEAD` | `DIMCHECK` |
-|  | `ABHD` |  | `PERPPTS` | `DIMSCAN` |
+| `XFTRECONV` | `POOLSIDE` | `ABMOVE` | `CORNERSTP` | `LINFINCHECK` |
+| `SOCONV` | `LAZFORM` | `CDCREATE` | `HEMISTEP` | `LINFINSCAN` |
+| `SORECONV` | `LAZTXT` | `CDCALLOUT` | `NORMIESTEP` | `LITELINFINSCAN` |
+| `VSCONV` | `OASIS` | `BPCALLOUT` | `AUTOBEAD` | `DIMCHECK` |
+| `VSRECONV` | `ABHD` |  | `PERPPTS` | `DIMSCAN` |
 |  | `ADAB` |  | `CPERPPTS` |  |
 |  | `FITABHD` |  |  |  |
 
@@ -75,25 +75,26 @@ reach for them.
 
 | **Shape** | **Points** | **Pads, dims & check** |
 | --- | --- | --- |
-| `POOLCOVER` | `ABFIND` | `PADDLE` |
-| `LAZFORMCOVER` | `ABMOVE` | `AUTODIM` |
-| `OASIS` | `CDCREATE` | `COVERCHECK` |
-| `ABHDCOVER` | `CDCALLOUT` | `COVERSCAN` |
-| `FITABHDCOVER` | `BPCALLOUT` | `LITECOVERSCAN` |
-| `STOCKCOVER` |  | `DIMCHECK` |
-| `CUSTBLOCK` |  | `DIMSCAN` |
-| `XFTCONV` |  |  |
+| `POOLCOVER` | `ABFIND` | `LINGUTTER` |
+| `LAZFORMCOVER` | `ABMOVE` | `LINGUTTERSCAN` |
+| `OASIS` | `CDCREATE` | `PADDLE` |
+| `ABHDCOVER` | `CDCALLOUT` | `AUTODIM` |
+| `FITABHDCOVER` | `BPCALLOUT` | `COVERCHECK` |
+| `STOCKCOVER` |  | `COVERSCAN` |
+| `CUSTBLOCK` |  | `LITECOVERSCAN` |
+| `XFTCONV` |  | `DIMCHECK` |
+| `XFTRECONV` |  | `DIMSCAN` |
 
 **Spa** -- 2 columns:
 
 | **Converters** | **Shape, dims & check** |
 | --- | --- |
 | `XFTCONV` | `SPA` |
-| `SOCONV` | `LAZSPA` |
-| `VSCONV` | `CUSTBLOCK` |
-|  | `AUTODIM` |
-|  | `SPACHECK` |
-|  | `SPACHECKSCAN` |
+| `XFTRECONV` | `LAZSPA` |
+| `SOCONV` | `CUSTBLOCK` |
+| `SORECONV` | `AUTODIM` |
+| `VSCONV` | `SPACHECK` |
+| `VSRECONV` | `SPACHECKSCAN` |
 |  | `LITESPACHECKSCAN` |
 |  | `DIMCHECK` |
 |  | `DIMSCAN` |
@@ -107,6 +108,13 @@ saw them, and `XFTCONV` sat under **Shape**, which it never was.
 (`Rest` is the complement of the three named jobs, so the two that
 moved left it automatically -- the test recomputes that and would have
 failed if they had not.)
+
+**Each reverter sits under its converter**, in the same column. A
+`RECONV` is looked for in exactly one situation -- the conversion just
+run turns out to be wrong, or the drawing has to go back to whoever
+exported it -- and the place it is looked for is where the converter
+was. The column name still tells the truth: undoing a conversion is
+converting, in the other direction.
 
 **Spa's buttons lost their captions**, and that is the column rule
 biting rather than an oversight: a page laid out in columns shows the
@@ -147,10 +155,10 @@ them, so a tool you cannot place in a job is still one tab away.
 
 | Group | Buttons |
 | --- | --- |
-| Layout | LAZFORM, LAZTXT, LAZFORMCOVER, SPA, POOL, POOLCOVER, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, PADDLE, LINGUTTER, LINGUTTERSCAN, AUTOBEAD, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST, CUSTBLOCK |
-| Points | ABCDEF, ALTABCDEF, XYPLOT, ABFIND, ABMOVE, PERPPTS, CPERPPTS, XFTCONV, DRONE, TYDRN |
+| Layout | LAZFORM, LAZTXT, LAZFORMCOVER, LAZSPA, SPA, POOL, POOLCOVER, POOLSIDE, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, LINGUTTER, LINGUTTERSCAN, PADDLE, AUTOBEAD, LAZSTEP, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST, CUSTBLOCK |
+| Points | ABCDEF, ALTABCDEF, XYPLOT, CONSTELLATION, ABFIND, ABMOVE, POINTRENAMER, PERPPTS, CPERPPTS, XFTCONV, XFTRECONV, SOCONV, SORECONV, VSCONV, VSRECONV, DRONE, TYDRN, TYLERDRONESUITE |
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
-| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, ABCURCHECK, ABCURCHECKSCAN, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
+| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, ABCURCHECK, ABCURCHECKSCAN, ABPCHECK, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
 
 `AUTODIM` and `DIMCHECK`/`DIMSCAN` are on all three jobs, because every
 job ends the same way; 10 commands are shared between jobs in total.
@@ -372,6 +380,24 @@ APPLOAD `LAZPANEL.lsp` on its own, or load `shared/LAZPASS.lsp`, which
 carries it along with every tool it lists. The button toolbar appears
 on load; type `LAZPANEL` to open the panel directly, or `LAZBUTTON` to
 re-summon the button, or `LAZPIN` to choose the pinned tools.
+
+## Tunables
+
+Every one is a plain literal in the **tunables block at the top of
+`LAZPANEL.lsp`**; nothing further down the file is meant to be edited
+to tune the panel. The captions and the page layout are editable too,
+but they live beside the code that reads them because they *are* the
+panel rather than settings of it -- and `tools/check_registry.py --fix`
+maintains them.
+
+| Global | Default | What it sets |
+| --- | --- | --- |
+| `lzp:*findname*` | `"Find"` | the Find page's tab title. Find is a page but NOT a group -- it stays out of `lzp:*groups*` -- so renaming it here is safe and adding it to a group is not |
+| `lzp:*tbname*` | `"LazPanel"` | the screen-button toolbar's name, as the CUI lists it |
+| `lzp:*poskey*` | `"LazPanel_Pos"` | where the panel remembers its position between restarts: a value in the AutoCAD profile, which is always writable where the registry may not be |
+| `lzp:*pinkey*` | `"HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel"` | where pins and recents live. **The VB palette reads the same key**, so a drafter has one set of pins whichever surface they pinned from -- change it here and in `ui/calofin_net/PaletteMemory.vb` together |
+| `lzp:*pinbudget*` | `84` | how wide a row of pinned or recent buttons may be, in DCL character cells. A ceiling, not a preference: DCL does not scroll, and a row past the screen's width stops the dialog opening at all |
+| `lzp:*reclimit*` | `5` | how many recently launched tools are remembered. The palette keeps the same number (`PaletteMemory.RecentLimit`) |
 
 ## Assumptions
 

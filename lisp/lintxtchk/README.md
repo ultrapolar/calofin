@@ -30,12 +30,6 @@ the value and APPLOAD the file again, or type the `setq` at the command
 line to try a value for one session -- every knob is read when the
 command runs, not when the file loads.
 
-They were locals of the command until v1.5, which is what the old
-version of this section got wrong: a `setq` typed at the command
-line was overwritten the moment the command started, and changing
-one meant editing inside the defun. They are globals now, and the
-checklist itself sits beside them.
-
 The tables below are the block, read off it:
 
 **How the column is laid out**
@@ -43,18 +37,13 @@ The tables below are the block, read off it:
 | Global | Default | Meaning |
 | --- | --- | --- |
 | `ltc:*height*` | `12.0` | Text height, in drawing units (1 unit = 1 inch on the shop's sheets). The next two are multiples of it, so changing this alone rescales the whole block and keeps its proportions |
-| `ltc:*spacing*` / `ltc:*indent*` | `1.6` / `1.5` | Vertical distance between lines, and the horizontal indent per sub-level, both as multiples of the text height. 1.6 leaves a comfortable gap; under about 1.2 the lines start to touch |
+| `ltc:*spacing*` | `1.6` | Vertical distance between lines, and the horizontal indent per sub-level, both as multiples of the text height. 1.6 leaves a comfortable gap; under about 1.2 the lines start to touch |
+| `ltc:*indent*` | `1.5` | Vertical distance between lines, and the horizontal indent per sub-level, both as multiples of the text height. 1.6 leaves a comfortable gap; under about 1.2 the lines start to touch |
 | `ltc:*bullet*` | `"- "` | What every line is prefixed with. "" gives a plain column, "[ ] " gives boxes to tick |
 
-**The checklist itself**
+These carry a table or a list rather than a single value, so they are named here rather than tabled with a default:
 
-| Global | Default | Meaning |
-| --- | --- | --- |
-| `ltc:*items*` | `(list` | Each entry is (indent-level . "line text"). Level 0 is a main item, 1 a sub-item indented under the one above it; a deeper level simply indents further. Inner double quotes and inch marks are escaped with a backslash. This is the shop's checklist, so it is content rather than a setting -- but it sits here, at the top, because editing it is why most people open this file. Add, remove or reword a line and the count in the done message follows on its own |
-
-The command saves and restores `OSMODE`, so running snaps won't pull
-the text off its grid, and your osnap settings are left as they were.
-
+- `ltc:*items*` -- Each entry is (indent-level . "line text"). Level 0 is a main item, 1 a sub-item indented under the one above it; a deeper level simply indents further. Inner double quotes and inch marks are escaped with a backslash. This is the shop's checklist, so it is content rather than a setting -- but it sits here, at the top, because editing it is why most people open this file. Add, remove or reword a line and the count in the done message follows on its own
 ## The checklist
 
 - Read all WSN (White Screen Notes), Notes from Merlin, and Customer Info

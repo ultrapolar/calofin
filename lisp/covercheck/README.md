@@ -110,32 +110,41 @@ The tables below are the block, read off it:
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `*cchk-pool-layer*` / `*cchk-cover-layer*` | `"POOL"` / `"COVER"` | The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these are layer names the shop's template already uses |
-| `*cchk-pool-note*` / `*cchk-spa-note*` | `"Pool Size Shown"` / `"Spa Size Shown"` | When no cover is drawn the sheet has to say which size IS shown. Both notes together is an error -- a sheet shows one or the other |
-| `*cchk-details-block*` / `*cchk-repl-block*` / `*cchk-dashed-pat*` | `"Cover Details"` / `"Replacement Disclaimer"` / `"*DASH*,*HIDDEN*"` | The block carrying Overlap and Spacing, the block a replacement drawing has to carry, and the linetype names that read as dashed (wcmatch, case-blind) |
+| `*cchk-pool-layer*` | `"POOL"` | The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these are layer names the shop's template already uses |
+| `*cchk-cover-layer*` | `"COVER"` | The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these are layer names the shop's template already uses |
+| `*cchk-pool-note*` | `"Pool Size Shown"` | When no cover is drawn the sheet has to say which size IS shown. Both notes together is an error -- a sheet shows one or the other |
+| `*cchk-spa-note*` | `"Spa Size Shown"` | When no cover is drawn the sheet has to say which size IS shown. Both notes together is an error -- a sheet shows one or the other |
+| `*cchk-details-block*` | `"Cover Details"` | The block carrying Overlap and Spacing, the block a replacement drawing has to carry, and the linetype names that read as dashed |
+| `*cchk-repl-block*` | `"Replacement Disclaimer"` | The block carrying Overlap and Spacing, the block a replacement drawing has to carry, and the linetype names that read as dashed |
+| `*cchk-dashed-pat*` | `"*DASH*,*HIDDEN*"` | The block carrying Overlap and Spacing, the block a replacement drawing has to carry, and the linetype names that read as dashed (wcmatch, case-blind) |
 
 **The cover rules: overlap and spacing**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
 | `*cchk-overlap-vals*` | `'(12.0 15.0 18.0)` | The only overlaps that exist, in inches. A drawing carrying anything else is wrong, not merely unusual |
-| `*cchk-area-small*` / `*cchk-area-large*` | `1200.0` / `2000.0` | Water area decides which: under SMALL -> 12" overlap and 5x5 spacing, over LARGE -> 18" and 3x3, between the two -> 15" and 4x4. Move the breakpoints and the whole rule moves with them (square feet) |
+| `*cchk-area-small*` | `1200.0` | Water area decides which: under SMALL -> 12" overlap and 5x5 spacing, over LARGE -> 18" and 3x3, between the two -> 15" and 4x4. Move the breakpoints and the whole rule moves with them (square feet) |
+| `*cchk-area-large*` | `2000.0` | Water area decides which: under SMALL -> 12" overlap and 5x5 spacing, over LARGE -> 18" and 3x3, between the two -> 15" and 4x4. Move the breakpoints and the whole rule moves with them (square feet) |
 
 **The cover rules: pads**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `*cchk-pad-size*` / `*cchk-pad-blocks*` / `*cchk-pads-layer*` | `36.0` / `'("Pad36x36" "Pad24x24")` / `"PADS"` | Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad that is already there (drawing units) |
+| `*cchk-pad-size*` | `36.0` | Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad that is already there (drawing units) |
+| `*cchk-pad-blocks*` | `'("Pad36x36" "Pad24x24")` | Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad that is already there |
+| `*cchk-pads-layer*` | `"PADS"` | Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad that is already there |
 | `*cchk-pad-near*` | `18.0` | A pad centre within this of a spot (Chebyshev distance -- the pad is a square) already covers it, so no second pad is suggested (drawing units) |
 | `*cchk-pad-maxrad*` | `54.0` | The largest concave radius that still needs pads: a gentler curve than 4'-6" does not pull the cover in hard enough to want one (drawing units) |
-| `*cchk-pad-cornertol*` / `*cchk-pad-arctol*` | `(/ (* 30.0 pi) 180.0)` / `(/ (* 10.0 pi) 180.0)` | A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a whole arc bending less than ARCTOL is semi-straight too. Both are PADDLE's, and tests/test_covercheck_pads.py fails if the two tools part company -- change them together (30 degrees, in radians; 10 degrees, in radians) |
+| `*cchk-pad-cornertol*` | `(/ (* 30.0 pi) 180.0)` | A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a whole arc bending less than ARCTOL is semi-straight too. Both are PADDLE's, and tests/test_covercheck_pads.py fails if the two tools part company -- change them together (30 degrees, in radians) |
+| `*cchk-pad-arctol*` | `(/ (* 10.0 pi) 180.0)` | A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a whole arc bending less than ARCTOL is semi-straight too. Both are PADDLE's, and tests/test_covercheck_pads.py fails if the two tools part company -- change them together (10 degrees, in radians) |
 | `*cchk-chain-fuzz*` | `0.05` | The widest gap that still chains two ends of an exploded outline into one loop. Raising it closes sloppier outlines and can chain two separate runs together (drawing units) |
 
 **The sheet's title block**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `*cchk-title-block*` / `*cchk-date-tag*` | `"Tech Title"` / `"Date"` | The title block and the attribute in it carrying the date; the date must read today, written MM/DD/YYYY. Spaces in the block name are optional when it is searched for |
+| `*cchk-title-block*` | `"Tech Title"` | The title block and the attribute in it carrying the date; the date must read today, written MM/DD/YYYY. Spaces in the block name are optional when it is searched for |
+| `*cchk-date-tag*` | `"Date"` | The title block and the attribute in it carrying the date; the date must read today, written MM/DD/YYYY. Spaces in the block name are optional when it is searched for |
 | `*cchk-block-depth*` | `3` | How many levels of nested block to search when looking for a name or a piece of text. Raising it finds text buried deeper, at the cost of a slower sweep (levels) |
 | `*cchk-tut-layer*` | `"TUTORIAL-COVERCHECK-DEMO"` | The layer TUTORIALCOVERCHECK draws its non-pool demo geometry on |
 
@@ -162,20 +171,31 @@ The tables below are the block, read off it:
 | Global | Default | Meaning |
 | --- | --- | --- |
 | `*cchk-style-order*` | `'("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"` | Dimension styles are reviewed in this order; styles not listed come afterwards ("whatever else is left"), still left-to-right. Matching is by exact name, case-blind |
-| `*cchk-dim-layer*` / `*cchk-dimfix-cmd*` | `"DIMENSION"` / `"CDIM"` | Every dimension belongs on this layer; DIMFIX-CMD is the command that moves the strays there, and is what the report tells you to run |
-| `*cchk-row-band*` / `*cchk-row-flat*` | `0.05` / `1.0` | Within a style, dimensions are reviewed row by row. Two dimensions count as the same ROW when their midpoints are within this fraction of the selection's height. Raise it and a whole sheet becomes one row (pure left-to-right); lower it and near-level dims split apart (fraction of the selection's height; ...and the band for a selection with no height) |
+| `*cchk-dim-layer*` | `"DIMENSION"` | Every dimension belongs on this layer; DIMFIX-CMD is the command that moves the strays there, and is what the report tells you to run |
+| `*cchk-dimfix-cmd*` | `"CDIM"` | Every dimension belongs on this layer; DIMFIX-CMD is the command that moves the strays there, and is what the report tells you to run |
+| `*cchk-row-band*` | `0.05` | Within a style, dimensions are reviewed row by row. Two dimensions count as the same ROW when their midpoints are within this fraction of the selection's height. Raise it and a whole sheet becomes one row (pure left-to-right); lower it and near-level dims split apart (fraction of the selection's height) |
+| `*cchk-row-flat*` | `1.0` | Within a style, dimensions are reviewed row by row. Two dimensions count as the same ROW when their midpoints are within this fraction of the selection's height. Raise it and a whole sheet becomes one row (pure left-to-right); lower it and near-level dims split apart (...and the band for a selection with no height) |
 
 **Colours**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `*cchk-grey-color*` / `*cchk-flag-color*` / `*cchk-arc-color*` / `*cchk-olap-color*` / `*cchk-orig-color*` / `*cchk-sugg-color*` / `*cchk-point-color*` | `8` / `1` / `6` / `4` / `1` / `3` / `2` | ACI: everything not under review, faded (grey); ACI: what you answered "No" to (red); ACI: arcs whose endpoints were moved (magenta); ACI: merged or flagged overlapping lines (cyan); ACI: the X marking where you drew the point (red); ACI: the + marking where COVERCHECK would put it (green); ACI: the crosses marking an overlap's two ends (yellow) |
+| `*cchk-grey-color*` | `8` | ACI: everything not under review, faded (grey) |
+| `*cchk-flag-color*` | `1` | ACI: what you answered "No" to (red) |
+| `*cchk-arc-color*` | `6` | ACI: arcs whose endpoints were moved (magenta) |
+| `*cchk-olap-color*` | `4` | ACI: merged or flagged overlapping lines (cyan) |
+| `*cchk-orig-color*` | `1` | ACI: the X marking where you drew the point (red) |
+| `*cchk-sugg-color*` | `3` | ACI: the + marking where COVERCHECK would put it (green) |
+| `*cchk-point-color*` | `2` | ACI: the crosses marking an overlap's two ends (yellow) |
 
 **The two layers**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `*cchk-constr-layer*` / `*cchk-constr-color*` / `*cchk-report-layer*` / `*cchk-report-color*` | `"COVERCHECK-CONSTRUCTION"` / `2` / `"COVERCHECK-REPORT"` / `3` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (ACI (yellow); ACI (green)) |
+| `*cchk-constr-layer*` | `"COVERCHECK-CONSTRUCTION"` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own |
+| `*cchk-constr-color*` | `2` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (ACI (yellow)) |
+| `*cchk-report-layer*` | `"COVERCHECK-REPORT"` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own |
+| `*cchk-report-color*` | `3` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (ACI (green)) |
 
 **How the report is sized and placed**
 
@@ -185,13 +205,16 @@ The tables below are the block, read off it:
 | `*cchk-report-chars*` | `45.0` | Report column width, in text heights |
 | `*cchk-report-wide*` | `0.25` | The report is scaled to the drawing: its text height is chosen so the whole report is about as tall as the drawing. On a wide, short sheet that would give a tiny report, so the reference height is at least this fraction of the drawing's WIDTH |
 | `*cchk-report-lead*` | `1.66` | MTEXT line pitch as a multiple of text height, used to turn a line count into a height. AutoCAD's default single spacing is 1.66 |
-| `*cchk-report-hmax*` / `*cchk-report-hmin*` | `30.0` / `200.0` | ...then the height is clamped: never taller than reference/HMAX, never shorter than reference/HMIN. Both are DIVISORS, so a smaller number is a looser bound |
+| `*cchk-report-hmax*` | `30.0` | ...then the height is clamped: never taller than reference/HMAX, never shorter than reference/HMIN. Both are DIVISORS, so a smaller number is a looser bound |
+| `*cchk-report-hmin*` | `200.0` | ...then the height is clamped: never taller than reference/HMAX, never shorter than reference/HMIN. Both are DIVISORS, so a smaller number is a looser bound |
 | `*cchk-report-hfall*` | `2.5` | The height used when the selection has no extents to scale against (DIMTXT x DIMSCALE is tried first) (drawing units) |
-| `*cchk-report-gap*` / `*cchk-zoom-out*` | `0.05` / `0.05` | Gap between the drawing and the report, as a fraction of the drawing's width, and the margin left around the closing zoom |
+| `*cchk-report-gap*` | `0.05` | Gap between the drawing and the report, as a fraction of the drawing's width, and the margin left around the closing zoom |
+| `*cchk-zoom-out*` | `0.05` | Gap between the drawing and the report, as a fraction of the drawing's width, and the margin left around the closing zoom |
 | `*cchk-zoom-margin*` | `0.75` | Empty space around ONE item when the review zooms to it, as a fraction of its size |
 | `*cchk-mark-size*` | `0.02` | Half-size of the X and + markers drawn while you answer, as a fraction of the current view height -- so they stay the same size on screen however far you are zoomed in (fraction of VIEWSIZE) |
 | `*cchk-attn-words*` | `"*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*,*NEEDS UPDATING*,*UPDATED TO*"` | A report line is rendered red and full-size when it matches this pattern (wcmatch, case-blind; comma separates alternatives). These are the words the report's own notes use for something that needs looking at -- reword a note and its word belongs here too, or the line quietly stops being red |
-| `*cchk-dist-mode*` / `*cchk-dist-prec*` | `2` / `4` | Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engineering, 4 architectural (feet-inches); prec is decimal places (for mode 4: the inch is split 2^prec ways). The dimension's own MEASUREMENT is not formatted here -- it follows the drawing's LUNITS/LUPREC, which is what the drafter reads on the sheet (rtos mode; decimal places) |
+| `*cchk-dist-mode*` | `2` | Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engineering, 4 architectural (feet-inches); prec is decimal places (for mode 4: the inch is split 2^prec ways). The dimension's own MEASUREMENT is not formatted here -- it follows the drawing's LUNITS/LUPREC, which is what the drafter reads on the sheet (rtos mode) |
+| `*cchk-dist-prec*` | `4` | Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engineering, 4 architectural (feet-inches); prec is decimal places (for mode 4: the inch is split 2^prec ways). The dimension's own MEASUREMENT is not formatted here -- it follows the drawing's LUNITS/LUPREC, which is what the drafter reads on the sheet (decimal places) |
 
 **Numerical guards (rarely changed)**
 

@@ -132,13 +132,41 @@ ones that are not. `LAZSTEPVER` prints the loaded version.
 
 ## Tunables
 
+Every one is a plain literal in the **tunables block at the top of
+`LAZSTEP.lsp`**. The frame numbers are in PER-MILLE of the picture, x
+and y with y down -- an image tile's own convention, so the only
+conversion at draw time is a multiply.
+
+**The VB palette's step sheets are generated from `lzt:chart` for every
+count up to the ceiling**, so a change to any frame number below is a
+`python3 tools/gen_ui_charts.py` away from being carried there too.
+
+**Not tunable here, deliberately:** the stroke font and the image
+tile's colours -- the grouped build takes `CALOFIN-LIB.lsp`'s instead.
+
 | Global | Default | What it sets |
 | --- | --- | --- |
-| `lzt:*max-steps*` | `8` | the step-count ceiling |
+| `lzt:*plan-x0*` | `100` | the wall, or the corner -- where the plan starts |
+| `lzt:*plan-x1*` | `860` | the far end of the run |
+| `lzt:*plan-yc*` | `180` | the run's centre line |
+| `lzt:*plan-hh*` | `120` | half the plan's opening at the far end |
+| `lzt:*width-x*` | `930` | where a whole-run width dimension stands |
+| `lzt:*chord-x1*` | `860` | the last chord across a hemi curve |
+| `lzt:*curve-rx*` | `840` | ...whose crown sits beyond it, at `x0 +` this |
+| `lzt:*tread-y0*` | `385` | the tread dimension row |
+| `lzt:*tread-y1*` | `445` | ...and the second one, when the count needs it |
 | `lzt:*one-row*` | `4` | treads that fit one row of boxes before the chain staggers onto two |
-| `lzt:*chart-w*` / `lzt:*chart-h*` | `58` / `20` | the chart column, in character cells |
-| `lzt:*wedge-ed*` | `5` | a tread box's `edit_width` |
-| `lzt:*col-line*` ... `lzt:*col-hi*` | `-16 -15 8 30 5` | outline, background, dimension, typed value, focus ring |
+| `lzt:*prof-x*` | `860` | top of the flight, x, in the side profile |
+| `lzt:*prof-y*` | `540` | and its y -- the profile hangs from here |
+| `lzt:*prof-w*` | `760` | the flight's whole run... |
+| `lzt:*prof-h*` | `450` | ...and its whole drop |
+| `lzt:*prof-gap*` | `40` | how far a depth dimension stands off its step |
+| `lzt:*max-steps*` | `8` | the step-count ceiling. DCL will not scroll and a dialog taller than the screen does not open at all; eight fits a laptop, nine does not reliably. **The VB palette offers exactly the counts a sheet was generated for, up to this number** |
+| `lzt:*chart-w*` | `58` | the chart column's width, in character cells |
+| `lzt:*chart-h*` | `20` | its total height in rows, spread over the bands |
+| `lzt:*wedge-ed*` | `5` | a tread box's `edit_width` where it is wedged into the drawing |
+| `lzt:*poskey*` | `"LazStep_Pos"` | where the dialog remembers its position between restarts (the AutoCAD profile) |
+| `lzt:*recallkey*` | `"HKEY_CURRENT_USER\\Software\\Calofin\\LazStep"` | where a sheet's last accepted answers are kept for Recall -- one value per routine AND count (`CORNERSTP-3`), because a three-step sheet recalled onto a five-step drawing would put numbers against treads they were never measured on. **The VB palette reads the same key and slot** |
 
 ## The state lines
 

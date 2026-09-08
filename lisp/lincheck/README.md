@@ -73,30 +73,28 @@ the value and APPLOAD the file again, or type the `setq` at the command
 line to try a value for one session -- every knob is read when the
 command runs, not when the file loads.
 
-What is deliberately not a knob is the checklist itself -- which
-question is asked, in what order, and which answer opens which
-follow-up. That is what this tool is, and it lives in the code
-below the block; splitting the prompts into a table away from the
-branching that reads them would be two things to keep in step
-instead of one.
-
 The tables below are the block, read off it:
 
 **How the report reads**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `lin:*tick*` / `lin:*note-sep*` / `lin:*ans-sep*` | `"[x] "` / `" -- "` / `" -> "` | The report is printed to the command line, one line per item. These are the pieces every line is built from: the tick that marks a done item, what separates an item from a note typed against it, and what separates a question from the answer picked |
+| `lin:*tick*` | `"[x] "` | The report is printed to the command line, one line per item. These are the pieces every line is built from: the tick that marks a done item, what separates an item from a note typed against it, and what separates a question from the answer picked |
+| `lin:*note-sep*` | `" -- "` | The report is printed to the command line, one line per item. These are the pieces every line is built from: the tick that marks a done item, what separates an item from a note typed against it, and what separates a question from the answer picked |
+| `lin:*ans-sep*` | `" -> "` | The report is printed to the command line, one line per item. These are the pieces every line is built from: the tick that marks a done item, what separates an item from a note typed against it, and what separates a question from the answer picked |
 | `lin:*indent*` | `"    "` | A cross dimension is logged indented under its heading by this |
-| `lin:*head-in*` / `lin:*head-out*` / `lin:*head-echo-in*` / `lin:*head-echo-out*` | `"== "` / `"=="` / `"=== "` / `"==="` | A section heading, in the report and on the command line. The two differ on purpose: the report's is quieter, since it is read as a block rather than watched as it goes by |
-| `lin:*rule*` / `lin:*title*` | `"############################################"` / `"#          LINER CHECKLIST REPORT          #"` | The banner the printed report is boxed in, and its title. RULE is drawn as-is, so its width is what sets the box's; the title is centred inside a line of the same character |
+| `lin:*head-in*` | `"== "` | A section heading, in the report and on the command line. The two differ on purpose: the report's is quieter, since it is read as a block rather than watched as it goes by |
+| `lin:*head-out*` | `"=="` | A section heading, in the report and on the command line. The two differ on purpose: the report's is quieter, since it is read as a block rather than watched as it goes by |
+| `lin:*head-echo-in*` | `"=== "` | A section heading, in the report and on the command line. The two differ on purpose: the report's is quieter, since it is read as a block rather than watched as it goes by |
+| `lin:*head-echo-out*` | `"==="` | A section heading, in the report and on the command line. The two differ on purpose: the report's is quieter, since it is read as a block rather than watched as it goes by |
+| `lin:*rule*` | `"############################################"` | The banner the printed report is boxed in, and its title. RULE is drawn as-is, so its width is what sets the box's; the title is centred inside a line of the same character |
+| `lin:*title*` | `"#          LINER CHECKLIST REPORT          #"` | The banner the printed report is boxed in, and its title. RULE is drawn as-is, so its width is what sets the box's; the title is centred inside a line of the same character |
 
 **What a typed answer may say**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
 | `lin:*back-words*` | `'("B" "BACK" "U" "UNDO")` | A getstring prompt cannot take initget keywords, so "go back a step" has to be typed like a note. These are the words that mean it, matched case-blind and whole; add a synonym and every typed prompt takes it |
-
 ## Assumptions
 
 * The checklist items and their order are fixed in the file -- there

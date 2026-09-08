@@ -140,9 +140,17 @@ The tables below are the block, read off it:
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `acc:*mark-layer*` / `acc:*comb-layer*` / `acc:*mark-color*` / `acc:*comb-color*` / `acc:*gap-color*` / `acc:*corner-color*` / `acc:*decl-color*` | `"POOL-CONT"` / `"POOL-COMB"` / `3` / `4` / `1` / `2` / `3` | findings and declarations go here; the curvature comb goes here; ACI: the marks layer (green); ACI: the comb layer (cyan); ACI: a gap, or the kink band (red); ACI: an undeclared corner (yellow); ACI: a declared break (green) |
+| `acc:*mark-layer*` | `"POOL-CONT"` | findings and declarations go here |
+| `acc:*comb-layer*` | `"POOL-COMB"` | the curvature comb goes here |
+| `acc:*mark-color*` | `3` | ACI: the marks layer (green) |
+| `acc:*comb-color*` | `4` | ACI: the comb layer (cyan) |
+| `acc:*gap-color*` | `1` | ACI: a gap, or the kink band (red) |
+| `acc:*corner-color*` | `2` | ACI: an undeclared corner (yellow) |
+| `acc:*decl-color*` | `3` | ACI: a declared break (green) |
 | `acc:*appid*` | `"ABCURCHECK"` | Everything ABCURCHECK draws carries xdata under this name, so a rescue erases only its own work off a layer the drawing may already be using. Renaming it orphans what earlier runs left behind -- including the declarations a later run is supposed to remember |
-| `acc:*dash-name*` / `acc:*dash-on*` / `acc:*dash-off*` | `"DASHED"` / `12.0` / `6.0` | The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total the two must add up to. It is created at pool scale so the dashes read on a 40-foot perimeter (drawing units of dash; ...and of gap) |
+| `acc:*dash-name*` | `"DASHED"` | The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total the two must add up to. It is created at pool scale so the dashes read on a 40-foot perimeter |
+| `acc:*dash-on*` | `12.0` | The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total the two must add up to. It is created at pool scale so the dashes read on a 40-foot perimeter (drawing units of dash) |
+| `acc:*dash-off*` | `6.0` | The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total the two must add up to. It is created at pool scale so the dashes read on a 40-foot perimeter (...and of gap) |
 
 **G0: is the loop closed at all**
 
@@ -157,7 +165,8 @@ The tables below are the block, read off it:
 | Global | Default | Meaning |
 | --- | --- | --- |
 | `acc:*tangent-eps*` | `0.5` | At or under this a joint is TANGENT -- the two sides run on into each other and there is nothing to report (degrees) |
-| `acc:*kink-tol*` / `acc:*corner-ang*` | `8.0` / `45.0` | The most a joint may turn and still read as smooth, and the angle over which it stops being a kink and becomes a corner. Both are ABHD's (*PF-TANG-TOL* and *PF-CORNER-ANG*): the 8-45 band is the one a fabricator finds in the bead, which is why it leads the grade. Move them only when ABHD's move -- the test fails if they part (degrees) |
+| `acc:*kink-tol*` | `8.0` | The most a joint may turn and still read as smooth, and the angle over which it stops being a kink and becomes a corner. Both are ABHD's (*PF-TANG-TOL* and *PF-CORNER-ANG*): the 8-45 band is the one a fabricator finds in the bead, which is why it leads the grade. Move them only when ABHD's move -- the test fails if they part (degrees) |
+| `acc:*corner-ang*` | `45.0` | The most a joint may turn and still read as smooth, and the angle over which it stops being a kink and becomes a corner. Both are ABHD's (*PF-TANG-TOL* and *PF-CORNER-ANG*): the 8-45 band is the one a fabricator finds in the bead, which is why it leads the grade. Move them only when ABHD's move -- the test fails if they part (degrees) |
 
 **Noise: what a traced outline leaves behind**
 
@@ -165,13 +174,16 @@ The tables below are the block, read off it:
 | --- | --- | --- |
 | `acc:*micro-len*` | `3.0` | A segment shorter than this is a micro-segment, the signature of an outline traced by hand rather than drawn (drawing units) |
 | `acc:*micro-share*` | `0.10` | The share of the perimeter sitting in micro-segments that costs the whole noise score. Lower it and a lightly traced outline is punished harder (fraction of the perimeter) |
-| `acc:*excess-free*` / `acc:*excess-cap*` | `0.35` / `1.00` | A freeform pool turns more than 360 degrees in total because it weaves; FREE is the excess it is owed before the noise score starts to fall, and CAP is where that score reaches zero. These two are the values most worth recalibrating against real drawings (turns beyond one full turn; ...and where it reaches zero) |
+| `acc:*excess-free*` | `0.35` | A freeform pool turns more than 360 degrees in total because it weaves; FREE is the excess it is owed before the noise score starts to fall, and CAP is where that score reaches zero. These two are the values most worth recalibrating against real drawings (turns beyond one full turn) |
+| `acc:*excess-cap*` | `1.00` | A freeform pool turns more than 360 degrees in total because it weaves; FREE is the excess it is owed before the noise score starts to fall, and CAP is where that score reaches zero. These two are the values most worth recalibrating against real drawings (...and where it reaches zero) |
 
 **The 0-100 index**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `acc:*w-integrity*` / `acc:*w-tangency*` / `acc:*w-noise*` | `40.0` / `35.0` / `25.0` | What each half of the check is worth. The three are summed and printed as the denominator, so they need not add to 100 -- but the grade word is set by the single worst thing found, not by the index, and these weights do not move it (G0: gaps, doubles, crossings; the kink and corner bands; micro share and turning excess) |
+| `acc:*w-integrity*` | `40.0` | What each half of the check is worth. The three are summed and printed as the denominator, so they need not add to 100 -- but the grade word is set by the single worst thing found, not by the index, and these weights do not move it (G0: gaps, doubles, crossings) |
+| `acc:*w-tangency*` | `35.0` | What each half of the check is worth. The three are summed and printed as the denominator, so they need not add to 100 -- but the grade word is set by the single worst thing found, not by the index, and these weights do not move it (the kink and corner bands) |
+| `acc:*w-noise*` | `25.0` | What each half of the check is worth. The three are summed and printed as the denominator, so they need not add to 100 -- but the grade word is set by the single worst thing found, not by the index, and these weights do not move it (micro share and turning excess) |
 
 **Picking and marking**
 
@@ -184,19 +196,22 @@ The tables below are the block, read off it:
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `acc:*comb-step*` / `acc:*comb-max*` | `12.0` / `24.0` | One comb tooth per this much run, and the length of the tooth at the tightest curvature in the loop -- every other tooth is scaled against that one, so the comb is a picture of relative curvature (drawing units per tooth; drawing units at the tightest bend) |
+| `acc:*comb-step*` | `12.0` | One comb tooth per this much run, and the length of the tooth at the tightest curvature in the loop -- every other tooth is scaled against that one, so the comb is a picture of relative curvature (drawing units per tooth) |
+| `acc:*comb-max*` | `24.0` | One comb tooth per this much run, and the length of the tooth at the tightest curvature in the loop -- every other tooth is scaled against that one, so the comb is a picture of relative curvature (drawing units at the tightest bend) |
 
 **The finding labels**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `acc:*label-min*` / `acc:*label-div*` | `4.0` / `200.0` | Label text is sized against the perimeter, so it reads the same on a 20-foot spa and a 60-foot pool: perimeter/DIV, but never under MIN (drawing units; perimeter divided by this) |
+| `acc:*label-min*` | `4.0` | Label text is sized against the perimeter, so it reads the same on a 20-foot spa and a 60-foot pool: perimeter/DIV, but never under MIN (drawing units) |
+| `acc:*label-div*` | `200.0` | Label text is sized against the perimeter, so it reads the same on a 20-foot spa and a 60-foot pool: perimeter/DIV, but never under MIN (perimeter divided by this) |
 
 **Numerical guards (rarely changed)**
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `acc:*flat-curv*` / `acc:*flat-tooth*` | `1.0e-12` / `1.0e-6` | A curvature below this is straight, so the comb is not drawn at all; a tooth shorter than this is not drawn either (1/drawing units; drawing units) |
+| `acc:*flat-curv*` | `1.0e-12` | A curvature below this is straight, so the comb is not drawn at all; a tooth shorter than this is not drawn either (1/drawing units) |
+| `acc:*flat-tooth*` | `1.0e-6` | A curvature below this is straight, so the comb is not drawn at all; a tooth shorter than this is not drawn either (drawing units) |
 ## Notes & limitations
 
 * **Curvature jumps are drawn, not scored.** A polyline of lines and

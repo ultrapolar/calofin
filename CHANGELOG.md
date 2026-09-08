@@ -8,12 +8,117 @@ which set of them shipped together. The release name lives in
 
 ## v3.6 -- 2026-09-08
 
+Two passes that landed together, and they are the same idea twice: a
+value somebody has to be able to reach has to be somewhere they can find
+it. One pass put every tool's settings in a block at the top of its
+file; the other gave every converter a way back that survives a save,
+which is the same thing said about a conversion.
+
+Every converter gains a reverter. `XFTCONV`, `SOCONV` and `VSCONV` each
+read somebody else's export and turn it into a drawing this office can
+work on; until now the only way back was `U`, which is good for as long
+as the session lasts and no longer. A conversion is found out to be
+wrong the week after -- the survey was converted twice, the wrong file
+was opened, the sheet has to go back to whoever exported it -- and by
+then `U` is gone.
+
+So each converter now **writes down what it did**, in xdata on the
+objects it touched, and each has a command that reads that back:
+`XFTRECONV`, `SORECONV`, `VSRECONV`. The record is the whole idea: an
+undo that works from the drawing alone cannot survive a save, because
+what a conversion destroys (an erased marker, an overwritten property,
+a stripped override block) is not in the drawing any more to be read.
+
+### Added
+
+- **`XFTRECONV`** (`lisp/xftconv/`, with `XFTCONV` at v1.13) puts a
+  converted survey back: the marker and the name text the swap erased,
+  the leftover text the purge took, the `ab_pt` block off again, and
+  the x12 undone by one `SCALE` of 1/12 about the base point the
+  conversion used.
+
+  Each block carries the record of what it replaced -- the erased
+  entities group by group, plus the scale and the WCS base point, which
+  are the two numbers no object in the drawing carries. Coordinates go
+  in through `rtos` at 8 decimals, so a round trip is exact to 1e-8 of
+  a drawing unit (a hundredth of a micron on a survey in inches) rather
+  than to the last bit of the float; `tests/test_xftconv.py` measures
+  that on the site-trace sample, whose coordinates carry more decimals
+  than the record writes.
+
+  **A highlight holding two conversions is refused by name.** They were
+  scaled about different base points, and one scale back cannot undo
+  both -- so it says so rather than half-reverting one of them.
+
+- **`SORECONV`** (`lisp/soconv/`, with `SOCONV` at v1.1) moves an
+  import back onto the export's own layers. The record keeps the layer
+  each object came off, that layer's own colour, and -- only when
+  `*soconv-force-bylayer*` was on, since that is the only time the
+  conversion overwrites anything else -- the colour, linetype and
+  lineweight the forcing replaced.
+
+  A source layer `PURGE`d on the tool's own advice is re-created with
+  the colour the record kept, so taking that advice does not close the
+  way back.
+
+- **`VSRECONV`** (`lisp/vsconv/`, with `VSCONV` at v1.1) does the same
+  for a VS export, and undoes **both halves of the dimension step**:
+  the style name back in group 3, and the `ACAD`/`DSTYLE` override
+  block back on the dimension, kept verbatim as the xdata items it
+  already was. A revert that restored the style name and left the
+  overrides off would leave the dimensions drawing in a style they
+  never had, which is the same trap the conversion itself exists to
+  avoid from the other side.
+
+  Its scope carries no layer filter where `VSCONV`'s does: a converted
+  object sits on `POOL` / `POINTS` / `DIMENSION`, where this office's
+  own drawing lives too, so the record is what says which objects came
+  from an export.
+
+### Changed
+
+- `vsconv:restyle-dim` strips the `ACAD` application's xdata and leaves
+  every other application's where it is. In AutoCAD that is what it
+  always did (an `entget` with an application list carries only that
+  application), so nothing about a conversion changes; it is now true
+  of the repo's VM as well, which is what lets a tool keep a record of
+  its own on an object whose xdata it is editing.
+
+- `entdel` in `tests/lispvm.py` takes an attributed `INSERT`'s
+  `ATTRIB`s and `SEQEND` with it, as AutoCAD does -- attributes are
+  owned by the block reference. Erasing a point block used to leave its
+  number attribute behind as a live entity for the next sweep to trip
+  over.
+
+### Notes
+
+- Each reverter is on the panel under its converter, in the same
+  `Converters` column: a `RECONV` is looked for in exactly one
+  situation, and the place it is looked for is where the converter was.
+- All three records can be switched off (`*xft-record*`,
+  `*soconv-record*`, `*vsconv-record*`). With one off its converter
+  runs exactly as it did before, says so in its done line rather than
+  promising a revert, and its reverter says there is nothing to work
+  from.
+- **One thing a revert spells out rather than restores**: an object
+  that arrived carrying no colour, linetype or lineweight of its own
+  comes back carrying the explicit ByLayer (`256`, `"ByLayer"`, `-1`)
+  that means the same thing. It draws and plots identically. Nothing
+  else about a round trip is approximate.
+
+- `lisp/lazpanel/README.md`'s page tables are rewritten from the
+  panel's own tables. Four of them had drifted: the `Cover` page was
+  missing `LINGUTTER` and `LINGUTTERSCAN`, `Layout` was missing
+  `POOLSIDE`, `LAZSPA` and `LAZSTEP`, `Points` was missing
+  `POINTRENAMER`, `CONSTELLATION` and `TYLERDRONESUITE`, and `Checking`
+  was missing `ABPCHECK`.
+
 A pass over the ten live checkers, one at a time: every value a drafter
 might want to change moved to a `TUNABLES` block at the top of its file,
 each with a comment saying what it controls, its units, and what raising
 or lowering it does. Three of them were bugs rather than untidiness.
 
-### Changed
+### Changed -- the ten checkers
 
 - **Every checker now opens with one tunables block** -- `CHECK` (v1.7),
   `DIMCHECK` (v1.13), `LINFINCHECK` (v2.9), `COVERCHECK` (v1.12),
@@ -53,7 +158,7 @@ or lowering it does. Three of them were bugs rather than untidiness.
   hardware tables above them; a shop whose blocks say "Deluxe FRP" adds
   a row instead of editing a cond.
 
-### Fixed
+### Fixed -- three of those were bugs, not untidiness
 
 - **`SPACHECK` could pass a sheet with no border.** The title-block
   finding was decided by looking for the word `OK` in its own sentence,
@@ -74,6 +179,21 @@ or lowering it does. Three of them were bugs rather than untidiness.
   overwritten the moment the command started. Height, spacing, indent,
   the bullet and the 26-line checklist are globals now, and the done
   message names the height it actually used.
+
+  Six of the ten join `tests/test_tunables.py`, the repo-wide rule the
+  same release introduced, so one test now holds them to it: every knob
+  inside its block, none stray outside it, none re-assigned, each saying
+  what changing it does, and each a row in its README's table carrying
+  the default it really has -- 304 knobs over 13 files. The four that
+  cannot join yet are the ones still spelling their globals
+  `*tool-name*` rather than `tool:*name*`, which that test's namespace
+  pattern cannot see; their own suites carry the same assertions.
+
+  Two knobs had to stop being two things at once to get there.
+  `abp:*limit*` was a default the command overwrote with whatever you
+  last answered, so it read as a setting while being state; the knob is
+  the default now and `abp:*asked*` is the answer. `SPACHECK`'s three
+  demo/sysvar globals moved out of the block for the same reason.
 
 ### Not changed, on purpose
 
