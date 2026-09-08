@@ -36,7 +36,8 @@ The four GUI files came first and check 6 is still theirs -- they are
 the ones whose knobs the VB palette shares.  Checks 1-5 are the general
 rule (STANDARDS.md section 5, "Tunables") and every file in FILES meets
 them; ``abcdef`` and ``ALTABCDEF`` joined when they grew blocks of their
-own.
+own, and ``BPCALLOUT`` / ``CDCALLOUT`` / ``CDCREATE`` when theirs were
+gathered into one.
 
 Run: python3 tests/test_tunables.py
 """
@@ -92,6 +93,39 @@ FILES = [
     # the older spelling the rule leaves where it got there first
     ('AutoDim', ROOT / 'lisp' / 'autodim' / 'AutoDim.lsp', 'ad',
      ROOT / 'lisp' / 'autodim' / 'README.md', SETTINGS),
+    # the three callout/create tools, which joined for the same reason
+    # again: each kept SOME of its settings in a block at the top and
+    # the rest inline -- a ring colour, a text offset, the sentence a
+    # callout is built from -- so adapting one meant reading the file
+    # to find out what was adjustable at all.
+    ('BPCALLOUT', ROOT / 'lisp' / 'bpcallout' / 'BPCALLOUT.lsp', 'bp',
+     ROOT / 'lisp' / 'bpcallout' / 'README.md', TUNABLES),
+    ('CDCALLOUT', ROOT / 'lisp' / 'cdcallout' / 'CDCALLOUT.lsp', 'cdo',
+     ROOT / 'lisp' / 'cdcallout' / 'README.md', TUNABLES),
+    ('CDCREATE', ROOT / 'lisp' / 'cdcreate' / 'CDCREATE.lsp', 'cdc',
+     ROOT / 'lisp' / 'cdcreate' / 'README.md', TUNABLES),
+    # OASIS, which had fourteen of its forty in a block and the other
+    # twenty-six spelled out where they were read -- a stand-off's 12
+    # and 18, a preview's 0.6 and 1.25, the 1e-8 a tie is deduped with.
+    # Joining here is what stopped the next one going back beside its
+    # code, and what caught the one knob in it that was really state:
+    # the hopper offset a run WROTE, so a pool quietly edited the
+    # setting it had been given (oasis:*hopoff-last* is the memory now).
+    ('OASIS', ROOT / 'lisp' / 'oasis' / 'OASIS.lsp', 'oasis',
+     ROOT / 'lisp' / 'oasis' / 'README.md', TUNABLES),
+    # POINTRENAMER, whose knobs reach further than most: what counts as
+    # a point, what counts as the perimeter, and -- since v1.4 -- which
+    # vertices of a fitted polyline are on the drawn curve at all.  It
+    # had OASIS's problem too: the band and the direction were knobs a
+    # run WROTE, so a value set at the top lasted until the first answer
+    # (ptr:*band-now* / ptr:*dir-now* are the memory now).
+    ('POINTRENAMER', ROOT / 'lisp' / 'pointrenamer' / 'POINTRENAMER.lsp',
+     'ptr', ROOT / 'lisp' / 'pointrenamer' / 'README.md', TUNABLES),
+    # the band unroller, whose numbers were spread down 1,240 lines: the
+    # dart cap in the emitter, the stop line in the drawing loop, the
+    # layer names at the entmake, the 1% target written out four times
+    ('wcalst', ROOT / 'lisp' / 'wcalst' / 'wcalst.lsp', 'wc',
+     ROOT / 'lisp' / 'wcalst' / 'README.md', TUNABLES),
 ]
 
 def split_block(src, markers):

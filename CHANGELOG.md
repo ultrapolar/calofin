@@ -94,7 +94,109 @@ in run in the VM at both tiers.
   took objects off -- so that already-empty `4 Dimensions` was named as
   something to purge by a run that never touched it.
 
+- **A complex top-right placement can nest the corner bulge**, and
+  OASIS drew nothing rather than saying so. The file argued the case
+  away: the gap between a corner bulge's centre and a side bulge's is
+  never *less* than their radii differ by. Never less -- but it can be
+  *equal*, and equal is an internal tangency, the one pair no tangent
+  radius bridges. It takes a corner bulge at exactly half the Y bound
+  and the two centres sharing an X, both of which the placement is free
+  to arrange: a 40' x 20' with a 10' corner bulge and a 9' right bulge
+  shifted a foot out. Every question answered, and then "those radii do
+  not make a closed outline -- nothing drawn", which is the one thing
+  the routine's header promises never happens. It is refused at the
+  placement question now, against both side bulges, and a tie reaches
+  the same check -- at its own floor a tie stands the corner bulge
+  straight above the right one, which is exactly the shared X.
+
+- **Esc inside the pool-bottom flow left its tangency marks behind.**
+  They are scaffolding, like the preview, but they were a local of
+  `oasis:askbottom`, which the command's own error handler cannot see
+  -- so cancelling there left every numbered mark, in red, over a pool
+  that was otherwise finished and worth keeping. They are
+  `oasis:*marks*` now and the handler clears them beside the preview.
+
+- OASIS's header banner still described **four families** and listed
+  four, having never heard about the NXT cloud; the prompt offers five
+  and `oasis:names` builds seven rings, not six. The file STANDARDS.md
+  calls the source of truth was the one place describing the tool as it
+  was two shapes ago.
+
+- **BPCALLOUT could not ring two points closer than twice its ring
+  radius.** A click was read against the rings already down even when
+  it had snapped to a survey point, so with the 5" default and two
+  points 8" apart, clicking the second landed inside the first's ring
+  and un-ringed it -- the run reported "nothing picked" and drew
+  nothing. Only a click with NO survey point under it is read against
+  the rings now; a click that snapped is the point it snapped to.
+
+- **`CDCALLOUT` and `CDCREATE` closed an undo group they had never
+  opened.** Both guard the `_.UNDO _Begin` behind the `UNDOCTL` check
+  -- `_Begin` with undo off errors out of the command -- and then
+  closed unconditionally, so in a drawing with undo switched off the
+  run ended on a stray `_End`. Both close only a group they opened,
+  which is what the flag was already there to say.
+
+- **`WCALST` closed one it had never opened either** -- the third of
+  that pair, found the same week and the same way. It drew both of its
+  layouts first, so with undo off the run died on its own last command
+  with the drawing already full and no `U` to take it back.
+
+- **A closed ring made `WCALST` walk for four minutes.** The
+  straightest continuation round a ring is always the next segment, so
+  tracing a long side lapped it until the 5,000-segment backstop and
+  reported a developed length of 694,662 -- about a thousand laps of a
+  band 1,250 long. The walk stops at a node it has already stood on,
+  taking the segment that closes the lap, so a ring develops as itself
+  in under half a second. The README claimed rings were unsupported;
+  they are handled, cut open at the segment you clicked.
+
+- **A line touching a long side was counted as a rung.** A datum line
+  or a cut mark crosses the chain as steeply as a rung does, and
+  counted as one it moved the median width, the vote for which side
+  the far edge is on, and -- through the middle rung, which is where
+  the far side is picked up -- which layer the far side was taken to
+  be on, redrawing the whole far side as loose reference marks. Only
+  segments leaving on the majority side are rungs now.
+
+- **The median rung was not the median.** `vl-sort` drops items that
+  compare equal (LISPLAB's lesson 2, met in production), so a band
+  flared at one end read its width off the deduped list: five 20s and
+  two 30s sort to `(20 30)`, whose median is the flare -- 50% wide, and
+  the width scales every cut, every filter and the whole layout.
+  `vl-sort-i` keeps them.
+
+- **With a tile height, a shallow band was cut through.** The apex rule
+  is tile + clearance below the straightened edge, but a clearance
+  clear of the foot; on a band shallower than the clearance itself both
+  halves go negative and the dart was drawn with its apex ABOVE the
+  straightened edge -- a V cut clean through the strip. It is held at
+  `wc:*apex-min-f*` of the local depth instead, which is what the
+  README had always claimed happened.
+
 ### Changed
+
+- **OASIS puts every knob at the top** -- all forty of them, in one
+  tunables block with a sentence each on what changing it does, and
+  joins `tests/test_tunables.py` so it stays that way. Fourteen were
+  already there; the other twenty-six were spelled out where they were
+  read, among them the dimension stand-off's `12` and `18` (POOL's own
+  rule, and now a knob that says it has to move with POOL's), the
+  preview's `0.6` joiners and `1.25` clearance, the `1.7` a radius
+  label sits out from its arc, the `1e-8` the check drawing dedupes
+  ties with, two loop guards and a bare `48.0` in the middle of the
+  kidney provisionals. Values are unchanged throughout: this renames,
+  it does not retune, and `test_the_tunables_are_live` sets one knob
+  out of each group on a loaded file and makes the drawing follow it.
+
+  **`oasis:*hopoff*` was not a knob.** The hopper question wrote it, so
+  an accepted offset became the session's default -- which is wanted,
+  but it meant a pool quietly edited the configuration it had been
+  given, and an office that set `24` in a startup file would find it
+  saying something else an hour later. The setting and the memory are
+  two names now: `oasis:*hopoff*` says where a fresh session starts and
+  is never written, `oasis:*hopoff-last*` holds what this session last
+  accepted. What a user sees is unchanged.
 
 - `vsconv:restyle-dim` strips the `ACAD` application's xdata and leaves
   every other application's where it is. In AutoCAD that is what it
@@ -108,6 +210,36 @@ in run in the VM at both tiers.
   owned by the block reference. Erasing a point block used to leave its
   number attribute behind as a live entity for the next sweep to trip
   over.
+
+- **The three callout/create tools put every knob at the top**, in one
+  tunables block with a sentence each on what changing it does, and
+  join `tests/test_tunables.py` so it stays that way. Each had kept
+  some settings in a block and the rest inline. New knobs, all
+  defaulting to today's behaviour: `bp:*layer-color*`, `bp:*text-gap*`
+  (the callout's default spot, which used to be twice the ring radius,
+  so shrinking the ring moved the text too), the callout's own wording
+  (`bp:*pt-prefix*`, `bp:*tail-one*`, `bp:*tail-many*`, `bp:*unknown*`
+  -- seven string literals over four functions until now),
+  `cdo:*layer-color*`, `cdo:*exact-eps*` and `cdc:*layer-color*`.
+
+  Two renames come with it, both under STANDARDS 8.4's "only if the
+  file is otherwise being reworked": BPCALLOUT's `*BP-LAYER*` family
+  takes the file's `bp:` prefix, and CDCALLOUT's three point-classifier
+  globals take `cdo:` -- that file already spelled its other knobs
+  `cdo:*style*` and `cdo:*layer*`, so it had two schemes for its own
+  settings. Both READMEs name the old spellings for anyone whose
+  startup file sets them.
+
+- **`WCALST` puts its 38 numbers at the top** (v1.8), the same rule
+  again on the tool that needed it most: the dart cap lived in the
+  emitter, the cut stop line in the drawing loop, the layer names at
+  the `entmake`, and the 1% target was written out four times over
+  1,240 lines. The prompt default and both variant summaries read the
+  knobs now, so retuning `wc:*maxfeat*` or `wc:*target*` cannot leave
+  the question or the sheet quoting the old figure, and the tool
+  README carries every one of them in a table. It joins
+  `tests/test_tunables.py`; `tests/test_wcalst.py` keeps the half that
+  file cannot see, retuning three knobs and checking what the run drew.
 
 - **Every knob at the top, explained.** `XFTCONV`'s settings block is
   rewritten one setting per form with a paragraph each -- what it is,

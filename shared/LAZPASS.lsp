@@ -13922,7 +13922,7 @@
 ;;; ever changing tangent, which is why the whole thing can be given as a
 ;;; handful of radii and two overall dimensions.
 ;;;
-;;; Four families come out of that, and the first question is which:
+;;; Five families come out of that, and the first question is which:
 ;;;
 ;;;   Center    three bulges -- left, right and one across the top,
 ;;;             centred -- joined by three reverse arcs.
@@ -13933,6 +13933,10 @@
 ;;;             sit INSIDE the big top circle, touching it from within,
 ;;;             and the outline hands straight over at each touch --
 ;;;             a SEAM, the one joint with nothing drawn between.
+;;;   NXTcloud  three lobes and four fillets, and the one shape whose
+;;;             ring meets a bulge TWICE: the centre lobe is walked
+;;;             under on the way out and over on the way back, so eight
+;;;             elements are cut from seven circles.
 ;;;
 ;;; The two families that come two ways get a second question of their
 ;;; own, asked straight after.  A cloud is one shape with two bottoms:
@@ -13943,7 +13947,7 @@
 ;;; touch it; on an ASYMMETRIC one the two unequal sides are given and
 ;;; the top circle is derived -- tangent to the top bound and both
 ;;; sides, its centre landing wherever those three contacts put it.
-;;; The pair of answers together names one of six rings.
+;;; The pair of answers together names one of seven rings.
 ;;;
 ;;;                        top bulge
 ;;;                      ___________                  ___________
@@ -14126,61 +14130,225 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.5")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.6")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
 ;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafting office might reasonably want different is set
+;; HERE and nowhere else: the code below reads these names and carries
+;; no bare numbers of its own.  Each knob says what CHANGING it does.
+;; Change a value, save, APPLOAD again -- or (setq oasis:*name* value)
+;; at the command line for one session; nothing below caches one.  Every
+;; one of them is a row in README.md's Tunables table, and
+;; tests/test_tunables.py holds the two together.
+;;
+;; Distances are in drawing units throughout, and a survey arrives in
+;; inches, so read them as inches unless the drawing says otherwise.
+;;
+;; They are grouped the way a run uses them: where it draws, what shape
+;; it starts from, what the preview opens on, how big the annotation is,
+;; what the pool bottom offers, and how much slack a comparison gets.
 
-(setq oasis:*poollayer*  "POOL")       ; the six arcs
+;; ---- where the output goes ---------------------------------------------
+
+;; The three layers, created if the drawing has not got them and thawed,
+;; unlocked and switched back on if it has -- a run onto a frozen layer
+;; otherwise looks like the command did nothing.  The colour beside each
+;; is used only when the layer is CREATED; a layer the drawing already
+;; has keeps its own.  *hicolor* is the odd one out: it is forced onto
+;; the circle a question is about, every time, so it reads as the answer
+;; being asked for rather than as part of the drawing.
+(setq oasis:*poollayer*  "POOL")       ; the arcs, and the pool bottom
 (setq oasis:*poolcolor*  4)
-(setq oasis:*dimlayer*   "DIMENSION")  ; every dimension
+(setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
 (setq oasis:*guidecolor* 8)
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
-;; Where a Center pool's top bulge sits across the X bound, as a fraction
-;; of it.  0.5 centres it, which is what every one on file wants; the
-;; value is here so an off-centre one does not need the file edited.
-(setq oasis:*topfrac* 0.5)
-
-;; The pool bottom.  The offset the hopper question offers first, the
-;; number of chords a guided slope line is drawn with, and how finely the
-;; deepest point of the offset ring is looked for.
-(setq oasis:*hopoff*   18.0)
-(setq oasis:*hopchord* 24)
-(setq oasis:*hopscan*  720)
-
-;; Slack for "is this the same point / the same length" tests, drawing
-;; units.  Measurements arrive in inches, so this is far below anything
-;; a tape can tell apart.
-(setq oasis:*fuzz* 1.0e-6)
-
 ;; Two styles, because the two drawings are read differently: the pool
 ;; itself is a plan and is dimensioned in the drawing's ordinary style,
 ;; while the check drawing beside it is nothing but tie measurements and
 ;; goes in the cross-dimension style, same as every other cross dim in
-;; the repo.  A drawing that has not got one of them is told so once and
-;; those dims come out in whatever style is current -- an invented style
-;; would look right and measure wrong.
+;; the repo.  Name a style the drawing has not got and those dims come
+;; out in whatever is current, with the routine saying so once -- an
+;; invented style would look right and measure wrong.
 (setq oasis:*dimstyle*   "Standard")           ; the pool's own dims
 (setq oasis:*crossstyle* "CROSS DIMENSIONS")   ; the check drawing's
 
-;; The check drawing sits this far to the right of the pool, measured
+;; How far to the right of the pool the check drawing sits, measured
 ;; from the pool's own right-hand bound, as a multiple of the dimension
-;; stand-off.  Big enough to clear the radius dims on that side.
+;; stand-off.  Raise it if the radius dims on that side ever reach it.
 (setq oasis:*checkgap* 4.0)
 
-;; The shape the preview starts from, before any radius has been given:
-;; how far across the envelope a side bulge and the top bulge usually
-;; reach, as fractions.  Three quarters of the short bound and half the
-;; long one is what an oasis normally comes in, so the first question is
-;; already looking at something familiar.
+;; ---- the shape itself --------------------------------------------------
+
+;; Where a Center pool's top bulge sits across the X bound, as a
+;; fraction of it.  0.5 centres the hump, which is what every pool on
+;; file wants; move it and every simple Center run draws the hump off
+;; centre.  (A COMPLEX run says it per-pool instead, by answering the
+;; placement question, so this is only the default.)
+(setq oasis:*topfrac* 0.5)
+
+;; ---- the shape the preview opens on ------------------------------------
+
+;; A radius not answered yet still needs a value for the preview to be
+;; drawable at all, so the gaps are filled with the proportions an oasis
+;; usually comes in and every invented one is labelled "?".  Change any
+;; of these and the FIRST question looks at a different starting shape;
+;; nothing that ends up drawn depends on one.
+;;
+;; A side bulge and the top bulge, as fractions of the bound each is
+;; measured across -- HALVED in use, because a bulge is twice its radius
+;; across.  Three quarters of the short bound and half the long one puts
+;; a 40 x 20 at 7'-6" side bulges and a 10'-0" top, against the 8'/9'
+;; and 11' of the drawing this tool was written from.
 (setq oasis:*startside* 0.75)
 (setq oasis:*starttop*  0.5)
 
-;;; -------------------- the four shapes ----------------------------------
+;; A joiner has no rule of thumb of its own -- what looks right depends
+;; entirely on the bulges either side of it -- so it is sized off them.
+;; Lower *startjoin* for shallower reverse curves; it is a fraction of
+;; the SMALLEST neighbouring bulge, which is what keeps the bulges the
+;; bigger circles and so keeps the picture reading as a pool.  A cloud's
+;; bottom is the exception: it sweeps under the whole pool, so it takes
+;; *startbig* of the LARGEST bulge instead.
+(setq oasis:*startjoin* 0.6)
+(setq oasis:*startbig*  1.2)
+
+;; ...and whichever of those two it is, it is then lifted to at least
+;; this multiple of its own minimum.  Keep it above 1.0: below that
+;; minimum there is no fillet at all, oasis:solve gives back nil, and
+;; the first radius question is put with an empty box on screen.  The
+;; margin over 1.0 is what keeps a barely buildable ring from opening
+;; looking pinched.
+(setq oasis:*startclear* 1.25)
+
+;; The two kidneys, whose provisionals cannot be read off neighbours
+;; because the shape derives half of itself: a TRUE kidney's top circle
+;; as a multiple of the smallest one that reaches both sides, and an
+;; ASYMMETRIC kidney's two given sides as fractions of the short bound.
+;; Keep those two unequal -- an asymmetric kidney whose preview opened
+;; symmetric would be showing the wrong shape.
+(setq oasis:*startktop*   1.5)
+(setq oasis:*startkleft*  0.40)
+(setq oasis:*startkright* 0.45)
+
+;; The side radius a true kidney's bottom joiner is sized against when
+;; the derivation has no answer at all.  Every top circle the questions
+;; admit does have one, so changing this changes nothing you can reach;
+;; it is here because a bare number in the middle of the provisionals
+;; would not be, and because a nil arriving at arithmetic is how a
+;; preview dies rather than draws.
+(setq oasis:*startkside* 48.0)
+
+;; ---- how big the annotation is -----------------------------------------
+
+;; All of it scales off the pool, so a 10-foot spa and a 40-foot pool
+;; are annotated to LOOK the same rather than to measure the same.  Each
+;; pair below is a floor under the result and a divisor of the longer
+;; bound: raise a divisor for smaller annotation, raise a floor to keep
+;; a small pool readable.
+;;
+;; The dimension stand-off, which is how far off the pool the overall
+;; dims sit.  This is POOL's own rule and is a knob here only so it can
+;; be kept in step with POOL: an oasis dimensioned beside a rectangle
+;; has to read at the same offset, so move these only together with
+;; POOL's own (pool:dimoff, lisp/pool/POOL.LSP).
+(setq oasis:*dimoffmin* 12.0)
+(setq oasis:*dimoffdiv* 18.0)
+
+;; How far a radius dimension's text is dragged off its own arc, as a
+;; fraction of that stand-off -- away from the centre on a bulge and
+;; towards it on a reverse arc, whose centre is itself outside the pool,
+;; so both land clear of the water.  Raise it to pull the text further
+;; out; at 0 the text sits on the arc.
+(setq oasis:*radiusdrag* 0.9)
+
+;; The dashed guide linetype, built rather than loaded from acad.lin (a
+;; failed load falls back to CONTINUOUS in silence, which is how dashes
+;; vanish).  Dash and gap are equal; lower *dashdiv* for a coarser dash.
+(setq oasis:*dashmin* 2.0)
+(setq oasis:*dashdiv* 40.0)
+
+;; The preview's radius labels: how tall the text is, and how far out
+;; from its own arc it sits, in text heights, along the direction that
+;; leads out of the water.  Raise the gap if a label ever sits on the
+;; outline it belongs to.
+(setq oasis:*pvtextdiv* 28.0)
+(setq oasis:*pvtextgap* 1.7)
+
+;; The little circle the check drawing marks each centre with.
+(setq oasis:*markmin* 1.0)
+(setq oasis:*markdiv* 90.0)
+
+;; The numbered marks the pool-bottom flow puts on every change of
+;; tangency, so one can be named: the mark's own radius, the number's
+;; text height, and how far outside the water that number sits, in text
+;; heights.  Raise the gap on a pool whose numbers crowd the outline.
+(setq oasis:*tangmarkdiv* 150.0)
+(setq oasis:*tangtextdiv* 34.0)
+(setq oasis:*tangtextgap* 1.6)
+
+;; ---- the pool bottom ---------------------------------------------------
+
+;; The hopper offset the question opens on when a session has not yet
+;; had an answer accepted.  After that the session's own last answer is
+;; what it offers, because a job's pools share a hopper -- that memory
+;; is oasis:*hopoff-last*, which is state and lives with the rest of it
+;; rather than here.  Change this one to move where a fresh session
+;; starts.
+(setq oasis:*hopoff* 18.0)
+
+;; How many chords a GUIDED slope line is drawn with.  It follows the
+;; wall with its offset easing away to nothing, so there is no exact
+;; curve to draw and it goes down as a polyline: more chords is a
+;; smoother line and a heavier drawing.
+(setq oasis:*hopchord* 24)
+
+;; How finely the deepest point of the offset ring is looked for, in
+;; samples round the whole ring.  Only the deep end's LOCATION comes off
+;; this scan -- every point actually drawn is solved exactly -- so
+;; raising it buys robustness on a lumpy outline, not precision.
+(setq oasis:*hopscan* 720)
+
+;; ---- slack, and the loop guards ----------------------------------------
+
+;; Slack for "is this the same point / the same length" tests, in
+;; drawing units.  Measurements arrive in inches, so this is far below
+;; anything a tape can tell apart; raise it only for a drawing whose
+;; units are much coarser than inches.
+(setq oasis:*fuzz* 1.0e-6)
+
+;; The tighter slack the check drawing dedupes its tie measurements
+;; with.  Two ties wanted between the same pair of centres are one tie,
+;; and the pair is compared as COORDINATES rather than as a distance --
+;; a centre is either the one already tied or a different one, with no
+;; near-miss in between -- so this is an equality test and takes
+;; equality's tolerance rather than the tape's.
+(setq oasis:*ptfuzz* 1.0e-8)
+
+;; How far out of the world plan the current UCS may lie and still count
+;; as flat.  A DIRECTION COSINE, not a length: it compares the UCS Z
+;; axis against the world Z, so it does not scale with the drawing and
+;; has nothing to do with *fuzz*.  A UCS past it is refused outright --
+;; the arcs would each need an extrusion of their own, and a plan pool
+;; has no business in one.
+(setq oasis:*ucsfuzz* 1.0e-8)
+
+;; Two belt-and-braces loop limits, neither reached by any input the
+;; questions admit: they are here so a bug upstream costs a wrong
+;; drawing rather than a hung AutoCAD.  *cmdguard* is how many empty
+;; (command) calls the error handler will send to drain a dimension left
+;; pending by an Esc; *ringguard* is how many elements the sub-ring
+;; walker may cross, as a multiple of the ring's own length.  Lower
+;; either and a legitimate run could be cut short.
+(setq oasis:*cmdguard*  10)
+(setq oasis:*ringguard* 4)
+
+;;; -------------------- the five shapes ----------------------------------
 ;;; Every one of them is a ring of BULGES -- circles pinned to the
 ;;; envelope -- with a JOINER between each consecutive pair.  A joiner is
 ;;; either a reverse arc of a radius the user gives, or, when both bulges
@@ -14240,12 +14408,12 @@
 (defun oasis:complex-p (ans)
   (= (nth 11 ans) "Complex"))
 
-;; The shape, resolved.  The first question offers four families --
-;; Center, TopRight, Cloud and Kidney -- and the two families that come
-;; two ways get a second question of their own, asked straight after: a
-;; cloud is one shape with two bottoms, a kidney one shape whose sides
-;; are either matched or not.  The pair of answers together names one of
-;; the six rings.
+;; The shape, resolved.  The first question offers five families --
+;; Center, TopRight, Cloud, Kidney and NXTcloud -- and the two families
+;; that come two ways get a second question of their own, asked straight
+;; after: a cloud is one shape with two bottoms, a kidney one shape
+;; whose sides are either matched or not.  The pair of answers together
+;; names one of the seven rings.
 (defun oasis:variant (ans)
   (cond ((= (nth 0 ans) "Cloud")
          (if (= (nth 10 ans) "Rounded") "RoundedBottom" "StraightBottom"))
@@ -14647,7 +14815,7 @@
 ;; The dash pattern the guide circles are drawn with, scaled to the pool
 ;; so it reads the same on a 10-foot spa and a 40-foot pool.
 (defun oasis:dashlt (w h / d)
-  (setq d (max 2.0 (/ (max w h) 40.0)))
+  (setq d (max oasis:*dashmin* (/ (max w h) oasis:*dashdiv*)))
   (oasis:ltmake "OASISDASH" "Oasis guide __ __ __ __" (list d (- 0.0 d))))
 
 ;;; -------------------- layers ------------------------------------------
@@ -15162,7 +15330,7 @@
 ;; parallel to the world Z.  Every plan-drafting UCS is.
 (defun oasis:ucs-flat-p ( / z)
   (setq z (trans '(0.0 0.0 1.0) 1 0 T))
-  (< (abs (- (abs (caddr z)) 1.0)) 1.0e-8))
+  (< (abs (- (abs (caddr z)) 1.0)) oasis:*ucsfuzz*))
 
 ;; How far the current UCS is turned from the world X axis.  Read off the
 ;; components rather than with (angle ...), which projects onto the UCS
@@ -15206,7 +15374,7 @@
 ;; How far off the pool the dimensions sit.  POOL's rule, so an oasis
 ;; drawn beside a rectangle is dimensioned at the same stand-off.
 (defun oasis:dimoff (w h)
-  (max 12.0 (/ (max w h) 18.0)))
+  (max oasis:*dimoffmin* (/ (max w h) oasis:*dimoffdiv*)))
 
 ;; The midpoint of an arc, and the direction out of the pool there.
 ;; On a bulge that is away from the centre; on a reverse arc it is
@@ -15297,11 +15465,15 @@
       ((oasis:line-p a)
        (command "_.DIMALIGNED"
                 (oasis:wp (nth 1 a) base) (oasis:wp (nth 2 a) base)
-                (oasis:wp (polar (car md) (cdr md) (* 0.9 doff)) base)))
+                (oasis:wp (polar (car md) (cdr md)
+                                 (* oasis:*radiusdrag* doff))
+                          base)))
       (t
        (command "_.DIMRADIUS"
                 (list e (oasis:wp (car md) base))
-                (oasis:wp (polar (car md) (cdr md) (* 0.9 doff)) base)))))
+                (oasis:wp (polar (car md) (cdr md)
+                                 (* oasis:*radiusdrag* doff))
+                          base)))))
   (princ))
 
 ;;; -------------------- the check drawing --------------------------------
@@ -15343,8 +15515,8 @@
   ;; otherwise be tied to itself, which is a dimension of nothing
   (setq hit (< (distance p q) oasis:*fuzz*))
   (foreach e ties
-    (if (or (and (equal (car e) p 1e-8) (equal (cadr e) q 1e-8))
-            (and (equal (car e) q 1e-8) (equal (cadr e) p 1e-8)))
+    (if (or (and (equal (car e) p oasis:*ptfuzz*) (equal (cadr e) q oasis:*ptfuzz*))
+            (and (equal (car e) q oasis:*ptfuzz*) (equal (cadr e) p oasis:*ptfuzz*)))
         (setq hit T)))
   (if hit ties (append ties (list (list p q)))))
 
@@ -15365,7 +15537,7 @@
   (oasis:dimstyle-on oasis:*crossstyle*)
   (setvar "CLAYER" oasis:*guidelayer*)
   (oasis:pv-box w h cbase lt)
-  (setq mark (max 1.0 (/ (max w h) 90.0)))
+  (setq mark (max oasis:*markmin* (/ (max w h) oasis:*markdiv*)))
   ;; the outline itself, so the centres have something to belong to
   (oasis:draw arcs cbase oasis:*poollayer*)
   (setvar "CLAYER" oasis:*guidelayer*)
@@ -15476,18 +15648,18 @@
               rl   (cond ((nth 4 ans)) (side))
               rt   (cond ((nth 5 ans)) (side))
               rr   (cond ((nth 6 ans)) (side))
-              g    (* 0.6 (min rl rt rr))
+              g    (* oasis:*startjoin* (min rl rt rr))
               ca   (oasis:nxtcen w h rl 0)
               cd   (oasis:nxtcen w h rt 1)
               cg   (oasis:nxtcen w h rr 2))
         (list w h rl rt rr
-              (cond ((nth 7 ans))  ((max g (* 1.25 (oasis:filmin cd rt
+              (cond ((nth 7 ans))  ((max g (* oasis:*startclear* (oasis:filmin cd rt
                                                                  ca rl)))))
-              (cond ((nth 8 ans))  ((max g (* 1.25 (oasis:filmin cg rr
+              (cond ((nth 8 ans))  ((max g (* oasis:*startclear* (oasis:filmin cg rr
                                                                  cd rt)))))
-              (cond ((nth 9 ans))  ((max g (* 1.25 (oasis:filmin ca rl
+              (cond ((nth 9 ans))  ((max g (* oasis:*startclear* (oasis:filmin ca rl
                                                                  cd rt)))))
-              (cond ((nth 13 ans)) ((max g (* 1.25 (oasis:filmin cd rt
+              (cond ((nth 13 ans)) ((max g (* oasis:*startclear* (oasis:filmin cd rt
                                                                  cg rr)))))
               0.0))
   (if (oasis:kidney-p var)
@@ -15498,13 +15670,13 @@
       ;; sides the way every joiner is
       (progn
         (setq rt (if (= var "TrueKidney")
-                     (cond ((nth 5 ans)) ((* 1.5 (oasis:ktrue-min w h)))))
+                     (cond ((nth 5 ans)) ((* oasis:*startktop* (oasis:ktrue-min w h)))))
               rl (if (= var "AsymKidney")
-                     (cond ((nth 4 ans)) ((* 0.40 (min w h)))))
+                     (cond ((nth 4 ans)) ((* oasis:*startkleft* (min w h)))))
               rr (if (= var "AsymKidney")
-                     (cond ((nth 6 ans)) ((* 0.45 (min w h)))))
+                     (cond ((nth 6 ans)) ((* oasis:*startkright* (min w h)))))
               g  (if (= var "TrueKidney")
-                     (cond ((oasis:ktrue-side w h rt)) (48.0))
+                     (cond ((oasis:ktrue-side w h rt)) (oasis:*startkside*))
                      (min rl rr))
               ;; the two circles the bottom joiner will actually span --
               ;; the matching pair derived on a true kidney, the two given
@@ -15519,8 +15691,8 @@
               ;; the preview would have nothing to draw until the very
               ;; last question was answered
               (cond ((nth 9 ans))
-                    ((max (* 0.6 g)
-                          (* 1.25 (oasis:filmin cl gl cr gr)))))
+                    ((max (* oasis:*startjoin* g)
+                          (* oasis:*startclear* (oasis:filmin cl gl cr gr)))))
               nil off))
       (progn
   (setq side (* 0.5 oasis:*startside* (min w h))
@@ -15539,21 +15711,23 @@
         ;; A cloud's bottom is the exception: it sweeps under the whole
         ;; pool, so it is read off the biggest bulge rather than the
         ;; smallest.
-        g    (* 0.6 (min rl rr (cond (rt) (rl))))
-        big  (* 1.2 (max rl rr (cond (rt) (rl))))
+        g    (* oasis:*startjoin* (min rl rr (cond (rt) (rl))))
+        big  (* oasis:*startbig* (max rl rr (cond (rt) (rl))))
         cl   (list rl rl)
         ct   (if rt (oasis:topcen w h rt var off))
         cr   (list (- w rr) rr))
   (list w h rl rt rr
         (cond ((nth 7 ans))
-              ((oasis:cloud-p var) (max g (* 1.25 (oasis:filmin cr rr cl rl))))
-              ((max g (* 1.25 (oasis:filmin ct rt cl rl)))))
+              ((oasis:cloud-p var)
+               (max g (* oasis:*startclear* (oasis:filmin cr rr cl rl))))
+              ((max g (* oasis:*startclear* (oasis:filmin ct rt cl rl)))))
         (cond ((nth 8 ans))
               ((oasis:cloud-p var) nil)
-              ((max g (* 1.25 (oasis:filmin cr rr ct rt)))))
+              ((max g (* oasis:*startclear* (oasis:filmin cr rr ct rt)))))
         (cond ((nth 9 ans))
-              ((oasis:cloud-p var) (max big (* 1.25 (oasis:filmin cl rl cr rr))))
-              ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))
+              ((oasis:cloud-p var)
+               (max big (* oasis:*startclear* (oasis:filmin cl rl cr rr))))
+              ((max g (* oasis:*startclear* (oasis:filmin cl rl cr rr)))))
         nil off)))))
 
 ;; Erase a preview.  Entities the user has since deleted are skipped, so
@@ -15622,7 +15796,7 @@
       (progn
         (cal:osdown)
         (setq lt   (oasis:dashlt w h)
-              hgt  (/ (max w h) 28.0)
+              hgt  (/ (max w h) oasis:*pvtextdiv*)
               full (oasis:fillin ans)
               arcs (oasis:solve (nth 0 full) (nth 1 full) (nth 2 full)
                                 (nth 3 full) (nth 4 full) (nth 5 full)
@@ -15660,7 +15834,8 @@
                                   (rtos (nth slot ans))
                                   (if slot "?" (rtos (nth 2 a))))
                           out (cons (oasis:pv-text
-                                      (polar (car md) (cdr md) (* 1.7 hgt))
+                                      (polar (car md) (cdr md)
+                                             (* oasis:*pvtextgap* hgt))
                                       hgt txt base hi)
                                     out)))
                 (setq i (1+ i)))
@@ -15943,20 +16118,33 @@
 ;; refused: that is an ordinary trimmed bulge, and oasis:report-extents
 ;; names it.
 ;;
-;; The hump's OTHER refusal has no counterpart here, and that is not an
-;; oversight.  A hump has no size limit -- it is trimmed away long
-;; before it reaches anything -- so it can grow to swallow the left
-;; bulge, and oasis:ask-offset turns that away.  A corner bulge cannot:
-;; it is tangent to the Y-max bound and at most half the envelope
-;; across, and both side bulges are tangent to the Y-min bound and at
-;; most half the envelope across from the other side, so the gap between
-;; those centres is never smaller than the radii differ by.  Wherever
-;; along the top wall it is put, it is never inside a side bulge and
-;; never swallows one.
+;; The hump's OTHER refusal -- a third bulge that swallows a side one --
+;; is checked here too, and for a while it was not, on the argument that
+;; a corner bulge cannot reach: it is tangent to the Y-max bound and at
+;; most half the envelope across, and both side bulges are tangent to
+;; the Y-min bound and at most half the envelope across from the other
+;; side, so the gap between those centres in Y alone is h - rt - rs and
+;; the radii differ by |rt - rs|, and the first is never less than the
+;; second.
+;;
+;; Never LESS -- but it can be EQUAL, and equal is nested: the two
+;; circles touch from the inside, which is the one case no tangent
+;; radius bridges either.  It needs the larger of the pair to be exactly
+;; half the Y bound, which is a legal answer, and the two centres to
+;; share an X, which the placement is free to arrange.  A 40 x 20 with a
+;; 10' corner bulge and a 9' right bulge shifted a foot out is one:
+;; every question answered, and then no outline at all.  So the
+;; placement is checked against both side bulges, exactly as
+;; oasis:ask-offset checks the hump against the left one -- and HERE
+;; rather than at the right bulge's own question, because on this shape
+;; the placement is asked after that question and oasis:right-nests has
+;; already had its look.
 ;;
 ;; Tie is checked the same way, because by the time it is checked it IS
-;; a shift: oasis:tieoff has already turned it into one.
-(defun oasis:ask-place (msg w h rt rr / v ct bad)
+;; a shift: oasis:tieoff has already turned it into one.  That matters:
+;; a tie at its own floor stands the corner bulge straight above the
+;; right one, which is precisely the shared X the nesting case needs.
+(defun oasis:ask-place (msg w h rl rt rr / v ct bad)
   (setq v   (oasis:askshift msg)
         bad T)
   (while bad
@@ -15976,12 +16164,22 @@
                    (oasis:tieoff w h rt rr v))))
       (t
        (setq ct  (oasis:topcen w h rt "TopRight" v)
-             bad (or (< (car ct) 0.0) (> (car ct) w)))
+             bad (cond ((or (< (car ct) 0.0) (> (car ct) w)) "out")
+                       ((oasis:nested-p ct rt (list rl rl) rl) "left")
+                       ((oasis:nested-p ct rt (list (- w rr) rr) rr)
+                        "right")))
        (if bad
            (progn
-             (princ (strcat "\nThat puts the corner bulge's centre at "
-                            (rtos (car ct)) ", off the " (rtos w)
-                            " envelope altogether -- it has to stay on it."))
+             (if (= bad "out")
+                 (princ (strcat "\nThat puts the corner bulge's centre at "
+                                (rtos (car ct)) ", off the " (rtos w)
+                                " envelope altogether -- it has to stay"
+                                " on it."))
+                 (princ (strcat "\nThere the corner bulge and the " bad
+                                " bulge lie one inside the other, so no"
+                                " tangent radius can join them.  Move it"
+                                " along the wall, or change one of the two"
+                                " radii.")))
              (setq v (oasis:askshift msg)))))))
   v)
 
@@ -16077,7 +16275,7 @@
     ;; the same slot, and the same shift, asked against the mark each
     ;; shape measures it from
     ((= k 12) (if (= var "TopRight")
-                  (oasis:ask-place (oasis:sprompt var 12) w h rt rr)
+                  (oasis:ask-place (oasis:sprompt var 12) w h rl rt rr)
                   (oasis:ask-offset (oasis:sprompt var 12) w h rl rt)))
     ((= k 13) (oasis:ask-tangent (oasis:sprompt var 13) cd rt cg rr runs))))
 
@@ -16387,7 +16585,7 @@
         want  (oasis:spanlen arcs sa sb)
         out   nil
         guard 0)
-  (while (and (> want oasis:*fuzz*) (< guard (* 4 n)))
+  (while (and (> want oasis:*fuzz*) (< guard (* oasis:*ringguard* n)))
     (setq l     (oasis:elen (nth k arcs))
           avail (* l (- 1.0 u0)))
     (if (<= want (+ avail oasis:*fuzz*))
@@ -16476,8 +16674,8 @@
   (setq js  (oasis:joints arcs)
         n   (length js)
         i   0
-        hgt (/ (max w h) 34.0)
-        mk  (/ (max w h) 150.0)
+        hgt (/ (max w h) oasis:*tangtextdiv*)
+        mk  (/ (max w h) oasis:*tangmarkdiv*)
         out nil)
   (while (< i n)
     (setq at  (oasis:ringat arcs (nth i js))
@@ -16485,7 +16683,7 @@
           ;; the number sits OUTSIDE the water, clear of the outline
           out (cons (oasis:pv-text (polar (car at)
                                           (+ (cadr at) pi)
-                                          (* 1.6 hgt))
+                                          (* oasis:*tangtextgap* hgt))
                                    hgt (itoa (1+ i)) base T)
                     out)
           i   (1+ i)))
@@ -16784,19 +16982,22 @@
   (setq bot nil)
   (while (null bot)
     (initget 6 "Back Undo")
-    (setq off (getdist (strcat "\nHopper offset in from the wall [Back] <"
-                               (rtos oasis:*hopoff*) ">: ")))
+    (setq off (getdist
+                (strcat "\nHopper offset in from the wall [Back] <"
+                        (rtos (cond (oasis:*hopoff-last*) (oasis:*hopoff*)))
+                        ">: ")))
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
        (setq bot 'OASIS-BACK))
       (t
-       (if (null off) (setq off oasis:*hopoff*))
+       (if (null off)
+           (setq off (cond (oasis:*hopoff-last*) (oasis:*hopoff*))))
        (setq try (oasis:bottom arcs (car sh) (cadr sh) (car sd) (cadr sd)
                                off))
        (if (= (type try) 'STR)
            (princ (strcat "\nAt " (rtos off) " " try "."))
-           (setq oasis:*hopoff* off
-                 bot            (list off try))))))
+           (setq oasis:*hopoff-last* off
+                 bot                 (list off try))))))
   bot)
 
 ;; How one slope line runs.  The side is named by the arc its end of the
@@ -16814,10 +17015,10 @@
 ;; own questions have it.  Back out of the first step and nothing is
 ;; added at all.  Returns the lines to report, so they land after the
 ;; pool's own, or nil when nothing was added.
-(defun oasis:askbottom (arcs w h base lt / marks ans pos k v off bot done)
-  (setq marks (oasis:tangmarks arcs w h base lt)
-        ans   (list nil nil nil nil nil)
-        pos   0)
+(defun oasis:askbottom (arcs w h base lt / ans pos k v off bot done)
+  (setq oasis:*marks* (oasis:tangmarks arcs w h base lt)
+        ans           (list nil nil nil nil nil)
+        pos           0)
   (while (and pos (< pos 5))
     (setq k pos
           v (cond ((= k 0) (oasis:askbreak "Shallow" arcs w h base))
@@ -16833,7 +17034,7 @@
                    (setq pos nil)))
         (setq ans (oasis:put ans k v)
               pos (1+ pos))))
-  (setq marks (oasis:pv-clear marks))
+  (setq oasis:*marks* (oasis:pv-clear oasis:*marks*))
   (if (null pos)
       nil
       (progn
@@ -16922,6 +17123,18 @@
 
 ;;; -------------------- the command -------------------------------------
 
+;; The numbered tangency marks the pool-bottom flow puts up.  A
+;; module global rather than a local of oasis:askbottom because
+;; c:OASIS's handler has to be able to clear them: an Esc inside
+;; that flow used to leave every one of them on the drawing, red,
+;; over a pool that was otherwise finished and worth keeping.
+(setq oasis:*marks*   nil)
+;; The hopper offset this session last had accepted, offered ahead of
+;; oasis:*hopoff* once there is one.  A job's pools share a hopper, so
+;; the second pool of a run should not have to be told again -- but the
+;; knob is the setting and this is the memory, and writing the setting
+;; would make a run quietly edit its own configuration.
+(setq oasis:*hopoff-last* nil)
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
@@ -16937,12 +17150,16 @@
     ;; an Esc part-way through a dimension leaves that command pending,
     ;; and the UNDO below would be swallowed as an answer to it
     (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
     ;; the preview is scaffolding, not a result -- it goes whether the run
-    ;; finished or the user pressed Esc part-way through the questions
+    ;; finished or the user pressed Esc part-way through the questions.
+    ;; So are the pool-bottom flow's numbered tangency marks, which are
+    ;; put up by a defun this handler cannot see the locals of -- hence
+    ;; oasis:*marks*.  Esc there left them on a finished pool.
     (oasis:pv-clear prev)
+    (setq oasis:*marks* (oasis:pv-clear oasis:*marks*))
     (if undo-open (command "_.UNDO" "_End"))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -31260,48 +31477,195 @@
 ;;;
 ;;;  Nothing is written until the split is shown and answered Yes, the
 ;;;  old-to-new table is printed so a callout can be chased afterwards,
-;;;  and the whole renumber is one U.
+;;;  and the whole renumber is one U.  A write that does not land -- a
+;;;  locked POINTS layer is the everyday reason -- is named in the table
+;;;  and counted at the end, never reported as a renumber that happened.
+;;;
+;;;  EVERY knob the tool has is in the TUNABLES block below, grouped and
+;;;  explained; nothing past it is a value meant to be edited.
 ;;; ======================================================================
 
 ;;; -------------------- version -----------------------------------------
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.3")
+(setq *pointrenamer-version* "v1.4")
 
 ;;; -------------------- tunables ----------------------------------------
+;;;  Every knob the tool has, all of them here.
+;;;  Past this block nothing is a bare number: every value the tool's
+;;;  behaviour turns on is named here, with what it does and what moving
+;;;  it costs.  Two ways to change one:
+;;;
+;;;    for good     edit the line here and re-APPLOAD the file
+;;;    for one job  type (setq ptr:*band* 3.0) at the command line after
+;;;                 loading -- it holds until the drawing closes
+;;;
+;;;  The groups, in the order you are likely to want them:
+;;;
+;;;    1  what counts as a point         4  what the report looks like
+;;;    2  what counts as the perimeter   5  tolerances, named not tuned
+;;;    3  what the questions start at
+;;;
+;;;  Every one of them is a literal the tool only ever READS, so what
+;;;  stands here is what the file does.  The two answers carried between
+;;;  runs -- the band and the direction -- are remembered in state of
+;;;  their own below the block, seeded from the knobs here, so a run
+;;;  cannot quietly overwrite the value you set.
+;;;
+;;;  One number is deliberately NOT here: the clamp inside the generic
+;;;  tangent helper.  That helper is the shared library's, carried here
+;;;  as a copy, and in the grouped build the library's own body is what
+;;;  runs -- so a knob here would be read at one tier and ignored at the
+;;;  other, which is worse than a number with a comment on it.
 
-;; Where the survey points live and what a point block calls its number
-;; -- ABPCHECK's abp:*pt-layer* / abp:*pt-block* / abp:*pt-tag*.
-(setq ptr:*pt-layer* "POINTS")    ; layer holding the survey points
-(setq ptr:*pt-block* "ab_pt")     ; block name whose INSERTs mark points
-(setq ptr:*pt-tag*   "number")    ; the attribute carrying the number
+;; -- 1. what counts as a point ----------------------------------------
 
-;; The layer the pool outline lives on, where the perimeter is looked
-;; for first.
+;; ABPCHECK's definition of a survey point, unchanged, so the two tools
+;; never disagree about what they are looking at (its abp:*pt-layer* /
+;; abp:*pt-block* / abp:*pt-tag*).  A block counts when it is NAMED
+;; *pt-block*, wherever in the drawing it sits, or when it sits on
+;; *pt-layer*, whatever it is named -- widen either and more blocks are
+;; swept in.  A block with nowhere to write a number is counted out loud
+;; and left alone whichever way it got here.
+(setq ptr:*pt-layer* "POINTS")    ; layer whose blocks count as points
+(setq ptr:*pt-block* "ab_pt")     ; block name that counts wherever it sits
+(setq ptr:*pt-tag*   "number")    ; the attribute the number lives in
+
+;; -- 2. what counts as the perimeter ----------------------------------
+
+;; Where the perimeter is looked for before anything is asked: the
+;; BIGGEST closed polyline on this layer inside the highlight.  Point it
+;; at the spa's layer and a spa sheet needs no pick either.  When the
+;; highlight holds no closed polyline on this layer but exactly one
+;; anywhere, that one is offered instead -- and a click overrides
+;; whatever was found, always.
 (setq ptr:*perim-layer* "POOL")
 
-;; How far off the perimeter still counts as on it.  The command asks,
-;; Enter takes what is here, and the answer is remembered for the
-;; session.
-(setq ptr:*band* 6.0)             ; 6 inches
+;; What the highlight is allowed to keep, so a hatch or a dimension
+;; cannot be dragged in by a sloppy window.  LINE and ARC are missing on
+;; purpose: they are perfectly good perimeters, but only when clicked
+;; for by name, never when swept up by the window.
+(setq ptr:*filter* '((0 . "POINT,INSERT,LWPOLYLINE,POLYLINE")))
 
-;; Which way round the last run went; the next run offers it as the
-;; default.
+;; Which vertices of an old-style (heavy) POLYLINE are NOT on the drawn
+;; curve, as a mask over the vertex flags (DXF group 70).  Bit 16 is a
+;; spline FRAME control point: the curve is pulled toward it and never
+;; through it, so walking the frame measures against a shape that is not
+;; on the sheet.  Bits 1 and 8 are the opposite -- the extra vertices
+;; curve- and spline-fitting ADD are the curve the sheet shows -- so
+;; they are kept.  Set it to 17 to walk a fitted polyline by its control
+;; points instead, as this tool did before v1.4.
+(setq ptr:*vertex-skip* 16)
+
+;; -- 3. what the questions start at -----------------------------------
+
+;; How far off the perimeter still counts as on it -- what the FIRST run
+;; of a session offers, before anyone has answered.  Later runs offer
+;; the last answer instead (ptr:*band-now*, below).  Zero is refused at
+;; the prompt (initget 6) -- to mean "only what is exactly on it",
+;; answer a hair such as 1/16" rather than 0.  Inches, like every
+;; distance here: 6.0 is six inches.
+(setq ptr:*band* 6.0)
+
+;; Which way round the FIRST run of a session offers, on the same
+;; footing as the band.  Spelled exactly as the keywords are, because
+;; this string IS the offered default: "Clockwise" or
+;; "COunterclockwise", nothing else.
 (setq ptr:*dir* "Clockwise")
 
-;; Two spots closer than this are the same spot (closing-run test).
+;; The number the count starts at, offered at every run.  Unlike the
+;; band and the direction this one is NOT carried between runs: a
+;; renumber almost always starts at 1, and continuing someone else's
+;; count is the exception you type.  Zero and negatives are refused.
+(setq ptr:*first* 1)
+
+;; The sysvars saved on the way in and put back on the way out, however
+;; the run ends.  Add a name here if a change ever starts touching one.
+(setq ptr:*sysvars* '("CMDECHO"))
+
+;; -- 4. what the report looks like ------------------------------------
+
+;; A start pick further than this off the perimeter is called out.  The
+;; sweep still begins at the nearest spot on the run, but a pick this
+;; far away is more often a mis-click than a corner.  Raise it to quiet
+;; the note on a plan drawn at a large scale, lower it to be told about
+;; a looser one.  Inches: 12.0 is a foot.
+(setq ptr:*far-pick* 12.0)
+
+;; The width the OLD number is padded to in the old-to-new table, so the
+;; arrows line up.  Widen it for a survey that numbers its shots
+;; "SW-CORNER-01" rather than "17".
+(setq ptr:*name-width* 8)
+
+;; How every distance in a prompt or a report is written -- the two
+;; arguments of (rtos d MODE PRECISION).  Mode 4 is feet-and-inches,
+;; which is what the sheets carry and what the crew reads back, and
+;; precision 4 is a sixteenth.  Mode 2 precision 2 would print "6.00"
+;; where this prints 0'-6".
+(setq ptr:*dist-mode* 4)
+(setq ptr:*dist-prec* 4)
+
+;; -- 5. tolerances ----------------------------------------------------
+;;  Named so that nothing in the code is an unexplained number, not so
+;;  that they can be tuned: every one is a floating-point noise floor,
+;;  in drawing units (inches).  Move one only with a reason.
+
+;; Two spots closer together than this are the same spot -- the test for
+;; whether a closed polyline's last vertex already sits on its first, so
+;; the closing run is not laid down twice.
 (setq ptr:*exact-eps* 1.0e-6)
 
+;; A perimeter shorter than this has nothing to sweep, so it is refused
+;; instead of divided by.
+(setq ptr:*zero-len* 1.0e-6)
 
-;; What the highlight keeps: the points and the polylines the perimeter
-;; could be.  Everything else never enters the selection.
-(setq ptr:*filter* '((0 . "POINT,INSERT,LWPOLYLINE,POLYLINE")))
+;; Below this a bulge is a straight line rather than an arc -- and so is
+;; the chord under one, which the same floor guards, because the arc
+;; math divides by both.
+(setq ptr:*bulge-eps* 1.0e-9)
+
+;; Below this a determinant has gone to zero: three points are collinear
+;; and have no circumcentre, and an arc's sweep is a whole circle rather
+;; than nothing at all.
+(setq ptr:*flat-eps* 1.0e-10)
+
+;; Below this a segment has no direction to project onto, so the nearest
+;; spot on it is simply its start.  It is a length SQUARED, which is why
+;; it is the square of the floors above.
+(setq ptr:*tiny-len2* 1.0e-20)
+
+;; How near a whole number a point's number has to read before the clash
+;; sweep counts it as one.  A shot numbered "3.5" is not in the range
+;; 1-10 in any sense a callout cares about, and neither is "3.0000001".
+(setq ptr:*whole-eps* 1.0e-9)
+
+;; Added to every station before it is wrapped round the loop, so that a
+;; point clicked dead-on the start sorts FIRST instead of being wrapped
+;; by floating-point noise to the far end of the sweep.  It has to be
+;; bigger than that noise and far smaller than the gap between two shots
+;; anyone would call separate.
+(setq ptr:*start-whisker* 1.0e-4)
+
+;;; -------------------- state -------------------------------------------
+;;;  Not knobs: what a run writes down, seeded from the block above.  A
+;;;  setting hoisted in here would advertise an initial value as a knob;
+;;;  a knob left down here would be overwritten by the first run.
+
+;; The band and the direction the last run of this session used, offered
+;; as the default by the next one.  nil until a run has answered, and
+;; the knobs above are what is offered until then.
+(setq ptr:*band-now* nil)
+(setq ptr:*dir-now* nil)
+
 
 ;;; -------------------- generic helpers ----------------------------------
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 
 ;;; -------------------- tool-specific asks ------------------------------
+
+;; Distance as every prompt and report writes it.
+(defun ptr:dstr (d) (rtos d ptr:*dist-mode* ptr:*dist-prec*))
 
 ;; Which way round.  CW and CCW ride along ALL-CAPS and hidden, so they
 ;; must be typed in full and cannot steal a canonical hotkey; they are
@@ -31339,8 +31703,6 @@
         ((null v) dflt)
         (t v)))
 
-;; Distance as the reports write it.
-(defun ptr:dstr (d) (rtos d 4 4))
 
 ;;; -------------------- arc / segment geometry --------------------------
 ;;;  A segment is (startPt endPt bulge), 2D points -- ABHD's shape, by
@@ -31356,7 +31718,7 @@
         x2 (car pb) y2 (cadr pb)
         x3 (car pc) y3 (cadr pc)
         d  (* 2.0 (+ (* x1 (- y2 y3)) (* x2 (- y3 y1)) (* x3 (- y1 y2)))))
-  (if (< (abs d) 1.0e-10)
+  (if (< (abs d) ptr:*flat-eps*)
     nil
     (progn
       (setq s1 (+ (* x1 x1) (* y1 y1))
@@ -31371,13 +31733,13 @@
 ;; vertex under a bulge (a traced outline leaves those behind), where
 ;; there is nothing to sweep and the chord math would divide by zero.
 (defun ptr:arc-geom (p1 p2 b / ch dir apex c)
-  (if (< (abs b) 1.0e-9)
+  (if (< (abs b) ptr:*bulge-eps*)
     nil
     (progn
       (setq p1 (cal:2d p1)
             p2 (cal:2d p2)
             ch (cal:dist p1 p2))
-      (if (< ch 1.0e-9)
+      (if (< ch ptr:*bulge-eps*)
         nil
         (progn
           (setq dir  (cal:v* (cal:v- p2 p1) (/ 1.0 ch))
@@ -31395,7 +31757,7 @@
 ;; degenerate).
 (defun ptr:seg-len (seg / p1 p2 b g)
   (setq p1 (car seg) p2 (cadr seg) b (caddr seg))
-  (if (< (abs b) 1.0e-9)
+  (if (< (abs b) ptr:*bulge-eps*)
     (cal:dist p1 p2)
     (progn
       (setq g (ptr:arc-geom p1 p2 b))
@@ -31417,12 +31779,12 @@
         p1 (cal:2d (car seg))
         p2 (cal:2d (cadr seg))
         b  (caddr seg))
-  (if (< (abs b) 1.0e-9)
+  (if (< (abs b) ptr:*bulge-eps*)
     (progn
       (setq v    (cal:v- p2 p1)
             w    (cal:v- p p1)
             len2 (cal:dot v v))
-      (if (< len2 1.0e-20)
+      (if (< len2 ptr:*tiny-len2*)
         (cons (cal:dist p p1) 0.0)
         (progn
           (setq t2 (/ (cal:dot w v) len2))
@@ -31464,13 +31826,13 @@
           b  (caddr s))
     (setq a (+ a (* 0.5 (- (* (car p1) (cadr p2))
                            (* (car p2) (cadr p1))))))
-    (if (> (abs b) 1.0e-9)
+    (if (> (abs b) ptr:*bulge-eps*)
       (progn
         ;; bulge = tan(sweep/4); segment area = r^2/2 (th - sin th),
         ;; signed the way the bulge turns
         (setq th (* 4.0 (atan (abs b)))
               ch (cal:dist p1 p2))
-        (if (> (abs (sin (/ th 2.0))) 1.0e-12)
+        (if (> (abs (sin (/ th 2.0))) ptr:*flat-eps*)
           (progn
             (setq r (/ ch (* 2.0 (sin (/ th 2.0)))))
             (setq a (+ a (* (if (> b 0.0) 1.0 -1.0)
@@ -31485,7 +31847,7 @@
 
 ;; X into [0, M), for walking a station round a closed loop.
 (defun ptr:wrap (x m)
-  (if (<= m 1.0e-12)
+  (if (<= m ptr:*zero-len*)
     0.0
     (progn
       (setq x (- x (* m (fix (/ x m)))))
@@ -31496,7 +31858,7 @@
 ;; The whisker keeps a point clicked dead-on as the start FIRST instead
 ;; of letting floating-point noise wrap it to the far end of the loop.
 (defun ptr:dirkey (s s0 len fwd)
-  (ptr:wrap (+ (if fwd (- s s0) (- s0 s)) 1.0e-4) len))
+  (ptr:wrap (+ (if fwd (- s s0) (- s0 s)) ptr:*start-whisker*) len))
 
 ;;; -------------------- entity -> segments ------------------------------
 
@@ -31534,8 +31896,11 @@
         bls    nil
         sub    (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    ;; skip spline/fit control vertices (flag bits 1 and 16)
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the vertices that are not ON the drawn curve -- the spline
+    ;; FRAME, by ptr:*vertex-skip*.  The curve- and spline-FIT vertices
+    ;; are the curve the sheet shows and are walked with the rest.
+    (if (= 0 (logand ptr:*vertex-skip*
+                     (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -31543,7 +31908,12 @@
   (while (< n (1- (length pts)))
     (setq segs (cons (list (nth n pts) (nth (1+ n) pts) (nth n bls)) segs)
           n    (1+ n)))
-  (if (and closed (> (length pts) 2))
+  ;; the same closing run lw-segs draws, under the same guard: a heavy
+  ;; polyline whose last vertex already sits on its first would
+  ;; otherwise carry a zero-length segment round the loop
+  (if (and closed
+           (> (length pts) 2)
+           (> (cal:dist (last pts) (car pts)) ptr:*exact-eps*))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
   (reverse segs))
 
@@ -31561,10 +31931,10 @@
            a1    (cdr (assoc 50 ed))
            a2    (cdr (assoc 51 ed))
            delta (cal:angnorm (- a2 a1)))
-     (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
+     (if (< delta ptr:*flat-eps*) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment (its bulge is
      ;; infinite): hand back two semicircles instead
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
+     (if (> delta (- (* 2.0 pi) ptr:*bulge-eps*))
        (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
              (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
        (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
@@ -31627,6 +31997,16 @@
 
 ;;; -------------------- reading the selection ---------------------------
 
+;; Is this entity a survey point block?  ABPCHECK's definition, in ONE
+;; place because two different sweeps ask it -- the highlight and the
+;; clash check -- and a knob that only half of them read would warn
+;; about the wrong points.  ED is the entity's data, which both callers
+;; already hold.
+(defun ptr:point-block-p (ed)
+  (and (= "INSERT" (cdr (assoc 0 ed)))
+       (or (= (strcase (cdr (assoc 2 ed))) (strcase ptr:*pt-block*))
+           (= (strcase (cdr (assoc 8 ed))) (strcase ptr:*pt-layer*)))))
+
 ;; WHICH attribute of a point block gets the new number: the TAG one
 ;; when the block carries it, else the first attribute already holding
 ;; something numeric -- the same fallback ptr:block-number reads by, so
@@ -31672,9 +32052,7 @@
     (cond
       ;; ab_pt blocks are survey points wherever they sit; other blocks
       ;; only count on the points layer
-      ((and (= typ "INSERT")
-            (or (= (strcase (cdr (assoc 2 ed))) (strcase ptr:*pt-block*))
-                (= lay (strcase ptr:*pt-layer*))))
+      ((ptr:point-block-p ed)
        (setq att (ptr:attr-target en ptr:*pt-tag*))
        (if att
          (setq n   (1+ n)
@@ -31701,7 +32079,7 @@
 ;; in [first, last] -- the collision the renumber cannot see, said out
 ;; loud instead of found at the next callout.  Only the current tab is
 ;; swept: a Layout1 detail reusing the numbers is not a clash.
-(defun ptr:clash-count (renamed first lastn / ss i en ed lay att nm v n)
+(defun ptr:clash-count (renamed first lastn / ss i en ed att nm v n)
   (setq n 0
         ss (ssget "_X" (list '(0 . "INSERT") (cons 410 (getvar "CTAB")))))
   (if ss
@@ -31710,10 +32088,8 @@
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
-              i   (1+ i)
-              lay (strcase (cdr (assoc 8 ed))))
-        (if (or (= (strcase (cdr (assoc 2 ed))) (strcase ptr:*pt-block*))
-                (= lay (strcase ptr:*pt-layer*)))
+              i   (1+ i))
+        (if (ptr:point-block-p ed)
           (progn
             (setq att (ptr:attr-target en ptr:*pt-tag*))
             (if (and att (not (member att renamed)))
@@ -31721,7 +32097,7 @@
                 (setq nm (cal:block-number en ptr:*pt-tag*)
                       v  (if nm (distof nm 2)))
                 (if (and v
-                         (equal v (float (fix v)) 1.0e-9)
+                         (equal v (float (fix v)) ptr:*whole-eps*)
                          (>= v (float first))
                          (<= v (float lastn)))
                   (setq n (1+ n))))))))))
@@ -31731,10 +32107,14 @@
 
 ;; The one write the whole command makes: the new number into the point
 ;; block's attribute, and the block redisplayed so the sheet shows it.
-(defun ptr:set-number (att ins s / ed)
-  (setq ed (entget att))
-  (entmod (subst (cons 1 s) (assoc 1 ed) ed))
-  (entupd ins))
+;; entmod answers nil when it could NOT write -- a locked layer is the
+;; everyday reason -- so its answer is carried back rather than assumed,
+;; and the caller counts what never landed instead of printing a table
+;; of renames that did not happen.  T when the number is on the sheet.
+(defun ptr:set-number (att ins s / ed got)
+  (setq ed  (entget att)
+        got (entmod (subst (cons 1 s) (assoc 1 ed) ed)))
+  (if got (progn (entupd ins) T)))
 
 ;;; -------------------- asking for the perimeter ------------------------
 
@@ -31745,6 +32125,12 @@
 (defun ptr:ask-perim (cand / v en done res)
   (while (not done)
     (initget "Back Undo")
+    ;; ERRNO is sticky -- it holds whatever the last failing call left
+    ;; there -- so it is cleared here and read immediately after the
+    ;; pick.  The clear is wrapped because an engine that makes ERRNO
+    ;; read-only would otherwise kill the command at its own prompt,
+    ;; and not telling a mis-click from Enter is the smaller loss.
+    (vl-catch-all-apply 'setvar (list "ERRNO" 0))
     (setq v (entsel
               (if cand
                 (strcat "\nSelect the perimeter (Enter = the highlighted"
@@ -31754,6 +32140,15 @@
                         " line or arc) [Back]: "))))
     (cond
       ((member v '("Back" "Undo")) (setq done T res 'CAL-BACK))
+      ;; entsel answers nil for Enter AND for a click that hit nothing.
+      ;; ERRNO 7 is what tells them apart, and without asking, a click
+      ;; that missed silently accepts the found perimeter -- the one
+      ;; outcome the user was reaching past it to override.
+      ((and (null v) (= 7 (getvar "ERRNO")))
+       (princ (strcat "\nNothing there - click on the perimeter itself"
+                      (if cand
+                        ", or press Enter to take the one that was found."
+                        "."))))
       ((and (null v) cand) (setq done T res cand))
       ((null v)
        (princ (strcat "\nThe highlight holds no closed polyline to fall"
@@ -31773,7 +32168,7 @@
                           nskip cand res perim segs tab len area fwd
                           start s0 dir band first lastn near far order
                           row q d k n new renamed nhead i dirword clash
-                          pick1)
+                          pick1 nfail nwrit ok)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -31782,7 +32177,7 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nPOINTRENAMER error: " msg)))
     (princ))
-  (cal:syssave '("CMDECHO"))
+  (cal:syssave ptr:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; a highlight made before the command was typed (pickfirst), grabbed
   ;; before the undo group's command clears it - step 1 takes it once,
@@ -31806,7 +32201,14 @@
          (progn
            (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
            (setq ss (ssget ptr:*filter*))))
-       (if (null ss) (setq ss (ssget "_X" ptr:*filter*)))
+       ;; "whole drawing" is the tab you are looking at, the same scope
+       ;; the clash check sweeps and the same one COVERCHECK and XFTCONV
+       ;; use for this prompt: renumbering points in a layout you cannot
+       ;; see -- and which the clash check would not even warn about --
+       ;; is never what Enter was meant to say
+       (if (null ss)
+         (setq ss (ssget "_X" (append ptr:*filter*
+                                      (list (cons 410 (getvar "CTAB")))))))
        (cond
          ((null ss)
           (princ "\nNothing to renumber - no points or polylines in the drawing.")
@@ -31839,8 +32241,12 @@
                 segs  (ptr:ent-segs perim)
                 tab   (ptr:seg-tab segs)
                 len   (ptr:tab-len tab))
-          (if (<= len 1.0e-6)
-            (princ "\nThat perimeter has no length - pick another.")
+          (if (<= len ptr:*zero-len*)
+            (progn
+              ;; a candidate this broken has to stop being offered, or
+              ;; Enter hands the same unusable loop back for ever
+              (if (eq perim cand) (setq cand nil))
+              (princ "\nThat perimeter has no length - pick another."))
             (progn
               (setq area (ptr:loop-area segs))
               (setq step 3))))))
@@ -31856,30 +32262,30 @@
          (t
           (setq start (ptr:measure res tab)
                 s0    (cdr start))
-          (if (> (car start) 12.0)
+          (if (> (car start) ptr:*far-pick*)
             (princ (strcat "\nNote: the pick sits " (ptr:dstr (car start))
                            " off the perimeter - the sweep starts at"
                            " the nearest spot on it.")))
           (setq step 4))))
       ;; ---- 4. which way round ------------------------------------
       ((= step 4)
-       (setq res (ptr:askdir ptr:*dir*))
+       (setq res (ptr:askdir (if ptr:*dir-now* ptr:*dir-now* ptr:*dir*)))
        (cond
          ((eq res 'CAL-BACK) (setq step 3))
-         (t (setq ptr:*dir* res
+         (t (setq ptr:*dir-now* res
                   step 5))))
       ;; ---- 5. the band -------------------------------------------
       ((= step 5)
        (setq res (ptr:asklimit
                    "How far off the perimeter still counts as on it?"
-                   ptr:*band* T))
+                   (if ptr:*band-now* ptr:*band-now* ptr:*band*) T))
        (cond
          ((eq res 'CAL-BACK) (setq step 4))
-         (t (setq ptr:*band* res
+         (t (setq ptr:*band-now* res
                   step 6))))
       ;; ---- 6. the first number -----------------------------------
       ((= step 6)
-       (setq res (ptr:asknum "Start the numbering at" 1 T))
+       (setq res (ptr:asknum "Start the numbering at" ptr:*first* T))
        (cond
          ((eq res 'CAL-BACK) (setq step 5))
          (t (setq first res
@@ -31890,9 +32296,9 @@
        ;; the direction asked for matches the loop's own winding
        ;; (counter-clockwise = positive area; a degenerate zero-area
        ;; run counts as drawn counter-clockwise)
-       (setq fwd  (eq (= ptr:*dir* "COunterclockwise") (>= area 0.0))
-             dir  ptr:*dir*
-             band ptr:*band*
+       (setq fwd  (eq (= ptr:*dir-now* "COunterclockwise") (>= area 0.0))
+             dir  ptr:*dir-now*
+             band ptr:*band-now*
              near nil
              far  nil)
        (foreach q recs
@@ -31927,31 +32333,46 @@
   ;; ---- the write, in one pass, then the old-to-new table ----------
   (if go
     (progn
-      (setq dirword (if (= ptr:*dir* "COunterclockwise")
+      (setq dirword (if (= dir "COunterclockwise")
                       "counterclockwise" "clockwise")
             n       first
             renamed nil
             nhead   (length near)
-            i       0)
+            i       0
+            nfail   0)
       (foreach row order
-        (if (= i 0)
+        ;; the near heading only when something IS near: with an empty
+        ;; band both headings used to print, back to back, over one list
+        (if (and (= i 0) (> nhead 0))
           (princ (strcat "\nAround the perimeter (" dirword " from the"
                          " pick):")))
         (if (= i nhead)
-          (princ (strcat "\nBeyond " (ptr:dstr ptr:*band*) " off the"
+          (princ (strcat "\nBeyond " (ptr:dstr band) " off the"
                          " perimeter (the count carries on, same"
                          " sweep):")))
-        (setq new (itoa n))
-        (ptr:set-number (nth 4 row) (nth 5 row) new)
-        (setq renamed (cons (nth 4 row) renamed))
+        (setq new (itoa n)
+              ok  (ptr:set-number (nth 4 row) (nth 5 row) new))
+        (if ok
+          (setq renamed (cons (nth 4 row) renamed))
+          (setq nfail (1+ nfail)))
+        ;; the row is printed either way, and a write that did not land
+        ;; says so on its own line -- a table that shows a rename the
+        ;; drawing never took is worse than no table at all
         (princ (strcat "\n  Pt. "
                        (cal:pad (if (and (nth 3 row) (/= (nth 3 row) ""))
                                   (nth 3 row) "?")
-                                8)
-                       "->  Pt. " new))
+                                ptr:*name-width*)
+                       "->  Pt. " new
+                       (if ok "" "   NOT WRITTEN")))
         (setq n (1+ n) i (1+ i)))
-      (princ (strcat "\n" (itoa (length order)) " point(s) renumbered "
+      (setq nwrit (- (length order) nfail))
+      (princ (strcat "\n" (itoa nwrit) " point(s) renumbered "
                      (itoa first) "-" (itoa lastn) "."))
+      (if (> nfail 0)
+        (princ (strcat "\nWarning: " (itoa nfail) " of them could not be"
+                       " written and still carry their old number - the"
+                       " layer they sit on is most likely locked."
+                       "  Unlock it and run POINTRENAMER again.")))
       (setq clash (ptr:clash-count renamed first lastn))
       (if (> clash 0)
         (princ (strcat "\nWarning: " (itoa clash) " point(s) OUTSIDE"
@@ -34762,11 +35183,11 @@
 ;;;
 ;;; Click every point that is bad, one after another, as many as you
 ;;; like; press Enter when done.  Each click:
-;;;   * snaps to the nearest survey point within *BP-SNAP* of the pick
+;;;   * snaps to the nearest survey point within bp:*snap* of the pick
 ;;;     (an "ab_pt" INSERT on any layer, any other INSERT on the POINTS
 ;;;     layer, or a plain POINT on the POINTS layer - the same
 ;;;     classifier the rest of the toolset uses),
-;;;   * draws a *BP-RADIUS* circle on the FGStep layer centered on
+;;;   * draws a bp:*radius* circle on the bp:*layer* layer centered on
 ;;;     that point, and
 ;;;   * reads what the point is called from the block's "number"
 ;;;     attribute, the name the drawing itself carries.
@@ -34780,46 +35201,97 @@
 ;;; exactly where you clicked - and reported as "Pt.?", so a stray
 ;;; shot with no block under it can be called out too.  Clicking a
 ;;; ringed point AGAIN un-rings it: the circle is erased and the point
-;;; leaves the callout - reselect a point to undo it.
+;;; leaves the callout - reselect a point to undo it.  A click that
+;;; snaps to a DIFFERENT survey point never un-rings a neighbour it
+;;; merely lands close to (v1.7 did, so two points under 10" apart
+;;; could not both be ringed); only a click with no survey point under
+;;; it is read against the rings it sits inside.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *bpcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;;
-;;; Assumes drawing units are INCHES (architectural).  Adjust the
-;;; constants below for other setups.
+;;; Assumes drawing units are INCHES (architectural).  Every knob -
+;;; layer and its colour, ring size, snap reach, text height, the
+;;; wording of the callout, what counts as a survey point - is in the
+;;; configuration block right below, each with its explanation.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.7")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *bpcallout-version* "v1.8")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
-(setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
-                                    ; text go on - the same layer LHD
-                                    ; puts its miss rings on
-(setq *BP-RADIUS*      5.0)         ; ring RADIUS (5 inches); halve it
-                                    ; here if a 5" diameter is wanted
-(setq *BP-SNAP*        12.0)        ; a pick within this of a survey
-                                    ; point rings THAT point; farther
-                                    ; away, the pick itself is ringed
-                                    ; and named "?"
-(setq *BP-TEXT-HGT*    6.0)         ; callout text height
-(setq *BP-POINT-BLOCK* "ab_pt")     ; block name whose INSERTs mark
-                                    ; points wherever they sit
-(setq *BP-POINT-LAYER* "POINTS")    ; layer whose POINTs/INSERTs are
-                                    ; always points
-(setq *BP-PT-TAG*      "number")    ; attribute tag on the point block
-                                    ; naming the point, as in "Pt.17"
-(setq *BP-EXACT-EPS*   0.001)       ; two picks this close land on the
-                                    ; same spot - the second un-rings it
 
-;; ---- helpers -------------------------------------------------------
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS -
+;;; inches in this shop's architectural drawings.
+
+;; -- where the marks go
+(setq bp:*layer* "FGStep")          ; layer the rings and the callout
+                                    ; text land on - the same layer LHD
+                                    ; puts its miss rings on.  Created
+                                    ; when the drawing lacks it; thawed,
+                                    ; unlocked and switched on when it
+                                    ; is there but unusable
+(setq bp:*layer-color* 1)           ; ACI colour that layer is CREATED
+                                    ; with (1 = red).  A layer already
+                                    ; in the drawing keeps its own
+
+;; -- the rings
+(setq bp:*radius* 5.0)              ; ring RADIUS (5" = a 10" circle);
+                                    ; halve it if a 5" DIAMETER is
+                                    ; wanted.  Also how far an un-ring
+                                    ; click reaches: a click inside a
+                                    ; ring that has no survey point
+                                    ; under it removes that ring
+(setq bp:*snap* 12.0)               ; a pick within this of a survey
+                                    ; point rings THAT point - the
+                                    ; nearest one when several qualify;
+                                    ; farther away, the pick itself is
+                                    ; ringed and named bp:*unknown*
+(setq bp:*exact-eps* 0.001)         ; two ring centres this close are
+                                    ; the same spot, so a second click
+                                    ; on a ringed survey point un-rings
+                                    ; it rather than ringing it twice
+
+;; -- the callout text
+(setq bp:*text-hgt* 6.0)            ; TEXT height of the callout
+(setq bp:*text-gap* 10.0)           ; Enter at the text prompt tucks the
+                                    ; callout this far to the right of
+                                    ; AND below the last ring's centre
+(setq bp:*pt-prefix* "Pt.")         ; how a point is named, in the
+                                    ; callout and on the command line:
+                                    ; the prefix + its number, "Pt.12"
+(setq bp:*tail-one* " is bad")      ; what follows the name when ONE
+                                    ; point was ringed: "Pt.12 is bad"
+(setq bp:*tail-many* " are bad")    ; ...and when two or more were:
+                                    ; "Pt.12, Pt.15 and Pt.20 are bad"
+(setq bp:*unknown* "?")             ; the number given to a ring with
+                                    ; no readable survey point under
+                                    ; it, so it still reads "Pt.? is
+                                    ; bad" rather than vanishing
+
+;; -- what counts as a survey point.  The classifier is shared with
+;;    LHD and CDCALLOUT: change it in all three or the tools disagree
+(setq bp:*point-block* "ab_pt")     ; block name whose INSERTs mark
+                                    ; points wherever they sit
+(setq bp:*point-layer* "POINTS")    ; layer whose POINTs and INSERTs
+                                    ; are always points, whatever block
+(setq bp:*pt-tag* "number")         ; attribute tag on the point block
+                                    ; naming the point.  A block without
+                                    ; it lends its first attribute that
+                                    ; reads as a number instead
+
+;;; -------------------- helpers ----------------------------------------
 
 ;; Every survey point in the drawing, as ((x y) . name) pairs.  What
-;; counts as a point matches LHD's classifier: an *BP-POINT-BLOCK*
-;; INSERT anywhere, any other INSERT on the *BP-POINT-LAYER* layer,
+;; counts as a point matches LHD's classifier: an bp:*point-block*
+;; INSERT anywhere, any other INSERT on the bp:*point-layer* layer,
 ;; or a plain POINT on that layer.  A point with no readable number
-;; is carried as "?" so it can still be ringed and reported.
+;; is carried as bp:*unknown* ("?") so it can still be ringed and
+;; reported.
 (defun bp:collect-points (/ ss i en ed typ p nm out)
   (setq out nil
         ss  (ssget "_X" '((0 . "INSERT,POINT"))))
@@ -34834,46 +35306,52 @@
         (cond
           ((= typ "INSERT")
            (if (or (= (strcase (cdr (assoc 2 ed)))
-                      (strcase *BP-POINT-BLOCK*))
+                      (strcase bp:*point-block*))
                    (= (strcase (cdr (assoc 8 ed)))
-                      (strcase *BP-POINT-LAYER*)))
+                      (strcase bp:*point-layer*)))
              (progn
-               (setq nm (cal:block-number en *BP-PT-TAG*))
+               (setq nm (cal:block-number en bp:*pt-tag*))
                (setq out (cons (cons (list (car p) (cadr p))
-                                     (if (and nm (/= nm "")) nm "?"))
+                                     (if (and nm (/= nm "")) nm
+                                       bp:*unknown*))
                                out)))))
           ((= typ "POINT")
            (if (= (strcase (cdr (assoc 8 ed)))
-                  (strcase *BP-POINT-LAYER*))
-             (setq out (cons (cons (list (car p) (cadr p)) "?") out)))))
+                  (strcase bp:*point-layer*))
+             (setq out (cons (cons (list (car p) (cadr p)) bp:*unknown*)
+                             out)))))
         (setq i (1+ i)))))
   out)
 
-;; The survey point nearest to pick PK, when one sits within *BP-SNAP*
+;; The survey point nearest to pick PK, when one sits within bp:*snap*
 ;; of it; nil otherwise.  Returns the ((x y) . name) pair.
 (defun bp:nearest-point (pk cands / best bd c d)
   (setq best nil bd nil)
   (foreach c cands
     (setq d (cal:dist pk (car c)))
-    (if (and (<= d *BP-SNAP*) (or (null bd) (< d bd)))
+    (if (and (<= d bp:*snap*) (or (null bd) (< d bd)))
       (setq best c bd d)))
   best)
 
 ;; The picked-list entry a new click lands on, when it lands on one:
 ;; either its snapped centre CTR is (as good as) an already-ringed
-;; spot, or - for a pick with no survey point under it - the raw pick
-;; PK is inside an existing ring.  Entries are (ctr name ring-ename);
-;; nil when the click is somewhere new.
-(defun bp:ringed-at (pk ctr picked / hit bd q d)
+;; spot, or - ONLY for a pick with no survey point under it, SNAPPED
+;; nil - the raw pick PK is inside an existing ring.  A pick that did
+;; snap to a survey point is that point and nothing else: v1.7 read it
+;; against the rings too, so a click meant for a point 8" from a ringed
+;; one landed inside the 5" ring and un-ringed the neighbour instead.
+;; Entries are (ctr name ring-ename); nil when the click is somewhere
+;; new.
+(defun bp:ringed-at (pk ctr picked snapped / hit bd q d)
   (setq hit nil)
   (foreach q picked
-    (if (< (cal:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
-  (if (null hit)
+    (if (< (cal:dist ctr (car q)) bp:*exact-eps*) (setq hit q)))
+  (if (and (null hit) (not snapped))
     (progn                              ; nearest ring the pick sits in
       (setq bd nil)
       (foreach q picked
         (setq d (cal:dist pk (car q)))
-        (if (and (<= d *BP-RADIUS*) (or (null bd) (< d bd)))
+        (if (and (<= d bp:*radius*) (or (null bd) (< d bd)))
           (setq hit q bd d)))))
   hit)
 
@@ -34884,35 +35362,37 @@
 
 ;; The callout sentence: "Pt.12 is bad", "Pt.12 and Pt.15 are bad",
 ;; "Pt.12, Pt.15 and Pt.20 are bad" - commas between all but the last
-;; pair, "and" before the last, is/are by count.
+;; pair, "and" before the last, is/are by count.  The name prefix and
+;; the two sentence tails are the bp:*pt-prefix* / bp:*tail-* knobs.
 (defun bp:phrase (names / n s i)
   (setq n (length names))
   (cond
     ((= n 0) "")
-    ((= n 1) (strcat "Pt." (car names) " is bad"))
+    ((= n 1) (strcat bp:*pt-prefix* (car names) bp:*tail-one*))
     (T
-     (setq s (strcat "Pt." (car names)) i 1)
+     (setq s (strcat bp:*pt-prefix* (car names)) i 1)
      (while (< i (1- n))
-       (setq s (strcat s ", Pt." (nth i names))
+       (setq s (strcat s ", " bp:*pt-prefix* (nth i names))
              i (1+ i)))
-     (strcat s " and Pt." (nth (1- n) names) " are bad"))))
+     (strcat s " and " bp:*pt-prefix* (nth (1- n) names)
+             bp:*tail-many*))))
 
 ;; Ring one bad point.
 (defun bp:draw-ring (ctr)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbCircle")
+                  (cons 8 bp:*layer*) '(100 . "AcDbCircle")
                   (cons 10 (list (car ctr) (cadr ctr) 0.0))
-                  (cons 40 *BP-RADIUS*))))
+                  (cons 40 bp:*radius*))))
 
 ;; Write the callout text at P.
 (defun bp:draw-text (p str)
   (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbText")
+                  (cons 8 bp:*layer*) '(100 . "AcDbText")
                   (cons 10 (list (car p) (cadr p) 0.0))
-                  (cons 40 *BP-TEXT-HGT*)
+                  (cons 40 bp:*text-hgt*)
                   (cons 1 str))))
 
-;; ---- command -------------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
@@ -34939,7 +35419,7 @@
   (setq cands (bp:collect-points))
   (if cands
     (princ (strcat "\n" (itoa (length cands)) " survey point(s) found;"
-                   " a click within " (rtos *BP-SNAP* 4 0)
+                   " a click within " (rtos bp:*snap* 4 0)
                    " snaps to the nearest one."))
     (princ (strcat "\nNo survey points found in the drawing - clicks"
                    " will be ringed where picked and named \"?\".")))
@@ -34950,23 +35430,24 @@
     (setq hit (bp:nearest-point pk cands))
     (if hit
       (setq ctr (car hit) nm (cdr hit))
-      (setq ctr (list (car pk) (cadr pk)) nm "?"))
-    (setq old (bp:ringed-at pk ctr picked))
+      (setq ctr (list (car pk) (cadr pk)) nm bp:*unknown*))
+    (setq old (bp:ringed-at pk ctr picked hit))
     (if old
       (progn                            ; reselecting a point undoes it
         (if (and (caddr old) (entget (caddr old)))
           (entdel (caddr old)))
         (setq picked (bp:drop-entry (caddr old) picked))
-        (princ (strcat "\n  Pt." (cadr old) " un-ringed.")))
+        (princ (strcat "\n  " bp:*pt-prefix* (cadr old)
+                       " un-ringed.")))
       (progn
-        (cal:ensure-layer *BP-LAYER* 1)
+        (cal:ensure-layer bp:*layer* bp:*layer-color*)
         (setq picked (cons (list ctr nm (bp:draw-ring ctr)) picked))
         (if hit
-          (princ (strcat "\n  Pt." nm " ringed."))
+          (princ (strcat "\n  " bp:*pt-prefix* nm " ringed."))
           (princ (strcat "\n  No survey point within "
-                         (rtos *BP-SNAP* 4 0)
-                         " of the pick - ringed where clicked, as"
-                         " Pt.?."))))))
+                         (rtos bp:*snap* 4 0)
+                         " of the pick - ringed where clicked, as "
+                         bp:*pt-prefix* bp:*unknown* "."))))))
 
   (if (null picked)
     (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
@@ -34978,11 +35459,11 @@
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"
                                     " the last ring>: ")))
       (if (null txtpt)                          ; Enter: tuck it beside
-        (setq txtpt (list (+ (car lastpt) (* 2.0 *BP-RADIUS*))
-                          (- (cadr lastpt) (* 2.0 *BP-RADIUS*)))))
+        (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
+                          (- (cadr lastpt) bp:*text-gap*))))
       (bp:draw-text txtpt phrase)
       (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
-                     " point(s) ringed on layer " *BP-LAYER*
+                     " point(s) ringed on layer " bp:*layer*
                      ";  \"" phrase "\""))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
@@ -35645,9 +36126,12 @@
 ;;; Point numbers are typed the way they read in the drawing: "35",
 ;;; "Pt.35", "pt 35", "#35" and "035" all name the same point -- the
 ;;; number is matched against the "number" attribute on the survey
-;;; point blocks (the same classifier BPCALLOUT and LHD use: an
-;;; "ab_pt" INSERT on any layer, any other INSERT on the POINTS
-;;; layer, or a plain POINT on the POINTS layer).
+;;; point blocks: an "ab_pt" INSERT on any layer, or any other INSERT
+;;; on the POINTS layer.  That is BPCALLOUT's and LHD's classifier
+;;; minus its third kind -- a plain POINT carries no attribute, so it
+;;; has no number to be asked for by, and this tool only ever names
+;;; points.  A block whose number cannot be read is left out for the
+;;; same reason.
 ;;;
 ;;; A number that names no point in the drawing is reported and the
 ;;; prompt re-asks -- nothing is drawn from a typo.  The whole run is
@@ -35663,30 +36147,65 @@
 ;;; drawing started from the wrong template is obvious instead of
 ;;; silently producing wrong-looking dims (CDCREATE's rule, kept).
 ;;;
+;;; Every knob - style, layer and its colour, the dimension-line
+;;; offset, the same-spot tolerance, what counts as a survey point - is
+;;; in the configuration block right below, each with its explanation.
+;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *cdcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.8")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *cdcallout-version* "v1.9")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
-(setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
-(setq cdo:*layer*       "DIMENSION")        ; layer the dims land on
-(setq cdo:*offset*      0.0)        ; distance the dimension line is
-                                    ; pushed off the tie it measures,
-                                    ; drawing units (0.0 = right
-                                    ; inbetween, on the tie itself --
-                                    ; CDCREATE's convention)
-(setq *CDO-POINT-BLOCK* "ab_pt")    ; block name whose INSERTs mark
-                                    ; points wherever they sit
-(setq *CDO-POINT-LAYER* "POINTS")   ; layer whose POINTs/INSERTs are
-                                    ; always points
-(setq *CDO-PT-TAG*      "number")   ; attribute tag on the point block
-                                    ; naming the point, as in "Pt.17"
 
-;; ---- point lookup --------------------------------------------------
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
+;; -- how the dimensions land (CDCREATE's and POOL's convention)
+(setq cdo:*style* "CROSS DIMENSIONS") ; dimension style the dims are
+                                    ; drawn in.  NOT invented when the
+                                    ; drawing lacks it: the dims then
+                                    ; take the current style and the run
+                                    ; says so, because a wrong template
+                                    ; should be obvious, not papered over
+(setq cdo:*layer* "DIMENSION")      ; layer the dims land on, ByLayer
+                                    ; (colour, linetype and lineweight
+                                    ; overrides stripped).  Created when
+                                    ; the drawing lacks it; thawed,
+                                    ; unlocked and switched on when it
+                                    ; is there but unusable
+(setq cdo:*layer-color* 7)          ; ACI colour that layer is CREATED
+                                    ; with (7 = white/black).  A layer
+                                    ; already in the drawing keeps its
+                                    ; own
+(setq cdo:*offset* 0.0)             ; distance the dimension line is
+                                    ; pushed off the tie it measures.
+                                    ; 0.0 = right inbetween, on the tie
+                                    ; itself (CDCREATE's convention);
+                                    ; positive = to the left of the
+                                    ; FROM->TO direction, negative = to
+                                    ; the right
+(setq cdo:*exact-eps* 0.001)        ; two survey points closer than
+                                    ; this sit on the same spot: the
+                                    ; tie is refused, nothing to measure
+
+;; -- what counts as a survey point.  The classifier is shared with
+;;    BPCALLOUT and LHD: change it in all three or the tools disagree
+(setq cdo:*point-block* "ab_pt")    ; block name whose INSERTs mark
+                                    ; points wherever they sit
+(setq cdo:*point-layer* "POINTS")   ; layer whose INSERTs are always
+                                    ; points, whatever block they are
+(setq cdo:*pt-tag* "number")        ; attribute tag on the point block
+                                    ; naming the point.  A block without
+                                    ; it lends its first attribute that
+                                    ; reads as a number instead
+
+;;; -------------------- point lookup ------------------------------------
 
 ;; Every NAMED survey point in the drawing, as ((x y z) . name) pairs.
 ;; What counts as a point matches BPCALLOUT/LHD; a point whose number
@@ -35702,11 +36221,11 @@
               ed (entget en)
               p  (cdr (assoc 10 ed)))
         (if (or (= (strcase (cdr (assoc 2 ed)))
-                   (strcase *CDO-POINT-BLOCK*))
+                   (strcase cdo:*point-block*))
                 (= (strcase (cdr (assoc 8 ed)))
-                   (strcase *CDO-POINT-LAYER*)))
+                   (strcase cdo:*point-layer*)))
           (progn
-            (setq nm (cal:block-number en *CDO-PT-TAG*))
+            (setq nm (cal:block-number en cdo:*pt-tag*))
             (if (and nm (/= nm ""))
               (setq out (cons (cons (list (car p) (cadr p) 0.0) nm)
                               out)))))
@@ -35743,7 +36262,7 @@
       (setq found c)))
   found)
 
-;; ---- dimension helpers (CDCREATE's conventions, kept) --------------
+;;; -------------------- dimension helpers (CDCREATE's, kept) ------------
 
 ;; midpoint of p1->p2, pushed perpendicular to the tie by dist
 ;; (dist 0.0 puts the dimension line straight inbetween, on the tie)
@@ -35793,7 +36312,7 @@
 
 ;; make that layer current, creating or repairing it on the way
 (defun cdo:setlayer (name)
-  (setvar "CLAYER" (cdo:ensure-layer name 7)))
+  (setvar "CLAYER" (cdo:ensure-layer name cdo:*layer-color*)))
 
 ;; restore a dimension style by name when the drawing has it;
 ;; returns T when the style was set
@@ -35825,7 +36344,7 @@
       (entupd en)
       t)))
 
-;; ---- the command ---------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call (the BPCALLOUT v1.0 lesson).
@@ -35929,7 +36448,7 @@
              ((null (setq b (cdo:find-point s2 cands)))
               (princ (strcat "\n  No point numbered \"" s2
                              "\" in the drawing -- nothing drawn.")))
-             ((< (distance (car a) (car b)) 1e-9)
+             ((< (distance (car a) (car b)) cdo:*exact-eps*)
               (princ (strcat "\n  Pt." (cdr a) " and Pt." (cdr b)
                              " sit on the same spot -- nothing to"
                              " measure.")))
@@ -35959,7 +36478,7 @@
       (setvar "CLAYER"  ocl)
       (setvar "OSMODE"  oos)
       (setvar "CMDECHO" oce)
-      (command "_.UNDO" "_End")
+      (if grouped (command "_.UNDO" "_End"))
       (setq grouped nil)
 
       (princ (strcat "\nCDCALLOUT: " (itoa made) " cross dimension"
@@ -36030,23 +36549,11 @@
 ;;;    Command: CDCREATE
 ;;;    Command: CDCREATEVER      prints the version
 ;;;
-;;;  Tunables (setq them after loading if a drawing needs different
-;;;  names, e.g. in a startup file):
-;;;    cdc:*style*   dimension style to use   ("CROSS DIMENSIONS")
-;;;    cdc:*layer*   layer to create dims on  ("DIMENSION")
-;;;    cdc:*offset*  distance the dimension line is pushed off the
-;;;                  line it measures, drawing units (0.0 = on it)
-;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
-;;;    cdc:*skipdimmed*  T to leave a tie that is dimensioned already,
-;;;                  nil to dimension it again anyway
-;;;    cdc:*dupetol* how close two extension line origins have to be to
-;;;                  count as the same point; nil = a sixteenth of an
-;;;                  inch in the drawing's own units
-;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
-;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
-;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
-;;;                  before the text goes to its bottom end instead of
-;;;                  its right-hand one
+;;;  Tunables: every knob -- style, layer and its colour, the offset,
+;;;  the text-position rule, erase / skip-dimensioned / same-point
+;;;  tolerance -- sits in the configuration block right after this
+;;;  header, each with its explanation.  (setq ...) one after loading,
+;;;  in a startup file say, when a drawing needs different names.
 ;;;
 ;;;  Notes
 ;;;    * Only LINE entities are dimensioned.  Anything else in the
@@ -36072,18 +36579,77 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-(setq *cdcreate-version* "v1.3")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *cdcreate-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
-(setq cdc:*style*  "CROSS DIMENSIONS")
-(setq cdc:*layer*  "DIMENSION")
-(setq cdc:*offset* 0.0)
-(setq cdc:*erase*  t)
-(setq cdc:*textpos* 0.8)
-(setq cdc:*vertang* 15.0)
-(setq cdc:*skipdimmed* t)
-(setq cdc:*dupetol* nil)           ; nil = 1/16" in the drawing's units
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
+;; -- how the dimensions land (POOL's convention for its cross dims)
+(setq cdc:*style* "CROSS DIMENSIONS") ; dimension style the dims are
+                                   ; drawn in.  NOT invented when the
+                                   ; drawing lacks it: the dims then
+                                   ; take the current style and the run
+                                   ; says so, because a wrong template
+                                   ; should be obvious, not papered over
+(setq cdc:*layer* "DIMENSION")     ; layer the dims land on, ByLayer
+                                   ; (colour, linetype and lineweight
+                                   ; overrides stripped).  Created when
+                                   ; the drawing lacks it; thawed,
+                                   ; unlocked and switched on when it is
+                                   ; there but unusable
+(setq cdc:*layer-color* 7)         ; ACI colour that layer is CREATED
+                                   ; with (7 = white/black).  A layer
+                                   ; already in the drawing keeps its own
+(setq cdc:*offset* 0.0)            ; distance the dimension line is
+                                   ; pushed off the line it measures.
+                                   ; 0.0 = on the line itself; positive
+                                   ; = to the left of the line's own
+                                   ; start->end direction, negative = to
+                                   ; the right
+
+;; -- where the text sits
+(setq cdc:*textpos* 0.8)           ; position of the text along the
+                                   ; dimension line, as a fraction of
+                                   ; its length measured from the far
+                                   ; end toward the right-hand (or
+                                   ; bottom) end: 0.5 = centred, and no
+                                   ; text move at all; 1.0 = right at
+                                   ; that end; 0.8 = 80% of the way
+(setq cdc:*vertang* 15.0)          ; degrees off vertical within which
+                                   ; a line counts as standing up, so
+                                   ; its text goes to the BOTTOM end
+                                   ; rather than the right-hand one
+                                   ; (where "right-hand" would be a
+                                   ; coin toss).  0.0 = only a dead-
+                                   ; vertical line, 90.0 = every line
+
+;; -- what happens to the lines
+(setq cdc:*erase* T)               ; T erases each line once its
+                                   ; dimension is drawn - the tie is the
+                                   ; dimension now; nil keeps them.  A
+                                   ; line that got no dimension is never
+                                   ; erased either way
+(setq cdc:*skipdimmed* T)          ; T leaves a line alone when some
+                                   ; dimension in model space already
+                                   ; runs between its two ends - either
+                                   ; way round, any style or layer; nil
+                                   ; dimensions it again anyway
+(setq cdc:*dupetol* nil)           ; how close two extension-line
+                                   ; origins have to be to count as the
+                                   ; same point, drawing units.  nil =
+                                   ; a sixteenth of an inch in the
+                                   ; drawing's own units (read off
+                                   ; INSUNITS, so 1.5875 in a mm drawing)
+
+;;; -------------------- run state ---------------------------------------
+;;; Not a knob, and outside the block above on purpose: cdc:syssave
+;;; writes its snapshot of the sysvars the run moves here, and
+;;; cdc:sysrestore empties it again, so it is live only mid-run.
 
 ;;; -------------------- helpers ------------------------------------
 
@@ -36322,7 +36888,7 @@
             (progn
               (command "_.UNDO" "_Begin")
               (setq undo-open T)))
-          (setvar "CLAYER" (cal:ensure-layer cdc:*layer* 7))
+          (setvar "CLAYER" (cal:ensure-layer cdc:*layer* cdc:*layer-color*))
           (setq havestyle (cdc:setstyle cdc:*style*))
           (if (not havestyle)
             (princ (strcat "\n** This drawing has no \"" cdc:*style*
@@ -36369,7 +36935,7 @@
 
           ;; -- 5. put the drawing back the way it was
           (cdc:restyle odim)
-          (command "_.UNDO" "_End")
+          (if undo-open (command "_.UNDO" "_End"))
           (setq undo-open nil)
 
           (princ (strcat "\n" (itoa made) " cross dimension"
@@ -74042,22 +74608,119 @@
 ;;;     the band where unrolling opens a gap
 ;;;   * band-height dimensions at both ends (layer DIMENSION)
 ;;;
-;;; Darts + inserts are capped (default 20): the required correction is
-;;; accumulated along the band and only released when it reaches a
-;;; minimum useful width, so the cut count stays conservative.
+;;; Darts + inserts are capped (the run asks, wc:*maxfeat* is the
+;;; default): the required correction is accumulated along the band and
+;;; only released when it reaches a minimum useful width, so the cut
+;;; count stays conservative.
+;;;
+;;; Every number the routine works to is a named tunable in the block
+;;; below the version banner -- layers, cut sizes, the tracing angles,
+;;; the placement of the two drawings -- so nothing has to be hunted
+;;; for in the body.
 ;;;
 ;;; Tested with AutoCAD 2018; plain AutoLISP, no VLX / ObjectARX.
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-;;; ------------------------ small math helpers ----------------------
+(setq *wcalst-version* "v1.8")   ; announced on load; release_lisp.py
+                                 ; stamps the dated twin in releases/
 
-(setq *wcalst-version* "v1.7")   ; announced on load; release_lisp.py
-                                    ; stamps the dated twin in releases/
+;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafter might reasonably want different is set HERE and
+;; nowhere else: the code below reads these names and carries no bare
+;; numbers of its own.  Each knob says what CHANGING it does and which
+;; way to move it.  Edit a value, save, APPLOAD again - or
+;; (setq wc:*name* value) at the command line for one session.  Every
+;; one of them is a row in README.md's Tunables table, and
+;; tests/test_tunables.py holds the two together.
+;;
+;; Distances are in inches throughout (1 drawing unit = 1 inch).  A name
+;; ending in -F is a FRACTION OF THE BAND WIDTH, so it scales with the
+;; piece; a plain length is absolute, because it describes something
+;; physical - a tile, a hand's clearance, the stock a sliver is cut
+;; from.  The 1e-9-sized guards inside the maths are not tunables: they
+;; only keep a divisor off zero, and moving one changes nothing a
+;; drafter can see.
+
+;; ---- output layers ---------------------------------------------------
+;; The colour is used ONLY when the layer has to be created; an existing
+;; layer keeps whatever colour the drawing gave it (and is thawed,
+;; unlocked and switched on, so a result cannot land somewhere unseen).
+
+(setq wc:*cut-layer* "AIR-B")       ; moves the straight edge, band ends, dart legs, slits and slivers to another layer
+(setq wc:*cut-color* 1)             ; recolours that layer where WCALST is the one creating it (1 = red)
+(setq wc:*dim-layer* "DIMENSION")   ; moves the end height dims, the variant labels and the length summary
+(setq wc:*dim-color* 3)             ; recolours that one on creation (3 = green)
+
+;; ---- reading the band off the drawing --------------------------------
+
+(setq wc:*node-fuzz* 3)             ; decimals kept when two endpoints are merged into one node: fewer welds points that are genuinely apart, more leaves ends the drafter meant to touch unjoined
+(setq wc:*seg-min* 1.0e-6)          ; shorter than this is a repeated point rather than a segment, and is dropped
+(setq wc:*trace-turn* 1.0472)       ; sharpest turn (radians, 60 deg) the trace of a long side will follow: raise it for a band with genuinely sharp corners along a side, lower it when tracing runs off into scenery
+(setq wc:*trace-max* 5000)          ; hard stop on one walk - the backstop behind the revisited-node test, and only reachable by geometry that is neither open nor a ring
+(setq wc:*rung-turn* 0.7854)        ; how steeply (radians, 45 deg) a segment must leave the chain to count as a rung: lower it and gentle diagonals join in, raise it and only square rungs do
+
+;; ---- what still counts as a band -------------------------------------
+;; Each of these re-asks rather than failing, so a wrong pick costs a
+;; click and not the command.
+
+(setq wc:*min-segs* 6)              ; fewest segments a selection may hold before it is sent back to be re-picked
+(setq wc:*min-chain* 3)             ; fewest segments a traced side may have before the pick is sent back
+(setq wc:*min-rungs* 2)             ; fewest rungs to find between the two sides, below which there is no width to measure
+
+;; ---- how many cuts, and how wide -------------------------------------
+
+(setq wc:*maxfeat* 20)              ; the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to
+(setq wc:*dart-cap* 4.0)            ; widest mouth ONE dart may open: lower it and a big correction splits across more rungs, raise it for fewer, wider Vs
+(setq wc:*wmin-f* 0.04)             ; smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutting hair-width darts
+(setq wc:*target* 0.01)             ; the after-cuts residual the refining variant aims under, as a share of the bottom line, and what OVER TARGET is measured against
+(setq wc:*refine* 0.6)              ; how far each refining pass drops the threshold: nearer 1 refines in smaller steps and uses more of the passes below
+(setq wc:*passes* 10)               ; how many refining passes before it settles for what it has and says so
+
+;; ---- where a cut stops ------------------------------------------------
+;; Depths are measured DOWN from the straightened edge.  An apex that
+;; reached that edge would cut the strip in two, so each rule here ends
+;; in a clamp holding the cut inside the band.
+
+(setq wc:*tile-clear* 1.0)          ; how far a cut clears the tile along the straight edge, and how far it stops short of the far edge
+(setq wc:*apex-f* 0.42)             ; how far down the local depth a cut stops when no tile height is given: lower it for a deeper hinge along the straight side
+(setq wc:*apex-min-f* 0.20)         ; closest a cut may ever come to the straightened edge, as a share of the local depth - what a band too shallow to hold the tile clearance falls back to
+(setq wc:*depth-min-f* 0.2)         ; floor under the local depth, as a share of the band width, so a dip in the far edge cannot collapse a cut
+(setq wc:*sliver-top* 1.0)          ; width at the top of an insert sliver, and the narrowest one that is drawn
+(setq wc:*sliver-extra* 1.0)        ; how much longer a sliver's sides are than the slit they fill - stock to trim on fitting
+(setq wc:*sliver-gap-f* 0.2)        ; how far below the band a sliver is drawn, as a share of the width
+
+;; ---- which points belong to this band ---------------------------------
+;; The selection is a window, so it catches end blocks, callouts and
+;; whatever else stood nearby.  These three drop what cannot be band.
+
+(setq wc:*near-f* 1.75)             ; how far off the chain (x band width) a point may sit and still be taken as part of this band, or carried along as a mark
+(setq wc:*over-f* 0.05)             ; how far above the straight edge (x width) a developed point may land before it is read as an end-clamp artefact and dropped
+(setq wc:*past-f* 0.25)             ; how far beyond either end of the band (x width) a point may sit and still be kept
+
+;; ---- placement and lettering of the two drawings ----------------------
+
+(setq wc:*drop-f* 1.5)              ; how far below the lowest point of the selection (x width) the first straight edge lands
+(setq wc:*stack-f* 5.0)             ; the gap (x width) between the two drawings: raise it when the summaries of one run into the next
+(setq wc:*label-f* 0.6)             ; how far above its straight edge (x width) a variant label sits
+(setq wc:*label-h-f* 0.4)           ; text height of that label, as a share of the band width
+(setq wc:*sum-x-f* 2.0)             ; how far right of the band end (x width) the length summary is written
+(setq wc:*sum-h-f* 0.35)            ; text height of the summary, as a share of the band width
+(setq wc:*sum-step-f* 0.55)         ; line spacing within the summary, as a share of the band width
+(setq wc:*dim-off-f* 1.2)           ; how far out past each end (x width) the height dimension lines are placed
+
+;; ---- how the numbers are written --------------------------------------
+
+(setq wc:*dec-places* 2)            ; decimals in every decimal-inch figure the report and the summary print
+(setq wc:*arch-frac* 8)             ; smallest fraction in the feet-and-inches twin printed beside it (8 = eighths, 16 = sixteenths)
+
+;;; ------------------------ small math helpers ----------------------
 
 (defun wc:key (p)
   ;; fuzzy node key so touching endpoints share one node
-  (strcat (rtos (car p) 2 3) "," (rtos (cadr p) 2 3))
+  (strcat (rtos (car p) 2 wc:*node-fuzz*) ","
+          (rtos (cadr p) 2 wc:*node-fuzz*))
 )
 
 (defun wc:turn (d0 d1 / d)
@@ -74123,7 +74786,7 @@
     )
     (while (cdr pts)
       (setq a (car pts) pts (cdr pts))
-      (if (> (distance a (car pts)) 1.0e-6)
+      (if (> (distance a (car pts)) wc:*seg-min*)
         (setq segs (cons (list a (car pts) lay en) segs))
       )
     )
@@ -74161,17 +74824,25 @@
 ;;; -------------------------- chain tracing -------------------------
 
 (defun wc:trace (segs nodes seed toward / cur p q ids pts cands best
-                 bestang j sg r ang d0 stop)
+                 bestang j sg r ang d0 stop seen nk walked closed)
   ;; walk from segment SEED through endpoint TOWARD, always taking the
-  ;; straightest continuation; stop when the best turn exceeds 60 deg.
-  ;; -> (ids . pts)  ids = seg indices walked (seed first),
-  ;;                 pts = nodes visited (start node first)
+  ;; straightest continuation; stop when the best turn is sharper than
+  ;; wc:*trace-turn*, or when the walk arrives at a node it has already
+  ;; stood on -- a side that closes on itself (a ring) is one lap, and
+  ;; without that test the walk laps it until wc:*trace-max* and reports
+  ;; a developed length of a thousand laps.
+  ;; -> (ids pts closed)  ids = seg indices walked (seed first),
+  ;;                      pts = nodes visited (start node first),
+  ;;                      closed = T when the side came back on itself
   (setq cur seed
         p   (wc:other-end (nth seed segs) toward)
         q   toward
         ids (list seed)
         pts (list q p)                  ; reversed order, start last
+        seen (list (wc:key q) (wc:key p))
+        walked 1
         stop nil
+        closed nil
   )
   (while (not stop)
     (setq d0 (wc:dir p q)
@@ -74192,29 +74863,53 @@
         )
       )
     )
-    (if (or (not best) (> bestang 1.0472) (> (length ids) 5000)) ; 60 deg
-      (setq stop T)
-      (setq ids (cons best ids)
-            p q
-            cur best
-            q (wc:other-end (nth best segs) q)
-            pts (cons q pts)
-      )
+    (setq nk (if best (wc:key (wc:other-end (nth best segs) q))))
+    (cond
+      ((or (not best) (> bestang wc:*trace-turn*) (> walked wc:*trace-max*))
+       (setq stop T))
+      ((member nk seen)                 ; back where it has been: a ring
+       (setq stop T closed T)
+       ;; a lap that lands exactly on the node it set out from has
+       ;; closed the ring, and that last segment is as much a part of
+       ;; the side as any other -- take it before stopping, or the
+       ;; developed length comes out one chord short
+       (if (equal nk (last seen))
+         (setq ids (cons best ids)
+               pts (cons (wc:other-end (nth best segs) q) pts)
+         )
+       ))
+      (T
+       (setq ids (cons best ids)
+             p q
+             cur best
+             q (wc:other-end (nth best segs) q)
+             pts (cons q pts)
+             seen (cons nk seen)
+             walked (1+ walked)
+       ))
     )
   )
-  (cons (reverse ids) (reverse pts))
+  (list (reverse ids) (reverse pts) closed)
 )
 
 (defun wc:full-chain (segs nodes seed / sg r1 r2)
   ;; trace both directions from SEED -> (ids . pts) covering the whole side
   (setq sg (nth seed segs)
         r1 (wc:trace segs nodes seed (car sg))   ; towards first endpoint
-        r2 (wc:trace segs nodes seed (cadr sg))  ; towards second endpoint
   )
-  ;; r1 pts = (B A ...towards a-side); r2 pts = (A B ...towards b-side)
-  (cons
-    (append (reverse (cdr (car r1))) (car r2))       ; ids, seed once
-    (append (reverse (cdr r1)) (cddr (cdr r2)))      ; pts, join at A B
+  (if (caddr r1)
+    ;; the first walk closed the loop, so it already IS the whole side --
+    ;; walking the other way would lap the same ring a second time and
+    ;; double every length taken off it
+    (cons (car r1) (cadr r1))
+    (progn
+      (setq r2 (wc:trace segs nodes seed (cadr sg))) ; towards the second
+      ;; r1 pts = (B A ...towards a-side); r2 pts = (A B ...towards b-side)
+      (cons
+        (append (reverse (cdr (car r1))) (car r2))     ; ids, seed once
+        (append (reverse (cadr r1)) (cddr (cadr r2)))  ; pts, join at A B
+      )
+    )
   )
 )
 
@@ -74286,7 +74981,8 @@
 (defun wc:emit (idebt rungs pts s wmin maxfeat carry / feats acc k fsum
                 cw f fdev)
   ;; walk the per-interval correction debt, releasing a dart (mouth
-  ;; capped at 4") or an insert whenever the accumulator reaches WMIN.
+  ;; capped at wc:*dart-cap*) or an insert whenever the accumulator
+  ;; reaches WMIN.
   ;; CARRY non-nil: the un-released remainder carries to the next rung
   ;; (large corrections split into several capped darts - best fit);
   ;; CARRY nil: the accumulator resets after each release (fewest cuts)
@@ -74298,7 +74994,7 @@
     (if (and (>= (abs acc) wmin) (< (length feats) maxfeat))
       (progn
         (setq cw (abs acc))
-        (if (< acc 0) (setq cw (min cw 4.0)))      ; dart mouth cap
+        (if (< acc 0) (setq cw (min cw wc:*dart-cap*)))  ; dart mouth cap
         (setq f (nth (1+ k) rungs)
               fdev (wc:dev-point (caddr f) pts s)
         )
@@ -74405,6 +75101,17 @@
   (reverse runs)
 )
 
+;; The two ways a length is written, both fed by the tunables above:
+;; wc:num is the decimal-inch figure every report and summary line uses,
+;; wc:arch the feet-and-inches twin printed beside it on the sheet.
+(defun wc:num (v)
+  (rtos v 2 wc:*dec-places*)
+)
+
+(defun wc:arch (v)
+  (rtos v 4 wc:*arch-frac*)
+)
+
 ;; A length as a percentage of the bottom-before length.  botb is
 ;; zero when the trace gave fewer than two distinct bottom points, and
 ;; a zero divisor here would throw AFTER the undo group opened, leaving
@@ -74442,6 +75149,7 @@
                  bandlays tileh toplen botb bota tx th pass stop
                  resid featsb residb paircnt bndpts vy vfeats vresid
                  vlab ssstairs stsegs stkeys synth comp compkeys grow
+                 rsgns rsgn rkeep rmaj sumk ln
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
                  stdy dfeats run stairrng stage wc-pick)
@@ -74478,7 +75186,7 @@
            (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))))
        (if (not ss) (progn (princ "\nNothing selected.") (exit)))
        (setq segs (wc:build-segs ss))
-       (if (< (length segs) 6)
+       (if (< (length segs) wc:*min-segs*)
          (princ "\nToo few segments to form a band - select again.")
          (progn
            (setq nodes (wc:build-nodes segs))
@@ -74523,7 +75231,7 @@
              ids (car r)
              pts (cdr r)
        )
-       (if (< (length ids) 3)
+       (if (< (length ids) wc:*min-chain*)
          (progn
            (princ "\nCould not trace a long side from that pick - pick again.")
            (setq stage 2)
@@ -74562,7 +75270,7 @@
                        (setq ang (abs (wc:turn dch (wc:dir p far)))
                              ang (min ang (- pi ang))
                        )
-                       (if (> ang 0.7854)          ; > 45 deg off the chain
+                       (if (> ang wc:*rung-turn*)  ; off the chain enough
                          (setq rungs (cons (list ni p far) rungs))
                        )
                      )
@@ -74573,34 +75281,57 @@
              (setq ni (1+ ni))
            )
            (setq rungs (reverse rungs))
-           (if (< (length rungs) 2)
+           ;; ---- 5. which side of the chain the far side is on, and
+           ;; ---- everything that leaves the chain the OTHER way thrown
+           ;; ---- out.  A datum line or a cut mark that happens to touch
+           ;; ---- the chain crosses it as steeply as a rung does, and
+           ;; ---- counted as one it moved the median width, the vote
+           ;; ---- below and -- through the middle rung -- which layer
+           ;; ---- the far side was taken to be on.
+           (setq side 0 rsgns nil)
+           (foreach f rungs
+             (setq ni (car f) p (cadr f) far (caddr f)
+                   p0 (nth (max 0 (1- ni)) pts)
+                   p1 (nth (min (1- n) (1+ ni)) pts)
+                   cross (- (* (- (car p1) (car p0))
+                               (- (cadr far) (cadr p)))
+                            (* (- (cadr p1) (cadr p0))
+                               (- (car far) (car p))))
+                   rsgn (if (> cross 0) 1 -1)
+                   rsgns (cons rsgn rsgns)
+                   side (+ side rsgn)
+             )
+           )
+           (setq rsgns (reverse rsgns)
+                 rmaj  (if (> side 0) 1 -1)
+                 rkeep nil
+                 k     0
+           )
+           (foreach f rungs
+             (if (= (nth k rsgns) rmaj) (setq rkeep (cons f rkeep)))
+             (setq k (1+ k))
+           )
+           (setq rungs (reverse rkeep))
+           (if (< (length rungs) wc:*min-rungs*)
              (progn
                (princ "\nCould not find the rungs between the two sides - pick again.")
                (setq stage 2)
              )
              (progn
-               ;; band width = median rung length
-               (setq widths (vl-sort (mapcar '(lambda (r)
-                                                (distance (cadr r) (caddr r)))
-                                             rungs)
-                                     '<)
+               ;; band width = median rung length.  vl-sort DROPS items
+               ;; that compare equal, and rungs of a constant-width band
+               ;; are all the same length -- so the median has to come
+               ;; off a list that kept its duplicates.
+               (setq widths (mapcar '(lambda (r)
+                                       (distance (cadr r) (caddr r)))
+                                    rungs)
+                     widths (mapcar '(lambda (i) (nth i widths))
+                                    (vl-sort-i widths '<))
                      w (nth (/ (length widths) 2) widths)
                )
 
-               ;; ---- 5. normalize orientation: far side below the
-               ;; ---- travel direction
-               (setq side 0)
-               (foreach f rungs
-                 (setq ni (car f) p (cadr f) far (caddr f)
-                       p0 (nth (max 0 (1- ni)) pts)
-                       p1 (nth (min (1- n) (1+ ni)) pts)
-                       cross (- (* (- (car p1) (car p0))
-                                   (- (cadr far) (cadr p)))
-                                (* (- (cadr p1) (cadr p0))
-                                   (- (car far) (car p))))
-                 )
-                 (setq side (+ side (if (> cross 0) 1 -1)))
-               )
+               ;; ---- normalize orientation: far side below the travel
+               ;; ---- direction
                (if (> side 0)          ; far side is left -> walk the other way
                  (progn
                    (setq pts (reverse pts)
@@ -74650,11 +75381,12 @@
       ;; ---- 7. feature threshold (conservative, capped) ---------------
       ((= stage 4)
        (initget "Back Undo")
-       (setq maxfeat (getint "\nMaximum darts + inserts <20> [Back]: "))
+       (setq maxfeat (getint (strcat "\nMaximum darts + inserts [Back] <"
+                                     (itoa wc:*maxfeat*) ">: ")))
        (if (= (type maxfeat) 'STR)
          (setq stage 2)
          (progn
-           (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat 20))
+           (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat wc:*maxfeat*))
            (setq stage 5)
          )
        ))
@@ -74662,8 +75394,8 @@
       ;; may only come up to (width - tile height - 1") from the far edge
       (T
        (initget "Back Undo")
-       (setq tileh (getreal
-                     "\nTile height along the straightened edge <none> [Back]: "))
+       (setq tileh (getreal (strcat "\nTile height along the straightened"
+                                    " edge [Back] <none>: ")))
        (if (= (type tileh) 'STR)
          (setq stage 4)
          (progn
@@ -74775,10 +75507,11 @@
         ;; the far side always lies below the straightened edge)
         devpts (vl-remove-if
                  '(lambda (dp)
-                    (or (> (cadddr dp) (* 1.75 w))
-                        (> (cadr dp) (* -0.05 w))
-                        (< (car dp) (* -0.25 w))
-                        (> (car dp) (+ (car (reverse s)) (* 0.25 w)))))
+                    (or (> (cadddr dp) (* wc:*near-f* w))
+                        (> (cadr dp) (* (- wc:*over-f*) w))
+                        (< (car dp) (* (- wc:*past-f*) w))
+                        (> (car dp) (+ (car (reverse s))
+                                       (* wc:*past-f* w)))))
                  devpts)
         devpts (vl-sort devpts '(lambda (a b) (< (caddr a) (caddr b))))
   )
@@ -74952,7 +75685,7 @@
   ;;      aims under 1% of the original bottom length
   ;; dart mouths are capped at 4" on the bottom line in both (larger
   ;; corrections split across consecutive rungs)
-  (setq wmin (max (* 0.04 w) (/ total maxfeat)))
+  (setq wmin (max (* wc:*wmin-f* w) (/ total maxfeat)))
 
   (setq rr (wc:emit idebt rungs pts s wmin maxfeat nil)
         featsb (car rr)                            ; minimum variant
@@ -74966,13 +75699,14 @@
           resid (+ (- bota botb) (cadr rr))
           pass (1+ pass)
     )
-    (if (or (<= (abs resid) (* 0.01 botb))         ; under the 1% target
+    (if (or (<= (abs resid) (* wc:*target* botb))  ; under the target
             (>= (length feats) maxfeat)            ; no room for more
-            (<= wmin (* 0.0401 w))                 ; threshold bottomed out
-            (>= pass 10)
+            (<= wmin (* wc:*wmin-f* w))            ; threshold bottomed out
+            (>= pass wc:*passes*)
         )
       (setq stop T)
-      (setq wmin (max (* 0.04 w) (* wmin 0.6)))    ; more, smaller features
+      (setq wmin (max (* wc:*wmin-f* w)            ; more, smaller features
+                      (* wmin wc:*refine*)))
     )
   )
 
@@ -75012,7 +75746,7 @@
     )
   )
   (setq x0 minx
-        y0 (- miny (* 1.5 w))          ; straight edge sits here
+        y0 (- miny (* wc:*drop-f* w))  ; straight edge sits here
   )
 
   ;; ---- 10. draw ----------------------------------------------------------
@@ -75022,8 +75756,8 @@
     (progn
       (command "_.UNDO" "_Begin")
       (setq inundo T)))
-  (setq lay2 (cal:ensure-layer "AIR-B" 1))
-  (cal:ensure-layer "DIMENSION" 3)
+  (setq lay2 (cal:ensure-layer wc:*cut-layer* wc:*cut-color*))
+  (cal:ensure-layer wc:*dim-layer* wc:*dim-color*)
 
   ;; two stacked drawings: the <1% target version, and below it the
   ;; minimum darts+inserts version
@@ -75039,7 +75773,8 @@
     )
 
     ;; variant label above the straight edge
-    (cal:text (list x0 (+ vy (* 0.6 w))) (* 0.4 w) vlab "DIMENSION")
+    (cal:text (list x0 (+ vy (* wc:*label-f* w))) (* wc:*label-h-f* w)
+             vlab wc:*dim-layer*)
 
     ;; straight (chosen) edge
     (setq sgp (list (+ x0 (car s)) vy)
@@ -75080,14 +75815,23 @@
       (setq x (+ x0 (car f))
             cw (cadr f)
             ;; local band depth = the actual bottom line at this feature
-            ld (max (- (wc:depth-at (car f) devpts)) (* 0.2 w))
+            ld (max (- (wc:depth-at (car f) devpts)) (* wc:*depth-min-f* w))
             ;; apex/slit stop line, measured down from the straightened
-            ;; edge.  With a tile height, tile+1" is the HIGHEST the apex
-            ;; may rise (closest it may come to the straight edge); the
-            ;; apex sits on that line, dropping lower only where the band
-            ;; is too shallow to reach it (kept 1" above the foot).
-            ;; Without a tile height, the default 42% of the local depth.
-            hz (if tileh (min (+ tileh 1.0) (- ld 1.0)) (* 0.42 ld))
+            ;; edge.  With a tile height, tile + wc:*tile-clear* is the
+            ;; HIGHEST the apex may rise (closest it may come to the
+            ;; straight edge); the apex sits on that line, dropping lower
+            ;; only where the band is too shallow to reach it (kept
+            ;; wc:*tile-clear* above the foot).  Both of those go
+            ;; NEGATIVE on a band shallower than the clearance itself --
+            ;; an apex above the straight edge, i.e. a cut straight
+            ;; through the strip -- so the outer max holds it inside the
+            ;; band whatever the tile asks for.  With no tile height,
+            ;; the plain wc:*apex-f* of the local depth.
+            hz (if tileh
+                 (max (min (+ tileh wc:*tile-clear*)
+                           (- ld wc:*tile-clear*))
+                      (* wc:*apex-min-f* ld))
+                 (* wc:*apex-f* ld))
             yb (- vy ld)                          ; local far edge
       )
       (if (= 1 (caddr f))
@@ -75105,16 +75849,18 @@
         )
         (progn                                    ; INSERT: slit + sliver below
           (wc:line (list x yb) (list x (- vy hz)) lay2)
-          ;; sliver piece: 1" wide at the top, the gap width at the
-          ;; bottom, sides about 1" longer than the slit it goes into
-          (setq dl (+ (- ld hz) 1.0)              ; slit length + 1"
-                cw (max cw 1.0)
-                yb (- vy ld (* 0.2 w))            ; sliver top
-                dr (- yb dl)                      ; sliver bottom
+          ;; sliver piece: wc:*sliver-top* wide at the top, the gap
+          ;; width at the bottom, sides wc:*sliver-extra* longer than
+          ;; the slit it goes into
+          (setq dl (+ (- ld hz) wc:*sliver-extra*)
+                cw (max cw wc:*sliver-top*)
+                yb (- vy ld (* wc:*sliver-gap-f* w))   ; sliver top
+                dr (- yb dl)                           ; sliver bottom
           )
           (wc:pline
             (list (list (- x (/ cw 2.0)) dr) (list (+ x (/ cw 2.0)) dr)
-                  (list (+ x 0.5) yb) (list (- x 0.5) yb)
+                  (list (+ x (/ wc:*sliver-top* 2.0)) yb)
+                  (list (- x (/ wc:*sliver-top* 2.0)) yb)
             )
             lay2 T
           )
@@ -75136,8 +75882,8 @@
                 dp2 (wc:dev-point (cadr sgm) pts s)
           )
           ;; keep only marks that actually sit on/near the band
-          (if (and (<= (cadddr dp1) (* 1.75 w))
-                   (<= (cadddr dp2) (* 1.75 w)))
+          (if (and (<= (cadddr dp1) (* wc:*near-f* w))
+                   (<= (cadddr dp2) (* wc:*near-f* w)))
             (progn
               (wc:line (list (+ x0 (car dp1)) (+ vy (cadr dp1)))
                        (list (+ x0 (car dp2)) (+ vy (cadr dp2)))
@@ -75151,66 +75897,70 @@
     )
 
     ;; height dimensions at both ends
-    (wc:vdim (list (car enda) vy) enda (- (car enda) (* 1.2 w)) "DIMENSION")
-    (wc:vdim (list (car endb) vy) endb (+ (car endb) (* 1.2 w)) "DIMENSION")
+    (wc:vdim (list (car enda) vy) enda
+             (- (car enda) (* wc:*dim-off-f* w)) wc:*dim-layer*)
+    (wc:vdim (list (car endb) vy) endb
+             (+ (car endb) (* wc:*dim-off-f* w)) wc:*dim-layer*)
 
     ;; length summary to the right of the drawing: top line, bottom line
     ;; before (along the original curve) and after (as drawn), the delta
     ;; the flattened bottom line is off by, and the residual once the
     ;; darts close / inserts fill (target: under 1%)
-    (setq tx (+ (car endb) (* 2.0 w))
-          th (* 0.35 w)
+    (setq tx (+ (car endb) (* wc:*sum-x-f* w))
+          th (* wc:*sum-h-f* w)
+          sumk -1
     )
-    (cal:text (list tx vy) th
-             (strcat "TOP LINE:      " (rtos toplen 2 2)
-                     "  (" (rtos toplen 4 8) ")")
-             "DIMENSION")
-    (cal:text (list tx (- vy (* 0.55 w))) th
-             (strcat "BOTTOM BEFORE: " (rtos botb 2 2)
-                     "  (" (rtos botb 4 8) ")")
-             "DIMENSION")
-    (cal:text (list tx (- vy (* 1.10 w))) th
-             (strcat "BOTTOM AFTER:  " (rtos bota 2 2)
-                     "  (" (rtos bota 4 8) ")")
-             "DIMENSION")
-    (cal:text (list tx (- vy (* 1.65 w))) th
-             (strcat "DELTA:         " (rtos (- bota botb) 2 2)
-                     "  (" (rtos (wc:pctof (- bota botb) botb) 2 2)
-                     "%" (if (< bota botb) " short)" " long)"))
-             "DIMENSION")
-    (cal:text (list tx (- vy (* 2.20 w))) th
-             (strcat "AFTER CUTS:    " (rtos vresid 2 2)
-                     "  (" (rtos (wc:pctof vresid botb) 2 2)
-                     "%)  [target <1%]"
-                     (if (> (abs vresid) (* 0.01 botb)) "  ** OVER TARGET **" ""))
-             "DIMENSION")
+    (foreach ln
+      (list
+        (strcat "TOP LINE:      " (wc:num toplen) "  (" (wc:arch toplen) ")")
+        (strcat "BOTTOM BEFORE: " (wc:num botb) "  (" (wc:arch botb) ")")
+        (strcat "BOTTOM AFTER:  " (wc:num bota) "  (" (wc:arch bota) ")")
+        (strcat "DELTA:         " (wc:num (- bota botb))
+                "  (" (wc:num (wc:pctof (- bota botb) botb))
+                "%" (if (< bota botb) " short)" " long)"))
+        (strcat "AFTER CUTS:    " (wc:num vresid)
+                "  (" (wc:num (wc:pctof vresid botb)) "%)  [target <"
+                (wc:num (* 100.0 wc:*target*)) "%]"
+                (if (> (abs vresid) (* wc:*target* botb))
+                  "  ** OVER TARGET **" ""))
+      )
+      (setq sumk (1+ sumk))
+      (cal:text (list tx (- vy (* wc:*sum-step-f* w sumk))) th
+               ln wc:*dim-layer*)
+    )
 
     ;; next variant goes below this one
-    (setq vy (- vy (* 5.0 w)))
+    (setq vy (- vy (* wc:*stack-f* w)))
   )
 
-  (command "_.UNDO" "_End")
-  (setq inundo nil)
+  ;; only a group this run actually opened: with undo off there is none,
+  ;; and an _End on nothing errors out of the command -- after every
+  ;; entity has already been drawn
+  (if inundo
+    (progn
+      (command "_.UNDO" "_End")
+      (setq inundo nil)))
   (setvar "CLAYER" oldlay)
 
   ;; ---- 11. report ---------------------------------------------------------
-  (princ (strcat "\nWCALST: developed length " (rtos toplen 2 2)
-                 ", band width " (rtos w 2 2) ", two drawings:"))
+  (princ (strcat "\nWCALST: developed length " (wc:num toplen)
+                 ", band width " (wc:num w) ", two drawings:"))
   (foreach vr (list (list feats resid "target <1%")
                     (list featsb residb "minimum cuts"))
     (setq dl 0 dr 0)
     (foreach f (car vr) (if (= 1 (caddr f)) (setq dl (1+ dl)) (setq dr (1+ dr))))
     (princ (strcat "\n  " (caddr vr) ": " (itoa dl) " dart(s), "
                    (itoa dr) " insert(s) (max " (itoa maxfeat)
-                   "), after cuts " (rtos (cadr vr) 2 2)
-                   " (" (rtos (wc:pctof (cadr vr) botb) 2 2) "%)"
-                   (if (> (abs (cadr vr)) (* 0.01 botb)) " OVER TARGET" "")))
+                   "), after cuts " (wc:num (cadr vr))
+                   " (" (wc:num (wc:pctof (cadr vr) botb)) "%)"
+                   (if (> (abs (cadr vr)) (* wc:*target* botb))
+                     " OVER TARGET" "")))
   )
-  (princ (strcat "\n  top line " (rtos toplen 2 2)
-                 ", bottom before " (rtos botb 2 2)
-                 ", bottom after " (rtos bota 2 2)
-                 ", delta " (rtos (- bota botb) 2 2)
-                 " (" (rtos (wc:pctof (- bota botb) botb) 2 2)
+  (princ (strcat "\n  top line " (wc:num toplen)
+                 ", bottom before " (wc:num botb)
+                 ", bottom after " (wc:num bota)
+                 ", delta " (wc:num (- bota botb))
+                 " (" (wc:num (wc:pctof (- bota botb) botb))
                  "%)."))
   (if (> nmk 0)
     (princ (strcat " " (itoa (/ nmk 2)) " reference mark(s) carried along."))

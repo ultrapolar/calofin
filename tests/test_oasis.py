@@ -1893,6 +1893,40 @@ def test_a_placement_off_the_envelope_is_asked_again():
     print("ok  bad place   -> a centre off the envelope is re-asked, out"
           " past the bound is drawn and reported")
 
+def test_a_placement_that_nests_the_corner_bulge_is_asked_again():
+    """A corner bulge at exactly half the Y bound, stood directly above a
+    side bulge, touches it from the INSIDE -- and an internal tangency is
+    the one pair no tangent radius bridges.  The gap between those two
+    centres in Y is never LESS than the radii differ by, which is the
+    argument this was left out on; equal is what it can be, and equal is
+    nested.  It has to be caught at the placement question, because on
+    this shape the placement is asked AFTER the right bulge's own and
+    oasis:right-nests has already had its look."""
+    w, h, rl, rt, rr = 480.0, 240.0, 96.0, 120.0, 108.0
+    joiners = [72.0, 36.0, 60.0]
+    # rt is h/2, so shifting the corner bulge by rt - rr stands it
+    # exactly over the right bulge and the two touch from within
+    vm = newvm()
+    run(vm, script(variant='TopRight', detail='Complex',
+                   measure=[w, h, rl, rt, rr, rt - rr, -60.0] + joiners),
+        'nested place')
+    said = "".join(str(m) for m in vm.printed)
+    assert 'corner bulge and the right bulge lie one inside the other' \
+        in said, said
+    assert len(arcs_of(vm, 99)) == 12, len(arcs_of(vm, 99))
+    # the same placement given as the TIE a drawing carries reaches it
+    # too: at its own floor the corner bulge stands straight above the
+    # right one, which is exactly the shared X the nesting needs
+    vm = newvm()
+    run(vm, script(variant='TopRight', detail='Complex',
+                   measure=([w, h, rl, rt, rr, 'Tie', abs((h - rt) - rr),
+                             -60.0] + joiners)),
+        'nested tie')
+    assert 'lie one inside the other' in "".join(str(m) for m in vm.printed)
+    assert len(arcs_of(vm, 99)) == 12, len(arcs_of(vm, 99))
+    print("ok  nested place-> a corner bulge stood inside a side one is"
+          " re-asked, by shift and by tie")
+
 
 def test_every_shape_takes_a_straight_run():
     """The ring does not care which shape it came from, so Line answers a
@@ -2562,6 +2596,124 @@ def test_backing_out_of_the_bottom_leaves_the_pool_alone():
     print("ok  bottom back -> Back out of the first step adds nothing; one"
           " step back re-asks the deep break")
 
+def test_the_tangency_marks_go_when_the_flow_is_cancelled():
+    """They are scaffolding, like the preview, and the file says so --
+    but they are put up by oasis:askbottom, whose locals the command's
+    own handler cannot see.  So an Esc inside the bottom flow left every
+    one of them, red, on a pool that was otherwise finished and worth
+    keeping.  They are module state now, for the handler to reach."""
+    def guides(vm):
+        return (len([d for d in made(vm, 'CIRCLE')
+                     if d.get(8) == 'POOL-GUIDE']),
+                len([d for d in made(vm, 'TEXT') if d.get(8) == 'POOL-GUIDE']))
+
+    vm = newvm()
+    run(vm, script(), 'no bottom')
+    clean = guides(vm)
+    assert clean == (6, 0), clean       # the check drawing's centre marks
+
+    vm = newvm()
+    vm.handle_errors = True
+
+    def esc(vm):
+        raise LispError('Function cancelled', vm)
+
+    vm.run('c:OASIS', script(bottom=[esc]))
+    assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+    assert guides(vm) == clean, (guides(vm), clean)
+    assert not vm.globals.get('oasis:*marks*'), vm.globals.get('oasis:*marks*')
+    # and the pool it was cancelled over is still there: an Esc in the
+    # bottom flow is not a reason to lose a drawn pool
+    assert len(arcs_of(vm, 99)) == 12, len(arcs_of(vm, 99))
+    print("ok  marks gone  -> Esc in the bottom flow takes the numbered"
+          " marks with it and leaves the pool")
+
+def test_the_tunables_are_live():
+    """Every adjustable number is in one block at the top of the file, and
+    the README tells a drawing office to `setq` the ones it wants after
+    loading.  That is only true if nothing caches one at load time, so
+    one knob out of each group is set on a loaded file and the drawing
+    has to follow it -- a knob that is named but read once into a
+    constant would be a promise the file does not keep."""
+    def drawn(**knobs):
+        vm = newvm()
+        for k, v in knobs.items():
+            vm.loads('(setq oasis:*%s* %s)' % (k, v))
+        run(vm, script(), 'knob ' + (",".join(knobs) or 'none'))
+        return vm
+
+    base = drawn()
+    doff = max(12.0, REF_X / 18.0)
+
+    # where the output goes
+    assert {d.get(8) for d in made(drawn(poollayer='"WATER"'), 'ARC')} \
+        == {'WATER'}
+    assert {d.get(8) for d in made(drawn(guidelayer='"SCRATCH"'), 'LINE')} \
+        == {'SCRATCH'}
+
+    # how far off the pool the dimensions sit
+    def dimline(vm):
+        return [c for c in cmds(vm, '_.DIMLINEAR') if '_H' in c][0][4][1]
+    assert close(dimline(base), REF_Y + doff), dimline(base)
+    assert close(dimline(drawn(dimoffdiv='9.0')), REF_Y + REF_X / 9.0)
+
+    # ...and how far off its own arc a radius dim's text is dragged
+    def drag(vm):
+        c = cmds(vm, '_.DIMRADIUS')[0]
+        d = _alist_dict(vm.entdata[c[1][0]])
+        return math.dist(c[2][:2], d[10][:2]) - d[40]
+    assert close(drag(base), 0.9 * doff), drag(base)
+    assert close(drag(drawn(radiusdrag='0.5')), 0.5 * doff)
+
+    # where the check drawing sits, and how big its centre marks are
+    def gap(vm):
+        return check_arcs_of(vm)[0][0][0] - arcs_of(vm)[0][0][0]
+    assert close(gap(base), REF_X + 4.0 * doff), gap(base)
+    assert close(gap(drawn(checkgap='6.0')), REF_X + 6.0 * doff)
+
+    def mark(vm):
+        return [d[40] for d in made(vm, 'CIRCLE')
+                if d.get(8) == 'POOL-GUIDE'][0]
+    assert close(mark(base), REF_X / 90.0), mark(base)
+    assert close(mark(drawn(markdiv='48.0')), REF_X / 48.0)
+
+    # and the shape itself: where a Center pool's hump sits across X
+    def hump(vm):
+        return [a for a in arcs_of(vm) if close(a[1], REF_BULGES[1])][0][0][0]
+    assert close(hump(base), 0.5 * REF_X), hump(base)
+    assert close(hump(drawn(topfrac='0.4')), 0.4 * REF_X)
+
+    print("ok  tunables    -> layers, stand-off, drag, check gap, marks and"
+          " topfrac all follow the block")
+
+def test_the_hopper_offset_is_remembered_without_writing_the_knob():
+    """A job's pools share a hopper, so the second pool of a session
+    should not have to be told the offset again -- and for a long time
+    the run got that by writing oasis:*hopoff*, the tunable itself,
+    which made a pool quietly edit the configuration it had been given.
+    The setting and the memory are two names now: the knob says where a
+    fresh session starts and is never written, oasis:*hopoff-last* holds
+    what this session last accepted and is what the question offers."""
+    def offered(vm):
+        return [p for p, _ in vm.prompts if 'Hopper offset' in p][-1]
+
+    breaks = ['Offset', 'BOttom', 120.0, 'Offset', 'Top', 100.0]
+    vm = newvm()
+    run(vm, script(bottom=breaks + [30.0, None, None]), 'first pool')
+    assert '<18.0000>' in offered(vm), offered(vm)      # the knob's own
+    assert vm.globals[Sym('oasis:*hopoff*')] == 18.0, \
+        vm.globals[Sym('oasis:*hopoff*')]
+    assert vm.globals[Sym('oasis:*hopoff-last*')] == 30.0, \
+        vm.globals[Sym('oasis:*hopoff-last*')]
+
+    # the next pool of the same session opens on what was accepted
+    vm.run('c:OASIS', script(bottom=breaks + [None, None, None]))
+    assert '<30.0000>' in offered(vm), offered(vm)
+    assert vm.globals[Sym('oasis:*hopoff*')] == 18.0, \
+        "a run wrote the tunable it was given"
+    print("ok  hopper memo -> the session remembers 30, the knob still"
+          " reads 18")
+
 
 def test_the_bottom_shares_the_pools_undo_group():
     """One U has to take the pool and its floor together, so the flow
@@ -3032,6 +3184,7 @@ if __name__ == '__main__':
     test_the_placement_takes_the_tie_a_drawing_carries()
     test_a_tie_no_circle_can_answer_is_asked_again()
     test_a_placement_off_the_envelope_is_asked_again()
+    test_a_placement_that_nests_the_corner_bulge_is_asked_again()
     test_every_shape_takes_a_straight_run()
     test_a_pinched_bulge_is_left_out_of_the_drawing()
     test_a_straight_run_is_crossed_like_any_arc()
@@ -3050,6 +3203,9 @@ if __name__ == '__main__':
     test_breaks_the_wrong_way_round_are_refused()
     test_a_hopper_offset_with_no_room_is_reasked()
     test_backing_out_of_the_bottom_leaves_the_pool_alone()
+    test_the_tangency_marks_go_when_the_flow_is_cancelled()
+    test_the_tunables_are_live()
+    test_the_hopper_offset_is_remembered_without_writing_the_knob()
     test_the_bottom_shares_the_pools_undo_group()
     test_nxtcloud_matches_its_reference_drawing()
     test_the_nxtcloud_lobes_are_pinned_by_the_envelope()

@@ -7,11 +7,11 @@
 ;;;
 ;;; Click every point that is bad, one after another, as many as you
 ;;; like; press Enter when done.  Each click:
-;;;   * snaps to the nearest survey point within *BP-SNAP* of the pick
+;;;   * snaps to the nearest survey point within bp:*snap* of the pick
 ;;;     (an "ab_pt" INSERT on any layer, any other INSERT on the POINTS
 ;;;     layer, or a plain POINT on the POINTS layer - the same
 ;;;     classifier the rest of the toolset uses),
-;;;   * draws a *BP-RADIUS* circle on the FGStep layer centered on
+;;;   * draws a bp:*radius* circle on the bp:*layer* layer centered on
 ;;;     that point, and
 ;;;   * reads what the point is called from the block's "number"
 ;;;     attribute, the name the drawing itself carries.
@@ -25,40 +25,90 @@
 ;;; exactly where you clicked - and reported as "Pt.?", so a stray
 ;;; shot with no block under it can be called out too.  Clicking a
 ;;; ringed point AGAIN un-rings it: the circle is erased and the point
-;;; leaves the callout - reselect a point to undo it.
+;;; leaves the callout - reselect a point to undo it.  A click that
+;;; snaps to a DIFFERENT survey point never un-rings a neighbour it
+;;; merely lands close to (v1.7 did, so two points under 10" apart
+;;; could not both be ringed); only a click with no survey point under
+;;; it is read against the rings it sits inside.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *bpcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;;
-;;; Assumes drawing units are INCHES (architectural).  Adjust the
-;;; constants below for other setups.
+;;; Assumes drawing units are INCHES (architectural).  Every knob -
+;;; layer and its colour, ring size, snap reach, text height, the
+;;; wording of the callout, what counts as a survey point - is in the
+;;; configuration block right below, each with its explanation.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.7")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *bpcallout-version* "v1.8")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
-(setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
-                                    ; text go on - the same layer LHD
-                                    ; puts its miss rings on
-(setq *BP-RADIUS*      5.0)         ; ring RADIUS (5 inches); halve it
-                                    ; here if a 5" diameter is wanted
-(setq *BP-SNAP*        12.0)        ; a pick within this of a survey
-                                    ; point rings THAT point; farther
-                                    ; away, the pick itself is ringed
-                                    ; and named "?"
-(setq *BP-TEXT-HGT*    6.0)         ; callout text height
-(setq *BP-POINT-BLOCK* "ab_pt")     ; block name whose INSERTs mark
-                                    ; points wherever they sit
-(setq *BP-POINT-LAYER* "POINTS")    ; layer whose POINTs/INSERTs are
-                                    ; always points
-(setq *BP-PT-TAG*      "number")    ; attribute tag on the point block
-                                    ; naming the point, as in "Pt.17"
-(setq *BP-EXACT-EPS*   0.001)       ; two picks this close land on the
-                                    ; same spot - the second un-rings it
 
-;; ---- helpers -------------------------------------------------------
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS -
+;;; inches in this shop's architectural drawings.
+
+;; -- where the marks go
+(setq bp:*layer* "FGStep")          ; layer the rings and the callout
+                                    ; text land on - the same layer LHD
+                                    ; puts its miss rings on.  Created
+                                    ; when the drawing lacks it; thawed,
+                                    ; unlocked and switched on when it
+                                    ; is there but unusable
+(setq bp:*layer-color* 1)           ; ACI colour that layer is CREATED
+                                    ; with (1 = red).  A layer already
+                                    ; in the drawing keeps its own
+
+;; -- the rings
+(setq bp:*radius* 5.0)              ; ring RADIUS (5" = a 10" circle);
+                                    ; halve it if a 5" DIAMETER is
+                                    ; wanted.  Also how far an un-ring
+                                    ; click reaches: a click inside a
+                                    ; ring that has no survey point
+                                    ; under it removes that ring
+(setq bp:*snap* 12.0)               ; a pick within this of a survey
+                                    ; point rings THAT point - the
+                                    ; nearest one when several qualify;
+                                    ; farther away, the pick itself is
+                                    ; ringed and named bp:*unknown*
+(setq bp:*exact-eps* 0.001)         ; two ring centres this close are
+                                    ; the same spot, so a second click
+                                    ; on a ringed survey point un-rings
+                                    ; it rather than ringing it twice
+
+;; -- the callout text
+(setq bp:*text-hgt* 6.0)            ; TEXT height of the callout
+(setq bp:*text-gap* 10.0)           ; Enter at the text prompt tucks the
+                                    ; callout this far to the right of
+                                    ; AND below the last ring's centre
+(setq bp:*pt-prefix* "Pt.")         ; how a point is named, in the
+                                    ; callout and on the command line:
+                                    ; the prefix + its number, "Pt.12"
+(setq bp:*tail-one* " is bad")      ; what follows the name when ONE
+                                    ; point was ringed: "Pt.12 is bad"
+(setq bp:*tail-many* " are bad")    ; ...and when two or more were:
+                                    ; "Pt.12, Pt.15 and Pt.20 are bad"
+(setq bp:*unknown* "?")             ; the number given to a ring with
+                                    ; no readable survey point under
+                                    ; it, so it still reads "Pt.? is
+                                    ; bad" rather than vanishing
+
+;; -- what counts as a survey point.  The classifier is shared with
+;;    LHD and CDCALLOUT: change it in all three or the tools disagree
+(setq bp:*point-block* "ab_pt")     ; block name whose INSERTs mark
+                                    ; points wherever they sit
+(setq bp:*point-layer* "POINTS")    ; layer whose POINTs and INSERTs
+                                    ; are always points, whatever block
+(setq bp:*pt-tag* "number")         ; attribute tag on the point block
+                                    ; naming the point.  A block without
+                                    ; it lends its first attribute that
+                                    ; reads as a number instead
+
+;;; -------------------- helpers ----------------------------------------
 
 ;; Flat XY distance, whatever Z the inputs carry.
 (defun bp:dist (a b)
@@ -91,7 +141,7 @@
                          " was off, frozen or locked - restored so the"
                          " result is visible.")))))))
 
-;; The name carried by a point block, read from its *BP-PT-TAG*
+;; The name carried by a point block, read from its bp:*pt-tag*
 ;; attribute; when the block has no such attribute, the first
 ;; attribute whose value reads as a number is taken instead (survey
 ;; exports do not all use the ab_pt tag).  nil when neither exists.
@@ -103,7 +153,7 @@
     (setq v (cdr (assoc 1 ed)))
     (if (and (null val)
              (cdr (assoc 2 ed))
-             (= (strcase (cdr (assoc 2 ed))) (strcase *BP-PT-TAG*)))
+             (= (strcase (cdr (assoc 2 ed))) (strcase bp:*pt-tag*)))
       (setq val v))
     (if (and (null fall) v (distof v 2))
       (setq fall v))
@@ -111,10 +161,11 @@
   (if val val fall))
 
 ;; Every survey point in the drawing, as ((x y) . name) pairs.  What
-;; counts as a point matches LHD's classifier: an *BP-POINT-BLOCK*
-;; INSERT anywhere, any other INSERT on the *BP-POINT-LAYER* layer,
+;; counts as a point matches LHD's classifier: an bp:*point-block*
+;; INSERT anywhere, any other INSERT on the bp:*point-layer* layer,
 ;; or a plain POINT on that layer.  A point with no readable number
-;; is carried as "?" so it can still be ringed and reported.
+;; is carried as bp:*unknown* ("?") so it can still be ringed and
+;; reported.
 (defun bp:collect-points (/ ss i en ed typ p nm out)
   (setq out nil
         ss  (ssget "_X" '((0 . "INSERT,POINT"))))
@@ -129,46 +180,52 @@
         (cond
           ((= typ "INSERT")
            (if (or (= (strcase (cdr (assoc 2 ed)))
-                      (strcase *BP-POINT-BLOCK*))
+                      (strcase bp:*point-block*))
                    (= (strcase (cdr (assoc 8 ed)))
-                      (strcase *BP-POINT-LAYER*)))
+                      (strcase bp:*point-layer*)))
              (progn
                (setq nm (bp:block-number en))
                (setq out (cons (cons (list (car p) (cadr p))
-                                     (if (and nm (/= nm "")) nm "?"))
+                                     (if (and nm (/= nm "")) nm
+                                       bp:*unknown*))
                                out)))))
           ((= typ "POINT")
            (if (= (strcase (cdr (assoc 8 ed)))
-                  (strcase *BP-POINT-LAYER*))
-             (setq out (cons (cons (list (car p) (cadr p)) "?") out)))))
+                  (strcase bp:*point-layer*))
+             (setq out (cons (cons (list (car p) (cadr p)) bp:*unknown*)
+                             out)))))
         (setq i (1+ i)))))
   out)
 
-;; The survey point nearest to pick PK, when one sits within *BP-SNAP*
+;; The survey point nearest to pick PK, when one sits within bp:*snap*
 ;; of it; nil otherwise.  Returns the ((x y) . name) pair.
 (defun bp:nearest-point (pk cands / best bd c d)
   (setq best nil bd nil)
   (foreach c cands
     (setq d (bp:dist pk (car c)))
-    (if (and (<= d *BP-SNAP*) (or (null bd) (< d bd)))
+    (if (and (<= d bp:*snap*) (or (null bd) (< d bd)))
       (setq best c bd d)))
   best)
 
 ;; The picked-list entry a new click lands on, when it lands on one:
 ;; either its snapped centre CTR is (as good as) an already-ringed
-;; spot, or - for a pick with no survey point under it - the raw pick
-;; PK is inside an existing ring.  Entries are (ctr name ring-ename);
-;; nil when the click is somewhere new.
-(defun bp:ringed-at (pk ctr picked / hit bd q d)
+;; spot, or - ONLY for a pick with no survey point under it, SNAPPED
+;; nil - the raw pick PK is inside an existing ring.  A pick that did
+;; snap to a survey point is that point and nothing else: v1.7 read it
+;; against the rings too, so a click meant for a point 8" from a ringed
+;; one landed inside the 5" ring and un-ringed the neighbour instead.
+;; Entries are (ctr name ring-ename); nil when the click is somewhere
+;; new.
+(defun bp:ringed-at (pk ctr picked snapped / hit bd q d)
   (setq hit nil)
   (foreach q picked
-    (if (< (bp:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
-  (if (null hit)
+    (if (< (bp:dist ctr (car q)) bp:*exact-eps*) (setq hit q)))
+  (if (and (null hit) (not snapped))
     (progn                              ; nearest ring the pick sits in
       (setq bd nil)
       (foreach q picked
         (setq d (bp:dist pk (car q)))
-        (if (and (<= d *BP-RADIUS*) (or (null bd) (< d bd)))
+        (if (and (<= d bp:*radius*) (or (null bd) (< d bd)))
           (setq hit q bd d)))))
   hit)
 
@@ -179,35 +236,37 @@
 
 ;; The callout sentence: "Pt.12 is bad", "Pt.12 and Pt.15 are bad",
 ;; "Pt.12, Pt.15 and Pt.20 are bad" - commas between all but the last
-;; pair, "and" before the last, is/are by count.
+;; pair, "and" before the last, is/are by count.  The name prefix and
+;; the two sentence tails are the bp:*pt-prefix* / bp:*tail-* knobs.
 (defun bp:phrase (names / n s i)
   (setq n (length names))
   (cond
     ((= n 0) "")
-    ((= n 1) (strcat "Pt." (car names) " is bad"))
+    ((= n 1) (strcat bp:*pt-prefix* (car names) bp:*tail-one*))
     (T
-     (setq s (strcat "Pt." (car names)) i 1)
+     (setq s (strcat bp:*pt-prefix* (car names)) i 1)
      (while (< i (1- n))
-       (setq s (strcat s ", Pt." (nth i names))
+       (setq s (strcat s ", " bp:*pt-prefix* (nth i names))
              i (1+ i)))
-     (strcat s " and Pt." (nth (1- n) names) " are bad"))))
+     (strcat s " and " bp:*pt-prefix* (nth (1- n) names)
+             bp:*tail-many*))))
 
 ;; Ring one bad point.
 (defun bp:draw-ring (ctr)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbCircle")
+                  (cons 8 bp:*layer*) '(100 . "AcDbCircle")
                   (cons 10 (list (car ctr) (cadr ctr) 0.0))
-                  (cons 40 *BP-RADIUS*))))
+                  (cons 40 bp:*radius*))))
 
 ;; Write the callout text at P.
 (defun bp:draw-text (p str)
   (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbText")
+                  (cons 8 bp:*layer*) '(100 . "AcDbText")
                   (cons 10 (list (car p) (cadr p) 0.0))
-                  (cons 40 *BP-TEXT-HGT*)
+                  (cons 40 bp:*text-hgt*)
                   (cons 1 str))))
 
-;; ---- command -------------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
@@ -234,7 +293,7 @@
   (setq cands (bp:collect-points))
   (if cands
     (princ (strcat "\n" (itoa (length cands)) " survey point(s) found;"
-                   " a click within " (rtos *BP-SNAP* 4 0)
+                   " a click within " (rtos bp:*snap* 4 0)
                    " snaps to the nearest one."))
     (princ (strcat "\nNo survey points found in the drawing - clicks"
                    " will be ringed where picked and named \"?\".")))
@@ -245,23 +304,24 @@
     (setq hit (bp:nearest-point pk cands))
     (if hit
       (setq ctr (car hit) nm (cdr hit))
-      (setq ctr (list (car pk) (cadr pk)) nm "?"))
-    (setq old (bp:ringed-at pk ctr picked))
+      (setq ctr (list (car pk) (cadr pk)) nm bp:*unknown*))
+    (setq old (bp:ringed-at pk ctr picked hit))
     (if old
       (progn                            ; reselecting a point undoes it
         (if (and (caddr old) (entget (caddr old)))
           (entdel (caddr old)))
         (setq picked (bp:drop-entry (caddr old) picked))
-        (princ (strcat "\n  Pt." (cadr old) " un-ringed.")))
+        (princ (strcat "\n  " bp:*pt-prefix* (cadr old)
+                       " un-ringed.")))
       (progn
-        (bp:ensure-layer *BP-LAYER* 1)
+        (bp:ensure-layer bp:*layer* bp:*layer-color*)
         (setq picked (cons (list ctr nm (bp:draw-ring ctr)) picked))
         (if hit
-          (princ (strcat "\n  Pt." nm " ringed."))
+          (princ (strcat "\n  " bp:*pt-prefix* nm " ringed."))
           (princ (strcat "\n  No survey point within "
-                         (rtos *BP-SNAP* 4 0)
-                         " of the pick - ringed where clicked, as"
-                         " Pt.?."))))))
+                         (rtos bp:*snap* 4 0)
+                         " of the pick - ringed where clicked, as "
+                         bp:*pt-prefix* bp:*unknown* "."))))))
 
   (if (null picked)
     (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
@@ -273,11 +333,11 @@
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"
                                     " the last ring>: ")))
       (if (null txtpt)                          ; Enter: tuck it beside
-        (setq txtpt (list (+ (car lastpt) (* 2.0 *BP-RADIUS*))
-                          (- (cadr lastpt) (* 2.0 *BP-RADIUS*)))))
+        (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
+                          (- (cadr lastpt) bp:*text-gap*))))
       (bp:draw-text txtpt phrase)
       (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
-                     " point(s) ringed on layer " *BP-LAYER*
+                     " point(s) ringed on layer " bp:*layer*
                      ";  \"" phrase "\""))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
