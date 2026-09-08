@@ -237,10 +237,20 @@ radii on whole feet, half feet or inches** (the hand trace: 1 of 23).
 ## Tunables
 
 **Everything modifiable is in one block at the top of `abhd.lsp`**,
-above the `end of configuration` rule, with a comment on each saying
-what moving it does. Nothing below that rule is meant to be edited to
-change behaviour: if a number in the body reads like a setting, it
-belongs up there. The block is in three groups.
+above the `end of tunables` rule, with a comment on each saying what
+moving it does. Nothing below that rule is meant to be edited to change
+behaviour: if a number in the body reads like a setting, it belongs up
+there. The block is in three groups, and every entry in it is a literal
+nothing re-assigns (STANDARDS.md section 5).
+
+What a **run** writes is not a knob and is not in the block: the
+distance, the curve cap and the hopper offset a session remembers, and
+the cover-mode flag, sit in the `session memory and run state` section
+directly under it — an initial value there is a starting point, not
+something to tune. `tests/test_abhd_contingencies.py` holds all of
+this: the block ruled off before the first `defun`, no knob in it
+written anywhere below, every knob commented, and every knob in the
+table here.
 
 **1. Drawing setup** — what ABHD reads and where it writes.
 
@@ -264,8 +274,9 @@ belongs up there. The block is in three groups.
 | `*PF-COMPARE*` | 3 rows | The three aims, their colours and their wording |
 
 **2. Fitter tuning** — how the perimeter and the bottom come out.
-`*PF-TOL*`, `*PF-MAX-ARCS*` and `*PF-HOP-OFF*` are the three answers a
-session remembers; they are seeded here and then asked each run.
+(The three answers a session remembers — `*PF-TOL*`, `*PF-MAX-ARCS*`
+and `*PF-HOP-OFF*` — are asked each run and live in the state section,
+not here: 1″, no cap and 18″ are where a fresh session starts.)
 
 | Variable | Default | Meaning |
 | --- | --- | --- |

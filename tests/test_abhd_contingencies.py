@@ -691,26 +691,37 @@ import re                                              # noqa: E402
 #: the file this tier actually loads -- the standalone one, or its
 #: generated twin under CALOFIN_LISP_ROOT=shared
 _src = open(newvm()._remap_root(LSP)).read()
-_knobs = (set(re.findall(r'\(setq\s+(\*PF-[A-Z0-9-]+\*)', _src))
-          | set(re.findall(r'\(if \(null (\*PF-[A-Z0-9-]+\*)\)', _src)))
-_config = _src.split(';; ---- end of configuration', 1)
-check("the file has one configuration block, and it closes",
-      len(_config) == 2 and _config[0].count('CONFIGURATION') == 1)
-#: the three answers the file documents as remembered from run to run;
-#: their ask helpers write them back, which is the only reason a knob
-#: is ever assigned below the configuration block
+
+#: the three answers the file documents as remembered from run to run.
+#: Each is WRITTEN by the run that asks it, so none of them is a knob
+#: (STANDARDS.md section 5): they live in the state section, and a
+#: block advertising one would be offering an initial value as a
+#: setting.
 REMEMBERED = {'*PF-TOL*', '*PF-MAX-ARCS*', '*PF-HOP-OFF*'}
 
-_below = set(re.findall(r'\(setq\s+(\*PF-[A-Z0-9-]+\*)', _config[-1]))
-check("the only knobs written below it are the three it remembers",
-      _below == REMEMBERED, sorted(_below ^ REMEMBERED))
+check("the tunables block is ruled off, and so is the state under it",
+      _src.count(';;; -------------------- tunables ') == 1
+      and _src.count(';; ---- end of tunables') == 1
+      and _src.count(';; ---- end of state') == 1)
+_block, _rest = _src.split(';; ---- end of tunables', 1)
+_block = _block.split(';;; -------------------- tunables ', 1)[1]
+_state, _body = _rest.split(';; ---- end of state', 1)
+check("...and both come before the first defun",
+      '(defun' not in _block and '(defun' not in _state)
+
+_knobs = set(re.findall(r'\(setq\s+(\*PF-[A-Z0-9-]+\*)', _block))
+_written = set(re.findall(r'\(setq\s+(\*PF-[A-Z0-9-]+\*)', _state + _body))
+check("every knob in the block is a literal nothing re-assigns",
+      not (_knobs & _written), sorted(_knobs & _written))
+check("the answers a run writes are state, and are not in the block",
+      _written == REMEMBERED and not (_knobs & REMEMBERED),
+      sorted(_written ^ REMEMBERED))
 check("every knob carries an explanation",
-      all(re.search(re.escape(k) + r'\*?[^\n]*\n?[^\n]*;', _config[0])
+      all(re.search(re.escape(k) + r'\*?[^\n]*\n?[^\n]*;', _block)
           for k in _knobs))
 
 _doc = open(os.path.join(REPO, 'lisp', 'abhd', 'README.md')).read()
-_undocumented = sorted(k for k in _knobs
-                       if ('`%s`' % k) not in _doc)
+_undocumented = sorted(k for k in _knobs if ('`%s`' % k) not in _doc)
 check("and the README documents every one of them",
       not _undocumented, _undocumented)
 print("  (%d knobs)" % len(_knobs))

@@ -154,51 +154,47 @@
 ;;; stubs dashed).
 ;;; ===================================================================
 
-;;; ===================================================================
-;;; CONFIGURATION  --  every knob the tool has, in one place
-;;; -------------------------------------------------------------------
-;;; Nothing below the "end of configuration" rule is meant to be edited
-;;; to change how ABHD behaves: if a number in the body still reads
-;;; like a setting, it belongs up here.  Three groups, in the order a
-;;; drafter is likely to need them:
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob the tool has, in one place (STANDARDS.md section 5).
+;;;  Nothing below the "end of tunables" rule is meant to be edited to
+;;;  change how ABHD behaves: if a number in the body still reads like a
+;;;  setting, it belongs up here.  Three groups, in the order a drafter
+;;;  is likely to need them:
 ;;;
-;;;   1. DRAWING SETUP  - what the tool reads and where it writes: the
-;;;      layer names and colours, the point block and its tag, the
-;;;      linetypes, the dimension styles, and how the candidate pick
-;;;      and its on-screen labels look.
-;;;   2. FITTER TUNING  - the distances, shares, angles and gains that
-;;;      decide how the perimeter and the bottom come out.  Calibrated
-;;;      against a real hand-drawn as-built trace; each entry says what
-;;;      moving it does.  The same span fitter lives in LHD (*LH-*) and
-;;;      CABHD (*CAB-*) word for word and the tests hold the three
-;;;      equal, so a fitter knob changed here is changed there too.
-;;;   3. GUARDS  - limits that keep the maths finite and the searches
-;;;      bounded.  Named so each is defined once and can be read, not
-;;;      because it wants changing.
+;;;    1. DRAWING SETUP  - what the tool reads and where it writes: the
+;;;       layer names and colours, the point block and its tag, the
+;;;       linetypes, the dimension styles, and how the candidate pick
+;;;       and its on-screen labels look.
+;;;    2. FITTER TUNING  - the distances, shares, angles and gains that
+;;;       decide how the perimeter and the bottom come out.  Calibrated
+;;;       against a real hand-drawn as-built trace; each entry says what
+;;;       moving it does.  The same span fitter lives in LHD (*LH-*) and
+;;;       CABHD (*CAB-*) word for word and the tests hold the three
+;;;       equal, so a fitter knob changed here is changed there too.
+;;;    3. GUARDS  - limits that keep the maths finite and the searches
+;;;       bounded.  Named so each is defined once and can be read, not
+;;;       because it wants changing.
 ;;;
-;;; Drawing units are inches throughout.  Three values are remembered
-;;; from run to run (the max distance, the curve cap, the hopper
-;;; offset): those are set only when unset, so reloading the file does
-;;; not forget them.  The practice pool TUTORIALABHD draws is fixed on
-;;; purpose and has no knobs.
-;;; ===================================================================
+;;;  Every one is a literal nothing re-assigns.  What a RUN writes -
+;;;  the distance, the curve cap and the hopper offset it remembers, and
+;;;  the cover-mode flag - is state, not a setting, and sits in its own
+;;;  section under the rule below rather than in here advertising an
+;;;  initial value as something to tune.
+;;;
+;;;  Drawing units are inches throughout.  The practice pool
+;;;  TUTORIALABHD draws is fixed on purpose and has no knobs.
+;;;
+;;;  ONE DIVERGENCE from the section 5 spelling, deliberate: these are
+;;;  named *PF-NAME* rather than pf:*name*.  The spelling predates the
+;;;  rule, the README quotes it, ABCURCHECK reads two of them out of
+;;;  this file by name, and LHD and CABHD carry the fitter half under
+;;;  *LH-* and *CAB-* with their suites comparing it code for code - so
+;;;  renaming is a coordinated pass over three tools and four suites,
+;;;  which is also why abhd is not yet in tests/test_tunables.py's
+;;;  FILES (its reader wants the namespaced spelling).
+;;; ----------------------------------------------------------------------
 
 ;; ---- 1. DRAWING SETUP ----------------------------------------------
-(setq pf:*version*      "090826 REV15") ; announced on load.  The
-                                    ; versioned twin of this file is
-                                    ; named abhd_<MMDDYY>_REV<##>.lsp
-                                    ; so anyone can see which iteration
-                                    ; is in a colleague's stack; bump
-                                    ; this with every revision and
-                                    ; regenerate releases/ (the tests
-                                    ; check the name, the match, and
-                                    ; this)
-;; Run state, not a setting: cover mode.  The pool-bottom question in
-;; pf:bottom answers No without being asked, so a cover sheet is fitted
-;; to its perimeter and stops there.  Set by ABHDCOVER, cleared on both
-;; exits from c:ABHD; nil for a typed ABHD, always.
-(setq abhd:*nobottom* nil)
-
 ;; Layers.  Each is created if missing, in the colour beside it; one
 ;; that already exists keeps its own colour but is thawed, unlocked and
 ;; switched on so a run is never invisible.  Colours are AutoCAD colour
@@ -326,20 +322,6 @@
                                     ; edit; the three mode names are not
 
 ;; ---- 2. FITTER TUNING ----------------------------------------------
-;; Remembered for the session - asked each run, Enter keeps the last
-;; answer - so these two are only seeded here, never reset by a reload:
-(if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; the max distance a point may
-                                    ; sit from the fitted line, as first
-                                    ; offered at step 1 in a fresh
-                                    ; session (1 inch)
-(if (null *PF-HOP-OFF*) (setq *PF-HOP-OFF* 18.0)) ; default hopper
-                                    ; offset (18 in); the first offset
-                                    ; typed in a run becomes the next
-                                    ; run's default
-;; *PF-MAX-ARCS* : cap on the number of curved segments in the output;
-;; nil = no cap.  The command prompts for it (Enter keeps the current
-;; value, "None" removes the cap) and remembers it for the session,
-;; like *PF-TOL*.  Nothing to set here - it is nil until asked.
 (setq *PF-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
                                     ; prompt (2 inches): further than
                                     ; that and the line is no longer a
@@ -561,7 +543,42 @@
                                     ; passes until one improves nothing,
                                     ; or this many have run - a bound
                                     ; on the search, not a target
-;; ---- end of configuration ------------------------------------------
+;; ---- end of tunables -----------------------------------------------
+
+;; ---- session memory and run state ----------------------------------
+;; None of this is a setting: each is written as the tool runs, so an
+;; initial value here is a starting point rather than something to
+;; tune.  The two remembered answers are seeded only when unset, so
+;; re-loading the file mid-session does not forget what the last run
+;; was asked.
+(setq pf:*version*      "090826 REV15") ; announced on load.  The
+                                    ; versioned twin of this file is
+                                    ; named abhd_<MMDDYY>_REV<##>.lsp
+                                    ; so anyone can see which iteration
+                                    ; is in a colleague's stack; bump
+                                    ; this with every revision and
+                                    ; regenerate releases/ (the tests
+                                    ; check the name, the match, and
+                                    ; this)
+(if (null *PF-TOL*) (setq *PF-TOL* 1.0)) ; the max distance a point may
+                                    ; sit from the fitted line: asked at
+                                    ; step 1, Enter keeps the last
+                                    ; answer, 1 inch in a fresh session
+(if (null *PF-HOP-OFF*) (setq *PF-HOP-OFF* 18.0)) ; the hopper offset
+                                    ; the bottom flow offers first; the
+                                    ; first offset typed in a run
+                                    ; becomes the next run's default
+;; *PF-MAX-ARCS* : the curve cap the last run was given; nil = no cap.
+;; Asked at step 3 (Enter keeps it, "None" clears it) and remembered
+;; like the two above.  Deliberately not set here at all: it is nil
+;; until something asks, and seeding it would only say so again.
+;;
+;; Cover mode: the pool-bottom question in pf:bottom answers No without
+;; being asked, so a cover sheet is fitted to its perimeter and stops
+;; there.  Set by ABHDCOVER, cleared on both exits from c:ABHD; nil for
+;; a typed ABHD, always.
+(setq abhd:*nobottom* nil)
+;; ---- end of state ---------------------------------------------------
 
 ;; ---- small 2D vector helpers ---------------------------------------
 (defun pf:2d (p) (list (car p) (cadr p)))
