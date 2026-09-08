@@ -677,7 +677,7 @@ labelled `?`. Nothing that ends up drawn depends on any of these.
 | `oasis:*startclear*` | `1.25` | ...and either is then lifted to at least this multiple of its own minimum. Must stay above `1.0`: below the minimum there is no fillet, and the first question would be put with an empty box on screen |
 | `oasis:*startktop*` | `1.5` | A **true** kidney's top circle, as a multiple of the smallest one that reaches both sides |
 | `oasis:*startkleft*` | `0.40` | An **asymmetric** kidney's two given sides, as fractions of the short bound. Deliberately unequal — a preview that opened symmetric would be showing the wrong shape |
-| `oasis:*startkright*` | `0.45` | |
+| `oasis:*startkright*` | `0.45` | ...and the other one |
 | `oasis:*startkside*` | `48.0` | Backstop side radius for a true kidney whose derivation has no answer at all. Every top circle the questions admit does have one, so this is here to keep a `nil` out of arithmetic rather than to be set |
 
 **How big the annotation is.** All of it scales off the pool, so a
@@ -694,8 +694,8 @@ a floor under the result.
 | `oasis:*dashdiv*` | `40.0` | ...otherwise the longer bound over this |
 | `oasis:*pvtextdiv*` | `28.0` | The preview's radius labels: text height as the longer bound over this |
 | `oasis:*pvtextgap*` | `1.7` | ...sitting this many text-heights out from the arc |
-| `oasis:*markmin*` | `1.0` | The circle the check drawing marks each centre with |
-| `oasis:*markdiv*` | `90.0` | |
+| `oasis:*markmin*` | `1.0` | The circle the check drawing marks each centre with: never under this... |
+| `oasis:*markdiv*` | `90.0` | ...otherwise the longer bound over this |
 | `oasis:*tangmarkdiv*` | `150.0` | The pool-bottom flow's numbered tangency marks: the mark's radius... |
 | `oasis:*tangtextdiv*` | `34.0` | ...the number's text height... |
 | `oasis:*tangtextgap*` | `1.6` | ...and how far outside the water the number sits |
