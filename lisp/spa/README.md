@@ -538,7 +538,7 @@ holds this table and the block together, so neither can drift from the other.
 | --- | --- | --- |
 | `spa:*dimlunit*` | `5` | 5 = fractional (84-1/2), 2 = decimal (84.50) |
 | `spa:*dimprec*` | `3` | 5 -> 1/8", 2 -> 3 decimal places |
-| `spa:*dimpost*` | `"\""` | dimension text Every dimension is written in standard inches whatever the host drawing is set to. Anything but 4 (Architectural) keeps the numbers in inches instead of... |
+| `spa:*dimpost*` | `"\""` | Every dimension is written in standard inches whatever the host drawing is set to. Anything but 4 (Architectural) keeps the numbers in inches instead of rolling them up into feet. |
 | `spa:*dim-asz*` | `0.8` | arrow size; raise for a bolder dim |
 | `spa:*dim-exe*` | `0.6` | extension line past the dim line |
 | `spa:*dim-exo*` | `0.6` | extension line offset from the outline |
@@ -556,68 +556,68 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*cut-off*` | `0.6` | cut-face dim, out past the face |
 | `spa:*oct-off*` | `0.8` | the octagon's one cut callout |
 | `spa:*doff-min*` | `6.0` | never closer than 6" |
-| `spa:*doff-div*` | `12.0` | how big the drawing furniture comes out Both flows size their dimension offsets and text off the spa itself, so a 5 ft cover and a 12 ft one both come out readable: do... |
+| `spa:*doff-div*` | `12.0` | Both flows size their dimension offsets and text off the spa itself, so a 5 ft cover and a 12 ft one both come out readable: doff = max(*doff-min*, longer overall / *doff-div*)... |
 | `spa:*th-min*` | `1.0` | never smaller than 1" |
-| `spa:*th-div*` | `40.0` | how big the drawing furniture comes out Both flows size their dimension offsets and text off the spa itself, so a 5 ft cover and a 12 ft one both come out readable: do... |
+| `spa:*th-div*` | `40.0` | Both flows size their dimension offsets and text off the spa itself, so a 5 ft cover and a 12 ft one both come out readable: doff = max(*doff-min*, longer overall / *doff-div*)... |
 | `spa:*hingetxth*` | `5.0` | hinge label height |
 | `spa:*hingetxw*` | `60.0` | hinge label MTEXT frame width |
 | `spa:*hingestyle*` | `"Attributes"` | label style (Standard when absent) |
 | `spa:*hingetxoff*` | `0.6` | label height multiples: line -> label |
 | `spa:*hdashmult*` | `20.0` | DASHED2 0.25" dash x 20 = 5" on paper |
-| `spa:*sfx-water*` | `"Water's Edge"` | the note stacked under every overall |
-| `spa:*sfx-cover*` | `"Cover Size"` | the note stacked under every overall |
+| `spa:*sfx-water*` | `"Water's Edge"` |  |
+| `spa:*sfx-cover*` | `"Cover Size"` |  |
 | `spa:*lay-water*` | `"POOL"` | water's edge perimeter (dashed) |
 | `spa:*lay-cover*` | `"COVER"` | cover size perimeter |
 | `spa:*lay-dim*` | `"DIMENSION"` | every dimension and corner mark |
-| `spa:*lay-notes*` | `"SPA-NOTES"` | corner letters, mode note, report, |
-| `spa:*lay-text*` | `"TEXT"` | the Hinge / Velcro Hinge labels |
-| `spa:*lay-hinge*` | `"COVER"` | The hinges themselves are cover hardware, so they are drawn on the cover's layer even on a sheet that shows only the water's edge (the report says so). Point this at s... |
+| `spa:*lay-notes*` | `"SPA-NOTES"` | corner letters, mode note, report, and the grey input guide |
+| `spa:*lay-text*` | `"TEXT"` | the Hinge / Velcro Hinge labels The hinges themselves are cover hardware, so they are drawn on the cover's layer even on a sheet that shows only the water's edge (the report say... |
+| `spa:*lay-hinge*` | `"COVER"` | The hinges themselves are cover hardware, so they are drawn on the cover's layer even on a sheet that shows only the water's edge (the report says so). Point this at spa:*lay-wa... |
 | `spa:*col-water*` | `4` | cyan, and only when POOL is created |
-| `spa:*col-cover*` | `6` | magenta, ditto -- an existing layer |
+| `spa:*col-cover*` | `6` | magenta, ditto -- an existing layer keeps the colour the office gave it |
 | `spa:*col-dim*` | `2` | yellow, on the same terms |
 | `spa:*col-notes*` | `3` | green, on the same terms |
-| `spa:*col-text*` | `7` | white or black, whichever the |
+| `spa:*col-text*` | `7` | white or black, whichever the background makes it |
 | `spa:*col-bad*` | `1` | red -- a letter the validator adjusted |
 | `spa:*col-advice*` | `4` | cyan -- a recommendation, not a failure |
-| `spa:*dashname*` | `"SPADASH"` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
-| `spa:*dashpat*` | `'(4.0 -3.0)` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
-| `spa:*dotname*` | `"SPADOT"` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
-| `spa:*dotpat*` | `'(0.0 -3.0)` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
+| `spa:*dashname*` | `"SPADASH"` | Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive draws, negative gap... |
+| `spa:*dashpat*` | `'(4.0 -3.0)` | Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive draws, negative gap... |
+| `spa:*dotname*` | `"SPADOT"` | Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive draws, negative gap... |
+| `spa:*dotpat*` | `'(0.0 -3.0)` | Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive draws, negative gap... |
 | `spa:*hdashname*` | `"DASHED2"` | the stock fold-hinge pattern |
-| `spa:*hdashpat*` | `'(0.25 -0.125)` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
-| `spa:*ds-cover*` | `"STANDARD INCHES"` | dimension styles, one per outline A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from... |
-| `spa:*ds-water*` | `"STANDARD INCHES 0.5"` | dimension styles, one per outline A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from... |
-| `spa:*wefactor*` | `0.5` | dimension styles, one per outline A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from... |
+| `spa:*hdashpat*` | `'(0.25 -0.125)` | Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive draws, negative gap... |
+| `spa:*ds-cover*` | `"STANDARD INCHES"` | A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from the standard-inches settings above, the wat... |
+| `spa:*ds-water*` | `"STANDARD INCHES 0.5"` | A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from the standard-inches settings above, the wat... |
+| `spa:*wefactor*` | `0.5` | A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from the standard-inches settings above, the wat... |
 | `spa:*gapdflt*` | `6.0` | suggested cover lap over the water's edge |
 | `spa:*diagoff*` | `0.82842712` | Offsetting a corner by g is not the same for every treatment: a radius stays concentric (r -> r + g) and a cut face lengthens by g * (2*sqrt2 - 2). That factor, once. |
-| `spa:*capfuzz*` | `1.0e-6` | How far a corner treatment may exceed its own setback cap before the size is refused and re-asked. Float noise only -- a millionth of an inch, orders below the 1/16" a... |
-| `spa:*octeq*` | `0.125` | How far the eight sides of an octagon may differ and still count as "all equal" -- a rounded-off cut face like 39-3/8" must still read as the regular octagon it is, an... |
+| `spa:*capfuzz*` | `1.0e-6` | How far a corner treatment may exceed its own setback cap before the size is refused and re-asked. Float noise only -- a millionth of an inch, orders below the 1/16" a tape read... |
+| `spa:*octeq*` | `0.125` | How far the eight sides of an octagon may differ and still count as "all equal" -- a rounded-off cut face like 39-3/8" must still read as the regular octagon it is, and get one... |
 | `spa:*sameeps*` | `0.0005` | ...and how far two corners' sizes may differ and still be one treatment for the Typ. rule. |
 | `spa:*rep-row*` | `2.2` | h multiples: row pitch |
 | `spa:*rep-title*` | `1.25` | h multiples: the heading's text height |
 | `spa:*rep-note*` | `1.4` | h multiples: a red failure note |
 | `spa:*rep-advice*` | `1.15` | h multiples: a cyan recommendation |
 | `spa:*rep-c1*` | `20.0` | h multiples: the TARGET column |
-| `spa:*rep-c2*` | `29.0` | the ACTUAL column; move it out if a |
+| `spa:*rep-c2*` | `29.0` | the ACTUAL column; move it out if a measurement ever runs into it |
 | `spa:*rep-c3*` | `38.0` | the DELTA column, on the same terms |
 | `spa:*rep-w*` | `46.0` | how wide the ruled box comes out |
 | `spa:*pv-col*` | `8` | guide outline (dark gray) |
 | `spa:*pvx-col*` | `7` | measuring tie (white) |
-| `spa:*hi-col*` | `1` | the element being asked for (red) |
+| `spa:*hi-col*` | `1` | the element being asked for (red) The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in spa:octpreview / spa:roundpreview rather than reading th... |
 | `spa:*pv-w*` | `240.0` | nominal guide width |
 | `spa:*pv-l*` | `200.0` | nominal guide length |
 | `spa:*pv-th*` | `12.0` | guide corner-letter height |
 | `spa:*pv-tie*` | `10.0` | guide tie-letter height |
 | `spa:*pv-lbl*` | `22.0` | how far a rectangle corner letter sits out |
 | `spa:*pv-olbl*` | `20.0` | ...and an octagon one, which sits tighter |
-| `spa:*pv-cap*` | `50.0` | biggest treatment the guide will draw, |
+| `spa:*pv-cap*` | `50.0` | biggest treatment the guide will draw, so one huge corner cannot swallow it |
 | `spa:*foamdflt*` | `(list (cons 48.0 96.0))` | assumed when nothing matches |
 | `spa:*foamdpc*` | `(list 2 3 4 5)` | and the counts it will accept |
 | `spa:*thermotaper*` | `"1-3/8"` | the one taper a Thermo-Light comes in |
 | `spa:*hinge-min*` | `2` | a cover is never fewer pieces than this |
 | `spa:*hinge-try*` | `3` | how many extra piece counts to try |
 | `spa:*hinge-edge*` | `0.01` | keep a hinge this far off the cover's edge |
-| `spa:*allcorners*` | `"the four corners"` | vocabulary The subject the all-same round asks about, spelled ONCE: it is the label the treatment question and its size follow-up both read ("How should the four corne... |
+| `spa:*allcorners*` | `"the four corners"` | The subject the all-same round asks about, spelled ONCE: it is the label the treatment question and its size follow-up both read ("How should the four corners be treated?", "Rad... |
 
 Not in that block, on purpose: run state (the which-outline switch, the
 guide's entity list), the octagon's edge table (that is shape

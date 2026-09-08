@@ -1341,27 +1341,27 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*cross-tol*` | `2.0` | cross dimension (diagonal) tolerance |
 | `pool:*grec-step*` | `0.125` | Grecian diagonal adjustment increment |
 | `pool:*grec-max*` | `4` | max increments each way (4 * 1/8 = 1/2) |
-| `pool:*capfuzz*` | `1.0e-6` | How far a corner treatment may exceed its own setback cap before the size is refused and re-asked. It exists because the cap is compared against a number the ROUTINE w... |
+| `pool:*capfuzz*` | `1.0e-6` | How far a corner treatment may exceed its own setback cap before the size is refused and re-asked. It exists because the cap is compared against a number the ROUTINE works out r... |
 | `pool:*lay-pool*` | `"POOL"` | the pool perimeter and the bottom |
 | `pool:*lay-dim*` | `"DIMENSION"` | every dimension and corner mark |
-| `pool:*lay-notes*` | `"POOL-NOTES"` | guide, report, mini-model, dashed |
+| `pool:*lay-notes*` | `"POOL-NOTES"` | guide, report, mini-model, dashed reference lines |
 | `pool:*col-pool*` | `4` | cyan, and only when POOL is created |
-| `pool:*col-dim*` | `2` | yellow, ditto -- an existing layer |
+| `pool:*col-dim*` | `2` | yellow, ditto -- an existing layer keeps the colour the office gave it |
 | `pool:*col-notes*` | `3` | green, on the same terms |
-| `pool:*col-bad*` | `1` | red -- a measurement the validator |
-| `pool:*dashname*` | `"POOLDASH"` | linetypes Defined here rather than loaded from acad.lin: a failed load used to fall back to CONTINUOUS silently, which is how dashes vanished. A pattern is (dash gap ... |
+| `pool:*col-bad*` | `1` | red -- a measurement the validator had to adjust, in the drawing and in the report table |
+| `pool:*dashname*` | `"POOLDASH"` | Defined here rather than loaded from acad.lin: a failed load used to fall back to CONTINUOUS silently, which is how dashes vanished. A pattern is (dash gap ...) in inches -- pos... |
 | `pool:*dashpat*` | `'(12.0 -12.0)` | 1 ft dash, 1 ft gap |
-| `pool:*dotname*` | `"POOLDOT"` | linetypes Defined here rather than loaded from acad.lin: a failed load used to fall back to CONTINUOUS silently, which is how dashes vanished. A pattern is (dash gap ... |
-| `pool:*dotpat*` | `'(0.0 -1.0)` | a dot every inch; widen the gap |
-| `pool:*smalldim*` | `24.0` | dimension styles A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a n... |
-| `pool:*smallfuzz*` | `1.0e-6` | dimension styles A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a n... |
-| `pool:*smallstyle*` | `"STANDARD INCHES"` | dimension styles A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a n... |
-| `pool:*crossstyle*` | `"CROSS DIMENSIONS"` | dimension styles A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a n... |
-| `pool:*sidestyle*` | `"SIDE STANDARD"` | dimension styles A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a n... |
+| `pool:*dotname*` | `"POOLDOT"` | Defined here rather than loaded from acad.lin: a failed load used to fall back to CONTINUOUS silently, which is how dashes vanished. A pattern is (dash gap ...) in inches -- pos... |
+| `pool:*dotpat*` | `'(0.0 -1.0)` | a dot every inch; widen the gap for a sparser measuring line |
+| `pool:*smalldim*` | `24.0` | A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a note printed once per run. M... |
+| `pool:*smallfuzz*` | `1.0e-6` | A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a note printed once per run. M... |
+| `pool:*smallstyle*` | `"STANDARD INCHES"` | A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a note printed once per run. M... |
+| `pool:*crossstyle*` | `"CROSS DIMENSIONS"` | A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a note printed once per run. M... |
+| `pool:*sidestyle*` | `"SIDE STANDARD"` | A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a note printed once per run. M... |
 | `pool:*doff-min*` | `12.0` | never closer than 1 ft |
-| `pool:*doff-div*` | `18.0` | how big the drawing furniture comes out Every flow sizes its dimension offsets and its text off the pool itself, so a 12 ft spa pool and a 60 ft lap pool both come out... |
+| `pool:*doff-div*` | `18.0` | Every flow sizes its dimension offsets and its text off the pool itself, so a 12 ft spa pool and a 60 ft lap pool both come out readable. doff is the dimension stand-off, th the... |
 | `pool:*th-min*` | `3.0` | never smaller than 3" |
-| `pool:*th-div*` | `70.0` | how big the drawing furniture comes out Every flow sizes its dimension offsets and its text off the pool itself, so a 12 ft spa pool and a 60 ft lap pool both come out... |
+| `pool:*th-div*` | `70.0` | Every flow sizes its dimension offsets and its text off the pool itself, so a 12 ft spa pool and a 60 ft lap pool both come out readable. doff is the dimension stand-off, th the... |
 | `pool:*mark-r*` | `0.18` | circle radius on the corner point |
 | `pool:*mark-lead*` | `1.2` | how far out the leader runs |
 | `pool:*ng-txt*` | `0.25` | "Not Given" text height |
@@ -1388,26 +1388,26 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*pvx-col*` | `7` | cross-dim / measuring line (white) |
 | `pool:*hi-col*` | `1` | the element being asked for (red) |
 | `pool:*pv-margin*` | `30.0` | smallest margin round the guide's zoom |
-| `pool:*pv-churn*` | `0.05` | re-zoom only when the box moved this |
+| `pool:*pv-churn*` | `0.05` | re-zoom only when the box moved this much of its own width -- lower follows the shape more closely and flickers more |
 | `pool:*fit-iter*` | `3000` | relaxation sweeps, pulling phase |
 | `pool:*fit-polish*` | `400` | sweeps of the sides-only finish |
 | `pool:*fit-quad*` | `2000` | sweeps for the four-corner relaxation |
 | `pool:*fit-slack*` | `0.05` | how far outside a band still passes |
-| `pool:*alfa-lo*` | `15.0` | degrees: the flattest corner A the |
-| `pool:*alfa-hi*` | `165.0` | and the sharpest; narrowing the pair |
+| `pool:*alfa-lo*` | `15.0` | degrees: the flattest corner A the scan will consider |
+| `pool:*alfa-hi*` | `165.0` | and the sharpest; narrowing the pair is faster and can miss a real fit |
 | `pool:*alfa-step*` | `0.25` | coarse sweep; finer costs every run |
 | `pool:*alfa-fine*` | `0.3` | how far either side the fine sweep runs |
-| `pool:*alfa-fstep*` | `0.005` | fine sweep, and the angle the fit |
+| `pool:*alfa-fstep*` | `0.005` | fine sweep, and the angle the fit is finally read to |
 | `pool:*grecth-step*` | `0.00087` | radians, ~ 0.05 degree |
 | `pool:*grec-fit*` | `0.0625` | accept an end within 1/16" |
 | `pool:*half-ratio*` | `0.5` | A pool runs about twice as long as it is wide, so the width question is offered this fraction of the length rather than asked cold. |
 | `pool:*quarter*` | `0.25` | A derived letter is quoted to the nearest quarter inch -- the granularity a tape is actually read to (pool:q4). |
-| `pool:*fixfloor*` | `12.0` | A sheet letter that does not close positive against its overall is lifted to a positive floor and the report says so. The floor is the smaller of this and a share of t... |
-| `pool:*hookslack*` | `0.0625` | how far a wall dim may slide to stay ON the pool A corner UNDER 90 degrees pokes out past its own treatment, so the drawn edge near it starts a little way up the wall... |
-| `pool:*sq90-tol*` | `(* pi (/ 20.0 180.0))` | when a corner may be called square on the sheet How far off 90 a corner may sit and still be marked "90%%d". This separates two POPULATIONS, so it wants to sit between... |
-| `pool:*btypes*` | `"Normal Sport Wedge SLope MOdflat SHallow"` | vocabulary Bottom-type keywords, shared by the rectangle / oval / grecian dispatchers. Normal and the four special bottoms all run through pool:hopnormal (they are the... |
-| `pool:*btshown*` | `"Normal/Sport/Wedge/SLope/MOdflat/SHallow"` | vocabulary Bottom-type keywords, shared by the rectangle / oval / grecian dispatchers. Normal and the four special bottoms all run through pool:hopnormal (they are the... |
-| `pool:*grecnpts*` | `(list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0` | nominal guide rings What the Grecian and Octagon guides look like before any measurement is in. The octagon's is a REGULAR one -- 300 square, cut c = 300/(2+root 2) =... |
+| `pool:*fixfloor*` | `12.0` | A sheet letter that does not close positive against its overall is lifted to a positive floor and the report says so. The floor is the smaller of this and a share of the overall... |
+| `pool:*hookslack*` | `0.0625` | A corner UNDER 90 degrees pokes out past its own treatment, so the drawn edge near it starts a little way up the wall and the far end cannot always meet it exactly there. Splitt... |
+| `pool:*sq90-tol*` | `(* pi (/ 20.0 180.0))` | How far off 90 a corner may sit and still be marked "90%%d". This separates two POPULATIONS, so it wants to sit between them rather than hug either: a pool the crew still calls... |
+| `pool:*btypes*` | `"Normal Sport Wedge SLope MOdflat SHallow"` | Bottom-type keywords, shared by the rectangle / oval / grecian dispatchers. Normal and the four special bottoms all run through pool:hopnormal (they are the same plan chain with... |
+| `pool:*btshown*` | `"Normal/Sport/Wedge/SLope/MOdflat/SHallow"` | Bottom-type keywords, shared by the rectangle / oval / grecian dispatchers. Normal and the four special bottoms all run through pool:hopnormal (they are the same plan chain with... |
+| `pool:*grecnpts*` | `(list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0` | What the Grecian and Octagon guides look like before any measurement is in. The octagon's is a REGULAR one -- 300 square, cut c = 300/(2+root 2) = 87.87, so all eight sides come... |
 | `pool:*octnpts*` | `(list (list 87.87 0.0) (list 212.13 0.0` | ...and the octagon's, which a change here resizes on screen and nowhere else -- the first answer rescales it either way. |
 
 Three kinds of thing are deliberately **not** in that block, and the
