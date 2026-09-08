@@ -41173,7 +41173,76 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.5")
+(setq *lazstep-version* "v1.6")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them:
+;;;    lzt:*types*       the three routines, their titles and entry points
+;;;    lzt:*asks* lzt:*ask-common*
+;;;                      the questions each routine asks beyond the chart
+;;;  The VB palette's step sheets are generated from lzt:chart for every
+;;;  count up to the ceiling below (tools/gen_ui_charts.py), so a change
+;;;  to any of the frame numbers here is a regeneration there.
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (cal:*imgfont*, lzt:*font-*, lzt:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;;  THE FRAME THE CHART IS DRAWN IN.  Everything is in PER-MILLE of the
+;;  picture, x and y, y down -- the same convention as an image tile,
+;;  so the only conversion at draw time is a multiply.  Integers, so
+;;  nothing depends on float formatting and two runs of the generator
+;;  agree to the unit.
+;;
+;;  The picture is one tall frame with the PLAN in the top third, the
+;;  tread dimension row(s) under it, and the SIDE PROFILE below that.
+;;  One coordinate space, one drawing engine, one set of bands.
+(setq lzt:*plan-x0*   100)      ; the wall, or the corner
+(setq lzt:*plan-x1*   860)      ; the far end of the run
+(setq lzt:*plan-yc*   180)      ; the run's centre line
+(setq lzt:*plan-hh*   120)      ; half the plan's opening at the far end
+(setq lzt:*width-x*   930)      ; where a whole-run width dim stands
+(setq lzt:*chord-x1*  860)      ; the last chord across a hemi curve
+(setq lzt:*curve-rx*  840)      ; ...whose crown sits beyond it, at x0 + this
+(setq lzt:*tread-y0*  385)      ; the tread dimension row
+(setq lzt:*tread-y1*  445)      ; ...and the second one, when N needs it
+(setq lzt:*one-row*     4)      ; treads that fit one row of boxes
+(setq lzt:*prof-x*    860)      ; top of the flight, x...
+(setq lzt:*prof-y*    540)      ; ...and y: the profile hangs from here
+(setq lzt:*prof-w*    760)      ; the flight's whole run...
+(setq lzt:*prof-h*    450)      ; ...and its whole drop
+(setq lzt:*prof-gap*   40)      ; how far a depth dim stands off its step
+
+;;  THE CEILING.  DCL will not scroll and a dialog taller than the
+;;  screen does not open at all, so the count has to stop somewhere.
+;;  Eight steps is one row of eight width boxes plus five rows of
+;;  paired depth boxes beside a twenty-cell chart, which fits a laptop
+;;  screen; nine does not reliably, and nothing here can ask the screen
+;;  how tall it is.  The VB palette offers exactly the counts a sheet
+;;  was generated for, up to this number (ChartCatalog.MaxSteps).
+(setq lzt:*max-steps* 8)
+
+;; The chart column: width in cells, its total height in rows spread
+;; over the bands, and the edit_width of a box wedged into the drawing.
+(setq lzt:*chart-w* 58)
+(setq lzt:*chart-h* 20)
+(setq lzt:*wedge-ed* 5)
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall -- one registry value per routine AND
+;; count ("CORNERSTP-3"), because a three-step sheet recalled onto a
+;; five-step drawing would put numbers against treads they were never
+;; measured on.  The VB palette reads the same key and slot
+;; (ui/calofin_net/StepFormView.vb).
+(setq lzt:*poskey* "LazStep_Pos")
+(setq lzt:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazStep")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -41224,40 +41293,6 @@
 ;;;  image-tile pixels do.
 
 
-
-;;; -------------------- the frame the chart is drawn in ------------------
-;;;  Everything is in PER-MILLE of the picture, x and y, y down -- the
-;;;  same convention as an image tile, so the only conversion at draw
-;;;  time is a multiply.  Integers, so nothing depends on float
-;;;  formatting and two runs of the generator agree to the unit.
-;;;
-;;;  The picture is one tall frame with the PLAN in the top third, the
-;;;  tread dimension row(s) under it, and the SIDE PROFILE below that.
-;;;  One coordinate space, one drawing engine, one set of bands.
-
-(setq lzt:*plan-x0*   100)      ; the wall, or the corner
-(setq lzt:*plan-x1*   860)      ; the far end of the run
-(setq lzt:*plan-yc*   180)      ; the run's centre line
-(setq lzt:*plan-hh*   120)      ; half the plan's opening at the far end
-(setq lzt:*width-x*   930)      ; where a whole-run width dim stands
-(setq lzt:*chord-x1*  860)      ; the last chord across a hemi curve
-(setq lzt:*curve-rx*  840)      ; ...whose crown sits beyond it, at x0 + this
-(setq lzt:*tread-y0*  385)      ; the tread dimension row
-(setq lzt:*tread-y1*  445)      ; ...and the second one, when N needs it
-(setq lzt:*one-row*     4)      ; treads that fit one row of boxes
-(setq lzt:*prof-x*    860)      ; top of the flight
-(setq lzt:*prof-y*    540)
-(setq lzt:*prof-w*    760)      ; the flight's whole run...
-(setq lzt:*prof-h*    450)      ; ...and its whole drop
-(setq lzt:*prof-gap*   40)      ; how far a depth dim stands off its step
-
-;;  THE CEILING.  DCL will not scroll and a dialog taller than the
-;;  screen does not open at all, so the count has to stop somewhere.
-;;  Eight steps is one row of eight width boxes plus five rows of
-;;  paired depth boxes beside a twenty-cell chart, which fits a laptop
-;;  screen; nine does not reliably, and nothing here can ask the screen
-;;  how tall it is.
-(setq lzt:*max-steps* 8)
 
 ;;; -------------------- generating the chart -----------------------------
 ;;;  A chart is (type title (outline ...) (dimension ...) (cut ...)).
@@ -41555,7 +41590,6 @@
 (setq lzt:*chart* nil)          ; the chart generated for that count
 (setq lzt:*focus* nil)          ; the key whose box has the caret
 (setq lzt:*pos* nil)            ; where the dialog was last standing
-(setq lzt:*poskey* "LazStep_Pos") ; ...in the profile, kept over a restart
 (setq lzt:*page* 1)             ; which page is open
 (setq lzt:*go* nil)             ; the type a tab click asked for
 (setq lzt:*msg* "")             ; what page one has to say about the count
@@ -41611,8 +41645,7 @@
 ;;;  the whole of the "nothing happened" case -- no message needed, and
 ;;;  the state line reports the fill by moving on its own.
 
-(setq lzt:*recallkey*
-      "HKEY_CURRENT_USER\\Software\\Calofin\\LazStep")
+;;  (lzt:*recallkey* itself is set in the TUNABLES block at the top of the file.)
 
 ;;  A sheet is stored as one string, "key=typed;key=typed".  A value
 ;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
@@ -42055,9 +42088,6 @@
 
 ;;; -------------------- the generated DCL --------------------------------
 
-(setq lzt:*chart-w* 58)         ; the chart column, in character cells
-(setq lzt:*chart-h* 20)         ; its total height, spread over the bands
-(setq lzt:*wedge-ed* 5)         ; a wedge box's edit_width
 
 ;; character cells across for a per-mille x
 (defun lzt:cellx (v) (/ (* v lzt:*chart-w*) 1000.0))
@@ -76692,7 +76722,56 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.4")
+(setq *lazspa-version* "v1.5")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them:
+;;;    lzs:*naok*      the keys that take NA on each sheet -- an NA on
+;;;                    any other key is DEMOTED to unanswered, and the
+;;;                    state line says so
+;;;    lzs:*cuts*      where each chart is cut into bands
+;;;    lzs:*charts* lzs:*corners* lzs:*second* lzs:*lists* lzs:*hints*
+;;;                    -- the sheets themselves; the VB palette's chart
+;;;                    catalog is generated from them (gen_ui_charts.py)
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (cal:*imgfont*, lzs:*font-*, lzs:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;; What a corner can be, in the SHEET LEGEND's words -- 90 / Radius /
+;; Diagonal -- with "(ask)" first so a row left alone sends nothing.
+;; SPA normalises these onto the canonical Square / Radius / Cut /
+;; NotGiven set itself, which is why they are not spelled canonically
+;; here.  ORDER MATTERS: lzs:sized names the treatments that carry a
+;; size by INDEX (2 = Radius, 3 = Diagonal), so reorder both or neither.
+(setq lzs:*ctreat* '("(ask)" "90" "Radius" "Diagonal"))
+
+;; Width budget for the row of chart tabs, in DCL character cells.
+;; Three charts run about 39 cells, so this never wraps today; it is
+;; here because DCL does not scroll, and a fourth shape must cost a row
+;; rather than the whole form.
+(setq lzs:*tabbudget* 84)
+
+;; The chart column: width in cells, and its total height in rows,
+;; which is spread over the bands the chart is cut into.
+(setq lzs:*chart-w* 52)
+(setq lzs:*chart-h* 19)
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall (the registry, one value per chart,
+;; "key=typed;key=typed").  The VB palette reads the recall key too
+;; (ui/calofin_net/ChartFormView.vb, RecallStore.SpaKey), so a sheet
+;; filled in here comes back there; tests/test_chart_form.py holds the
+;; two together.
+(setq lzs:*poskey* "LazSpa_Pos")
+(setq lzs:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazSpa")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  THIS build takes the table, its metrics, the tile palette and the
@@ -76877,7 +76956,7 @@
 ;;;  asks corner treatments for.  An octagon's corners ARE its S / S1 /
 ;;;  S2 letters, already on the chart, and a round spa has none.
 
-(setq lzs:*ctreat* '("(ask)" "90" "Radius" "Diagonal"))
+;;  (lzs:*ctreat* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzs:*corners*
   '(("Rectangle"
@@ -77037,7 +77116,6 @@
 (setq lzs:*focus* nil)          ; the key whose box has the caret
 (setq lzs:*chart* nil)          ; the chart being filled in
 (setq lzs:*pos* nil)            ; where the dialog was last standing
-(setq lzs:*poskey* "LazSpa_Pos") ; ...in the profile, kept over a restart
 (setq lzs:*go* nil)             ; the chart a tab click asked for
 
 (defun lzs:get (key / p)
@@ -77275,8 +77353,7 @@
 ;;;  the whole of the "nothing happened" case -- no message needed, and
 ;;;  the state line reports the fill by moving on its own.
 
-(setq lzs:*recallkey*
-      "HKEY_CURRENT_USER\\Software\\Calofin\\LazSpa")
+;;  (lzs:*recallkey* itself is set in the TUNABLES block at the top of the file.)
 
 ;;  A sheet is stored as one string, "key=typed;key=typed".  A value
 ;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
@@ -77507,7 +77584,7 @@
 ;; run about 39 cells, so this never wraps today -- it is here because
 ;; DCL does not scroll and a fourth shape must cost a row rather than
 ;; the whole form.
-(setq lzs:*tabbudget* 84)
+;;  (lzs:*tabbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzs:tabrows ( / out row w c cw)
   (setq row nil w 0)
@@ -77531,8 +77608,6 @@
     (setq out (cons "  }" out)))
   (reverse out))
 
-(setq lzs:*chart-w* 52)         ; the chart column, in character cells
-(setq lzs:*chart-h* 19)         ; its total height, spread over the bands
 
 ;; character cells across for a per-mille x
 (defun lzs:cellx (v) (/ (* v lzs:*chart-w*) 1000.0))
@@ -78129,7 +78204,59 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.13")
+(setq *lazform-version* "v2.14")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them, because
+;;;  each is half of a rule rather than a setting:
+;;;    lzf:*nobtype*     the charts with no bottom-type popup (the L shapes)
+;;;    lzf:*crecharts*   the charts whose corner rows answer POOL's gate
+;;;    lzf:*sportchain*  the four keys that make up the Sport chain
+;;;    lzf:*charts* lzf:*cross* lzf:*picks* lzf:*corners* lzf:*oaslive*
+;;;    lzf:*hints*       -- the sheets themselves; the VB palette's chart
+;;;                      catalog is generated from them (gen_ui_charts.py)
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (cal:*imgfont*, lzf:*font-*, lzf:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;; The bottoms POOL draws, spelled as POOL's own keywords -- the
+;; capitals are each one's abbreviation at the prompt.  Adding a name
+;; here offers it on the popup; it does not teach POOL to draw it.
+(setq lzf:*btypes* '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
+
+;; What a corner can be: STANDARDS.md's canonical set, "(ask)" first so
+;; a row left alone sends nothing and POOL asks.  ORDER MATTERS --
+;; lzf:csized names the treatments that carry a size by their INDEX
+;; here (2 = Radius, 3 = Cut), so reorder both or neither.
+(setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
+
+;; Width budgets, in DCL character cells.  DCL does not scroll: a row
+;; wider than the screen stops the dialog opening at all, so each is a
+;; ceiling the packer wraps at, never a preference.
+(setq lzf:*tabbudget* 84)       ; the row of chart tabs
+(setq lzf:*rowbudget* 92)       ; a row of paired column boxes
+
+;; The chart column: its width in cells, and its height as a share of
+;; that width (a string, because DCL reads aspect_ratio as one).
+(setq lzf:*chart-w* 52)
+(setq lzf:*chart-a* "0.72")
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall (the registry, one value per chart,
+;; "key=typed;key=typed").  The VB palette reads the recall key too
+;; (ui/calofin_net/ChartFormView.vb, RecallStore.PoolKey), so a sheet
+;; filled in here comes back there; tests/test_chart_form.py holds the
+;; two together.
+(setq lzf:*poskey* "LazForm_Pos")
+(setq lzf:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazForm")
 
 ;;; -------------------- the stroke font ---------------------------------
 ;;;  THIS build takes the table, its metrics, the tile palette and the
@@ -78950,7 +79077,7 @@
 ;;;  On the shapes that gate their corner questions behind a yes/no
 ;;;  (lzf:*crecharts*), picking any row answers that gate too.
 
-(setq lzf:*ctreat* '("(ask)" "Square" "Radius" "Cut" "NotGiven"))
+;;  (lzf:*ctreat* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzf:*corners*
   '(("Rectangle"
@@ -79053,7 +79180,6 @@
 (setq lzf:*insq* nil)           ; the in-square toggle, as it is set
 (setq lzf:*btype* 0)            ; the bottom-type row, as it is picked
 (setq lzf:*pos* nil)            ; where the dialog was last standing
-(setq lzf:*poskey* "LazForm_Pos") ; ...in the profile, kept over a restart
 (setq lzf:*go* nil)             ; the chart a tab click asked for
 (setq lzf:*ranchart* nil)       ; the chart Insert was finally pressed on
 
@@ -79243,7 +79369,7 @@
 ;;  the right in the chart's own order, each labelled with its letter so
 ;;  the list and the picture read as one thing.
 
-(setq lzf:*btypes* '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
+;;  (lzf:*btypes* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzf:tabstrip (cur / out c n)
   ;; The tab strip: one button per chart, the current one disabled so
@@ -79268,7 +79394,7 @@
   (reverse out))
 
 ;; Chart keys packed into rows no wider than the budget.
-(setq lzf:*tabbudget* 84)
+;;  (lzf:*tabbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzf:tabrows ( / out row w c cw)
   (setq row nil w 0)
@@ -79280,8 +79406,6 @@
   (if row (setq out (cons (reverse row) out)))
   (reverse out))
 
-(setq lzf:*chart-w* 52)         ; the chart column, in character cells
-(setq lzf:*chart-a* "0.72")     ; and its height, as a share of that
 
 ;;; -------------------- packing the column boxes ------------------------
 ;;;  A DCL DIALOG TALLER THAN THE SCREEN DOES NOT OPEN, and nothing
@@ -79300,7 +79424,7 @@
 ;;;  boundaries a reader might expect -- it follows the width, and
 ;;;  every box is labelled for itself either way.
 
-(setq lzf:*rowbudget* 92)       ; cells a packed row may occupy
+;;  (lzf:*rowbudget* itself is set in the TUNABLES block at the top of the file.)
 
 ;; One column-only box, at the given width and indent.
 (defun lzf:extbox (d w ind)
@@ -79891,8 +80015,7 @@
 ;;;  the whole of the "nothing happened" case -- no message needed, and
 ;;;  the state line reports the fill by moving on its own.
 
-(setq lzf:*recallkey*
-      "HKEY_CURRENT_USER\\Software\\Calofin\\LazForm")
+;;  (lzf:*recallkey* itself is set in the TUNABLES block at the top of the file.)
 
 ;;  A sheet is stored as one string, "key=typed;key=typed".  A value
 ;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
@@ -80623,7 +80746,53 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.10")
+(setq *lazpanel-version* "v3.11")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.  Nothing below this block
+;;;  is meant to be edited to tune the panel.
+;;;
+;;;  Also editable, but living beside the code that reads them because
+;;;  they ARE the panel rather than settings of it:
+;;;    lzp:*captions*   one caption per command -- the only place they live
+;;;    lzp:*groups*     the pages, as columns of command names
+;;;  tools/check_registry.py --fix maintains both; the VB palette's
+;;;  catalog is generated from them (tools/gen_ui_data.py).
+
+;; The Find page's tab title.  Find is a page but not a group: it stays
+;; out of lzp:*groups* -- what Rest is computed against and what
+;; lzp:commands folds -- so renaming it here is safe and adding it to a
+;; group is not.
+(setq lzp:*findname* "Find")
+
+;; The screen-button toolbar's name, as the CUI lists it.
+(setq lzp:*tbname* "LazPanel")
+
+;; Where the panel remembers its position between restarts: a value in
+;; the AutoCAD profile (setenv), which is always writable where the
+;; registry may not be.
+(setq lzp:*poskey* "LazPanel_Pos")
+
+;; Where pins and recents live: one registry key, values "Pins" and
+;; "Recent", names joined with ";".  THE VB PALETTE READS THE SAME KEY
+;; (ui/calofin_net/PaletteMemory.vb) so a drafter has one set of pins
+;; whichever surface they pinned from.  Change it here and there
+;; together, or tests/test_palette_shell.py fails.
+(setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
+
+;; How wide, in DCL character cells, a row of pinned or recent buttons
+;; may be before the next button starts a new row.  DCL does not
+;; scroll: a row past the screen's width does not clip the page, it
+;; stops the dialog opening at all, so this is a ceiling and not a
+;; preference.  84 fits a laptop screen.
+(setq lzp:*pinbudget* 84)
+
+;; How many recently launched tools are remembered, newest first.  The
+;; palette keeps the same number (PaletteMemory.RecentLimit) and
+;; tests/test_palette_shell.py holds the two together.
+(setq lzp:*reclimit* 5)
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -81002,13 +81171,11 @@
 ;; column layout and no roster of its own, it searches the whole one, so
 ;; it must stay out of lzp:*groups* -- which is what "Rest" is computed
 ;; against, what lzp:commands folds, and what lzp:dcl-one lays out.
-(setq lzp:*findname* "Find")
+;;  (lzp:*findname* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
-(setq lzp:*tbname* "LazPanel")    ; the screen-button toolbar's name
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
 (setq lzp:*pos* nil)              ; where the panel was last standing
-(setq lzp:*poskey* "LazPanel_Pos") ; ...in the profile, kept over a restart
 (setq lzp:*go* nil)               ; the group a tab click asked for
 (setq lzp:*icontype* nil)         ; which byte-array spelling worked
 (setq lzp:*iconstep* nil)         ; the COM call the icon write died on
@@ -81020,7 +81187,6 @@
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
 (setq lzp:*page* nil)             ; the page the panel reopens on
 (setq lzp:*pins* nil)             ; the pinned tools, in pin order
-(setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
 
 ;;; -------------------- roster access -----------------------------------
 
@@ -81229,7 +81395,7 @@
 ;;  So pins are packed greedily into as many rows as they need, with
 ;;  the Pin... button packed last like any other item.  Pin thirty
 ;;  tools and you get a tall panel, never a broken one.
-(setq lzp:*pinbudget* 84)
+;;  (lzp:*pinbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzp:pin-label (n) (strcat "    : button { label = \"" n
                                  "\"; key = \"pin_" n "\"; }"))
@@ -81287,7 +81453,7 @@
 ;;  Keys are "rec_", which cannot collide with the same tool's "pin_"
 ;;  button or with its own button further down the page.
 
-(setq lzp:*reclimit* 5)           ; how many are remembered
+;;  (lzp:*reclimit* itself is set in the TUNABLES block at the top of the file.)
 (setq lzp:*recent* nil)           ; most recent first
 
 ;; Everything remembered, minus what Pinned already shows.
@@ -81716,6 +81882,11 @@
 ;;  can be carried in an ordinary string, and MSXML turns that string
 ;;  into a real VT_UI1 array on the other side.  Both components ship
 ;;  with Windows, and the toolbar this icon goes on already needs COM.
+;;  NOT A KNOB: the alphabet is RFC 4648's, the same 64 characters on
+;;  both ends of the transfer.  It is a literal nothing re-assigns, so
+;;  it is shaped like a tunable and tests/test_tunables.py would ask
+;;  for it in the block at the top -- but reordering a character here
+;;  does not adjust anything, it decodes the icon to garbage.
 (setq lzp:*b64*
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
 

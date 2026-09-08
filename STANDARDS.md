@@ -374,6 +374,29 @@ prefix, colon-separated: `tool:helper-name`, globals with earmuffs
 `tools/check_scope.py` has a case-collision check. Pick one spelling
 per name and keep it.)
 
+**Tunables.** A global that is a *setting* -- a literal nothing
+re-assigns, that a person might reasonably want different -- goes in a
+tunables block at the top of the file, between the version banner and
+the first `defun`, under a `;;; ---` rule reading `tunables`. One
+`setq` per line with a sentence saying what changing it does; not what
+it is, what moves when you change it. Scattering settings down the
+file beside the code that reads them means finding them is reading the
+file, and a knob defined *after* the code that reads it is nil while
+that code loads. Every knob is also a row in the tool's README
+`## Tunables` table.
+
+A knob-shaped global that is not a setting -- LAZPANEL's base64
+alphabet is RFC 4648's, and reordering a character in it decodes the
+icon to garbage rather than adjusting anything -- stays where it is and
+says `NOT A KNOB:` in the comment directly above, with the reason. The
+reason is the point: without it the marker is a way to opt out of the
+rule rather than a fact about the constant.
+
+State (`nil`-initialized, written as the tool runs) is not a knob and
+does not go in the block; hoisting it there advertises an initial value
+as a setting. `tests/test_tunables.py` holds all of this -- the four
+GUI files today, and it is the pattern for any tool that grows one.
+
 **Commands.** `(defun c:TOOLNAME ...)` -- `c:` lowercase, name
 uppercase. Secondary commands by fixed suffix:
 

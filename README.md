@@ -467,6 +467,11 @@ python3 tests/test_chart_form.py      # the palette's chart form against what it
                                       # must agree with: the DCL forms' recall
                                       # store, the wire it asks about a bad box,
                                       # and the sheet it draws
+python3 tests/test_tunables.py        # the four GUI files' knobs: all in the
+                                      # block at the top, each saying what
+                                      # changing it does, each a row in the
+                                      # README, and the ones the palette shares
+                                      # spelled the same on both surfaces
 python3 tests/test_cancel_paths.py    # every headline command cancelled at its
                                       # first prompt: the handler runs, settings
                                       # come back, no group or error mode left
