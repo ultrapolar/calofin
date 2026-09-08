@@ -6,13 +6,16 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
-## v3.6 -- 2026-09-04
+## v3.6 -- 2026-09-08
 
 The three converters -- `XFTCONV`, `SOCONV`, `VSCONV`, the column the
 panel's Pool and Spa pages lead with -- read through together: every
 knob a shop might turn moved to the top of its file with an explanation
 beside it, and the contingencies a survey brings in run in the VM at
-both tiers.
+both tiers. They are now under the tunables rule (STANDARDS 5) that
+landed in this same release, with the canonical block header, the
+version banner above it and the explanation over each `setq` the way
+`LINGUTTER` and the panel write theirs.
 
 ### Fixed
 
@@ -60,6 +63,16 @@ both tiers.
   promised a shared-tier run from the start, but the path was hard-wired
   to `lisp/`, so the grouped twin was only ever load-checked. `make
   parity` now runs the converter at both tiers like its two siblings.
+- `tests/test_converter_tunables.py` holds the tunables rule for these
+  three the way `tests/test_tunables.py` holds it for the four GUI
+  files. It could not simply extend that one: its parser reads a knob
+  as one `setq` per line with a scalar after it, and the converters'
+  central knobs are multi-line tables (`*soconv-map*` is seven rows)
+  whose default cannot be written in a README cell. So the block is
+  walked by parens instead, and the README check asks that every knob
+  HAS a row rather than comparing the default in it. It was worth
+  writing: it caught `XFTCONV` explaining each knob *below* its `setq`
+  where every other file in the tree explains it above.
 - Contingency sections in all three suites: undo switched off, an
   import already in inches, a plain `POINT` for a marker, MTEXT and
   justified names, each settings switch in its non-default position, a

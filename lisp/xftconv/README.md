@@ -103,7 +103,7 @@ Notes:
   template), they are created to match the template — a `POINT` at the origin
   plus the `number` attribute definition.
 
-## Settings
+## Tunables
 
 The constants at the top of `xftconv.lsp` are the whole configuration, and
 each one carries its explanation in the file -- what it is, when to change it

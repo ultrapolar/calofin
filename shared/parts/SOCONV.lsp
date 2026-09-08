@@ -60,11 +60,11 @@
 
 (vl-load-com)
 
-;; ---------------------------------------------------------------
-;; Configuration - every knob the tool has, each one explained.
-;; Nothing below this block is meant to be edited for a shop's own
-;; conventions.
-;; ---------------------------------------------------------------
+;;; -------------------- tunables ----------------------------------------
+;;; Everything a shop might want changed, all in one block; nothing
+;;; settable lives anywhere else in this file.  Each says what CHANGING
+;;; it does.  setq any of them after loading -- in a startup file, say
+;;; -- and the next run reads the new value.
 
 ;; The conversion itself, one row per rule:
 ;;
@@ -114,9 +114,7 @@
 ;; same switch with the opposite default, because ITS sample restyles.
 (setq *soconv-force-bylayer* nil)
 
-;; ---------------------------------------------------------------
-;; Helpers
-;; ---------------------------------------------------------------
+;;; -------------------- helpers -----------------------------------------
 
 ;; Unlock every layer in NAMES that is currently locked and return the
 ;; list of layer objects that were unlocked (so they can be re-locked).
@@ -217,9 +215,7 @@
     (setq i (1+ i)))
   (list (reverse jobs) srcs dests tally))
 
-;; ---------------------------------------------------------------
-;; Main command
-;; ---------------------------------------------------------------
+;;; -------------------- the command -------------------------------------
 (defun c:SOCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
                    tally job dest obj)
 

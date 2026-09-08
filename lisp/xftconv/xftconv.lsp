@@ -43,102 +43,102 @@
 
 
 
-;;; -------------------------------------------------------------------
-;;;  SETTINGS - every knob the tool has, each one explained.  Edit here
-;;;  if the export or the template ever changes; nothing below this
-;;;  section is meant to be touched for a shop's own conventions.
-;;; -------------------------------------------------------------------
-
 (setq *xft-version* "v1.13") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
+;;; -------------------- tunables ----------------------------------------
+;;; Everything the export or the template might want changed, all in one
+;;; block; nothing settable lives anywhere else in this file.  Each says
+;;; what CHANGING it does.  setq any of them after loading -- in a
+;;; startup file, say -- and the next run reads the new value.
+
 ;; --- what happens to the whole selection ---------------------------
 
-(setq *xft-scale* 12.0)
 ;; Scale factor applied to EVERYTHING highlighted, about the middle of
 ;; its bounding box, before any point is read.  12 is feet -> inches,
 ;; which is how both exports arrive.  1.0 skips the SCALE step entirely
 ;; (an import that is already in inches); any other factor is applied
 ;; as given.  Every distance below that is NOT counted in text heights
 ;; is measured AFTER this scale, in drawing units.
+(setq *xft-scale* 12.0)
 
 ;; --- the block every marker becomes ---------------------------------
 
-(setq *xft-block* "ab_pt")
 ;; The block that replaces each marker: the template's point block, the
 ;; one ABHD, POINTRENAMER and the rest of the build read.  If it is
 ;; missing from the drawing (a bare DXF rather than the template),
 ;; xft:ensure-block builds a copy - a POINT at the origin plus the
 ;; attribute below - and says so.  That fallback definition is written
 ;; to match the template and is not a setting.
+(setq *xft-block* "ab_pt")
 
-(setq *xft-block-layer* "POINTS")
 ;; The layer the block is inserted on.  Created if missing; thawed,
 ;; unlocked and switched on if it is there but unusable (STANDARDS 5),
 ;; with a line saying so.  A LOCKED one is the exception: locks stop
 ;; the run by name before anything is touched, because the swap has to
 ;; erase as well as insert.
+(setq *xft-block-layer* "POINTS")
 
-(setq *xft-block-layer-color* 6)
 ;; The colour *xft-block-layer* is CREATED with when the drawing has
 ;; not got it.  An existing layer is never recoloured, so this only
 ;; ever shows on a bare drawing.  6 is magenta - the pink the survey
 ;; points show in, and the number SOCONV, VSCONV and DRONE create
 ;; POINTS with, so the converters agree on a bare drawing.
+(setq *xft-block-layer-color* 6)
 
-(setq *xft-att-tag* "number")
 ;; The attribute tag inside the block that receives the point number.
 ;; The template's ab_pt calls it "number", and every downstream tool
 ;; that labels points reads that tag - change it only with them.
+(setq *xft-att-tag* "number")
 
-(setq *xft-att-style* "Attributes")
 ;; The text style the attribute is written in.  If the drawing has no
 ;; style by this name the current TEXTSTYLE is used instead, quietly -
 ;; a missing style must not stop a conversion.
+(setq *xft-att-style* "Attributes")
 
-(setq *xft-att-height* 4.0)
 ;; The attribute's text height, in drawing units AFTER the scale - 4.0
 ;; is what the sample drawing shows.  It is written into each ATTRIB,
 ;; so a fixed-height style does not change it.
+(setq *xft-att-height* 4.0)
 
-(setq *xft-att-offset* '(0.8697246 -3.5316825))
 ;; Where the attribute sits relative to the point: (dx dy) in drawing
 ;; units after the scale, as measured off the sample drawing - a little
 ;; right of and below the marker, so the number never sits on the dot.
+(setq *xft-att-offset* '(0.8697246 -3.5316825))
 
 ;; --- the Leica XFT flavour ------------------------------------------
 ;; An X of two crossing LINEs (or a plain POINT) on *xft-marker-layer*,
 ;; with the name stacked above it as TEXT / MTEXT on *xft-name-layer*.
 
-(setq *xft-marker-layer* "LEICA_POINT")
 ;; The layer the X markers sit on.  A wcmatch pattern - "*" and ","
 ;; work - so "LEICA_POINT,LEICA_PT" would read two exports' worth.
+(setq *xft-marker-layer* "LEICA_POINT")
 
-(setq *xft-name-layer* "LEICA_POINT_NAME")
 ;; The layer the point-name text sits on.  Also a wcmatch pattern.  It
 ;; is tested BEFORE the marker layer, so a name layer whose name also
 ;; matches *xft-marker-layer* is still read as names, not markers.
+(setq *xft-name-layer* "LEICA_POINT_NAME")
 
-(setq *xft-name-reach* 6.0)
 ;; How far from a marker its name may sit, counted in that name's own
 ;; text heights (so the scale leaves it alone).  Leica stacks the name
 ;; a deliberate distance above the X - about 2.5 heights up - and the
 ;; layer already rules the rest of the drawing out, so six is generous
 ;; without reaching the next point over.
+(setq *xft-name-reach* 6.0)
 
-(setq *xft-strip-prefix* T)
 ;; T takes the letter prefix off a Leica name: "P22" -> "22".  Leica
 ;; calls every point "P<n>", so the P is noise and nothing is lost.
 ;; nil puts the label in as it stands, MTEXT codes stripped and the
 ;; ends trimmed.  The site trace has its own switch below, and for a
 ;; reason given there, the opposite default.
+(setq *xft-strip-prefix* T)
 
-(setq *xft-purge-text* T)
 ;; T erases every TEXT / MTEXT still in the selection once the swap is
 ;; done: a Leica export writes nothing but point names, so what is left
 ;; is import noise (including names that found no marker).  nil keeps
 ;; it.  Highlight only the import, or turn this off, when the selection
 ;; carries text you want.
+(setq *xft-purge-text* T)
 
 ;; --- the site-trace flavour -----------------------------------------
 ;; Same feet, same block out the other end, but the marker is a small
@@ -148,17 +148,16 @@
 ;; diagonals.  A corner is therefore drawn twice, once per layer;
 ;; xft:collect groups by location, so the two circles become one block.
 
-(setq *xft-dot-layer* "POOL_POINTS,BREAK_LINES,CROSS_MEASUREMENTS")
 ;; The layers the circle markers sit on - a wcmatch comma list, so a
 ;; trace that adds a fourth point layer is one more name here.
+(setq *xft-dot-layer* "POOL_POINTS,BREAK_LINES,CROSS_MEASUREMENTS")
 
-(setq *xft-dot-name-layer* "TEXT")
 ;; The layer the trace writes its point names on.  It is the general
 ;; text layer, shared with the captions on its break lines and
 ;; diagonals ("Deep End", "Diagonal 1") - the reach below is what
 ;; tells the two apart, not the layer.
+(setq *xft-dot-name-layer* "TEXT")
 
-(setq *xft-dot-reach* 1.0)
 ;; How far from a circle its name may sit, in text heights.  The name
 ;; sits ON the centre rather than above it, which is why this is one
 ;; height where the Leica reach is six: it only has to forgive an
@@ -166,16 +165,16 @@
 ;; break line's own caption from being read as a point number.  Widen
 ;; it and "Deep End" - justified onto the middle of its break line, in
 ;; the same column as both of its endpoints - becomes a point.
+(setq *xft-dot-reach* 1.0)
 
-(setq *xft-dot-strip-prefix* nil)
 ;; nil keeps a trace name whole: "C1" stays "C1".  The letter is the
 ;; point's family - C for a pool corner, S for a shallow-end break, D
 ;; for a deep-end one - and the numbers restart per family, so
 ;; stripping it would leave C1, S1 and D1 all reading "1": three points
 ;; wearing one number in the attribute every downstream tool labels
 ;; them from.  T strips it the way the Leica flavour does.
+(setq *xft-dot-strip-prefix* nil)
 
-(setq *xft-dot-purge-text* nil)
 ;; nil leaves the trace's leftover text alone, because it is not all
 ;; point names: the break lines and the diagonals are captioned, and a
 ;; sweep would take the survey's annotation with the noise.  The name
@@ -183,30 +182,29 @@
 ;; sweeps, as the Leica flavour does.  A selection holding both
 ;; flavours - which no real import does - is swept if EITHER switch
 ;; is on, because the Leica half's noise is the reason to sweep.
+(setq *xft-dot-purge-text* nil)
 
 ;; --- matching tolerances, both flavours -----------------------------
 
-(setq *xft-column-tol* 0.5)
 ;; Both exports put the name in the marker's column - Leica stacks it
 ;; above, the trace lands it on the centre - so a name whose X is
 ;; within this many of its own text heights of the marker's X wins
 ;; over a name that is merely nearer.  That is what keeps a tight
 ;; cluster of points from stealing each other's tags.  Failing a
 ;; same-column name, nearest-within-reach wins; a name is used once.
+(setq *xft-column-tol* 0.5)
 
-(setq *xft-fuzz* 1e-4)
 ;; How close two marker centres have to be, in drawing units after the
 ;; scale, to count as the same point.  The two LINEs of an X share an
 ;; exact midpoint and a corner's two circles an exact centre, so this
 ;; only has to absorb floating-point noise; widen it only if an export
 ;; starts landing its duplicate markers a measurable distance apart.
+(setq *xft-fuzz* 1e-4)
 
 (vl-load-com)   ; getboundingbox, for the middle of the selection
 
 
-;;; -------------------------------------------------------------------
-;;;  small helpers
-;;; -------------------------------------------------------------------
+;;; -------------------- small helpers -----------------------------------
 
 (defun xft:mid (a b)
   (list (/ (+ (car a) (car b)) 2.0)

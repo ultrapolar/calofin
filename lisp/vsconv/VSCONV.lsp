@@ -63,11 +63,11 @@
 
 (vl-load-com)
 
-;; ---------------------------------------------------------------
-;; Configuration - every knob the tool has, each one explained.
-;; Nothing below this block is meant to be edited for a shop's own
-;; conventions.
-;; ---------------------------------------------------------------
+;;; -------------------- tunables ----------------------------------------
+;;; Everything an exporter or a shop might want changed, all in one
+;;; block; nothing settable lives anywhere else in this file.  Each says
+;;; what CHANGING it does.  setq any of them after loading -- in a
+;;; startup file, say -- and the next run reads the new value.
 
 ;; source layer -> destination layer.  The conversion IS this table: an
 ;; exporter that names its layers differently is retuned here and
@@ -120,9 +120,7 @@
 ;; overrides on and changes only the style name.
 (setq *vsconv-dim-xdata* "ACAD")
 
-;; ---------------------------------------------------------------
-;; Helpers
-;; ---------------------------------------------------------------
+;;; -------------------- helpers -----------------------------------------
 
 ;; Create the output layer, or - when it already exists - make sure it
 ;; is on, thawed and unlocked.  Without this a successful run onto a
@@ -264,9 +262,7 @@
   (entmod ed)
   (entupd ent))
 
-;; ---------------------------------------------------------------
-;; Main command
-;; ---------------------------------------------------------------
+;;; -------------------- the command -------------------------------------
 (defun c:VSCONV (/ *error* doc unlocked mark-open srcs here plan froms
                    reached filter ss i ent ed lay dest obj dims empty p
                    tally n-moved n-dim)
