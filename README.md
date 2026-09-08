@@ -423,6 +423,14 @@ python3 tests/test_cornerstp_geometry.py
 python3 tests/test_cornerstp_bench.py   # CORNERSTP's bench, run in lispvm
 python3 tests/test_cornerstp_profile.py # the side profile all three draw
 python3 tests/test_normiestep_corner.py # NORMIESTEP corner mode, run in lispvm
+python3 tests/test_steps_settings.py  # the step routines' tunables - every
+                                      # knob wired up and moving the drawing,
+                                      # each reader falling back to the value
+                                      # its settings block sets - and the
+                                      # contingencies: UNDO off, no dim
+                                      # styles, an undrawable dim layer, a
+                                      # frozen layer, AUTOBEAD absent, and a
+                                      # selection that cannot be a run
 python3 tests/test_drone_height_lisp.py
 python3 tests/test_addon.py           # UV layout exporter
 python3 tests/test_cloud_mesher.py    # point cloud mesher
