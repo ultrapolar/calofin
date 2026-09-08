@@ -415,6 +415,67 @@ assert ln not in vm.deleted
 print("   the second run finds its own earlier dimension and stands down")
 
 
+print("== C24. UNDO switched off: no group opened, none closed ==")
+# UNDOCTL with bit 1 clear.  v1.3 guarded the _Begin and then closed
+# unconditionally -- an _End with no group open, which the VM refuses
+# the way AutoCAD's stray UNDO prompt would have stalled the run
+vm = newvm()
+vm.sysvars['UNDOCTL'] = 0
+ls = [line(vm, (0, 0, 0), (10, 0, 0))]
+run(vm, [None, ls], "C24")
+assert not any(c and c[0] == '_.UNDO' for c in vm.commands), vm.commands
+assert len(dims(vm)) == 1 and ls[0] in vm.deleted
+assert vm.sysvars['CLAYER'] == "POOL" and vm.sysvars['DIMSTYLE'] == "STANDARD"
+print("   dim drawn, line erased, no _.UNDO at all")
+
+
+print("== C25. cdc:*layer-color* decides a created DIMENSION's colour ==")
+vm = newvm()
+run(vm, [None, [line(vm, (0, 0, 0), (10, 0, 0))]], "C25-default")
+rec = vm.recdata[vm.tablerecs['LAYER']['DIMENSION']]
+assert next(g.b for g in rec if isinstance(g, Dot) and g.a == 62) == 7
+vm = newvm()
+vm.globals[Sym('cdc:*layer-color*')] = 3
+run(vm, [None, [line(vm, (0, 0, 0), (10, 0, 0))]], "C25-knob")
+rec = vm.recdata[vm.tablerecs['LAYER']['DIMENSION']]
+assert next(g.b for g in rec if isinstance(g, Dot) and g.a == 62) == 3
+print("   7 by default, 3 when the knob says so")
+
+
+print("== C26. cdc:*vertang* decides which lines stand up ==")
+# 0.0: only a dead-vertical line stands, so C11's 10-off-vertical line
+# now puts its text at the right-hand end instead of the bottom
+vm = newvm()
+vm.globals[Sym('cdc:*vertang*')] = 0.0
+run(vm, [None, [line(vm, (0, 0, 0), (1, 10, 0))]], "C26-flat")
+assert near(textmoves(vm)[0], [0.8, 8.0, 0.0]), textmoves(vm)[0]
+# 90.0: every line stands, so even a near-level one goes to its lower
+# end -- p1 here, the text 20% along from it
+vm = newvm()
+vm.globals[Sym('cdc:*vertang*')] = 90.0
+run(vm, [None, [line(vm, (0, 0, 0), (10, 1, 0))]], "C26-steep")
+assert near(textmoves(vm)[0], [2.0, 0.2, 0.0]), textmoves(vm)[0]
+print("   0 degrees: right-hand end; 90 degrees: bottom end")
+
+
+print("== C27. Esc at the highlight prompt: settings back, nothing left ==")
+vm = newvm()
+vm.handle_errors = True
+vm.sysvars['OSMODE'] = 512
+
+
+def _esc(v):
+    raise LispError('Function cancelled', v)
+
+
+run(vm, [None, _esc], "C27")
+assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+assert vm.sysvars['OSMODE'] == 512 and vm.sysvars['CLAYER'] == "POOL"
+assert not any('error' in p.lower() for p in vm.printed), vm.printed
+assert not any(c and c[0] == '_.UNDO' for c in vm.commands)
+print("   handler ran once, silently; settings untouched")
+
+
 print("== C23. CDCREATEVER prints the version ==")
 vm = newvm()
 vm.run('c:CDCREATEVER', [])

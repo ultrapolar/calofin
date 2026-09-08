@@ -120,9 +120,13 @@
 ;;;  holds: type POOLVER.  Regenerate the pair with
 ;;;  tools/release_lisp.py.
 
-(setq pool:*version* "090826 REV23")
+;; NOT A KNOB: the revision this file IS, not a setting.  tools/release_lisp.py
+;; reads it to name the dated twin in releases/ and POOLVER prints it,
+;; so editing it here renames a release rather than changing anything
+;; the routine does.  Bump it when the file changes, per CLAUDE.md.
+(setq pool:*version* "090826 REV24")
 
-;;; ==================== ADJUSTABLE CONSTANTS ==========================
+;;; -------------------- tunables ----------------------------------------
 ;;;
 ;;;  EVERY KNOB THIS TOOL HAS IS IN THIS BLOCK.  Each one is WRITTEN
 ;;;  ONCE: change a value here and every place that reads it follows,
@@ -143,7 +147,10 @@
 ;;;      not tuned.  Most sit with the engine that owns them (the answer
 ;;;      store's beside the store, the preview's beside the preview),
 ;;;      under a comment saying so; the ones with no such home are
-;;;      collected at the END of this block under their own heading.
+;;;      collected in the "run state" section ruled off directly BELOW
+;;;      this block -- outside it, which is what keeps
+;;;      tests/test_tunables.py's "a knob is a literal nothing
+;;;      re-assigns" true of everything in here.
 ;;;    * SHAPE STRUCTURE -- pool:*grecedges*, pool:*hexsides*,
 ;;;      pool:*grec-simple* and friends.  Those describe WHICH corner
 ;;;      joins which, not how the tool behaves: editing one does not
@@ -156,13 +163,12 @@
 ;;;  Lengths are DRAWING UNITS (inches).  Colours are AutoCAD colour
 ;;;  numbers (1 red, 2 yellow, 3 green, 4 cyan, 7 white/black, 8 gray).
 
-;;; ---- field tolerances: how far the drawn pool may sit off the tape
+;; ---- field tolerances: how far the drawn pool may sit off the tape
 ;;;
 ;;;  A crew's measurements never close perfectly, so the fitter is
 ;;;  allowed to miss them by this much before it reports a failure.
 ;;;  Tighten them and more pools come back "CROSS DIMS FAILED";
 ;;;  loosen them and the drawing drifts further from what was taped.
-
 (setq pool:*side-tol*  1.0)     ; side length tolerance
 (setq pool:*cross-tol* 2.0)     ; cross dimension (diagonal) tolerance
 (setq pool:*grec-step* 0.125)   ; Grecian diagonal adjustment increment
@@ -181,39 +187,39 @@
 ;; hands, and a treatment can still never overrun the wall it sits on.
 (setq pool:*capfuzz*   1.0e-6)
 
-;;; ---- output layers and their colours
+;; ---- output layers and their colours
 ;;;
 ;;;  Made (or un-frozen, unlocked and switched back on) at the start of
 ;;;  every run by pool:layer.  Rename one here and every entity the
 ;;;  routine draws follows it; the colour is used only when the layer
 ;;;  has to be created, so a drawing that already carries the layer
 ;;;  keeps the office's own colour.
-
 (setq pool:*lay-pool*  "POOL")        ; the pool perimeter and the bottom
 (setq pool:*lay-dim*   "DIMENSION")   ; every dimension and corner mark
 (setq pool:*lay-notes* "POOL-NOTES")  ; guide, report, mini-model, dashed
                                       ; reference lines
-(setq pool:*col-pool*  4)             ; cyan
-(setq pool:*col-dim*   2)             ; yellow
-(setq pool:*col-notes* 3)             ; green
+(setq pool:*col-pool*  4)             ; cyan, and only when POOL is created
+(setq pool:*col-dim*   2)             ; yellow, ditto -- an existing layer
+                                      ; keeps the colour the office gave it
+(setq pool:*col-notes* 3)             ; green, on the same terms
 (setq pool:*col-bad*   1)             ; red -- a measurement the validator
                                       ; had to adjust, in the drawing and
                                       ; in the report table
 
-;;; ---- linetypes
+;; ---- linetypes
 ;;;
 ;;;  Defined here rather than loaded from acad.lin: a failed load used
 ;;;  to fall back to CONTINUOUS silently, which is how dashes vanished.
 ;;;  A pattern is (dash gap ...) in inches -- positive draws, negative
 ;;;  gaps, 0 is a dot -- and is scaled per entity to cancel the
 ;;;  drawing's LTSCALE, so it plots the same size in any drawing.
-
 (setq pool:*dashname* "POOLDASH")
 (setq pool:*dashpat*  '(12.0 -12.0))  ; 1 ft dash, 1 ft gap
 (setq pool:*dotname*  "POOLDOT")
-(setq pool:*dotpat*   '(0.0 -1.0))    ; dot, 1" gap
+(setq pool:*dotpat*   '(0.0 -1.0))    ; a dot every inch; widen the gap
+                                      ; for a sparser measuring line
 
-;;; ---- dimension styles
+;; ---- dimension styles
 ;;;
 ;;;  A style the drawing already defines is used as it stands -- the
 ;;;  office template wins -- and a missing one leaves the dim in the
@@ -230,6 +236,18 @@
 ;;;  SIDE STANDARD block keeps that style even under 24 inches: the
 ;;;  reference sheets show a 19" S1 in SIDE STANDARD, not inches.
 ;;;
+;;;  The FLOOR dims keep their style under 24 inches too, for the same
+;;;  reason and by the same mechanism (pool:*flooron*, opened by
+;;;  pool:dimflbeg): the whole BOTTOM phase -- the H/G/F/E and M/L/K
+;;;  hopper chains, the sport bottom's E2/F2/G/F1/E1, and the section
+;;;  depths C / D / C2 -- reads as ONE chain of runs that adds up to
+;;;  the pool, and a 19" H in inches beside a 12'6" F in feet is the
+;;;  one thing a crew reads wrong.  POOLSIDE.lsp draws those same floor
+;;;  dims on their own and switches style for none of them, so a
+;;;  section drawn either way comes out the same.  (The six-sided
+;;;  hopper's W/L1/X are secondary sheet letters, so they are SIDE
+;;;  STANDARD and stay so.)
+;;;
 ;;;  The cut-off is "UNDER 24 inches": a 2 ft corner is a STANDARD dim,
 ;;;  not an inches one.  It has to be read with a hair of tolerance,
 ;;;  because most of these lengths are not the number the crew typed --
@@ -241,14 +259,13 @@
 ;;;  tolerance is float noise only -- a MILLIONTH of an inch, a million
 ;;;  times the noise it absorbs and orders below the 1/16" a tape can
 ;;;  read, so every real measurement under 2 ft is still an inches dim.
-
 (setq pool:*smalldim*    24.0)
 (setq pool:*smallfuzz*   1.0e-6)
 (setq pool:*smallstyle*  "STANDARD INCHES")
 (setq pool:*crossstyle*  "CROSS DIMENSIONS")
 (setq pool:*sidestyle*   "SIDE STANDARD")
 
-;;; ---- how big the drawing furniture comes out
+;; ---- how big the drawing furniture comes out
 ;;;
 ;;;  Every flow sizes its dimension offsets and its text off the pool
 ;;;  itself, so a 12 ft spa pool and a 60 ft lap pool both come out
@@ -260,18 +277,16 @@
 ;;;
 ;;;  The minimums are what stops a small pool's dims collapsing into
 ;;;  each other; the divisors are what keeps a big one's from sprawling.
-
 (setq pool:*doff-min* 12.0)     ; never closer than 1 ft
 (setq pool:*doff-div* 18.0)
 (setq pool:*th-min*   3.0)      ; never smaller than 3"
 (setq pool:*th-div*   70.0)
 
-;;; ---- corner marks and callouts, as multiples of doff
+;; ---- corner marks and callouts, as multiples of doff
 ;;;
 ;;;  The square-corner mark of STANDARDS.md section 2 is a small circle
 ;;;  on the corner with a leader out along its outward diagonal; a
 ;;;  NotGiven corner adds a "Not Given" note past the leader tip.
-
 (setq pool:*mark-r*     0.18)   ; circle radius on the corner point
 (setq pool:*mark-lead*  1.2)    ; how far out the leader runs
 (setq pool:*ng-txt*     0.25)   ; "Not Given" text height
@@ -279,25 +294,23 @@
 (setq pool:*rad-off*    0.9)    ; radius dim, dragged out past the arc
 (setq pool:*cut-off*    0.5)    ; cut-face dim, out past the face
 
-;;; ---- where the bottom's chain dimensions sit
+;; ---- where the bottom's chain dimensions sit
 ;;;
 ;;;  The H/G/F/E chain runs below the hopper centre and the M/L/K chain
 ;;;  to the right of the hopper's edge, the way the field sheet stacks
 ;;;  them.  The H/G/F/E line drops by whichever is CLOSER -- a fixed
 ;;;  foot, or a sixth of the hopper's width -- so it stays inside the
 ;;;  hopper on a small pool and does not wander on a big one.
-
 (setq pool:*mlkoff*    30.0)    ; M/L/K dim line, right of the hopper
 (setq pool:*chainoff*  12.0)    ; H/G/F/E drop: at most this...
 (setq pool:*chaindiv*  6.0)     ; ...and at most hopper width / this
 
-;;; ---- the report table and the mini-model beside it
+;; ---- the report table and the mini-model beside it
 ;;;
 ;;;  Column positions are multiples of the note height h, so the table
 ;;;  scales with the drawing.  Feet-inch strings run longer than decimal
 ;;;  inches, so the ACTUAL and DELTA columns move out when the report is
 ;;;  in feet-inches (see pool:*ftin*).
-
 (setq pool:*rep-gap*    2.0)    ; doff multiples: pool -> table
 (setq pool:*rep-row*    2.2)    ; h multiples: row pitch
 (setq pool:*rep-title*  1.25)   ; h multiples: the heading's text height
@@ -312,14 +325,13 @@
 (setq pool:*map-gap*    3.0)    ; th multiples: table -> mini-model
 (setq pool:*map-size*  24.0)    ; th multiples: the mini-model's box
 
-;;; ---- the guide preview
+;; ---- the guide preview
 ;;;
 ;;;  A gray pool of the chosen shape is drawn as soon as the shape is
 ;;;  picked and reshapes itself around every answer; the element being
 ;;;  asked for turns red.  The nominal point rings below are what the
 ;;;  guide starts at before any measurement is in -- proportions, not
 ;;;  sizes, since the first answer rescales them.
-
 (setq pool:*pv-col*  8)         ; guide outline (dark gray)
 (setq pool:*pvx-col* 7)         ; cross-dim / measuring line (white)
 (setq pool:*hi-col*  1)         ; the element being asked for (red)
@@ -328,7 +340,7 @@
                                 ; much of its own width -- lower follows
                                 ; the shape more closely and flickers more
 
-;;; ---- the fitting engine
+;; ---- the fitting engine
 ;;;
 ;;;  Two passes, both iterative: sides held exactly true while the cross
 ;;;  dims are pulled as close as they will come, then -- only if that
@@ -336,7 +348,6 @@
 ;;;  More iterations fit marginally better and cost time on every run;
 ;;;  the acceptance slack is what stops a fit that landed a thousandth
 ;;;  outside its band being reported as a failure.
-
 (setq pool:*fit-iter*    3000)  ; relaxation sweeps, pulling phase
 (setq pool:*fit-polish*   400)  ; sweeps of the sides-only finish
 (setq pool:*fit-quad*    2000)  ; sweeps for the four-corner relaxation
@@ -344,11 +355,14 @@
 
 ;;  The four-bar scan: the angle at corner A is swept coarsely across
 ;;  the whole usable range, then re-swept finely round the best hit.
-(setq pool:*alfa-lo*    15.0)   ; degrees
-(setq pool:*alfa-hi*   165.0)
-(setq pool:*alfa-step*   0.25)  ; coarse sweep
+(setq pool:*alfa-lo*    15.0)   ; degrees: the flattest corner A the
+                                ; scan will consider
+(setq pool:*alfa-hi*   165.0)   ; and the sharpest; narrowing the pair
+                                ; is faster and can miss a real fit
+(setq pool:*alfa-step*   0.25)  ; coarse sweep; finer costs every run
 (setq pool:*alfa-fine*   0.3)   ; how far either side the fine sweep runs
-(setq pool:*alfa-fstep*  0.005) ; fine sweep
+(setq pool:*alfa-fstep*  0.005) ; fine sweep, and the angle the fit
+                                ; is finally read to
 
 ;;  The Grecian end solver: the diagonal angle is scanned for the one
 ;;  that reproduces the measured end width, and a fit within
@@ -356,7 +370,7 @@
 (setq pool:*grecth-step* 0.00087)  ; radians, ~ 0.05 degree
 (setq pool:*grec-fit*    0.0625)   ; accept an end within 1/16"
 
-;;; ---- what the routine offers when a measurement is missing
+;; ---- what the routine offers when a measurement is missing
 ;;;
 ;;;  None of these change the drawing on its own: each is a SUGGESTION
 ;;;  the crew takes with Enter or types over, or a floor a letter that
@@ -376,7 +390,7 @@
 ;; get a foot of correction imposed on it.
 (setq pool:*fixfloor*  12.0)
 
-;;; ---- how far a wall dim may slide to stay ON the pool
+;; ---- how far a wall dim may slide to stay ON the pool
 ;;;
 ;;;  A corner UNDER 90 degrees pokes out past its own treatment, so the
 ;;;  drawn edge near it starts a little way up the wall and the far end
@@ -388,7 +402,7 @@
 ;;;  blows this budget, and keeps the true corners instead.
 (setq pool:*hookslack* 0.0625)
 
-;;; ---- when a corner may be called square on the sheet
+;; ---- when a corner may be called square on the sheet
 ;;;
 ;;;  How far off 90 a corner may sit and still be marked "90%%d".  This
 ;;;  separates two POPULATIONS, so it wants to sit between them rather
@@ -400,7 +414,7 @@
 ;;;  than twice that margin to 135.
 (setq pool:*sq90-tol* (* pi (/ 20.0 180.0)))
 
-;;; ---- vocabulary
+;; ---- vocabulary
 ;;;
 ;;;  Bottom-type keywords, shared by the rectangle / oval / grecian
 ;;;  dispatchers.  Normal and the four special bottoms all run through
@@ -410,28 +424,28 @@
 ;;;  KEYWORDS ARE NOT FREELY EDITABLE: the palette's field map, the
 ;;;  form tests and STANDARDS.md all spell these, and the shown bracket
 ;;;  must stay the keyword list with slashes (STANDARDS section 1).
-
 (setq pool:*btypes*  "Normal Sport Wedge SLope MOdflat SHallow")
 (setq pool:*btshown* "Normal/Sport/Wedge/SLope/MOdflat/SHallow")
 
-;;; ---- nominal guide rings
+;; ---- nominal guide rings
 ;;;
 ;;;  What the Grecian and Octagon guides look like before any
 ;;;  measurement is in.  The octagon's is a REGULAR one -- 300 square,
 ;;;  cut c = 300/(2+root 2) = 87.87, so all eight sides come out 124.26
 ;;;  -- because that is what the shape being measured looks like.  (An
 ;;;  elongated guide made the sheet read like a grecian's.)
-
 (setq pool:*grecnpts* (list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0)
                             (list 410.0 125.0) (list 360.0 180.0)
                             (list 0.0 180.0) (list -50.0 125.0)
                             (list -50.0 55.0)))
+;; ...and the octagon's, which a change here resizes on screen and
+;; nowhere else -- the first answer rescales it either way.
 (setq pool:*octnpts* (list (list 87.87 0.0) (list 212.13 0.0)
                            (list 300.0 87.87) (list 300.0 212.13)
                            (list 212.13 300.0) (list 87.87 300.0)
                            (list 0.0 212.13) (list 0.0 87.87)))
 
-;;; ---- RUN STATE (not knobs)
+;;; -------------------- run state (not tunables) ----------------------
 ;;;
 ;;;  Declared here because AutoLISP wants a global declared at top
 ;;;  level, but set and cleared by the run itself -- editing a value
@@ -446,6 +460,7 @@
 (setq pool:*valnotes*    nil)             ; validation problems, for the report
 (setq pool:*smallwarned* nil)             ; the missing-style note is once a run
 (setq pool:*sideon*      nil)             ; a SIDE STANDARD block is open
+(setq pool:*flooron*     nil)             ; a floor-dims (BOTTOM) block is open
 (setq pool:*dimstyle0*   nil)             ; dim style current when POOL started
 (setq pool:*ftin*        nil)             ; T = report in feet-inches; set per
                                           ; run from the units the DRAWING was
@@ -673,15 +688,24 @@
 ;;; and the previous style comes straight back afterwards.  Every
 ;;; dimension the routine draws goes through pool:dimalg / pool:dimrot
 ;;; / pool:dimrad / pool:dimcorner1, so switching in those four covers
-;;; plan dims, hopper chain dims, corner treatments, radii and the
-;;; side-profile depths alike.  (Angular corner dims measure degrees,
-;;; not inches, so they are left alone.)
+;;; plan dims, corner treatments and radii alike.  (Angular corner
+;;; dims measure degrees, not inches, so they are left alone.)
+;;;
+;;; Two kinds of dimension are exempt, and each says so with a flag
+;;; rather than by measuring anything: a secondary sheet letter
+;;; (pool:*sideon*) and a floor dim (pool:*flooron*) -- the hopper
+;;; chains and the section depths of the BOTTOM phase, which stay in
+;;; the standard style however short a run comes out.
 
 (defun pool:dimsbegin (d / odim)
   ;; inside a SIDE STANDARD block the letter keeps that style however
   ;; small it is -- the reference sheets show a 19" S1 in SIDE
-  ;; STANDARD, not in inches
-  (if (and (< d (- pool:*smalldim* pool:*smallfuzz*)) (not pool:*sideon*))
+  ;; STANDARD, not in inches -- and inside a floor-dims block the run
+  ;; or depth keeps the standard style for the same reason: one member
+  ;; of a chain in inches while the rest read in feet is misread
+  (if (and (< d (- pool:*smalldim* pool:*smallfuzz*))
+           (not pool:*sideon*)
+           (not pool:*flooron*))
       (if (tblsearch "DIMSTYLE" pool:*smallstyle*)
           (progn
             (setq odim (getvar "DIMSTYLE"))
@@ -780,6 +804,23 @@
   (setq pool:*sideon* nil)
   (if (and odim (tblsearch "DIMSTYLE" odim))
       (command "_.-DIMSTYLE" "_Restore" odim)))
+
+;; Open / close a floor-dims block.  Everything the BOTTOM phase
+;; draws -- the hopper chains, the sport and six-sided letters, the
+;; section depths -- is dimensioned between these two, and the
+;; under-24" switch is suppressed for all of it (pool:*flooron*).
+;; Nothing is switched IN, so there is no previous style to hand back:
+;; a floor dim is drawn in whatever style the run is already in, which
+;; is the standard one unless the caller opened a block of its own
+;; (the six-sided hopper's W/L1/X open a SIDE STANDARD one, and keep
+;; that style).
+(defun pool:dimflbeg ()
+  (setq pool:*flooron* t)
+  nil)
+
+(defun pool:dimflend ()
+  (setq pool:*flooron* nil)
+  nil)
 
 ;; One aligned dim / radius dim in the SIDE STANDARD style.
 (defun pool:dimalgs (p1 p2 pt / od)
@@ -4893,6 +4934,7 @@
   ;; chain dimensions along the two centerlines, like the sheet
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" pool:*lay-dim*)
+  (pool:dimflbeg)                   ; no under-24" switch below
   ;; M/L/K def points sit on the hopper edge; their dim line floats
   ;; 30" right via the 'voff vector
   (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
@@ -4929,6 +4971,7 @@
               (pool:dimalg (list (+ x0 h g f) y0) (list (+ x0 h g f) (- y0 c2))
                            (list (+ x0 h g f (* 0.3 doff)) (- y0 (* 0.5 c2))))
               (setq pool:*profents* (cons (entlast) pool:*profents*))))))
+  (pool:dimflend)
   (setvar "CLAYER" odl)
   (setq rows (list
     (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
@@ -5150,6 +5193,7 @@
   (pool:profdraw x0 y0 total wh brks pool:*lay-pool* nil)
   (setq odl (getvar "CLAYER"))
   (setvar "CLAYER" pool:*lay-dim*)
+  (pool:dimflbeg)                   ; no under-24" switch below
   ;; plan chains, standard-hopper style
   (foreach tl (append (list (list 'pl 'pobl nil (member 0 hfx))
                             (list 'pobl 'pdfl nil (member 1 hfx)))
@@ -5170,6 +5214,7 @@
   (setq xd (if nopad (+ x0 e2 f2) (+ x0 e2 f2 (* 0.5 g))))
   (pool:dimalg (list xd y0) (list xd (- y0 hd))
                (list (+ xd (* 0.3 doff)) (- y0 (* 0.5 hd))))
+  (pool:dimflend)
   (setvar "CLAYER" odl)
   (setq rows (append
     (list (pool:vrow "SPT E2" e2r (distance (cadr (assoc 'pl gg)) (cadr (assoc 'pobl gg))) 0 hfx)
@@ -5463,6 +5508,7 @@
         (pool:hopovaldraw gg pool:*lay-pool* nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" pool:*lay-dim*)
+        (pool:dimflbeg)                   ; no under-24" switch below
         (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
                           (list 'phl 'phr nil (member 1 hfx))
                           (list 'phr 'pbrk nil (member 2 hfx))
@@ -5478,6 +5524,7 @@
                                 (if (caddr tl) (cadr (assoc 'voff gg))
                                     (list 0.0 0.0))))
           (if (cadddr tl) (pool:dimred)))
+        (pool:dimflend)
         (setvar "CLAYER" odl)
         (setq o (pool:circum (cadr (assoc 'ttop gg)) (cadr (assoc 'tip gg))
                              (cadr (assoc 'tbot gg)))
@@ -5802,6 +5849,7 @@
         (pool:hopgrecdraw gg pool:*lay-pool* six nil)
         (setq odl (getvar "CLAYER"))
         (setvar "CLAYER" pool:*lay-dim*)
+        (pool:dimflbeg)                   ; no under-24" switch below
         (foreach tl (list (list 'pl 'phl nil (member 0 hfx))
                           (list 'phl 'phr nil (member 1 hfx))
                           (list 'phr 'pbrk nil (member 2 hfx))
@@ -5844,6 +5892,7 @@
                   (pool:dimalgs (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))
                                 (pool:mid (cadr (assoc 'cb2 gg)) (cadr (assoc 'cb1 gg))))
                   (if sixbad (pool:dimred)))))
+        (pool:dimflend)
         (setvar "CLAYER" odl)
         (setq rows (list
           (pool:vrow "HOP H" hraw (distance (cadr (assoc 'pl gg)) (cadr (assoc 'phl gg))) 0 hfx)
@@ -8027,8 +8076,11 @@
     (pool:sysrestore)
     ;; DIMSTYLE is read-only to setvar, so it is put back the only way
     ;; it can be: dying inside a small-dim, cross-dim or SIDE STANDARD
-    ;; block must not leave that style current in the user's drawing
-    (setq pool:*sideon* nil)
+    ;; block must not leave that style current in the user's drawing.
+    ;; The floor-dims flag switches no style, but a run that died with
+    ;; it set would draw the NEXT pool's plan with the rule off
+    (setq pool:*sideon* nil
+          pool:*flooron* nil)
     (pool:dimsend pool:*dimstyle0*)
     (pool:pvkill)
     ;; a form must never outlive the run it was given to: left behind,
@@ -8051,6 +8103,7 @@
         pool:*smallwarned* nil
         pool:*profents* nil
         pool:*sideon* nil
+        pool:*flooron* nil
         pool:*dimstyle0* (getvar "DIMSTYLE")
         ;; report lengths follow the units the DRAWING was in before
         ;; POOL switches to architectural for its prompts: a crew whose

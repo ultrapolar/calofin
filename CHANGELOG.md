@@ -8,20 +8,144 @@ which set of them shipped together. The release name lives in
 
 ## v3.6 -- 2026-09-08
 
-POOL and SPA went over end to end: every knob either tool has now lives
-in one documented block at the top of its file, and the one prompt a
-drafter could not answer is fixed.
+Every converter gains a reverter. `XFTCONV`, `SOCONV` and `VSCONV` each
+read somebody else's export and turn it into a drawing this office can
+work on; until now the only way back was `U`, which is good for as long
+as the session lasts and no longer. A conversion is found out to be
+wrong the week after -- the survey was converted twice, the wrong file
+was opened, the sheet has to go back to whoever exported it -- and by
+then `U` is gone.
+
+So each converter now **writes down what it did**, in xdata on the
+objects it touched, and each has a command that reads that back:
+`XFTRECONV`, `SORECONV`, `VSRECONV`. The record is the whole idea: an
+undo that works from the drawing alone cannot survive a save, because
+what a conversion destroys (an erased marker, an overwritten property,
+a stripped override block) is not in the drawing any more to be read.
+
+### Added
+
+- **`XFTRECONV`** (`lisp/xftconv/`, with `XFTCONV` at v1.13) puts a
+  converted survey back: the marker and the name text the swap erased,
+  the leftover text the purge took, the `ab_pt` block off again, and
+  the x12 undone by one `SCALE` of 1/12 about the base point the
+  conversion used.
+
+  Each block carries the record of what it replaced -- the erased
+  entities group by group, plus the scale and the WCS base point, which
+  are the two numbers no object in the drawing carries. Coordinates go
+  in through `rtos` at 8 decimals, so a round trip is exact to 1e-8 of
+  a drawing unit (a hundredth of a micron on a survey in inches) rather
+  than to the last bit of the float; `tests/test_xftconv.py` measures
+  that on the site-trace sample, whose coordinates carry more decimals
+  than the record writes.
+
+  **A highlight holding two conversions is refused by name.** They were
+  scaled about different base points, and one scale back cannot undo
+  both -- so it says so rather than half-reverting one of them.
+
+- **`SORECONV`** (`lisp/soconv/`, with `SOCONV` at v1.1) moves an
+  import back onto the export's own layers. The record keeps the layer
+  each object came off, that layer's own colour, and -- only when
+  `*soconv-force-bylayer*` was on, since that is the only time the
+  conversion overwrites anything else -- the colour, linetype and
+  lineweight the forcing replaced.
+
+  A source layer `PURGE`d on the tool's own advice is re-created with
+  the colour the record kept, so taking that advice does not close the
+  way back.
+
+- **`VSRECONV`** (`lisp/vsconv/`, with `VSCONV` at v1.1) does the same
+  for a VS export, and undoes **both halves of the dimension step**:
+  the style name back in group 3, and the `ACAD`/`DSTYLE` override
+  block back on the dimension, kept verbatim as the xdata items it
+  already was. A revert that restored the style name and left the
+  overrides off would leave the dimensions drawing in a style they
+  never had, which is the same trap the conversion itself exists to
+  avoid from the other side.
+
+  Its scope carries no layer filter where `VSCONV`'s does: a converted
+  object sits on `POOL` / `POINTS` / `DIMENSION`, where this office's
+  own drawing lives too, so the record is what says which objects came
+  from an export.
+
+### Changed
+
+- **`POOL` and `SPA` join the tunables rule** (`POOL.LSP` 090826 REV24,
+  `SPA.LSP` 090826 REV15), the two biggest files in the tree and the
+  last of the drawing tools outside it. 72 knobs in POOL and 82 in SPA
+  by `tests/test_tunables.py`'s count, each written once, grouped by
+  topic, each saying what changing it does, each a row in its README's
+  Tunables table. Both files are in that test's `FILES` now, so neither
+  block can quietly grow a number back beside the code that reads it.
+
+  What moved up: the output layers and the colour each is created with
+  (POOL had `"POOL"`, `"POOL-NOTES"` and `"DIMENSION"` spelled out 67
+  times between them), the linetype patterns, the `doff`/`th` rules
+  every flow sizes its furniture with, the corner-mark proportions, the
+  report and mini-model layout, the guide colours and nominal rings,
+  the fitting engine's sweep counts and scan steps, and the suggestion
+  and fallback rules. In SPA that also brought up the two tables the
+  whole hinge pass is built on -- `spa:*foamtab*` and `spa:*hardtab*`,
+  the shop's own foam-sheet and hardware data, which sat 1,200 lines
+  down.
+
+  `spa:*lay-hinge*` names the layer the hinges are drawn on, which was
+  the literal `"COVER"` inside the draw loop (default unchanged), and
+  `pool:*lts*` is gone -- a global nothing had read since the
+  per-entity linetype scale replaced it.
+
+  Registering the two turned up a real bug in the checker itself: in
+  `assigned()` a STRING value did not take a slot, so every name/value
+  pair AFTER a string in the same `setq` was read one position out.
+  `spa:setmode` is one long `setq` with `"WATER'S EDGE"` in the middle
+  of it, so the three knobs past that string -- read there, never
+  written -- came back as writes and check 3 called three settings
+  state. Strings count like any other atom now, which is what the
+  function's own docstring already claimed.
+
+- `vsconv:restyle-dim` strips the `ACAD` application's xdata and leaves
+  every other application's where it is. In AutoCAD that is what it
+  always did (an `entget` with an application list carries only that
+  application), so nothing about a conversion changes; it is now true
+  of the repo's VM as well, which is what lets a tool keep a record of
+  its own on an object whose xdata it is editing.
+
+- `entdel` in `tests/lispvm.py` takes an attributed `INSERT`'s
+  `ATTRIB`s and `SEQEND` with it, as AutoCAD does -- attributes are
+  owned by the block reference. Erasing a point block used to leave its
+  number attribute behind as a live entity for the next sweep to trip
+  over.
+
+- **The three callout/create tools put every knob at the top**, in one
+  tunables block with a sentence each on what changing it does, and
+  join `tests/test_tunables.py` so it stays that way. Each had kept
+  some settings in a block and the rest inline. New knobs, all
+  defaulting to today's behaviour: `bp:*layer-color*`, `bp:*text-gap*`
+  (the callout's default spot, which used to be twice the ring radius,
+  so shrinking the ring moved the text too), the callout's own wording
+  (`bp:*pt-prefix*`, `bp:*tail-one*`, `bp:*tail-many*`, `bp:*unknown*`
+  -- seven string literals over four functions until now),
+  `cdo:*layer-color*`, `cdo:*exact-eps*` and `cdc:*layer-color*`.
+
+  Two renames come with it, both under STANDARDS 8.4's "only if the
+  file is otherwise being reworked": BPCALLOUT's `*BP-LAYER*` family
+  takes the file's `bp:` prefix, and CDCALLOUT's three point-classifier
+  globals take `cdo:` -- that file already spelled its other knobs
+  `cdo:*style*` and `cdo:*layer*`, so it had two schemes for its own
+  settings. Both READMEs name the old spellings for anyone whose
+  startup file sets them.
 
 ### Fixed
 
 - **A corner treatment sized at exactly its cap was refused, and the
-  maximum the prompt then printed failed the same test** (`POOL.LSP`
-  090826 REV23, `SPA.LSP` 090826 REV15). A treatment is capped at half
-  the shorter wall it sits on, so two of them can never overlap and
-  fold the perimeter -- but the cap is compared against a setback the
-  routine WORKS OUT rather than the number that was typed. A radius
-  becomes `r / tan(angle/2)`, and at a true 90-degree corner
-  `cos(45)/sin(45)` is `1.0000000000000002` in floating point, not `1`.
+  maximum the prompt then printed failed the same test** (`POOL.LSP`,
+  `SPA.LSP`). A treatment is capped at half the shorter wall it sits
+  on, so two of them can never overlap and fold the perimeter -- but
+  the cap is compared against a setback the routine WORKS OUT rather
+  than the number that was typed. A radius becomes `r / tan(angle/2)`,
+  and at a true 90-degree corner `cos(45)/sin(45)` is
+  `1.0000000000000002` in floating point, not `1`.
 
   So a 120" radius on a 240"-wide pool -- the full-round end a crew
   really does draw -- measured `120.00000000000003` against a cap of
@@ -38,45 +162,43 @@ drafter could not answer is fixed.
   size draws its four arcs, and a genuinely oversized one is still
   refused exactly once and then takes the maximum it printed.
 
-### Changed
+- **BPCALLOUT could not ring two points closer than twice its ring
+  radius.** A click was read against the rings already down even when
+  it had snapped to a survey point, so with the 5" default and two
+  points 8" apart, clicking the second landed inside the first's ring
+  and un-ringed it -- the run reported "nothing picked" and drew
+  nothing. Only a click with NO survey point under it is read against
+  the rings now; a click that snapped is the point it snapped to.
 
-- **Every knob in `POOL.LSP` and `SPA.LSP` is in one block at the top
-  of its file**, under `ADJUSTABLE CONSTANTS`, grouped by topic with an
-  explanation of what each group controls and what moves when it
-  changes -- 85 constants in POOL, 106 in SPA. Each is WRITTEN ONCE, so
-  a shop cannot retune a number in one place and leave it behind in
-  another, and a check over both files confirms every constant declared
-  is also read somewhere.
+- **`CDCALLOUT` and `CDCREATE` closed an undo group they had never
+  opened.** Both guard the `_.UNDO _Begin` behind the `UNDOCTL` check
+  -- `_Begin` with undo off errors out of the command -- and then
+  closed unconditionally, so in a drawing with undo switched off the
+  run ended on a stray `_End`. Both close only a group they opened,
+  which is what the flag was already there to say.
 
-  What moved up: the output layers and the colour each is created with
-  (POOL had `"POOL"`, `"POOL-NOTES"` and `"DIMENSION"` spelled out 67
-  times between them), the linetype patterns, the `doff`/`th` rules
-  every flow sizes its furniture with, the corner-mark proportions, the
-  report and mini-model layout, the guide colours and nominal rings,
-  the fitting engine's sweep counts and scan steps, and the suggestion
-  and fallback rules. In SPA that also brought up the two tables the
-  whole hinge pass is built on -- `spa:*foamtab*` and `spa:*hardtab*`,
-  the shop's own foam-sheet and hardware data, which sat 1,200 lines
-  down.
+### Notes
 
-  Three kinds of thing are deliberately NOT in the blocks, and each
-  block says so: run state (set and cleared by a run, not tuned), the
-  shape index tables (which corner joins which -- editing one describes
-  a different pool, it does not retune this one), and the bare
-  `1.0e-6` guards inside the geometry, which are float noise rather
-  than measurements.
+- Each reverter is on the panel under its converter, in the same
+  `Converters` column: a `RECONV` is looked for in exactly one
+  situation, and the place it is looked for is where the converter was.
+- All three records can be switched off (`*xft-record*`,
+  `*soconv-record*`, `*vsconv-record*`). With one off its converter
+  runs exactly as it did before, says so in its done line rather than
+  promising a revert, and its reverter says there is nothing to work
+  from.
+- **One thing a revert spells out rather than restores**: an object
+  that arrived carrying no colour, linetype or lineweight of its own
+  comes back carrying the explicit ByLayer (`256`, `"ByLayer"`, `-1`)
+  that means the same thing. It draws and plots identically. Nothing
+  else about a round trip is approximate.
 
-- **`spa:*lay-hinge*`** names the layer the hinges are drawn on, which
-  was the literal `"COVER"` inside the draw loop. It is cover hardware,
-  so the default is unchanged; the constant is what makes a sheet
-  showing only the water's edge retunable, and its comment says how.
-
-- `pool:*lts*` is gone -- a global nothing had read since the
-  per-entity linetype scale replaced it, still carrying the comment
-  "(legacy, unused)".
-
-- Both per-tool READMEs gained a **Tunables** section mapping the
-  groups in the block, per STANDARDS.md section 5.
+- `lisp/lazpanel/README.md`'s page tables are rewritten from the
+  panel's own tables. Four of them had drifted: the `Cover` page was
+  missing `LINGUTTER` and `LINGUTTERSCAN`, `Layout` was missing
+  `POOLSIDE`, `LAZSPA` and `LAZSTEP`, `Points` was missing
+  `POINTRENAMER`, `CONSTELLATION` and `TYLERDRONESUITE`, and `Checking`
+  was missing `ABPCHECK`.
 
 ## v3.5 -- 2026-09-02
 

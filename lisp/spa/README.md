@@ -384,7 +384,7 @@ are set for the duration of the command and restored afterwards; each
 dimension keeps the settings as its own style override, so the numbers
 stay in inches once the command is done.
 
-Defaults (the first group of the `ADJUSTABLE CONSTANTS` block at the
+Defaults (the first group of the `tunables` block at the
 top of the file — see **Tunables** below):
 
 ```lisp
@@ -525,27 +525,99 @@ its dimensions — the drawing as the order sheet shows it.
 ## Tunables
 
 **Every knob the routine has is in one block at the top of `SPA.LSP`**,
-under `ADJUSTABLE CONSTANTS`. Each one is written *once*: change a
+ruled off as `tunables`. Each one is written *once*: change a
 value there and every place that reads it follows. (Numbers still
 appear in the code below and a few happen to equal a knob above, so
 retune by editing the named constant rather than by searching for its
 value.) Each group says what it controls; the map is:
 
-| Group | What it sets |
-| --- | --- |
-| dimension text | units, precision, the inch mark, and the arrow / extension / gap sizes as multiples of the note height |
-| dimension stand-off | how far the cover's overalls sit outside it, how far the water's edge's sit inside, the inboard flat dims, the lap note |
-| corner callouts | the circled 90 mark, the `?` and `Not Given` note, and how far a radius, cut or octagon-cut callout is dragged out |
-| drawing furniture | how `doff` and `th` are sized off the spa — a floor and a divisor each |
-| hinge lettering | label height, frame width, text style, how far the label sits off its line, and the fold hinge's dash scale |
-| layers and colours | `POOL` / `COVER` / `DIMENSION` / `SPA-NOTES` / `TEXT`, the colour each is created with, the red of an adjusted letter and the cyan of a recommendation — plus `*lay-hinge*`, which is where the hinges themselves are drawn |
-| linetypes | the dashed, dotted and fold-hinge patterns, in inches, scaled to cancel `LTSCALE` |
-| dimension styles | the two style names, the water's edge's furniture factor, and the suggested cover lap |
-| **the foam sheet** | `*foamtab*` — the shop data this whole pass is built on: grade + taper give foam width, foam length and the acceptable piece counts. `*foamdflt*` is the last-resort sheet, and using it IS noted in the report. A grade whose taper only the Standard row carries falls back to Standard's numbers first, and quietly |
-| **hardware** | `*hardtab*` — what the longest hinge calls for, per grade, and the three item names in the order they are reported |
-| hinge solver | the fewest pieces a cover can be, how many extra counts to try when a spillaway will not be dodged, and how far off the edge a hinge is kept |
-| report table | row pitch, column positions, the text heights of the heading, a red failure and a cyan recommendation |
-| guide preview | the three guide colours and the nominal guide's size, letter heights and treatment cap |
+Every knob, its default and what changing it does. `tests/test_tunables.py`
+holds this table and the block together, so neither can drift from the other.
+
+| Knob | Default | What changing it does |
+| --- | --- | --- |
+| `spa:*dimlunit*` | `5` | 5 = fractional (84-1/2), 2 = decimal (84.50) |
+| `spa:*dimprec*` | `3` | 5 -> 1/8", 2 -> 3 decimal places |
+| `spa:*dimpost*` | `"\""` | dimension text Every dimension is written in standard inches whatever the host drawing is set to. Anything but 4 (Architectural) keeps the numbers in inches instead of... |
+| `spa:*dim-asz*` | `0.8` | arrow size; raise for a bolder dim |
+| `spa:*dim-exe*` | `0.6` | extension line past the dim line |
+| `spa:*dim-exo*` | `0.6` | extension line offset from the outline |
+| `spa:*dim-gap*` | `0.4` | gap round the text |
+| `spa:*dimoff*` | `36.0` | 3 ft: cover outline -> the LEFT overall dim |
+| `spa:*topoff*` | `24.0` | 2 ft: cover outline -> the TOP overall dim |
+| `spa:*flatoff*` | `18.0` | outline -> the inboard flat dims |
+| `spa:*insetfrac*` | `0.3333` | water's edge dims, a third of the way in |
+| `spa:*lapoff*` | `14.0` | how far under the cover the lap note sits |
+| `spa:*mark-r*` | `0.18` | circle radius on the corner point |
+| `spa:*mark-lead*` | `1.2` | how far out its leader runs |
+| `spa:*ng-txt*` | `0.25` | "Not Given" text height |
+| `spa:*ng-off*` | `1.45` | how far out that note sits |
+| `spa:*rad-off*` | `0.9` | radius dim, dragged out past the arc |
+| `spa:*cut-off*` | `0.6` | cut-face dim, out past the face |
+| `spa:*oct-off*` | `0.8` | the octagon's one cut callout |
+| `spa:*doff-min*` | `6.0` | never closer than 6" |
+| `spa:*doff-div*` | `12.0` | how big the drawing furniture comes out Both flows size their dimension offsets and text off the spa itself, so a 5 ft cover and a 12 ft one both come out readable: do... |
+| `spa:*th-min*` | `1.0` | never smaller than 1" |
+| `spa:*th-div*` | `40.0` | how big the drawing furniture comes out Both flows size their dimension offsets and text off the spa itself, so a 5 ft cover and a 12 ft one both come out readable: do... |
+| `spa:*hingetxth*` | `5.0` | hinge label height |
+| `spa:*hingetxw*` | `60.0` | hinge label MTEXT frame width |
+| `spa:*hingestyle*` | `"Attributes"` | label style (Standard when absent) |
+| `spa:*hingetxoff*` | `0.6` | label height multiples: line -> label |
+| `spa:*hdashmult*` | `20.0` | DASHED2 0.25" dash x 20 = 5" on paper |
+| `spa:*sfx-water*` | `"Water's Edge"` | the note stacked under every overall |
+| `spa:*sfx-cover*` | `"Cover Size"` | the note stacked under every overall |
+| `spa:*lay-water*` | `"POOL"` | water's edge perimeter (dashed) |
+| `spa:*lay-cover*` | `"COVER"` | cover size perimeter |
+| `spa:*lay-dim*` | `"DIMENSION"` | every dimension and corner mark |
+| `spa:*lay-notes*` | `"SPA-NOTES"` | corner letters, mode note, report, |
+| `spa:*lay-text*` | `"TEXT"` | the Hinge / Velcro Hinge labels |
+| `spa:*lay-hinge*` | `"COVER"` | The hinges themselves are cover hardware, so they are drawn on the cover's layer even on a sheet that shows only the water's edge (the report says so). Point this at s... |
+| `spa:*col-water*` | `4` | cyan, and only when POOL is created |
+| `spa:*col-cover*` | `6` | magenta, ditto -- an existing layer |
+| `spa:*col-dim*` | `2` | yellow, on the same terms |
+| `spa:*col-notes*` | `3` | green, on the same terms |
+| `spa:*col-text*` | `7` | white or black, whichever the |
+| `spa:*col-bad*` | `1` | red -- a letter the validator adjusted |
+| `spa:*col-advice*` | `4` | cyan -- a recommendation, not a failure |
+| `spa:*dashname*` | `"SPADASH"` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
+| `spa:*dashpat*` | `'(4.0 -3.0)` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
+| `spa:*dotname*` | `"SPADOT"` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
+| `spa:*dotpat*` | `'(0.0 -3.0)` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
+| `spa:*hdashname*` | `"DASHED2"` | the stock fold-hinge pattern |
+| `spa:*hdashpat*` | `'(0.25 -0.125)` | linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTINUOUS silently. A pattern is (dash gap ...) in inches -- positive... |
+| `spa:*ds-cover*` | `"STANDARD INCHES"` | dimension styles, one per outline A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from... |
+| `spa:*ds-water*` | `"STANDARD INCHES 0.5"` | dimension styles, one per outline A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from... |
+| `spa:*wefactor*` | `0.5` | dimension styles, one per outline A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from... |
+| `spa:*gapdflt*` | `6.0` | suggested cover lap over the water's edge |
+| `spa:*diagoff*` | `0.82842712` | Offsetting a corner by g is not the same for every treatment: a radius stays concentric (r -> r + g) and a cut face lengthens by g * (2*sqrt2 - 2). That factor, once. |
+| `spa:*capfuzz*` | `1.0e-6` | How far a corner treatment may exceed its own setback cap before the size is refused and re-asked. Float noise only -- a millionth of an inch, orders below the 1/16" a... |
+| `spa:*octeq*` | `0.125` | How far the eight sides of an octagon may differ and still count as "all equal" -- a rounded-off cut face like 39-3/8" must still read as the regular octagon it is, an... |
+| `spa:*sameeps*` | `0.0005` | ...and how far two corners' sizes may differ and still be one treatment for the Typ. rule. |
+| `spa:*rep-row*` | `2.2` | h multiples: row pitch |
+| `spa:*rep-title*` | `1.25` | h multiples: the heading's text height |
+| `spa:*rep-note*` | `1.4` | h multiples: a red failure note |
+| `spa:*rep-advice*` | `1.15` | h multiples: a cyan recommendation |
+| `spa:*rep-c1*` | `20.0` | h multiples: the TARGET column |
+| `spa:*rep-c2*` | `29.0` | the ACTUAL column; move it out if a |
+| `spa:*rep-c3*` | `38.0` | the DELTA column, on the same terms |
+| `spa:*rep-w*` | `46.0` | how wide the ruled box comes out |
+| `spa:*pv-col*` | `8` | guide outline (dark gray) |
+| `spa:*pvx-col*` | `7` | measuring tie (white) |
+| `spa:*hi-col*` | `1` | the element being asked for (red) |
+| `spa:*pv-w*` | `240.0` | nominal guide width |
+| `spa:*pv-l*` | `200.0` | nominal guide length |
+| `spa:*pv-th*` | `12.0` | guide corner-letter height |
+| `spa:*pv-tie*` | `10.0` | guide tie-letter height |
+| `spa:*pv-lbl*` | `22.0` | how far a rectangle corner letter sits out |
+| `spa:*pv-olbl*` | `20.0` | ...and an octagon one, which sits tighter |
+| `spa:*pv-cap*` | `50.0` | biggest treatment the guide will draw, |
+| `spa:*foamdflt*` | `(list (cons 48.0 96.0))` | assumed when nothing matches |
+| `spa:*foamdpc*` | `(list 2 3 4 5)` | and the counts it will accept |
+| `spa:*thermotaper*` | `"1-3/8"` | the one taper a Thermo-Light comes in |
+| `spa:*hinge-min*` | `2` | a cover is never fewer pieces than this |
+| `spa:*hinge-try*` | `3` | how many extra piece counts to try |
+| `spa:*hinge-edge*` | `0.01` | keep a hinge this far off the cover's edge |
+| `spa:*allcorners*` | `"the four corners"` | vocabulary The subject the all-same round asks about, spelled ONCE: it is the label the treatment question and its size follow-up both read ("How should the four corne... |
 
 Not in that block, on purpose: run state (the which-outline switch, the
 guide's entity list), the octagon's edge table (that is shape

@@ -186,9 +186,13 @@
 ;;;  that loaded the static name can still say which revision it holds:
 ;;;  type SPAVER.  Regenerate the pair with tools/release.py.
 
+;; NOT A KNOB: the revision this file IS, not a setting.  tools/release_lisp.py
+;; reads it to name the dated twin in releases/ and SPAVER prints it,
+;; so editing it here renames a release rather than changing anything
+;; the routine does.  Bump it when the file changes, per CLAUDE.md.
 (setq spa:*version* "090826 REV15")
 
-;;; ==================== ADJUSTABLE CONSTANTS ==========================
+;;; -------------------- tunables ----------------------------------------
 ;;;
 ;;;  EVERY KNOB THIS TOOL HAS IS IN THIS BLOCK.  Each one is WRITTEN
 ;;;  ONCE: change a value here and every place that reads it follows,
@@ -207,8 +211,10 @@
 ;;;    * RUN STATE -- spa:*form*, spa:*mode* and the rest of the
 ;;;      which-outline switch, the guide's entity list.  They are set
 ;;;      and cleared by a run, not tuned.  spa:*form* sits with the
-;;;      answer store that owns it; the rest are collected at the END
-;;;      of this block under their own heading.
+;;;      answer store that owns it; the rest are collected in the "run
+;;;      state" section ruled off directly BELOW this block -- outside
+;;;      it, which is what keeps tests/test_tunables.py's "a knob is a
+;;;      literal nothing re-assigns" true of everything in here.
 ;;;    * SHAPE STRUCTURE -- spa:*octedges*, spa:*octnames*.  Those say
 ;;;      WHICH corner joins which, not how the tool behaves: editing one
 ;;;      does not retune this routine, it describes a different spa.
@@ -220,19 +226,18 @@
 ;;;  numbers (1 red, 2 yellow, 3 green, 4 cyan, 6 magenta, 7 white/black,
 ;;;  8 gray).
 
-;;; ---- dimension text
+;; ---- dimension text
 ;;;
 ;;;  Every dimension is written in standard inches whatever the host
 ;;;  drawing is set to.  Anything but 4 (Architectural) keeps the
 ;;;  numbers in inches instead of rolling them up into feet.
-
 (setq spa:*dimlunit* 5)         ; 5 = fractional (84-1/2), 2 = decimal (84.50)
 (setq spa:*dimprec*  3)         ; 5 -> 1/8", 2 -> 3 decimal places
 (setq spa:*dimpost*  "\"")      ; suffix stuck on every measurement
 
 ;;  The dimension furniture is sized off the drawing's note height th,
 ;;  so the numbers read at any spa size.  These are the multiples of it.
-(setq spa:*dim-asz*  0.8)       ; arrow size
+(setq spa:*dim-asz*  0.8)       ; arrow size; raise for a bolder dim
 (setq spa:*dim-exe*  0.6)       ; extension line past the dim line
 (setq spa:*dim-exo*  0.6)       ; extension line offset from the outline
 (setq spa:*dim-gap*  0.4)       ; gap round the text
@@ -244,26 +249,24 @@
         "DIMTXT" "DIMASZ"
         "DIMEXE" "DIMEXO" "DIMGAP" "DIMSCALE" "DIMTIX" "DIMTOFL" "DIMATFIT"))
 
-;;; ---- where the dimension lines stand off
+;; ---- where the dimension lines stand off
 ;;;
 ;;;  The COVER's overalls go outside the drawing; the WATER'S EDGE's go
 ;;;  a third of the way into its own outline when both are drawn, hooked
 ;;;  to points on the dimension line itself so the arrows land on the
 ;;;  outline rather than trailing extension lines across the cover.
-
 (setq spa:*dimoff*    36.0)     ; 3 ft: cover outline -> the LEFT overall dim
 (setq spa:*topoff*    24.0)     ; 2 ft: cover outline -> the TOP overall dim
 (setq spa:*flatoff*   18.0)     ; outline -> the inboard flat dims
 (setq spa:*insetfrac* 0.3333)   ; water's edge dims, a third of the way in
 (setq spa:*lapoff*    14.0)     ; how far under the cover the lap note sits
 
-;;; ---- corner callouts, as multiples of doff
+;; ---- corner callouts, as multiples of doff
 ;;;
 ;;;  A radius corner takes a radius dim read from outside the arc, a cut
 ;;;  corner an aligned dim across its face, a square one the circled
 ;;;  90-degree mark of STANDARDS.md section 2, and a NotGiven corner
 ;;;  that same mark with a "?" and a "Not Given" note past its tip.
-
 (setq spa:*mark-r*    0.18)     ; circle radius on the corner point
 (setq spa:*mark-lead* 1.2)      ; how far out its leader runs
 (setq spa:*ng-txt*    0.25)     ; "Not Given" text height
@@ -272,45 +275,41 @@
 (setq spa:*cut-off*   0.6)      ; cut-face dim, out past the face
 (setq spa:*oct-off*   0.8)      ; the octagon's one cut callout
 
-;;; ---- how big the drawing furniture comes out
+;; ---- how big the drawing furniture comes out
 ;;;
 ;;;  Both flows size their dimension offsets and text off the spa
 ;;;  itself, so a 5 ft cover and a 12 ft one both come out readable:
 ;;;
 ;;;      doff = max(*doff-min*, longer overall / *doff-div*)
 ;;;      th   = max(*th-min*,   longer overall / *th-div*)
-
 (setq spa:*doff-min*  6.0)      ; never closer than 6"
 (setq spa:*doff-div* 12.0)
 (setq spa:*th-min*    1.0)      ; never smaller than 1"
 (setq spa:*th-div*   40.0)
 
-;;; ---- hinge lettering and linework
+;; ---- hinge lettering and linework
 ;;;
 ;;;  Matched to the office template's before/after sample: labels are
 ;;;  MTEXT in the Attributes style at a fixed height, bottom-centred off
 ;;;  the line; the fold hinge is drawn in the stock DASHED2 linetype at
 ;;;  an effective 5" dash.
-
 (setq spa:*hingetxth*  5.0)     ; hinge label height
 (setq spa:*hingetxw*  60.0)     ; hinge label MTEXT frame width
 (setq spa:*hingestyle* "Attributes")  ; label style (Standard when absent)
 (setq spa:*hingetxoff* 0.6)     ; label height multiples: line -> label
 (setq spa:*hdashmult* 20.0)     ; DASHED2 0.25" dash x 20 = 5" on paper
 
-;;; ---- the note stacked under every overall
-
+;; ---- the note stacked under every overall
 (setq spa:*sfx-water* "Water's Edge")
 (setq spa:*sfx-cover* "Cover Size")
 
-;;; ---- output layers and their colours
+;; ---- output layers and their colours
 ;;;
 ;;;  Made (or un-frozen, unlocked and switched back on) at the start of
 ;;;  every run by spa:layer.  Rename one here and every entity the
 ;;;  routine draws follows it; the colour is used only when the layer
 ;;;  has to be created, so a drawing that already carries the layer
 ;;;  keeps the office's own colour.
-
 (setq spa:*lay-water* "POOL")   ; water's edge perimeter (dashed)
 (setq spa:*lay-cover* "COVER")  ; cover size perimeter
 (setq spa:*lay-dim*   "DIMENSION")  ; every dimension and corner mark
@@ -322,22 +321,23 @@
 ;; report says so).  Point this at spa:*lay-water* to have them follow
 ;; whichever outline was actually drawn.
 (setq spa:*lay-hinge* "COVER")
-(setq spa:*col-water* 4)        ; cyan
-(setq spa:*col-cover* 6)        ; magenta
-(setq spa:*col-dim*   2)        ; yellow
-(setq spa:*col-notes* 3)        ; green
-(setq spa:*col-text*  7)        ; white / black
+(setq spa:*col-water* 4)        ; cyan, and only when POOL is created
+(setq spa:*col-cover* 6)        ; magenta, ditto -- an existing layer
+                                ; keeps the colour the office gave it
+(setq spa:*col-dim*   2)        ; yellow, on the same terms
+(setq spa:*col-notes* 3)        ; green, on the same terms
+(setq spa:*col-text*  7)        ; white or black, whichever the
+                                ; background makes it
 (setq spa:*col-bad*   1)        ; red -- a letter the validator adjusted
 (setq spa:*col-advice* 4)       ; cyan -- a recommendation, not a failure
 
-;;; ---- linetypes
+;; ---- linetypes
 ;;;
 ;;;  Defined here rather than loaded from acad.lin, so a failed load can
 ;;;  never fall back to CONTINUOUS silently.  A pattern is (dash gap ...)
 ;;;  in inches -- positive draws, negative gaps, 0 is a dot -- scaled per
 ;;;  entity to cancel the drawing's LTSCALE.  A spa is a fraction of a
 ;;;  pool's size, so POOL's 12" dash would read as a solid line here.
-
 (setq spa:*dashname* "SPADASH")
 (setq spa:*dashpat*  '(4.0 -3.0))
 (setq spa:*dotname*  "SPADOT")
@@ -345,13 +345,12 @@
 (setq spa:*hdashname* "DASHED2")        ; the stock fold-hinge pattern
 (setq spa:*hdashpat*  '(0.25 -0.125))
 
-;;; ---- dimension styles, one per outline
+;; ---- dimension styles, one per outline
 ;;;
 ;;;  A style the drawing already defines is used exactly as it stands --
 ;;;  the office template wins -- and one that is missing is built from
 ;;;  the standard-inches settings above, the water's edge at
 ;;;  spa:*wefactor* of the normal furniture size (the 0.5 in its name).
-
 (setq spa:*ds-cover*  "STANDARD INCHES")
 (setq spa:*ds-water*  "STANDARD INCHES 0.5")
 (setq spa:*wefactor*  0.5)
@@ -381,23 +380,22 @@
 ;;  treatment for the Typ. rule.
 (setq spa:*sameeps* 0.0005)
 
-;;; ---- the report table
-
+;; ---- the report table
 (setq spa:*rep-row*    2.2)     ; h multiples: row pitch
 (setq spa:*rep-title*  1.25)    ; h multiples: the heading's text height
 (setq spa:*rep-note*   1.4)     ; h multiples: a red failure note
 (setq spa:*rep-advice* 1.15)    ; h multiples: a cyan recommendation
 (setq spa:*rep-c1*    20.0)     ; h multiples: the TARGET column
-(setq spa:*rep-c2*    29.0)     ; ACTUAL
-(setq spa:*rep-c3*    38.0)     ; DELTA
-(setq spa:*rep-w*     46.0)     ; table width
+(setq spa:*rep-c2*    29.0)     ; the ACTUAL column; move it out if a
+                                ; measurement ever runs into it
+(setq spa:*rep-c3*    38.0)     ; the DELTA column, on the same terms
+(setq spa:*rep-w*     46.0)     ; how wide the ruled box comes out
 
-;;; ---- the guide preview
+;; ---- the guide preview
 ;;;
 ;;;  A grey nominal spa is drawn as soon as the shape is picked and the
 ;;;  element being measured turns red.  The nominal sizes below are what
 ;;;  the guide is drawn at before any measurement is in.
-
 (setq spa:*pv-col*  8)          ; guide outline (dark gray)
 (setq spa:*pvx-col* 7)          ; measuring tie (white)
 (setq spa:*hi-col*  1)          ; the element being asked for (red)
@@ -415,7 +413,7 @@
 (setq spa:*pv-cap* 50.0)        ; biggest treatment the guide will draw,
                                 ; so one huge corner cannot swallow it
 
-;;; ---- the foam sheet
+;; ---- the foam sheet
 ;;;
 ;;;  THE SHOP DATA THIS ROUTINE IS BUILT ON.  Grade and taper -- read off
 ;;;  the Spa Cover Details block, or asked -- pick a row, and the row
@@ -433,7 +431,6 @@
 ;;;  Standard sheet carries is drawn to Standard's numbers, and QUIETLY:
 ;;;  the report says nothing about it.  Only when even that misses does
 ;;;  spa:*foamdflt* below take over, and that one IS noted.
-
 (setq spa:*foamtab*
   (list
     (list "ECONOMY"     "3-2"   (list (cons 48.0 96.0))                  (list 2))
@@ -449,15 +446,14 @@
     (list "THERMOLIGHT" "1-3/8" (list (cons 53.0 nil))                   (list 2 3 4 5))))
 
 (setq spa:*foamdflt*  (list (cons 48.0 96.0)))   ; assumed when nothing matches
-(setq spa:*foamdpc*   (list 2 3 4 5))
+(setq spa:*foamdpc*   (list 2 3 4 5))  ; and the counts it will accept
 (setq spa:*thermotaper* "1-3/8")  ; the one taper a Thermo-Light comes in
 
-;;; ---- hardware called for by the LONGEST hinge, per grade
+;; ---- hardware called for by the LONGEST hinge, per grade
 ;;;
 ;;;  Each rule is (OVER <inches>) | (ALWAYS) | (NEVER) | (REQUEST), and
 ;;;  the three columns are velcro hinges, double C channel, hold down
 ;;;  kit -- in that order, which is the order they are reported in.
-
 (setq spa:*hardtab*
   (list                 ;  grade          velcro        double C      hold down
     (list "ECONOMY"     '(REQUEST)    '(REQUEST)    '(REQUEST))
@@ -465,32 +461,32 @@
     (list "ULTRA"       '(OVER 108.0) '(NEVER)      '(OVER 96.0))
     (list "THERMOLIGHT" '(ALWAYS)     '(NEVER)      '(NEVER))))
 
+;; What the three columns are called in the report, in the order the
+;; table above holds them -- rename one and the report follows.
 (setq spa:*hardnames* (list "VELCRO HINGES" "DOUBLE C CHANNEL"
                             "HOLD DOWN KIT"))
 
-;;; ---- the hinge placement solver
+;; ---- the hinge placement solver
 ;;;
 ;;;  The fewest pieces that fit the foam width are used, spaced evenly,
 ;;;  then nudged off any spillaway zone.  When no nudge works the piece
 ;;;  count is bumped and the search runs again, up to spa:*hinge-try*
 ;;;  counts past the minimum; failing everything the even layout is kept
 ;;;  and the report says which hinge is in a zone.
-
 (setq spa:*hinge-min*  2)       ; a cover is never fewer pieces than this
 (setq spa:*hinge-try*  3)       ; how many extra piece counts to try
 (setq spa:*hinge-edge* 0.01)    ; keep a hinge this far off the cover's edge
 
-;;; ---- vocabulary
+;; ---- vocabulary
 ;;;
 ;;;  The subject the all-same round asks about, spelled ONCE: it is the
 ;;;  label the treatment question and its size follow-up both read
 ;;;  ("How should the four corners be treated?", "Radius for the four
 ;;;  corners"), and the string spa:fckey matches to hand that round
 ;;;  corner A's form boxes.  Lower case, because spa:fckey folds first.
-
 (setq spa:*allcorners* "the four corners")
 
-;;; ---- RUN STATE (not knobs)
+;;; -------------------- run state (not tunables) ----------------------
 ;;;
 ;;;  Declared here because AutoLISP wants a global declared at top
 ;;;  level, but set and cleared by the run itself -- editing a value

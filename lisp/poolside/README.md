@@ -69,6 +69,14 @@ chain on one baseline below and `C` / `D` / `C2` where they fall, all on
 three layers, so a `POOLSIDE` section drops under a `POOL` plan without a
 layer to reconcile.
 
+**No dimension style is switched.** Every dim here is a floor dim -- the
+runs, the depths, `B` -- and floor dims stay in the drawing's standard
+style however short they measure, so an 18" `H` reads in feet-inches
+beside the 23'6" `F` next to it rather than dropping into an inches
+style on its own. `POOL` draws the same section under the same rule
+(REV23 on); its `STANDARD INCHES` switch is for small **plan** dims --
+corner radii and cut faces -- and `POOLSIDE` draws no plan.
+
 ## Install & run
 
 APPLOAD `POOLSIDE.lsp` (or the dated twin in `releases/`), then:
@@ -92,8 +100,6 @@ puts your setting back.
 
 | Global | Default | What it does |
 | --- | --- | --- |
-| `psd:*smalldim*` | `24.0` | runs under this are dimensioned in the small-dim style |
-| `psd:*smallstyle*` | `"STANDARD INCHES"` | that style, when the drawing has one; otherwise the current style, said once |
 | `psd:*pv-col*` / `psd:*pvx-col*` / `psd:*hi-col*` | `8` / `7` / `1` | guide outline, guide tie, and the highlight on the tie being asked |
 
 The nominal guide is drawn at `0.09 * B` for `C` and `0.20 * B` for `D`
@@ -132,5 +138,5 @@ CALOFIN_LISP_ROOT=shared python3 tests/test_poolside.py # grouped tier
 Both tiers drive `c:POOLSIDE` end to end in the AutoLISP VM: one run per
 bottom type, the `NA` / slack / negative-run paths, `G = 0` on a hopper
 and on a Sport, the mirror, the two depth range checks, `Back`, the
-small-dim style switch, and that the user's `OSMODE` and `LUNITS` come
-back.
+that a short run keeps the standard style, and that the user's `OSMODE`
+and `LUNITS` come back.
