@@ -353,6 +353,30 @@ the chart's name, so a new shape never means new code:
 | `lzf:*oaslive*` | for an oasis sheet: which routine it feeds, and which keys that shape asks for in each state of its dropdowns |
 | `lzf:*oasart*` | for an oasis sheet: the `oasis:solve` arguments its picture was built from, and the box it was scaled into |
 
+## Tunables
+
+Every one is a plain literal in the **tunables block at the top of
+`LAZFORM.lsp`**. The sheets themselves (`lzf:*charts*`, `lzf:*cross*`,
+`lzf:*picks*`, `lzf:*corners*`) are editable too, but each lives beside
+the rule that reads it.
+
+**Not tunable here, deliberately:** the stroke font and the image
+tile's colours. The grouped build drops them and takes
+`CALOFIN-LIB.lsp`'s `cal:*imgfont*` / `cal:*imgcol-*` instead, so a
+change made only here would show on the standalone file and vanish
+from `LAZPASS.lsp`.
+
+| Global | Default | What it sets |
+| --- | --- | --- |
+| `lzf:*btypes*` | `'("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow")` | the bottoms POOL draws, as POOL's own keywords -- the capitals are each one's abbreviation at the prompt. Adding a name offers it on the popup; it does not teach POOL to draw it |
+| `lzf:*ctreat*` | `'("(ask)" "Square" "Radius" "Cut" "NotGiven")` | what a corner can be: STANDARDS.md's canonical set, `(ask)` first so a row left alone sends nothing. **Order matters** -- `lzf:csized` names the sized treatments by index |
+| `lzf:*tabbudget*` | `84` | how wide the row of chart tabs may be, in DCL character cells. A ceiling: DCL does not scroll |
+| `lzf:*rowbudget*` | `92` | the same for a row of paired column boxes |
+| `lzf:*chart-w*` | `52` | the chart column's width, in character cells |
+| `lzf:*chart-a*` | `"0.72"` | and its height, as a share of that width -- a string, because DCL reads `aspect_ratio` as one |
+| `lzf:*poskey*` | `"LazForm_Pos"` | where the dialog remembers its position between restarts (the AutoCAD profile) |
+| `lzf:*recallkey*` | `"HKEY_CURRENT_USER\\Software\\Calofin\\LazForm"` | where a sheet's last accepted answers are kept for Recall, one value per chart. **The VB palette reads the same key** (`RecallStore.PoolKey`), so a sheet filled in here comes back there |
+
 ## Assumptions
 
 - POOL is loaded, and its answer store (`pool:*form*`,

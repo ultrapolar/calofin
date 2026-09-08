@@ -266,6 +266,9 @@
 ;; changes nothing but the layer, so nothing but the layer is written
 ;; down, and SORECONV puts nothing but the layer back.
 
+;; NOT A KNOB: the number of items in the fixed part above, which
+;; soconv:read indexes into.  Changing it does not change the record's
+;; shape, it stops the reader agreeing with the writer.
 (setq *soconv-record-len* 8)
 
 ;; APP's items onto ENT, leaving every OTHER application's xdata alone.

@@ -155,6 +155,8 @@ The constants at the top of `xftconv.lsp` are the whole configuration:
 | `*xft-xdata-app*` | `"XFTCONV"` | the xdata application the record lives under |
 | `*xft-num-prec*` | `8` | decimals a coordinate is written to |
 | `*xft-rebuild-color*` | `7` | colour for a layer `XFTRECONV` has to re-create |
+| `*xft-keep-common*` | `(8 62 6 370 410)` | DXF groups the record carries whatever the entity type is |
+| `*xft-keep*` | one row per type | and the groups it carries per type -- what an export writes on the five kinds of object `XFTCONV` erases. An export that writes something else onto its markers is carried by adding its group code here |
 | `*xft-marker-layer*` | `"LEICA_POINT"` | layer of the X marker (wildcards ok) |
 | `*xft-name-layer*` | `"LEICA_POINT_NAME"` | layer of the point name text |
 | `*xft-block*` | `"ab_pt"` | block that replaces the marker |

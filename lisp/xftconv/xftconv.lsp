@@ -97,6 +97,24 @@
   *xft-rebuild-color*  7                  ; colour for a layer XFTRECONV re-creates
 )
 
+;; Which DXF groups the record carries, and so which of them XFTRECONV
+;; can put back.  These are what an export writes on the five entity
+;; types XFTCONV erases; an export that writes something else onto its
+;; markers -- a thickness, a transparency -- is carried by adding its
+;; group code here, and nothing else in the file changes.  A code is
+;; read back as a point (10, 11), a real (39 40 41 50 51), an integer
+;; (62 66 70-73 370) or a string, by xft:group, so a code of a kind not
+;; in one of those four lists comes back as text.
+(setq
+  *xft-keep-common* '(8 62 6 370 410)     ; carried whatever the type is
+  *xft-keep*                              ; and these, per type
+  '(("LINE"   (10 11))
+    ("POINT"  (10 50))
+    ("CIRCLE" (10 40))
+    ("TEXT"   (1 7 10 11 40 41 50 51 71 72 73))
+    ("MTEXT"  (1 3 7 10 40 41 50 71 72)))
+)
+
 ;; The site-trace flavour.  Same feet, same block out the other end, but
 ;; the marker is a small CIRCLE instead of an X and it appears on three
 ;; purpose layers rather than one - POOL_POINTS for the pool corners,
@@ -296,18 +314,18 @@
 ;;;  general entity copier here would be claiming more than the tool
 ;;;  can test.
 
+;; NOT A KNOB: these five characters are the grammar itself, and
+;; xft:esc, xft:split and xft:unesc all read this list -- but changing
+;; it changes what an ALREADY WRITTEN record means, so a drawing
+;; converted before the change could not be read after it.  The list is
+;; here so the three helpers cannot disagree about it, not so it can be
+;; edited.  (Which groups the record carries IS tunable: *xft-keep* is
+;; in the block at the top.)
 (setq *xft-delims* '("\\" ";" "|" "=" ","))
 
-;; The groups carried, per type.  The common ones ride on everything.
-(setq *xft-keep-common* '(8 62 6 370 410))
-(setq *xft-keep*
-  '(("LINE"   (10 11))
-    ("POINT"  (10 50))
-    ("CIRCLE" (10 40))
-    ("TEXT"   (1 7 10 11 40 41 50 51 71 72 73))
-    ("MTEXT"  (1 3 7 10 40 41 50 71 72))))
-
-;; entmake wants the subclass markers the type belongs to.
+;; NOT A KNOB: AutoCAD's own subclass names, which entmake wants and
+;; will not accept a substitute for.  A type is added here when it is
+;; added to *xft-keep*; neither name in a row is a choice.
 (setq *xft-subclass*
   '(("LINE"   "AcDbLine")
     ("POINT"  "AcDbPoint")

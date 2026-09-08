@@ -101,7 +101,76 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.5")
+(setq *lazstep-version* "v1.6")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them:
+;;;    lzt:*types*       the three routines, their titles and entry points
+;;;    lzt:*asks* lzt:*ask-common*
+;;;                      the questions each routine asks beyond the chart
+;;;  The VB palette's step sheets are generated from lzt:chart for every
+;;;  count up to the ceiling below (tools/gen_ui_charts.py), so a change
+;;;  to any of the frame numbers here is a regeneration there.
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (lzt:*font*, lzt:*font-*, lzt:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;;  THE FRAME THE CHART IS DRAWN IN.  Everything is in PER-MILLE of the
+;;  picture, x and y, y down -- the same convention as an image tile,
+;;  so the only conversion at draw time is a multiply.  Integers, so
+;;  nothing depends on float formatting and two runs of the generator
+;;  agree to the unit.
+;;
+;;  The picture is one tall frame with the PLAN in the top third, the
+;;  tread dimension row(s) under it, and the SIDE PROFILE below that.
+;;  One coordinate space, one drawing engine, one set of bands.
+(setq lzt:*plan-x0*   100)      ; the wall, or the corner
+(setq lzt:*plan-x1*   860)      ; the far end of the run
+(setq lzt:*plan-yc*   180)      ; the run's centre line
+(setq lzt:*plan-hh*   120)      ; half the plan's opening at the far end
+(setq lzt:*width-x*   930)      ; where a whole-run width dim stands
+(setq lzt:*chord-x1*  860)      ; the last chord across a hemi curve
+(setq lzt:*curve-rx*  840)      ; ...whose crown sits beyond it, at x0 + this
+(setq lzt:*tread-y0*  385)      ; the tread dimension row
+(setq lzt:*tread-y1*  445)      ; ...and the second one, when N needs it
+(setq lzt:*one-row*     4)      ; treads that fit one row of boxes
+(setq lzt:*prof-x*    860)      ; top of the flight, x...
+(setq lzt:*prof-y*    540)      ; ...and y: the profile hangs from here
+(setq lzt:*prof-w*    760)      ; the flight's whole run...
+(setq lzt:*prof-h*    450)      ; ...and its whole drop
+(setq lzt:*prof-gap*   40)      ; how far a depth dim stands off its step
+
+;;  THE CEILING.  DCL will not scroll and a dialog taller than the
+;;  screen does not open at all, so the count has to stop somewhere.
+;;  Eight steps is one row of eight width boxes plus five rows of
+;;  paired depth boxes beside a twenty-cell chart, which fits a laptop
+;;  screen; nine does not reliably, and nothing here can ask the screen
+;;  how tall it is.  The VB palette offers exactly the counts a sheet
+;;  was generated for, up to this number (ChartCatalog.MaxSteps).
+(setq lzt:*max-steps* 8)
+
+;; The chart column: width in cells, its total height in rows spread
+;; over the bands, and the edit_width of a box wedged into the drawing.
+(setq lzt:*chart-w* 58)
+(setq lzt:*chart-h* 20)
+(setq lzt:*wedge-ed* 5)
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall -- one registry value per routine AND
+;; count ("CORNERSTP-3"), because a three-step sheet recalled onto a
+;; five-step drawing would put numbers against treads they were never
+;; measured on.  The VB palette reads the same key and slot
+;; (ui/calofin_net/StepFormView.vb).
+(setq lzt:*poskey* "LazStep_Pos")
+(setq lzt:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazStep")
 
 ;;; -------------------- the three routines -------------------------------
 ;;;  Name, what the tab calls it, and the entry point its store feeds.
@@ -203,39 +272,6 @@
 (setq lzt:*font-h* 60)          ; glyph cell height, tenths
 (setq lzt:*font-adv* 56)        ; pen advance per character, tenths
 
-;;; -------------------- the frame the chart is drawn in ------------------
-;;;  Everything is in PER-MILLE of the picture, x and y, y down -- the
-;;;  same convention as an image tile, so the only conversion at draw
-;;;  time is a multiply.  Integers, so nothing depends on float
-;;;  formatting and two runs of the generator agree to the unit.
-;;;
-;;;  The picture is one tall frame with the PLAN in the top third, the
-;;;  tread dimension row(s) under it, and the SIDE PROFILE below that.
-;;;  One coordinate space, one drawing engine, one set of bands.
-
-(setq lzt:*plan-x0*   100)      ; the wall, or the corner
-(setq lzt:*plan-x1*   860)      ; the far end of the run
-(setq lzt:*plan-yc*   180)      ; the run's centre line
-(setq lzt:*plan-hh*   120)      ; half the plan's opening at the far end
-(setq lzt:*width-x*   930)      ; where a whole-run width dim stands
-(setq lzt:*chord-x1*  860)      ; the last chord across a hemi curve
-(setq lzt:*curve-rx*  840)      ; ...whose crown sits beyond it, at x0 + this
-(setq lzt:*tread-y0*  385)      ; the tread dimension row
-(setq lzt:*tread-y1*  445)      ; ...and the second one, when N needs it
-(setq lzt:*one-row*     4)      ; treads that fit one row of boxes
-(setq lzt:*prof-x*    860)      ; top of the flight
-(setq lzt:*prof-y*    540)
-(setq lzt:*prof-w*    760)      ; the flight's whole run...
-(setq lzt:*prof-h*    450)      ; ...and its whole drop
-(setq lzt:*prof-gap*   40)      ; how far a depth dim stands off its step
-
-;;  THE CEILING.  DCL will not scroll and a dialog taller than the
-;;  screen does not open at all, so the count has to stop somewhere.
-;;  Eight steps is one row of eight width boxes plus five rows of
-;;  paired depth boxes beside a twenty-cell chart, which fits a laptop
-;;  screen; nine does not reliably, and nothing here can ask the screen
-;;  how tall it is.
-(setq lzt:*max-steps* 8)
 
 ;;; -------------------- generating the chart -----------------------------
 ;;;  A chart is (type title (outline ...) (dimension ...) (cut ...)).
@@ -533,7 +569,6 @@
 (setq lzt:*chart* nil)          ; the chart generated for that count
 (setq lzt:*focus* nil)          ; the key whose box has the caret
 (setq lzt:*pos* nil)            ; where the dialog was last standing
-(setq lzt:*poskey* "LazStep_Pos") ; ...in the profile, kept over a restart
 (setq lzt:*page* 1)             ; which page is open
 (setq lzt:*go* nil)             ; the type a tab click asked for
 (setq lzt:*msg* "")             ; what page one has to say about the count
@@ -614,8 +649,7 @@
 ;;;  the whole of the "nothing happened" case -- no message needed, and
 ;;;  the state line reports the fill by moving on its own.
 
-(setq lzt:*recallkey*
-      "HKEY_CURRENT_USER\\Software\\Calofin\\LazStep")
+;;  (lzt:*recallkey* itself is set in the TUNABLES block at the top of the file.)
 
 ;;  A sheet is stored as one string, "key=typed;key=typed".  A value
 ;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
@@ -1180,9 +1214,6 @@
 
 ;;; -------------------- the generated DCL --------------------------------
 
-(setq lzt:*chart-w* 58)         ; the chart column, in character cells
-(setq lzt:*chart-h* 20)         ; its total height, spread over the bands
-(setq lzt:*wedge-ed* 5)         ; a wedge box's edit_width
 
 ;; character cells across for a per-mille x
 (defun lzt:cellx (v) (/ (* v lzt:*chart-w*) 1000.0))

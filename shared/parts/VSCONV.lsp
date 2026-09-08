@@ -243,6 +243,10 @@
 ;; wrapper of its own -- and must not be given one, because AutoCAD
 ;; refuses xdata whose braces do not balance.
 
+;; NOT A KNOB: the number of items in the fixed part above, which
+;; vsconv:read indexes into and after which the override block starts.
+;; Changing it does not change the record's shape, it stops the reader
+;; agreeing with the writer.
 (setq *vsconv-record-len* 9)
 
 ;; APP's items onto ENT, leaving every OTHER application's xdata alone.

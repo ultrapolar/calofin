@@ -27,7 +27,7 @@
 ;;;       are asked to pick the two you mean.
 ;;;   2.  If the two walls intersect at a point, that intersection is
 ;;;       the starting point.
-;;;   3.  Choose the draw direction [Inside out/Outside in]:
+;;;   3.  Choose the draw direction [Inside/Outside]:
 ;;;         INSIDE OUT (default) - steps are built from the corner out
 ;;;         toward the pool from given step treads and step widths.
 ;;;         OUTSIDE IN - the furthest (outermost) step is placed first
@@ -139,23 +139,17 @@
 ;;;   clears the widest tread in the flight, which is what keeps both
 ;;;   extension lines running forward, out of the steps.
 ;;;
-;;; OPTIONAL SETTINGS (set these before running the command)
-;;;   *CS-WIDTH-TOL*      step width tolerance in drawing units.  When
-;;;                       nil (the default) it is 1/8" converted through
-;;;                       the drawing's INSUNITS setting.
-;;;   *CS-DEPTH-DIMSTYLE* dim style for step-tread dims (also used by
-;;;                       the side-profile dims).
-;;;   *CS-WIDTH-DIMSTYLE* dim style for step-width dims.
-;;;   *CS-DIM-LAYER*      layer for the dimensions.  When nil (the
-;;;                       default) the current layer is used.
-;;;   *CS-PROFILE-DIMGAP* how far the side profile's dims stand off the
-;;;                       flight, on top of the clearance the geometry
-;;;                       needs.  nil (the default) is four text
-;;;                       heights or three quarters of a tread,
-;;;                       whichever is more, so the fan keeps its
-;;;                       proportions whether or not the drawing has a
-;;;                       dim scale set up.  It also sets how much
-;;;                       further out again the overall depth sits.
+;;; THE SETTINGS
+;;;   Every number this routine can be told to draw differently is a
+;;;   setting at the top of the file, under SETTINGS, one per knob with
+;;;   what it does and what it defaults to - the width tolerance and the
+;;;   inches it is derived from, the two dim styles and the dim layer,
+;;;   how far the tread chain stands off the run and how far the width
+;;;   dims nest behind it, the nearly-parallel warning, and the side
+;;;   profile's dim gap.  setq one before running the command and the
+;;;   next run picks it up.  There is nothing to change further down:
+;;;   the code reads every one of them through a helper that falls back
+;;;   to the shipped default when the value cannot be used.
 ;;;
 ;;; NOTES
 ;;;   - Geometry is assumed to be drawn in plan view.  The routine warns
@@ -174,21 +168,80 @@
 ;;;     picks are always made by hand.
 ;;; ======================================================================
 
-;; Settings - only defined if not already set, so the two routines that
-;; share them stay in sync no matter which file loads first.
-(if (not (boundp '*cs-width-tol*))      (setq *cs-width-tol* nil))
-(if (not (boundp '*cs-dim-layer*))      (setq *cs-dim-layer* nil))
+;;; ------------------------------ SETTINGS ------------------------------
+;;;  THE KNOBS, all of them, in one place.  Each is defined only if it
+;;;  is not already set, so the three step routines share ONE set of
+;;;  settings whichever file loads first and a value set before loading
+;;;  them stands.  setq one at the command line - or in acaddoc.lsp -
+;;;  and the next run picks it up.
+;;;
+;;;  Deliberately NOT settings: the epsilons the geometry compares
+;;;  against (a point is on a line or it is not), the temporary vectors
+;;;  the run previews itself with, the direction the side profile reads
+;;;  (down and to the left, the way the shop's elevations do), and the
+;;;  bead itself - that is AUTOBEAD's work, on AUTOBEAD's own settings.
+
+;; Step width tolerance, in drawing units: a step whose requested width
+;; is within this of the wall opening it lands in is snapped to the
+;; walls; any other width is held exactly and breaks away from them.
+;; nil = derive it from *cs-tol-inch* through the drawing's INSUNITS.
+(if (not (boundp '*cs-width-tol*)) (setq *cs-width-tol* nil))
+
+;; What that tolerance is in INCHES when it is derived - the shop reads
+;; it as 1/8".  Raise it to let a wider mismatch still snap to the
+;; walls; 0.0 snaps only an exact fit.
+(if (not (boundp '*cs-tol-inch*)) (setq *cs-tol-inch* 0.125))
+
+;; Dim style for the step-tread dims - the side profile's depth dims
+;; use it too.  A style the drawing does not have is reported at the
+;; start of the run and the current style is used instead.
 (if (not (boundp '*cs-depth-dimstyle*)) (setq *cs-depth-dimstyle* "STANDARD INCHES"))
+
+;; Dim style for the step-width dims, with the same fallback.
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
-;; How far the side profile's dims stand off the flight, on top of the
-;; clearance the geometry itself needs.  nil = four text heights, which
-;; is what the shop's own elevations read like; raise it to open the
-;; fan out further, lower it to tuck the dims in.
+
+;; Layer the dimensions are drawn on.  nil = the current layer; a layer
+;; that is missing, off, frozen or locked is reported and the current
+;; layer is used, so a run never draws dims where they cannot be seen.
+(if (not (boundp '*cs-dim-layer*)) (setq *cs-dim-layer* nil))
+
+;; How far the step-tread dim chain stands off the run's axis, in TEXT
+;; HEIGHTS - so it tracks DIMSCALE (or the annotation scale) instead of
+;; the drawing's size.  2.0 keeps the chain clear of its own text.
+(if (not (boundp '*cs-dim-offset*)) (setq *cs-dim-offset* 2.0))
+
+;; How far a step-width dim sits behind the corner, in text heights, on
+;; top of half that step's own width.  The half-width is what nests the
+;; wider steps progressively further out; this is the gap on top of it.
+(if (not (boundp '*cs-dim-nest*)) (setq *cs-dim-nest* 1.5))
+
+;; CORNERSTP only.  The tread chain also clears this fraction of the
+;; first step's width, so a wide run does not run its chain through the
+;; steps; the larger of it and *cs-dim-offset* wins.
+(if (not (boundp '*cs-chain-frac*)) (setq *cs-chain-frac* 0.2))
+
+;; CORNERSTP only.  How close to parallel, in DEGREES, the two selected
+;; walls may be before the run says the corner it found is a long way
+;; off.  It warns and carries on - it never refuses the selection.
+(if (not (boundp '*cs-parallel-tol*)) (setq *cs-parallel-tol* 1.0))
+
+;; How far the side profile's dims stand off the flight, in drawing
+;; units, on top of the clearance the geometry itself needs.  nil = the
+;; larger of the two terms below, which is what the shop's own
+;; elevations read like; raise it to open the fan out further, lower it
+;; to tuck the dims in.  It also sets how much further out again the
+;; overall depth sits.
 (if (not (boundp '*cs-profile-dimgap*)) (setq *cs-profile-dimgap* nil))
+
+;; The two terms of that default: text heights, and a fraction of the
+;; widest tread in the flight.  Keeping both is what makes the fan hold
+;; its proportions whether or not the drawing has a dim scale set up.
+(if (not (boundp '*cs-profile-gap-txt*)) (setq *cs-profile-gap-txt* 4.0))
+(if (not (boundp '*cs-profile-gap-tread*)) (setq *cs-profile-gap-tread* 0.75))
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.0") ; printed on load and at command start so a
+(setq *cs-version* "v4.1") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -399,19 +452,59 @@
   (cs-mid2 (cdr (assoc 10 ed)) (cdr (assoc 11 ed))))
 
 ;;; ------------------------- setting helpers ----------------------------
+;;;  Every setting is read through one of these rather than straight out
+;;;  of the global, and the fallback in each is the value the SETTINGS
+;;;  block initialises that setting to: a setting somebody set to
+;;;  something unusable - a string where a number belongs, a symbol -
+;;;  then costs the shipped behaviour and nothing else, instead of
+;;;  failing in the middle of a run.  tests/test_steps_settings.py holds
+;;;  the two copies of each number together.
 
-;; 1/8" expressed in the drawing's units (INSUNITS); inches if unitless
-(defun cs-autotol ( / iu)
-  (setq iu (getvar "INSUNITS"))
-  (cond ((= iu 1) 0.125)            ; inches
-        ((= iu 2) (/ 0.125 12.0))   ; feet
-        ((= iu 4) 3.175)            ; millimeters
-        ((= iu 5) 0.3175)           ; centimeters
-        ((= iu 6) 0.003175)         ; meters
-        (T        0.125)))          ; unitless - assume inches
+;; A setting that has to be a number: V when it is one, DFLT when it is
+;; not.
+(defun cs-num (v dflt) (if (numberp v) v dflt))
+
+;; *cs-tol-inch* expressed in the drawing's units (INSUNITS); inches
+;; when the drawing is unitless
+(defun cs-autotol ( / iu b)
+  (setq iu (getvar "INSUNITS")
+        b  (cs-num *cs-tol-inch* 0.125))
+  (cond ((= iu 2) (/ b 12.0))     ; feet
+        ((= iu 4) (* b 25.4))     ; millimeters
+        ((= iu 5) (* b 2.54))     ; centimeters
+        ((= iu 6) (* b 0.0254))   ; meters
+        (T        b)))            ; inches, or unitless - assume inches
 
 (defun cs-tolerance ( )
   (if (numberp *cs-width-tol*) *cs-width-tol* (cs-autotol)))
+
+;; The nearly-parallel warning threshold in RADIANS, which is what the
+;; angle test has; the setting is in degrees, which is how a drafter
+;; reads it.
+(defun cs-partol ( ) (* pi (/ (cs-num *cs-parallel-tol* 1.0) 180.0)))
+
+;; How far the step-tread dim chain stands off the run's axis.
+(defun cs-dimoff (txth) (* (cs-num *cs-dim-offset* 2.0) txth))
+
+;; How far a step-width dim sits behind the corner: half that step's
+;; own width - which is what nests the wider steps further out - plus
+;; the standoff on top of it.
+(defun cs-nestoff (w txth)
+  (+ (* 0.5 w) (* (cs-num *cs-dim-nest* 1.5) txth)))
+
+;; The tread chain's standoff off the bisector, which also clears a
+;; fraction of the first step's width so a wide run keeps its chain out
+;; of the steps.
+(defun cs-chainoff (w txth)
+  (max (cs-dimoff txth) (* (cs-num *cs-chain-frac* 0.2) w)))
+
+;; How far the side profile's dims stand off the flight, WIDEST being
+;; the widest tread in it.
+(defun cs-pgap (txth widest)
+  (if (numberp *cs-profile-dimgap*)
+    *cs-profile-dimgap*
+    (max (* (cs-num *cs-profile-gap-txt* 4.0) txth)
+         (* (cs-num *cs-profile-gap-tread* 0.75) widest))))
 
 ;; annotation text height in drawing units; DIMSCALE is 0 for
 ;; annotative dim styles, where the annotation scale governs instead
@@ -839,7 +932,7 @@
            (exit)))
   (setq ang (abs (- (angle (car w1) (cadr w1)) (angle (car w2) (cadr w2)))))
   (while (> ang pi) (setq ang (- ang pi)))
-  (if (or (< ang 0.0175) (> ang (- pi 0.0175)))
+  (if (or (< ang (cs-partol)) (> ang (- pi (cs-partol))))
     (princ (strcat "\nWARNING: the two walls are nearly parallel; the"
                    " corner is "
                    (rtos (distance corner (cs-mid2 (car w1) (cadr w1))))
@@ -1098,13 +1191,12 @@
                     (if dimflag
                       (progn
                         (if (null offd)
-                          (setq offd (max (* 2.0 txth) (* 0.2 w))))
+                          (setq offd (cs-chainoff w txth)))
                         ;; step width: nested just outside the corner
                         (cs-dim *cs-width-dimstyle* e1 e2
                                 (cs-add corner
                                         (cs-scl bis
-                                                (- (+ (* 0.5 w)
-                                                      (* 1.5 txth))))))
+                                                (- (cs-nestoff w txth)))))
                         ;; step tread: chain link back out to the
                         ;; previous (next-further-out) tread
                         (if pprev
@@ -1240,7 +1332,7 @@
             (progn
               (setq w (distance e1 e2))
               ;; fix the tread chain's side offset once, off the bisector
-              (if (null offd) (setq offd (max (* 2.0 txth) (* 0.2 w))))
+              (if (null offd) (setq offd (cs-chainoff w txth)))
               ;; step tread: link of a chain along the bisector, from the
               ;; previous tread crossing (p - bis*dep) to this one (p)
               (cs-dim *cs-depth-dimstyle*
@@ -1252,8 +1344,7 @@
               ;; wider (deeper) steps stack progressively further out
               (cs-dim *cs-width-dimstyle*
                       e1 e2
-                      (cs-add corner
-                              (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))))
+                      (cs-add corner (cs-scl bis (- (cs-nestoff w txth)))))))
           (setq prevL e1 prevR e2 pprev p drawn (1+ drawn)
                 slog (cons (list (cs-since mark) svdist svl svr svp svt svn)
                            slog)
@@ -1290,12 +1381,12 @@
              ;; its length, placed behind the wall
              (cs-dim *cs-width-dimstyle* bns bnff
                      (cs-add (cs-mid2 bns bnff)
-                             (cs-scl bnrm (- (+ bno (* 2.0 txth))))))
+                             (cs-scl bnrm (- (+ bno (cs-dimoff txth))))))
              ;; its offset off the wall, just past the cap
              (cs-dim *cs-depth-dimstyle* bnfar bnff
                      (cs-add (cs-mid2 bnfar bnff)
                              (cs-scl (cs-unit (cs-vec corner bnfar))
-                                     (* 2.0 txth))))))
+                                     (cs-dimoff txth))))))
          (princ (strcat "\nBench drawn: " (rtos (distance bns bnff))
                         " along the wall, " (rtos bno)
                         " off it, ending on step " (itoa bnk) "."))))))
@@ -1407,14 +1498,9 @@
                       ;; in one chain.  Clearing the widest tread is what
                       ;; keeps BOTH extension lines running forward, out of
                       ;; the flight; the gap on top of that is what makes
-                      ;; the fan readable, and *cs-profile-dimgap* sets it.
-                      ;; four text heights, or three quarters of a tread -
-                      ;; whichever is more, so the fan keeps its proportions
-                      ;; whether or not the drawing has a dim scale set up
-                      (setq pgap (cond ((numberp *cs-profile-dimgap*)
-                                        *cs-profile-dimgap*)
-                                       ((max (* 4.0 txth)
-                                             (* 0.75 (apply 'max tds)))))
+                      ;; the fan readable, and cs-pgap - *cs-profile-dimgap*
+                      ;; and the two terms of its default - is what sets it
+                      (setq pgap (cs-pgap txth (apply 'max tds))
                             pfo  (+ (apply 'max tds) pgap)
                             ix   1)
                       (while (< ix (length cnrs))
@@ -1447,11 +1533,14 @@
   (if (and diag (nth 3 diag)) (redraw (nth 3 diag) 4))
   (redraw)
   (if oldstyle (cs-setstyle oldstyle))   ; back to the entry dim style
-  (command "_.UNDO" "_End")
+  ;; close only a group this run opened: in a drawing with UNDO off
+  ;; none was, and _End on no group is an error of its own
+  (if undoflag
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (if oldce (setvar "CMDECHO" oldce))
   (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
-  (setq undoflag nil)
 
   ;; ---- 11. bead the steps -----------------------------------------------
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
@@ -1572,7 +1661,7 @@
   (princ "\n  - optionally a chamfer diagonal or a fillet arc with them")
   (princ "\n  - more than two straight walls: it asks you to pick the two")
   (princ "\nTHE PROMPTS, IN ORDER")
-  (princ "\n  1. Draw steps [Inside out/Outside in]")
+  (princ "\n  1. Draw steps [Inside/Outside]")
   (princ "\n     Inside out: corner outward - each step asks step tread,")
   (princ "\n       then width (Enter fits the step to the walls).")
   (princ "\n     Outside in: the width of the furthest step places it")
@@ -1674,13 +1763,13 @@
     (cs-conn prevL e1 w1 w2)
     (cs-conn prevR e2 w1 w2)
     (setq w (distance e1 e2))
-    (if (null offd) (setq offd (max (* 2.0 txth) (* 0.2 w))))
+    (if (null offd) (setq offd (cs-chainoff w txth)))
     (cs-dim *cs-depth-dimstyle*
             (cs-add p (cs-scl bis (- dep))) p
             (cs-add (cs-add p (cs-scl bis (* -0.5 dep)))
                     (cs-scl perp offd)))
     (cs-dim *cs-width-dimstyle* e1 e2
-            (cs-add org (cs-scl bis (- (+ (* 0.5 w) (* 1.5 txth))))))
+            (cs-add org (cs-scl bis (- (cs-nestoff w txth)))))
     (cond
       ((= n 1)
        (princ "\n[2] Step 1: step tread 24, width 48.  The wall opening")
@@ -1700,8 +1789,9 @@
     (setq prevL e1 prevR e2 n (1+ n)))
 
   (if oldstyle (cs-setstyle oldstyle))
-  (command "_.UNDO" "_End")
-  (setq undoflag nil)
+  (if undoflag                           ; only a group this run opened
+    (progn (command "_.UNDO" "_End")
+           (setq undoflag nil)))
   (setvar "CMDECHO" oldce)
   (princ "\n[5] Done.  One U removes this whole demo.  Now try it for")
   (princ "\n    real: type CORNERSTP, select two wall lines of a corner,")

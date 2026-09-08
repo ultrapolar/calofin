@@ -941,9 +941,16 @@ BUILTINS[Sym('grdraw')] = lambda vm, a: NIL
 def _strcat(vm, a):
     """AutoCAD's strcat takes strings and nothing else -- a nil that
     reached it is a bug in the routine, so it dies here rather than
-    quietly stringifying itself."""
+    quietly stringifying itself.
+
+    A SYMBOL is not a string either, and that one needs saying because
+    Sym subclasses str here: without the isinstance below, a routine
+    that strcats a symbol -- an entry point handed 'pool:run instead of
+    "pool:run" -- reads as fine in the VM and dies in AutoCAD with bad
+    argument type: stringp.  (vl-princ-to-string or princ is the way to
+    name a symbol in a message.)"""
     for i, x in enumerate(a):
-        if not isinstance(x, str):
+        if isinstance(x, Sym) or not isinstance(x, str):
             raise LispError(
                 f"strcat: bad argument type: stringp {x!r} (arg {i + 1})", vm)
     return ''.join(a)
