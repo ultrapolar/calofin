@@ -94,171 +94,204 @@
 ;; Version banner, shown on load and at the top of every run's report.
 (setq *constellation-version* "v1.4")
 
-;;; ----------------------------------------------------------------------
-;;;  Tunables  --  every knob this file has, in one place
-;;;
-;;;  Nothing below this section is meant to be edited to retune the tool:
-;;;  the code reads these globals and only these.  Set one AFTER the file
-;;;  has loaded (a startup .lsp, or straight at the command line) rather
-;;;  than editing the value here, so the released file stays as shipped:
-;;;
-;;;      (setq cst:*flag* 0.5)
-;;;
-;;;  Each knob says what it is measured in and what moving it does.  The
-;;;  groups run in the order the command meets them: what it draws on,
-;;;  the survey block, the point count, a prompt default, the solve, the
-;;;  turn-to-fit, the report, the drawing sizes -- and then the things
-;;;  that LOOK like knobs and are not, with the reason each stays put.
-;;; ----------------------------------------------------------------------
+;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafter might reasonably want different is set HERE and
+;; nowhere else: the code below reads these names and carries no bare
+;; numbers of its own.  Each knob says what CHANGING it does.  Change a
+;; value, save, APPLOAD again - or (setq cst:*name* value) at the
+;; command line for one session.  Every one of them is a row in
+;; README.md's Tunables table, and tests/test_tunables.py holds the two
+;; together.
+;;
+;; Distances are in inches throughout (1 drawing unit = 1 inch).
+;;
+;; The groups run in the order the command meets them: what it draws
+;; on, the survey block, how many points, a prompt default, the solve,
+;; the turn-to-fit, the report, the drawing sizes.
 
-;; ---- Layers, and the colour each is given ------------------------------
-;; Where each part of the result goes, and the ACI colour the layer gets
-;; IF THIS COMMAND HAS TO CREATE IT.  A layer the drawing already has
-;; keeps its own colour -- it is only switched on, thawed and unlocked if
-;; it needs to be, so the result is never drawn where nobody can see it.
-;; ACI: 1 red, 2 yellow, 3 green, 4 cyan, 5 blue, 6 magenta, 7 white,
-;; 8 grey.  Grey for the frame and cyan for the legend, so neither
-;; competes with the result; the result itself lands in the point and
-;; dimension colours the rest of the toolkit uses.
+;; ---- where the result goes -----------------------------------------------
+
+;; The layer each part of the result lands on.  Point one at a layer
+;; the office already uses and the result joins that layer's work;
+;; point it somewhere new and it stands apart, ready to freeze on its
+;; own.
 (setq cst:*space-layer*   "CONSTELLATION-SPACE")   ; the rectangle asked for
-(setq cst:*space-color*   8)                       ; grey
 (setq cst:*guide-layer*   "CONSTELLATION-GUIDE")   ; the starting oval, erased
-(setq cst:*guide-color*   4)                       ; cyan
 (setq cst:*outline-layer* "CONSTELLATION")         ; the ring through A B C ...
-(setq cst:*outline-color* 3)                       ; green
 (setq cst:*dim-layer*     "DIMENSION")             ; as AUTODIM and WCALST
-(setq cst:*dim-color*     2)                       ; yellow
 (setq cst:*point-layer*   "POINTS")                ; as ABCDEF and XYPLOT
-(setq cst:*point-color*   2)                       ; yellow
 
-;; ---- The survey block --------------------------------------------------
-;; ABCDEF's survey block and its attribute tag, so ABHD / CABHD / ABFIND /
-;; LHD / BPCALLOUT read this import the same as any other.  Change these
-;; only together with ABCDEF and XYPLOT, or those readers stop seeing the
-;; points.  The block's own geometry -- an attribute one unit right and
-;; two down -- is ABCDEF's definition and is NOT a knob (see the end of
-;; this section).
+;; The ACI colour each of those layers is CREATED with.  Moving one
+;; changes nothing in a drawing that already has the layer -- an
+;; existing layer keeps its own colour and is only switched on, thawed
+;; and unlocked if it needs to be, so the result is never drawn where
+;; nobody can see it.  1 red, 2 yellow, 3 green, 4 cyan, 5 blue,
+;; 6 magenta, 7 white, 8 grey.  Grey for the frame and cyan for the
+;; legend, so neither competes with the result; the result itself lands
+;; in the point and dimension colours the rest of the toolkit uses.
+(setq cst:*space-color*   8)
+(setq cst:*guide-color*   4)
+(setq cst:*outline-color* 3)
+(setq cst:*dim-color*     2)
+(setq cst:*point-color*   2)
+
+;; ---- the survey block ----------------------------------------------------
+
+;; ABCDEF's survey block and its attribute tag.  Move either and ABHD,
+;; CABHD, ABFIND, LHD and BPCALLOUT stop recognising what this command
+;; imports, so they only ever move together with ABCDEF and XYPLOT.
 (setq cst:*point-block* "ab_pt")
 (setq cst:*point-tag*   "number")
 
-;; ---- How many points ---------------------------------------------------
-;; The labels, in the order they are handed out clockwise.  The CEILING
-;; is derived from that string rather than typed as a second number, so
-;; the shipped pair cannot disagree -- it is read HERE, at load, so a
-;; shorter alphabet set afterwards has to set *maxpts* with it or
-;; cst:letter is asked for a letter that is not there.  The FLOOR is 3,
-;; because two points share one dim and neither of them then has the
-;; two a placement needs.  *defcount* is what Enter
-;; takes at the count prompt, and is clamped into [*minpts* *maxpts*] at
-;; the ask -- a default nobody can take is not a default.
-(setq cst:*letters*  "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-(setq cst:*minpts*   3)
-(setq cst:*maxpts*   (strlen cst:*letters*))       ; 26: single letters
-(setq cst:*defcount* 4)                            ; a pool's four corners
+;; ---- how many points -----------------------------------------------------
 
-;; ---- A prompt default --------------------------------------------------
-;; What Enter takes at "Draw the outline through the points in order?":
-;; "Yes" or "No" (anything else reads as "Yes").  The run's other
-;; defaults are not knobs: the base point defaults to the origin because
+;; The labels, in the order they are handed out clockwise.  Shortening
+;; the string lowers the ceiling below with it; anything else about it
+;; renames the points.
+(setq cst:*letters*  "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+;; The count the run will accept.  Raising the floor refuses small jobs
+;; the solver can do; the ceiling is read off the label string at load,
+;; so a shorter alphabet set afterwards has to set this with it or
+;; cst:letter is asked for a letter that is not there.
+(setq cst:*minpts*   3)
+(setq cst:*maxpts*   (strlen cst:*letters*))
+
+;; What Enter takes at the count prompt.  Set it to the job you do most
+;; and the common case becomes one keystroke; it is clamped into the
+;; range above at the ask, so a value outside it costs nothing.
+(setq cst:*defcount* 4)
+
+;; ---- a prompt default ----------------------------------------------------
+
+;; What Enter takes at "Draw the outline through the points in order?"
+;; -- "No" to make the ring something asked for rather than assumed
+;; (anything but "No" reads as "Yes").  The run's other defaults are
+;; deliberately not knobs: the base point defaults to the origin because
 ;; that is AutoCAD's own convention, and "does it look right" defaults
-;; to Yes because a run that went well is the common one -- the whole
-;; point of that question is that the drawing be looked at.
+;; to Yes because a run that went well is the common one.
 (setq cst:*def-outline* "Yes")
 
-;; ---- The solve, stage 1: sweeps ----------------------------------------
-;; Stress-majorization sweeps only have to get the layout into the right
-;; BASIN, which they do in a few dozen; the fit is finished by stage 2.
-;; *sweeps* caps one settle.  *tol* is how far the furthest point moved
-;; in a sweep, in drawing units, below which the settle stops early.
-;; Raising *sweeps* costs time on every start and buys almost nothing.
+;; ---- the solve, stage 1: sweeps ------------------------------------------
+
+;; Stress-majorization sweeps only have to get the layout into the
+;; right BASIN, which takes a few dozen; stage 2 finishes the fit.
+;; Raising the cap costs time on every start and buys almost nothing.
 (setq cst:*sweeps* 120)
+
+;; How far the furthest point moved in one sweep, in drawing units,
+;; below which sweeping stops early.  Lowering it sweeps longer for a
+;; start stage 2 would have reached anyway.
 (setq cst:*tol*    1.0e-6)
 
-;; ---- The solve, stage 2: Levenberg-Marquardt ---------------------------
-;; Up to *lm-iters* outer steps, each allowed *lm-tries* damping retries
-;; before the fit is called finished.  *lm-lam* is the damping to start
-;; with; a step that reduces the miss multiplies it by *lm-down* (never
-;; below *lm-lammin*), a step that does not multiplies it by *lm-up* and
-;; is retried.  *lm-done* is the sum of squared misses below which there
-;; is nothing left to gain -- about a ten-millionth of an inch, RMS.  Of
-;; these only *lm-done* is worth touching, and only to LOOSEN it on a
-;; machine where a 26-point job is too slow.
+;; ---- the solve, stage 2: Levenberg-Marquardt -----------------------------
+
+;; The outer steps, and the damping retries allowed inside one of them
+;; before the fit is called finished.  Lowering either stops the fit
+;; short of the answer, which shows up as misses the report then blames
+;; a tape for.
 (setq cst:*lm-iters*  40)
 (setq cst:*lm-tries*   8)
+
+;; The damping itself: what it starts at, the floor it may fall to, and
+;; what a step that reduced the miss and a step that did not multiply
+;; it by.  These four are the fit's temperament rather than settings to
+;; reach for -- move them and a chart that used to land exactly may
+;; stop.
 (setq cst:*lm-lam*    1.0e-3)
 (setq cst:*lm-lammin* 1.0e-12)
 (setq cst:*lm-down*   0.1)
 (setq cst:*lm-up*     10.0)
+
+;; The sum of squared misses below which there is nothing left to gain
+;; -- about a ten-millionth of an inch, RMS.  The one stage-2 knob
+;; worth reaching for, and only to LOOSEN it on a machine where a
+;; 26-point job is too slow.
 (setq cst:*lm-done*   1.0e-14)
 
-;; ---- The starts tried --------------------------------------------------
-;; A stress minimum is LOCAL, and a constellation that starts folded can
-;; stay folded, so three starts are run and the best kept: the oval, the
-;; oval flattened to *squash* of its height, and the oval scattered by
-;; *shake* of the smaller space dimension.  Arcs double the count: every
-;; start is run once with the arcs in from the off and once with them
-;; joining a shape the dims have already settled, because neither order
-;; wins every job.
+;; ---- the starts tried ----------------------------------------------------
+
+;; A stress minimum is LOCAL, and a constellation that starts folded
+;; can stay folded, so the oval is not the only start tried: raise
+;; either and the second and third starts fall further from it, which
+;; finds a folded shape more often and moves nothing on a chart that
+;; was already landing.  *squash* flattens the oval to this share of
+;; its height; *shake* scatters it by this share of the smaller space
+;; dimension.
 (setq cst:*squash* 0.35)
 (setq cst:*shake*  0.30)
 
-;; ---- Turn-to-fit -------------------------------------------------------
-;; The solved shape is spun to sit in the space: the whole circle sampled
-;; *rot-coarse* ways, then *rot-passes* refining passes of *rot-fine*
-;; samples each, one grid spacing either side of the last winner.  A long
-;; thin constellation in a tight space can have a window of angles that
-;; fit only a fraction of a degree wide, which is what the passes buy.
+;; ---- turn-to-fit ---------------------------------------------------------
+
+;; The solved shape is spun to sit in the space: the whole circle
+;; sampled *rot-coarse* ways, then *rot-passes* refining passes of
+;; *rot-fine* samples, each one grid spacing either side of the last
+;; winner.  Lowering any of them can miss the window a long thin
+;; constellation in a tight space fits through, which is sometimes only
+;; a fraction of a degree wide.
 (setq cst:*rot-coarse* 360)
 (setq cst:*rot-fine*   40)
 (setq cst:*rot-passes* 3)
 
-;; ---- The report --------------------------------------------------------
-;; *flag*: a dim, or an arc radius, that ends up further than this from
-;; what was given is starred, and the leave-one-out test runs to name
-;; the culprit.  Drawing units: at a sixteenth of an inch nobody
-;; re-measures, at a quarter something is wrong with the sheet.
-;; *over-tol*: how far the points may reach past the space, the two axes
-;; added, before the report says so.  A millionth of an inch means any
-;; real overhang is mentioned; a sixteenth would stop it mentioning
-;; overhang nobody can see.
+;; ---- the report ----------------------------------------------------------
+
+;; How far a dim or an arc radius may end up from what was given before
+;; it is starred and the leave-one-out test goes looking for the tape
+;; to blame.  Drawing units: at a sixteenth of an inch nobody
+;; re-measures, at a quarter something is wrong with the sheet.  Raise
+;; it and a bad tape stops being reported.
 (setq cst:*flag*     0.25)
+
+;; How far the points may reach past the space, the two axes added,
+;; before the report says so.  Raise it to stop hearing about overhang
+;; nobody can see.
 (setq cst:*over-tol* 1.0e-6)
 
-;; ---- Drawing sizes -----------------------------------------------------
-;; As shares of the smaller side of the space, so a spa and a pool both
-;; get labels in proportion -- with two FLOORS in drawing units, so a
-;; tiny space still gets a label that can be read and a marker that can
-;; be seen.
-(setq cst:*texth*     0.025)    ; label / attribute height
-(setq cst:*texth-min* 0.5)      ; ...never below half an inch
-(setq cst:*dotr*      0.008)    ; preview marker radius
-(setq cst:*dotr-min*  0.1)      ; ...never below a tenth of an inch
-(setq cst:*dimoff*    0.060)    ; how far a perimeter dim stands off
+;; ---- drawing sizes -------------------------------------------------------
 
-;; ---- Deliberately NOT knobs --------------------------------------------
-;; Numbers further down that look tunable and are left where they are,
-;; because each is tied to something that would have to move with it:
-;;
-;;   WHERE A SITS AND WHICH WAY THE LETTERS RUN (cst:oval: 135 degrees,
-;;     stepping clockwise).  Top left, clockwise, is the order a pool's
-;;     corners are called out in; the preview's message, the arc help,
-;;     the wrap rule Z-B = Z A B, the mirror test and the bow question
-;;     all assume it.
-;;   THE ab_pt GEOMETRY (cst:ensure-block, cst:insert-pt).  ABCDEF's
-;;     definition, repeated so a drawing can hold both imports.
-;;   THE GOLDEN ANGLE (cst:*golden*, just below).  What makes the
-;;     scattered start and the coincident-point push-apart deterministic
-;;     and evenly spread.  A constant of mathematics, named once so its
-;;     two users cannot disagree.
-;;   THE FLOATING-POINT GUARDS (1e-9 and 1e-12 in the solver).  Where
-;;     two points count as coincident, or a pivot as zero; they keep
-;;     divisions finite and carry no measurement meaning.
-;;   THE LIBRARY HELPERS (the Ask, Settings and Vector sections below).
-;;     Their bodies are CALOFIN-LIB's byte for byte, and the grouped
-;;     build swaps them for the library's own -- a change made here
-;;     would be lost there.
+;; Label height, preview marker radius and how far a perimeter dim
+;; stands off, as shares of the smaller side of the space -- so a spa
+;; and a pool both come out in proportion.  Raise one and that part of
+;; the drawing grows with the job.
+(setq cst:*texth*     0.025)
+(setq cst:*dotr*      0.008)
+(setq cst:*dimoff*    0.060)
 
-;; The golden angle, in radians.  Not a knob: see the list above.
+;; Floors under the first two, in drawing units, so a tiny space still
+;; gets a label that can be read and a marker that can be seen.  Raise
+;; one and small jobs get bigger text or fatter markers.
+(setq cst:*texth-min* 0.5)
+(setq cst:*dotr-min*  0.1)
+
+;;; ----------------------------------------------------------------------
+;;;  Constants that are NOT knobs
+;;;
+;;;  And, for the reader who comes here looking: the other numbers
+;;;  further down that look tunable and are left where they are, each
+;;;  tied to something that would have to move with it.
+;;;
+;;;    WHERE A SITS AND WHICH WAY THE LETTERS RUN (cst:oval: 135
+;;;      degrees, stepping clockwise).  Top left, clockwise, is the
+;;;      order a pool's corners are called out in; the preview's
+;;;      message, the arc help, the wrap rule Z-B = Z A B, the mirror
+;;;      test and the bow question all assume it.
+;;;    THE ab_pt GEOMETRY (cst:ensure-block, cst:insert-pt).  ABCDEF's
+;;;      definition, repeated so a drawing can hold both imports.
+;;;    THE FLOATING-POINT GUARDS (1e-9 and 1e-12 in the solver).  Where
+;;;      two points count as coincident, or a pivot as zero; they keep
+;;;      divisions finite and carry no measurement meaning.
+;;;    THE LIBRARY HELPERS (the Ask, Settings and Vector sections
+;;;      below).  Their bodies are CALOFIN-LIB's byte for byte, and the
+;;;      grouped build swaps them for the library's own -- a change
+;;;      made here would be lost there.
+;;; ----------------------------------------------------------------------
+
+;; NOT A KNOB: the golden angle, in radians.  It is what makes the
+;; scattered start and the coincident-point push-apart spread evenly
+;; without a random number generator, so the same job drawn twice comes
+;; out the same.  Any other value clumps them.  Named once because two
+;; places need it and they must not disagree.
 (setq cst:*golden* 2.399963229728653)
 
 ;;; ----------------------------------------------------------------------

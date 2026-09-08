@@ -228,47 +228,63 @@ perimeter through it.
 
 ## Tunables
 
-Every knob the file has is in one place: the **Tunables** section at the
-top of `CONSTELLATION.lsp`, grouped in the order the run meets them, each
-with its unit and what moving it does. Nothing below that section is
-meant to be edited to retune the tool. `setq` a knob after loading (in a
-startup file, say) rather than editing the shipped value:
+Every knob the file has is in one block at the top of
+`CONSTELLATION.lsp`, in the order the run meets them, each with a
+sentence saying what *changing* it does. Nothing below that block is
+meant to be edited to retune the tool. Change a value and reload, or
+`setq` one after loading for a single session. `tests/test_tunables.py`
+holds this table and the block together.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `cst:*space-layer*` / `cst:*space-color*` | `"CONSTELLATION-SPACE"` / `8` | The rectangle asked for, and the ACI colour the layer gets **if this command has to create it**. A layer the drawing already has keeps its own colour — it is only switched on, thawed and unlocked if it needs to be, so the result is never drawn where nobody can see it |
-| `cst:*guide-layer*` / `cst:*guide-color*` | `"CONSTELLATION-GUIDE"` / `4` | The starting oval — erased on the way out |
-| `cst:*outline-layer*` / `cst:*outline-color*` | `"CONSTELLATION"` / `3` | The ring through `A B C` … |
-| `cst:*dim-layer*` / `cst:*dim-color*` | `"DIMENSION"` / `2` | As `AUTODIM` and `WCALST` use it |
-| `cst:*point-layer*` / `cst:*point-color*` | `"POINTS"` / `2` | As `ABCDEF` and `XYPLOT` use it |
-| `cst:*point-block*` / `cst:*point-tag*` | `"ab_pt"` / `"number"` | `ABCDEF`'s survey block and attribute tag, so `ABHD`, `CABHD`, `ABFIND`, `LHD` and `BPCALLOUT` read the result. Change only together with `ABCDEF` and `XYPLOT`, or those readers stop seeing the points |
-| `cst:*letters*` | `"ABCDEFGHIJKLMNOPQRSTUVWXYZ"` | The labels, in the order they are handed out clockwise |
-| `cst:*minpts*` / `cst:*maxpts*` | `3` / `(strlen cst:*letters*)` = 26 | Points allowed. Three is the floor — two points share one dim and neither then has the two a placement needs. The ceiling is **derived** from the label string rather than typed as a second number, so the shipped pair cannot disagree. It is read at load, so a shorter alphabet set afterwards has to set `cst:*maxpts*` with it |
-| `cst:*defcount*` | `4` | What Enter takes at the count prompt. Clamped into the range above at the ask, so a default set out of range cannot offer a count the next line would refuse |
-| `cst:*def-outline*` | `"Yes"` | What Enter takes at *Draw the outline through the points in order?* — `"Yes"` or `"No"` |
-| `cst:*sweeps*` | `120` | Cap on stage-1 sweeps. They only have to reach the right *basin* now, which takes a few dozen; stage 2 finishes the fit |
-| `cst:*tol*` | `1.0e-6` | Movement of the furthest point in one sweep, in drawing units, below which stage 1 stops early |
-| `cst:*lm-iters*` / `cst:*lm-tries*` | `40` / `8` | Stage-2 iterations, and the damping retries inside one of them |
-| `cst:*lm-lam*` / `cst:*lm-lammin*` | `1.0e-3` / `1.0e-12` | Starting damping, and the floor it may fall to |
-| `cst:*lm-down*` / `cst:*lm-up*` | `0.1` / `10.0` | What the damping is multiplied by after a step that reduced the miss, and after one that did not (which is then retried) |
-| `cst:*lm-done*` | `1.0e-14` | Sum of squared misses below which there is nothing left to gain (about a ten-millionth of an inch, RMS). The one stage-2 knob worth touching, and only to *loosen* it on a machine where a 26-point job is too slow |
-| `cst:*squash*` / `cst:*shake*` | `0.35` / `0.30` | The second and third starting layouts — the oval flattened to this share of its height, and the oval scattered by this share of the smaller space dimension. A stress minimum is *local*, and a constellation that starts folded can stay folded, so the oval is not the only thing tried. With arcs declared each start is run twice, once with the arcs in from the beginning and once with the dims settled alone first, because neither order wins every job; the closest of all of them is kept |
+| `cst:*space-layer*` | `"CONSTELLATION-SPACE"` | The layer the space rectangle lands on |
+| `cst:*guide-layer*` | `"CONSTELLATION-GUIDE"` | The starting oval — erased on the way out |
+| `cst:*outline-layer*` | `"CONSTELLATION"` | The ring through `A B C` … |
+| `cst:*dim-layer*` | `"DIMENSION"` | The aligned dims, as `AUTODIM` and `WCALST` use it |
+| `cst:*point-layer*` | `"POINTS"` | The survey points, as `ABCDEF` and `XYPLOT` use it |
+| `cst:*space-color*` | `8` | ACI colour the space layer is **created** with — grey, a frame rather than a result. A layer the drawing already has keeps its own colour and is only switched on, thawed and unlocked if it needs to be |
+| `cst:*guide-color*` | `4` | The same for the guide layer — cyan, so the legend reads as a legend |
+| `cst:*outline-color*` | `3` | The same for the outline layer |
+| `cst:*dim-color*` | `2` | The same for the dimension layer |
+| `cst:*point-color*` | `2` | The same for the point layer |
+| `cst:*point-block*` | `"ab_pt"` | `ABCDEF`'s survey block. Move it and `ABHD`, `CABHD`, `ABFIND`, `LHD` and `BPCALLOUT` stop recognising the import, so it only moves together with `ABCDEF` and `XYPLOT` |
+| `cst:*point-tag*` | `"number"` | The attribute tag those readers look for |
+| `cst:*letters*` | `"ABCDEFGHIJKLMNOPQRSTUVWXYZ"` | The labels, in the order they are handed out clockwise. Shortening it lowers the ceiling below with it |
+| `cst:*minpts*` | `3` | The floor. Three, because two points share one dim and neither then has the two a placement needs |
+| `cst:*maxpts*` | `(strlen cst:*letters*)` | The ceiling, read off the label string at load rather than typed as a second number. A shorter alphabet set afterwards has to set this with it |
+| `cst:*defcount*` | `4` | What Enter takes at the count prompt — clamped into the range above at the ask, so a value outside it costs nothing |
+| `cst:*def-outline*` | `"Yes"` | What Enter takes at *Draw the outline through the points in order?* — `"No"` makes the ring asked for rather than assumed |
+| `cst:*sweeps*` | `120` | Cap on stage-1 sweeps. They only have to reach the right *basin*; raising it costs time on every start and buys almost nothing |
+| `cst:*tol*` | `1.0e-6` | Movement of the furthest point in one sweep, in drawing units, below which sweeping stops early |
+| `cst:*lm-iters*` | `40` | Stage-2 outer steps. Lowering it stops the fit short of the answer |
+| `cst:*lm-tries*` | `8` | Damping retries allowed inside one of those steps |
+| `cst:*lm-lam*` | `1.0e-3` | The damping to start with |
+| `cst:*lm-lammin*` | `1.0e-12` | The floor the damping may fall to |
+| `cst:*lm-down*` | `0.1` | What the damping is multiplied by after a step that reduced the miss |
+| `cst:*lm-up*` | `10.0` | And after one that did not, which is then retried |
+| `cst:*lm-done*` | `1.0e-14` | Sum of squared misses below which there is nothing left to gain (about a ten-millionth of an inch, RMS). The one stage-2 knob worth reaching for, and only to *loosen* it where a 26-point job is too slow |
+| `cst:*squash*` | `0.35` | The second start: the oval flattened to this share of its height. A stress minimum is *local*, and a constellation that starts folded can stay folded |
+| `cst:*shake*` | `0.30` | The third start: the oval scattered by this share of the smaller space dimension |
 | `cst:*rot-coarse*` | `360` | Steps in the whole-circle turn-to-fit sweep |
-| `cst:*rot-fine*` / `cst:*rot-passes*` | `40` / `3` | The refining passes after it, each sampling one grid spacing either side of the last winner |
-| `cst:*flag*` | `0.25` | A dim, or an arc radius, missing by more than this is starred and the leave-one-out test runs. At a sixteenth of an inch nobody re-measures; at a quarter something is wrong with the sheet |
-| `cst:*over-tol*` | `1.0e-6` | How far the points may reach past the space, the two axes added, before the report says so. A millionth of an inch means any real overhang is mentioned; a sixteenth would stop it mentioning overhang nobody can see |
-| `cst:*texth*` / `cst:*dotr*` / `cst:*dimoff*` | `0.025` / `0.008` / `0.060` | Label height, preview marker radius and perimeter-dim stand-off, as shares of the smaller side of the space |
-| `cst:*texth-min*` / `cst:*dotr-min*` | `0.5` / `0.1` | Floors on the first two, in drawing units, so a tiny space still gets a label that can be read and a marker that can be seen |
+| `cst:*rot-fine*` | `40` | Samples in each refining pass after it |
+| `cst:*rot-passes*` | `3` | How many refining passes, each one grid spacing either side of the last winner. Lowering these can miss the window a long thin shape in a tight space fits through |
+| `cst:*flag*` | `0.25` | How far a dim or an arc radius may miss before it is starred and the leave-one-out test looks for the tape to blame. At a sixteenth of an inch nobody re-measures; at a quarter something is wrong with the sheet |
+| `cst:*over-tol*` | `1.0e-6` | How far the points may reach past the space, the two axes added, before the report says so |
+| `cst:*texth*` | `0.025` | Label height, as a share of the smaller side of the space |
+| `cst:*dotr*` | `0.008` | Preview marker radius, the same way |
+| `cst:*dimoff*` | `0.060` | How far a perimeter dim stands off, the same way |
+| `cst:*texth-min*` | `0.5` | Floor under the label height, in drawing units, so a tiny space still gets a label that can be read |
+| `cst:*dotr-min*` | `0.1` | Floor under the marker radius, for the same reason |
 
-The section ends with what **looks** tunable and is deliberately not,
-and why: where `A` sits and which way the letters run (the preview's
+The block ends with what **looks** tunable and is deliberately not, and
+why: where `A` sits and which way the letters run (the preview's
 message, the arc help, the wrap rule and the mirror test all assume top
 left, clockwise); the `ab_pt` block's geometry (`ABCDEF`'s, repeated so
-a drawing can hold both imports); the golden angle (`cst:*golden*`, a
-constant named once so the scattered start and the coincident-point
-push-apart cannot disagree); the floating-point guards in the solver;
-and the library helpers, whose bodies the grouped build swaps for
-`CALOFIN-LIB`'s own.
+a drawing can hold both imports); the floating-point guards in the
+solver; and the library helpers, whose bodies the grouped build swaps
+for `CALOFIN-LIB`'s own. `cst:*golden*` — the golden angle, which makes
+the scattered start deterministic — carries a `NOT A KNOB:` marker for
+the same reason.
 
 ## Notes & limitations
 

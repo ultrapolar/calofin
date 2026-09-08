@@ -297,15 +297,21 @@ assert hasseg(segs, (390.0, -42.0), (480.0, -42.0)), "the chain lost its place"
 print("   Back walks the run chain and the depths without derailing")
 
 # ---------------------------------------------------------------- 12
-print("== P12. small runs take the STANDARD INCHES style when there is one ==")
+print("== P12. a short run keeps the standard style -- these are floor dims ==")
+# H is 12" here, half the old 24" cutover, and the drawing HAS the
+# small-dim style: a section is one chain of runs adding up to B, so
+# no member of it drops into inches while its neighbours read in feet.
 vm = run(["Normal"] + BASE +
          [480.0, 12.0, 90.0, 288.0, 90.0, 42.0, 96.0, "No"],
          "P12", dimstyles=("STANDARD INCHES",))
 sw = [c for c in vm.commands if c and c[0] == '_.-DIMSTYLE']
-assert sw, "the small-dim style was never switched in"
-assert any(c[2] == 'STANDARD INCHES' for c in sw), \
-    "switched to something else: %r" % sw
-print("   %d dim-style switches, and the style comes back" % len(sw))
+assert not sw, "POOLSIDE switched a dim style: %r" % sw
+assert vm.sysvars['DIMSTYLE'] == 'STANDARD', vm.sysvars['DIMSTYLE']
+# and the 12" H really was dimensioned -- the rule is not "no dim"
+dims = [c for c in vm.commands if c and c[0] == '_.DIMLINEAR']
+assert any(abs(abs(c[1][0] - c[2][0]) - 12.0) < 1e-6 for c in dims), dims
+assert not [s for s in vm.printed if 'dim style' in s], vm.printed
+print("   the 12\" H is drawn, in STANDARD, with no switch and no note")
 
 # ---------------------------------------------------------------- 13
 print("== P13. the user's settings come back ==")

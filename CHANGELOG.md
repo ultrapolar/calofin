@@ -8,24 +8,104 @@ which set of them shipped together. The release name lives in
 
 ## v3.6 -- 2026-09-08
 
-A validation pass over `CONSTELLATION`: every knob gathered at the top of
-the file and explained, the paths a clean run never takes driven under
+Every converter gains a reverter. `XFTCONV`, `SOCONV` and `VSCONV` each
+read somebody else's export and turn it into a drawing this office can
+work on; until now the only way back was `U`, which is good for as long
+as the session lasts and no longer. A conversion is found out to be
+wrong the week after -- the survey was converted twice, the wrong file
+was opened, the sheet has to go back to whoever exported it -- and by
+then `U` is gone.
+
+So each converter now **writes down what it did**, in xdata on the
+objects it touched, and each has a command that reads that back:
+`XFTRECONV`, `SORECONV`, `VSRECONV`. The record is the whole idea: an
+undo that works from the drawing alone cannot survive a save, because
+what a conversion destroys (an erased marker, an overwritten property,
+a stripped override block) is not in the drawing any more to be read.
+
+`CONSTELLATION` gets the same pass, and joins the tunables rule with
+`AUTODIM` and the two point plotters: every knob gathered into a block
+at the top and explained, the paths a clean run never takes driven under
 test, and the four defects that turned up on the way closed.
+
+### Added
+
+- **`XFTRECONV`** (`lisp/xftconv/`, with `XFTCONV` at v1.13) puts a
+  converted survey back: the marker and the name text the swap erased,
+  the leftover text the purge took, the `ab_pt` block off again, and
+  the x12 undone by one `SCALE` of 1/12 about the base point the
+  conversion used.
+
+  Each block carries the record of what it replaced -- the erased
+  entities group by group, plus the scale and the WCS base point, which
+  are the two numbers no object in the drawing carries. Coordinates go
+  in through `rtos` at 8 decimals, so a round trip is exact to 1e-8 of
+  a drawing unit (a hundredth of a micron on a survey in inches) rather
+  than to the last bit of the float; `tests/test_xftconv.py` measures
+  that on the site-trace sample, whose coordinates carry more decimals
+  than the record writes.
+
+  **A highlight holding two conversions is refused by name.** They were
+  scaled about different base points, and one scale back cannot undo
+  both -- so it says so rather than half-reverting one of them.
+
+- **`SORECONV`** (`lisp/soconv/`, with `SOCONV` at v1.1) moves an
+  import back onto the export's own layers. The record keeps the layer
+  each object came off, that layer's own colour, and -- only when
+  `*soconv-force-bylayer*` was on, since that is the only time the
+  conversion overwrites anything else -- the colour, linetype and
+  lineweight the forcing replaced.
+
+  A source layer `PURGE`d on the tool's own advice is re-created with
+  the colour the record kept, so taking that advice does not close the
+  way back.
+
+- **`VSRECONV`** (`lisp/vsconv/`, with `VSCONV` at v1.1) does the same
+  for a VS export, and undoes **both halves of the dimension step**:
+  the style name back in group 3, and the `ACAD`/`DSTYLE` override
+  block back on the dimension, kept verbatim as the xdata items it
+  already was. A revert that restored the style name and left the
+  overrides off would leave the dimensions drawing in a style they
+  never had, which is the same trap the conversion itself exists to
+  avoid from the other side.
+
+  Its scope carries no layer filter where `VSCONV`'s does: a converted
+  object sits on `POOL` / `POINTS` / `DIMENSION`, where this office's
+  own drawing lives too, so the record is what says which objects came
+  from an export.
 
 ### Changed
 
-- **`CONSTELLATION` v1.4: every knob is at the top, and says what it
-  does.** The Tunables section now carries the five layer colours (they
-  were literals in `cst:preview` and `cst:draw`), the label and marker
-  floors, the Levenberg-Marquardt damping factors, the outline default
-  and the overhang threshold, each with its unit and what moving it
-  does. `cst:*maxpts*` is derived from the label string instead of being
-  a second number to keep in step with it; `cst:*defcount*` is clamped
-  into range at the ask, since the README invites setting it after
-  loading; the golden angle is named once instead of typed twice. The
-  section closes with what looks tunable and is deliberately not, and
-  why -- where `A` sits, the `ab_pt` geometry, the float guards, the
-  library helpers the grouped build swaps away.
+- `vsconv:restyle-dim` strips the `ACAD` application's xdata and leaves
+  every other application's where it is. In AutoCAD that is what it
+  always did (an `entget` with an application list carries only that
+  application), so nothing about a conversion changes; it is now true
+  of the repo's VM as well, which is what lets a tool keep a record of
+  its own on an object whose xdata it is editing.
+
+- `entdel` in `tests/lispvm.py` takes an attributed `INSERT`'s
+  `ATTRIB`s and `SEQEND` with it, as AutoCAD does -- attributes are
+  owned by the block reference. Erasing a point block used to leave its
+  number attribute behind as a live entity for the next sweep to trip
+  over.
+
+- **`CONSTELLATION` v1.4 joins the tunables rule** (STANDARDS.md
+  section 5), with 38 knobs in a block at the top and a row apiece in
+  its README. Five layer colours came out of `cst:preview` and
+  `cst:draw`, where they were literal ACI numbers; the label and marker
+  floors out of `cst:texth` and `cst:dotr`; the Levenberg-Marquardt
+  damping factors out of `cst:lm`; the outline default out of
+  `cst:ask`; the overhang threshold out of the report. `cst:*maxpts*`
+  is read off the label string instead of being a second number to keep
+  in step with it, and `cst:*defcount*` is clamped into range at the
+  ask, since the README invites setting it after loading. The golden
+  angle is named once for its two users and carries a `NOT A KNOB:`
+  marker, since spreading the scattered start evenly is what it does
+  and no other value does it. The block closes with the other numbers
+  that look tunable and are not -- where `A` sits, the `ab_pt`
+  geometry, the float guards, the library helpers the grouped build
+  swaps away. `tests/test_tunables.py` carries the file now, so the
+  next knob cannot land underneath the block.
 
 ### Fixed
 
@@ -55,6 +135,29 @@ test, and the four defects that turned up on the way closed.
   and found the moment something did: the clamp added to `cst:askcount`
   above. The local is `tofix` now, with a comment saying why.
 
+### Notes
+
+- Each reverter is on the panel under its converter, in the same
+  `Converters` column: a `RECONV` is looked for in exactly one
+  situation, and the place it is looked for is where the converter was.
+- All three records can be switched off (`*xft-record*`,
+  `*soconv-record*`, `*vsconv-record*`). With one off its converter
+  runs exactly as it did before, says so in its done line rather than
+  promising a revert, and its reverter says there is nothing to work
+  from.
+- **One thing a revert spells out rather than restores**: an object
+  that arrived carrying no colour, linetype or lineweight of its own
+  comes back carrying the explicit ByLayer (`256`, `"ByLayer"`, `-1`)
+  that means the same thing. It draws and plots identically. Nothing
+  else about a round trip is approximate.
+
+- `lisp/lazpanel/README.md`'s page tables are rewritten from the
+  panel's own tables. Four of them had drifted: the `Cover` page was
+  missing `LINGUTTER` and `LINGUTTERSCAN`, `Layout` was missing
+  `POOLSIDE`, `LAZSPA` and `LAZSTEP`, `Points` was missing
+  `POINTRENAMER`, `CONSTELLATION` and `TYLERDRONESUITE`, and `Checking`
+  was missing `ABPCHECK`.
+
 ### Checks and tests
 
 - `tests/test_constellation.py` grows fifteen contingency tests -- 73
@@ -67,6 +170,8 @@ test, and the four defects that turned up on the way closed.
   switched-off layer restored, the block made once, UNDO off, an arc
   named out of ring order and one with an impossible radius, and each
   knob at the top moved and shown to move what it says. Both tiers.
+- `tests/test_tunables.py` takes `CONSTELLATION` into `FILES`, which is
+  what holds its block and its README table together from here on.
 
 ## v3.5 -- 2026-09-02
 
