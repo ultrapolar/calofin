@@ -75830,22 +75830,119 @@
 ;;;     the band where unrolling opens a gap
 ;;;   * band-height dimensions at both ends (layer DIMENSION)
 ;;;
-;;; Darts + inserts are capped (default 20): the required correction is
-;;; accumulated along the band and only released when it reaches a
-;;; minimum useful width, so the cut count stays conservative.
+;;; Darts + inserts are capped (the run asks, wc:*maxfeat* is the
+;;; default): the required correction is accumulated along the band and
+;;; only released when it reaches a minimum useful width, so the cut
+;;; count stays conservative.
+;;;
+;;; Every number the routine works to is a named tunable in the block
+;;; below the version banner -- layers, cut sizes, the tracing angles,
+;;; the placement of the two drawings -- so nothing has to be hunted
+;;; for in the body.
 ;;;
 ;;; Tested with AutoCAD 2018; plain AutoLISP, no VLX / ObjectARX.
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-;;; ------------------------ small math helpers ----------------------
+(setq *wcalst-version* "v1.8")   ; announced on load; release_lisp.py
+                                 ; stamps the dated twin in releases/
 
-(setq *wcalst-version* "v1.7")   ; announced on load; release_lisp.py
-                                    ; stamps the dated twin in releases/
+;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafter might reasonably want different is set HERE and
+;; nowhere else: the code below reads these names and carries no bare
+;; numbers of its own.  Each knob says what CHANGING it does and which
+;; way to move it.  Edit a value, save, APPLOAD again - or
+;; (setq wc:*name* value) at the command line for one session.  Every
+;; one of them is a row in README.md's Tunables table, and
+;; tests/test_tunables.py holds the two together.
+;;
+;; Distances are in inches throughout (1 drawing unit = 1 inch).  A name
+;; ending in -F is a FRACTION OF THE BAND WIDTH, so it scales with the
+;; piece; a plain length is absolute, because it describes something
+;; physical - a tile, a hand's clearance, the stock a sliver is cut
+;; from.  The 1e-9-sized guards inside the maths are not tunables: they
+;; only keep a divisor off zero, and moving one changes nothing a
+;; drafter can see.
+
+;; ---- output layers ---------------------------------------------------
+;; The colour is used ONLY when the layer has to be created; an existing
+;; layer keeps whatever colour the drawing gave it (and is thawed,
+;; unlocked and switched on, so a result cannot land somewhere unseen).
+
+(setq wc:*cut-layer* "AIR-B")       ; moves the straight edge, band ends, dart legs, slits and slivers to another layer
+(setq wc:*cut-color* 1)             ; recolours that layer where WCALST is the one creating it (1 = red)
+(setq wc:*dim-layer* "DIMENSION")   ; moves the end height dims, the variant labels and the length summary
+(setq wc:*dim-color* 3)             ; recolours that one on creation (3 = green)
+
+;; ---- reading the band off the drawing --------------------------------
+
+(setq wc:*node-fuzz* 3)             ; decimals kept when two endpoints are merged into one node: fewer welds points that are genuinely apart, more leaves ends the drafter meant to touch unjoined
+(setq wc:*seg-min* 1.0e-6)          ; shorter than this is a repeated point rather than a segment, and is dropped
+(setq wc:*trace-turn* 1.0472)       ; sharpest turn (radians, 60 deg) the trace of a long side will follow: raise it for a band with genuinely sharp corners along a side, lower it when tracing runs off into scenery
+(setq wc:*trace-max* 5000)          ; hard stop on one walk - the backstop behind the revisited-node test, and only reachable by geometry that is neither open nor a ring
+(setq wc:*rung-turn* 0.7854)        ; how steeply (radians, 45 deg) a segment must leave the chain to count as a rung: lower it and gentle diagonals join in, raise it and only square rungs do
+
+;; ---- what still counts as a band -------------------------------------
+;; Each of these re-asks rather than failing, so a wrong pick costs a
+;; click and not the command.
+
+(setq wc:*min-segs* 6)              ; fewest segments a selection may hold before it is sent back to be re-picked
+(setq wc:*min-chain* 3)             ; fewest segments a traced side may have before the pick is sent back
+(setq wc:*min-rungs* 2)             ; fewest rungs to find between the two sides, below which there is no width to measure
+
+;; ---- how many cuts, and how wide -------------------------------------
+
+(setq wc:*maxfeat* 20)              ; the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to
+(setq wc:*dart-cap* 4.0)            ; widest mouth ONE dart may open: lower it and a big correction splits across more rungs, raise it for fewer, wider Vs
+(setq wc:*wmin-f* 0.04)             ; smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutting hair-width darts
+(setq wc:*target* 0.01)             ; the after-cuts residual the refining variant aims under, as a share of the bottom line, and what OVER TARGET is measured against
+(setq wc:*refine* 0.6)              ; how far each refining pass drops the threshold: nearer 1 refines in smaller steps and uses more of the passes below
+(setq wc:*passes* 10)               ; how many refining passes before it settles for what it has and says so
+
+;; ---- where a cut stops ------------------------------------------------
+;; Depths are measured DOWN from the straightened edge.  An apex that
+;; reached that edge would cut the strip in two, so each rule here ends
+;; in a clamp holding the cut inside the band.
+
+(setq wc:*tile-clear* 1.0)          ; how far a cut clears the tile along the straight edge, and how far it stops short of the far edge
+(setq wc:*apex-f* 0.42)             ; how far down the local depth a cut stops when no tile height is given: lower it for a deeper hinge along the straight side
+(setq wc:*apex-min-f* 0.20)         ; closest a cut may ever come to the straightened edge, as a share of the local depth - what a band too shallow to hold the tile clearance falls back to
+(setq wc:*depth-min-f* 0.2)         ; floor under the local depth, as a share of the band width, so a dip in the far edge cannot collapse a cut
+(setq wc:*sliver-top* 1.0)          ; width at the top of an insert sliver, and the narrowest one that is drawn
+(setq wc:*sliver-extra* 1.0)        ; how much longer a sliver's sides are than the slit they fill - stock to trim on fitting
+(setq wc:*sliver-gap-f* 0.2)        ; how far below the band a sliver is drawn, as a share of the width
+
+;; ---- which points belong to this band ---------------------------------
+;; The selection is a window, so it catches end blocks, callouts and
+;; whatever else stood nearby.  These three drop what cannot be band.
+
+(setq wc:*near-f* 1.75)             ; how far off the chain (x band width) a point may sit and still be taken as part of this band, or carried along as a mark
+(setq wc:*over-f* 0.05)             ; how far above the straight edge (x width) a developed point may land before it is read as an end-clamp artefact and dropped
+(setq wc:*past-f* 0.25)             ; how far beyond either end of the band (x width) a point may sit and still be kept
+
+;; ---- placement and lettering of the two drawings ----------------------
+
+(setq wc:*drop-f* 1.5)              ; how far below the lowest point of the selection (x width) the first straight edge lands
+(setq wc:*stack-f* 5.0)             ; the gap (x width) between the two drawings: raise it when the summaries of one run into the next
+(setq wc:*label-f* 0.6)             ; how far above its straight edge (x width) a variant label sits
+(setq wc:*label-h-f* 0.4)           ; text height of that label, as a share of the band width
+(setq wc:*sum-x-f* 2.0)             ; how far right of the band end (x width) the length summary is written
+(setq wc:*sum-h-f* 0.35)            ; text height of the summary, as a share of the band width
+(setq wc:*sum-step-f* 0.55)         ; line spacing within the summary, as a share of the band width
+(setq wc:*dim-off-f* 1.2)           ; how far out past each end (x width) the height dimension lines are placed
+
+;; ---- how the numbers are written --------------------------------------
+
+(setq wc:*dec-places* 2)            ; decimals in every decimal-inch figure the report and the summary print
+(setq wc:*arch-frac* 8)             ; smallest fraction in the feet-and-inches twin printed beside it (8 = eighths, 16 = sixteenths)
+
+;;; ------------------------ small math helpers ----------------------
 
 (defun wc:key (p)
   ;; fuzzy node key so touching endpoints share one node
-  (strcat (rtos (car p) 2 3) "," (rtos (cadr p) 2 3))
+  (strcat (rtos (car p) 2 wc:*node-fuzz*) ","
+          (rtos (cadr p) 2 wc:*node-fuzz*))
 )
 
 (defun wc:turn (d0 d1 / d)
@@ -75911,7 +76008,7 @@
     )
     (while (cdr pts)
       (setq a (car pts) pts (cdr pts))
-      (if (> (distance a (car pts)) 1.0e-6)
+      (if (> (distance a (car pts)) wc:*seg-min*)
         (setq segs (cons (list a (car pts) lay en) segs))
       )
     )
@@ -75949,17 +76046,25 @@
 ;;; -------------------------- chain tracing -------------------------
 
 (defun wc:trace (segs nodes seed toward / cur p q ids pts cands best
-                 bestang j sg r ang d0 stop)
+                 bestang j sg r ang d0 stop seen nk walked closed)
   ;; walk from segment SEED through endpoint TOWARD, always taking the
-  ;; straightest continuation; stop when the best turn exceeds 60 deg.
-  ;; -> (ids . pts)  ids = seg indices walked (seed first),
-  ;;                 pts = nodes visited (start node first)
+  ;; straightest continuation; stop when the best turn is sharper than
+  ;; wc:*trace-turn*, or when the walk arrives at a node it has already
+  ;; stood on -- a side that closes on itself (a ring) is one lap, and
+  ;; without that test the walk laps it until wc:*trace-max* and reports
+  ;; a developed length of a thousand laps.
+  ;; -> (ids pts closed)  ids = seg indices walked (seed first),
+  ;;                      pts = nodes visited (start node first),
+  ;;                      closed = T when the side came back on itself
   (setq cur seed
         p   (wc:other-end (nth seed segs) toward)
         q   toward
         ids (list seed)
         pts (list q p)                  ; reversed order, start last
+        seen (list (wc:key q) (wc:key p))
+        walked 1
         stop nil
+        closed nil
   )
   (while (not stop)
     (setq d0 (wc:dir p q)
@@ -75980,29 +76085,53 @@
         )
       )
     )
-    (if (or (not best) (> bestang 1.0472) (> (length ids) 5000)) ; 60 deg
-      (setq stop T)
-      (setq ids (cons best ids)
-            p q
-            cur best
-            q (wc:other-end (nth best segs) q)
-            pts (cons q pts)
-      )
+    (setq nk (if best (wc:key (wc:other-end (nth best segs) q))))
+    (cond
+      ((or (not best) (> bestang wc:*trace-turn*) (> walked wc:*trace-max*))
+       (setq stop T))
+      ((member nk seen)                 ; back where it has been: a ring
+       (setq stop T closed T)
+       ;; a lap that lands exactly on the node it set out from has
+       ;; closed the ring, and that last segment is as much a part of
+       ;; the side as any other -- take it before stopping, or the
+       ;; developed length comes out one chord short
+       (if (equal nk (last seen))
+         (setq ids (cons best ids)
+               pts (cons (wc:other-end (nth best segs) q) pts)
+         )
+       ))
+      (T
+       (setq ids (cons best ids)
+             p q
+             cur best
+             q (wc:other-end (nth best segs) q)
+             pts (cons q pts)
+             seen (cons nk seen)
+             walked (1+ walked)
+       ))
     )
   )
-  (cons (reverse ids) (reverse pts))
+  (list (reverse ids) (reverse pts) closed)
 )
 
 (defun wc:full-chain (segs nodes seed / sg r1 r2)
   ;; trace both directions from SEED -> (ids . pts) covering the whole side
   (setq sg (nth seed segs)
         r1 (wc:trace segs nodes seed (car sg))   ; towards first endpoint
-        r2 (wc:trace segs nodes seed (cadr sg))  ; towards second endpoint
   )
-  ;; r1 pts = (B A ...towards a-side); r2 pts = (A B ...towards b-side)
-  (cons
-    (append (reverse (cdr (car r1))) (car r2))       ; ids, seed once
-    (append (reverse (cdr r1)) (cddr (cdr r2)))      ; pts, join at A B
+  (if (caddr r1)
+    ;; the first walk closed the loop, so it already IS the whole side --
+    ;; walking the other way would lap the same ring a second time and
+    ;; double every length taken off it
+    (cons (car r1) (cadr r1))
+    (progn
+      (setq r2 (wc:trace segs nodes seed (cadr sg))) ; towards the second
+      ;; r1 pts = (B A ...towards a-side); r2 pts = (A B ...towards b-side)
+      (cons
+        (append (reverse (cdr (car r1))) (car r2))     ; ids, seed once
+        (append (reverse (cadr r1)) (cddr (cadr r2)))  ; pts, join at A B
+      )
+    )
   )
 )
 
@@ -76074,7 +76203,8 @@
 (defun wc:emit (idebt rungs pts s wmin maxfeat carry / feats acc k fsum
                 cw f fdev)
   ;; walk the per-interval correction debt, releasing a dart (mouth
-  ;; capped at 4") or an insert whenever the accumulator reaches WMIN.
+  ;; capped at wc:*dart-cap*) or an insert whenever the accumulator
+  ;; reaches WMIN.
   ;; CARRY non-nil: the un-released remainder carries to the next rung
   ;; (large corrections split into several capped darts - best fit);
   ;; CARRY nil: the accumulator resets after each release (fewest cuts)
@@ -76086,7 +76216,7 @@
     (if (and (>= (abs acc) wmin) (< (length feats) maxfeat))
       (progn
         (setq cw (abs acc))
-        (if (< acc 0) (setq cw (min cw 4.0)))      ; dart mouth cap
+        (if (< acc 0) (setq cw (min cw wc:*dart-cap*)))  ; dart mouth cap
         (setq f (nth (1+ k) rungs)
               fdev (wc:dev-point (caddr f) pts s)
         )
@@ -76193,6 +76323,17 @@
   (reverse runs)
 )
 
+;; The two ways a length is written, both fed by the tunables above:
+;; wc:num is the decimal-inch figure every report and summary line uses,
+;; wc:arch the feet-and-inches twin printed beside it on the sheet.
+(defun wc:num (v)
+  (rtos v 2 wc:*dec-places*)
+)
+
+(defun wc:arch (v)
+  (rtos v 4 wc:*arch-frac*)
+)
+
 ;; A length as a percentage of the bottom-before length.  botb is
 ;; zero when the trace gave fewer than two distinct bottom points, and
 ;; a zero divisor here would throw AFTER the undo group opened, leaving
@@ -76230,6 +76371,7 @@
                  bandlays tileh toplen botb bota tx th pass stop
                  resid featsb residb paircnt bndpts vy vfeats vresid
                  vlab ssstairs stsegs stkeys synth comp compkeys grow
+                 rsgns rsgn rkeep rmaj sumk ln
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
                  stdy dfeats run stairrng stage wc-pick)
@@ -76266,7 +76408,7 @@
            (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))))
        (if (not ss) (progn (princ "\nNothing selected.") (exit)))
        (setq segs (wc:build-segs ss))
-       (if (< (length segs) 6)
+       (if (< (length segs) wc:*min-segs*)
          (princ "\nToo few segments to form a band - select again.")
          (progn
            (setq nodes (wc:build-nodes segs))
@@ -76311,7 +76453,7 @@
              ids (car r)
              pts (cdr r)
        )
-       (if (< (length ids) 3)
+       (if (< (length ids) wc:*min-chain*)
          (progn
            (princ "\nCould not trace a long side from that pick - pick again.")
            (setq stage 2)
@@ -76350,7 +76492,7 @@
                        (setq ang (abs (wc:turn dch (wc:dir p far)))
                              ang (min ang (- pi ang))
                        )
-                       (if (> ang 0.7854)          ; > 45 deg off the chain
+                       (if (> ang wc:*rung-turn*)  ; off the chain enough
                          (setq rungs (cons (list ni p far) rungs))
                        )
                      )
@@ -76361,34 +76503,57 @@
              (setq ni (1+ ni))
            )
            (setq rungs (reverse rungs))
-           (if (< (length rungs) 2)
+           ;; ---- 5. which side of the chain the far side is on, and
+           ;; ---- everything that leaves the chain the OTHER way thrown
+           ;; ---- out.  A datum line or a cut mark that happens to touch
+           ;; ---- the chain crosses it as steeply as a rung does, and
+           ;; ---- counted as one it moved the median width, the vote
+           ;; ---- below and -- through the middle rung -- which layer
+           ;; ---- the far side was taken to be on.
+           (setq side 0 rsgns nil)
+           (foreach f rungs
+             (setq ni (car f) p (cadr f) far (caddr f)
+                   p0 (nth (max 0 (1- ni)) pts)
+                   p1 (nth (min (1- n) (1+ ni)) pts)
+                   cross (- (* (- (car p1) (car p0))
+                               (- (cadr far) (cadr p)))
+                            (* (- (cadr p1) (cadr p0))
+                               (- (car far) (car p))))
+                   rsgn (if (> cross 0) 1 -1)
+                   rsgns (cons rsgn rsgns)
+                   side (+ side rsgn)
+             )
+           )
+           (setq rsgns (reverse rsgns)
+                 rmaj  (if (> side 0) 1 -1)
+                 rkeep nil
+                 k     0
+           )
+           (foreach f rungs
+             (if (= (nth k rsgns) rmaj) (setq rkeep (cons f rkeep)))
+             (setq k (1+ k))
+           )
+           (setq rungs (reverse rkeep))
+           (if (< (length rungs) wc:*min-rungs*)
              (progn
                (princ "\nCould not find the rungs between the two sides - pick again.")
                (setq stage 2)
              )
              (progn
-               ;; band width = median rung length
-               (setq widths (vl-sort (mapcar '(lambda (r)
-                                                (distance (cadr r) (caddr r)))
-                                             rungs)
-                                     '<)
+               ;; band width = median rung length.  vl-sort DROPS items
+               ;; that compare equal, and rungs of a constant-width band
+               ;; are all the same length -- so the median has to come
+               ;; off a list that kept its duplicates.
+               (setq widths (mapcar '(lambda (r)
+                                       (distance (cadr r) (caddr r)))
+                                    rungs)
+                     widths (mapcar '(lambda (i) (nth i widths))
+                                    (vl-sort-i widths '<))
                      w (nth (/ (length widths) 2) widths)
                )
 
-               ;; ---- 5. normalize orientation: far side below the
-               ;; ---- travel direction
-               (setq side 0)
-               (foreach f rungs
-                 (setq ni (car f) p (cadr f) far (caddr f)
-                       p0 (nth (max 0 (1- ni)) pts)
-                       p1 (nth (min (1- n) (1+ ni)) pts)
-                       cross (- (* (- (car p1) (car p0))
-                                   (- (cadr far) (cadr p)))
-                                (* (- (cadr p1) (cadr p0))
-                                   (- (car far) (car p))))
-                 )
-                 (setq side (+ side (if (> cross 0) 1 -1)))
-               )
+               ;; ---- normalize orientation: far side below the travel
+               ;; ---- direction
                (if (> side 0)          ; far side is left -> walk the other way
                  (progn
                    (setq pts (reverse pts)
@@ -76438,11 +76603,12 @@
       ;; ---- 7. feature threshold (conservative, capped) ---------------
       ((= stage 4)
        (initget "Back Undo")
-       (setq maxfeat (getint "\nMaximum darts + inserts <20> [Back]: "))
+       (setq maxfeat (getint (strcat "\nMaximum darts + inserts [Back] <"
+                                     (itoa wc:*maxfeat*) ">: ")))
        (if (= (type maxfeat) 'STR)
          (setq stage 2)
          (progn
-           (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat 20))
+           (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat wc:*maxfeat*))
            (setq stage 5)
          )
        ))
@@ -76450,8 +76616,8 @@
       ;; may only come up to (width - tile height - 1") from the far edge
       (T
        (initget "Back Undo")
-       (setq tileh (getreal
-                     "\nTile height along the straightened edge <none> [Back]: "))
+       (setq tileh (getreal (strcat "\nTile height along the straightened"
+                                    " edge [Back] <none>: ")))
        (if (= (type tileh) 'STR)
          (setq stage 4)
          (progn
@@ -76563,10 +76729,11 @@
         ;; the far side always lies below the straightened edge)
         devpts (vl-remove-if
                  '(lambda (dp)
-                    (or (> (cadddr dp) (* 1.75 w))
-                        (> (cadr dp) (* -0.05 w))
-                        (< (car dp) (* -0.25 w))
-                        (> (car dp) (+ (car (reverse s)) (* 0.25 w)))))
+                    (or (> (cadddr dp) (* wc:*near-f* w))
+                        (> (cadr dp) (* (- wc:*over-f*) w))
+                        (< (car dp) (* (- wc:*past-f*) w))
+                        (> (car dp) (+ (car (reverse s))
+                                       (* wc:*past-f* w)))))
                  devpts)
         devpts (vl-sort devpts '(lambda (a b) (< (caddr a) (caddr b))))
   )
@@ -76740,7 +76907,7 @@
   ;;      aims under 1% of the original bottom length
   ;; dart mouths are capped at 4" on the bottom line in both (larger
   ;; corrections split across consecutive rungs)
-  (setq wmin (max (* 0.04 w) (/ total maxfeat)))
+  (setq wmin (max (* wc:*wmin-f* w) (/ total maxfeat)))
 
   (setq rr (wc:emit idebt rungs pts s wmin maxfeat nil)
         featsb (car rr)                            ; minimum variant
@@ -76754,13 +76921,14 @@
           resid (+ (- bota botb) (cadr rr))
           pass (1+ pass)
     )
-    (if (or (<= (abs resid) (* 0.01 botb))         ; under the 1% target
+    (if (or (<= (abs resid) (* wc:*target* botb))  ; under the target
             (>= (length feats) maxfeat)            ; no room for more
-            (<= wmin (* 0.0401 w))                 ; threshold bottomed out
-            (>= pass 10)
+            (<= wmin (* wc:*wmin-f* w))            ; threshold bottomed out
+            (>= pass wc:*passes*)
         )
       (setq stop T)
-      (setq wmin (max (* 0.04 w) (* wmin 0.6)))    ; more, smaller features
+      (setq wmin (max (* wc:*wmin-f* w)            ; more, smaller features
+                      (* wmin wc:*refine*)))
     )
   )
 
@@ -76800,7 +76968,7 @@
     )
   )
   (setq x0 minx
-        y0 (- miny (* 1.5 w))          ; straight edge sits here
+        y0 (- miny (* wc:*drop-f* w))  ; straight edge sits here
   )
 
   ;; ---- 10. draw ----------------------------------------------------------
@@ -76810,8 +76978,8 @@
     (progn
       (command "_.UNDO" "_Begin")
       (setq inundo T)))
-  (setq lay2 (cal:ensure-layer "AIR-B" 1))
-  (cal:ensure-layer "DIMENSION" 3)
+  (setq lay2 (cal:ensure-layer wc:*cut-layer* wc:*cut-color*))
+  (cal:ensure-layer wc:*dim-layer* wc:*dim-color*)
 
   ;; two stacked drawings: the <1% target version, and below it the
   ;; minimum darts+inserts version
@@ -76827,7 +76995,8 @@
     )
 
     ;; variant label above the straight edge
-    (cal:text (list x0 (+ vy (* 0.6 w))) (* 0.4 w) vlab "DIMENSION")
+    (cal:text (list x0 (+ vy (* wc:*label-f* w))) (* wc:*label-h-f* w)
+             vlab wc:*dim-layer*)
 
     ;; straight (chosen) edge
     (setq sgp (list (+ x0 (car s)) vy)
@@ -76868,14 +77037,23 @@
       (setq x (+ x0 (car f))
             cw (cadr f)
             ;; local band depth = the actual bottom line at this feature
-            ld (max (- (wc:depth-at (car f) devpts)) (* 0.2 w))
+            ld (max (- (wc:depth-at (car f) devpts)) (* wc:*depth-min-f* w))
             ;; apex/slit stop line, measured down from the straightened
-            ;; edge.  With a tile height, tile+1" is the HIGHEST the apex
-            ;; may rise (closest it may come to the straight edge); the
-            ;; apex sits on that line, dropping lower only where the band
-            ;; is too shallow to reach it (kept 1" above the foot).
-            ;; Without a tile height, the default 42% of the local depth.
-            hz (if tileh (min (+ tileh 1.0) (- ld 1.0)) (* 0.42 ld))
+            ;; edge.  With a tile height, tile + wc:*tile-clear* is the
+            ;; HIGHEST the apex may rise (closest it may come to the
+            ;; straight edge); the apex sits on that line, dropping lower
+            ;; only where the band is too shallow to reach it (kept
+            ;; wc:*tile-clear* above the foot).  Both of those go
+            ;; NEGATIVE on a band shallower than the clearance itself --
+            ;; an apex above the straight edge, i.e. a cut straight
+            ;; through the strip -- so the outer max holds it inside the
+            ;; band whatever the tile asks for.  With no tile height,
+            ;; the plain wc:*apex-f* of the local depth.
+            hz (if tileh
+                 (max (min (+ tileh wc:*tile-clear*)
+                           (- ld wc:*tile-clear*))
+                      (* wc:*apex-min-f* ld))
+                 (* wc:*apex-f* ld))
             yb (- vy ld)                          ; local far edge
       )
       (if (= 1 (caddr f))
@@ -76893,16 +77071,18 @@
         )
         (progn                                    ; INSERT: slit + sliver below
           (wc:line (list x yb) (list x (- vy hz)) lay2)
-          ;; sliver piece: 1" wide at the top, the gap width at the
-          ;; bottom, sides about 1" longer than the slit it goes into
-          (setq dl (+ (- ld hz) 1.0)              ; slit length + 1"
-                cw (max cw 1.0)
-                yb (- vy ld (* 0.2 w))            ; sliver top
-                dr (- yb dl)                      ; sliver bottom
+          ;; sliver piece: wc:*sliver-top* wide at the top, the gap
+          ;; width at the bottom, sides wc:*sliver-extra* longer than
+          ;; the slit it goes into
+          (setq dl (+ (- ld hz) wc:*sliver-extra*)
+                cw (max cw wc:*sliver-top*)
+                yb (- vy ld (* wc:*sliver-gap-f* w))   ; sliver top
+                dr (- yb dl)                           ; sliver bottom
           )
           (wc:pline
             (list (list (- x (/ cw 2.0)) dr) (list (+ x (/ cw 2.0)) dr)
-                  (list (+ x 0.5) yb) (list (- x 0.5) yb)
+                  (list (+ x (/ wc:*sliver-top* 2.0)) yb)
+                  (list (- x (/ wc:*sliver-top* 2.0)) yb)
             )
             lay2 T
           )
@@ -76924,8 +77104,8 @@
                 dp2 (wc:dev-point (cadr sgm) pts s)
           )
           ;; keep only marks that actually sit on/near the band
-          (if (and (<= (cadddr dp1) (* 1.75 w))
-                   (<= (cadddr dp2) (* 1.75 w)))
+          (if (and (<= (cadddr dp1) (* wc:*near-f* w))
+                   (<= (cadddr dp2) (* wc:*near-f* w)))
             (progn
               (wc:line (list (+ x0 (car dp1)) (+ vy (cadr dp1)))
                        (list (+ x0 (car dp2)) (+ vy (cadr dp2)))
@@ -76939,66 +77119,70 @@
     )
 
     ;; height dimensions at both ends
-    (wc:vdim (list (car enda) vy) enda (- (car enda) (* 1.2 w)) "DIMENSION")
-    (wc:vdim (list (car endb) vy) endb (+ (car endb) (* 1.2 w)) "DIMENSION")
+    (wc:vdim (list (car enda) vy) enda
+             (- (car enda) (* wc:*dim-off-f* w)) wc:*dim-layer*)
+    (wc:vdim (list (car endb) vy) endb
+             (+ (car endb) (* wc:*dim-off-f* w)) wc:*dim-layer*)
 
     ;; length summary to the right of the drawing: top line, bottom line
     ;; before (along the original curve) and after (as drawn), the delta
     ;; the flattened bottom line is off by, and the residual once the
     ;; darts close / inserts fill (target: under 1%)
-    (setq tx (+ (car endb) (* 2.0 w))
-          th (* 0.35 w)
+    (setq tx (+ (car endb) (* wc:*sum-x-f* w))
+          th (* wc:*sum-h-f* w)
+          sumk -1
     )
-    (cal:text (list tx vy) th
-             (strcat "TOP LINE:      " (rtos toplen 2 2)
-                     "  (" (rtos toplen 4 8) ")")
-             "DIMENSION")
-    (cal:text (list tx (- vy (* 0.55 w))) th
-             (strcat "BOTTOM BEFORE: " (rtos botb 2 2)
-                     "  (" (rtos botb 4 8) ")")
-             "DIMENSION")
-    (cal:text (list tx (- vy (* 1.10 w))) th
-             (strcat "BOTTOM AFTER:  " (rtos bota 2 2)
-                     "  (" (rtos bota 4 8) ")")
-             "DIMENSION")
-    (cal:text (list tx (- vy (* 1.65 w))) th
-             (strcat "DELTA:         " (rtos (- bota botb) 2 2)
-                     "  (" (rtos (wc:pctof (- bota botb) botb) 2 2)
-                     "%" (if (< bota botb) " short)" " long)"))
-             "DIMENSION")
-    (cal:text (list tx (- vy (* 2.20 w))) th
-             (strcat "AFTER CUTS:    " (rtos vresid 2 2)
-                     "  (" (rtos (wc:pctof vresid botb) 2 2)
-                     "%)  [target <1%]"
-                     (if (> (abs vresid) (* 0.01 botb)) "  ** OVER TARGET **" ""))
-             "DIMENSION")
+    (foreach ln
+      (list
+        (strcat "TOP LINE:      " (wc:num toplen) "  (" (wc:arch toplen) ")")
+        (strcat "BOTTOM BEFORE: " (wc:num botb) "  (" (wc:arch botb) ")")
+        (strcat "BOTTOM AFTER:  " (wc:num bota) "  (" (wc:arch bota) ")")
+        (strcat "DELTA:         " (wc:num (- bota botb))
+                "  (" (wc:num (wc:pctof (- bota botb) botb))
+                "%" (if (< bota botb) " short)" " long)"))
+        (strcat "AFTER CUTS:    " (wc:num vresid)
+                "  (" (wc:num (wc:pctof vresid botb)) "%)  [target <"
+                (wc:num (* 100.0 wc:*target*)) "%]"
+                (if (> (abs vresid) (* wc:*target* botb))
+                  "  ** OVER TARGET **" ""))
+      )
+      (setq sumk (1+ sumk))
+      (cal:text (list tx (- vy (* wc:*sum-step-f* w sumk))) th
+               ln wc:*dim-layer*)
+    )
 
     ;; next variant goes below this one
-    (setq vy (- vy (* 5.0 w)))
+    (setq vy (- vy (* wc:*stack-f* w)))
   )
 
-  (command "_.UNDO" "_End")
-  (setq inundo nil)
+  ;; only a group this run actually opened: with undo off there is none,
+  ;; and an _End on nothing errors out of the command -- after every
+  ;; entity has already been drawn
+  (if inundo
+    (progn
+      (command "_.UNDO" "_End")
+      (setq inundo nil)))
   (setvar "CLAYER" oldlay)
 
   ;; ---- 11. report ---------------------------------------------------------
-  (princ (strcat "\nWCALST: developed length " (rtos toplen 2 2)
-                 ", band width " (rtos w 2 2) ", two drawings:"))
+  (princ (strcat "\nWCALST: developed length " (wc:num toplen)
+                 ", band width " (wc:num w) ", two drawings:"))
   (foreach vr (list (list feats resid "target <1%")
                     (list featsb residb "minimum cuts"))
     (setq dl 0 dr 0)
     (foreach f (car vr) (if (= 1 (caddr f)) (setq dl (1+ dl)) (setq dr (1+ dr))))
     (princ (strcat "\n  " (caddr vr) ": " (itoa dl) " dart(s), "
                    (itoa dr) " insert(s) (max " (itoa maxfeat)
-                   "), after cuts " (rtos (cadr vr) 2 2)
-                   " (" (rtos (wc:pctof (cadr vr) botb) 2 2) "%)"
-                   (if (> (abs (cadr vr)) (* 0.01 botb)) " OVER TARGET" "")))
+                   "), after cuts " (wc:num (cadr vr))
+                   " (" (wc:num (wc:pctof (cadr vr) botb)) "%)"
+                   (if (> (abs (cadr vr)) (* wc:*target* botb))
+                     " OVER TARGET" "")))
   )
-  (princ (strcat "\n  top line " (rtos toplen 2 2)
-                 ", bottom before " (rtos botb 2 2)
-                 ", bottom after " (rtos bota 2 2)
-                 ", delta " (rtos (- bota botb) 2 2)
-                 " (" (rtos (wc:pctof (- bota botb) botb) 2 2)
+  (princ (strcat "\n  top line " (wc:num toplen)
+                 ", bottom before " (wc:num botb)
+                 ", bottom after " (wc:num bota)
+                 ", delta " (wc:num (- bota botb))
+                 " (" (wc:num (wc:pctof (- bota botb) botb))
                  "%)."))
   (if (> nmk 0)
     (princ (strcat " " (itoa (/ nmk 2)) " reference mark(s) carried along."))

@@ -131,6 +131,17 @@ a stripped override block) is not in the drawing any more to be read.
   settings. Both READMEs name the old spellings for anyone whose
   startup file sets them.
 
+- **`WCALST` puts its 38 numbers at the top** (v1.8), the same rule
+  again on the tool that needed it most: the dart cap lived in the
+  emitter, the cut stop line in the drawing loop, the layer names at
+  the `entmake`, and the 1% target was written out four times over
+  1,240 lines. The prompt default and both variant summaries read the
+  knobs now, so retuning `wc:*maxfeat*` or `wc:*target*` cannot leave
+  the question or the sheet quoting the old figure, and the tool
+  README carries every one of them in a table. It joins
+  `tests/test_tunables.py`; `tests/test_wcalst.py` keeps the half that
+  file cannot see, retuning three knobs and checking what the run drew.
+
 ### Fixed
 
 - **A complex top-right placement can nest the corner bulge**, and
@@ -175,6 +186,43 @@ a stripped override block) is not in the drawing any more to be read.
   closed unconditionally, so in a drawing with undo switched off the
   run ended on a stray `_End`. Both close only a group they opened,
   which is what the flag was already there to say.
+
+- **`WCALST` closed one it had never opened either** -- the third of
+  that pair, found the same week and the same way. It drew both of its
+  layouts first, so with undo off the run died on its own last command
+  with the drawing already full and no `U` to take it back.
+
+- **A closed ring made `WCALST` walk for four minutes.** The
+  straightest continuation round a ring is always the next segment, so
+  tracing a long side lapped it until the 5,000-segment backstop and
+  reported a developed length of 694,662 -- about a thousand laps of a
+  band 1,250 long. The walk stops at a node it has already stood on,
+  taking the segment that closes the lap, so a ring develops as itself
+  in under half a second. The README claimed rings were unsupported;
+  they are handled, cut open at the segment you clicked.
+
+- **A line touching a long side was counted as a rung.** A datum line
+  or a cut mark crosses the chain as steeply as a rung does, and
+  counted as one it moved the median width, the vote for which side
+  the far edge is on, and -- through the middle rung, which is where
+  the far side is picked up -- which layer the far side was taken to
+  be on, redrawing the whole far side as loose reference marks. Only
+  segments leaving on the majority side are rungs now.
+
+- **The median rung was not the median.** `vl-sort` drops items that
+  compare equal (LISPLAB's lesson 2, met in production), so a band
+  flared at one end read its width off the deduped list: five 20s and
+  two 30s sort to `(20 30)`, whose median is the flare -- 50% wide, and
+  the width scales every cut, every filter and the whole layout.
+  `vl-sort-i` keeps them.
+
+- **With a tile height, a shallow band was cut through.** The apex rule
+  is tile + clearance below the straightened edge, but a clearance
+  clear of the foot; on a band shallower than the clearance itself both
+  halves go negative and the dart was drawn with its apex ABOVE the
+  straightened edge -- a V cut clean through the strip. It is held at
+  `wc:*apex-min-f*` of the local depth instead, which is what the
+  README had always claimed happened.
 
 ### Notes
 

@@ -125,6 +125,11 @@ FILES = [
     # (ptr:*band-now* / ptr:*dir-now* are the memory now).
     ('POINTRENAMER', ROOT / 'lisp' / 'pointrenamer' / 'POINTRENAMER.lsp',
      'ptr', ROOT / 'lisp' / 'pointrenamer' / 'README.md', TUNABLES),
+    # the band unroller, whose numbers were spread down 1,240 lines: the
+    # dart cap in the emitter, the stop line in the drawing loop, the
+    # layer names at the entmake, the 1% target written out four times
+    ('wcalst', ROOT / 'lisp' / 'wcalst' / 'wcalst.lsp', 'wc',
+     ROOT / 'lisp' / 'wcalst' / 'README.md', TUNABLES),
     # the check family.  Six of the ten name their globals tool:*x*, so
     # they read here; the other four (CHECK, DIMCHECK, LINFINCHECK,
     # COVERCHECK) still spell theirs *tool-x*, which this file's
