@@ -78,6 +78,14 @@ FILES = [
      ROOT / 'lisp' / 'abcdef' / 'README.md'),
     ('ALTABCDEF', ROOT / 'lisp' / 'altabcdef' / 'ALTABCDEF.lsp', 'altabcdef',
      ROOT / 'lisp' / 'altabcdef' / 'README.md'),
+    # POINTRENAMER, whose knobs reach further than most: what counts as a
+    # point, what counts as the perimeter, and -- since v1.4 -- which
+    # vertices of a fitted polyline are on the drawn curve at all.  Its
+    # two session-remembered answers are held apart from the knobs that
+    # seed them (ptr:*band-now* / ptr:*dir-now*), which is what lets the
+    # knobs stay literals nothing re-assigns.
+    ('POINTRENAMER', ROOT / 'lisp' / 'pointrenamer' / 'POINTRENAMER.lsp',
+     'ptr', ROOT / 'lisp' / 'pointrenamer' / 'README.md'),
 ]
 
 HEADER = ';;; -------------------- tunables '

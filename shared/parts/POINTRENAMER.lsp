@@ -63,9 +63,8 @@
 
 (setq *pointrenamer-version* "v1.4")
 
-;;; ======================================================================
-;;; TUNABLES  --  every knob the tool has, all of them here
-;;; ----------------------------------------------------------------------
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob the tool has, all of them here.
 ;;;  Past this block nothing is a bare number: every value the tool's
 ;;;  behaviour turns on is named here, with what it does and what moving
 ;;;  it costs.  Two ways to change one:
@@ -80,14 +79,19 @@
 ;;;    2  what counts as the perimeter   5  tolerances, named not tuned
 ;;;    3  what the questions start at
 ;;;
+;;;  Every one of them is a literal the tool only ever READS, so what
+;;;  stands here is what the file does.  The two answers carried between
+;;;  runs -- the band and the direction -- are remembered in state of
+;;;  their own below the block, seeded from the knobs here, so a run
+;;;  cannot quietly overwrite the value you set.
+;;;
 ;;;  One number is deliberately NOT here: the clamp inside the generic
 ;;;  tangent helper.  That helper is the shared library's, carried here
 ;;;  as a copy, and in the grouped build the library's own body is what
 ;;;  runs -- so a knob here would be read at one tier and ignored at the
 ;;;  other, which is worse than a number with a comment on it.
-;;; ======================================================================
 
-;;; --- 1. what counts as a point ----------------------------------------
+;; -- 1. what counts as a point ----------------------------------------
 
 ;; ABPCHECK's definition of a survey point, unchanged, so the two tools
 ;; never disagree about what they are looking at (its abp:*pt-layer* /
@@ -100,7 +104,7 @@
 (setq ptr:*pt-block* "ab_pt")     ; block name that counts wherever it sits
 (setq ptr:*pt-tag*   "number")    ; the attribute the number lives in
 
-;;; --- 2. what counts as the perimeter ----------------------------------
+;; -- 2. what counts as the perimeter ----------------------------------
 
 ;; Where the perimeter is looked for before anything is asked: the
 ;; BIGGEST closed polyline on this layer inside the highlight.  Point it
@@ -126,19 +130,20 @@
 ;; points instead, as this tool did before v1.4.
 (setq ptr:*vertex-skip* 16)
 
-;;; --- 3. what the questions start at -----------------------------------
+;; -- 3. what the questions start at -----------------------------------
 
-;; How far off the perimeter still counts as on it.  The command asks
-;; and Enter takes this; the answer then REPLACES it for the rest of the
-;; session, so a second run offers what the first one used.  Zero is
-;; refused at the prompt (initget 6) -- to mean "only what is exactly on
-;; it", answer a hair such as 1/16" rather than 0.
-(setq ptr:*band* 6.0)             ; 6 inches
+;; How far off the perimeter still counts as on it -- what the FIRST run
+;; of a session offers, before anyone has answered.  Later runs offer
+;; the last answer instead (ptr:*band-now*, below).  Zero is refused at
+;; the prompt (initget 6) -- to mean "only what is exactly on it",
+;; answer a hair such as 1/16" rather than 0.  Inches, like every
+;; distance here: 6.0 is six inches.
+(setq ptr:*band* 6.0)
 
-;; Which way round the last run went; the next run offers it as the
-;; default, and it is replaced the same way the band is.  Spelled
-;; exactly as the keywords are, because this string IS the offered
-;; default: "Clockwise" or "COunterclockwise", nothing else.
+;; Which way round the FIRST run of a session offers, on the same
+;; footing as the band.  Spelled exactly as the keywords are, because
+;; this string IS the offered default: "Clockwise" or
+;; "COunterclockwise", nothing else.
 (setq ptr:*dir* "Clockwise")
 
 ;; The number the count starts at, offered at every run.  Unlike the
@@ -151,13 +156,14 @@
 ;; the run ends.  Add a name here if a change ever starts touching one.
 (setq ptr:*sysvars* '("CMDECHO"))
 
-;;; --- 4. what the report looks like ------------------------------------
+;; -- 4. what the report looks like ------------------------------------
 
 ;; A start pick further than this off the perimeter is called out.  The
 ;; sweep still begins at the nearest spot on the run, but a pick this
 ;; far away is more often a mis-click than a corner.  Raise it to quiet
-;; the note on a plan drawn at a large scale.
-(setq ptr:*far-pick* 12.0)        ; 1 foot
+;; the note on a plan drawn at a large scale, lower it to be told about
+;; a looser one.  Inches: 12.0 is a foot.
+(setq ptr:*far-pick* 12.0)
 
 ;; The width the OLD number is padded to in the old-to-new table, so the
 ;; arrows line up.  Widen it for a survey that numbers its shots
@@ -172,10 +178,10 @@
 (setq ptr:*dist-mode* 4)
 (setq ptr:*dist-prec* 4)
 
-;;; --- 5. tolerances ----------------------------------------------------
-;;;  Named so that nothing in the code is an unexplained number, not so
-;;;  that they can be tuned: every one is a floating-point noise floor,
-;;;  in drawing units (inches).  Move one only with a reason.
+;; -- 5. tolerances ----------------------------------------------------
+;;  Named so that nothing in the code is an unexplained number, not so
+;;  that they can be tuned: every one is a floating-point noise floor,
+;;  in drawing units (inches).  Move one only with a reason.
 
 ;; Two spots closer together than this are the same spot -- the test for
 ;; whether a closed polyline's last vertex already sits on its first, so
@@ -212,6 +218,17 @@
 ;; bigger than that noise and far smaller than the gap between two shots
 ;; anyone would call separate.
 (setq ptr:*start-whisker* 1.0e-4)
+
+;;; -------------------- state -------------------------------------------
+;;;  Not knobs: what a run writes down, seeded from the block above.  A
+;;;  setting hoisted in here would advertise an initial value as a knob;
+;;;  a knob left down here would be overwritten by the first run.
+
+;; The band and the direction the last run of this session used, offered
+;; as the default by the next one.  nil until a run has answered, and
+;; the knobs above are what is offered until then.
+(setq ptr:*band-now* nil)
+(setq ptr:*dir-now* nil)
 
 
 ;;; -------------------- generic helpers ----------------------------------
@@ -824,19 +841,19 @@
           (setq step 4))))
       ;; ---- 4. which way round ------------------------------------
       ((= step 4)
-       (setq res (ptr:askdir ptr:*dir*))
+       (setq res (ptr:askdir (if ptr:*dir-now* ptr:*dir-now* ptr:*dir*)))
        (cond
          ((eq res 'CAL-BACK) (setq step 3))
-         (t (setq ptr:*dir* res
+         (t (setq ptr:*dir-now* res
                   step 5))))
       ;; ---- 5. the band -------------------------------------------
       ((= step 5)
        (setq res (ptr:asklimit
                    "How far off the perimeter still counts as on it?"
-                   ptr:*band* T))
+                   (if ptr:*band-now* ptr:*band-now* ptr:*band*) T))
        (cond
          ((eq res 'CAL-BACK) (setq step 4))
-         (t (setq ptr:*band* res
+         (t (setq ptr:*band-now* res
                   step 6))))
       ;; ---- 6. the first number -----------------------------------
       ((= step 6)
@@ -851,9 +868,9 @@
        ;; the direction asked for matches the loop's own winding
        ;; (counter-clockwise = positive area; a degenerate zero-area
        ;; run counts as drawn counter-clockwise)
-       (setq fwd  (eq (= ptr:*dir* "COunterclockwise") (>= area 0.0))
-             dir  ptr:*dir*
-             band ptr:*band*
+       (setq fwd  (eq (= ptr:*dir-now* "COunterclockwise") (>= area 0.0))
+             dir  ptr:*dir-now*
+             band ptr:*band-now*
              near nil
              far  nil)
        (foreach q recs
@@ -888,7 +905,7 @@
   ;; ---- the write, in one pass, then the old-to-new table ----------
   (if go
     (progn
-      (setq dirword (if (= ptr:*dir* "COunterclockwise")
+      (setq dirword (if (= dir "COunterclockwise")
                       "counterclockwise" "clockwise")
             n       first
             renamed nil
@@ -902,7 +919,7 @@
           (princ (strcat "\nAround the perimeter (" dirword " from the"
                          " pick):")))
         (if (= i nhead)
-          (princ (strcat "\nBeyond " (ptr:dstr ptr:*band*) " off the"
+          (princ (strcat "\nBeyond " (ptr:dstr band) " off the"
                          " perimeter (the count carries on, same"
                          " sweep):")))
         (setq new (itoa n)

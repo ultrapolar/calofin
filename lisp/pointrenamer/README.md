@@ -70,10 +70,13 @@ synonym); `Back` at the perimeter pick reopens the highlight.
 
 ## Tunables
 
-**Every** knob is in the `TUNABLES` block at the top of the file, each
-with a comment saying what it does and what moving it costs; past that
-block nothing is a bare number.  Edit a line and re-APPLOAD for good,
-or `(setq ptr:*band* 3.0)` at the command line for one drawing.
+**Every** knob is in the `tunables` block at the top of the file, each
+with a sentence saying what changing it does; past that block nothing
+is a bare number.  Edit a line and re-APPLOAD for good, or
+`(setq ptr:*band* 3.0)` at the command line for one drawing.  Every one
+is a literal the tool only reads -- the two answers carried between
+runs are kept in state of their own, so a run cannot overwrite what you
+set here.
 
 *What counts as a point* -- `ABPCHECK`'s definition, so the two tools
 never disagree:
@@ -89,34 +92,49 @@ never disagree:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `ptr:*perim-layer*` | `"POOL"` | layer the perimeter is looked for on |
-| `ptr:*filter*` | `POINT,INSERT,LWPOLYLINE,POLYLINE` | what the highlight may keep |
+| `ptr:*filter*` | `'((0 . "POINT,INSERT,LWPOLYLINE,POLYLINE"))` | what the highlight may keep.  `LINE` and `ARC` are absent on purpose: good perimeters, but only when clicked for by name |
 | `ptr:*vertex-skip*` | `16` | heavy-`POLYLINE` vertex flags that are **not** on the drawn curve -- the spline frame.  Curve- and spline-**fit** vertices are the curve the sheet shows, so they are walked; `17` restores the pre-v1.4 walk that dropped them |
 
-*What the questions start at:*
+*What the questions start at* -- what the FIRST run of a session
+offers, before anyone has answered:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ptr:*band*` | `6.0` | the band; the answer replaces it for the session |
-| `ptr:*dir*` | `"Clockwise"` | last direction, replaced the same way |
-| `ptr:*first*` | `1` | the number the count is offered at (not carried between runs) |
-| `ptr:*sysvars*` | `("CMDECHO")` | saved on the way in, restored however the run ends |
+| `ptr:*band*` | `6.0` | the band; later runs offer the last answer instead |
+| `ptr:*dir*` | `"Clockwise"` | the direction, on the same footing |
+| `ptr:*first*` | `1` | the number the count is offered at, every run (not carried between them) |
+| `ptr:*sysvars*` | `'("CMDECHO")` | saved on the way in, restored however the run ends |
 
 *What the report looks like:*
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ptr:*far-pick*` | `12.0` | a start pick further off than this is called out |
-| `ptr:*name-width*` | `8` | column the old number is padded to |
-| `ptr:*dist-mode*` / `ptr:*dist-prec*` | `4` / `4` | the `rtos` mode and precision every distance is written with -- feet-and-inches to a sixteenth |
+| `ptr:*far-pick*` | `12.0` | a start pick further off the perimeter than this is called out |
+| `ptr:*name-width*` | `8` | column the old number is padded to in the old-to-new table |
+| `ptr:*dist-mode*` | `4` | the `rtos` mode every distance is written with -- 4 is feet-and-inches |
+| `ptr:*dist-prec*` | `4` | its precision -- 4 is a sixteenth |
 
-*Tolerances* -- `ptr:*exact-eps*`, `ptr:*zero-len*`, `ptr:*bulge-eps*`,
-`ptr:*flat-eps*`, `ptr:*tiny-len2*`, `ptr:*whole-eps*`,
-`ptr:*start-whisker*`.  Named so
-nothing in the code is an unexplained number, not so they can be tuned:
-each is a floating-point noise floor, in inches.  The one number left
-in the body is the clamp inside the generic tangent helper, which the
-grouped build takes from `CALOFIN-LIB` -- a knob there would be read at
-one tier and ignored at the other.
+*Tolerances* -- named so nothing in the code is an unexplained number,
+not so they can be tuned.  Each is a floating-point noise floor, in
+inches; move one only with a reason:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ptr:*exact-eps*` | `1.0e-6` | two spots this close are the same spot -- the closing-run test |
+| `ptr:*zero-len*` | `1.0e-6` | a perimeter shorter than this has nothing to sweep |
+| `ptr:*bulge-eps*` | `1.0e-9` | below this a bulge is a straight line, and so is the chord under one |
+| `ptr:*flat-eps*` | `1.0e-10` | below this a determinant has gone to zero: collinear points, a full-circle sweep |
+| `ptr:*tiny-len2*` | `1.0e-20` | a segment with no direction to project onto (a length **squared**) |
+| `ptr:*whole-eps*` | `1.0e-9` | how near a whole number a point's number must read before the clash sweep counts it |
+| `ptr:*start-whisker*` | `1.0e-4` | added to every station so a point clicked dead-on the start sorts first |
+
+The one number left in the body is the clamp inside the generic tangent
+helper, which the grouped build takes from `CALOFIN-LIB` -- a knob there
+would be read at one tier and ignored at the other.
+
+`ptr:*band-now*`, `ptr:*dir-now*` and `ptr:*sysold*` are **state**, not
+knobs: what a run writes down.  They sit below the block, and setting
+one by hand is not a way to configure anything.
 
 ## Notes & limitations
 
