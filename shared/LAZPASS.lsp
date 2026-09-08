@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.5, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.6, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -83793,7 +83793,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.5 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.6 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 
