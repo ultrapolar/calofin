@@ -30,8 +30,10 @@
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
-;;;         Enter / M  ->  MOVE it onto the nearest object (green +)
-;;;         K          ->  KEEP it exactly where you drew it (red X);
+;;;         Enter / M  ->  MOVE it onto the nearest object (the +
+;;;                        marker, green by default)
+;;;         K          ->  KEEP it exactly where you drew it (the X
+;;;                        marker, red by default);
 ;;;                        the point is put back and nothing changes
 ;;;         P          ->  PICK the spot yourself
 ;;;     A point TWO OR MORE DIMENSIONS measure to is an ANCHOR and is
@@ -272,7 +274,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.8")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.9")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -280,67 +282,275 @@
   (princ (strcat "\nLINFINCHECK " *lfc-version*))
   (princ))
 
-;; --- tunables ------------------------------------------------------
-(setq *lfc-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
-(setq *lfc-grey-color*   8)       ; grey used to fade out everything not under review
-(setq *lfc-flag-color*   1)       ; red: dimensions you answered "No" to
-(setq *lfc-arc-color*    6)       ; magenta: arcs whose endpoints were moved
-(setq *lfc-olap-color*   4)       ; cyan: merged or flagged overlapping lines
-(setq *lfc-olap-fuzz*    1.0e-4)  ; max sideways offset that still counts as "same line"
-(setq *lfc-step-maxgap*  18.0)    ; steps: max tread spacing (drawing units; 18 = 18" when 1 unit = 1")
-(setq *lfc-step-minlines* 3)      ; steps: how many stacked parallel lines look like steps
-(setq *lfc-bench-minlines* 2)     ; side view: a bench profile is only two treads deep
-(setq *lfc-step-angtol*  1.0)     ; steps: parallelism tolerance (degrees)
-(setq *lfc-bead-layer*   "Bead Track") ; layer bead track must be drawn on
-(setq *lfc-bead-dist*    18.0)    ; how close bead track must be to plan-view steps (units)
-(setq *lfc-title-block*  "Tech Title") ; title block holding the wall height (spaces optional)
-(setq *lfc-wallht-tag*   "WallHt")     ; attribute tag carrying the wall height
-(setq *lfc-date-tag*     "Date")       ; attribute tag carrying the drawing date
-(setq *lfc-height-tol*   0.25)    ; steps height vs WallHt: allowed difference (units)
-(setq *lfc-min-wallht*   1.0)     ; a WallHt below this is NONSENSICAL (0'' walls do not exist)
-(setq *lfc-ask-phrase*   "Wall height") ; the question text expected when WallHt is "?"
-;; the generic Step Attachment block lists every option with a box; if
+;;; ======================================================================
+;;;  TUNABLES -- every value LINFINCHECK reads that someone might want
+;;;  to change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq *lfc-tol* 0.001) -- because every knob
+;;;  is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); angles in degrees where said so; colours are ACI numbers
+;;;  (1 red, 2 yellow, 3 green, 4 cyan, 5 blue, 6 magenta, 7 white,
+;;;  8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
+
+;; -- the liner rules: steps -------------------------------------------
+
+;; Treads are found as stacked parallel lines.  MAXGAP is the widest
+;; spacing that still reads as one flight (raise it for a drawing with
+;; deeper treads); MINLINES is how many stacked lines make a staircase
+;; in plan; BENCH-MINLINES the same in the side view, where a bench
+;; profile is only two treads deep; ANGTOL how far from parallel two
+;; treads may sit.
+(setq *lfc-step-maxgap*   18.0)    ; drawing units
+(setq *lfc-step-minlines* 3)       ; lines
+(setq *lfc-bench-minlines* 2)      ; lines
+(setq *lfc-step-angtol*   1.0)     ; degrees
+
+;; Bead track: the layer it belongs on, and how close to the plan-view
+;; steps it has to run before it counts as tracking them.
+(setq *lfc-bead-layer*    "Bead Track")
+(setq *lfc-bead-dist*     18.0)    ; drawing units
+
+;; The generic Step Attachment block lists every option with a box; if
 ;; ALL of them are still showing, nobody picked one, and the drawing
-;; must carry the question note instead
+;; must carry the question note instead.
 (setq *lfc-attach-options*
       '("Bead" "Flaps" "Rod Pockets" "No Attachment"))
 (setq *lfc-secured-phrase* "to be secured")
 
-;; dimension styles are reviewed in this order; styles not listed
-;; come afterwards ("whatever else is left"), still left-to-right
-(setq *lfc-style-order*
-      '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
-;; every dimension belongs on this layer; CDIM is the command that
-;; moves the strays there, and is what the report tells you to run
-(setq *lfc-dim-layer*   "DIMENSION")
-(setq *lfc-dimfix-cmd*  "CDIM")
-(setq *lfc-constr-layer* "LINFINCHECK-CONSTRUCTION")
-(setq *lfc-constr-color* 2)       ; yellow
-(setq *lfc-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
-(setq *lfc-block-depth*  3)       ; how many levels of nested blocks to search for names/text
-(setq *lfc-orig-color*   1)       ; red X: where you drew the point
-(setq *lfc-sugg-color*   3)       ; green +: where LINFINCHECK would move it
-;; title block border: nominal 58'-8" x 45'-3 5/8", or a scaled-UP multiple
-(setq *lfc-border-layer* "border")
-(setq *lfc-border-w*     704.0)   ; 58'-8"     in drawing units (1 unit = 1 inch)
-(setq *lfc-border-h*     543.625) ; 45'-3 5/8" in drawing units
-(setq *lfc-border-tol*   0.005)   ; 0.5% slack on both the scale and the aspect ratio
-(setq *lfc-fgstep-words*          ; a fiberglass step shows up under any of these
-      '("Fiberglass Step" "FG Step"))
-;; a liner pattern field carrying one of these was never really filled
-;; in ("Not Supplied", "#ERROR") - LINFINCHECK wipes it back to blank
-(setq *lfc-badwords*     '("NOT" "ERROR"))
-(setq *lfc-report-layer* "LINFINCHECK-REPORT")
-(setq *lfc-report-color* 3)       ; green
-(setq *lfc-zoom-margin*  0.75)    ; empty space around the zoomed item (fraction of its size)
-(setq *lfc-report-chars* 45.0)    ; report column width, in text heights
-(setq *lfc-ask-all-arc-ends* nil) ; T = confirm EVERY arc endpoint, even already-attached ones
-(setq *lfc-anchor-tol*   1.0e-4)  ; how close two dimension points must be to count as the same spot
-(setq *lfc-anchor-min*   2)       ; that many dimensions meeting there make it an anchor
+;; A fiberglass step shows up under any of these names.
+(setq *lfc-fgstep-words*  '("Fiberglass Step" "FG Step"))
 
-;; entity types dimension points and arc ends may attach to
+;; -- the liner rules: the title block ---------------------------------
+
+;; The title block holding the wall height and the sheet date, and the
+;; two attribute tags inside it.  Spaces in the block name are optional
+;; when it is searched for.
+(setq *lfc-title-block*   "Tech Title")
+(setq *lfc-wallht-tag*    "WallHt")
+(setq *lfc-date-tag*      "Date")
+
+;; The step height and WallHt may differ by this much before the report
+;; says to check the wall height...
+(setq *lfc-height-tol*    0.25)    ; drawing units
+
+;; ...and a WallHt below this is NONSENSICAL rather than merely wrong
+;; (0" walls do not exist).
+(setq *lfc-min-wallht*    1.0)     ; drawing units
+
+;; The question text expected in the drawing when WallHt reads "?".
+(setq *lfc-ask-phrase*    "Wall height")
+
+;; A liner pattern field carrying one of these words was never really
+;; filled in ("Not Supplied", "#ERROR") -- LINFINCHECK takes that phrase,
+;; and only that phrase, back out.  Matching is case-blind on whole
+;; words.
+(setq *lfc-badwords*      '("NOT" "ERROR"))
+
+;; -- the liner rules: the drawing border ------------------------------
+
+;; The title block border is nominally 58'-8" x 45'-3 5/8", or a
+;; scaled-UP whole multiple of it, on this layer.  TOL is the slack
+;; allowed on both the scale factor and the aspect ratio.
+(setq *lfc-border-layer*  "border")
+(setq *lfc-border-w*      704.0)   ; 58'-8"     in drawing units
+(setq *lfc-border-h*      543.625) ; 45'-3 5/8" in drawing units
+(setq *lfc-border-tol*    0.005)   ; 0.5%, as a fraction
+
+;; How many levels of nested block to search when looking for a name or
+;; a piece of text.  Raising it finds text buried deeper, at the cost of
+;; a slower sweep.
+(setq *lfc-block-depth*   3)       ; levels
+
+;; -- what counts as attached, and what counts as one spot -------------
+
+;; A dimension point or an arc end within this distance of an object is
+;; ATTACHED and is not questioned.  It has three more jobs: the
+;; smallest move worth asking about, the shortest overlap worth
+;; reporting, and the shortest segment admitted to overlap detection.
+;; Raising it asks fewer questions on all four counts.
+(setq *lfc-tol*           1.0e-4)  ; drawing units
+
+;; How close two dimension points must be to count as the same spot...
+(setq *lfc-anchor-tol*    1.0e-4)  ; drawing units
+
+;; ...and how many dimensions must meet there to make it an ANCHOR: a
+;; point left as drawn, geometry under it or not (the pair of dims
+;; pinning a hypotenuse corner is the everyday case).  1 would make
+;; every point an anchor and switch the dimension audit off.
+(setq *lfc-anchor-min*    2)       ; dimensions meeting at one spot
+
+;; Entity types a dimension point or an arc end may attach to.  Each
+;; must be a curve AutoCAD can measure to (vlax-curve-*).
 (setq *lfc-curve-types*
       '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
+
+;; T = confirm EVERY arc endpoint, even ones already attached.
+(setq *lfc-ask-all-arc-ends* nil)
+
+;; -- overlapping lines --------------------------------------------------
+
+;; How far apart two parallel lines may sit and still be called the
+;; same line.  Raising it calls more near-misses an overlap.
+(setq *lfc-olap-fuzz*     1.0e-4)  ; drawing units, sideways offset
+
+;; Two segments are only tested for overlap when their directions are
+;; within this of each other.  It is a bucketing shortcut, not a rule:
+;; keep it comfortably wider than the angle *lfc-olap-fuzz* implies
+;; over a segment's length, or a genuine overlap is never compared.
+(setq *lfc-olap-dirtol*   0.5)     ; degrees
+
+;; Entity types whose straight segments take part in overlap detection.
+;; Arcs, circles and splines have no straight run to overlap, which is
+;; why this is a shorter list than *lfc-curve-types*.
+(setq *lfc-olap-types*    '("LINE" "LWPOLYLINE" "POLYLINE"))
+
+;; -- review order ------------------------------------------------------
+
+;; Dimension styles are reviewed in this order; styles not listed come
+;; afterwards ("whatever else is left"), still left-to-right.  Matching
+;; is by exact name, case-blind.
+(setq *lfc-style-order*
+      '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
+
+;; Every dimension belongs on this layer; DIMFIX-CMD is the command
+;; that moves the strays there, and is what the report tells you to run.
+(setq *lfc-dim-layer*     "DIMENSION")
+(setq *lfc-dimfix-cmd*    "CDIM")
+
+;; Within a style, dimensions are reviewed row by row.  Two dimensions
+;; count as the same ROW when their midpoints are within this fraction
+;; of the selection's height.  Raise it and a whole sheet becomes one
+;; row (pure left-to-right); lower it and near-level dims split apart.
+(setq *lfc-row-band*      0.05)    ; fraction of the selection's height
+(setq *lfc-row-flat*      1.0)     ; ...and the band for a selection with no height
+
+;; -- colours -----------------------------------------------------------
+
+(setq *lfc-grey-color*    8)       ; ACI: everything not under review, faded (grey)
+(setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
+(setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
+(setq *lfc-orig-color*    1)       ; ACI: the X marking where you drew the point (red)
+(setq *lfc-sugg-color*    3)       ; ACI: the + marking where LINFINCHECK would put it (green)
+(setq *lfc-point-color*   2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+
+;; The command line and the report name these colours as they use them,
+;; so a colour changed here is described correctly rather than still
+;; being called red.
+
+;; -- the two layers ----------------------------------------------------
+
+;; The construction XLINE through a moved dimension's original points,
+;; and the report MTEXT.  Both layers are created on first use; the
+;; colour applies only then, so a layer already in the drawing keeps
+;; its own.
+(setq *lfc-constr-layer*  "LINFINCHECK-CONSTRUCTION")
+(setq *lfc-constr-color*  2)       ; ACI (yellow)
+(setq *lfc-report-layer*  "LINFINCHECK-REPORT")
+(setq *lfc-report-color*  3)       ; ACI (green)
+
+;; -- how the report is sized and placed --------------------------------
+
+;; All-clear lines are written at this fraction of the height the red
+;; attention lines get, so problems stand out.  1.0 = same size.
+(setq *lfc-green-scale*   0.75)
+
+;; Report column width, in text heights, and the width of the
+;; tutorial's reference sheet, which is prose rather than a column of
+;; findings and so runs wider.
+(setq *lfc-report-chars*  45.0)
+(setq *lfc-sheet-chars*   70.0)
+
+;; The report is scaled to the drawing: its text height is chosen so
+;; the whole report is about as tall as the drawing.  On a wide, short
+;; sheet that would give a tiny report, so the reference height is at
+;; least this fraction of the drawing's WIDTH.
+(setq *lfc-report-wide*   0.25)
+
+;; MTEXT line pitch as a multiple of text height, used to turn a line
+;; count into a height.  AutoCAD's default single spacing is 1.66.
+(setq *lfc-report-lead*   1.66)
+
+;; ...then the height is clamped: never taller than reference/HMAX,
+;; never shorter than reference/HMIN.  Both are DIVISORS, so a smaller
+;; number is a looser bound.
+(setq *lfc-report-hmax*   30.0)
+(setq *lfc-report-hmin*   200.0)
+
+;; The height used when the selection has no extents to scale against
+;; (DIMTXT x DIMSCALE is tried first), and the default offered for the
+;; tutorial's reference sheet.
+(setq *lfc-report-hfall*  2.5)     ; drawing units
+
+;; Gap between the drawing and the report, as a fraction of the
+;; drawing's width, and the margin left around the closing zoom.
+(setq *lfc-report-gap*    0.05)
+(setq *lfc-zoom-out*      0.05)
+
+;; Empty space around ONE item when the review zooms to it, as a
+;; fraction of its size.
+(setq *lfc-zoom-margin*   0.75)
+
+;; Half-size of the X and + markers drawn while you answer, as a
+;; fraction of the current view height -- so they stay the same size on
+;; screen however far you are zoomed in.
+(setq *lfc-mark-size*     0.02)    ; fraction of VIEWSIZE
+
+;; A report line is rendered red and full-size when it matches this
+;; pattern (wcmatch, case-blind; comma separates alternatives).  These
+;; are the words the report's own notes use for something that needs
+;; looking at -- reword a note and its word belongs here too, or the
+;; line quietly stops being red.
+(setq *lfc-attn-words*
+      "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*,*NEEDS UPDATING*,*UPDATED TO*")
+
+;; Distances in prompts and the report go through (rtos d mode prec):
+;; mode 2 is decimal, 3 engineering, 4 architectural (feet-inches);
+;; prec is decimal places (for mode 4: the inch is split 2^prec ways).
+;; The dimension's own MEASUREMENT is not formatted here -- it follows
+;; the drawing's LUNITS/LUPREC, which is what the drafter reads on the
+;; sheet.
+(setq *lfc-dist-mode*     2)       ; rtos mode
+(setq *lfc-dist-prec*     4)       ; decimal places
+
+;; -- numerical guards (rarely changed) --------------------------------
+
+;; Two points closer than this are the SAME point: no construction line
+;; is drawn through them, no joining line between an X and a +, and an
+;; arc is never re-fitted onto its own other end.
+(setq *lfc-same-pt*       1e-8)    ; drawing units
+
+;; How far an arc's extrusion normal (DXF 210) may lean from world +Z
+;; and still be audited; beyond it the arc is skipped rather than
+;; re-fitted in the wrong plane.
+(setq *lfc-planar-eps*    1e-9)    ; dimensionless (normal components)
+
+;; Below this a polyline bulge is treated as straight, so the edge
+;; joins overlap detection, and three points are too collinear to fit
+;; an arc through.
+(setq *lfc-flat-eps*      1e-12)
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  LINFINCHECK keeps no state between runs: everything
+;;;  a run remembers is a local of the command, and what it leaves in
+;;;  the drawing is xdata under the "LINFINCHECK" APPID.
+;;; ======================================================================
+
+;; A distance as the prompts and the report print it.
+(defun lfc:dist (d)
+  (rtos d *lfc-dist-mode* *lfc-dist-prec*))
+
+;; The word for an ACI colour, so a message naming a colour follows the
+;; knob instead of saying "red" whatever the knob holds.
+(defun lfc:color-name (aci / q)
+  (setq q (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if q (cdr q) (strcat "colour " (itoa aci))))
 
 ;; --- safety: xdata tags, colour stash, layer locks -----------------
 
@@ -503,7 +713,7 @@
   ;; infinite construction line through p1-p2 on the check layer,
   ;; tagged so reruns and LINFINCHECKRESCUE can clear it
   (setq len (distance p1 p2))
-  (if (and (> len 1e-8)
+  (if (and (> len *lfc-same-pt*)
            (entmake (list '(0 . "XLINE")
                           '(100 . "AcDbEntity")
                           (cons 8 *lfc-constr-layer*)
@@ -557,7 +767,7 @@
   best)
 
 (defun lfc:ptstr (p)
-  (strcat "(" (rtos (car p) 2 4) ", " (rtos (cadr p) 2 4) ")"))
+  (strcat "(" (lfc:dist (car p)) ", " (lfc:dist (cadr p)) ")"))
 
 (defun lfc:pad2 (n)
   (if (< n 10) (strcat "0" (itoa n)) (itoa n)))
@@ -626,21 +836,21 @@
 (defun lfc:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *lfc-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (- (cadr p) s)) (list (+ (car p) s) (+ (cadr p) s)) col 1)
   (grdraw (list (- (car p) s) (+ (cadr p) s)) (list (+ (car p) s) (- (cadr p) s)) col 1))
 
 (defun lfc:mark-plus (pt col / p s)
   ;; upright cross - marks WHERE LINFINCHECK WOULD PUT IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *lfc-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
 (defun lfc:mark-point (pt)
   ;; both strokes, for a point that is simply being pointed out
-  (lfc:mark-x pt 2)
-  (lfc:mark-plus pt 2))
+  (lfc:mark-x pt *lfc-point-color*)
+  (lfc:mark-plus pt *lfc-point-color*))
 
 (defun lfc:ask-yn (msg / ans)
   ;; T = yes (Enter or Y), nil = no (N)
@@ -670,8 +880,8 @@
 (defun lfc:confirm-move (label orig sugg what / ans newp)
   ;; The point has been put where LINFINCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
-  ;; which: a red X where you drew it, a green + where we would move
-  ;; it, joined by a line. WHAT names what the green + sits on, so a
+  ;; which: an X where you drew it, a + where we would move
+  ;; it, joined by a line. WHAT names what the + sits on, so a
   ;; move onto a shared anchor point does not claim to be an object.
   ;; Returns
   ;;   'move - take our suggestion
@@ -679,13 +889,14 @@
   ;;   <point> - a spot you picked yourself (current UCS)
   (lfc:mark-x    orig *lfc-orig-color*)
   (lfc:mark-plus sugg *lfc-sugg-color*)
-  (if (> (distance orig sugg) 1e-8)
+  (if (> (distance orig sugg) *lfc-same-pt*)
     (grdraw (trans orig 0 1) (trans sugg 0 1) *lfc-sugg-color* 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (lfc:ptstr orig)
-                 "  (red X)"
+                 "  (" (lfc:color-name *lfc-orig-color*) " X)"
                  "\n    Move = onto " what " " (lfc:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "  (" (lfc:color-name *lfc-sugg-color*) " +), "
+                 (lfc:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
@@ -694,7 +905,9 @@
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
     (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
-                                    " <Move to the green +>: ")))
+                                    " <Move to the "
+                                    (lfc:color-name *lfc-sugg-color*)
+                                    " +>: ")))
        (if newp newp 'move))))
 
 (defun lfc:mtext (ins height width text layer / dxf)
@@ -770,9 +983,9 @@
 
 (defun lfc:attn-p (s)
   ;; T when a report line describes something questionable or that
-  ;; needs looking over / fixing, so the report renders it in red
-  (wcmatch (strcase s)
-    "*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*,*NEEDS UPDATING*,*UPDATED TO*"))
+  ;; needs looking over / fixing, so the report renders it in red.
+  ;; The words are *lfc-attn-words*, at the top of the file.
+  (wcmatch (strcase s) (strcase *lfc-attn-words*)))
 
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -998,17 +1211,18 @@
       (foreach l diml
         (setq ndim (+ ndim (if (lfc:attn-p l) 1.0 *lfc-green-scale*))))))
   (setq nlin (max nmain ndim))
-  (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+  (if (and minx (> (max (- maxy miny) (- maxx minx)) *lfc-same-pt*))
     (progn
-      (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-            h   (/ ref (* 1.66 nlin)))
-      (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-      (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+      (setq ref (max (- maxy miny) (* *lfc-report-wide* (- maxx minx)))
+            h   (/ ref (* *lfc-report-lead* nlin)))
+      (if (> h (/ ref *lfc-report-hmax*)) (setq h (/ ref *lfc-report-hmax*)))
+      (if (< h (/ ref *lfc-report-hmin*)) (setq h (/ ref *lfc-report-hmin*))))
     (progn
       (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-      (if (or (null h) (<= h 0.0)) (setq h 2.5))))
+      (if (or (null h) (<= h 0.0)) (setq h *lfc-report-hfall*))))
   (setq ins (if minx
-              (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+              (list (+ maxx (* *lfc-report-gap* (max (- maxx minx) 1.0)))
+                    maxy 0.0)
               (list 0.0 0.0 0.0)))
   ;; --- the main sheet
   (setq txt (strcat (lfc:big title)
@@ -1093,7 +1307,7 @@
         bx (car p2) by (cadr p2)
         cx (car p3) cy (cadr p3)
         d  (* 2.0 (+ (* ax (- by cy)) (* bx (- cy ay)) (* cx (- ay by)))))
-  (if (> (abs d) 1e-12)
+  (if (> (abs d) *lfc-flat-eps*)
     (list (/ (+ (* (+ (* ax ax) (* ay ay)) (- by cy))
                 (* (+ (* bx bx) (* by by)) (- cy ay))
                 (* (+ (* cx cx) (* cy cy)) (- ay by)))
@@ -1108,14 +1322,14 @@
   ;; only arcs drawn in the world XY plane are handled
   (setq n (cdr (assoc 210 ed)))
   (or (null n)
-      (and (< (abs (car n)) 1e-9)
-           (< (abs (cadr n)) 1e-9)
+      (and (< (abs (car n)) *lfc-planar-eps*)
+           (< (abs (cadr n)) *lfc-planar-eps*)
            (> (caddr n) 0.0))))
 
 (defun lfc:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
   ;; target point; returns T on success
-  (if (and (> (distance target fixed) 1e-8)
+  (if (and (> (distance target fixed) *lfc-same-pt*)
            (setq c (lfc:circumcenter fixed mid target)))
     (progn
       (setq r  (distance c target)
@@ -1147,7 +1361,7 @@
 (defun lfc:unit (v / l)
   ;; v scaled to length 1; nil for a (near-)zero vector
   (setq l (distance '(0.0 0.0 0.0) v))
-  (if (> l 1e-12)
+  (if (> l *lfc-flat-eps*)
     (mapcar '(lambda (x) (/ x l)) v)))
 
 (defun lfc:proj-param (p a u)
@@ -1212,7 +1426,7 @@
   ;; only genuinely collinear neighbours are ever tested. Segments of
   ;; the same entity are skipped (a polyline meeting itself is not a
   ;; duplicate), as are pairs already found through another segment.
-  (setq atol  (* 0.5 (/ pi 180.0))              ; 0.5 deg is ample at this fuzz
+  (setq atol  (* *lfc-olap-dirtol* (/ pi 180.0))
         fams  nil
         pairs nil
         seen  nil)
@@ -1275,7 +1489,8 @@
 (defun lfc:seg-ent (s) (caddr s))
 
 (defun lfc:ocs->wcs (p nz)
-  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1e-9))) (trans p nz 0) p))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) *lfc-planar-eps*)))
+    (trans p nz 0) p))
 
 (defun lfc:lwpoly-segs (ent / ed nz elev vs bl cls n i segs g)
   ;; straight edges of an LWPOLYLINE; bulged (arc) edges are skipped
@@ -1298,10 +1513,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *lfc-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *lfc-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -1321,10 +1536,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *lfc-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *lfc-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -1333,6 +1548,7 @@
   (setq ed (entget ent)
         et (cdr (assoc 0 ed)))
   (cond
+    ((not (member et *lfc-olap-types*)) nil)
     ((= et "LINE")       (list (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed)) ent)))
     ((= et "LWPOLYLINE") (lfc:lwpoly-segs ent))
     ((= et "POLYLINE")   (lfc:heavy-poly-segs ent))))
@@ -2294,7 +2510,7 @@
              (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
-                            " is " (rtos dsug 2 4) " away."))
+                            " is " (lfc:dist dsug) " away."))
              (setq ans (lfc:confirm-move label pt sugg what))
              (cond
                ((eq ans 'move)
@@ -2369,7 +2585,10 @@
     (progn
       (setq ok (eq ok 'yes))
       (setq note (strcat
-                   (if ok "OK" "FLAGGED to fix (red)")
+                   (if ok
+                     "OK"
+                     (strcat "FLAGGED to fix ("
+                             (lfc:color-name *lfc-flag-color*) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -2403,7 +2622,8 @@
     ((<= (caddr near) *lfc-tol*)             ; endpoint sits on an object...
      (setq ends (lfc:curve-ends (car near)))
      ;; never snap onto the arc's own other endpoint
-     (setq ends (vl-remove-if '(lambda (q) (< (distance q other) 1e-8)) ends))
+     (setq ends (vl-remove-if
+                  '(lambda (q) (< (distance q other) *lfc-same-pt*)) ends))
      (cond
        ((null ends) nil)                      ; closed curve: no ends to demand
        ((vl-some '(lambda (q) (<= (distance p q) *lfc-tol*)) ends)
@@ -2411,7 +2631,7 @@
        (t (lfc:closest-of p ends))))         ; ...but mid-object: closest end
     (t                                        ; floating: closest end anywhere,
      (setq target (lfc:nearest-end p ent cands))
-     (if (or (null target) (< (distance target other) 1e-8))
+     (if (or (null target) (< (distance target other) *lfc-same-pt*))
        (cadr near)                            ; else closest point on closest object
        target))))
 
@@ -2443,7 +2663,7 @@
      (if (lfc:move-arc-end ent which target)
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
-                        (rtos (distance p target) 2 4) " away."))
+                        (lfc:dist (distance p target)) " away."))
          (setq ans (lfc:confirm-move label p target "the object end"))
          (cond
            ((eq ans 'move)
@@ -2512,10 +2732,12 @@
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
-                (strcat (itoa (length moved)) " endpoint(s) moved (magenta), "
+                (strcat (itoa (length moved)) " endpoint(s) moved ("
+                        (lfc:color-name *lfc-arc-color*) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
-                              " endpoint(s) moved (magenta)"))
+                              " endpoint(s) moved ("
+                              (lfc:color-name *lfc-arc-color*) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -2574,18 +2796,25 @@
         ((= ans "Merge")
          (lfc:merge-lines la lb info)
          (lfc:set-color ea *lfc-olap-color*)
-         (princ "\n  Merged into one line (cyan).")
-         (list label "merged into one line (cyan)" 'merged ea))
+         (princ (strcat "\n  Merged into one line ("
+                        (lfc:color-name *lfc-olap-color*) ")."))
+         (list label
+               (strcat "merged into one line ("
+                       (lfc:color-name *lfc-olap-color*) ")")
+               'merged ea))
         ((= ans "Flag")
          (lfc:set-color ea *lfc-olap-color*)
          (lfc:set-color eb *lfc-olap-color*)
-         (princ "\n  Flagged to fix (cyan).")
+         (princ (strcat "\n  Flagged to fix ("
+                        (lfc:color-name *lfc-olap-color*) ")."))
          (list label
-               (if (lfc:whole-line-p la)
-                 (if (= (strcase lay1) (strcase lay2))
-                   "flagged to fix (cyan)"
-                   "different layers - flagged to fix (cyan)")
-                 "polyline edge - flagged to fix (cyan)")
+               (strcat
+                 (if (lfc:whole-line-p la)
+                   (if (= (strcase lay1) (strcase lay2))
+                     "flagged to fix ("
+                     "different layers - flagged to fix (")
+                   "polyline edge - flagged to fix (")
+                 (lfc:color-name *lfc-olap-color*) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -2724,9 +2953,9 @@
 
         ;; march order for the dimensions: style groups first
         ;; (*lfc-style-order*), then row by row, left to right
-        (setq rowtol (if (and miny maxy (> (- maxy miny) 1e-8))
-                       (* 0.05 (- maxy miny))
-                       1.0))
+        (setq rowtol (if (and miny maxy (> (- maxy miny) *lfc-same-pt*))
+                       (* *lfc-row-band* (- maxy miny))
+                       *lfc-row-flat*))
         (setq dims (lfc:sort-dims dims rowtol))
 
         ;; spots two or more dimensions measure to are anchors: a
@@ -3516,7 +3745,8 @@
         ;; --- show the drawing plus the report -----------------------
         (if minx
           (progn
-            (setq m (* 0.05 (max (- maxx minx) (- maxy miny) 1.0)))
+            (setq m (* *lfc-zoom-out*
+                       (max (- maxx minx) (- maxy miny) 1.0)))
             (command "_.ZOOM" "_Window"
                      (trans (list (- minx m) (- miny m) 0.0) 0 1)
                      (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
@@ -3644,7 +3874,8 @@
      (foreach e (if lite
                   nil
                   (lfc:sort-dims dims (if (and miny maxy)
-                                        (* 0.05 (- maxy miny)) 1.0)))
+                                        (* *lfc-row-band* (- maxy miny))
+                                        *lfc-row-flat*)))
        (setq ed  (entget e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
@@ -3670,10 +3901,10 @@
                  ((and dq (or (null near) (< dq (caddr near))))
                   (setq bad (append bad (list (strcat (car s)
                                                       " off the shared anchor by "
-                                                      (rtos dq 2 4))))))
+                                                      (lfc:dist dq))))))
                  (near
                   (setq bad (append bad (list (strcat (car s) " off by "
-                                                      (rtos (caddr near) 2 4)))))))))))
+                                                      (lfc:dist (caddr near))))))))))))
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
@@ -4317,10 +4548,11 @@
           (setq ins (getpoint "\n  Pick the top-left corner for the sheet: "))
           (if ins
             (progn
-              (setq h   (getdist (strcat "\n  Text height <" (rtos 2.5) ">: "))
-                    h   (if h h 2.5)
+              (setq h   (getdist (strcat "\n  Text height <"
+                                        (rtos *lfc-report-hfall*) ">: "))
+                    h   (if h h *lfc-report-hfall*)
                     ins (trans ins 1 0))
-              (lfc:mtext ins h (* 70.0 h)
+              (lfc:mtext ins h (* *lfc-sheet-chars* h)
                           (lfc:join (lfc:tut-checklist) "\\P")
                           *lfc-report-layer*)
               (princ "\n  Reference sheet placed (one U removes it)."))

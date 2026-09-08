@@ -96,54 +96,148 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.4")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
-;; ---- configuration ---------------------------------------------------
+;;; ======================================================================
+;;;  TUNABLES -- every value ABCURCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq acc:*kink-tol* 5.0) -- because every
+;;;  knob is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); angles are DEGREES here even though the code works in
+;;;  radians; colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey).
+;;;
+;;;  The tangent bands are ABHD's, not this file's: the two commands
+;;;  have to agree on what smooth means, and tests/test_abcurcheck.py
+;;;  fails if they part company.  Move them only when ABHD's move.
+;;; ----------------------------------------------------------------------
+
+;; -- where the marks go -------------------------------------------------
 
 (setq acc:*mark-layer*   "POOL-CONT")  ; findings and declarations go here
 (setq acc:*comb-layer*   "POOL-COMB")  ; the curvature comb goes here
-(setq acc:*fuzz*         1.0e-4)       ; endpoint-matching fuzz, as ABHD's
-                                       ; *PF-CHAIN-FUZZ*: closer than this
-                                       ; and two ends are the same point
-(setq acc:*tangent-eps*  0.5)          ; deg - at or under this a joint is
-                                       ; tangent
-(setq acc:*kink-tol*     8.0)          ; deg - ABHD's *PF-TANG-TOL*: the
-                                       ; most a joint may turn and still
-                                       ; read as smooth
-(setq acc:*corner-ang*   45.0)         ; deg - ABHD's *PF-CORNER-ANG*:
-                                       ; over this it is a corner, not a
-                                       ; kink
-(setq acc:*micro-len*    3.0)          ; a segment shorter than this (3
-                                       ; inches) is a micro-segment: the
-                                       ; signature of a traced outline
-(setq acc:*micro-share*  0.10)         ; share of the perimeter sitting in
-                                       ; micro-segments that costs the
-                                       ; whole noise score
-(setq acc:*close-tol*    5.0)          ; deg - how far the signed turning
-                                       ; total may sit off 360 before the
-                                       ; loop is called self-crossing
-(setq acc:*snap-dist*    6.0)          ; how near a declaration pick must
-                                       ; land to a joint to claim it
-(setq acc:*mark-radius*  4.0)          ; radius of the finding rings
-(setq acc:*cross-max*    300)          ; skip the O(n^2) crossing scan
-                                       ; above this many segments, and say
-                                       ; so rather than pretend it ran
-(setq acc:*comb-step*    12.0)         ; one comb tooth per foot of run
-(setq acc:*comb-max*     24.0)         ; length of the tooth at the
-                                       ; tightest curvature in the loop
-(setq acc:*excess-free*  0.35)         ; turning excess a freeform pool is
-                                       ; allowed before the noise score
-                                       ; starts to fall...
-(setq acc:*excess-cap*   1.00)         ; ...and where it reaches zero
-(setq acc:*w-integrity*  40.0)         ; index weights: G0 is pass/fail,
-(setq acc:*w-tangency*   35.0)         ; tangency scales with the total
-(setq acc:*w-noise*      25.0)         ; undeclared kink, noise with the
-                                       ; micro share and turning excess
+(setq acc:*mark-color*   3)            ; ACI: the marks layer (green)
+(setq acc:*comb-color*   4)            ; ACI: the comb layer (cyan)
+(setq acc:*gap-color*    1)            ; ACI: a gap, or the kink band (red)
+(setq acc:*corner-color* 2)            ; ACI: an undeclared corner (yellow)
+(setq acc:*decl-color*   3)            ; ACI: a declared break (green)
 
+;; Everything ABCURCHECK draws carries xdata under this name, so a
+;; rescue erases only its own work off a layer the drawing may already
+;; be using.  Renaming it orphans what earlier runs left behind --
+;; including the declarations a later run is supposed to remember.
+(setq acc:*appid*        "ABCURCHECK")
+
+;; The dashed linetype declarations are ringed with, and its pattern:
+;; dash, gap, and the total the two must add up to.  It is created at
+;; pool scale so the dashes read on a 40-foot perimeter.
+(setq acc:*dash-name*    "DASHED")
+(setq acc:*dash-on*      12.0)         ; drawing units of dash
+(setq acc:*dash-off*     6.0)          ; ...and of gap
+;; -- G0: is the loop closed at all -------------------------------------
+
+;; Closer than this and two ends are the same point -- ABHD's
+;; *PF-CHAIN-FUZZ*.  Raising it forgives sloppier joins; a gap over it
+;; is a finding in its own right and the worst thing the grade can
+;; carry.
+(setq acc:*fuzz*         1.0e-4)       ; drawing units
+
+;; The signed turning of a simple closed loop is 360 degrees.  This is
+;; how far off that the total may sit before the loop is called
+;; self-crossing.
+(setq acc:*close-tol*    5.0)          ; degrees
+
+;; The crossing scan compares every segment with every other, so it is
+;; skipped above this many segments -- and the report says it was
+;; skipped rather than pretending it ran.
+(setq acc:*cross-max*    300)          ; segments
+
+;; -- G1: how sharply a joint may turn ----------------------------------
+
+;; At or under this a joint is TANGENT -- the two sides run on into
+;; each other and there is nothing to report.
+(setq acc:*tangent-eps*  0.5)          ; degrees
+
+;; The most a joint may turn and still read as smooth, and the angle
+;; over which it stops being a kink and becomes a corner.  Both are
+;; ABHD's (*PF-TANG-TOL* and *PF-CORNER-ANG*): the 8-45 band is the one
+;; a fabricator finds in the bead, which is why it leads the grade.
+;; Move them only when ABHD's move -- the test fails if they part.
+(setq acc:*kink-tol*     8.0)          ; degrees
+(setq acc:*corner-ang*   45.0)         ; degrees
+
+;; -- noise: what a traced outline leaves behind ------------------------
+
+;; A segment shorter than this is a micro-segment, the signature of an
+;; outline traced by hand rather than drawn.
+(setq acc:*micro-len*    3.0)          ; drawing units
+
+;; The share of the perimeter sitting in micro-segments that costs the
+;; whole noise score.  Lower it and a lightly traced outline is
+;; punished harder.
+(setq acc:*micro-share*  0.10)         ; fraction of the perimeter
+
+;; A freeform pool turns more than 360 degrees in total because it
+;; weaves; FREE is the excess it is owed before the noise score starts
+;; to fall, and CAP is where that score reaches zero.  These two are
+;; the values most worth recalibrating against real drawings.
+(setq acc:*excess-free*  0.35)         ; turns beyond one full turn
+(setq acc:*excess-cap*   1.00)         ; ...and where it reaches zero
+
+;; -- the 0-100 index ---------------------------------------------------
+
+;; What each half of the check is worth.  The three are summed and
+;; printed as the denominator, so they need not add to 100 -- but the
+;; grade word is set by the single worst thing found, not by the index,
+;; and these weights do not move it.
+(setq acc:*w-integrity*  40.0)         ; G0: gaps, doubles, crossings
+(setq acc:*w-tangency*   35.0)         ; the kink and corner bands
+(setq acc:*w-noise*      25.0)         ; micro share and turning excess
+
+;; -- picking and marking ------------------------------------------------
+
+;; How near a pick must land to a joint to declare it -- or, on Remove,
+;; to drop the declaration nearest the pick.
+(setq acc:*snap-dist*    6.0)          ; drawing units
+
+;; Radius of the rings drawn round a finding or a declaration.
+(setq acc:*mark-radius*  4.0)          ; drawing units
+
+;; -- the curvature comb -------------------------------------------------
+
+;; One comb tooth per this much run, and the length of the tooth at the
+;; tightest curvature in the loop -- every other tooth is scaled
+;; against that one, so the comb is a picture of relative curvature.
+(setq acc:*comb-step*    12.0)         ; drawing units per tooth
+(setq acc:*comb-max*     24.0)         ; drawing units at the tightest bend
+
+;; -- the finding labels -------------------------------------------------
+
+;; Label text is sized against the perimeter, so it reads the same on a
+;; 20-foot spa and a 60-foot pool: perimeter/DIV, but never under MIN.
+(setq acc:*label-min*    4.0)          ; drawing units
+(setq acc:*label-div*    200.0)        ; perimeter divided by this
+
+;; -- numerical guards (rarely changed) ---------------------------------
+
+;; A curvature below this is straight, so the comb is not drawn at all;
+;; a tooth shorter than this is not drawn either.
+(setq acc:*flat-curv*    1.0e-12)      ; 1/drawing units
+(setq acc:*flat-tooth*   1.0e-6)       ; drawing units
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  The sysvar list and its snapshot below are not
+;;;  knobs: they are what the run puts back on the way out.
 (setq acc:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
 (setq acc:*sysold* nil)                ; the snapshot itself
+;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
 ;; Local copies of the generic library helpers, as the standalone tier
@@ -819,7 +913,12 @@
         ix (acc:index res))
   (princ (strcat "\n\n  GRADE  " (acc:pad (car g) 10)
                  "set by: " (cadr g)))
-  (princ (strcat "\n  Index  " (acc:pad (strcat (itoa (car ix)) " / 100") 10)
+  (princ (strcat "\n  Index  "
+                 (acc:pad (strcat (itoa (car ix)) " / "
+                                  (itoa (fix (+ acc:*w-integrity*
+                                                acc:*w-tangency*
+                                                acc:*w-noise*))))
+                          10)
                  "(integrity " (itoa (cadr ix))
                  ", tangency " (itoa (caddr ix))
                  ", noise " (itoa (cadddr ix)) ")"))
@@ -861,14 +960,15 @@
 ;; calls).  Dash lengths are in drawing units - sized for an inch
 ;; drawing, so the dashes read at pool scale.
 (defun acc:ensure-dashed ()
-  (if (not (tblsearch "LTYPE" "DASHED"))
+  (if (not (tblsearch "LTYPE" acc:*dash-name*))
     (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLinetypeTableRecord")
-                   '(2 . "DASHED") '(70 . 0)
+                   (cons 2 acc:*dash-name*) '(70 . 0)
                    '(3 . "Dashed __ __ __ __ __")
-                   '(72 . 65) '(73 . 2) '(40 . 18.0)
-                   '(49 . 12.0) '(74 . 0)
-                   '(49 . -6.0) '(74 . 0)))))
+                   '(72 . 65) '(73 . 2)
+                   (cons 40 (+ acc:*dash-on* acc:*dash-off*))
+                   (cons 49 acc:*dash-on*) '(74 . 0)
+                   (cons 49 (- acc:*dash-off*)) '(74 . 0)))))
 
 ;; ---- "this one is mine" stamping -------------------------------------
 ;; ABCURCHECK draws onto layers the drawing may already be using, so it
@@ -880,15 +980,15 @@
 (defun acc:tag (en kind / ed)
   (if en
     (progn
-      (regapp "ABCURCHECK")
+      (regapp acc:*appid*)
       (setq ed (entget en))
-      (entmod (append ed (list (list -3 (list "ABCURCHECK"
+      (entmod (append ed (list (list -3 (list acc:*appid*
                                               (cons 1000 kind))))))))
   en)
 
 (defun acc:kind (en / x)
-  (setq x (assoc -3 (entget en '("ABCURCHECK"))))
-  (if x (cdr (assoc 1000 (cdr (assoc "ABCURCHECK" (cdr x)))))))
+  (setq x (assoc -3 (entget en (list acc:*appid*))))
+  (if x (cdr (assoc 1000 (cdr (assoc acc:*appid* (cdr x)))))))
 
 ;; Erase this command's own objects of one KIND on a layer, leaving
 ;; anything the user drew there alone.  Returns how many went.
@@ -945,24 +1045,25 @@
 ;; drawing and the answer list can never disagree.
 (defun acc:draw-declared (declared / p)
   (acc:ensure-dashed)
-  (acc:ensure-layer acc:*mark-layer* 3)
+  (acc:ensure-layer acc:*mark-layer* acc:*mark-color*)
   (acc:purge acc:*mark-layer* "DECL")
   (foreach p declared
-    (acc:tag (acc:ring p acc:*mark-radius* 3 T) "DECL")))
+    (acc:tag (acc:ring p acc:*mark-radius* acc:*decl-color* T) "DECL")))
 
 ;; Ring and label every undeclared finding.  Only what fails is marked:
 ;; a ring on all 47 joints of a normal polyline says nothing, and a
 ;; drawing nobody can read is a check nobody runs.
 (defun acc:draw-marks (res / h col lab n j)
-  (acc:ensure-layer acc:*mark-layer* 3)
+  (acc:ensure-layer acc:*mark-layer* acc:*mark-color*)
   (acc:purge acc:*mark-layer* "MARK")
-  (setq h (max 4.0 (/ (acc:val "perim" res) 200.0))
+  (setq h (max acc:*label-min*
+               (/ (acc:val "perim" res) acc:*label-div*))
         n 0)
   (foreach j (acc:offenders res)
     (setq col (if (or (>= (acc:j-gap j) acc:*fuzz*)
                       (= (acc:j-band j) "kink"))
-                1     ; red - a gap, or the 8-45 deg band that hurts
-                2)    ; yellow - a corner nobody declared
+                acc:*gap-color*      ; a gap, or the band that hurts
+                acc:*corner-color*)  ; a corner nobody declared
           lab (if (>= (acc:j-gap j) acc:*fuzz*)
                 (strcat "gap " (rtos (acc:j-gap j) 2 3))
                 (strcat (rtos (acc:deg (abs (acc:j-ang j))) 2 1) "%%d"))
@@ -1005,14 +1106,14 @@
         kmax 0.0)
   (foreach pr segs
     (setq kmax (max kmax (abs (acc:seg-curv pr)))))
-  (if (< kmax 1.0e-12)
+  (if (< kmax acc:*flat-curv*)
     (progn
       (princ "\n  The comb was not drawn: this perimeter is all straight"
              )
       (princ "\n  lines, so every tooth would have zero length.")
       0)
     (progn
-      (acc:ensure-layer acc:*comb-layer* 4)
+      (acc:ensure-layer acc:*comb-layer* acc:*comb-color*)
       (acc:purge acc:*comb-layer* "MARK")
       (setq scale (/ acc:*comb-max* kmax)
             tips  (acc:comb-tips segs scale)
@@ -1022,7 +1123,7 @@
         ;; a zero-length tooth on a straight run would be a degenerate
         ;; line, so only real teeth are drawn - the envelope still runs
         ;; through the curve there, which is what flat should look like
-        (if (> (acc:dist (car pr) (cadr pr)) 1.0e-6)
+        (if (> (acc:dist (car pr) (cadr pr)) acc:*flat-tooth*)
           (acc:tag
             (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
                             (cons 8 acc:*comb-layer*) '(100 . "AcDbLine")
@@ -1089,7 +1190,8 @@
              (setq p (acc:2d p) best nil bd nil)
              (foreach q declared
                (setq d (acc:dist p q))
-               (if (or (null bd) (< d bd)) (setq bd d best q)))
+               (if (and (<= d acc:*snap-dist*) (or (null bd) (< d bd)))
+                 (setq bd d best q)))
              (if best
                (setq declared (acc:remove best declared))
                (princ "\n  Nothing declared to drop."))))))

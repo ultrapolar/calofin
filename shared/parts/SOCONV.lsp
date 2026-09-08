@@ -49,10 +49,12 @@
 ;;; dim by hand while making it.  That is an edit, not a rule, and it
 ;;; is not in here.)
 ;;;
-;;; Locked layers among those touched are unlocked for the run and
-;;; re-locked afterwards, on the error path too; the destination layers
-;;; are created if the drawing does not have them, and thawed and
-;;; switched on if it does.  The whole run is one undo group.
+;;; A locked SOURCE layer is unlocked for the run and re-locked
+;;; afterwards, on the error path too.  The destination layers are
+;;; output layers: only the ones the selection actually reaches are
+;;; created, and one that exists but is frozen, locked or off is
+;;; repaired for good, with a line saying so (STANDARDS 5).  The whole
+;;; run is one undo group.
 ;;;
 ;;; SORECONV MOVES IT ALL BACK.  U undoes a run still in the session;
 ;;; SORECONV undoes one that was saved and reopened, which is when a
@@ -77,14 +79,16 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.2")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
 
-;; ---------------------------------------------------------------
-;; Configuration
-;; ---------------------------------------------------------------
+;;; -------------------- tunables ----------------------------------------
+;;; Everything a shop might want changed, all in one block; nothing
+;;; settable lives anywhere else in this file.  Each says what CHANGING
+;;; it does.  setq any of them after loading -- in a startup file, say
+;;; -- and the next run reads the new value.
 
 ;; The conversion itself, one row per rule:
 ;;
@@ -122,13 +126,16 @@
     ("TEXT"      . 4)
     ("DIMENSION" . 141)))
 
-(setq *soconv-default-color* 7)   ; a destination not named above
+;; The colour for a destination the table above does not name - what a
+;; retuned *soconv-map* row pointing at a new layer gets.  7 is white.
+(setq *soconv-default-color* 7)
 
 ;; nil, and a moved object keeps every property it arrived with, which
 ;; is what the sample conversion does.  T instead forces colour,
-;; linetype and lineweight to BYLAYER on the way past, the way DRONE
-;; and TYDRN do -- so the import takes the destination layer's own
-;; appearance and nothing overrides it later.
+;; linetype and lineweight to BYLAYER on the way past, the way DRONE,
+;; TYDRN and VSCONV do -- so the import takes the destination layer's
+;; own appearance and nothing overrides it later.  VSCONV carries the
+;; same switch with the opposite default, because ITS sample restyles.
 (setq *soconv-force-bylayer* nil)
 
 ;; The record SORECONV reads back, and the application it lives under.
@@ -137,9 +144,7 @@
 (setq *soconv-record*     t
       *soconv-xdata-app*  "SOCONV")
 
-;; ---------------------------------------------------------------
-;; Helpers
-;; ---------------------------------------------------------------
+;;; -------------------- helpers -----------------------------------------
 
 ;; Unlock every layer in NAMES that is currently locked and return the
 ;; list of layer objects that were unlocked (so they can be re-locked).
@@ -244,9 +249,7 @@
     (setq i (1+ i)))
   (list (reverse jobs) srcs dests tally))
 
-;; ---------------------------------------------------------------
-;; The record
-;; ---------------------------------------------------------------
+;;; -------------------- the record --------------------------------------
 ;; Eight xdata items in a fixed order, which is why there is no
 ;; grammar here to get wrong: xdata groups are typed, so a layer name
 ;; carrying a "|" (an xref-dependent one does) or a linetype called
@@ -378,9 +381,7 @@
   (reverse out)
 )
 
-;; ---------------------------------------------------------------
-;; Main command
-;; ---------------------------------------------------------------
+;;; -------------------- the command -------------------------------------
 (defun c:SOCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
                    tally job dest obj)
 

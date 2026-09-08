@@ -14,8 +14,9 @@ foreign layers rather than for the trace that arrives with labels on it.
 
 1. **LAYERS** -- every object on a source layer moves to the layer
    `*vsconv-map*` pairs it with, with color, linetype and lineweight
-   forced to BYLAYER so the moved geometry takes the destination
-   layer's own appearance instead of carrying the export's:
+   forced to BYLAYER (`*vsconv-force-bylayer*`, on by default) so the
+   moved geometry takes the destination layer's own appearance instead
+   of carrying the export's:
 
    | From | To | What it is |
    | --- | --- | --- |
@@ -38,11 +39,14 @@ foreign layers rather than for the trace that arrives with labels on it.
    draw itself in the export's 2.5-unit text. Strip the block and the
    style is finally the thing that decides.
 
-The destination layers are created if missing (and un-frozen,
-un-locked and switched back on when they are there but unusable).
-Locked layers among those touched are unlocked for the run and
-re-locked afterwards, on the error path too. The whole run is one undo
-mark, and a done line reports what moved, per source layer.
+Only the destination layers the selection actually reaches are
+created -- an export with nothing dimensioned leaves no empty
+`DIMENSION` behind, and a highlight of the anchors alone creates
+`POINTS` and nothing else. One that exists but is frozen, locked or
+switched off is repaired for good, with a line saying so. A locked
+**source** layer is unlocked for the run and re-locked afterwards, on
+the error path too. The whole run is one undo mark, and a done line
+reports what moved, per source layer.
 
 ## Install & run
 
@@ -111,16 +115,18 @@ they never had.
 
 ## Tunables
 
-At the top of `VSCONV.lsp`:
+At the top of `VSCONV.lsp`, each with its explanation beside it -- nothing
+below that block is meant to be edited for a shop's own conventions:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `*vsconv-map*` | the five pairs above | source layer -> destination layer. **The conversion is this table** -- an export that names its layers differently is retuned here and nothing else in the file changes |
-| `*vsconv-colors*` | `POOL` 4, `POINTS` 6, `DIMENSION` 141 | the color a destination layer is *created* with |
-| `*vsconv-default-color*` | `7` | for a destination the table above does not name |
-| `*vsconv-dim-style*` | `"STANDARD"` | the style the dimensions land in |
-| `*vsconv-dim-xdata*` | `"ACAD"` | the application whose style overrides go with the rename; `nil` leaves the overrides on |
-| `*vsconv-record*` | `t` | write the undo record `VSRECONV` reads |
+| `*vsconv-colors*` | `POOL` 4, `POINTS` 6, `DIMENSION` 141 | the color a destination layer is *created* with; an existing layer keeps its own |
+| `*vsconv-default-color*` | `7` | for a destination the table above does not name -- what a retuned map row pointing at a new layer gets |
+| `*vsconv-force-bylayer*` | `T` | force color, linetype and lineweight to BYLAYER on every moved object. `nil` moves the layer and leaves every other property as it arrived -- `SOCONV`'s default, because *its* sample does that; the two tools carry the same switch with opposite defaults, each for its export. The record is written either way and keeps its fixed shape, so with the forcing off `VSRECONV` puts back the values the object still has |
+| `*vsconv-dim-style*` | `"STANDARD"` | the style the dimensions land in; missing from the drawing, the dimensions keep the export's style and overrides and the run says so once |
+| `*vsconv-dim-xdata*` | `"ACAD"` | the application whose style overrides go with the rename; `nil` leaves the overrides on and changes only the style name. It is also where `vsconv:stamp` reads the overrides the record carries |
+| `*vsconv-record*` | `t` | write the undo record `VSRECONV` reads; `nil` converts exactly as before and writes nothing down, so the run can only be undone by `U` |
 | `*vsconv-xdata-app*` | `"VSCONV"` | the xdata application that record lives under |
 
 ## Notes & limitations
@@ -132,7 +138,8 @@ At the top of `VSCONV.lsp`:
   do with.
 * A drawing whose color, linetype or lineweight was set per object on
   purpose loses that in the move -- BYLAYER is the whole point of the
-  conversion, and the export sets none of the three.
+  conversion, and the export sets none of the three. Set
+  `*vsconv-force-bylayer*` to `nil` for the job that wants them kept.
 * If the drawing has no `*vsconv-dim-style*` dimension style, the
   dimensions still move layer but keep the export's style and its
   overrides, and the run says so once rather than once per dimension.
@@ -157,7 +164,13 @@ style rename, that a highlight scopes the run, that a drawing with none
 of those layers is reported rather than prompted over, the
 missing-dimension-style path, and the two cut-short paths (an error
 mid-run and an Esc at the prompt) that reach the command's own
-`*error*` -- which has to put the lock back and close the mark.
+`*error*` -- which has to put the lock back and close the mark. Then
+the contingencies: each tunable in its non-default position
+(`*vsconv-force-bylayer*` `nil`, `*vsconv-dim-xdata*` `nil`, a retuned
+map pointing at a layer the colour table does not name), an export with
+nothing dimensioned -- which must leave no `DIMENSION` layer behind --
+and a frozen, switched-off destination repaired with a line saying so.
+
 Then `VSRECONV` over the same fixture: the round trip lands every object
 on the layer and properties it arrived with and every dimension back on
 its own style **with its override block**, a purged source layer is

@@ -8,6 +8,12 @@ which set of them shipped together. The release name lives in
 
 ## v3.6 -- 2026-09-08
 
+Two passes that landed together, and they are the same idea twice: a
+value somebody has to be able to reach has to be somewhere they can find
+it. One pass put every tool's settings in a block at the top of its
+file; the other gave every converter a way back that survives a save,
+which is the same thing said about a conversion.
+
 Every converter gains a reverter. `XFTCONV`, `SOCONV` and `VSCONV` each
 read somebody else's export and turn it into a drawing this office can
 work on; until now the only way back was `U`, which is good for as long
@@ -23,9 +29,15 @@ undo that works from the drawing alone cannot survive a save, because
 what a conversion destroys (an erased marker, an overwritten property,
 a stripped override block) is not in the drawing any more to be read.
 
+Alongside that, the three converters were read through together:
+every knob a shop might turn is at the top of its file with an
+explanation beside it, under the tunables rule (STANDARDS 5) that
+landed in this same release, and the contingencies a survey brings
+in run in the VM at both tiers.
+
 ### Added
 
-- **`XFTRECONV`** (`lisp/xftconv/`, with `XFTCONV` at v1.13) puts a
+- **`XFTRECONV`** (`lisp/xftconv/`, with `XFTCONV` at v1.14) puts a
   converted survey back: the marker and the name text the swap erased,
   the leftover text the purge took, the `ab_pt` block off again, and
   the x12 undone by one `SCALE` of 1/12 about the base point the
@@ -44,7 +56,7 @@ a stripped override block) is not in the drawing any more to be read.
   scaled about different base points, and one scale back cannot undo
   both -- so it says so rather than half-reverting one of them.
 
-- **`SORECONV`** (`lisp/soconv/`, with `SOCONV` at v1.1) moves an
+- **`SORECONV`** (`lisp/soconv/`, with `SOCONV` at v1.2) moves an
   import back onto the export's own layers. The record keeps the layer
   each object came off, that layer's own colour, and -- only when
   `*soconv-force-bylayer*` was on, since that is the only time the
@@ -55,7 +67,7 @@ a stripped override block) is not in the drawing any more to be read.
   the colour the record kept, so taking that advice does not close the
   way back.
 
-- **`VSRECONV`** (`lisp/vsconv/`, with `VSCONV` at v1.1) does the same
+- **`VSRECONV`** (`lisp/vsconv/`, with `VSCONV` at v1.2) does the same
   for a VS export, and undoes **both halves of the dimension step**:
   the style name back in group 3, and the `ACAD`/`DSTYLE` override
   block back on the dimension, kept verbatim as the xdata items it
@@ -69,7 +81,146 @@ a stripped override block) is not in the drawing any more to be read.
   own drawing lives too, so the record is what says which objects came
   from an export.
 
+### Fixed
+
+- **`XFTCONV`** (v1.14) died in a drawing with undo recording switched
+  off (`UNDO` `Control` `None`). The `_.UNDO _Begin` was already behind
+  a check of `UNDOCTL`, but the `_End` on the success path was not, so
+  the run swapped every point and then errored out through its handler
+  on the group it never opened. Both ends of the group sit behind the
+  one flag now, as the handler's close always did.
+- **`VSCONV`** (v1.2) created every destination layer -- `POOL`,
+  `POINTS`, `DIMENSION` -- before it had looked at the selection, so an
+  export with nothing dimensioned left an empty `DIMENSION` behind and a
+  highlight of the anchors alone created `POOL` for nothing. It plans
+  the run first now, the way `SOCONV` always did: only the destinations
+  the selection reaches are created, and only the source layers it takes
+  from are unlocked. The same plan fixed the done line's `now empty`
+  list, which walked every VS layer present rather than the ones the run
+  took objects off -- so that already-empty `4 Dimensions` was named as
+  something to purge by a run that never touched it.
+
+- **A complex top-right placement can nest the corner bulge**, and
+  OASIS drew nothing rather than saying so. The file argued the case
+  away: the gap between a corner bulge's centre and a side bulge's is
+  never *less* than their radii differ by. Never less -- but it can be
+  *equal*, and equal is an internal tangency, the one pair no tangent
+  radius bridges. It takes a corner bulge at exactly half the Y bound
+  and the two centres sharing an X, both of which the placement is free
+  to arrange: a 40' x 20' with a 10' corner bulge and a 9' right bulge
+  shifted a foot out. Every question answered, and then "those radii do
+  not make a closed outline -- nothing drawn", which is the one thing
+  the routine's header promises never happens. It is refused at the
+  placement question now, against both side bulges, and a tie reaches
+  the same check -- at its own floor a tie stands the corner bulge
+  straight above the right one, which is exactly the shared X.
+
+- **Esc inside the pool-bottom flow left its tangency marks behind.**
+  They are scaffolding, like the preview, but they were a local of
+  `oasis:askbottom`, which the command's own error handler cannot see
+  -- so cancelling there left every numbered mark, in red, over a pool
+  that was otherwise finished and worth keeping. They are
+  `oasis:*marks*` now and the handler clears them beside the preview.
+
+- OASIS's header banner still described **four families** and listed
+  four, having never heard about the NXT cloud; the prompt offers five
+  and `oasis:names` builds seven rings, not six. The file STANDARDS.md
+  calls the source of truth was the one place describing the tool as it
+  was two shapes ago.
+
+- **BPCALLOUT could not ring two points closer than twice its ring
+  radius.** A click was read against the rings already down even when
+  it had snapped to a survey point, so with the 5" default and two
+  points 8" apart, clicking the second landed inside the first's ring
+  and un-ringed it -- the run reported "nothing picked" and drew
+  nothing. Only a click with NO survey point under it is read against
+  the rings now; a click that snapped is the point it snapped to.
+
+- **`CDCALLOUT` and `CDCREATE` closed an undo group they had never
+  opened.** Both guard the `_.UNDO _Begin` behind the `UNDOCTL` check
+  -- `_Begin` with undo off errors out of the command -- and then
+  closed unconditionally, so in a drawing with undo switched off the
+  run ended on a stray `_End`. Both close only a group they opened,
+  which is what the flag was already there to say.
+
+- **`WCALST` closed one it had never opened either** -- the third of
+  that pair, found the same week and the same way. It drew both of its
+  layouts first, so with undo off the run died on its own last command
+  with the drawing already full and no `U` to take it back.
+
+- **A closed ring made `WCALST` walk for four minutes.** The
+  straightest continuation round a ring is always the next segment, so
+  tracing a long side lapped it until the 5,000-segment backstop and
+  reported a developed length of 694,662 -- about a thousand laps of a
+  band 1,250 long. The walk stops at a node it has already stood on,
+  taking the segment that closes the lap, so a ring develops as itself
+  in under half a second. The README claimed rings were unsupported;
+  they are handled, cut open at the segment you clicked.
+
+- **A line touching a long side was counted as a rung.** A datum line
+  or a cut mark crosses the chain as steeply as a rung does, and
+  counted as one it moved the median width, the vote for which side
+  the far edge is on, and -- through the middle rung, which is where
+  the far side is picked up -- which layer the far side was taken to
+  be on, redrawing the whole far side as loose reference marks. Only
+  segments leaving on the majority side are rungs now.
+
+- **The median rung was not the median.** `vl-sort` drops items that
+  compare equal (LISPLAB's lesson 2, met in production), so a band
+  flared at one end read its width off the deduped list: five 20s and
+  two 30s sort to `(20 30)`, whose median is the flare -- 50% wide, and
+  the width scales every cut, every filter and the whole layout.
+  `vl-sort-i` keeps them.
+
+- **With a tile height, a shallow band was cut through.** The apex rule
+  is tile + clearance below the straightened edge, but a clearance
+  clear of the foot; on a band shallower than the clearance itself both
+  halves go negative and the dart was drawn with its apex ABOVE the
+  straightened edge -- a V cut clean through the strip. It is held at
+  `wc:*apex-min-f*` of the local depth instead, which is what the
+  README had always claimed happened.
+
+- **`TUTORIALABHD`'s demo never created the layer it drew on.** Its
+  captions, its three candidate outlines and their labels all go on
+  `POOL-FIT`, and `entmake` onto a layer the drawing does not have
+  fails -- so on a first-time drawing, which is exactly who runs a
+  tutorial, the tour drew nothing at all. It gates the layer now, the
+  way `pf:compare` always has.
+
+- **A swept ABHD demo left a line on the `POOL` layer.** The walk that
+  re-registers the bottom's output as scaffolding started *after* the
+  two break lines, and `pf:bottom-draw` takes those out of the registry
+  along with its own output -- so the shallow break line was dropped
+  and never picked back up, and "Swept -- the drawing is as it was" was
+  not quite true. The walk starts behind them now.
+
+- **The pool bottom's dimensions were the one thing ABHD drew without
+  its own stamp**, against the rule in its own header that everything
+  it creates carries one and only stamped objects are ever erased.
+
 ### Changed
+
+- **OASIS puts every knob at the top** -- all forty of them, in one
+  tunables block with a sentence each on what changing it does, and
+  joins `tests/test_tunables.py` so it stays that way. Fourteen were
+  already there; the other twenty-six were spelled out where they were
+  read, among them the dimension stand-off's `12` and `18` (POOL's own
+  rule, and now a knob that says it has to move with POOL's), the
+  preview's `0.6` joiners and `1.25` clearance, the `1.7` a radius
+  label sits out from its arc, the `1e-8` the check drawing dedupes
+  ties with, two loop guards and a bare `48.0` in the middle of the
+  kidney provisionals. Values are unchanged throughout: this renames,
+  it does not retune, and `test_the_tunables_are_live` sets one knob
+  out of each group on a loaded file and makes the drawing follow it.
+
+  **`oasis:*hopoff*` was not a knob.** The hopper question wrote it, so
+  an accepted offset became the session's default -- which is wanted,
+  but it meant a pool quietly edited the configuration it had been
+  given, and an office that set `24` in a startup file would find it
+  saying something else an hour later. The setting and the memory are
+  two names now: `oasis:*hopoff*` says where a fresh session starts and
+  is never written, `oasis:*hopoff-last*` holds what this session last
+  accepted. What a user sees is unchanged.
 
 - `vsconv:restyle-dim` strips the `ACAD` application's xdata and leaves
   every other application's where it is. In AutoCAD that is what it
@@ -103,6 +254,36 @@ a stripped override block) is not in the drawing any more to be read.
   settings. Both READMEs name the old spellings for anyone whose
   startup file sets them.
 
+- **`WCALST` puts its 38 numbers at the top** (v1.8), the same rule
+  again on the tool that needed it most: the dart cap lived in the
+  emitter, the cut stop line in the drawing loop, the layer names at
+  the `entmake`, and the 1% target was written out four times over
+  1,240 lines. The prompt default and both variant summaries read the
+  knobs now, so retuning `wc:*maxfeat*` or `wc:*target*` cannot leave
+  the question or the sheet quoting the old figure, and the tool
+  README carries every one of them in a table. It joins
+  `tests/test_tunables.py`; `tests/test_wcalst.py` keeps the half that
+  file cannot see, retuning three knobs and checking what the run drew.
+
+- **Every knob at the top, explained.** `XFTCONV`'s settings block is
+  rewritten one setting per form with a paragraph each -- what it is,
+  when to change it, what depends on it -- and three values that were
+  buried in the code joined it: `*xft-block-layer-color*` (the `6` that
+  a missing `POINTS` was created with, in two places), `*xft-strip-prefix*`
+  (the Leica flavour's letter strip, hard-wired `T` where the trace
+  flavour had a switch) and `*xft-column-tol*` (the half text height
+  that decides "same column" in the name matching). `VSCONV` gained
+  `*vsconv-force-bylayer*` (default `T`), the switch `SOCONV` already
+  had with the opposite default -- each tool's default is what its
+  sample export does, and the two files now say so about each other.
+  `SOCONV`'s block, already complete, has the same header and its
+  default colour explained. The per-tool READMEs' tables follow.
+- The three headers say precisely what happens to a locked layer: a
+  locked **source** is unlocked for the run and re-locked, on the error
+  path too; a destination is an output layer, repaired for good with a
+  line saying so (STANDARDS 5). The READMEs and tests had it right; the
+  headers claimed re-locking for both.
+
 - **ABHD puts every knob at the top too** (`abhd.lsp` at 090826
   REV15), in one tunables block of 53 settings in three groups --
   drawing setup, fitter tuning, guards -- each with a sentence on what
@@ -133,40 +314,50 @@ a stripped override block) is not in the drawing any more to be read.
   pass over three tools and four suites (the block says so, at the top,
   where someone looking for the omission will be).
 
-### Fixed
+### Checks and tests
 
-- **BPCALLOUT could not ring two points closer than twice its ring
-  radius.** A click was read against the rings already down even when
-  it had snapped to a survey point, so with the 5" default and two
-  points 8" apart, clicking the second landed inside the first's ring
-  and un-ringed it -- the run reported "nothing picked" and drew
-  nothing. Only a click with NO survey point under it is read against
-  the rings now; a click that snapped is the point it snapped to.
+- `tests/test_xftconv.py` honours `CALOFIN_LISP_ROOT` -- its docstring
+  promised a shared-tier run from the start, but the path was hard-wired
+  to `lisp/`, so the grouped twin was only ever load-checked. `make
+  parity` now runs the converter at both tiers like its two siblings.
+- `tests/test_converter_tunables.py` holds the tunables rule for these
+  three the way `tests/test_tunables.py` holds it for the four GUI
+  files. It could not simply extend that one: its parser reads a knob
+  as one `setq` per line with a scalar after it, and the converters'
+  central knobs are multi-line tables (`*soconv-map*` is seven rows)
+  whose default cannot be written in a README cell. So the block is
+  walked by parens instead, and the README check asks that every knob
+  HAS a row rather than comparing the default in it. It was worth
+  writing: it caught `XFTCONV` explaining each knob *below* its `setq`
+  where every other file in the tree explains it above.
+- Contingency sections in all three suites: undo switched off, an
+  import already in inches, a plain `POINT` for a marker, MTEXT and
+  justified names, each settings switch in its non-default position, a
+  frozen and switched-off destination repaired rather than drawn onto
+  blind, the attribute style falling back to `TEXTSTYLE`, an error
+  mid-run through `XFTCONV`'s handler, both flavours in one highlight,
+  `XFTCONV-SETUP`; `VSCONV`'s and `SOCONV`'s retuned tables and default
+  colour, `VSCONV`'s `*vsconv-dim-xdata*` `nil`, an export with nothing
+  dimensioned, and a `SOCONV` highlight carrying nothing of the
+  export's.
 
-- **`CDCALLOUT` and `CDCREATE` closed an undo group they had never
-  opened.** Both guard the `_.UNDO _Begin` behind the `UNDOCTL` check
-  -- `_Begin` with undo off errors out of the command -- and then
-  closed unconditionally, so in a drawing with undo switched off the
-  run ended on a stray `_End`. Both close only a group they opened,
-  which is what the flag was already there to say.
+- `tests/test_abhd_contingencies.py` drives `ABHD`, `ABHDCOVER` and
+  `ADAB` through the paths a bad drawing takes -- no points, two
+  points, five duplicates, a gap, a `SPLINE`, a tilted UCS, a distance
+  past the ceiling, a percentage over 100, a pick nowhere near a survey
+  point, a break picked twice on one point, a bottom cancelled halfway,
+  a `Redo` that omits a point and puts it back -- and runs
+  `TUTORIALABHD`, which nothing had ever executed. 65 checks in 13
+  sections, at both tiers, each reading the message the path prints and
+  what it left in the drawing. The last section holds the block itself.
 
-- **`TUTORIALABHD`'s demo never created the layer it drew on.** Its
-  captions, its three candidate outlines and their labels all go on
-  `POOL-FIT`, and `entmake` onto a layer the drawing does not have
-  fails -- so on a first-time drawing, which is exactly who runs a
-  tutorial, the tour drew nothing at all. It gates the layer now, the
-  way `pf:compare` always has.
-
-- **A swept ABHD demo left a line on the `POOL` layer.** The walk that
-  re-registers the bottom's output as scaffolding started *after* the
-  two break lines, and `pf:bottom-draw` takes those out of the registry
-  along with its own output -- so the shallow break line was dropped
-  and never picked back up, and "Swept -- the drawing is as it was" was
-  not quite true. The walk starts behind them now.
-
-- **The pool bottom's dimensions were the one thing ABHD drew without
-  its own stamp**, against the rule in its own header that everything
-  it creates carries one and only stamped objects are ever erased.
+- Two gaps in `tests/lispvm.py` the suite could not have been honest
+  without. `ssget` ignored the `-4` grouping operators, so ADAB's
+  automatic point sweep -- an `<OR` of three `<AND` groups -- matched
+  nothing at all; and `distof` read only the leading number, so `3'6`
+  came back as **3** in every feet-and-inches answer in the tree,
+  `LAZFORM`'s and `LAZSTEP`'s included, which is the whole reason they
+  try mode 4 before mode 2.
 
 ### Notes
 
@@ -191,23 +382,98 @@ a stripped override block) is not in the drawing any more to be read.
   `POINTRENAMER`, `CONSTELLATION` and `TYLERDRONESUITE`, and `Checking`
   was missing `ABPCHECK`.
 
-- `tests/test_abhd_contingencies.py` drives `ABHD`, `ABHDCOVER` and
-  `ADAB` through the paths a bad drawing takes -- no points, two
-  points, five duplicates, a gap, a `SPLINE`, a tilted UCS, a distance
-  past the ceiling, a percentage over 100, a pick nowhere near a survey
-  point, a break picked twice on one point, a bottom cancelled halfway,
-  a `Redo` that omits a point and puts it back -- and runs
-  `TUTORIALABHD`, which nothing had ever executed. 65 checks in 13
-  sections, at both tiers, each reading the message the path prints and
-  what it left in the drawing. The last section holds the block itself.
+A pass over the ten live checkers, one at a time: every value a drafter
+might want to change moved to a `TUNABLES` block at the top of its file,
+each with a comment saying what it controls, its units, and what raising
+or lowering it does. Three of them were bugs rather than untidiness.
 
-- Two gaps in `tests/lispvm.py` the suite could not have been honest
-  without. `ssget` ignored the `-4` grouping operators, so ADAB's
-  automatic point sweep -- an `<OR` of three `<AND` groups -- matched
-  nothing at all; and `distof` read only the leading number, so `3'6`
-  came back as **3** in every feet-and-inches answer in the tree,
-  `LAZFORM`'s and `LAZSTEP`'s included, which is the whole reason they
-  try mode 4 before mode 2.
+### Changed -- the ten checkers
+
+- **Every checker now opens with one tunables block** -- `CHECK` (v1.7),
+  `DIMCHECK` (v1.13), `LINFINCHECK` (v2.9), `COVERCHECK` (v1.12),
+  `SPACHECK` (v1.13), `ABPCHECK` (v1.5), `ABCURCHECK` (v1.4),
+  `LINCHECK` (v1.4), `LINTXTCHK` (v1.5), `CCPRECHECK` (v1.4) -- and each
+  suite asserts three things about it: no knob is set anywhere else in
+  the file, none is missing an explanation, and the README's Tunables
+  table names them all. Those tables are generated off the block itself,
+  headings and prose included, so the two cannot disagree.
+
+  The block also states the contract the files never used to: every knob
+  is read when the command RUNS, so a `setq` typed at the command line
+  takes effect on the next run. The suites drive that -- a raised
+  tolerance forgiving the gap it used to shift, a renamed report layer,
+  feet-and-inches distances, a widened planarity gate auditing a tilted
+  arc, a direction bucket narrowed under a pair's 0.2 degrees.
+
+- **`DIMCHECK`, `LINFINCHECK` and `COVERCHECK` share one shape.** The
+  three are siblings (~40 helper names and 1,200-1,400 identical lines
+  pairwise), so the same values were buried in the same helpers: the
+  report-sizing cluster, the reading-order row band, the marker size,
+  the overlap direction bucket and entity list, the distance format and
+  three numerical guards. The sizing constants were typed twice in each
+  file -- once in the review command, once in the scan -- so a report
+  that came out the wrong size had to be fixed in two places or in
+  neither.
+
+- **Colour words follow the colour knobs.** The reports said "recolored
+  red" and "(magenta)" whatever the knobs held. `DIMCHECK`'s attention
+  pattern matched on the word MAGENTA, which is what forced it; it
+  matches on ENDPOINT(S) MOVED now -- what the line means rather than
+  what colour it came out -- so every colour word in the review, the
+  report and the tutorial is the colour actually used.
+
+- **`SPACHECK`'s grade, taper and short-name vocabularies are tables.**
+  Three `cond`s spelling out words that have to agree with the foam and
+  hardware tables above them; a shop whose blocks say "Deluxe FRP" adds
+  a row instead of editing a cond.
+
+### Fixed -- three of those were bugs, not untidiness
+
+- **`SPACHECK` could pass a sheet with no border.** The title-block
+  finding was decided by looking for the word `OK` in its own sentence,
+  and the "NO BORDER found on layer 'X'" sentence names the layer -- so
+  a border layer called `TB-OK` read as a pass. `spachk:title-verdict`
+  returns a flag beside its sentence now and the audit reads the flag.
+
+- **`ABCURCHECK`'s `Remove` ignored `acc:*snap-dist*`.** It dropped the
+  declaration nearest the pick however far away that pick landed, so a
+  stray click anywhere in the drawing removed one. It honours the snap
+  distance, as the declare pick always did. Its index also prints its
+  weights' actual sum rather than a typed `/ 100`.
+
+- **`LINTXTCHK`'s layout parameters could not be changed either way.**
+  The README said they were "set near the top of `LINTXTCHK.lsp` and are
+  easy to tweak"; they were locals of the command, so editing one meant
+  a trip inside the defun and a `setq` typed at the command line was
+  overwritten the moment the command started. Height, spacing, indent,
+  the bullet and the 26-line checklist are globals now, and the done
+  message names the height it actually used.
+
+  Six of the ten join `tests/test_tunables.py`, the repo-wide rule the
+  same release introduced, so one test now holds them to it: every knob
+  inside its block, none stray outside it, none re-assigned, each saying
+  what changing it does, and each a row in its README's table carrying
+  the default it really has -- 304 knobs over 13 files. The four that
+  cannot join yet are the ones still spelling their globals
+  `*tool-name*` rather than `tool:*name*`, which that test's namespace
+  pattern cannot see; their own suites carry the same assertions.
+
+  Two knobs had to stop being two things at once to get there.
+  `abp:*limit*` was a default the command overwrote with whatever you
+  last answered, so it read as a setting while being state; the knob is
+  the default now and `abp:*asked*` is the answer. `SPACHECK`'s three
+  demo/sysvar globals moved out of the block for the same reason.
+
+### Not changed, on purpose
+
+- The questions `LINCHECK` and `CCPRECHECK` ask. For those two the
+  wording, the order and which answer opens which follow-up are one
+  thing, held in the code; a table of prompts split from the branching
+  that reads them would be two places to keep in step instead of one.
+  Their blocks carry how each walk TALKS -- the tick, the separators,
+  the report's box, the Back synonyms each file had written out twice.
+- The deprecated acady matcher (`lisp/standards_checker/`), which
+  `STANDARDS.md` keeps as-is.
 
 ## v3.5 -- 2026-09-02
 

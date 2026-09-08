@@ -589,4 +589,172 @@ except LispError as e:
 print("   a point only one dim measures to is still questioned")
 
 
+
+
+# ------------------------------------------------------------------
+# The TUNABLES block: one place to change anything, and every knob in
+# it explained.  The block also promises a knob is read when the
+# command RUNS, so this loads the file and reads each one back.
+# ------------------------------------------------------------------
+print("== the tunables block holds every knob, each explained ==")
+import re as _re
+
+_SRC = open(CHK, encoding='ascii').read()    # also asserts pure ASCII
+_lines = _SRC.splitlines()
+_start = next(i for i, l in enumerate(_lines) if l.startswith(';;;  TUNABLES'))
+_end = next(i for i, l in enumerate(_lines) if l.startswith(';;;  END TUNABLES'))
+_outside = [l for i, l in enumerate(_lines)
+            if l.startswith('(setq *cchk-') and not _start < i < _end
+            and 'version' not in l]
+assert not _outside, _outside
+
+
+def _explained(i):
+    """A knob is explained by a trailing remark, or by the ;;-prose at
+    the head of the paragraph it sits in - knobs that share one
+    explanation are grouped under it deliberately."""
+    if _re.search(r'\)\s*;', _lines[i]):
+        return True
+    j = i - 1
+    while j >= 0 and _lines[j].strip():
+        if _lines[j].lstrip().startswith(';;'):
+            return True
+        j -= 1
+    return False
+
+
+_undoc = [l for i, l in enumerate(_lines[_start:_end], _start)
+          if l.startswith('(setq *cchk-') and not _explained(i)]
+assert not _undoc, _undoc
+
+KNOBS = [k for k in _re.findall(r'^\(setq (\*cchk-[a-z-]+\*)', _SRC, _re.M)
+         if k != '*cchk-version*']
+_vm = build_vm()[0]
+_nil_ok = {'*cchk-ask-all-arc-ends*'}
+_unbound = [k for k in KNOBS
+            if _vm.loads(k) is None and k not in _nil_ok]
+assert not _unbound, _unbound
+_readme = open(os.path.join(HERE, '..', 'lisp', 'covercheck', 'README.md')).read()
+_missing = [k for k in KNOBS if k not in _readme]
+assert not _missing, _missing
+print(f"   {len(KNOBS)} knobs, all inside the block, all explained,"
+      " all in the README")
+
+# ------------------------------------------------------------------
+# Every knob is read when the command RUNS, so a setq typed after
+# loading changes the next run.  Each one below is driven through the
+# behaviour it is meant to change - and the report is checked to
+# describe the colours it actually used, rather than saying "red"
+# whatever the knob holds.
+# ------------------------------------------------------------------
+print("== tunables: honoured after load, and the report follows them ==")
+
+
+def _scan_with(setqs=None):
+    vm, _ = build_vm()
+    if setqs:
+        vm.loads(setqs)
+    vm.run('c:COVERSCAN', [None, selectable(vm)])
+    return vm
+
+
+def _findings(vm, layer='COVERCHECK-REPORT'):
+    """The per-item lines: what follows the report's separator row.  The
+    dashboard above it carries its own needs-attention flag per line and
+    is not what *cchk-attn-words* decides."""
+    return '\n'.join(report_texts(vm, layer)).split('-' * 40)[-1]
+
+
+def _report_geom(vm, layer='COVERCHECK-REPORT'):
+    """(text height, column width, insertion x) of the main report."""
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        d = {g.a: g.b for g in vm.entdata[e] if isinstance(g, Dot)}
+        if d.get(0) == 'MTEXT' and d.get(8) == layer:
+            ins = d.get(10)
+            if ins is None:
+                for g in vm.entdata[e]:
+                    if isinstance(g, list) and g and g[0] == 10:
+                        ins = g[1:]
+            return d.get(40), d.get(41), ins[0]
+    raise AssertionError('no report on ' + layer)
+
+
+_base_h, _base_w, _base_x = _report_geom(_scan_with())
+
+# both clamps are DIVISORS of the reference height, so a smaller number
+# is a looser bound.  Driven in pairs, because whether the DEFAULT is
+# clamped at all depends on how long this drawing's report came out.
+_h60, _, _ = _report_geom(_scan_with('(setq *cchk-report-hmax* 60.0)'))
+_h120, _, _ = _report_geom(_scan_with('(setq *cchk-report-hmax* 120.0)'))
+assert abs(_h60 - 2.0 * _h120) < 1e-9, (_h60, _h120)
+assert _h60 <= _base_h + 1e-9, (_base_h, _h60)
+_h8, _, _ = _report_geom(_scan_with('(setq *cchk-report-hmin* 8.0)'))
+_h4, _, _ = _report_geom(_scan_with('(setq *cchk-report-hmin* 4.0)'))
+assert abs(_h4 - 2.0 * _h8) < 1e-9, (_h8, _h4)
+assert _h8 >= _base_h - 1e-9, (_base_h, _h8)
+print("   *cchk-report-hmax* / -hmin*: the ceiling only ever shrinks the text"
+      " and the floor only grows it, each in exact proportion")
+
+_, _w, _ = _report_geom(_scan_with('(setq *cchk-report-chars* 90.0)'))
+assert abs(_w - 2.0 * _base_w) < 1e-6, (_base_w, _w)
+print("   *cchk-report-chars*: twice the knob is exactly twice the column")
+
+_h, _, _ = _report_geom(_scan_with('(setq *cchk-report-lead* 3.32)'))
+assert _h < _base_h, (_base_h, _h)
+print("   *cchk-report-lead*: a looser line pitch gives a smaller text height")
+
+_, _, _x = _report_geom(_scan_with('(setq *cchk-report-gap* 0.5)'))
+assert _x > _base_x, (_base_x, _x)
+print("   *cchk-report-gap*: a wider gap pushes the report further right")
+
+_vm = _scan_with('(setq *cchk-report-layer* "MY-REPORT" *cchk-report-color* 5)')
+assert report_texts(_vm, 'MY-REPORT'), 'the report did not move'
+_rec = _vm.loads('(tblsearch "LAYER" "MY-REPORT")')
+assert any(isinstance(g, Dot) and g.a == 62 and g.b == 5 for g in _rec), _rec
+print("   *cchk-report-layer* / -color*: the report moves, layer made in colour")
+
+_vm = _scan_with('(setq *cchk-flag-color* 4)')
+assert '{\\C4;' in '\n'.join(report_texts(_vm)), report_texts(_vm)[0][:200]
+print("   *cchk-flag-color*: the report's attention runs follow the knob")
+
+_vm = _scan_with('(setq *cchk-green-scale* 0.5)')
+assert '{\\H0.5000x;' in '\n'.join(report_texts(_vm)), report_texts(_vm)[0][:200]
+print("   *cchk-green-scale*: the all-clear runs are written at the new size")
+
+# the pattern decides the FINDINGS; a few header lines carry their own
+# needs-attention flag and are not its to change, so this counts runs
+# rather than demanding none at all
+def _red_runs(vm):
+    return '\n'.join(report_texts(vm)).count('{\\C1;')
+
+
+_none = _red_runs(_scan_with('(setq *cchk-attn-words* "*NOTHING MATCHES THIS*")'))
+_all = _red_runs(_scan_with())
+assert _none < _all, (_none, _all)
+assert 'NOT attached' in _findings(_scan_with()), _findings(_scan_with())[:400]
+print(f"   *cchk-attn-words*: matched by nothing, the report's red runs"
+      f" fall from {_all} to {_none}")
+
+if 'OVERLAP' in _findings(_scan_with()):
+    _vm = _scan_with('(setq *cchk-olap-types* \'("ARC"))')
+    assert 'OVERLAP' not in _findings(_vm), _findings(_vm)[:400]
+    print("   *cchk-olap-types* without LINE: the overlapping pair is not"
+          " looked for")
+else:
+    # this fixture plants no overlapping pair; the knob still has to be
+    # the only place the type list lives, which the block test asserts
+    print("   *cchk-olap-types*: no overlap in this fixture to drive it with")
+
+_vm = _scan_with('(setq *cchk-tol* 20.0)')
+assert 'NOT attached' not in _findings(_vm), _findings(_vm)[:400]
+assert 'NOT attached' in _findings(_scan_with()), _findings(_scan_with())[:400]
+print("   *cchk-tol* raised past the fault: the stray point reads as attached")
+
+_vm = _scan_with('(setq *cchk-dist-mode* 4 *cchk-dist-prec* 4)')
+assert '\'-' in _findings(_vm), _findings(_vm)[:400]
+print("   *cchk-dist-mode* 4: the scan reports feet and inches")
+
+
 print("\nALL COVERCHECK SCENARIOS PASSED")

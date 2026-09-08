@@ -128,7 +128,8 @@ existed.
 
 ## Tunables
 
-At the top of `SOCONV.lsp`:
+At the top of `SOCONV.lsp`, each with its explanation beside it -- nothing
+below that block is meant to be edited for a shop's own conventions:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -211,7 +212,13 @@ paths around it: a second run that finds nothing to do, a highlight
 that scopes the conversion, `*soconv-force-bylayer*`, a drawing that is
 not an export at all, an error mid-run and an `Esc` at the selection
 prompt -- the last two reaching the command's own `*error*`, which has
-to put the locks back and close the mark it opened.
+to put the locks back and close the mark it opened. Then the
+contingencies the table promises: the correct spelling of `Existing
+Anchorss` converting too, a wildcard row and an added row behaving as
+rules (a destination the colour table does not name is created in
+`*soconv-default-color*`), a frozen, switched-off `TEXT` repaired with
+a line saying so, and a highlight carrying nothing of the export's
+being told so rather than converted.
 
 Then `SORECONV` over the same fixture: the round trip lands every object
 on the layer, colour, linetype and lineweight it arrived with; a source
