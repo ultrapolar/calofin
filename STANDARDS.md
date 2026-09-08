@@ -798,7 +798,15 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
 * Prefix styles: 15 files use `prefix-`, `paddle--` uses a double
   hyphen; new work uses `tool:`. Existing prefixes migrate only if
   their file is otherwise being reworked -- a rename touches every
-  line.  (Still open, on purpose.)
+  line.  (Still open, on purpose.)  BPCALLOUT's `*BP-LAYER*` family
+  took `bp:` under exactly that clause: its knobs were being gathered
+  into one tunables block, and the block is what `test_tunables.py`
+  reads, so the rename was the price of being pinned rather than
+  merely tidy.  CDCALLOUT's three point-classifier globals moved the
+  same way, and for the sharper reason that the file already spelled
+  its other knobs `cdo:*style*` / `cdo:*layer*` -- one file, two
+  schemes.  Both READMEs name the old spellings for anyone whose
+  startup file sets them.
 * ~~4 living files with no `*error*` handler~~ **DONE** -- `abcdef`
   and `altabcdef` plot geometry, so they took a handler AND an undo
   group (a cancelled plot is one U now, not one per entity);

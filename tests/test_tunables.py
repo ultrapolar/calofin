@@ -36,7 +36,8 @@ The four GUI files came first and check 6 is still theirs -- they are
 the ones whose knobs the VB palette shares.  Checks 1-5 are the general
 rule (STANDARDS.md section 5, "Tunables") and every file in FILES meets
 them; ``abcdef`` and ``ALTABCDEF`` joined when they grew blocks of their
-own.
+own, and ``BPCALLOUT`` / ``CDCALLOUT`` / ``CDCREATE`` when theirs were
+gathered into one.
 
 Run: python3 tests/test_tunables.py
 """
@@ -96,6 +97,26 @@ FILES = [
     # the older spelling the rule leaves where it got there first
     ('AutoDim', ROOT / 'lisp' / 'autodim' / 'AutoDim.lsp', 'ad',
      ROOT / 'lisp' / 'autodim' / 'README.md', SETTINGS),
+    # the three callout/create tools, which joined for the same reason
+    # again: each kept SOME of its settings in a block at the top and
+    # the rest inline -- a ring colour, a text offset, the sentence a
+    # callout is built from -- so adapting one meant reading the file
+    # to find out what was adjustable at all.
+    ('BPCALLOUT', ROOT / 'lisp' / 'bpcallout' / 'BPCALLOUT.lsp', 'bp',
+     ROOT / 'lisp' / 'bpcallout' / 'README.md', TUNABLES),
+    ('CDCALLOUT', ROOT / 'lisp' / 'cdcallout' / 'CDCALLOUT.lsp', 'cdo',
+     ROOT / 'lisp' / 'cdcallout' / 'README.md', TUNABLES),
+    ('CDCREATE', ROOT / 'lisp' / 'cdcreate' / 'CDCREATE.lsp', 'cdc',
+     ROOT / 'lisp' / 'cdcreate' / 'README.md', TUNABLES),
+    # OASIS, which had fourteen of its forty in a block and the other
+    # twenty-six spelled out where they were read -- a stand-off's 12
+    # and 18, a preview's 0.6 and 1.25, the 1e-8 a tie is deduped with.
+    # Joining here is what stopped the next one going back beside its
+    # code, and what caught the one knob in it that was really state:
+    # the hopper offset a run WROTE, so a pool quietly edited the
+    # setting it had been given (oasis:*hopoff-last* is the memory now).
+    ('OASIS', ROOT / 'lisp' / 'oasis' / 'OASIS.lsp', 'oasis',
+     ROOT / 'lisp' / 'oasis' / 'README.md', TUNABLES),
     # the check family.  Six of the ten name their globals tool:*x*, so
     # they read here; the other four (CHECK, DIMCHECK, LINFINCHECK,
     # COVERCHECK) still spell theirs *tool-x*, which this file's
@@ -201,10 +222,17 @@ def assigned(src, ns):
 def why_of(lines, i):
     """What line I of a block says about changing the knob it sets.
 
-    Either a remark after the value, the ``;`` lines continuing under
-    it, or the ``;;`` comment standing over the run of setqs this one
-    is in -- the frame numbers share one paragraph and then a word
-    each, and that is the right shape for them.  '' when none is there.
+    All of what is there: a remark after the value, the ``;`` lines
+    continuing under it, and the ``;;`` comment standing over the run of
+    setqs this one is in -- the frame numbers share one paragraph and
+    then a word each, and that is the right shape for them.  '' when
+    none of the three is there.
+
+    All three rather than the first one found, because the check family
+    writes the UNIT as its remark and the explanation in the paragraph
+    above: "drawing units" was reading as the whole answer.  Joining can
+    only lengthen an answer, so nothing that explained itself before can
+    start failing here.
 
     The continuation case is what a setq too long to leave room for a
     remark does (AutoDim's two entity-type lists run to the margin).
