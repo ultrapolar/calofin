@@ -377,13 +377,17 @@ per name and keep it.)
 **Tunables.** A global that is a *setting* -- a literal nothing
 re-assigns, that a person might reasonably want different -- goes in a
 tunables block at the top of the file, between the version banner and
-the first `defun`, under a `;;; ---` rule reading `tunables`. One
+the first `defun`, under a `;;; ---` rule naming it. `tunables` is the
+word to use; PADDLE spells its rule `settings` and LINGUTTER `the
+knobs`, which is the same block under an older name and fine to leave.
+What matters is that there is one of them and everything is in it. One
 `setq` per line with a sentence saying what changing it does; not what
 it is, what moves when you change it. Scattering settings down the
 file beside the code that reads them means finding them is reading the
 file, and a knob defined *after* the code that reads it is nil while
-that code loads. Every knob is also a row in the tool's README
-`## Tunables` table.
+that code loads. Every knob is also a row in a table in the tool's
+README: `## Tunables` where there is one, PADDLE's
+`## Assumptions / configuration` where the table came first.
 
 A knob-shaped global that is not a setting -- LAZPANEL's base64
 alphabet is RFC 4648's, and reordering a character in it decodes the
@@ -394,8 +398,9 @@ rule rather than a fact about the constant.
 
 State (`nil`-initialized, written as the tool runs) is not a knob and
 does not go in the block; hoisting it there advertises an initial value
-as a setting. `tests/test_tunables.py` holds all of this -- the four
-GUI files today, and it is the pattern for any tool that grows one.
+as a setting. `tests/test_tunables.py` holds all of this for the four
+GUI files -- the panel and the three chart forms, whose knobs the VB
+palette shares -- and it is the pattern for any tool that grows one.
 
 **Commands.** `(defun c:TOOLNAME ...)` -- `c:` lowercase, name
 uppercase. Secondary commands by fixed suffix:
