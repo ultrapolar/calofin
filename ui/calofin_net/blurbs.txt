@@ -69,6 +69,7 @@ POOLDEMO          Draws a worked example pool end to end
 POOLSIDE          POOL's longitudinal section on its own, from the floor run chain
 SMARTFILLET       Fillet a corner after previewing every radius that fits
 SOCONV            Puts an SO site-survey export onto the shop's layers in one pass
+SORECONV          Undoes a SOCONV run - every object back on the export's own layers
 SPA               Spa / hot-tub template layout
 SPACHECK          Audits a spa sheet against what SPA draws
 SPACHECKSCAN      The spa sheet review as one scan
@@ -77,6 +78,8 @@ STOCKCOVER        Replaces a highlighted perimeter with a stock cover drawing
 TYDRN             Text, pool-point and anchor cleanup in one pass
 TYLERDRONESUITE   The whole drone trace in one - TYDRN, then PADDLE, then CDIM
 VSCONV            Remaps a VS survey export's numbered layers onto the shop's
+VSRECONV          Undoes a VSCONV run - layers, properties and the dimension overrides
 WCALST            Unrolls a curved constant-width band flat, with darts
 XFTCONV           Cleans up a Leica XFT/DXF import or a site trace
+XFTRECONV         Undoes an XFTCONV run - the markers and text back, and the scale with them
 XYPLOT            Plot an X/Y sheet, twice: points, and dimensioned

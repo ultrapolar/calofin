@@ -132,6 +132,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("POOLSIDE", "Pool side view", "POOL's longitudinal section on its own, from the floor run chain"),
         New Entry("SMARTFILLET", "Corner radius, previewed", "Fillet a corner after previewing every radius that fits"),
         New Entry("SOCONV", "SO survey onto our layers", "Puts an SO site-survey export onto the shop's layers in one pass"),
+        New Entry("SORECONV", "SO conversion, undone", "Undoes a SOCONV run - every object back on the export's own layers"),
         New Entry("SPA", "Spa template", "Spa / hot-tub template layout"),
         New Entry("SPACHECK", "Spa sheet review", "Audits a spa sheet against what SPA draws"),
         New Entry("SPACHECKSCAN", "Spa sheet scan", "The spa sheet review as one scan"),
@@ -140,8 +141,10 @@ Public NotInheritable Class CommandCatalog
         New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"),
         New Entry("TYLERDRONESUITE", "Drone suite: tidy, pad, CDIM", "The whole drone trace in one - TYDRN, then PADDLE, then CDIM"),
         New Entry("VSCONV", "VS export onto shop layers", "Remaps a VS survey export's numbered layers onto the shop's"),
+        New Entry("VSRECONV", "VS conversion, undone", "Undoes a VSCONV run - layers, properties and the dimension overrides"),
         New Entry("WCALST", "Unroll curved band", "Unrolls a curved constant-width band flat, with darts"),
         New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
+        New Entry("XFTRECONV", "Import cleanup, undone", "Undoes an XFTCONV run - the markers and text back, and the scale with them"),
         New Entry("XYPLOT", "X/Y offset plot", "Plot an X/Y sheet, twice: points, and dimensioned")
     }
 
@@ -192,8 +195,11 @@ Public NotInheritable Class CommandCatalog
             New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
             New Entry("CPERPPTS", "Curved perp points", "PERPPTS for a curved run"),
             New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
+            New Entry("XFTRECONV", "Import cleanup, undone", "Undoes an XFTCONV run - the markers and text back, and the scale with them"),
             New Entry("SOCONV", "SO survey onto our layers", "Puts an SO site-survey export onto the shop's layers in one pass"),
+            New Entry("SORECONV", "SO conversion, undone", "Undoes a SOCONV run - every object back on the export's own layers"),
             New Entry("VSCONV", "VS export onto shop layers", "Remaps a VS survey export's numbered layers onto the shop's"),
+            New Entry("VSRECONV", "VS conversion, undone", "Undoes a VSCONV run - layers, properties and the dimension overrides"),
             New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
             New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"),
             New Entry("TYLERDRONESUITE", "Drone suite: tidy, pad, CDIM", "The whole drone trace in one - TYDRN, then PADDLE, then CDIM")
@@ -237,19 +243,19 @@ Public NotInheritable Class CommandCatalog
     ''' page answers what a tool IS.</summary>
     Public Shared ReadOnly Pages As Page() = {
         New Page("Pool", {
-            New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV"}),
+            New Column("Converters", {"XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV"}),
             New Column("Shape", {"POOL", "POOLSIDE", "LAZFORM", "LAZTXT", "OASIS", "ABHD", "ADAB", "FITABHD"}),
             New Column("Points", {"ABFIND", "ABMOVE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
             New Column("Steps", {"LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "AUTOBEAD", "PERPPTS", "CPERPPTS"}),
             New Column("Dims & check", {"AUTODIM", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Cover", {
-            New Column("Shape", {"POOLCOVER", "LAZFORMCOVER", "OASIS", "ABHDCOVER", "FITABHDCOVER", "STOCKCOVER", "CUSTBLOCK", "XFTCONV"}),
+            New Column("Shape", {"POOLCOVER", "LAZFORMCOVER", "OASIS", "ABHDCOVER", "FITABHDCOVER", "STOCKCOVER", "CUSTBLOCK", "XFTCONV", "XFTRECONV"}),
             New Column("Points", {"ABFIND", "ABMOVE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
             New Column("Pads, dims & check", {"LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTODIM", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Spa", {
-            New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV"}),
+            New Column("Converters", {"XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV"}),
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "CUSTBLOCK", "AUTODIM", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Rest", {
@@ -259,7 +265,7 @@ Public NotInheritable Class CommandCatalog
             New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "ADAB", "CABHD", "LHD", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
         }),
         New Page("Points", {
-            New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "ABFIND", "ABMOVE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "XFTCONV", "SOCONV", "VSCONV", "DRONE", "TYDRN", "TYLERDRONESUITE"})
+            New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "ABFIND", "ABMOVE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV", "DRONE", "TYDRN", "TYLERDRONESUITE"})
         }),
         New Page("Dimensions", {
             New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT"})
