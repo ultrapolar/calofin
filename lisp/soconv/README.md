@@ -56,6 +56,7 @@ way, and neither does the conversion.)
 | Command | What it does |
 | --- | --- |
 | `SOCONV` | Move the import onto `POOL` / `POINTS` / `TEXT` / `DIMENSION` |
+| `SORECONV` | Move it all back onto the export's own layers |
 | `SOCONVVER` | Print the loaded version |
 
 It is on the LazPanel's `Rest` and `Points` pages, captioned *SO survey
@@ -85,6 +86,46 @@ on the export's layers.
 
 The whole run is one undo mark, so a single `U` puts the drawing back.
 
+## Undoing it -- `SORECONV`
+
+`U` is good for the session. `SORECONV` undoes a conversion that was saved
+and reopened -- which is when a drawing turns out to have been converted
+by mistake, or has to go back to whoever exported it:
+
+```
+Command: SORECONV
+Select the converted import to put back <Enter = whole drawing>:
+SORECONV done: 317 object(s) put back -- 69 -> Pool Perimeter, 232 -> LEICA_DISTO_POINT_ENTITY, ...
+  Off POOL, POINTS, TEXT, DIMENSION - this drawing is on the export's own layers again.
+```
+
+Every object `SOCONV` moves carries a **record** in its own xdata: the
+layer it came off, that layer's colour, and -- only when
+`*soconv-force-bylayer*` was on -- the colour, linetype and lineweight
+the forcing overwrote. Nothing else about the object changes, so a
+converted drawing looks and plots exactly as it did before the record
+existed.
+
+* **A source layer `PURGE`d on the tool's own advice is re-created**,
+  with the colour the record kept off it while it was still there. An
+  existing layer is never recoloured.
+* **Only objects carrying a record move**, so `Enter` (the whole
+  drawing) is as safe here as it is in `SOCONV`, and this office's own
+  drawing on `POOL` is not touched.
+* **The record goes with the move it describes** -- but only when the
+  move finishes. If a linetype has been purged since the conversion,
+  that object keeps its record and the run says so, so loading the
+  linetype and running `SORECONV` again really does finish it.
+* **One thing it spells out rather than restores**: with the forcing on,
+  an object that arrived carrying *no* colour, linetype or lineweight of
+  its own comes back carrying an explicit ByLayer -- `256`, `ByLayer`,
+  `-1` -- where it had the absent group that means the same thing. It
+  draws and plots identically; nothing else about the round trip is
+  approximate.
+* **`*soconv-record*` `nil` turns the record off.** `SOCONV` then
+  converts exactly as before and says so, and `SORECONV` has nothing to
+  work from.
+
 ## Tunables
 
 At the top of `SOCONV.lsp`:
@@ -94,6 +135,8 @@ At the top of `SOCONV.lsp`:
 | `*soconv-map*` | the six rules above | The conversion itself: rows of `(source-layer entity-types destination)`, tried in order, first match winning. Both patterns are `wcmatch` patterns, so `,` is alternation and `*` is anything -- a shop whose export names things differently retunes here and nowhere else |
 | `*soconv-colors*` | `POOL` 4, `POINTS` 6, `TEXT` 4, `DIMENSION` 141 | Colour to **create** a destination layer with when the drawing has not got it. An existing layer is never recoloured, so these only ever show on a bare drawing; `POOL` is cyan to agree with `POOL.LSP` and `POOLSIDE`, the other two places in the build that create it |
 | `*soconv-default-color*` | `7` | For a destination the table above does not name |
+| `*soconv-record*` | `t` | Write the undo record `SORECONV` reads |
+| `*soconv-xdata-app*` | `"SOCONV"` | The xdata application that record lives under |
 | `*soconv-force-bylayer*` | `nil` | `T` also forces colour, linetype and lineweight to BYLAYER on the way past, the way `DRONE` and `TYDRN` do, so the import takes the destination layer's appearance and nothing overrides it later |
 
 Only the destinations a run actually reaches are created: a survey with
@@ -140,7 +183,8 @@ Two things in the sample are deliberately **not** in the tool:
   purge them: deleting layers is not something the sample shows and not
   something to do behind the drafter's back. `-PURGE` `LA` takes them
   when you are happy with the result -- which is what the done-line
-  says.
+  says. `SORECONV` re-creates one that was purged, so taking that
+  advice does not close the way back.
 * A locked layer among those touched is unlocked for the run and locked
   again afterwards, on the error path too. The destination layers are
   the exception: they are output layers, so `ensure-layer` thaws,
@@ -168,6 +212,14 @@ that scopes the conversion, `*soconv-force-bylayer*`, a drawing that is
 not an export at all, an error mid-run and an `Esc` at the selection
 prompt -- the last two reaching the command's own `*error*`, which has
 to put the locks back and close the mark it opened.
+
+Then `SORECONV` over the same fixture: the round trip lands every object
+on the layer, colour, linetype and lineweight it arrived with; a source
+layer purged between the two runs is re-created with the recorded colour;
+a linetype that cannot be loaded leaves that object's record in place
+rather than claiming a finished job; `*soconv-record*` `nil` writes
+nothing down; and an error and an `Esc` reach the reverter's own
+`*error*`.
 
 `python3 tests/test_shared.py` loads it with everything else, so a name
 collision fails there.

@@ -6,6 +6,191 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.6 -- 2026-09-08
+
+Every converter gains a reverter. `XFTCONV`, `SOCONV` and `VSCONV` each
+read somebody else's export and turn it into a drawing this office can
+work on; until now the only way back was `U`, which is good for as long
+as the session lasts and no longer. A conversion is found out to be
+wrong the week after -- the survey was converted twice, the wrong file
+was opened, the sheet has to go back to whoever exported it -- and by
+then `U` is gone.
+
+So each converter now **writes down what it did**, in xdata on the
+objects it touched, and each has a command that reads that back:
+`XFTRECONV`, `SORECONV`, `VSRECONV`. The record is the whole idea: an
+undo that works from the drawing alone cannot survive a save, because
+what a conversion destroys (an erased marker, an overwritten property,
+a stripped override block) is not in the drawing any more to be read.
+
+### Added
+
+- **`XFTRECONV`** (`lisp/xftconv/`, with `XFTCONV` at v1.13) puts a
+  converted survey back: the marker and the name text the swap erased,
+  the leftover text the purge took, the `ab_pt` block off again, and
+  the x12 undone by one `SCALE` of 1/12 about the base point the
+  conversion used.
+
+  Each block carries the record of what it replaced -- the erased
+  entities group by group, plus the scale and the WCS base point, which
+  are the two numbers no object in the drawing carries. Coordinates go
+  in through `rtos` at 8 decimals, so a round trip is exact to 1e-8 of
+  a drawing unit (a hundredth of a micron on a survey in inches) rather
+  than to the last bit of the float; `tests/test_xftconv.py` measures
+  that on the site-trace sample, whose coordinates carry more decimals
+  than the record writes.
+
+  **A highlight holding two conversions is refused by name.** They were
+  scaled about different base points, and one scale back cannot undo
+  both -- so it says so rather than half-reverting one of them.
+
+- **`SORECONV`** (`lisp/soconv/`, with `SOCONV` at v1.1) moves an
+  import back onto the export's own layers. The record keeps the layer
+  each object came off, that layer's own colour, and -- only when
+  `*soconv-force-bylayer*` was on, since that is the only time the
+  conversion overwrites anything else -- the colour, linetype and
+  lineweight the forcing replaced.
+
+  A source layer `PURGE`d on the tool's own advice is re-created with
+  the colour the record kept, so taking that advice does not close the
+  way back.
+
+- **`VSRECONV`** (`lisp/vsconv/`, with `VSCONV` at v1.1) does the same
+  for a VS export, and undoes **both halves of the dimension step**:
+  the style name back in group 3, and the `ACAD`/`DSTYLE` override
+  block back on the dimension, kept verbatim as the xdata items it
+  already was. A revert that restored the style name and left the
+  overrides off would leave the dimensions drawing in a style they
+  never had, which is the same trap the conversion itself exists to
+  avoid from the other side.
+
+  Its scope carries no layer filter where `VSCONV`'s does: a converted
+  object sits on `POOL` / `POINTS` / `DIMENSION`, where this office's
+  own drawing lives too, so the record is what says which objects came
+  from an export.
+
+### Changed
+
+- `vsconv:restyle-dim` strips the `ACAD` application's xdata and leaves
+  every other application's where it is. In AutoCAD that is what it
+  always did (an `entget` with an application list carries only that
+  application), so nothing about a conversion changes; it is now true
+  of the repo's VM as well, which is what lets a tool keep a record of
+  its own on an object whose xdata it is editing.
+
+- `entdel` in `tests/lispvm.py` takes an attributed `INSERT`'s
+  `ATTRIB`s and `SEQEND` with it, as AutoCAD does -- attributes are
+  owned by the block reference. Erasing a point block used to leave its
+  number attribute behind as a live entity for the next sweep to trip
+  over.
+
+- **The three callout/create tools put every knob at the top**, in one
+  tunables block with a sentence each on what changing it does, and
+  join `tests/test_tunables.py` so it stays that way. Each had kept
+  some settings in a block and the rest inline. New knobs, all
+  defaulting to today's behaviour: `bp:*layer-color*`, `bp:*text-gap*`
+  (the callout's default spot, which used to be twice the ring radius,
+  so shrinking the ring moved the text too), the callout's own wording
+  (`bp:*pt-prefix*`, `bp:*tail-one*`, `bp:*tail-many*`, `bp:*unknown*`
+  -- seven string literals over four functions until now),
+  `cdo:*layer-color*`, `cdo:*exact-eps*` and `cdc:*layer-color*`.
+
+  Two renames come with it, both under STANDARDS 8.4's "only if the
+  file is otherwise being reworked": BPCALLOUT's `*BP-LAYER*` family
+  takes the file's `bp:` prefix, and CDCALLOUT's three point-classifier
+  globals take `cdo:` -- that file already spelled its other knobs
+  `cdo:*style*` and `cdo:*layer*`, so it had two schemes for its own
+  settings. Both READMEs name the old spellings for anyone whose
+  startup file sets them.
+
+- **`WCALST` puts its 38 numbers at the top** (v1.8), the same rule
+  again on the tool that needed it most: the dart cap lived in the
+  emitter, the cut stop line in the drawing loop, the layer names at
+  the `entmake`, and the 1% target was written out four times over
+  1,240 lines. The prompt default and both variant summaries read the
+  knobs now, so retuning `wc:*maxfeat*` or `wc:*target*` cannot leave
+  the question or the sheet quoting the old figure, and the tool
+  README carries every one of them in a table. It joins
+  `tests/test_tunables.py`; `tests/test_wcalst.py` keeps the half that
+  file cannot see, retuning three knobs and checking what the run drew.
+
+### Fixed
+
+- **BPCALLOUT could not ring two points closer than twice its ring
+  radius.** A click was read against the rings already down even when
+  it had snapped to a survey point, so with the 5" default and two
+  points 8" apart, clicking the second landed inside the first's ring
+  and un-ringed it -- the run reported "nothing picked" and drew
+  nothing. Only a click with NO survey point under it is read against
+  the rings now; a click that snapped is the point it snapped to.
+
+- **`CDCALLOUT` and `CDCREATE` closed an undo group they had never
+  opened.** Both guard the `_.UNDO _Begin` behind the `UNDOCTL` check
+  -- `_Begin` with undo off errors out of the command -- and then
+  closed unconditionally, so in a drawing with undo switched off the
+  run ended on a stray `_End`. Both close only a group they opened,
+  which is what the flag was already there to say.
+
+- **`WCALST` closed one it had never opened either** -- the third of
+  that pair, found the same week and the same way. It drew both of its
+  layouts first, so with undo off the run died on its own last command
+  with the drawing already full and no `U` to take it back.
+
+- **A closed ring made `WCALST` walk for four minutes.** The
+  straightest continuation round a ring is always the next segment, so
+  tracing a long side lapped it until the 5,000-segment backstop and
+  reported a developed length of 694,662 -- about a thousand laps of a
+  band 1,250 long. The walk stops at a node it has already stood on,
+  taking the segment that closes the lap, so a ring develops as itself
+  in under half a second. The README claimed rings were unsupported;
+  they are handled, cut open at the segment you clicked.
+
+- **A line touching a long side was counted as a rung.** A datum line
+  or a cut mark crosses the chain as steeply as a rung does, and
+  counted as one it moved the median width, the vote for which side
+  the far edge is on, and -- through the middle rung, which is where
+  the far side is picked up -- which layer the far side was taken to
+  be on, redrawing the whole far side as loose reference marks. Only
+  segments leaving on the majority side are rungs now.
+
+- **The median rung was not the median.** `vl-sort` drops items that
+  compare equal (LISPLAB's lesson 2, met in production), so a band
+  flared at one end read its width off the deduped list: five 20s and
+  two 30s sort to `(20 30)`, whose median is the flare -- 50% wide, and
+  the width scales every cut, every filter and the whole layout.
+  `vl-sort-i` keeps them.
+
+- **With a tile height, a shallow band was cut through.** The apex rule
+  is tile + clearance below the straightened edge, but a clearance
+  clear of the foot; on a band shallower than the clearance itself both
+  halves go negative and the dart was drawn with its apex ABOVE the
+  straightened edge -- a V cut clean through the strip. It is held at
+  `wc:*apex-min-f*` of the local depth instead, which is what the
+  README had always claimed happened.
+
+### Notes
+
+- Each reverter is on the panel under its converter, in the same
+  `Converters` column: a `RECONV` is looked for in exactly one
+  situation, and the place it is looked for is where the converter was.
+- All three records can be switched off (`*xft-record*`,
+  `*soconv-record*`, `*vsconv-record*`). With one off its converter
+  runs exactly as it did before, says so in its done line rather than
+  promising a revert, and its reverter says there is nothing to work
+  from.
+- **One thing a revert spells out rather than restores**: an object
+  that arrived carrying no colour, linetype or lineweight of its own
+  comes back carrying the explicit ByLayer (`256`, `"ByLayer"`, `-1`)
+  that means the same thing. It draws and plots identically. Nothing
+  else about a round trip is approximate.
+
+- `lisp/lazpanel/README.md`'s page tables are rewritten from the
+  panel's own tables. Four of them had drifted: the `Cover` page was
+  missing `LINGUTTER` and `LINGUTTERSCAN`, `Layout` was missing
+  `POOLSIDE`, `LAZSPA` and `LAZSTEP`, `Points` was missing
+  `POINTRENAMER`, `CONSTELLATION` and `TYLERDRONESUITE`, and `Checking`
+  was missing `ABPCHECK`.
+
 ## v3.5 -- 2026-09-02
 
 `SOCONV`'s sibling, written the same way: from a before/after the shop

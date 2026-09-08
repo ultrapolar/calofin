@@ -27,17 +27,20 @@ Every dimension lands the way `CDCREATE` and `POOL` make cross dims:
   stripped.
 
 The whole run is **one undo group**: a single `U` takes every
-dimension away. The dimension style, current layer, `OSMODE` and
-`CMDECHO` in force before the command are restored afterwards — on a
-clean finish, an error, or Esc.
+dimension away. (With UNDO switched off in the drawing no group is
+opened — or closed — and the run still works.) The dimension style,
+current layer, `OSMODE` and `CMDECHO` in force before the command are
+restored afterwards — on a clean finish, an error, or Esc.
 
 ## Typing point numbers
 
 Numbers are matched against the `number` attribute on the survey
-point blocks (the same classifier `BPCALLOUT` and `LHD` use: an
-`ab_pt` INSERT on any layer, or any other INSERT on the **POINTS**
-layer). Type them the way they read in the drawing — all of these
-name the same point:
+point blocks: an `ab_pt` INSERT on any layer, or any other INSERT on
+the **POINTS** layer. That is `BPCALLOUT`'s and `LHD`'s classifier
+minus its third kind — a plain POINT entity carries no attribute, so
+it has no number to be asked for by, and a block whose number cannot
+be read is left out for the same reason. Type them the way they read
+in the drawing — all of these name the same point:
 
 ```
 35    Pt.35    pt35    PT.35    #35    035    35.0
@@ -93,11 +96,17 @@ DIMENSION layer.
 ## Revisions
 
 `CDCALLOUT.lsp` carries the auto-stamped banner
-`(setq *cdcallout-version* "v1.2")` that `tools/release_lisp.py`
+`(setq *cdcallout-version* "v1.9")` that `tools/release_lisp.py`
 reads; run it after any change and the dated twin
-`releases/CDCALLOUT_MMDDYY_REV12.lsp` regenerates itself. Bump the
+`releases/CDCALLOUT_MMDDYY_REV19.lsp` regenerates itself. Bump the
 banner with every revision.
 
+* **v1.9** — every knob sits in one configuration block at the top of
+  the file, each with its explanation; the layer colour and the
+  same-spot tolerance joined the ones already there, and the three
+  point-classifier knobs took the file's `cdo:` prefix. Fixed: with
+  UNDO switched off in the drawing the run closed an undo group it had
+  never opened.
 * **v1.2** — the dimension line is placed automatically, right
   inbetween the two points (`cdo:*offset*` pushes it off,
   CDCREATE-style); the pick prompt is gone.
@@ -106,19 +115,27 @@ banner with every revision.
   mis-typed TO number now re-asks TO instead of restarting the round.
 * **v1.0** — first release.
 
-## Assumptions / configuration
+## Tunables
 
-The constants at the top of `CDCALLOUT.lsp` are easy to change:
+Every knob sits in the tunables block at the top of
+`CDCALLOUT.lsp`, each with its explanation beside it; change a value
+there, or `setq` it after loading from a startup file:
 
-```lisp
-(setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style
-(setq cdo:*layer*       "DIMENSION")        ; layer dims land on
-(setq cdo:*offset*      0.0)                ; push the dim line off the
-                                            ; tie; 0.0 = right inbetween
-(setq *CDO-POINT-BLOCK* "ab_pt")            ; the survey point block
-(setq *CDO-POINT-LAYER* "POINTS")           ; layer whose INSERTs count
-(setq *CDO-PT-TAG*      "number")           ; attribute naming the point
-```
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `cdo:*style*` | `"CROSS DIMENSIONS"` | Dimension style the dims are drawn in — never invented; a missing one is reported and the current style used |
+| `cdo:*layer*` | `"DIMENSION"` | Layer the dims land on, ByLayer — created when missing, thawed / unlocked / switched on when unusable |
+| `cdo:*layer-color*` | `7` | ACI colour a *created* `DIMENSION` layer gets; an existing layer keeps its own |
+| `cdo:*offset*` | `0.0` | How far the dimension line is pushed off the tie, drawing units; `0.0` = right inbetween, positive = to the left of the FROM→TO direction |
+| `cdo:*exact-eps*` | `0.001` | Two points closer than this sit on the same spot; the tie is refused |
+| `cdo:*point-block*` | `"ab_pt"` | Block name whose INSERTs are points wherever they sit |
+| `cdo:*point-layer*` | `"POINTS"` | Layer whose INSERTs are always points |
+| `cdo:*pt-tag*` | `"number"` | Attribute naming the point; a block without it lends its first numeric attribute |
+
+The last three are the survey-point classifier `BPCALLOUT` and `LHD`
+share — change them in all three or the tools disagree. (Before v1.9
+they were spelled `*CDO-POINT-BLOCK*`, `*CDO-POINT-LAYER*` and
+`*CDO-PT-TAG*`; a startup file that sets them needs the new names.)
 
 Requires the Visual LISP engine (full AutoCAD; LT cannot run this).
 
@@ -128,9 +145,13 @@ Requires the Visual LISP engine (full AutoCAD; LT cannot run this).
 AutoLISP VM and drives `CDCALLOUT` end to end — the style/layer/
 ByLayer fixup, the automatic inbetween placement (and the offset
 tunable), state restoration, the rinse-repeat loop, every number
-spelling, decimal point names, unknown numbers, cancelled rounds,
-Back and the missing-style rule:
+spelling, decimal point names, unknown numbers, duplicate numbers,
+cancelled rounds, Back, the missing-style rule, a frozen / locked / off
+`DIMENSION` layer and its colour knob, the point classifier, the
+same-spot tolerance, UNDO switched off, and Esc mid-run through the
+handler:
 
 ```
 python3 tests/test_cdcallout.py
+CALOFIN_LISP_ROOT=shared python3 tests/test_cdcallout.py   # grouped build
 ```

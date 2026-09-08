@@ -635,29 +635,94 @@ so a run cut short leaves nothing behind for the next one.
 
 ## Tunables
 
-`setq` these after loading (in a startup file, say) when a drawing
-needs different names:
+Every adjustable number in `OASIS.lsp` is in one block at the top of the
+file, grouped the way a run uses them, with a comment on each saying
+what it does and what changing it costs. `setq` any of them after
+loading — in a startup file, say — and the next run picks the new value
+up; nothing caches one. `tests/test_tunables.py` holds this table and
+that block together: every knob has to appear here with the default it
+really has, and a knob added beside the code that reads it fails.
+
+**Where the output goes.** The colour is used only when the layer is
+*created*; a layer the drawing already has keeps its own.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `oasis:*poollayer*` | `"POOL"` | Layer the six arcs are drawn on |
+| `oasis:*poollayer*` | `"POOL"` | Layer the arcs are drawn on |
 | `oasis:*poolcolor*` | `4` | Colour it is created with |
 | `oasis:*dimlayer*` | `"DIMENSION"` | Layer every dimension goes on |
 | `oasis:*dimcolor*` | `2` | Colour it is created with |
 | `oasis:*guidelayer*` | `"POOL-GUIDE"` | Layer the dashed circles, the box and the `?` labels go on |
 | `oasis:*guidecolor*` | `8` | Colour it is created with |
-| `oasis:*hicolor*` | `1` (red) | Colour the circle being asked about is drawn in |
-| `oasis:*dimstyle*` | `"Standard"` | Style the pool's own eight dims are drawn in |
-| `oasis:*crossstyle*` | `"CROSS DIMENSIONS"` | Style the check drawing's eighteen are drawn in |
-| `oasis:*startside*` | `0.75` | How far across the short bound a side bulge reaches before its radius is given |
-| `oasis:*starttop*` | `0.5` | How far across the long bound the top bulge reaches before its radius is given |
+| `oasis:*hicolor*` | `1` | Colour (red) the circle being asked about is drawn in. Forced every time, so it reads as the answer being asked for rather than as part of the drawing |
+| `oasis:*dimstyle*` | `"Standard"` | Style the pool's own dims are drawn in |
+| `oasis:*crossstyle*` | `"CROSS DIMENSIONS"` | Style the check drawing's are drawn in |
 | `oasis:*checkgap*` | `4.0` | How far right the check drawing sits, as a multiple of the dimension stand-off |
-| `oasis:*topfrac*` | `0.5` | Where a **Center** pool's top bulge sits across the X bound, as a fraction of it |
-| `oasis:*fuzz*` | `1.0e-6` | Slack for "same point / same length" tests, drawing units |
 
-The dimension stand-off is not a tunable: it is `max(12, longer side /
-18)`, the same rule `POOL` uses, so an oasis dimensioned beside a
-rectangle reads at the same offset.
+**The shape itself.**
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `oasis:*topfrac*` | `0.5` | Where a **Center** pool's top bulge sits across the X bound, as a fraction of it. A complex run moves that bulge per-pool instead; this is what every simple run draws |
+
+**The shape the preview starts from.** A radius not yet answered still
+needs a value for the preview to be drawable, so the gaps are filled
+with the proportions an oasis usually comes in and every invented one is
+labelled `?`. Nothing that ends up drawn depends on any of these.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `oasis:*startside*` | `0.75` | A side bulge, as a fraction of the bound it is measured across (halved in use — a bulge is twice its radius across) |
+| `oasis:*starttop*` | `0.5` | The top bulge, the same way |
+| `oasis:*startjoin*` | `0.6` | A joiner, as a fraction of the **smallest** bulge beside it — which keeps the bulges the bigger circles |
+| `oasis:*startbig*` | `1.2` | A cloud's bottom instead reads off the **largest** bulge: it sweeps under the whole pool |
+| `oasis:*startclear*` | `1.25` | ...and either is then lifted to at least this multiple of its own minimum. Must stay above `1.0`: below the minimum there is no fillet, and the first question would be put with an empty box on screen |
+| `oasis:*startktop*` | `1.5` | A **true** kidney's top circle, as a multiple of the smallest one that reaches both sides |
+| `oasis:*startkleft*` | `0.40` | An **asymmetric** kidney's two given sides, as fractions of the short bound. Deliberately unequal — a preview that opened symmetric would be showing the wrong shape |
+| `oasis:*startkright*` | `0.45` | ...and the other one |
+| `oasis:*startkside*` | `48.0` | Backstop side radius for a true kidney whose derivation has no answer at all. Every top circle the questions admit does have one, so this is here to keep a `nil` out of arithmetic rather than to be set |
+
+**How big the annotation is.** All of it scales off the pool, so a
+10-foot spa and a 40-foot pool are annotated to *look* the same rather
+than to measure the same. Each pair is a divisor of the longer bound and
+a floor under the result.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `oasis:*dimoffmin*` | `12.0` | The dimension stand-off: never closer in than this... |
+| `oasis:*dimoffdiv*` | `18.0` | ...otherwise the longer bound over this. **This is `POOL`'s own rule** — an oasis dimensioned beside a rectangle has to read at the same offset, so change these only together with POOL's |
+| `oasis:*radiusdrag*` | `0.9` | How far a radius dim's text is dragged off its arc, as a fraction of that stand-off |
+| `oasis:*dashmin*` | `2.0` | The guide linetype's dash and gap: never under this... |
+| `oasis:*dashdiv*` | `40.0` | ...otherwise the longer bound over this |
+| `oasis:*pvtextdiv*` | `28.0` | The preview's radius labels: text height as the longer bound over this |
+| `oasis:*pvtextgap*` | `1.7` | ...sitting this many text-heights out from the arc |
+| `oasis:*markmin*` | `1.0` | The circle the check drawing marks each centre with: never under this... |
+| `oasis:*markdiv*` | `90.0` | ...otherwise the longer bound over this |
+| `oasis:*tangmarkdiv*` | `150.0` | The pool-bottom flow's numbered tangency marks: the mark's radius... |
+| `oasis:*tangtextdiv*` | `34.0` | ...the number's text height... |
+| `oasis:*tangtextgap*` | `1.6` | ...and how far outside the water the number sits |
+
+**The pool bottom.**
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `oasis:*hopoff*` | `18.0` | The offset the hopper question opens on when a session has not yet had one accepted. After that the session offers its own last answer, because a job's pools share a hopper — that memory is `oasis:*hopoff-last*`, which is state rather than a setting, so a run never edits the configuration it was given |
+| `oasis:*hopchord*` | `24` | How many chords a **guided** slope line is drawn with — more is smoother and heavier |
+| `oasis:*hopscan*` | `720` | How finely the deepest point of the offset ring is looked for. Only the deep end's *location* comes off this scan; every point drawn is solved exactly |
+
+**Slack, and the loop guards.**
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `oasis:*fuzz*` | `1.0e-6` | Slack for "same point / same length" tests, drawing units. Measurements arrive in inches, so this is far below anything a tape can tell apart |
+| `oasis:*ptfuzz*` | `1.0e-8` | The tighter slack the check drawing dedupes its ties with. A centre is either the one already tied or a different one, with no near-miss between, so this is an equality test and gets equality's tolerance |
+| `oasis:*ucsfuzz*` | `1.0e-8` | How far out of the world plan the UCS may lie and still count as flat. A **direction cosine**, not a length — it does not scale with the drawing and has nothing to do with `*fuzz*` |
+| `oasis:*cmdguard*` | `10` | How many empty `(command)` calls the error handler will send to drain a dimension left pending by an Esc |
+| `oasis:*ringguard*` | `4` | How many elements the sub-ring walker may cross, as a multiple of the ring's own length |
+
+Neither guard is reached by any input the questions admit; they are
+there so a bug upstream costs a wrong drawing rather than a hung
+AutoCAD.
 
 ## What it refuses, and what it only reports
 
@@ -682,7 +747,13 @@ eight answers are in — the question simply comes back, with the reason:
   run: a third bulge shifted until its centre is off either end of the
   envelope, and a tie shorter than the two centres' own Y separation,
   which no circle on the top wall can be that close to satisfy. Both
-  come back with the number that bounds them.
+  come back with the number that bounds them. A placement that stands
+  the corner bulge *inside* a side bulge is refused there too — it takes
+  a corner bulge at exactly half the Y bound with the two centres
+  sharing an X, and the two then touch from within, which is the nesting
+  above by another route. It is caught at the placement question because
+  on that shape the placement is asked *after* the right bulge's own,
+  and the check that runs there has already had its look.
 
 One more refusal is not about the shape at all: a **UCS tilted out of
 the world plan** is turned away before the first question, because an
@@ -735,7 +806,9 @@ away.
 * **The preview is one undo group with everything else**, so a single
   `U` after the run takes the pool, the check drawing and all their
   dimensions away together. Esc part-way through the questions erases
-  the preview too — no half-answered pool is left behind.
+  the preview too — no half-answered pool is left behind — and Esc
+  inside the pool-bottom flow erases that flow's numbered tangency
+  marks, leaving the finished pool it was cancelled over intact.
 * The dashed guide linetype is **built by the routine** (`OASISDASH`,
   scaled to the pool) rather than loaded from `acad.lin`, because a
   failed load falls back to continuous silently, which is how dashes
@@ -775,7 +848,7 @@ offered, each refused and asked for instead.
 
 `python3 tests/test_oasis.py` loads the real `OASIS.lsp` into the repo's
 AutoLISP VM (`tests/lispvm.py`) and drives `c:OASIS` with scripted
-answers — 102 of them. The reference case is checked against the drawing OASIS was
+answers — 115 of them. The reference case is checked against the drawing OASIS was
 written from — a 40'-0" × 20'-0" oasis with 8'/11'/9' bulges and
 6'/3'/5' tangent radii — and all six arcs must land on that drawing's
 six arcs to 1e-6". The rest cover closure and tangent continuity at
@@ -910,6 +983,16 @@ each bound, read off the arcs as drawn rather than the circles they are
 cut from (a bulge circle can dip well past a bound its own arc never
 reaches, which is why the reference oasis is unchanged by that); and the
 check drawing marks and ties the twice-met circle once, never to itself.
+
+Two guard the contingencies that were argued away rather than tested.
+A complex top-right placement that stands the corner bulge inside a side
+bulge — reachable both as a typed shift and as a tie at its own floor —
+is re-asked at the placement question instead of running the whole way
+to "those radii do not make a closed outline". And an Esc inside the
+pool-bottom flow takes that flow's numbered tangency marks with it and
+leaves the finished pool standing, which needed those marks to become
+module state: they are put up by a defun whose locals the command's own
+error handler cannot see.
 
 The preview ones wrap `getdist` to photograph the drawing at the moment
 each question is put — it is erased before the next one, so there is no

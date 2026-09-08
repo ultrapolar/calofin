@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.5, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.6, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 58 files, 167 commands:
+;;; 58 files, 170 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABMOVE
@@ -31,13 +31,14 @@
 ;;;   OASISVER  PADDLE  PADDLEVER  PERPPTS  PERPPTSVER  POINTRENAMER
 ;;;   POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE
 ;;;   POOLSIDEVER  POOLVER  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER
-;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER
-;;;   STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD
-;;;   TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS
-;;;   TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP
-;;;   TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN
-;;;   TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER  WCALST  WCALSTVER
-;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XYPLOT  XYPLOTVER
+;;;   SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
+;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST
+;;;   TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN
+;;;   TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN
+;;;   TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK
+;;;   TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV
+;;;   WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV
+;;;   XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -13921,7 +13922,7 @@
 ;;; ever changing tangent, which is why the whole thing can be given as a
 ;;; handful of radii and two overall dimensions.
 ;;;
-;;; Four families come out of that, and the first question is which:
+;;; Five families come out of that, and the first question is which:
 ;;;
 ;;;   Center    three bulges -- left, right and one across the top,
 ;;;             centred -- joined by three reverse arcs.
@@ -13932,6 +13933,10 @@
 ;;;             sit INSIDE the big top circle, touching it from within,
 ;;;             and the outline hands straight over at each touch --
 ;;;             a SEAM, the one joint with nothing drawn between.
+;;;   NXTcloud  three lobes and four fillets, and the one shape whose
+;;;             ring meets a bulge TWICE: the centre lobe is walked
+;;;             under on the way out and over on the way back, so eight
+;;;             elements are cut from seven circles.
 ;;;
 ;;; The two families that come two ways get a second question of their
 ;;; own, asked straight after.  A cloud is one shape with two bottoms:
@@ -13942,7 +13947,7 @@
 ;;; touch it; on an ASYMMETRIC one the two unequal sides are given and
 ;;; the top circle is derived -- tangent to the top bound and both
 ;;; sides, its centre landing wherever those three contacts put it.
-;;; The pair of answers together names one of six rings.
+;;; The pair of answers together names one of seven rings.
 ;;;
 ;;;                        top bulge
 ;;;                      ___________                  ___________
@@ -14125,61 +14130,225 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.5")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.6")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
 ;;; -------------------- tunables ----------------------------------------
+;;
+;; Everything a drafting office might reasonably want different is set
+;; HERE and nowhere else: the code below reads these names and carries
+;; no bare numbers of its own.  Each knob says what CHANGING it does.
+;; Change a value, save, APPLOAD again -- or (setq oasis:*name* value)
+;; at the command line for one session; nothing below caches one.  Every
+;; one of them is a row in README.md's Tunables table, and
+;; tests/test_tunables.py holds the two together.
+;;
+;; Distances are in drawing units throughout, and a survey arrives in
+;; inches, so read them as inches unless the drawing says otherwise.
+;;
+;; They are grouped the way a run uses them: where it draws, what shape
+;; it starts from, what the preview opens on, how big the annotation is,
+;; what the pool bottom offers, and how much slack a comparison gets.
 
-(setq oasis:*poollayer*  "POOL")       ; the six arcs
+;; ---- where the output goes ---------------------------------------------
+
+;; The three layers, created if the drawing has not got them and thawed,
+;; unlocked and switched back on if it has -- a run onto a frozen layer
+;; otherwise looks like the command did nothing.  The colour beside each
+;; is used only when the layer is CREATED; a layer the drawing already
+;; has keeps its own.  *hicolor* is the odd one out: it is forced onto
+;; the circle a question is about, every time, so it reads as the answer
+;; being asked for rather than as part of the drawing.
+(setq oasis:*poollayer*  "POOL")       ; the arcs, and the pool bottom
 (setq oasis:*poolcolor*  4)
-(setq oasis:*dimlayer*   "DIMENSION")  ; every dimension
+(setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
 (setq oasis:*guidecolor* 8)
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
-;; Where a Center pool's top bulge sits across the X bound, as a fraction
-;; of it.  0.5 centres it, which is what every one on file wants; the
-;; value is here so an off-centre one does not need the file edited.
-(setq oasis:*topfrac* 0.5)
-
-;; The pool bottom.  The offset the hopper question offers first, the
-;; number of chords a guided slope line is drawn with, and how finely the
-;; deepest point of the offset ring is looked for.
-(setq oasis:*hopoff*   18.0)
-(setq oasis:*hopchord* 24)
-(setq oasis:*hopscan*  720)
-
-;; Slack for "is this the same point / the same length" tests, drawing
-;; units.  Measurements arrive in inches, so this is far below anything
-;; a tape can tell apart.
-(setq oasis:*fuzz* 1.0e-6)
-
 ;; Two styles, because the two drawings are read differently: the pool
 ;; itself is a plan and is dimensioned in the drawing's ordinary style,
 ;; while the check drawing beside it is nothing but tie measurements and
 ;; goes in the cross-dimension style, same as every other cross dim in
-;; the repo.  A drawing that has not got one of them is told so once and
-;; those dims come out in whatever style is current -- an invented style
-;; would look right and measure wrong.
+;; the repo.  Name a style the drawing has not got and those dims come
+;; out in whatever is current, with the routine saying so once -- an
+;; invented style would look right and measure wrong.
 (setq oasis:*dimstyle*   "Standard")           ; the pool's own dims
 (setq oasis:*crossstyle* "CROSS DIMENSIONS")   ; the check drawing's
 
-;; The check drawing sits this far to the right of the pool, measured
+;; How far to the right of the pool the check drawing sits, measured
 ;; from the pool's own right-hand bound, as a multiple of the dimension
-;; stand-off.  Big enough to clear the radius dims on that side.
+;; stand-off.  Raise it if the radius dims on that side ever reach it.
 (setq oasis:*checkgap* 4.0)
 
-;; The shape the preview starts from, before any radius has been given:
-;; how far across the envelope a side bulge and the top bulge usually
-;; reach, as fractions.  Three quarters of the short bound and half the
-;; long one is what an oasis normally comes in, so the first question is
-;; already looking at something familiar.
+;; ---- the shape itself --------------------------------------------------
+
+;; Where a Center pool's top bulge sits across the X bound, as a
+;; fraction of it.  0.5 centres the hump, which is what every pool on
+;; file wants; move it and every simple Center run draws the hump off
+;; centre.  (A COMPLEX run says it per-pool instead, by answering the
+;; placement question, so this is only the default.)
+(setq oasis:*topfrac* 0.5)
+
+;; ---- the shape the preview opens on ------------------------------------
+
+;; A radius not answered yet still needs a value for the preview to be
+;; drawable at all, so the gaps are filled with the proportions an oasis
+;; usually comes in and every invented one is labelled "?".  Change any
+;; of these and the FIRST question looks at a different starting shape;
+;; nothing that ends up drawn depends on one.
+;;
+;; A side bulge and the top bulge, as fractions of the bound each is
+;; measured across -- HALVED in use, because a bulge is twice its radius
+;; across.  Three quarters of the short bound and half the long one puts
+;; a 40 x 20 at 7'-6" side bulges and a 10'-0" top, against the 8'/9'
+;; and 11' of the drawing this tool was written from.
 (setq oasis:*startside* 0.75)
 (setq oasis:*starttop*  0.5)
 
-;;; -------------------- the four shapes ----------------------------------
+;; A joiner has no rule of thumb of its own -- what looks right depends
+;; entirely on the bulges either side of it -- so it is sized off them.
+;; Lower *startjoin* for shallower reverse curves; it is a fraction of
+;; the SMALLEST neighbouring bulge, which is what keeps the bulges the
+;; bigger circles and so keeps the picture reading as a pool.  A cloud's
+;; bottom is the exception: it sweeps under the whole pool, so it takes
+;; *startbig* of the LARGEST bulge instead.
+(setq oasis:*startjoin* 0.6)
+(setq oasis:*startbig*  1.2)
+
+;; ...and whichever of those two it is, it is then lifted to at least
+;; this multiple of its own minimum.  Keep it above 1.0: below that
+;; minimum there is no fillet at all, oasis:solve gives back nil, and
+;; the first radius question is put with an empty box on screen.  The
+;; margin over 1.0 is what keeps a barely buildable ring from opening
+;; looking pinched.
+(setq oasis:*startclear* 1.25)
+
+;; The two kidneys, whose provisionals cannot be read off neighbours
+;; because the shape derives half of itself: a TRUE kidney's top circle
+;; as a multiple of the smallest one that reaches both sides, and an
+;; ASYMMETRIC kidney's two given sides as fractions of the short bound.
+;; Keep those two unequal -- an asymmetric kidney whose preview opened
+;; symmetric would be showing the wrong shape.
+(setq oasis:*startktop*   1.5)
+(setq oasis:*startkleft*  0.40)
+(setq oasis:*startkright* 0.45)
+
+;; The side radius a true kidney's bottom joiner is sized against when
+;; the derivation has no answer at all.  Every top circle the questions
+;; admit does have one, so changing this changes nothing you can reach;
+;; it is here because a bare number in the middle of the provisionals
+;; would not be, and because a nil arriving at arithmetic is how a
+;; preview dies rather than draws.
+(setq oasis:*startkside* 48.0)
+
+;; ---- how big the annotation is -----------------------------------------
+
+;; All of it scales off the pool, so a 10-foot spa and a 40-foot pool
+;; are annotated to LOOK the same rather than to measure the same.  Each
+;; pair below is a floor under the result and a divisor of the longer
+;; bound: raise a divisor for smaller annotation, raise a floor to keep
+;; a small pool readable.
+;;
+;; The dimension stand-off, which is how far off the pool the overall
+;; dims sit.  This is POOL's own rule and is a knob here only so it can
+;; be kept in step with POOL: an oasis dimensioned beside a rectangle
+;; has to read at the same offset, so move these only together with
+;; POOL's own (pool:dimoff, lisp/pool/POOL.LSP).
+(setq oasis:*dimoffmin* 12.0)
+(setq oasis:*dimoffdiv* 18.0)
+
+;; How far a radius dimension's text is dragged off its own arc, as a
+;; fraction of that stand-off -- away from the centre on a bulge and
+;; towards it on a reverse arc, whose centre is itself outside the pool,
+;; so both land clear of the water.  Raise it to pull the text further
+;; out; at 0 the text sits on the arc.
+(setq oasis:*radiusdrag* 0.9)
+
+;; The dashed guide linetype, built rather than loaded from acad.lin (a
+;; failed load falls back to CONTINUOUS in silence, which is how dashes
+;; vanish).  Dash and gap are equal; lower *dashdiv* for a coarser dash.
+(setq oasis:*dashmin* 2.0)
+(setq oasis:*dashdiv* 40.0)
+
+;; The preview's radius labels: how tall the text is, and how far out
+;; from its own arc it sits, in text heights, along the direction that
+;; leads out of the water.  Raise the gap if a label ever sits on the
+;; outline it belongs to.
+(setq oasis:*pvtextdiv* 28.0)
+(setq oasis:*pvtextgap* 1.7)
+
+;; The little circle the check drawing marks each centre with.
+(setq oasis:*markmin* 1.0)
+(setq oasis:*markdiv* 90.0)
+
+;; The numbered marks the pool-bottom flow puts on every change of
+;; tangency, so one can be named: the mark's own radius, the number's
+;; text height, and how far outside the water that number sits, in text
+;; heights.  Raise the gap on a pool whose numbers crowd the outline.
+(setq oasis:*tangmarkdiv* 150.0)
+(setq oasis:*tangtextdiv* 34.0)
+(setq oasis:*tangtextgap* 1.6)
+
+;; ---- the pool bottom ---------------------------------------------------
+
+;; The hopper offset the question opens on when a session has not yet
+;; had an answer accepted.  After that the session's own last answer is
+;; what it offers, because a job's pools share a hopper -- that memory
+;; is oasis:*hopoff-last*, which is state and lives with the rest of it
+;; rather than here.  Change this one to move where a fresh session
+;; starts.
+(setq oasis:*hopoff* 18.0)
+
+;; How many chords a GUIDED slope line is drawn with.  It follows the
+;; wall with its offset easing away to nothing, so there is no exact
+;; curve to draw and it goes down as a polyline: more chords is a
+;; smoother line and a heavier drawing.
+(setq oasis:*hopchord* 24)
+
+;; How finely the deepest point of the offset ring is looked for, in
+;; samples round the whole ring.  Only the deep end's LOCATION comes off
+;; this scan -- every point actually drawn is solved exactly -- so
+;; raising it buys robustness on a lumpy outline, not precision.
+(setq oasis:*hopscan* 720)
+
+;; ---- slack, and the loop guards ----------------------------------------
+
+;; Slack for "is this the same point / the same length" tests, in
+;; drawing units.  Measurements arrive in inches, so this is far below
+;; anything a tape can tell apart; raise it only for a drawing whose
+;; units are much coarser than inches.
+(setq oasis:*fuzz* 1.0e-6)
+
+;; The tighter slack the check drawing dedupes its tie measurements
+;; with.  Two ties wanted between the same pair of centres are one tie,
+;; and the pair is compared as COORDINATES rather than as a distance --
+;; a centre is either the one already tied or a different one, with no
+;; near-miss in between -- so this is an equality test and takes
+;; equality's tolerance rather than the tape's.
+(setq oasis:*ptfuzz* 1.0e-8)
+
+;; How far out of the world plan the current UCS may lie and still count
+;; as flat.  A DIRECTION COSINE, not a length: it compares the UCS Z
+;; axis against the world Z, so it does not scale with the drawing and
+;; has nothing to do with *fuzz*.  A UCS past it is refused outright --
+;; the arcs would each need an extrusion of their own, and a plan pool
+;; has no business in one.
+(setq oasis:*ucsfuzz* 1.0e-8)
+
+;; Two belt-and-braces loop limits, neither reached by any input the
+;; questions admit: they are here so a bug upstream costs a wrong
+;; drawing rather than a hung AutoCAD.  *cmdguard* is how many empty
+;; (command) calls the error handler will send to drain a dimension left
+;; pending by an Esc; *ringguard* is how many elements the sub-ring
+;; walker may cross, as a multiple of the ring's own length.  Lower
+;; either and a legitimate run could be cut short.
+(setq oasis:*cmdguard*  10)
+(setq oasis:*ringguard* 4)
+
+;;; -------------------- the five shapes ----------------------------------
 ;;; Every one of them is a ring of BULGES -- circles pinned to the
 ;;; envelope -- with a JOINER between each consecutive pair.  A joiner is
 ;;; either a reverse arc of a radius the user gives, or, when both bulges
@@ -14239,12 +14408,12 @@
 (defun oasis:complex-p (ans)
   (= (nth 11 ans) "Complex"))
 
-;; The shape, resolved.  The first question offers four families --
-;; Center, TopRight, Cloud and Kidney -- and the two families that come
-;; two ways get a second question of their own, asked straight after: a
-;; cloud is one shape with two bottoms, a kidney one shape whose sides
-;; are either matched or not.  The pair of answers together names one of
-;; the six rings.
+;; The shape, resolved.  The first question offers five families --
+;; Center, TopRight, Cloud, Kidney and NXTcloud -- and the two families
+;; that come two ways get a second question of their own, asked straight
+;; after: a cloud is one shape with two bottoms, a kidney one shape
+;; whose sides are either matched or not.  The pair of answers together
+;; names one of the seven rings.
 (defun oasis:variant (ans)
   (cond ((= (nth 0 ans) "Cloud")
          (if (= (nth 10 ans) "Rounded") "RoundedBottom" "StraightBottom"))
@@ -14646,7 +14815,7 @@
 ;; The dash pattern the guide circles are drawn with, scaled to the pool
 ;; so it reads the same on a 10-foot spa and a 40-foot pool.
 (defun oasis:dashlt (w h / d)
-  (setq d (max 2.0 (/ (max w h) 40.0)))
+  (setq d (max oasis:*dashmin* (/ (max w h) oasis:*dashdiv*)))
   (oasis:ltmake "OASISDASH" "Oasis guide __ __ __ __" (list d (- 0.0 d))))
 
 ;;; -------------------- layers ------------------------------------------
@@ -15161,7 +15330,7 @@
 ;; parallel to the world Z.  Every plan-drafting UCS is.
 (defun oasis:ucs-flat-p ( / z)
   (setq z (trans '(0.0 0.0 1.0) 1 0 T))
-  (< (abs (- (abs (caddr z)) 1.0)) 1.0e-8))
+  (< (abs (- (abs (caddr z)) 1.0)) oasis:*ucsfuzz*))
 
 ;; How far the current UCS is turned from the world X axis.  Read off the
 ;; components rather than with (angle ...), which projects onto the UCS
@@ -15205,7 +15374,7 @@
 ;; How far off the pool the dimensions sit.  POOL's rule, so an oasis
 ;; drawn beside a rectangle is dimensioned at the same stand-off.
 (defun oasis:dimoff (w h)
-  (max 12.0 (/ (max w h) 18.0)))
+  (max oasis:*dimoffmin* (/ (max w h) oasis:*dimoffdiv*)))
 
 ;; The midpoint of an arc, and the direction out of the pool there.
 ;; On a bulge that is away from the centre; on a reverse arc it is
@@ -15296,11 +15465,15 @@
       ((oasis:line-p a)
        (command "_.DIMALIGNED"
                 (oasis:wp (nth 1 a) base) (oasis:wp (nth 2 a) base)
-                (oasis:wp (polar (car md) (cdr md) (* 0.9 doff)) base)))
+                (oasis:wp (polar (car md) (cdr md)
+                                 (* oasis:*radiusdrag* doff))
+                          base)))
       (t
        (command "_.DIMRADIUS"
                 (list e (oasis:wp (car md) base))
-                (oasis:wp (polar (car md) (cdr md) (* 0.9 doff)) base)))))
+                (oasis:wp (polar (car md) (cdr md)
+                                 (* oasis:*radiusdrag* doff))
+                          base)))))
   (princ))
 
 ;;; -------------------- the check drawing --------------------------------
@@ -15342,8 +15515,8 @@
   ;; otherwise be tied to itself, which is a dimension of nothing
   (setq hit (< (distance p q) oasis:*fuzz*))
   (foreach e ties
-    (if (or (and (equal (car e) p 1e-8) (equal (cadr e) q 1e-8))
-            (and (equal (car e) q 1e-8) (equal (cadr e) p 1e-8)))
+    (if (or (and (equal (car e) p oasis:*ptfuzz*) (equal (cadr e) q oasis:*ptfuzz*))
+            (and (equal (car e) q oasis:*ptfuzz*) (equal (cadr e) p oasis:*ptfuzz*)))
         (setq hit T)))
   (if hit ties (append ties (list (list p q)))))
 
@@ -15364,7 +15537,7 @@
   (oasis:dimstyle-on oasis:*crossstyle*)
   (setvar "CLAYER" oasis:*guidelayer*)
   (oasis:pv-box w h cbase lt)
-  (setq mark (max 1.0 (/ (max w h) 90.0)))
+  (setq mark (max oasis:*markmin* (/ (max w h) oasis:*markdiv*)))
   ;; the outline itself, so the centres have something to belong to
   (oasis:draw arcs cbase oasis:*poollayer*)
   (setvar "CLAYER" oasis:*guidelayer*)
@@ -15475,18 +15648,18 @@
               rl   (cond ((nth 4 ans)) (side))
               rt   (cond ((nth 5 ans)) (side))
               rr   (cond ((nth 6 ans)) (side))
-              g    (* 0.6 (min rl rt rr))
+              g    (* oasis:*startjoin* (min rl rt rr))
               ca   (oasis:nxtcen w h rl 0)
               cd   (oasis:nxtcen w h rt 1)
               cg   (oasis:nxtcen w h rr 2))
         (list w h rl rt rr
-              (cond ((nth 7 ans))  ((max g (* 1.25 (oasis:filmin cd rt
+              (cond ((nth 7 ans))  ((max g (* oasis:*startclear* (oasis:filmin cd rt
                                                                  ca rl)))))
-              (cond ((nth 8 ans))  ((max g (* 1.25 (oasis:filmin cg rr
+              (cond ((nth 8 ans))  ((max g (* oasis:*startclear* (oasis:filmin cg rr
                                                                  cd rt)))))
-              (cond ((nth 9 ans))  ((max g (* 1.25 (oasis:filmin ca rl
+              (cond ((nth 9 ans))  ((max g (* oasis:*startclear* (oasis:filmin ca rl
                                                                  cd rt)))))
-              (cond ((nth 13 ans)) ((max g (* 1.25 (oasis:filmin cd rt
+              (cond ((nth 13 ans)) ((max g (* oasis:*startclear* (oasis:filmin cd rt
                                                                  cg rr)))))
               0.0))
   (if (oasis:kidney-p var)
@@ -15497,13 +15670,13 @@
       ;; sides the way every joiner is
       (progn
         (setq rt (if (= var "TrueKidney")
-                     (cond ((nth 5 ans)) ((* 1.5 (oasis:ktrue-min w h)))))
+                     (cond ((nth 5 ans)) ((* oasis:*startktop* (oasis:ktrue-min w h)))))
               rl (if (= var "AsymKidney")
-                     (cond ((nth 4 ans)) ((* 0.40 (min w h)))))
+                     (cond ((nth 4 ans)) ((* oasis:*startkleft* (min w h)))))
               rr (if (= var "AsymKidney")
-                     (cond ((nth 6 ans)) ((* 0.45 (min w h)))))
+                     (cond ((nth 6 ans)) ((* oasis:*startkright* (min w h)))))
               g  (if (= var "TrueKidney")
-                     (cond ((oasis:ktrue-side w h rt)) (48.0))
+                     (cond ((oasis:ktrue-side w h rt)) (oasis:*startkside*))
                      (min rl rr))
               ;; the two circles the bottom joiner will actually span --
               ;; the matching pair derived on a true kidney, the two given
@@ -15518,8 +15691,8 @@
               ;; the preview would have nothing to draw until the very
               ;; last question was answered
               (cond ((nth 9 ans))
-                    ((max (* 0.6 g)
-                          (* 1.25 (oasis:filmin cl gl cr gr)))))
+                    ((max (* oasis:*startjoin* g)
+                          (* oasis:*startclear* (oasis:filmin cl gl cr gr)))))
               nil off))
       (progn
   (setq side (* 0.5 oasis:*startside* (min w h))
@@ -15538,21 +15711,23 @@
         ;; A cloud's bottom is the exception: it sweeps under the whole
         ;; pool, so it is read off the biggest bulge rather than the
         ;; smallest.
-        g    (* 0.6 (min rl rr (cond (rt) (rl))))
-        big  (* 1.2 (max rl rr (cond (rt) (rl))))
+        g    (* oasis:*startjoin* (min rl rr (cond (rt) (rl))))
+        big  (* oasis:*startbig* (max rl rr (cond (rt) (rl))))
         cl   (list rl rl)
         ct   (if rt (oasis:topcen w h rt var off))
         cr   (list (- w rr) rr))
   (list w h rl rt rr
         (cond ((nth 7 ans))
-              ((oasis:cloud-p var) (max g (* 1.25 (oasis:filmin cr rr cl rl))))
-              ((max g (* 1.25 (oasis:filmin ct rt cl rl)))))
+              ((oasis:cloud-p var)
+               (max g (* oasis:*startclear* (oasis:filmin cr rr cl rl))))
+              ((max g (* oasis:*startclear* (oasis:filmin ct rt cl rl)))))
         (cond ((nth 8 ans))
               ((oasis:cloud-p var) nil)
-              ((max g (* 1.25 (oasis:filmin cr rr ct rt)))))
+              ((max g (* oasis:*startclear* (oasis:filmin cr rr ct rt)))))
         (cond ((nth 9 ans))
-              ((oasis:cloud-p var) (max big (* 1.25 (oasis:filmin cl rl cr rr))))
-              ((max g (* 1.25 (oasis:filmin cl rl cr rr)))))
+              ((oasis:cloud-p var)
+               (max big (* oasis:*startclear* (oasis:filmin cl rl cr rr))))
+              ((max g (* oasis:*startclear* (oasis:filmin cl rl cr rr)))))
         nil off)))))
 
 ;; Erase a preview.  Entities the user has since deleted are skipped, so
@@ -15621,7 +15796,7 @@
       (progn
         (cal:osdown)
         (setq lt   (oasis:dashlt w h)
-              hgt  (/ (max w h) 28.0)
+              hgt  (/ (max w h) oasis:*pvtextdiv*)
               full (oasis:fillin ans)
               arcs (oasis:solve (nth 0 full) (nth 1 full) (nth 2 full)
                                 (nth 3 full) (nth 4 full) (nth 5 full)
@@ -15659,7 +15834,8 @@
                                   (rtos (nth slot ans))
                                   (if slot "?" (rtos (nth 2 a))))
                           out (cons (oasis:pv-text
-                                      (polar (car md) (cdr md) (* 1.7 hgt))
+                                      (polar (car md) (cdr md)
+                                             (* oasis:*pvtextgap* hgt))
                                       hgt txt base hi)
                                     out)))
                 (setq i (1+ i)))
@@ -15942,20 +16118,33 @@
 ;; refused: that is an ordinary trimmed bulge, and oasis:report-extents
 ;; names it.
 ;;
-;; The hump's OTHER refusal has no counterpart here, and that is not an
-;; oversight.  A hump has no size limit -- it is trimmed away long
-;; before it reaches anything -- so it can grow to swallow the left
-;; bulge, and oasis:ask-offset turns that away.  A corner bulge cannot:
-;; it is tangent to the Y-max bound and at most half the envelope
-;; across, and both side bulges are tangent to the Y-min bound and at
-;; most half the envelope across from the other side, so the gap between
-;; those centres is never smaller than the radii differ by.  Wherever
-;; along the top wall it is put, it is never inside a side bulge and
-;; never swallows one.
+;; The hump's OTHER refusal -- a third bulge that swallows a side one --
+;; is checked here too, and for a while it was not, on the argument that
+;; a corner bulge cannot reach: it is tangent to the Y-max bound and at
+;; most half the envelope across, and both side bulges are tangent to
+;; the Y-min bound and at most half the envelope across from the other
+;; side, so the gap between those centres in Y alone is h - rt - rs and
+;; the radii differ by |rt - rs|, and the first is never less than the
+;; second.
+;;
+;; Never LESS -- but it can be EQUAL, and equal is nested: the two
+;; circles touch from the inside, which is the one case no tangent
+;; radius bridges either.  It needs the larger of the pair to be exactly
+;; half the Y bound, which is a legal answer, and the two centres to
+;; share an X, which the placement is free to arrange.  A 40 x 20 with a
+;; 10' corner bulge and a 9' right bulge shifted a foot out is one:
+;; every question answered, and then no outline at all.  So the
+;; placement is checked against both side bulges, exactly as
+;; oasis:ask-offset checks the hump against the left one -- and HERE
+;; rather than at the right bulge's own question, because on this shape
+;; the placement is asked after that question and oasis:right-nests has
+;; already had its look.
 ;;
 ;; Tie is checked the same way, because by the time it is checked it IS
-;; a shift: oasis:tieoff has already turned it into one.
-(defun oasis:ask-place (msg w h rt rr / v ct bad)
+;; a shift: oasis:tieoff has already turned it into one.  That matters:
+;; a tie at its own floor stands the corner bulge straight above the
+;; right one, which is precisely the shared X the nesting case needs.
+(defun oasis:ask-place (msg w h rl rt rr / v ct bad)
   (setq v   (oasis:askshift msg)
         bad T)
   (while bad
@@ -15975,12 +16164,22 @@
                    (oasis:tieoff w h rt rr v))))
       (t
        (setq ct  (oasis:topcen w h rt "TopRight" v)
-             bad (or (< (car ct) 0.0) (> (car ct) w)))
+             bad (cond ((or (< (car ct) 0.0) (> (car ct) w)) "out")
+                       ((oasis:nested-p ct rt (list rl rl) rl) "left")
+                       ((oasis:nested-p ct rt (list (- w rr) rr) rr)
+                        "right")))
        (if bad
            (progn
-             (princ (strcat "\nThat puts the corner bulge's centre at "
-                            (rtos (car ct)) ", off the " (rtos w)
-                            " envelope altogether -- it has to stay on it."))
+             (if (= bad "out")
+                 (princ (strcat "\nThat puts the corner bulge's centre at "
+                                (rtos (car ct)) ", off the " (rtos w)
+                                " envelope altogether -- it has to stay"
+                                " on it."))
+                 (princ (strcat "\nThere the corner bulge and the " bad
+                                " bulge lie one inside the other, so no"
+                                " tangent radius can join them.  Move it"
+                                " along the wall, or change one of the two"
+                                " radii.")))
              (setq v (oasis:askshift msg)))))))
   v)
 
@@ -16076,7 +16275,7 @@
     ;; the same slot, and the same shift, asked against the mark each
     ;; shape measures it from
     ((= k 12) (if (= var "TopRight")
-                  (oasis:ask-place (oasis:sprompt var 12) w h rt rr)
+                  (oasis:ask-place (oasis:sprompt var 12) w h rl rt rr)
                   (oasis:ask-offset (oasis:sprompt var 12) w h rl rt)))
     ((= k 13) (oasis:ask-tangent (oasis:sprompt var 13) cd rt cg rr runs))))
 
@@ -16386,7 +16585,7 @@
         want  (oasis:spanlen arcs sa sb)
         out   nil
         guard 0)
-  (while (and (> want oasis:*fuzz*) (< guard (* 4 n)))
+  (while (and (> want oasis:*fuzz*) (< guard (* oasis:*ringguard* n)))
     (setq l     (oasis:elen (nth k arcs))
           avail (* l (- 1.0 u0)))
     (if (<= want (+ avail oasis:*fuzz*))
@@ -16475,8 +16674,8 @@
   (setq js  (oasis:joints arcs)
         n   (length js)
         i   0
-        hgt (/ (max w h) 34.0)
-        mk  (/ (max w h) 150.0)
+        hgt (/ (max w h) oasis:*tangtextdiv*)
+        mk  (/ (max w h) oasis:*tangmarkdiv*)
         out nil)
   (while (< i n)
     (setq at  (oasis:ringat arcs (nth i js))
@@ -16484,7 +16683,7 @@
           ;; the number sits OUTSIDE the water, clear of the outline
           out (cons (oasis:pv-text (polar (car at)
                                           (+ (cadr at) pi)
-                                          (* 1.6 hgt))
+                                          (* oasis:*tangtextgap* hgt))
                                    hgt (itoa (1+ i)) base T)
                     out)
           i   (1+ i)))
@@ -16783,19 +16982,22 @@
   (setq bot nil)
   (while (null bot)
     (initget 6 "Back Undo")
-    (setq off (getdist (strcat "\nHopper offset in from the wall [Back] <"
-                               (rtos oasis:*hopoff*) ">: ")))
+    (setq off (getdist
+                (strcat "\nHopper offset in from the wall [Back] <"
+                        (rtos (cond (oasis:*hopoff-last*) (oasis:*hopoff*)))
+                        ">: ")))
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
        (setq bot 'OASIS-BACK))
       (t
-       (if (null off) (setq off oasis:*hopoff*))
+       (if (null off)
+           (setq off (cond (oasis:*hopoff-last*) (oasis:*hopoff*))))
        (setq try (oasis:bottom arcs (car sh) (cadr sh) (car sd) (cadr sd)
                                off))
        (if (= (type try) 'STR)
            (princ (strcat "\nAt " (rtos off) " " try "."))
-           (setq oasis:*hopoff* off
-                 bot            (list off try))))))
+           (setq oasis:*hopoff-last* off
+                 bot                 (list off try))))))
   bot)
 
 ;; How one slope line runs.  The side is named by the arc its end of the
@@ -16813,10 +17015,10 @@
 ;; own questions have it.  Back out of the first step and nothing is
 ;; added at all.  Returns the lines to report, so they land after the
 ;; pool's own, or nil when nothing was added.
-(defun oasis:askbottom (arcs w h base lt / marks ans pos k v off bot done)
-  (setq marks (oasis:tangmarks arcs w h base lt)
-        ans   (list nil nil nil nil nil)
-        pos   0)
+(defun oasis:askbottom (arcs w h base lt / ans pos k v off bot done)
+  (setq oasis:*marks* (oasis:tangmarks arcs w h base lt)
+        ans           (list nil nil nil nil nil)
+        pos           0)
   (while (and pos (< pos 5))
     (setq k pos
           v (cond ((= k 0) (oasis:askbreak "Shallow" arcs w h base))
@@ -16832,7 +17034,7 @@
                    (setq pos nil)))
         (setq ans (oasis:put ans k v)
               pos (1+ pos))))
-  (setq marks (oasis:pv-clear marks))
+  (setq oasis:*marks* (oasis:pv-clear oasis:*marks*))
   (if (null pos)
       nil
       (progn
@@ -16921,6 +17123,18 @@
 
 ;;; -------------------- the command -------------------------------------
 
+;; The numbered tangency marks the pool-bottom flow puts up.  A
+;; module global rather than a local of oasis:askbottom because
+;; c:OASIS's handler has to be able to clear them: an Esc inside
+;; that flow used to leave every one of them on the drawing, red,
+;; over a pool that was otherwise finished and worth keeping.
+(setq oasis:*marks*   nil)
+;; The hopper offset this session last had accepted, offered ahead of
+;; oasis:*hopoff* once there is one.  A job's pools share a hopper, so
+;; the second pool of a run should not have to be told again -- but the
+;; knob is the setting and this is the memory, and writing the setting
+;; would make a run quietly edit its own configuration.
+(setq oasis:*hopoff-last* nil)
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
@@ -16936,12 +17150,16 @@
     ;; an Esc part-way through a dimension leaves that command pending,
     ;; and the UNDO below would be swallowed as an answer to it
     (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
     ;; the preview is scaffolding, not a result -- it goes whether the run
-    ;; finished or the user pressed Esc part-way through the questions
+    ;; finished or the user pressed Esc part-way through the questions.
+    ;; So are the pool-bottom flow's numbered tangency marks, which are
+    ;; put up by a defun this handler cannot see the locals of -- hence
+    ;; oasis:*marks*.  Esc there left them on a finished pool.
     (oasis:pv-clear prev)
+    (setq oasis:*marks* (oasis:pv-clear oasis:*marks*))
     (if undo-open (command "_.UNDO" "_End"))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -34761,11 +34979,11 @@
 ;;;
 ;;; Click every point that is bad, one after another, as many as you
 ;;; like; press Enter when done.  Each click:
-;;;   * snaps to the nearest survey point within *BP-SNAP* of the pick
+;;;   * snaps to the nearest survey point within bp:*snap* of the pick
 ;;;     (an "ab_pt" INSERT on any layer, any other INSERT on the POINTS
 ;;;     layer, or a plain POINT on the POINTS layer - the same
 ;;;     classifier the rest of the toolset uses),
-;;;   * draws a *BP-RADIUS* circle on the FGStep layer centered on
+;;;   * draws a bp:*radius* circle on the bp:*layer* layer centered on
 ;;;     that point, and
 ;;;   * reads what the point is called from the block's "number"
 ;;;     attribute, the name the drawing itself carries.
@@ -34779,46 +34997,97 @@
 ;;; exactly where you clicked - and reported as "Pt.?", so a stray
 ;;; shot with no block under it can be called out too.  Clicking a
 ;;; ringed point AGAIN un-rings it: the circle is erased and the point
-;;; leaves the callout - reselect a point to undo it.
+;;; leaves the callout - reselect a point to undo it.  A click that
+;;; snaps to a DIFFERENT survey point never un-rings a neighbour it
+;;; merely lands close to (v1.7 did, so two points under 10" apart
+;;; could not both be ringed); only a click with no survey point under
+;;; it is read against the rings it sits inside.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *bpcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;;
-;;; Assumes drawing units are INCHES (architectural).  Adjust the
-;;; constants below for other setups.
+;;; Assumes drawing units are INCHES (architectural).  Every knob -
+;;; layer and its colour, ring size, snap reach, text height, the
+;;; wording of the callout, what counts as a survey point - is in the
+;;; configuration block right below, each with its explanation.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-(setq *bpcallout-version* "v1.7")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *bpcallout-version* "v1.8")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
-(setq *BP-LAYER*       "FGStep")    ; layer the rings and the callout
-                                    ; text go on - the same layer LHD
-                                    ; puts its miss rings on
-(setq *BP-RADIUS*      5.0)         ; ring RADIUS (5 inches); halve it
-                                    ; here if a 5" diameter is wanted
-(setq *BP-SNAP*        12.0)        ; a pick within this of a survey
-                                    ; point rings THAT point; farther
-                                    ; away, the pick itself is ringed
-                                    ; and named "?"
-(setq *BP-TEXT-HGT*    6.0)         ; callout text height
-(setq *BP-POINT-BLOCK* "ab_pt")     ; block name whose INSERTs mark
-                                    ; points wherever they sit
-(setq *BP-POINT-LAYER* "POINTS")    ; layer whose POINTs/INSERTs are
-                                    ; always points
-(setq *BP-PT-TAG*      "number")    ; attribute tag on the point block
-                                    ; naming the point, as in "Pt.17"
-(setq *BP-EXACT-EPS*   0.001)       ; two picks this close land on the
-                                    ; same spot - the second un-rings it
 
-;; ---- helpers -------------------------------------------------------
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS -
+;;; inches in this shop's architectural drawings.
+
+;; -- where the marks go
+(setq bp:*layer* "FGStep")          ; layer the rings and the callout
+                                    ; text land on - the same layer LHD
+                                    ; puts its miss rings on.  Created
+                                    ; when the drawing lacks it; thawed,
+                                    ; unlocked and switched on when it
+                                    ; is there but unusable
+(setq bp:*layer-color* 1)           ; ACI colour that layer is CREATED
+                                    ; with (1 = red).  A layer already
+                                    ; in the drawing keeps its own
+
+;; -- the rings
+(setq bp:*radius* 5.0)              ; ring RADIUS (5" = a 10" circle);
+                                    ; halve it if a 5" DIAMETER is
+                                    ; wanted.  Also how far an un-ring
+                                    ; click reaches: a click inside a
+                                    ; ring that has no survey point
+                                    ; under it removes that ring
+(setq bp:*snap* 12.0)               ; a pick within this of a survey
+                                    ; point rings THAT point - the
+                                    ; nearest one when several qualify;
+                                    ; farther away, the pick itself is
+                                    ; ringed and named bp:*unknown*
+(setq bp:*exact-eps* 0.001)         ; two ring centres this close are
+                                    ; the same spot, so a second click
+                                    ; on a ringed survey point un-rings
+                                    ; it rather than ringing it twice
+
+;; -- the callout text
+(setq bp:*text-hgt* 6.0)            ; TEXT height of the callout
+(setq bp:*text-gap* 10.0)           ; Enter at the text prompt tucks the
+                                    ; callout this far to the right of
+                                    ; AND below the last ring's centre
+(setq bp:*pt-prefix* "Pt.")         ; how a point is named, in the
+                                    ; callout and on the command line:
+                                    ; the prefix + its number, "Pt.12"
+(setq bp:*tail-one* " is bad")      ; what follows the name when ONE
+                                    ; point was ringed: "Pt.12 is bad"
+(setq bp:*tail-many* " are bad")    ; ...and when two or more were:
+                                    ; "Pt.12, Pt.15 and Pt.20 are bad"
+(setq bp:*unknown* "?")             ; the number given to a ring with
+                                    ; no readable survey point under
+                                    ; it, so it still reads "Pt.? is
+                                    ; bad" rather than vanishing
+
+;; -- what counts as a survey point.  The classifier is shared with
+;;    LHD and CDCALLOUT: change it in all three or the tools disagree
+(setq bp:*point-block* "ab_pt")     ; block name whose INSERTs mark
+                                    ; points wherever they sit
+(setq bp:*point-layer* "POINTS")    ; layer whose POINTs and INSERTs
+                                    ; are always points, whatever block
+(setq bp:*pt-tag* "number")         ; attribute tag on the point block
+                                    ; naming the point.  A block without
+                                    ; it lends its first attribute that
+                                    ; reads as a number instead
+
+;;; -------------------- helpers ----------------------------------------
 
 ;; Every survey point in the drawing, as ((x y) . name) pairs.  What
-;; counts as a point matches LHD's classifier: an *BP-POINT-BLOCK*
-;; INSERT anywhere, any other INSERT on the *BP-POINT-LAYER* layer,
+;; counts as a point matches LHD's classifier: an bp:*point-block*
+;; INSERT anywhere, any other INSERT on the bp:*point-layer* layer,
 ;; or a plain POINT on that layer.  A point with no readable number
-;; is carried as "?" so it can still be ringed and reported.
+;; is carried as bp:*unknown* ("?") so it can still be ringed and
+;; reported.
 (defun bp:collect-points (/ ss i en ed typ p nm out)
   (setq out nil
         ss  (ssget "_X" '((0 . "INSERT,POINT"))))
@@ -34833,46 +35102,52 @@
         (cond
           ((= typ "INSERT")
            (if (or (= (strcase (cdr (assoc 2 ed)))
-                      (strcase *BP-POINT-BLOCK*))
+                      (strcase bp:*point-block*))
                    (= (strcase (cdr (assoc 8 ed)))
-                      (strcase *BP-POINT-LAYER*)))
+                      (strcase bp:*point-layer*)))
              (progn
-               (setq nm (cal:block-number en *BP-PT-TAG*))
+               (setq nm (cal:block-number en bp:*pt-tag*))
                (setq out (cons (cons (list (car p) (cadr p))
-                                     (if (and nm (/= nm "")) nm "?"))
+                                     (if (and nm (/= nm "")) nm
+                                       bp:*unknown*))
                                out)))))
           ((= typ "POINT")
            (if (= (strcase (cdr (assoc 8 ed)))
-                  (strcase *BP-POINT-LAYER*))
-             (setq out (cons (cons (list (car p) (cadr p)) "?") out)))))
+                  (strcase bp:*point-layer*))
+             (setq out (cons (cons (list (car p) (cadr p)) bp:*unknown*)
+                             out)))))
         (setq i (1+ i)))))
   out)
 
-;; The survey point nearest to pick PK, when one sits within *BP-SNAP*
+;; The survey point nearest to pick PK, when one sits within bp:*snap*
 ;; of it; nil otherwise.  Returns the ((x y) . name) pair.
 (defun bp:nearest-point (pk cands / best bd c d)
   (setq best nil bd nil)
   (foreach c cands
     (setq d (cal:dist pk (car c)))
-    (if (and (<= d *BP-SNAP*) (or (null bd) (< d bd)))
+    (if (and (<= d bp:*snap*) (or (null bd) (< d bd)))
       (setq best c bd d)))
   best)
 
 ;; The picked-list entry a new click lands on, when it lands on one:
 ;; either its snapped centre CTR is (as good as) an already-ringed
-;; spot, or - for a pick with no survey point under it - the raw pick
-;; PK is inside an existing ring.  Entries are (ctr name ring-ename);
-;; nil when the click is somewhere new.
-(defun bp:ringed-at (pk ctr picked / hit bd q d)
+;; spot, or - ONLY for a pick with no survey point under it, SNAPPED
+;; nil - the raw pick PK is inside an existing ring.  A pick that did
+;; snap to a survey point is that point and nothing else: v1.7 read it
+;; against the rings too, so a click meant for a point 8" from a ringed
+;; one landed inside the 5" ring and un-ringed the neighbour instead.
+;; Entries are (ctr name ring-ename); nil when the click is somewhere
+;; new.
+(defun bp:ringed-at (pk ctr picked snapped / hit bd q d)
   (setq hit nil)
   (foreach q picked
-    (if (< (cal:dist ctr (car q)) *BP-EXACT-EPS*) (setq hit q)))
-  (if (null hit)
+    (if (< (cal:dist ctr (car q)) bp:*exact-eps*) (setq hit q)))
+  (if (and (null hit) (not snapped))
     (progn                              ; nearest ring the pick sits in
       (setq bd nil)
       (foreach q picked
         (setq d (cal:dist pk (car q)))
-        (if (and (<= d *BP-RADIUS*) (or (null bd) (< d bd)))
+        (if (and (<= d bp:*radius*) (or (null bd) (< d bd)))
           (setq hit q bd d)))))
   hit)
 
@@ -34883,35 +35158,37 @@
 
 ;; The callout sentence: "Pt.12 is bad", "Pt.12 and Pt.15 are bad",
 ;; "Pt.12, Pt.15 and Pt.20 are bad" - commas between all but the last
-;; pair, "and" before the last, is/are by count.
+;; pair, "and" before the last, is/are by count.  The name prefix and
+;; the two sentence tails are the bp:*pt-prefix* / bp:*tail-* knobs.
 (defun bp:phrase (names / n s i)
   (setq n (length names))
   (cond
     ((= n 0) "")
-    ((= n 1) (strcat "Pt." (car names) " is bad"))
+    ((= n 1) (strcat bp:*pt-prefix* (car names) bp:*tail-one*))
     (T
-     (setq s (strcat "Pt." (car names)) i 1)
+     (setq s (strcat bp:*pt-prefix* (car names)) i 1)
      (while (< i (1- n))
-       (setq s (strcat s ", Pt." (nth i names))
+       (setq s (strcat s ", " bp:*pt-prefix* (nth i names))
              i (1+ i)))
-     (strcat s " and Pt." (nth (1- n) names) " are bad"))))
+     (strcat s " and " bp:*pt-prefix* (nth (1- n) names)
+             bp:*tail-many*))))
 
 ;; Ring one bad point.
 (defun bp:draw-ring (ctr)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbCircle")
+                  (cons 8 bp:*layer*) '(100 . "AcDbCircle")
                   (cons 10 (list (car ctr) (cadr ctr) 0.0))
-                  (cons 40 *BP-RADIUS*))))
+                  (cons 40 bp:*radius*))))
 
 ;; Write the callout text at P.
 (defun bp:draw-text (p str)
   (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                  (cons 8 *BP-LAYER*) '(100 . "AcDbText")
+                  (cons 8 bp:*layer*) '(100 . "AcDbText")
                   (cons 10 (list (car p) (cadr p) 0.0))
-                  (cons 40 *BP-TEXT-HGT*)
+                  (cons 40 bp:*text-hgt*)
                   (cons 1 str))))
 
-;; ---- command -------------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
@@ -34938,7 +35215,7 @@
   (setq cands (bp:collect-points))
   (if cands
     (princ (strcat "\n" (itoa (length cands)) " survey point(s) found;"
-                   " a click within " (rtos *BP-SNAP* 4 0)
+                   " a click within " (rtos bp:*snap* 4 0)
                    " snaps to the nearest one."))
     (princ (strcat "\nNo survey points found in the drawing - clicks"
                    " will be ringed where picked and named \"?\".")))
@@ -34949,23 +35226,24 @@
     (setq hit (bp:nearest-point pk cands))
     (if hit
       (setq ctr (car hit) nm (cdr hit))
-      (setq ctr (list (car pk) (cadr pk)) nm "?"))
-    (setq old (bp:ringed-at pk ctr picked))
+      (setq ctr (list (car pk) (cadr pk)) nm bp:*unknown*))
+    (setq old (bp:ringed-at pk ctr picked hit))
     (if old
       (progn                            ; reselecting a point undoes it
         (if (and (caddr old) (entget (caddr old)))
           (entdel (caddr old)))
         (setq picked (bp:drop-entry (caddr old) picked))
-        (princ (strcat "\n  Pt." (cadr old) " un-ringed.")))
+        (princ (strcat "\n  " bp:*pt-prefix* (cadr old)
+                       " un-ringed.")))
       (progn
-        (cal:ensure-layer *BP-LAYER* 1)
+        (cal:ensure-layer bp:*layer* bp:*layer-color*)
         (setq picked (cons (list ctr nm (bp:draw-ring ctr)) picked))
         (if hit
-          (princ (strcat "\n  Pt." nm " ringed."))
+          (princ (strcat "\n  " bp:*pt-prefix* nm " ringed."))
           (princ (strcat "\n  No survey point within "
-                         (rtos *BP-SNAP* 4 0)
-                         " of the pick - ringed where clicked, as"
-                         " Pt.?."))))))
+                         (rtos bp:*snap* 4 0)
+                         " of the pick - ringed where clicked, as "
+                         bp:*pt-prefix* bp:*unknown* "."))))))
 
   (if (null picked)
     (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
@@ -34977,11 +35255,11 @@
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"
                                     " the last ring>: ")))
       (if (null txtpt)                          ; Enter: tuck it beside
-        (setq txtpt (list (+ (car lastpt) (* 2.0 *BP-RADIUS*))
-                          (- (cadr lastpt) (* 2.0 *BP-RADIUS*)))))
+        (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
+                          (- (cadr lastpt) bp:*text-gap*))))
       (bp:draw-text txtpt phrase)
       (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
-                     " point(s) ringed on layer " *BP-LAYER*
+                     " point(s) ringed on layer " bp:*layer*
                      ";  \"" phrase "\""))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
@@ -35644,9 +35922,12 @@
 ;;; Point numbers are typed the way they read in the drawing: "35",
 ;;; "Pt.35", "pt 35", "#35" and "035" all name the same point -- the
 ;;; number is matched against the "number" attribute on the survey
-;;; point blocks (the same classifier BPCALLOUT and LHD use: an
-;;; "ab_pt" INSERT on any layer, any other INSERT on the POINTS
-;;; layer, or a plain POINT on the POINTS layer).
+;;; point blocks: an "ab_pt" INSERT on any layer, or any other INSERT
+;;; on the POINTS layer.  That is BPCALLOUT's and LHD's classifier
+;;; minus its third kind -- a plain POINT carries no attribute, so it
+;;; has no number to be asked for by, and this tool only ever names
+;;; points.  A block whose number cannot be read is left out for the
+;;; same reason.
 ;;;
 ;;; A number that names no point in the drawing is reported and the
 ;;; prompt re-asks -- nothing is drawn from a typo.  The whole run is
@@ -35662,30 +35943,65 @@
 ;;; drawing started from the wrong template is obvious instead of
 ;;; silently producing wrong-looking dims (CDCREATE's rule, kept).
 ;;;
+;;; Every knob - style, layer and its colour, the dimension-line
+;;; offset, the same-spot tolerance, what counts as a survey point - is
+;;; in the configuration block right below, each with its explanation.
+;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *cdcallout-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;; ===================================================================
 
-;; ---- configuration -------------------------------------------------
-(setq *cdcallout-version* "v1.8")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *cdcallout-version* "v1.9")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
-(setq cdo:*style*       "CROSS DIMENSIONS") ; dimension style to use
-(setq cdo:*layer*       "DIMENSION")        ; layer the dims land on
-(setq cdo:*offset*      0.0)        ; distance the dimension line is
-                                    ; pushed off the tie it measures,
-                                    ; drawing units (0.0 = right
-                                    ; inbetween, on the tie itself --
-                                    ; CDCREATE's convention)
-(setq *CDO-POINT-BLOCK* "ab_pt")    ; block name whose INSERTs mark
-                                    ; points wherever they sit
-(setq *CDO-POINT-LAYER* "POINTS")   ; layer whose POINTs/INSERTs are
-                                    ; always points
-(setq *CDO-PT-TAG*      "number")   ; attribute tag on the point block
-                                    ; naming the point, as in "Pt.17"
 
-;; ---- point lookup --------------------------------------------------
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
+;; -- how the dimensions land (CDCREATE's and POOL's convention)
+(setq cdo:*style* "CROSS DIMENSIONS") ; dimension style the dims are
+                                    ; drawn in.  NOT invented when the
+                                    ; drawing lacks it: the dims then
+                                    ; take the current style and the run
+                                    ; says so, because a wrong template
+                                    ; should be obvious, not papered over
+(setq cdo:*layer* "DIMENSION")      ; layer the dims land on, ByLayer
+                                    ; (colour, linetype and lineweight
+                                    ; overrides stripped).  Created when
+                                    ; the drawing lacks it; thawed,
+                                    ; unlocked and switched on when it
+                                    ; is there but unusable
+(setq cdo:*layer-color* 7)          ; ACI colour that layer is CREATED
+                                    ; with (7 = white/black).  A layer
+                                    ; already in the drawing keeps its
+                                    ; own
+(setq cdo:*offset* 0.0)             ; distance the dimension line is
+                                    ; pushed off the tie it measures.
+                                    ; 0.0 = right inbetween, on the tie
+                                    ; itself (CDCREATE's convention);
+                                    ; positive = to the left of the
+                                    ; FROM->TO direction, negative = to
+                                    ; the right
+(setq cdo:*exact-eps* 0.001)        ; two survey points closer than
+                                    ; this sit on the same spot: the
+                                    ; tie is refused, nothing to measure
+
+;; -- what counts as a survey point.  The classifier is shared with
+;;    BPCALLOUT and LHD: change it in all three or the tools disagree
+(setq cdo:*point-block* "ab_pt")    ; block name whose INSERTs mark
+                                    ; points wherever they sit
+(setq cdo:*point-layer* "POINTS")   ; layer whose INSERTs are always
+                                    ; points, whatever block they are
+(setq cdo:*pt-tag* "number")        ; attribute tag on the point block
+                                    ; naming the point.  A block without
+                                    ; it lends its first attribute that
+                                    ; reads as a number instead
+
+;;; -------------------- point lookup ------------------------------------
 
 ;; Every NAMED survey point in the drawing, as ((x y z) . name) pairs.
 ;; What counts as a point matches BPCALLOUT/LHD; a point whose number
@@ -35701,11 +36017,11 @@
               ed (entget en)
               p  (cdr (assoc 10 ed)))
         (if (or (= (strcase (cdr (assoc 2 ed)))
-                   (strcase *CDO-POINT-BLOCK*))
+                   (strcase cdo:*point-block*))
                 (= (strcase (cdr (assoc 8 ed)))
-                   (strcase *CDO-POINT-LAYER*)))
+                   (strcase cdo:*point-layer*)))
           (progn
-            (setq nm (cal:block-number en *CDO-PT-TAG*))
+            (setq nm (cal:block-number en cdo:*pt-tag*))
             (if (and nm (/= nm ""))
               (setq out (cons (cons (list (car p) (cadr p) 0.0) nm)
                               out)))))
@@ -35742,7 +36058,7 @@
       (setq found c)))
   found)
 
-;; ---- dimension helpers (CDCREATE's conventions, kept) --------------
+;;; -------------------- dimension helpers (CDCREATE's, kept) ------------
 
 ;; midpoint of p1->p2, pushed perpendicular to the tie by dist
 ;; (dist 0.0 puts the dimension line straight inbetween, on the tie)
@@ -35792,7 +36108,7 @@
 
 ;; make that layer current, creating or repairing it on the way
 (defun cdo:setlayer (name)
-  (setvar "CLAYER" (cdo:ensure-layer name 7)))
+  (setvar "CLAYER" (cdo:ensure-layer name cdo:*layer-color*)))
 
 ;; restore a dimension style by name when the drawing has it;
 ;; returns T when the style was set
@@ -35824,7 +36140,7 @@
       (entupd en)
       t)))
 
-;; ---- the command ---------------------------------------------------
+;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call (the BPCALLOUT v1.0 lesson).
@@ -35928,7 +36244,7 @@
              ((null (setq b (cdo:find-point s2 cands)))
               (princ (strcat "\n  No point numbered \"" s2
                              "\" in the drawing -- nothing drawn.")))
-             ((< (distance (car a) (car b)) 1e-9)
+             ((< (distance (car a) (car b)) cdo:*exact-eps*)
               (princ (strcat "\n  Pt." (cdr a) " and Pt." (cdr b)
                              " sit on the same spot -- nothing to"
                              " measure.")))
@@ -35958,7 +36274,7 @@
       (setvar "CLAYER"  ocl)
       (setvar "OSMODE"  oos)
       (setvar "CMDECHO" oce)
-      (command "_.UNDO" "_End")
+      (if grouped (command "_.UNDO" "_End"))
       (setq grouped nil)
 
       (princ (strcat "\nCDCALLOUT: " (itoa made) " cross dimension"
@@ -36029,23 +36345,11 @@
 ;;;    Command: CDCREATE
 ;;;    Command: CDCREATEVER      prints the version
 ;;;
-;;;  Tunables (setq them after loading if a drawing needs different
-;;;  names, e.g. in a startup file):
-;;;    cdc:*style*   dimension style to use   ("CROSS DIMENSIONS")
-;;;    cdc:*layer*   layer to create dims on  ("DIMENSION")
-;;;    cdc:*offset*  distance the dimension line is pushed off the
-;;;                  line it measures, drawing units (0.0 = on it)
-;;;    cdc:*erase*   T to erase each dimensioned line, nil to keep it
-;;;    cdc:*skipdimmed*  T to leave a tie that is dimensioned already,
-;;;                  nil to dimension it again anyway
-;;;    cdc:*dupetol* how close two extension line origins have to be to
-;;;                  count as the same point; nil = a sixteenth of an
-;;;                  inch in the drawing's own units
-;;;    cdc:*textpos* where the text sits along the dimension, 0.0 at the
-;;;                  far end, 0.5 centred, 1.0 at the right/bottom end
-;;;    cdc:*vertang* how near vertical (degrees) a line has to stand
-;;;                  before the text goes to its bottom end instead of
-;;;                  its right-hand one
+;;;  Tunables: every knob -- style, layer and its colour, the offset,
+;;;  the text-position rule, erase / skip-dimensioned / same-point
+;;;  tolerance -- sits in the configuration block right after this
+;;;  header, each with its explanation.  (setq ...) one after loading,
+;;;  in a startup file say, when a drawing needs different names.
 ;;;
 ;;;  Notes
 ;;;    * Only LINE entities are dimensioned.  Anything else in the
@@ -36071,18 +36375,77 @@
 ;;;      finish, an error, or Esc.
 ;;; ===================================================================
 
-(setq *cdcreate-version* "v1.3")   ; announced on load; release_lisp.py
+;;; -------------------- version ---------------------------------------
+(setq *cdcreate-version* "v1.4")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
-(setq cdc:*style*  "CROSS DIMENSIONS")
-(setq cdc:*layer*  "DIMENSION")
-(setq cdc:*offset* 0.0)
-(setq cdc:*erase*  t)
-(setq cdc:*textpos* 0.8)
-(setq cdc:*vertang* 15.0)
-(setq cdc:*skipdimmed* t)
-(setq cdc:*dupetol* nil)           ; nil = 1/16" in the drawing's units
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS.
+
+;; -- how the dimensions land (POOL's convention for its cross dims)
+(setq cdc:*style* "CROSS DIMENSIONS") ; dimension style the dims are
+                                   ; drawn in.  NOT invented when the
+                                   ; drawing lacks it: the dims then
+                                   ; take the current style and the run
+                                   ; says so, because a wrong template
+                                   ; should be obvious, not papered over
+(setq cdc:*layer* "DIMENSION")     ; layer the dims land on, ByLayer
+                                   ; (colour, linetype and lineweight
+                                   ; overrides stripped).  Created when
+                                   ; the drawing lacks it; thawed,
+                                   ; unlocked and switched on when it is
+                                   ; there but unusable
+(setq cdc:*layer-color* 7)         ; ACI colour that layer is CREATED
+                                   ; with (7 = white/black).  A layer
+                                   ; already in the drawing keeps its own
+(setq cdc:*offset* 0.0)            ; distance the dimension line is
+                                   ; pushed off the line it measures.
+                                   ; 0.0 = on the line itself; positive
+                                   ; = to the left of the line's own
+                                   ; start->end direction, negative = to
+                                   ; the right
+
+;; -- where the text sits
+(setq cdc:*textpos* 0.8)           ; position of the text along the
+                                   ; dimension line, as a fraction of
+                                   ; its length measured from the far
+                                   ; end toward the right-hand (or
+                                   ; bottom) end: 0.5 = centred, and no
+                                   ; text move at all; 1.0 = right at
+                                   ; that end; 0.8 = 80% of the way
+(setq cdc:*vertang* 15.0)          ; degrees off vertical within which
+                                   ; a line counts as standing up, so
+                                   ; its text goes to the BOTTOM end
+                                   ; rather than the right-hand one
+                                   ; (where "right-hand" would be a
+                                   ; coin toss).  0.0 = only a dead-
+                                   ; vertical line, 90.0 = every line
+
+;; -- what happens to the lines
+(setq cdc:*erase* T)               ; T erases each line once its
+                                   ; dimension is drawn - the tie is the
+                                   ; dimension now; nil keeps them.  A
+                                   ; line that got no dimension is never
+                                   ; erased either way
+(setq cdc:*skipdimmed* T)          ; T leaves a line alone when some
+                                   ; dimension in model space already
+                                   ; runs between its two ends - either
+                                   ; way round, any style or layer; nil
+                                   ; dimensions it again anyway
+(setq cdc:*dupetol* nil)           ; how close two extension-line
+                                   ; origins have to be to count as the
+                                   ; same point, drawing units.  nil =
+                                   ; a sixteenth of an inch in the
+                                   ; drawing's own units (read off
+                                   ; INSUNITS, so 1.5875 in a mm drawing)
+
+;;; -------------------- run state ---------------------------------------
+;;; Not a knob, and outside the block above on purpose: cdc:syssave
+;;; writes its snapshot of the sysvars the run moves here, and
+;;; cdc:sysrestore empties it again, so it is live only mid-run.
 
 ;;; -------------------- helpers ------------------------------------
 
@@ -36321,7 +36684,7 @@
             (progn
               (command "_.UNDO" "_Begin")
               (setq undo-open T)))
-          (setvar "CLAYER" (cal:ensure-layer cdc:*layer* 7))
+          (setvar "CLAYER" (cal:ensure-layer cdc:*layer* cdc:*layer-color*))
           (setq havestyle (cdc:setstyle cdc:*style*))
           (if (not havestyle)
             (princ (strcat "\n** This drawing has no \"" cdc:*style*
@@ -36368,7 +36731,7 @@
 
           ;; -- 5. put the drawing back the way it was
           (cdc:restyle odim)
-          (command "_.UNDO" "_End")
+          (if undo-open (command "_.UNDO" "_End"))
           (setq undo-open nil)
 
           (princ (strcat "\n" (itoa made) " cross dimension"
@@ -72722,6 +73085,8 @@
 ;;;
 ;;; Commands:  SOCONV     move the import onto POOL / POINTS / TEXT /
 ;;;                       DIMENSION
+;;;            SORECONV   put a converted import back on the export's
+;;;                       own layers
 ;;;            SOCONVVER  print the loaded version
 ;;; ======================================================================
 ;;;
@@ -72768,9 +73133,31 @@
 ;;; re-locked afterwards, on the error path too; the destination layers
 ;;; are created if the drawing does not have them, and thawed and
 ;;; switched on if it does.  The whole run is one undo group.
+;;;
+;;; SORECONV MOVES IT ALL BACK.  U undoes a run still in the session;
+;;; SORECONV undoes one that was saved and reopened, which is when a
+;;; drawing turns out to have been converted by mistake or to need
+;;; sending back to whoever exported it.  Every object SOCONV moves
+;;; carries a RECORD in its own xdata -- the layer it came off, that
+;;; layer's colour, and (only when *soconv-force-bylayer* was on) the
+;;; colour, linetype and lineweight the forcing overwrote.  SORECONV
+;;; reads it, puts the object back, re-creates a source layer that has
+;;; been PURGED in the meantime, and takes the record off again.
+;;;
+;;; The record is xdata under "SOCONV" and nothing else about the
+;;; object changes, so a converted drawing still looks and plots
+;;; exactly as it did before the record existed.
+;;;
+;;; ONE THING THE REVERT SPELLS OUT rather than restores: with the
+;;; forcing on, an object that arrived carrying NO colour, linetype or
+;;; lineweight of its own comes back carrying an explicit ByLayer --
+;;; 256, "ByLayer", -1 -- where it had the absent group that means the
+;;; same thing.  It draws and plots identically, and a DXF diff of the
+;;; before and after says so; nothing else about the round trip is
+;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.1")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -72824,6 +73211,12 @@
 ;; appearance and nothing overrides it later.
 (setq *soconv-force-bylayer* nil)
 
+;; The record SORECONV reads back, and the application it lives under.
+;; nil converts exactly as before and writes nothing down, so the run
+;; can only be undone by U; the tests drive both ways.
+(setq *soconv-record*     t
+      *soconv-xdata-app*  "SOCONV")
+
 ;; ---------------------------------------------------------------
 ;; Helpers
 ;; ---------------------------------------------------------------
@@ -72858,6 +73251,10 @@
   (if (member (strcase name) (mapcar 'strcase lst))
     lst
     (append lst (list name))))
+
+;; The layer ENT is on right now.
+(defun soconv:layer-of (ent)
+  (cdr (assoc 8 (entget ent))))
 
 ;; The destination for an entity of type TYP on layer LAY, or nil when
 ;; no rule claims it.  Rows are tried in order and the first wins.
@@ -72928,6 +73325,140 @@
   (list (reverse jobs) srcs dests tally))
 
 ;; ---------------------------------------------------------------
+;; The record
+;; ---------------------------------------------------------------
+;; Eight xdata items in a fixed order, which is why there is no
+;; grammar here to get wrong: xdata groups are typed, so a layer name
+;; carrying a "|" (an xref-dependent one does) or a linetype called
+;; anything at all travels as itself.
+;;
+;;   0  1000  "SOCONV"                the marker
+;;   1  1000  the version that wrote it
+;;   2  1000  the layer it came off
+;;   3  1000  its linetype, "" unless the run forced BYLAYER
+;;   4  1070  that layer's own colour, for a source layer since PURGEd
+;;   5  1070  1 when the run forced BYLAYER, else 0
+;;   6  1070  its colour,     256 (ByLayer) unless the run forced it
+;;   7  1070  its lineweight, -1 (ByLayer)  unless the run forced it
+;;
+;; Only what the conversion actually overwrote is kept.  With the
+;; forcing off -- the default, and what the sample does -- SOCONV
+;; changes nothing but the layer, so nothing but the layer is written
+;; down, and SORECONV puts nothing but the layer back.
+
+;; NOT A KNOB: the number of items in the fixed part above, which
+;; soconv:read indexes into.  Changing it does not change the record's
+;; shape, it stops the reader agreeing with the writer.
+(setq *soconv-record-len* 8)
+
+;; APP's items onto ENT, leaving every OTHER application's xdata alone.
+;;
+;; (entget ent) with no application list carries no xdata at all in
+;; AutoCAD, so there this is the plain append the rest of the tree
+;; writes.  The VM the tests run on hands back every group it holds,
+;; xdata included, so the -3 already there is merged with rather than
+;; doubled -- an entity cannot carry two of them, and assoc would only
+;; ever find the first.
+(defun soconv:xput (ent app items / ed x apps)
+  (setq ed   (entget ent)
+        x    (assoc -3 ed)
+        apps (if x
+               (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x))
+               '()))
+  (setq apps (append apps (list (cons app items))))
+  (entmod (if x
+            (subst (cons -3 apps) x ed)
+            (append ed (list (cons -3 apps)))))
+)
+
+;; APP's items off ENT.  The application name goes back with NO data
+;; after it, which is how xdata is deleted -- an entmod that simply
+;; omits the application leaves it exactly where it was.
+(defun soconv:xdel (ent app / ed x apps)
+  (setq ed (entget ent (list app))
+        x  (assoc -3 ed))
+  (if x
+    (progn
+      (setq apps (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x)))
+      (setq apps (append apps (list (list app))))
+      (entmod (subst (cons -3 apps) x ed))))
+)
+
+;; The items ENT carries under our application, or nil.  An application
+;; entry with nothing after it is one xdel has emptied, and reads as no
+;; record at all -- which is what it is.
+(defun soconv:xget (ent app / x a)
+  (setq x (assoc -3 (entget ent (list app))))
+  (if x (setq a (assoc app (cdr x))))
+  (if (and a (cdr a)) (cdr a))
+)
+
+;; The colour to re-create a source layer with, read off the layer
+;; while it is still there.  A layer that is switched OFF carries the
+;; colour negated; the record keeps the colour and not the off-ness,
+;; so a layer SORECONV has to re-create comes back visible.
+(defun soconv:layer-color (name / tb c)
+  (setq tb (tblsearch "LAYER" name)
+        c  (if tb (cdr (assoc 62 tb))))
+  (if (and c (/= c 0)) (abs c) *soconv-default-color*)
+)
+
+;; Written BEFORE the move, which is the only moment the object still
+;; carries what the record is about.
+(defun soconv:stamp (ent lay / obj forced)
+  (regapp *soconv-xdata-app*)
+  (setq obj    (vlax-ename->vla-object ent)
+        forced *soconv-force-bylayer*)
+  (soconv:xput ent *soconv-xdata-app*
+    (list (cons 1000 *soconv-xdata-app*)
+          (cons 1000 *soconv-version*)
+          (cons 1000 lay)
+          (cons 1000 (if forced (vla-get-Linetype obj) ""))
+          (cons 1070 (soconv:layer-color lay))
+          (cons 1070 (if forced 1 0))
+          (cons 1070 (if forced (vla-get-Color obj) 256))
+          (cons 1070 (if forced (vla-get-Lineweight obj) -1))))
+)
+
+;; (source-layer layer-colour forced? colour linetype lineweight) off
+;; one object, or nil when it carries no record of ours.
+(defun soconv:read (ent / items)
+  (setq items (soconv:xget ent *soconv-xdata-app*))
+  (if (and items
+           (= *soconv-record-len* (length items))
+           (= *soconv-xdata-app* (cdr (nth 0 items))))
+    (list (cdr (nth 2 items))
+          (cdr (nth 4 items))
+          (= 1 (cdr (nth 5 items)))
+          (cdr (nth 6 items))
+          (cdr (nth 3 items))
+          (cdr (nth 7 items))))
+)
+
+;; The colour to re-create source layer LAY with: the one the record
+;; kept from the layer itself, off the first object that came off it.
+;; An existing layer is never recoloured -- ensure-layer only ever uses
+;; this when the layer has to be made -- so a drawing that still has
+;; its export layers keeps their colours whatever the record says.
+(defun soconv:color-for (lay recs / out r)
+  (foreach r recs
+    (if (and (null out) (= (strcase (nth 1 r)) (strcase lay)))
+      (setq out (nth 2 r))))
+  (if out out *soconv-default-color*)
+)
+
+;; Every (ename . record) in SS, in drawing order.
+(defun soconv:recorded (ss / i ent rec out)
+  (setq i 0 out '())
+  (while (< i (sslength ss))
+    (setq ent (ssname ss i))
+    (if (and (entget ent) (setq rec (soconv:read ent)))
+      (setq out (cons (cons ent rec) out)))
+    (setq i (1+ i)))
+  (reverse out)
+)
+
+;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
 (defun c:SOCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
@@ -72984,6 +73515,9 @@
       ;; unlock everything about to be touched, both ends of the move
       (setq unlocked (soconv:unlock-layers (append srcs dests) doc))
       (foreach job jobs
+        ;; the record first: after the move the object no longer
+        ;; carries the layer, or the properties, it is about
+        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job))))
         (setq obj (vlax-ename->vla-object (car job)))
         (vla-put-Layer obj (cdr job))
         (if *soconv-force-bylayer*
@@ -72999,18 +73533,122 @@
       (princ (strcat "\nSOCONV done: " (itoa (length jobs))
                      " object(s) moved -- " (soconv:tally-line tally) "."))
       (princ (strcat "\n  Moved off " (soconv:namelist srcs)
-                     " - PURGE those layers once the result looks right.")))
+                     " - PURGE those layers once the result looks right."))
+      (if *soconv-record*
+        (princ "\n  SORECONV moves it all back; PURGE only when you are sure.")
+        (princ (strcat "\n  *soconv-record* is off, so nothing was written"
+                       " down - only U undoes this run."))))
     (progn
       (princ "\nSOCONV: nothing here is on the export's layers - nothing moved.")
       (princ (strcat "\n  It converts " (soconv:namelist (soconv:sources))
                      "."))))
   (princ))
 
+(defun c:SORECONV (/ *error* doc unlocked mark-open ss recs r ent obj
+                     lay srcs offs tally missing done n)
+
+  ;; SOCONV's handler, for the same reasons (STANDARDS 5).
+  (defun *error* (msg)
+    (if unlocked (vl-catch-all-apply 'soconv:relock-layers (list unlocked)))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nSORECONV error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
+        missing  '())
+
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+
+  ;; The scope SOCONV takes, taken the same way: the highlight if there
+  ;; is one, else what is picked, else the whole drawing.  Only objects
+  ;; carrying a record move either way, so Enter is as safe here as it
+  ;; is there.
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
+      (setq ss (ssget))
+      (if (null ss)
+        (setq ss (ssget "_X")))))
+
+  (setq recs (if ss (soconv:recorded ss)))
+
+  (if recs
+    (progn
+      ;; the layers it goes back ONTO, and the layers it comes OFF.
+      ;; A destination of the revert is an output layer, so it is
+      ;; created when the conversion's own PURGE advice was taken --
+      ;; with the colour the record kept from the layer itself.
+      (setq srcs '() offs '())
+      (foreach r recs
+        (setq lay  (nth 1 r)
+              srcs (soconv:add lay srcs)
+              offs (soconv:add (soconv:layer-of (car r)) offs)))
+      (foreach lay srcs
+        (cal:ensure-layer lay (soconv:color-for lay recs)))
+      (setq unlocked (soconv:unlock-layers (append srcs offs) doc))
+
+      (foreach r recs
+        (setq ent  (car r)
+              obj  (vlax-ename->vla-object ent)
+              done T)
+        (vla-put-Layer obj (nth 1 r))
+        ;; only a run that FORCED the three properties wrote them down,
+        ;; and only such a run has anything to put back
+        (if (nth 3 r)
+          (progn
+            (vla-put-Color obj (nth 4 r))
+            (vla-put-Lineweight obj (nth 6 r))
+            (if (or (member (strcase (nth 5 r)) '("BYLAYER" "BYBLOCK"))
+                    (tblsearch "LTYPE" (nth 5 r)))
+              (vla-put-Linetype obj (nth 5 r))
+              (setq missing (soconv:add (nth 5 r) missing)
+                    done    nil))))
+        ;; The record goes with the move it described -- but only when
+        ;; the move is FINISHED.  An object whose linetype could not be
+        ;; come back to keeps its record, so loading the linetype and
+        ;; running SORECONV again really does finish it; deleting it
+        ;; here would make that advice a lie.
+        (if done (soconv:xdel ent *soconv-xdata-app*))
+        (setq tally (soconv:bump (nth 1 r) tally)))
+
+      (soconv:relock-layers unlocked)
+      (setq unlocked nil)))
+
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
+
+  (if recs
+    (progn
+      (setq n (length recs))
+      (princ (strcat "\nSORECONV done: " (itoa n)
+                     " object(s) put back -- " (soconv:tally-line tally) "."))
+      (princ (strcat "\n  Off " (soconv:namelist offs)
+                     " - this drawing is on the export's own layers again."))
+      (if missing
+        (princ (strcat "\n  Linetype " (soconv:namelist missing)
+                       " is no longer loaded, so those objects kept BYLAYER"
+                       " - LINETYPE-load it and run SORECONV again to finish"
+                       " them."))))
+    (progn
+      (princ "\nSORECONV: nothing here carries a SOCONV record - nothing moved.")
+      (princ "\n  It undoes a SOCONV run, and only from the record SOCONV")
+      (princ "\n  leaves on every object it moves.  A drawing converted with")
+      (princ "\n  *soconv-record* off, or by hand, carries none - U is the")
+      (princ "\n  only way back from those.")))
+  (princ))
+
 (defun c:SOCONVVER ()
   (princ (strcat "\nSOCONV " *soconv-version*))
   (princ))
 
-(princ (strcat "\nSOCONV " *soconv-version* " loaded.  Type SOCONV to run."))
+(princ (strcat "\nSOCONV " *soconv-version*
+               " loaded.  Type SOCONV to run, SORECONV to undo one."))
 (princ)
 
 
@@ -73026,6 +73664,8 @@
 ;;; Commands:  VSCONV     convert the import - highlight it first, or
 ;;;                       press Enter and take every VS layer in the
 ;;;                       drawing
+;;;            VSRECONV   put a converted import back on the VS layers,
+;;;                       style overrides and all
 ;;;            VSCONVVER  print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -73074,9 +73714,29 @@
 ;;; work cannot be converted twice.  Locked layers among those touched
 ;;; are unlocked for the run and re-locked afterwards, on the error path
 ;;; too, and the whole run is one undo group.
+;;;
+;;; VSRECONV PUTS ALL OF IT BACK.  U undoes a run still in the session;
+;;; VSRECONV undoes one that was saved and reopened -- which is when a
+;;; sheet turns out to have been converted by mistake, or has to go
+;;; back to whoever exported it.  Every object VSCONV moves carries a
+;;; RECORD in its own xdata: the layer it came off and that layer's
+;;; colour, the colour, linetype and lineweight the BYLAYER forcing
+;;; overwrote, and -- for a dimension -- the style name it had AND the
+;;; whole ACAD/DSTYLE override block, kept verbatim as the xdata items
+;;; it already was, so the text height and arrow size the export wrote
+;;; come back exactly as they went in.  Both halves of the dimension
+;;; step are undone, or the revert would leave the dimensions drawing
+;;; in a style they never had.
+;;;
+;;; ONE THING THE REVERT SPELLS OUT rather than restores: an object
+;;; that arrived carrying NO colour, linetype or lineweight of its own
+;;; comes back carrying an explicit ByLayer -- 256, "ByLayer", -1 --
+;;; where it had the absent group that means the same thing.  It draws
+;;; and plots identically, and a DXF diff of the before and after says
+;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.1")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -73114,6 +73774,12 @@
       *vsconv-dim-xdata* "ACAD")     ; the application whose style
                                      ; overrides are removed with them;
                                      ; nil leaves the overrides on
+
+;; The record VSRECONV reads back, and the application it lives under.
+;; nil converts exactly as before and writes nothing down, so the run
+;; can only be undone by U; the tests drive both ways.
+(setq *vsconv-record*    t
+      *vsconv-xdata-app* "VSCONV")
 
 ;; ---------------------------------------------------------------
 ;; Helpers
@@ -73198,19 +73864,178 @@
     (append alist (list (cons key 1)))))
 
 ;; One dimension onto the shop style, overrides and all.  The style name
-;; is DXF group 3 and can simply be written; the overrides are xdata
-;; under the "ACAD" application, and an application name handed to
-;; entmod with NO data after it is how xdata is deleted.  The group has
-;; to be there and empty for that: an entmod list that simply omits it
-;; leaves the xdata exactly where it was.
-(defun vsconv:restyle-dim (ent style app / ed x)
-  (setq ed (if app (entget ent (list app)) (entget ent)))
+;; is DXF group 3 and can simply be written; the overrides come off
+;; through vsconv:xdel, which deletes ONE application's xdata and
+;; leaves every other application's where it is -- this file's own
+;; record among them, since it is written before this runs.
+(defun vsconv:restyle-dim (ent style app / ed)
+  (setq ed (entget ent))
   (if (assoc 3 ed)
-    (setq ed (subst (cons 3 style) (assoc 3 ed) ed)))
-  (if (and app (setq x (assoc -3 ed)))
-    (setq ed (subst (list -3 (list app)) x ed)))
-  (entmod ed)
+    (entmod (subst (cons 3 style) (assoc 3 ed) ed)))
+  (if app (vsconv:xdel ent app))
   (entupd ent))
+
+
+;; ---------------------------------------------------------------
+;; The record
+;; ---------------------------------------------------------------
+;; Nine xdata items in a fixed order, and then -- for a dimension --
+;; the export's own override block copied straight in behind them.
+;; xdata groups are typed, so there is no grammar here to get wrong: a
+;; layer name carrying a "|" (an xref-dependent one does) travels as
+;; itself, and the overrides travel as the xdata items they already
+;; are rather than as a rendering of them.
+;;
+;;   0  1000  "VSCONV"                the marker
+;;   1  1000  the version that wrote it
+;;   2  1000  the layer it came off
+;;   3  1000  its linetype, before the BYLAYER forcing
+;;   4  1000  its dimension style, "" for anything but a dimension
+;;   5  1070  that layer's own colour, for a source layer since PURGEd
+;;   6  1070  its colour,     before the forcing
+;;   7  1070  its lineweight, before the forcing
+;;   8  1070  1 when an override block follows, else 0
+;;   9+       that block, item for item, braces and all
+;;
+;; The block is already brace-balanced where it stands, so it needs no
+;; wrapper of its own -- and must not be given one, because AutoCAD
+;; refuses xdata whose braces do not balance.
+
+;; NOT A KNOB: the number of items in the fixed part above, which
+;; vsconv:read indexes into and after which the override block starts.
+;; Changing it does not change the record's shape, it stops the reader
+;; agreeing with the writer.
+(setq *vsconv-record-len* 9)
+
+;; APP's items onto ENT, leaving every OTHER application's xdata alone.
+;;
+;; (entget ent) with no application list carries no xdata at all in
+;; AutoCAD, so there this is the plain append the rest of the tree
+;; writes.  The VM the tests run on hands back every group it holds,
+;; xdata included, so the -3 already there is merged with rather than
+;; doubled -- an entity cannot carry two of them, and assoc would only
+;; ever find the first.
+(defun vsconv:xput (ent app items / ed x apps)
+  (setq ed   (entget ent)
+        x    (assoc -3 ed)
+        apps (if x
+               (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x))
+               '()))
+  (setq apps (append apps (list (cons app items))))
+  (entmod (if x
+            (subst (cons -3 apps) x ed)
+            (append ed (list (cons -3 apps)))))
+)
+
+;; APP's items off ENT.  The application name goes back with NO data
+;; after it, which is how xdata is deleted: an entmod list that simply
+;; omits the application leaves its xdata exactly where it was.
+(defun vsconv:xdel (ent app / ed x apps)
+  (setq ed (entget ent (list app))
+        x  (assoc -3 ed))
+  (if x
+    (progn
+      (setq apps (vl-remove-if '(lambda (a) (= (car a) app)) (cdr x)))
+      (setq apps (append apps (list (list app))))
+      (entmod (subst (cons -3 apps) x ed))))
+)
+
+;; The items ENT carries under APP, or nil.  An application entry with
+;; nothing after it is one xdel has emptied, and reads as no items --
+;; which is what it is.
+(defun vsconv:xget (ent app / x a)
+  (setq x (assoc -3 (entget ent (list app))))
+  (if x (setq a (assoc app (cdr x))))
+  (if (and a (cdr a)) (cdr a))
+)
+
+;; LST with its first N items dropped.
+(defun vsconv:tail (lst n)
+  (while (and lst (> n 0)) (setq lst (cdr lst) n (1- n)))
+  lst
+)
+
+;; The colour to re-create a source layer with, read off the layer
+;; while it is still there.  A layer that is switched OFF carries the
+;; colour negated; the record keeps the colour and not the off-ness, so
+;; a layer VSRECONV has to re-create comes back visible.
+(defun vsconv:layer-color (name / tb c)
+  (setq tb (tblsearch "LAYER" name)
+        c  (if tb (cdr (assoc 62 tb))))
+  (if (and c (/= c 0)) (abs c) *vsconv-default-color*)
+)
+
+;; Written BEFORE the move and before the restyle, which is the only
+;; moment the object still carries everything the record is about.
+(defun vsconv:stamp (ent lay / obj typ sty ovr)
+  (regapp *vsconv-xdata-app*)
+  (setq obj (vlax-ename->vla-object ent)
+        typ (cdr (assoc 0 (entget ent))))
+  ;; only a DIMENSION has a style to lose or overrides to lose it to,
+  ;; and group 3 means something else entirely on an MTEXT
+  (if (= "DIMENSION" typ)
+    (setq sty (cdr (assoc 3 (entget ent)))
+          ovr (if *vsconv-dim-xdata* (vsconv:xget ent *vsconv-dim-xdata*))))
+  (vsconv:xput ent *vsconv-xdata-app*
+    (append (list (cons 1000 *vsconv-xdata-app*)
+                  (cons 1000 *vsconv-version*)
+                  (cons 1000 lay)
+                  (cons 1000 (vla-get-Linetype obj))
+                  (cons 1000 (if sty sty ""))
+                  (cons 1070 (vsconv:layer-color lay))
+                  (cons 1070 (vla-get-Color obj))
+                  (cons 1070 (vla-get-Lineweight obj))
+                  (cons 1070 (if ovr 1 0)))
+            (if ovr ovr '())))
+)
+
+;; (source-layer layer-colour colour linetype lineweight style
+;;  overrides) off one object, or nil when it carries no record of ours.
+(defun vsconv:read (ent / items)
+  (setq items (vsconv:xget ent *vsconv-xdata-app*))
+  (if (and items
+           (<= *vsconv-record-len* (length items))
+           (= *vsconv-xdata-app* (cdr (nth 0 items))))
+    (list (cdr (nth 2 items))
+          (cdr (nth 5 items))
+          (cdr (nth 6 items))
+          (cdr (nth 3 items))
+          (cdr (nth 7 items))
+          (cdr (nth 4 items))
+          (if (= 1 (cdr (nth 8 items)))
+            (vsconv:tail items *vsconv-record-len*))))
+)
+
+;; NAME added to LST unless a spelling of it is in there already; the
+;; order is first-seen, which is the order the report reads in.
+(defun vsconv:add (name lst)
+  (if (member (strcase name) (mapcar 'strcase lst))
+    lst
+    (append lst (list name)))
+)
+
+;; The colour to re-create source layer LAY with: the one the record
+;; kept from the layer itself, off the first object that came off it.
+;; An existing layer is never recoloured -- ensure-layer only ever uses
+;; this when the layer has to be made -- so a drawing that still has
+;; its export layers keeps their colours whatever the record says.
+(defun vsconv:color-for (lay recs / out r)
+  (foreach r recs
+    (if (and (null out) (= (strcase (nth 1 r)) (strcase lay)))
+      (setq out (nth 2 r))))
+  (if out out *vsconv-default-color*)
+)
+
+;; Every (ename . record) in SS, in drawing order.
+(defun vsconv:recorded (ss / i ent rec out)
+  (setq i 0 out '())
+  (while (< i (sslength ss))
+    (setq ent (ssname ss i))
+    (if (and (entget ent) (setq rec (vsconv:read ent)))
+      (setq out (cons (cons ent rec) out)))
+    (setq i (1+ i)))
+  (reverse out)
+)
 
 ;; ---------------------------------------------------------------
 ;; Main command
@@ -73295,6 +74120,10 @@
                   dest (vsconv:dest lay))
             (if dest
               (progn
+                ;; the record first: after the move and the restyle the
+                ;; object no longer carries the layer, the properties or
+                ;; the overrides it is about
+                (if *vsconv-record* (vsconv:stamp ent lay))
                 (setq obj (vlax-ename->vla-object ent))
                 (vla-put-Layer obj dest)
                 (vsconv:force-bylayer obj)
@@ -73357,11 +74186,134 @@
       (if empty
         (princ (strcat "\n  now empty: " (vsconv:namelist (reverse empty))
                        " - PURGE them when you are ready; VSCONV leaves"
-                       " them so one U backs the whole run out")))))
+                       " them so one U backs the whole run out")))
+      (if (> n-moved 0)
+        (if *vsconv-record*
+          (princ "\n  VSRECONV puts it all back, overrides and all.")
+          (princ (strcat "\n  *vsconv-record* is off, so nothing was written"
+                         " down - only U undoes this run."))))))
 
   ;; A mark is still open on the "nothing to convert" path above.
   (if mark-open
     (progn (vla-EndUndoMark doc) (setq mark-open nil)))
+  (princ))
+
+(defun c:VSRECONV (/ *error* doc unlocked mark-open ss recs r ent obj ed
+                     lay srcs offs tally missing done n n-dim)
+
+  ;; VSCONV's handler, for the same reasons (STANDARDS 5).
+  (defun *error* (msg)
+    (if unlocked (vl-catch-all-apply 'vsconv:relock-layers (list unlocked)))
+    (setq unlocked nil)
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nVSRECONV error: " msg)))
+    (princ))
+
+  (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
+        unlocked nil
+        missing  '()
+        n-dim    0)
+
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+
+  ;; No layer filter here, where VSCONV has one.  A converted object is
+  ;; on POOL / POINTS / DIMENSION, which is where this office's own
+  ;; drawing lives too -- so the record is what says which objects came
+  ;; from an export, and nothing else is touched whatever is selected.
+  (setq ss (ssget "_I"))
+  (if (null ss)
+    (progn
+      (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
+      (setq ss (ssget))
+      (if (null ss)
+        (setq ss (ssget "_X")))))
+
+  (setq recs (if ss (vsconv:recorded ss)))
+
+  (if recs
+    (progn
+      ;; the layers it goes back ONTO, and the layers it comes OFF.  A
+      ;; destination of the revert is an output layer, so it is created
+      ;; when the conversion's own PURGE advice was taken -- with the
+      ;; colour the record kept from the layer itself.
+      (setq srcs '() offs '())
+      (foreach r recs
+        (setq lay  (nth 1 r)
+              srcs (vsconv:add lay srcs)
+              offs (vsconv:add (cdr (assoc 8 (entget (car r)))) offs)))
+      (foreach lay srcs
+        (cal:ensure-layer lay (vsconv:color-for lay recs)))
+      (setq unlocked (vsconv:unlock-layers (append srcs offs) doc))
+
+      (foreach r recs
+        (setq ent  (car r)
+              obj  (vlax-ename->vla-object ent)
+              done T)
+        (vla-put-Layer obj (nth 1 r))
+        (vla-put-Color obj (nth 3 r))
+        (vla-put-Lineweight obj (nth 5 r))
+        (if (or (member (strcase (nth 4 r)) '("BYLAYER" "BYBLOCK"))
+                (tblsearch "LTYPE" (nth 4 r)))
+          (vla-put-Linetype obj (nth 4 r))
+          (setq missing (vsconv:add (nth 4 r) missing)
+                done    nil))
+        ;; the dimension step, both halves: the style name back in
+        ;; group 3, and the override block back under its own
+        ;; application exactly as it was lifted
+        (if (and (nth 6 r) (/= "" (nth 6 r)))
+          (progn
+            (setq ed (entget ent))
+            (if (assoc 3 ed)
+              (entmod (subst (cons 3 (nth 6 r)) (assoc 3 ed) ed)))
+            (if (and (nth 7 r) *vsconv-dim-xdata*)
+              (vsconv:xput ent *vsconv-dim-xdata* (nth 7 r)))
+            (entupd ent)
+            (setq n-dim (1+ n-dim))))
+        ;; The record goes with the move it described -- but only when
+        ;; the move is FINISHED.  An object whose linetype could not be
+        ;; come back to keeps its record, so loading the linetype and
+        ;; running VSRECONV again really does finish it; deleting it
+        ;; here would make that advice a lie.
+        (if done (vsconv:xdel ent *vsconv-xdata-app*))
+        (setq tally (vsconv:bump (strcase (nth 1 r)) tally)))
+
+      (vsconv:relock-layers unlocked)
+      (setq unlocked nil)))
+
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
+
+  (if recs
+    (progn
+      (setq n (length recs))
+      (princ (strcat "\nVSRECONV done: " (itoa n)
+                     " object(s) put back on the export's own layers."))
+      ;; in the table's own order, as VSCONV reports it
+      (foreach r *vsconv-map*
+        (if (setq lay (assoc (strcase (car r)) tally))
+          (princ (strcat "\n  " (cdr r) ": " (itoa (cdr lay))
+                         " -> " (car r)))))
+      (if (> n-dim 0)
+        (princ (strcat "\n  " (itoa n-dim) " dimension(s) back on their own"
+                       " style"
+                       (if *vsconv-dim-xdata*
+                         (strcat ", " *vsconv-dim-xdata*
+                                 " style overrides restored")
+                         ""))))
+      (if missing
+        (princ (strcat "\n  Linetype " (vsconv:namelist missing)
+                       " is no longer loaded, so those objects kept BYLAYER"
+                       " - LINETYPE-load it and run VSRECONV again to finish"
+                       " them."))))
+    (progn
+      (princ "\nVSRECONV: nothing here carries a VSCONV record - nothing moved.")
+      (princ "\n  It undoes a VSCONV run, and only from the record VSCONV")
+      (princ "\n  leaves on every object it moves.  A drawing converted with")
+      (princ "\n  *vsconv-record* off, or by hand, carries none - U is the")
+      (princ "\n  only way back from those.")))
   (princ))
 
 (defun c:VSCONVVER ()
@@ -73369,7 +74321,7 @@
   (princ))
 
 (princ (strcat "\nVSCONV " *vsconv-version*
-               " loaded.  Type VSCONV to run."))
+               " loaded.  Type VSCONV to run, VSRECONV to undo one."))
 (princ)
 
 
@@ -74774,8 +75726,10 @@
 ;;;  XFTCONV.lsp   -  survey import cleanup (Leica XFT / site trace)
 ;;;  AutoCAD 2018
 ;;;
-;;;  Command:  XFTCONV   - highlight the import, that is the only answer
-;;;                        it needs
+;;;  Commands:  XFTCONV    - highlight the import, that is the only
+;;;                          answer it needs
+;;;             XFTRECONV  - put a converted import back the way it
+;;;                          arrived
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
@@ -74812,6 +75766,24 @@
 ;;;
 ;;;  Non-text geometry is scaled and otherwise left alone.  The whole
 ;;;  run is one UNDO step.
+;;;
+;;;  XFTRECONV undoes all of it.  U undoes a run that is still in the
+;;;  session; XFTRECONV undoes one that was saved and reopened a week
+;;;  later, which is when a survey turns out to have been converted
+;;;  twice or converted by mistake.  It can do that because XFTCONV
+;;;  writes down what it erased: every block it inserts carries a
+;;;  RECORD in its own xdata - the scale and the base point the run
+;;;  used, and the marker, the name text and any leftover text that
+;;;  went with them, group by group.  Erasing alone would not be
+;;;  enough to work from: an entdel'd entity is gone for good once the
+;;;  drawing is saved, and the scale factor is not written on anything.
+;;;
+;;;  So XFTRECONV rebuilds what the swap erased, erases the block that
+;;;  replaced it, and scales the selection back by 1/12 about the same
+;;;  base point - and a drawing that has been through both is the
+;;;  drawing that arrived.  *xft-record* is the one line that turns the
+;;;  record off; with it off XFTCONV still converts and XFTRECONV has
+;;;  nothing to work from and says so.
 ;;; ===================================================================
 
 
@@ -74820,7 +75792,7 @@
 ;;;  SETTINGS - edit these if the export or the template ever changes
 ;;; -------------------------------------------------------------------
 
-(setq *xft-version* "v1.12") ; printed on load and at command start so a
+(setq *xft-version* "v1.13") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 (setq
@@ -74837,6 +75809,37 @@
   *xft-fuzz*         1e-4                 ; tolerance for "same point"
   *xft-purge-text*   t                    ; erase every TEXT/MTEXT left in the
                                           ; selection once the points are done
+)
+
+;; The record XFTRECONV reads.  *xft-record* nil converts exactly as
+;; before and writes nothing down, so the run cannot be undone later by
+;; anything but U; the tests drive both ways.  The colour is only ever
+;; reached by a rebuild onto a layer that has been PURGED since the
+;; conversion - an existing layer keeps its own, as everywhere else in
+;; the build.
+(setq
+  *xft-record*         t                  ; write the undo record on each block
+  *xft-xdata-app*      "XFTCONV"          ; the xdata application it lives under
+  *xft-num-prec*       8                  ; decimals a coordinate is written to
+  *xft-rebuild-color*  7                  ; colour for a layer XFTRECONV re-creates
+)
+
+;; Which DXF groups the record carries, and so which of them XFTRECONV
+;; can put back.  These are what an export writes on the five entity
+;; types XFTCONV erases; an export that writes something else onto its
+;; markers -- a thickness, a transparency -- is carried by adding its
+;; group code here, and nothing else in the file changes.  A code is
+;; read back as a point (10, 11), a real (39 40 41 50 51), an integer
+;; (62 66 70-73 370) or a string, by xft:group, so a code of a kind not
+;; in one of those four lists comes back as text.
+(setq
+  *xft-keep-common* '(8 62 6 370 410)     ; carried whatever the type is
+  *xft-keep*                              ; and these, per type
+  '(("LINE"   (10 11))
+    ("POINT"  (10 50))
+    ("CIRCLE" (10 40))
+    ("TEXT"   (1 7 10 11 40 41 50 51 71 72 73))
+    ("MTEXT"  (1 3 7 10 40 41 50 71 72)))
 )
 
 ;; The site-trace flavour.  Same feet, same block out the other end, but
@@ -74994,6 +75997,271 @@
 
 
 ;;; -------------------------------------------------------------------
+;;;  the record - what XFTRECONV puts the survey back from
+;;; -------------------------------------------------------------------
+;;;  One string per block, in that block's own xdata.  It holds the
+;;;  entities the swap erased, written out group by group, and beside
+;;;  it as xdata reals the scale and the base point the run used - the
+;;;  two numbers no object in the drawing carries.
+;;;
+;;;  The grammar is one line: entities are separated by ";", their
+;;;  groups by "|", a group's code from its value by "=", and the parts
+;;;  of a point by ",".  Any of those - and the "\" that escapes them,
+;;;  which MTEXT formatting is full of - is backslash-escaped inside a
+;;;  value, so the string can be split a level at a time and a caption
+;;;  reading "1=2;3" is never read as structure.  Escapes come off at
+;;;  the leaf and nowhere earlier, which is why xft:split leaves them
+;;;  on.
+;;;
+;;;  Coordinates go through rtos at *xft-num-prec* decimals rather than
+;;;  as raw floats, because xdata carries strings and reals in separate
+;;;  groups and one string keeps the record readable in a DXF dump.  A
+;;;  round trip is therefore exact to 1e-8 of a drawing unit - a
+;;;  hundredth of a micron on a survey in inches - and not to the last
+;;;  bit of the float.  tests/test_xftconv.py measures exactly that, so
+;;;  the claim cannot rot.
+;;;
+;;;  Only the groups a rebuild needs are carried: what an export writes
+;;;  on the five entity types XFTCONV erases.  An object's own xdata,
+;;;  its extension dictionary and its reactors are NOT in the record and
+;;;  do not come back - a survey import has none, and inventing a
+;;;  general entity copier here would be claiming more than the tool
+;;;  can test.
+
+;; NOT A KNOB: these five characters are the grammar itself, and
+;; xft:esc, xft:split and xft:unesc all read this list -- but changing
+;; it changes what an ALREADY WRITTEN record means, so a drawing
+;; converted before the change could not be read after it.  The list is
+;; here so the three helpers cannot disagree about it, not so it can be
+;; edited.  (Which groups the record carries IS tunable: *xft-keep* is
+;; in the block at the top.)
+(setq *xft-delims* '("\\" ";" "|" "=" ","))
+
+;; NOT A KNOB: AutoCAD's own subclass names, which entmake wants and
+;; will not accept a substitute for.  A type is added here when it is
+;; added to *xft-keep*; neither name in a row is a choice.
+(setq *xft-subclass*
+  '(("LINE"   "AcDbLine")
+    ("POINT"  "AcDbPoint")
+    ("CIRCLE" "AcDbCircle")
+    ("TEXT"   "AcDbText")
+    ("MTEXT"  "AcDbMText")))
+
+(defun xft:esc (s / i n c out)
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c   (substr s i 1)
+          out (strcat out (if (member c *xft-delims*) (strcat "\\" c) c))
+          i   (1+ i)))
+  out
+)
+
+(defun xft:unesc (s / i n c out)
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (and (= c "\\") (< i n))
+      (setq out (strcat out (substr s (1+ i) 1)) i (+ i 2))
+      (setq out (strcat out c) i (1+ i))))
+  out
+)
+
+;; S split on every UNESCAPED sep.  The pieces keep their escapes -
+;; take them off with xft:unesc at the leaf, or a value that escaped a
+;; "=" would be split on it at the next level down.
+(defun xft:split (s sep / i n c out cur)
+  (setq out '() cur "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (cond
+      ((and (= c "\\") (< i n))
+       (setq cur (strcat cur c (substr s (1+ i) 1)) i (+ i 2)))
+      ((= c sep) (setq out (cons cur out) cur "" i (1+ i)))
+      (t (setq cur (strcat cur c) i (1+ i)))
+    )
+  )
+  (reverse (cons cur out))
+)
+
+(defun xft:atof (s) (if s (atof s) 0.0))
+
+(defun xft:r2s (v) (rtos v 2 *xft-num-prec*))
+
+;; A DXF value as text: a point is its three parts, a number is rtos'd
+;; or itoa'd, a string is itself.
+;;
+;; ESCAPING HAPPENS HERE, on the leaves, and nowhere above.  A point
+;; writes the "," between its parts itself, so a caller that escaped
+;; the whole result afterwards would escape that comma too -- and the
+;; split that reads it back, which only cuts on an UNESCAPED one, would
+;; hand the whole "x,y,z" back as the x and read the y as zero.  Only a
+;; string can carry a delimiter, so only a string is escaped.
+(defun xft:val2s (v)
+  (cond
+    ((null v) "")
+    ((= (type v) 'LIST)
+     (strcat (xft:r2s (car v)) "," (xft:r2s (cadr v)) ","
+             (xft:r2s (if (caddr v) (caddr v) 0.0))))
+    ((= (type v) 'STR) (xft:esc v))
+    ((= (type v) 'INT) (itoa v))
+    (t (xft:r2s v))
+  )
+)
+
+;; ...and back, the CODE saying which of the four it was.  S is still
+;; escaped, so a point is split before its parts are unescaped.
+(defun xft:group (code s / b)
+  (cond
+    ((member code '(10 11))
+     (setq b (mapcar 'xft:unesc (xft:split s ",")))
+     (cons code (list (xft:atof (car b)) (xft:atof (cadr b))
+                      (xft:atof (caddr b)))))
+    ((member code '(39 40 41 50 51)) (cons code (xft:atof (xft:unesc s))))
+    ((member code '(62 66 70 71 72 73 370)) (cons code (atoi (xft:unesc s))))
+    (t (cons code (xft:unesc s)))
+  )
+)
+
+;; One entity as one string, nil for a type the record does not carry.
+;; The alist is walked in ORDER rather than assoc'd group by group, so
+;; an MTEXT that spills its text across repeated group 3s keeps all of
+;; them.
+(defun xft:ser (en / ed typ codes p out)
+  (setq ed  (entget en)
+        typ (cdr (assoc 0 ed)))
+  (if (setq codes (cadr (assoc typ *xft-keep*)))
+    (progn
+      (setq codes (append codes *xft-keep-common*)
+            out   (strcat "0=" (xft:esc typ)))
+      (foreach p ed
+        (if (member (car p) codes)
+          (setq out (strcat out "|" (itoa (car p)) "="
+                            (xft:val2s (cdr p))))))
+      out
+    )
+  )
+)
+
+(defun xft:deser (spec / g bits ed)
+  (setq ed '())
+  (foreach g (xft:split spec "|")
+    (setq bits (xft:split g "="))
+    (if (cdr bits)
+      (setq ed (cons (xft:group (atoi (xft:unesc (car bits))) (cadr bits))
+                     ed))))
+  (reverse ed)
+)
+
+;; SPEC back into the drawing, or nil when it names a type the record
+;; does not carry.  The layer goes through ensure-layer: it is an output
+;; layer for this run, and a rebuild onto one that was PURGED after the
+;; conversion has to create it (STANDARDS 5).
+(defun xft:rebuild (spec / ed typ sub lay out p)
+  (setq ed  (xft:deser spec)
+        typ (cdr (assoc 0 ed))
+        sub (cadr (assoc typ *xft-subclass*))
+        lay (cdr (assoc 8 ed)))
+  (if (and typ sub)
+    (progn
+      (cal:ensure-layer (if lay lay "0") *xft-rebuild-color*)
+      (setq out (list (cons 0 typ) '(100 . "AcDbEntity")))
+      (foreach p ed
+        (if (member (car p) *xft-keep-common*)
+          (setq out (append out (list p)))))
+      (setq out (append out (list (cons 100 sub))))
+      (foreach p ed
+        (if (not (member (car p) (cons 0 *xft-keep-common*)))
+          (setq out (append out (list p)))))
+      (entmakex out)
+    )
+  )
+)
+
+;; SPEC appended to a payload, "" and nil both meaning nothing to add.
+(defun xft:join (payload spec)
+  (cond
+    ((or (null spec) (= spec "")) payload)
+    ((= payload "") spec)
+    (t (strcat payload ";" spec))
+  )
+)
+
+;; One xdata string holds 255 characters, so the payload travels in
+;; pieces and is joined back before it is read.  A cut can land between
+;; a backslash and what it escapes; nothing looks at a piece on its own,
+;; so it does not matter.
+(defun xft:chunks (s / out)
+  (setq out '())
+  (while (> (strlen s) 250)
+    (setq out (cons (substr s 1 250) out)
+          s   (substr s 251)))
+  (reverse (cons s out))
+)
+
+;; The record onto one block: the marker word and the version that
+;; wrote it, the scale and the WCS base point as reals, then the
+;; payload.  WCS because a base kept in the UCS of the day would be
+;; read back under whatever UCS the revert happens to run in.
+(defun xft:stamp (en base scale payload / items)
+  (regapp *xft-xdata-app*)
+  (setq items (append (list (cons 1000 *xft-xdata-app*)
+                            (cons 1000 *xft-version*)
+                            (cons 1040 scale)
+                            (cons 1040 (car base))
+                            (cons 1040 (cadr base))
+                            (cons 1040 (if (caddr base) (caddr base) 0.0)))
+                      (mapcar '(lambda (c) (cons 1000 c))
+                              (xft:chunks payload))))
+  (entmod (append (entget en)
+                  (list (list -3 (cons *xft-xdata-app* items)))))
+)
+
+;; ...and back: (version scale base payload), or nil when this entity
+;; carries no record of ours.
+(defun xft:record (en / x app strs nums p)
+  (setq x (assoc -3 (entget en (list *xft-xdata-app*))))
+  (if x (setq app (assoc *xft-xdata-app* (cdr x))))
+  (if app
+    (progn
+      (setq strs '() nums '())
+      (foreach p (cdr app)
+        (cond ((= (car p) 1000) (setq strs (cons (cdr p) strs)))
+              ((= (car p) 1040) (setq nums (cons (cdr p) nums)))))
+      (setq strs (reverse strs) nums (reverse nums))
+      (if (and (cdr strs) (= (car strs) *xft-xdata-app*)
+               (= 4 (length nums)))
+        (list (cadr strs)
+              (car nums)
+              (list (cadr nums) (caddr nums) (cadddr nums))
+              (if (cddr strs) (apply 'strcat (cddr strs)) "")))
+    )
+  )
+)
+
+;; The record nearest PT gains SPEC.  A leftover text belongs to no one
+;; marker, so it is kept by the point it sat closest to: revert part of
+;; a survey and the annotation that came back is the annotation that
+;; was next to it.
+(defun xft:attach (recs pt spec / best bestd d out r)
+  (if (or (null recs) (null spec) (= spec ""))
+    recs
+    (progn
+      (foreach r recs
+        (setq d (cal:d2 pt (cadr r)))
+        (if (or (null best) (< d bestd)) (setq best r bestd d)))
+      (setq out '())
+      (foreach r recs
+        (setq out (cons (if (eq r best)
+                          (list (car r) (cadr r) (xft:join (caddr r) spec))
+                          r)
+                        out)))
+      (reverse out)
+    )
+  )
+)
+
+
+;;; -------------------------------------------------------------------
 ;;;  drawing setup - make sure the layer, style and block are there
 ;;; -------------------------------------------------------------------
 
@@ -75087,10 +76355,11 @@
 ;;;  insert one replacement point
 ;;; -------------------------------------------------------------------
 
-(defun xft:insert (pt num / apt)
-  (setq apt (list (+ (car pt) (car  *xft-att-offset*))
-                  (+ (cadr pt) (cadr *xft-att-offset*))
-                  (caddr pt)))
+(defun xft:insert (pt num / apt prev en)
+  (setq apt  (list (+ (car pt) (car  *xft-att-offset*))
+                   (+ (cadr pt) (cadr *xft-att-offset*))
+                   (caddr pt))
+        prev (entlast))
   (entmake (list '(0 . "INSERT")
                  '(100 . "AcDbEntity")
                  (cons 8 *xft-block-layer*)
@@ -75114,6 +76383,16 @@
   (entmake (list '(0 . "SEQEND")
                  '(100 . "AcDbEntity")
                  (cons 8 *xft-block-layer*)))
+  ;; the block reference just made, handed back so the run can stamp
+  ;; its record on it.  entlast is no way to find it: the attributes
+  ;; and the SEQEND are subentities, so AutoCAD answers with the
+  ;; INSERT and the VM the tests run on answers with the SEQEND.  The
+  ;; walk starts from where the drawing ended before the sequence and
+  ;; takes the first INSERT, which is the same entity on both.
+  (setq en (if prev (entnext prev) (entnext)))
+  (while (and en (/= "INSERT" (cdr (assoc 0 (entget en)))))
+    (setq en (entnext en)))
+  en
 )
 
 
@@ -75135,11 +76414,15 @@
 ;; or the whole label goes in as it stands; either way MTEXT formatting
 ;; codes are stripped and the result is trimmed.
 ;;
-;; Returns (made blank): how many blocks went in, and how many of those
-;; found no name and carry a blank number.
+;; Returns (made blank recs): how many blocks went in, how many of those
+;; found no name and carry a blank number, and one (ename centre
+;; payload) per block for the record XFTRECONV reads.  The payload is
+;; taken BEFORE anything is erased, which is the only moment the marker
+;; and its name text are still there to be read.
 (defun xft:swap (groups names reach strip / g nm ctr best bestd bestr rank
-                                            txth lim d num made blank e)
-  (setq made 0 blank 0)
+                                            txth lim d num made blank e
+                                            en spec recs)
+  (setq made 0 blank 0 recs '())
   (foreach g groups
     (setq ctr   (car g)
           best  nil
@@ -75170,12 +76453,18 @@
                          best names))
       (setq num "" blank (1+ blank))
     )
-    (xft:insert ctr num)
+    (setq spec "")
+    (if *xft-record*
+      (progn
+        (foreach e (cdr g) (setq spec (xft:join spec (xft:ser e))))
+        (if best (setq spec (xft:join spec (xft:ser (nth 3 best)))))))
+    (setq en (xft:insert ctr num))
     (foreach e (cdr g) (entdel e))
     (if best (entdel (nth 3 best)))
+    (if en (setq recs (cons (list en ctr spec) recs)))
     (setq made (1+ made))
   )
-  (list made blank)
+  (list made blank (reverse recs))
 )
 
 
@@ -75184,8 +76473,8 @@
 ;;; -------------------------------------------------------------------
 
 (defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone guard
-                     ss base i en ed typ locked
-                     markers names dots dotnames r
+                     ss base wbase i en ed typ locked
+                     markers names dots dotnames r recs
                      nmade nblank ndots nleft)
 
   (defun xft:restore ()
@@ -75278,8 +76567,12 @@
           (xft:ensure-block)
 
           ;; ---- 1. scale x12 about the middle of what was picked ---
-          ;; getboundingbox works in WCS, SCALE wants the current UCS
-          (setq base (trans (xft:centre ss) 0 1))
+          ;; getboundingbox works in WCS, SCALE wants the current UCS.
+          ;; The record keeps the WCS one: a base written down in the
+          ;; UCS of the day would be read back under whatever UCS the
+          ;; revert runs in, and land the survey somewhere else.
+          (setq wbase (xft:centre ss)
+                base  (trans wbase 0 1))
           (if (/= *xft-scale* 1.0)
             (progn
               (princ (strcat "\nScaling " (itoa (sslength ss)) " objects by "
@@ -75339,12 +76632,14 @@
           ;; ---- 3/4. name each marker, block in, marker out -------
           (setq r      (xft:swap markers names *xft-name-reach* T)
                 nmade  (car r)
-                nblank (cadr r))
+                nblank (cadr r)
+                recs   (caddr r))
           (setq r      (xft:swap dots dotnames *xft-dot-reach*
                                  *xft-dot-strip-prefix*)
                 ndots  (car r)
                 nmade  (+ nmade ndots)
-                nblank (+ nblank (cadr r)))
+                nblank (+ nblank (cadr r))
+                recs   (append recs (caddr r)))
 
           ;; ---- 5. every other bit of text in the selection goes ---
           ;; the numbers now live in the block attributes, so anything
@@ -75368,12 +76663,29 @@
                 (setq en (ssname ss i)
                       ed (entget en))
                 (if (and ed (member (cdr (assoc 0 ed)) '("TEXT" "MTEXT")))
-                  (progn (entdel en) (setq nleft (1+ nleft)))
+                  (progn
+                    ;; read before erasing, and kept by the block it
+                    ;; sat nearest: a leftover text belongs to no one
+                    ;; marker, so that is the only association there is
+                    (if *xft-record*
+                      (setq recs (xft:attach recs (xft:txtpt ed)
+                                             (xft:ser en))))
+                    (entdel en)
+                    (setq nleft (1+ nleft)))
                 )
                 (setq i (1+ i))
               )
             )
           )
+
+          ;; ---- 6. write the record down --------------------------
+          ;; Last, in one pass: the payloads are only complete once the
+          ;; purge above has handed its text to the blocks it belongs
+          ;; to, and stamping twice would mean reading each block's
+          ;; xdata back to append to it.
+          (if *xft-record*
+            (foreach r recs
+              (xft:stamp (car r) wbase *xft-scale* (caddr r))))
 
           (command "_.UNDO" "_End")
           (setq undone nil)
@@ -75391,9 +76703,215 @@
                            " had no name text nearby - inserted with a blank number.")))
           (if (> nleft 0)
             (princ (strcat "\n" (itoa nleft) " leftover text object(s) erased.")))
+          (if (and *xft-record* recs)
+            (princ "\nXFTRECONV puts all of it back - the blocks carry the record.")
+            (princ (strcat "\n*xft-record* is off, so nothing was written down -"
+                           " only U undoes this run.")))
           (princ)
         )
       )
+    )
+  )
+  (princ)
+)
+
+
+;;; -------------------------------------------------------------------
+;;;  XFTRECONV  -  the conversion, undone
+;;; -------------------------------------------------------------------
+;;;  Highlight the converted survey; every block in it that carries a
+;;;  record gives back the marker and the text it replaced, the block
+;;;  goes, and the whole highlight is scaled back by 1/12 about the
+;;;  base point the conversion used.
+;;;
+;;;  ONE RUN AT A TIME.  Two conversions have two base points, and one
+;;;  scale about one of them cannot undo both - so a highlight holding
+;;;  blocks from two runs is refused by name rather than half-reverted.
+;;;  The runs are told apart by the scale and base each block carries,
+;;;  which is exactly what the difference has to be for it to matter.
+
+;; The (ename version scale base payload) of every block in SS that
+;; carries a record of ours.
+(defun xft:records (ss / i en ed rec out)
+  (setq i 0 out '())
+  (while (< i (sslength ss))
+    (setq en (ssname ss i)
+          ed (entget en))
+    (if (and ed (= "INSERT" (cdr (assoc 0 ed)))
+             (setq rec (xft:record en)))
+      (setq out (cons (cons en rec) out)))
+    (setq i (1+ i))
+  )
+  (reverse out)
+)
+
+;; How many DIFFERENT conversions those records came from.  Two runs
+;; agreeing on scale and base to the fuzz are one run as far as the
+;; scale-back is concerned, which is the only thing this decides.
+(defun xft:runs (recs / out r key hit k)
+  (setq out '())
+  (foreach r recs
+    (setq key (list (nth 2 r) (nth 3 r)) hit nil)
+    (foreach k out
+      (if (and (not hit) (equal k key *xft-fuzz*)) (setq hit t)))
+    (if (not hit) (setq out (cons key out)))
+  )
+  (reverse out)
+)
+
+;; The locked layers in the way: the ones the blocks to be erased sit
+;; on.  A layer a rebuild writes TO is an output layer and goes through
+;; ensure-layer instead, which unlocks it for good and says so.
+(defun xft:locked-blocks (recs / lay out r)
+  (setq out '())
+  (foreach r recs
+    (setq lay (cdr (assoc 8 (entget (car r)))))
+    (if (and lay
+             (not (member (strcase lay) (mapcar 'strcase out)))
+             (xft:locked lay))
+      (setq out (cons lay out)))
+  )
+  (reverse out)
+)
+
+(defun c:XFTRECONV ( / *error* xft:restore oscm osos osclay undone guard
+                       ss recs runs locked r spec keep i en
+                       scale base nback nrebuilt)
+
+  (defun xft:restore ()
+    (if oscm   (setvar "CMDECHO" oscm))
+    (if osos   (setvar "OSMODE"  osos))
+    (if osclay (setvar "CLAYER"  osclay))
+    ;; popped on every way out, not in the handler alone -- see the
+    ;; same note in c:XFTCONV
+    (if *pop-error-mode* (*pop-error-mode*))
+  )
+
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nXFTRECONV error: " msg)))
+    (setq guard 0)
+    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+      (command)
+      (setq guard (1+ guard)))
+    (xft:restore)
+    (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (princ "\nNothing was left half done - use U to roll the run back.")
+    (princ)
+  )
+
+  (if *push-error-using-command* (*push-error-using-command*))
+
+  (setq oscm   (getvar "CMDECHO")
+        osos   (getvar "OSMODE")
+        osclay (getvar "CLAYER"))
+
+  (princ (strcat "\nXFTRECONV " *xft-version*
+                 " - put a converted survey back the way it arrived."))
+
+  ;; ---- selection, the same three ways XFTCONV takes it ------------
+  (setq ss (ssget "_I"))
+  (if (not ss)
+    (progn
+      (princ "\nSelect the converted survey (Enter = everything in this space): ")
+      (setq ss (ssget))))
+  (if (not ss)
+    (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
+  )
+
+  (cond
+    ((not ss)
+     (princ "\nNothing to work on.")
+     (xft:restore)
+     (princ))
+
+    ;; ---- nothing here was converted, or nothing wrote it down -----
+    ((not (setq recs (xft:records ss)))
+     (princ "\nNo converted points here - nothing carries an XFTCONV record.")
+     (princ "\n  XFTRECONV undoes an XFTCONV run, and only from the record")
+     (princ "\n  XFTCONV leaves on the blocks it inserts.  A survey converted")
+     (princ "\n  with *xft-record* off, or by hand, has none - U is the only")
+     (princ "\n  way back from those.")
+     (xft:restore)
+     (princ))
+
+    ;; ---- two runs cannot be undone by one scale -------------------
+    ((> (length (setq runs (xft:runs recs))) 1)
+     (princ (strcat "\nThis highlight holds points from " (itoa (length runs))
+                    " different XFTCONV runs."))
+     (princ "\n  Each was scaled about its own base point, and one scale back")
+     (princ "\n  cannot undo two - highlight one survey at a time.")
+     (xft:restore)
+     (princ))
+
+    ;; ---- a locked layer would refuse the erase --------------------
+    ((setq locked (xft:locked-blocks recs))
+     (princ (strcat "\nUnlock " (xft:namelist locked)
+                    " first, then run XFTRECONV again."))
+     (xft:restore)
+     (princ))
+
+    (t
+     (setvar "CMDECHO" 0)
+     (setvar "OSMODE" 0)
+     (if (= 1 (logand 1 (getvar "UNDOCTL")))
+       (progn
+         (command "_.UNDO" "_Begin")
+         (setq undone t)))
+
+     (setq scale    (nth 2 (car recs))
+           base     (nth 3 (car recs))
+           nback    0
+           nrebuilt 0)
+
+     ;; ---- 1. the markers and the text, back into the drawing ----
+     (setq keep (ssadd))
+     (foreach r recs
+       (foreach spec (xft:split (nth 4 r) ";")
+         (if (/= spec "")
+           (progn
+             (setq en (xft:rebuild spec))
+             (if en
+               (progn (ssadd en keep)
+                      (setq nrebuilt (1+ nrebuilt))))))
+       )
+       (entdel (car r))
+       (setq nback (1+ nback))
+     )
+
+     ;; ---- 2. what the scale-back applies to ---------------------
+     ;; everything rebuilt above, plus everything highlighted that is
+     ;; still there.  Built as its own set rather than reusing the
+     ;; highlight, and built AFTER the erase: a block's attributes are
+     ;; erased with it, and SCALE will not take a selection carrying
+     ;; entities that have gone out from under it.
+     (setq i 0)
+     (while (< i (sslength ss))
+       (setq en (ssname ss i))
+       (if (entget en) (ssadd en keep))
+       (setq i (1+ i))
+     )
+
+     ;; ---- 3. and back down to the units it arrived in ------------
+     (if (and (/= scale 0.0) (/= scale 1.0) (> (sslength keep) 0))
+       (progn
+         (princ (strcat "\nScaling " (itoa (sslength keep)) " objects back by 1/"
+                        (rtos scale 2 4) " about the conversion's own base ..."))
+         (command "_.SCALE" keep "" (trans base 0 1) (/ 1.0 scale))))
+
+     (command "_.UNDO" "_End")
+     (setq undone nil)
+     (xft:restore)
+
+     ;; ---- report -------------------------------------------------
+     (princ (strcat "\n" (itoa nback) " \"" *xft-block*
+                    "\" block(s) taken back off the survey."))
+     (princ (strcat "\n" (itoa nrebuilt)
+                    " marker and text object(s) put back."))
+     (if (= 0 nrebuilt)
+       (princ (strcat "\n  Their records carry no geometry - the run that"
+                      " wrote them found markers it could not read back.")))
+     (princ)
     )
   )
   (princ)
@@ -75416,7 +76934,8 @@
   (princ))
 
 (princ (strcat "\nXFTCONV.lsp " *xft-version*
-               " loaded.  Type XFTCONV to scale a survey import and swap its points."))
+               " loaded.  Type XFTCONV to scale a survey import and swap"
+               " its points, XFTRECONV to put one back."))
 (princ)
 
 
@@ -82316,7 +83835,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.11")
+(setq *lazpanel-version* "v3.12")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -82483,6 +84002,7 @@
     ("POOLSIDE"         "Pool side view")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SOCONV"           "SO survey onto our layers")
+    ("SORECONV"         "SO conversion, undone")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
@@ -82491,8 +84011,10 @@
     ("TYDRN"            "Text + point tidy-up")
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
     ("VSCONV"           "VS export onto shop layers")
+    ("VSRECONV"         "VS conversion, undone")
     ("WCALST"           "Unroll curved band")
     ("XFTCONV"          "Survey import cleanup")
+    ("XFTRECONV"        "Import cleanup, undone")
     ("XYPLOT"           "X/Y offset plot")
    ))
 
@@ -82522,8 +84044,11 @@
   '(("Pool"
      ("Converters"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       )
      ("Shape"
       "POOL"
@@ -82570,6 +84095,7 @@
       "STOCKCOVER"
       "CUSTBLOCK"
       "XFTCONV"
+      "XFTRECONV"
       )
      ("Points"
       "ABFIND"
@@ -82593,8 +84119,11 @@
      ("Spa"
      ("Converters"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       )
      ("Shape, dims & check"
       "SPA"
@@ -82682,8 +84211,11 @@
       "PERPPTS"
       "CPERPPTS"
       "XFTCONV"
+      "XFTRECONV"
       "SOCONV"
+      "SORECONV"
       "VSCONV"
+      "VSRECONV"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -84240,11 +85772,12 @@
   "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET"
   "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
   "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE"
-  "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SOCONVVER"
-  "VSCONV" "VSCONVVER" "WCALST" "WCALSTVER" "XFTCONV" "XFTCONV-SETUP"
-  "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA"
-  "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
-  "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV"
+  "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER" "WCALST" "WCALSTVER"
+  "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER"
+  "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT"
+  "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON"
+  "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
@@ -84261,7 +85794,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.5 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.6 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 
