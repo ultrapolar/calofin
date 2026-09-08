@@ -639,7 +639,9 @@ Every adjustable number in `OASIS.lsp` is in one block at the top of the
 file, grouped the way a run uses them, with a comment on each saying
 what it does and what changing it costs. `setq` any of them after
 loading — in a startup file, say — and the next run picks the new value
-up; nothing caches one.
+up; nothing caches one. `tests/test_tunables.py` holds this table and
+that block together: every knob has to appear here with the default it
+really has, and a knob added beside the code that reads it fails.
 
 **Where the output goes.** The colour is used only when the layer is
 *created*; a layer the drawing already has keeps its own.
