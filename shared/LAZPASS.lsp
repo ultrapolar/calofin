@@ -46814,8 +46814,10 @@
 ;;;         a RED X   where you drew it,
 ;;;         a GREEN + where we would move it, joined by a line.
 ;;;     You then choose, one point at a time:
-;;;         Enter / M  ->  MOVE it onto the nearest object (green +)
-;;;         K          ->  KEEP it exactly where you drew it (red X);
+;;;         Enter / M  ->  MOVE it onto the nearest object (the +
+;;;                        marker, green by default)
+;;;         K          ->  KEEP it exactly where you drew it (the X
+;;;                        marker, red by default);
 ;;;                        the point is put back and nothing changes
 ;;;         P          ->  PICK the spot yourself
 ;;;     A point TWO OR MORE DIMENSIONS measure to is an ANCHOR and is
@@ -46902,7 +46904,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.12")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.13")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -46910,34 +46912,203 @@
   (princ (strcat "\nDIMCHECK " *dchk-version*))
   (princ))
 
-;; --- tunables ------------------------------------------------------
-(setq *dchk-tol*          1.0e-4)  ; max gap (drawing units) that still counts as attached
-(setq *dchk-grey-color*   8)       ; grey used to fade out everything not under review
-(setq *dchk-flag-color*   1)       ; red: dimensions you answered "No" to
-(setq *dchk-arc-color*    6)       ; magenta: arcs whose endpoints were moved
-(setq *dchk-olap-color*   4)       ; cyan: merged or flagged overlapping lines
-(setq *dchk-olap-fuzz*    1.0e-4)  ; max sideways offset that still counts as "same line"
-(setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
-(setq *dchk-constr-color* 2)       ; yellow
-(setq *dchk-green-scale*  0.75)    ; report: all-clear text height, as a fraction of the red text
-(setq *dchk-orig-color*   1)       ; red X: where you drew the point
-(setq *dchk-sugg-color*   3)       ; green +: where DIMCHECK would move it
-(setq *dchk-report-layer* "DIMCHECK-REPORT")
-(setq *dchk-report-color* 3)       ; green
-(setq *dchk-zoom-margin*  0.75)    ; empty space around the zoomed item (fraction of its size)
-(setq *dchk-report-chars* 45.0)    ; report column width, in text heights
-(setq *dchk-ask-all-arc-ends* nil) ; T = confirm EVERY arc endpoint, even already-attached ones
-(setq *dchk-anchor-tol*   1.0e-4)  ; how close two dimension points must be to count as the same spot
-(setq *dchk-anchor-min*   2)       ; that many dimensions meeting there make it an anchor
+;;; ======================================================================
+;;;  TUNABLES -- every value DIMCHECK reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq *dchk-tol* 0.001) -- because every knob
+;;;  is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); angles in degrees where said so; colours are ACI numbers
+;;;  (1 red, 2 yellow, 3 green, 4 cyan, 5 blue, 6 magenta, 7 white,
+;;;  8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
 
-;; dimension styles are reviewed in this order; styles not listed
-;; come afterwards ("whatever else is left"), still left-to-right
+;; -- what counts as attached, and what counts as one spot -------------
+
+;; A dimension point or an arc end within this distance of an object is
+;; ATTACHED and is not questioned.  It has three more jobs: the
+;; smallest move worth asking about, the shortest overlap worth
+;; reporting, and the shortest segment admitted to overlap detection.
+;; Raising it asks fewer questions on all four counts.
+(setq *dchk-tol*          1.0e-4)  ; drawing units
+
+;; How close two dimension points must be to count as the same spot...
+(setq *dchk-anchor-tol*   1.0e-4)  ; drawing units
+
+;; ...and how many dimensions must meet there to make it an ANCHOR: a
+;; point left as drawn, geometry under it or not (the pair of dims
+;; pinning a hypotenuse corner is the everyday case).  1 would make
+;; every point an anchor and switch the dimension audit off.
+(setq *dchk-anchor-min*   2)       ; dimensions meeting at one spot
+
+;; Entity types a dimension point or an arc end may attach to.  Each
+;; must be a curve AutoCAD can measure to (vlax-curve-*).
+(setq *dchk-curve-types*
+      '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
+
+;; T = confirm EVERY arc endpoint, even ones already attached.
+(setq *dchk-ask-all-arc-ends* nil)
+
+;; -- overlapping lines --------------------------------------------------
+
+;; How far apart two parallel lines may sit and still be called the
+;; same line.  Raising it calls more near-misses an overlap.
+(setq *dchk-olap-fuzz*    1.0e-4)  ; drawing units, sideways offset
+
+;; Two segments are only tested for overlap when their directions are
+;; within this of each other.  It is a bucketing shortcut, not a rule:
+;; keep it comfortably wider than the angle *dchk-olap-fuzz* implies
+;; over a segment's length, or a genuine overlap is never compared.
+(setq *dchk-olap-dirtol*  0.5)     ; degrees
+
+;; Entity types whose straight segments take part in overlap detection.
+;; Arcs, circles and splines have no straight run to overlap, which is
+;; why this is a shorter list than *dchk-curve-types*.
+(setq *dchk-olap-types*
+      '("LINE" "LWPOLYLINE" "POLYLINE"))
+
+;; -- review order ------------------------------------------------------
+
+;; Dimension styles are reviewed in this order; styles not listed come
+;; afterwards ("whatever else is left"), still left-to-right.  Matching
+;; is by exact name, case-blind.
 (setq *dchk-style-order*
       '("STANDARD" "SIDE STANDARD" "STANDARD INCHES" "CROSS DIMENSIONS"))
 
-;; entity types dimension points and arc ends may attach to
-(setq *dchk-curve-types*
-      '("LINE" "ARC" "CIRCLE" "ELLIPSE" "LWPOLYLINE" "POLYLINE" "SPLINE"))
+;; Within a style, dimensions are reviewed row by row.  Two dimensions
+;; count as the same ROW when their midpoints are within this fraction
+;; of the selection's height.  Raise it and a whole sheet becomes one
+;; row (pure left-to-right); lower it and near-level dims split apart.
+(setq *dchk-row-band*     0.05)    ; fraction of the selection's height
+(setq *dchk-row-flat*     1.0)     ; ...and the band for a selection with no height
+
+;; -- colours -----------------------------------------------------------
+
+(setq *dchk-grey-color*   8)       ; ACI: everything not under review, faded (grey)
+(setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
+(setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
+(setq *dchk-orig-color*   1)       ; ACI: the X marking where you drew the point (red)
+(setq *dchk-sugg-color*   3)       ; ACI: the + marking where DIMCHECK would put it (green)
+(setq *dchk-point-color*  2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+
+;; The command line and the report name these colours as they use them,
+;; so a colour changed here is described correctly rather than still
+;; being called red.
+
+;; -- the two layers ----------------------------------------------------
+
+;; The construction XLINE through a moved dimension's original points,
+;; and the report MTEXT.  Both layers are created on first use; the
+;; colour applies only then, so a layer already in the drawing keeps
+;; its own.
+(setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
+(setq *dchk-constr-color* 2)       ; ACI (yellow)
+(setq *dchk-report-layer* "DIMCHECK-REPORT")
+(setq *dchk-report-color* 3)       ; ACI (green)
+
+;; -- how the report is sized and placed --------------------------------
+
+;; All-clear lines are written at this fraction of the height the red
+;; attention lines get, so problems stand out.  1.0 = same size.
+(setq *dchk-green-scale*  0.75)
+
+;; Report column width, in text heights.
+(setq *dchk-report-chars* 45.0)
+
+;; ...and the width of TUTORIALDIMCHECK's reference sheet, which is
+;; prose rather than a column of findings and so runs wider.
+(setq *dchk-sheet-chars*  70.0)
+
+;; The report is scaled to the drawing: its text height is chosen so
+;; the whole report is about as tall as the drawing.  On a wide, short
+;; sheet that would give a tiny report, so the reference height is at
+;; least this fraction of the drawing's WIDTH.
+(setq *dchk-report-wide*  0.25)
+
+;; MTEXT line pitch as a multiple of text height, used to turn a line
+;; count into a height.  AutoCAD's default single spacing is 1.66.
+(setq *dchk-report-lead*  1.66)
+
+;; ...then the height is clamped, so a three-line report on a big sheet
+;; is not gigantic and a 200-line one is still readable: never taller
+;; than reference/HMAX, never shorter than reference/HMIN.
+(setq *dchk-report-hmax*  30.0)
+(setq *dchk-report-hmin*  200.0)
+
+;; The height used when the selection has no extents to scale against
+;; (DIMCHECK tries DIMTXT x DIMSCALE first and falls back to this;
+;; DIMSCAN uses it directly).
+(setq *dchk-report-hfall* 2.5)     ; drawing units
+
+;; Gap between the drawing and the report, as a fraction of the
+;; drawing's width, and the margin left around the closing zoom.
+(setq *dchk-report-gap*   0.05)
+(setq *dchk-zoom-out*     0.05)
+
+;; Empty space around ONE item when the review zooms to it, as a
+;; fraction of its size.
+(setq *dchk-zoom-margin*  0.75)
+
+;; Half-size of the X and + markers drawn while you answer, as a
+;; fraction of the current view height -- so they stay the same size on
+;; screen however far you are zoomed in.
+(setq *dchk-mark-size*    0.02)    ; fraction of VIEWSIZE
+
+;; A report line is rendered red and full-size when it matches this
+;; pattern (wcmatch, case-blind; comma separates alternatives).  These
+;; are the words the report's own notes use for something that needs
+;; looking at -- reword a note and its word belongs here too, or the
+;; line quietly stops being red.
+(setq *dchk-attn-words*
+      "*FLAGGED*,*SKIPPED*,*ENDPOINT(S) MOVED*,*ASSOCIATIVE*,*NOT ATTACHED*,*OVERLAP*")
+
+;; Distances in prompts and the report go through (rtos d mode prec):
+;; mode 2 is decimal, 3 engineering, 4 architectural (feet-inches);
+;; prec is decimal places (for mode 4: the inch is split 2^prec ways).
+;; The dimension's own MEASUREMENT is not formatted here -- it follows
+;; the drawing's LUNITS/LUPREC, which is what the drafter reads on the
+;; sheet.
+(setq *dchk-dist-mode*    2)       ; rtos mode
+(setq *dchk-dist-prec*    4)       ; decimal places
+
+;; -- numerical guards (rarely changed) --------------------------------
+
+;; Two points closer than this are the SAME point: no construction line
+;; is drawn through them, no joining line between an X and a +, and an
+;; arc is never re-fitted onto its own other end.
+(setq *dchk-same-pt*      1e-8)    ; drawing units
+
+;; How far an arc's extrusion normal (DXF 210) may lean from world +Z
+;; and still be audited; beyond it the arc is "not in world XY plane -
+;; skipped" rather than re-fitted in the wrong plane.
+(setq *dchk-planar-eps*   1e-9)    ; dimensionless (normal components)
+
+;; Below this a polyline bulge is treated as straight, so the edge
+;; joins overlap detection, and three points are too collinear to fit
+;; an arc through.
+(setq *dchk-flat-eps*     1e-12)
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  DIMCHECK keeps no state between runs: everything a
+;;;  run remembers is a local of the command, and what it leaves in the
+;;;  drawing is xdata under the "DIMCHECK" APPID.
+;;; ======================================================================
+
+;; A distance as the prompts and the report print it.
+(defun dchk:dist (d)
+  (rtos d *dchk-dist-mode* *dchk-dist-prec*))
+
+;; The word for an ACI colour, so a message naming a colour follows the
+;; knob instead of saying "red" whatever the knob holds.
+(defun dchk:color-name (aci / p)
+  (setq p (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if p (cdr p) (strcat "colour " (itoa aci))))
 
 ;; --- safety: xdata tags, colour stash, layer locks -----------------
 
@@ -47067,7 +47238,7 @@
   ;; infinite construction line through p1-p2 on the check layer,
   ;; tagged so reruns and DIMCHECKRESCUE can clear it
   (setq len (distance p1 p2))
-  (if (and (> len 1e-8)
+  (if (and (> len *dchk-same-pt*)
            (entmake (list '(0 . "XLINE")
                           '(100 . "AcDbEntity")
                           (cons 8 *dchk-constr-layer*)
@@ -47121,7 +47292,7 @@
   best)
 
 (defun dchk:ptstr (p)
-  (strcat "(" (rtos (car p) 2 4) ", " (rtos (cadr p) 2 4) ")"))
+  (strcat "(" (dchk:dist (car p)) ", " (dchk:dist (cadr p)) ")"))
 
 (defun dchk:zoom-ent (ent / bb p1 p2 m)
   ;; zoom the current view onto ent with some breathing room
@@ -47168,27 +47339,27 @@
 (defun dchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *dchk-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (- (cadr p) s)) (list (+ (car p) s) (+ (cadr p) s)) col 1)
   (grdraw (list (- (car p) s) (+ (cadr p) s)) (list (+ (car p) s) (- (cadr p) s)) col 1))
 
 (defun dchk:mark-plus (pt col / p s)
   ;; upright cross - marks WHERE DIMCHECK WOULD PUT IT
   (setq p (trans pt 0 1)
-        s (* 0.02 (getvar "VIEWSIZE")))
+        s (* *dchk-mark-size* (getvar "VIEWSIZE")))
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
 (defun dchk:mark-point (pt)
   ;; both strokes, for a point that is simply being pointed out
-  (dchk:mark-x pt 2)
-  (dchk:mark-plus pt 2))
+  (dchk:mark-x pt *dchk-point-color*)
+  (dchk:mark-plus pt *dchk-point-color*))
 
 (defun dchk:confirm-move (label orig sugg what / ans newp)
   ;; The point has been put where DIMCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
-  ;; which: a red X where you drew it, a green + where we would move
-  ;; it, joined by a line. WHAT names what the green + sits on, so a
+  ;; which: an X where you drew it, a + where we would move
+  ;; it, joined by a line. WHAT names what the + sits on, so a
   ;; move onto a shared anchor point does not claim to be an object.
   ;; Returns
   ;;   'move - take our suggestion
@@ -47196,13 +47367,14 @@
   ;;   <point> - a spot you picked yourself (current UCS)
   (dchk:mark-x    orig *dchk-orig-color*)
   (dchk:mark-plus sugg *dchk-sugg-color*)
-  (if (> (distance orig sugg) 1e-8)
+  (if (> (distance orig sugg) *dchk-same-pt*)
     (grdraw (trans orig 0 1) (trans sugg 0 1) *dchk-sugg-color* 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (dchk:ptstr orig)
-                 "  (red X)"
+                 "  (" (dchk:color-name *dchk-orig-color*) " X)"
                  "\n    Move = onto " what " " (dchk:ptstr sugg)
-                 "  (green +), " (rtos (distance orig sugg) 2 4) " away"
+                 "  (" (dchk:color-name *dchk-sugg-color*) " +), "
+                 (dchk:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   (initget "Move Keep Pick")
   (setq ans (getkword
@@ -47211,7 +47383,9 @@
     ((or (null ans) (= ans "Move")) 'move)
     ((= ans "Keep") 'keep)
     (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
-                                    " <Move to the green +>: ")))
+                                    " <Move to the "
+                                    (dchk:color-name *dchk-sugg-color*)
+                                    " +>: ")))
        (if newp newp 'move))))
 
 (defun dchk:mtext (ins height width text layer / e)
@@ -47228,8 +47402,7 @@
 (defun dchk:attn-p (s)
   ;; T when a report line describes something questionable or that
   ;; needs looking over / fixing, so the report renders it in red
-  (wcmatch (strcase s)
-    "*FLAGGED*,*SKIPPED*,*MAGENTA*,*ASSOCIATIVE*,*NOT ATTACHED*,*OVERLAP*"))
+  (wcmatch (strcase s) (strcase *dchk-attn-words*)))
 
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
@@ -47247,14 +47420,14 @@
   ;; only arcs drawn in the world XY plane are handled
   (setq n (cdr (assoc 210 ed)))
   (or (null n)
-      (and (< (abs (car n)) 1e-9)
-           (< (abs (cadr n)) 1e-9)
+      (and (< (abs (car n)) *dchk-planar-eps*)
+           (< (abs (cadr n)) *dchk-planar-eps*)
            (> (caddr n) 0.0))))
 
 (defun dchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
   ;; target point; returns T on success
-  (if (and (> (distance target fixed) 1e-8)
+  (if (and (> (distance target fixed) *dchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
       (setq r  (distance c target)
@@ -47339,7 +47512,8 @@
 (defun dchk:seg-ent (s) (caddr s))
 
 (defun dchk:ocs->wcs (p nz)
-  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1e-9))) (trans p nz 0) p))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) *dchk-planar-eps*)))
+    (trans p nz 0) p))
 
 (defun dchk:lwpoly-segs (ent / ed nz elev vs bl cls n i segs g)
   ;; straight edges of an LWPOLYLINE; bulged (arc) edges are skipped
@@ -47362,10 +47536,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *dchk-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *dchk-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -47385,10 +47559,10 @@
         n  (length vs)
         i  0)
   (while (< i (1- n))
-    (if (equal 0.0 (nth i bl) 1e-12)
+    (if (equal 0.0 (nth i bl) *dchk-flat-eps*)
       (setq segs (cons (list (nth i vs) (nth (1+ i) vs) ent) segs)))
     (setq i (1+ i)))
-  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) 1e-12))
+  (if (and cls (> n 2) (equal 0.0 (nth (1- n) bl) *dchk-flat-eps*))
     (setq segs (cons (list (nth (1- n) vs) (car vs) ent) segs)))
   segs)
 
@@ -47397,6 +47571,7 @@
   (setq ed (entget ent)
         et (cdr (assoc 0 ed)))
   (cond
+    ((not (member et *dchk-olap-types*)) nil)
     ((= et "LINE")       (list (list (cdr (assoc 10 ed)) (cdr (assoc 11 ed)) ent)))
     ((= et "LWPOLYLINE") (dchk:lwpoly-segs ent))
     ((= et "POLYLINE")   (dchk:heavy-poly-segs ent))))
@@ -47435,7 +47610,7 @@
   ;; only genuinely collinear neighbours are ever tested. Segments of
   ;; the same entity are skipped (a polyline meeting itself is not a
   ;; duplicate), as are pairs already found through another segment.
-  (setq atol  (* 0.5 (/ pi 180.0))              ; 0.5 deg is ample at this fuzz
+  (setq atol  (* *dchk-olap-dirtol* (/ pi 180.0))
         fams  nil
         pairs nil
         seen  nil)
@@ -47658,7 +47833,7 @@
              (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
-                            " is " (rtos dsug 2 4) " away."))
+                            " is " (dchk:dist dsug) " away."))
              (setq ans (dchk:confirm-move label pt sugg what))
              (cond
                ((eq ans 'move)
@@ -47733,7 +47908,10 @@
     (progn
       (setq ok (eq ok 'yes))
       (setq note (strcat
-                   (if ok "OK" "FLAGGED to fix (red)")
+                   (if ok
+                     "OK"
+                     (strcat "FLAGGED to fix ("
+                             (dchk:color-name *dchk-flag-color*) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -47767,7 +47945,8 @@
     ((<= (caddr near) *dchk-tol*)             ; endpoint sits on an object...
      (setq ends (dchk:curve-ends (car near)))
      ;; never snap onto the arc's own other endpoint
-     (setq ends (vl-remove-if '(lambda (q) (< (distance q other) 1e-8)) ends))
+     (setq ends (vl-remove-if
+                  '(lambda (q) (< (distance q other) *dchk-same-pt*)) ends))
      (cond
        ((null ends) nil)                      ; closed curve: no ends to demand
        ((vl-some '(lambda (q) (<= (distance p q) *dchk-tol*)) ends)
@@ -47775,7 +47954,7 @@
        (t (dchk:closest-of p ends))))         ; ...but mid-object: closest end
     (t                                        ; floating: closest end anywhere,
      (setq target (dchk:nearest-end p ent cands))
-     (if (or (null target) (< (distance target other) 1e-8))
+     (if (or (null target) (< (distance target other) *dchk-same-pt*))
        (cadr near)                            ; else closest point on closest object
        target))))
 
@@ -47807,7 +47986,7 @@
      (if (dchk:move-arc-end ent which target)
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
-                        (rtos (distance p target) 2 4) " away."))
+                        (dchk:dist (distance p target)) " away."))
          (setq ans (dchk:confirm-move label p target "the object end"))
          (cond
            ((eq ans 'move)
@@ -47876,10 +48055,12 @@
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
-                (strcat (itoa (length moved)) " endpoint(s) moved (magenta), "
+                (strcat (itoa (length moved)) " endpoint(s) moved ("
+                        (dchk:color-name *dchk-arc-color*) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
-                              " endpoint(s) moved (magenta)"))
+                              " endpoint(s) moved ("
+                              (dchk:color-name *dchk-arc-color*) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -47938,18 +48119,25 @@
         ((= ans "Merge")
          (dchk:merge-lines la lb info)
          (dchk:set-color ea *dchk-olap-color*)
-         (princ "\n  Merged into one line (cyan).")
-         (list label "merged into one line (cyan)" 'merged ea))
+         (princ (strcat "\n  Merged into one line ("
+                        (dchk:color-name *dchk-olap-color*) ")."))
+         (list label
+               (strcat "merged into one line ("
+                       (dchk:color-name *dchk-olap-color*) ")")
+               'merged ea))
         ((= ans "Flag")
          (dchk:set-color ea *dchk-olap-color*)
          (dchk:set-color eb *dchk-olap-color*)
-         (princ "\n  Flagged to fix (cyan).")
+         (princ (strcat "\n  Flagged to fix ("
+                        (dchk:color-name *dchk-olap-color*) ")."))
          (list label
-               (if (dchk:whole-line-p la)
-                 (if (= (strcase lay1) (strcase lay2))
-                   "flagged to fix (cyan)"
-                   "different layers - flagged to fix (cyan)")
-                 "polyline edge - flagged to fix (cyan)")
+               (strcat
+                 (if (dchk:whole-line-p la)
+                   (if (= (strcase lay1) (strcase lay2))
+                     "flagged to fix ("
+                     "different layers - flagged to fix (")
+                   "polyline edge - flagged to fix (")
+                 (dchk:color-name *dchk-olap-color*) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -48074,9 +48262,9 @@
 
         ;; march order for the dimensions: style groups first
         ;; (*dchk-style-order*), then row by row, left to right
-        (setq rowtol (if (and miny maxy (> (- maxy miny) 1e-8))
-                       (* 0.05 (- maxy miny))
-                       1.0))
+        (setq rowtol (if (and miny maxy (> (- maxy miny) *dchk-same-pt*))
+                       (* *dchk-row-band* (- maxy miny))
+                       *dchk-row-flat*))
         (setq dims (dchk:sort-dims dims rowtol))
 
         ;; spots two or more dimensions measure to are anchors: a
@@ -48256,24 +48444,30 @@
         ;; --- report on the right side, to scale with the drawing ----
         ;; text height picked from the drawing's extents so the whole
         ;; report roughly matches the drawing's height (MTEXT line
-        ;; spacing is ~1.66 x text height), clamped so a short report
-        ;; is not gigantic nor a long one unreadably small
+        ;; pitch is *dchk-report-lead* x text height), clamped by
+        ;; *dchk-report-hmax*/-hmin so a short report is not gigantic
+        ;; nor a long one unreadably small
         ;; all-clear lines are shorter, so weight them when sizing
         (setq nlin 3.0)                          ; title, legend, separator
         (foreach l lines
           (setq nlin (+ nlin (if (dchk:attn-p l) 1.0 *dchk-green-scale*))))
         (setq nlin (+ nlin (* 3.0 *dchk-green-scale*)))   ; the header dashboard
-        (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+        (if (and minx (> (max (- maxy miny) (- maxx minx)) *dchk-same-pt*))
           (progn
-            (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-                  h   (/ ref (* 1.66 nlin)))
-            (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-            (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
+            (setq ref (max (- maxy miny)
+                           (* *dchk-report-wide* (- maxx minx)))
+                  h   (/ ref (* *dchk-report-lead* nlin)))
+            (if (> h (/ ref *dchk-report-hmax*))
+              (setq h (/ ref *dchk-report-hmax*)))
+            (if (< h (/ ref *dchk-report-hmin*))
+              (setq h (/ ref *dchk-report-hmin*))))
           (progn
             (setq h (* (getvar "DIMTXT") (getvar "DIMSCALE")))
-            (if (or (null h) (<= h 0.0)) (setq h 2.5))))
+            (if (or (null h) (<= h 0.0)) (setq h *dchk-report-hfall*))))
         (setq ins (if minx
-                    (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+                    (list (+ maxx (* *dchk-report-gap*
+                                     (max (- maxx minx) 1.0)))
+                          maxy 0.0)
                     (list 0.0 0.0 0.0)))
         ;; header dashboard: each line carries a "needs attention" flag
         ;; so a category with anything to look over turns red
@@ -48321,7 +48515,7 @@
         ;; --- show the drawing plus the report -----------------------
         (if minx
           (progn
-            (setq m (* 0.05 (max (- maxx minx) (- maxy miny) 1.0)))
+            (setq m (* *dchk-zoom-out* (max (- maxx minx) (- maxy miny) 1.0)))
             (command "_.ZOOM" "_Window"
                      (trans (list (- minx m) (- miny m) 0.0) 0 1)
                      (trans (list (+ (car ins) (* *dchk-report-chars* h) m)
@@ -48335,7 +48529,8 @@
         (princ (strcat "\n\n--- DIMCHECK complete ---"
                        "\nDimensions: " (itoa (length dims)) " checked, "
                        (itoa ndok) " correct, "
-                       (itoa ndflag) " flagged to fix (red)"
+                       (itoa ndflag) " flagged to fix ("
+                       (dchk:color-name *dchk-flag-color*) ")"
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
@@ -48345,11 +48540,13 @@
                          "")
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
-                       (itoa nasnap) " endpoint(s), magenta)"
+                       (itoa nasnap) " endpoint(s), "
+                       (dchk:color-name *dchk-arc-color*) ")"
                        "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
                        (if olaps
                          (strcat ", " (itoa nomerged) " merged, "
-                                 (itoa noflag) " flagged (cyan), "
+                                 (itoa noflag) " flagged ("
+                                 (dchk:color-name *dchk-olap-color*) "), "
                                  (itoa noleft) " left as drawn")
                          "")
                        "\nReport placed on the right side of the drawing (layer "
@@ -48412,7 +48609,9 @@
            anchors (dchk:shared-anchors dims))
 
      ;; --- dimensions: report stray definition points, move nothing
-     (foreach e (dchk:sort-dims dims (if (and miny maxy) (* 0.05 (- maxy miny)) 1.0))
+     (foreach e (dchk:sort-dims dims (if (and miny maxy)
+                                       (* *dchk-row-band* (- maxy miny))
+                                       *dchk-row-flat*))
        (setq ed  (entget e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
@@ -48438,10 +48637,10 @@
                  ((and dq (or (null near) (< dq (caddr near))))
                   (setq bad (append bad (list (strcat (car s)
                                                       " off the shared anchor by "
-                                                      (rtos dq 2 4))))))
+                                                      (dchk:dist dq))))))
                  (near
                   (setq bad (append bad (list (strcat (car s) " off by "
-                                                      (rtos (caddr near) 2 4)))))))))))
+                                                      (dchk:dist (caddr near))))))))))))
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
@@ -48509,15 +48708,20 @@
      (foreach l lines
        (setq nlin (+ nlin (if (dchk:attn-p l) 1.0 *dchk-green-scale*))))
      (setq nlin (+ nlin (* 3.0 *dchk-green-scale*)))
-     (if (and minx (> (max (- maxy miny) (- maxx minx)) 1e-8))
+     (if (and minx (> (max (- maxy miny) (- maxx minx)) *dchk-same-pt*))
        (progn
-         (setq ref (max (- maxy miny) (* 0.25 (- maxx minx)))
-               h   (/ ref (* 1.66 nlin)))
-         (if (> h (/ ref 30.0))  (setq h (/ ref 30.0)))
-         (if (< h (/ ref 200.0)) (setq h (/ ref 200.0))))
-       (setq h 2.5))
+         (setq ref (max (- maxy miny)
+                        (* *dchk-report-wide* (- maxx minx)))
+               h   (/ ref (* *dchk-report-lead* nlin)))
+         (if (> h (/ ref *dchk-report-hmax*))
+           (setq h (/ ref *dchk-report-hmax*)))
+         (if (< h (/ ref *dchk-report-hmin*))
+           (setq h (/ ref *dchk-report-hmin*))))
+       (setq h *dchk-report-hfall*))
      (setq ins (if minx
-                 (list (+ maxx (* 0.05 (max (- maxx minx) 1.0))) maxy 0.0)
+                 (list (+ maxx (* *dchk-report-gap*
+                                  (max (- maxx minx) 1.0)))
+                       maxy 0.0)
                  (list 0.0 0.0 0.0)))
      (setq txt (strcat "DIMSCAN REPORT - " (cal:datestr)
                        "  [DIMCHECK " *dchk-version* "]"
@@ -48563,7 +48767,9 @@
     "     then left to right, top to bottom inside each group."
     "   Every other object greys out; the one under review is zoomed to."
     "   A definition point not touching any object: you choose"
-    "     Move (green +, onto the nearest object) / Keep (red X, exactly"
+    (strcat "     Move (" (dchk:color-name *dchk-sugg-color*)
+            " +, onto the nearest object) / Keep ("
+            (dchk:color-name *dchk-orig-color*) " X, exactly")
     "     where you drew it) / Pick your own spot."
     (strcat "   A point "
             (if (= *dchk-anchor-min* 2) "two" (itoa *dchk-anchor-min*))
@@ -48703,8 +48909,14 @@
       (if (cal:ask-yn "\n  Write a read-only DIMSCAN report for the practice drawing?" "Yes")
         (progn
           (princ "\n  Running DIMSCAN - it changes nothing, it only reports.")
-          (princ "\n  (In the report, RED lines at full size are the problems;")
-          (princ "\n   green lines at three-quarter size are the all-clears.)")
+          (princ (strcat "\n  (In the report, "
+                         (strcase (dchk:color-name *dchk-flag-color*))
+                         " lines at full size are the problems;"))
+          (princ (strcat "\n   "
+                         (dchk:color-name *dchk-report-color*)
+                         " lines at "
+                         (rtos (* 100.0 *dchk-green-scale*) 2 0)
+                         "% size are the all-clears.)"))
           (dchk:tut-pause
             (strcat "DIMSCAN will ask you to highlight - window the practice\n"
                     "  drawing (or press Enter for the whole drawing). The report\n"
@@ -48762,10 +48974,11 @@
           (setq ins (getpoint "\n  Pick the top-left corner for the sheet: "))
           (if ins
             (progn
-              (setq h   (getdist (strcat "\n  Text height <" (rtos 2.5) ">: "))
-                    h   (if h h 2.5)
+              (setq h   (getdist (strcat "\n  Text height <"
+                                        (rtos *dchk-report-hfall*) ">: "))
+                    h   (if h h *dchk-report-hfall*)
                     ins (trans ins 1 0))
-              (dchk:mtext ins h (* 70.0 h)
+              (dchk:mtext ins h (* *dchk-sheet-chars* h)
                           (dchk:join (dchk:tut-checklist) "\\P")
                           *dchk-report-layer*)
               (princ "\n  Reference sheet placed (one U removes it)."))

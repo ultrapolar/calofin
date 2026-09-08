@@ -518,13 +518,22 @@ check("the block opens and closes", 0 < start < end)
 outside = [l for i, l in enumerate(lines)
            if l.startswith('(setq *cfchk-') and not start < i < end]
 check("no *cfchk-* knob is set outside the block", not outside, repr(outside))
-undocumented = []
-for i, l in enumerate(lines[start:end], start):
-    if l.startswith('(setq *cfchk-'):
-        above = lines[i - 1].startswith(';;')
-        remark = re.search(r'\)\s*;', l) is not None
-        if not (above or remark):
-            undocumented.append(l)
+def explained(i):
+    """A knob is explained by a trailing remark, or by the ;;-prose at
+    the head of the paragraph it sits in - knobs that share one
+    explanation are grouped under it deliberately."""
+    if re.search(r'\)\s*;', lines[i]):
+        return True
+    j = i - 1
+    while j >= 0 and lines[j].strip():
+        if lines[j].lstrip().startswith(';;'):
+            return True
+        j -= 1
+    return False
+
+
+undocumented = [l for i, l in enumerate(lines[start:end], start)
+                if l.startswith('(setq *cfchk-') and not explained(i)]
 check("every knob carries an explanation", not undocumented, repr(undocumented))
 knobs = re.findall(r'^\(setq (\*cfchk-[a-z-]+\*)', SRC, re.M)
 vm = newvm()
