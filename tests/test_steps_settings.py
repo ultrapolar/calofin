@@ -587,6 +587,88 @@ def test_hemistep_reads_a_curve_it_was_handed():
     print("HEMISTEP measures a curve from its middle and fits its steps to it")
 
 
+AUTOBEAD = os.path.join(HERE, '..', 'lisp', 'autobead', 'AUTOBEAD.lsp')
+
+#: Enter at the bead question and at the side question (taking the
+#: <Yes> and <All> defaults), then a point well clear of the run for
+#: the side to bead toward.
+BEAD_TAIL = [None, None, (0.0, -500.0, 0.0)]
+
+
+def test_the_bead_hand_off_with_autobead_actually_loaded():
+    """Sections 11 / 8 / 8 of the three routines are gated on
+    (boundp 'autobead-build), and no suite ever loaded AUTOBEAD beside
+    them: across the whole of tests/, autobead-build appeared only in
+    test_autobead.py, and the only step-routine bead coverage was
+    test_autobead_absent_is_said_not_crashed above -- the branch that
+    does nothing.  So the hand-off itself was never executed by
+    anything, in any of the three routines.
+
+    What is pinned is the CONTRACT: the run reaches the bead flow, asks
+    its three questions, and hands over a non-empty selection set, the
+    direction as picked, the side keyword, no individually-named treads
+    on the All branch, and exactly one tread to hold back -- which is a
+    real tread, the midpoint of a line the run drew, and not a stale
+    point left over from somewhere else.
+
+    autobead-build is replaced by a recorder rather than wrapped: the
+    real one reports through (prompt), which the VM does not record, and
+    what is untested here is the hand-off, not AUTOBEAD.
+    """
+    seen = []
+    for cmd, (path, script) in sorted(SCRIPT.items()):
+        vm = fresh(path)
+        vm.load(AUTOBEAD)
+        vm.loads("(setq t:*seen* nil)")
+        vm.loads("(defun autobead-build (ss dir side some hold)"
+                 " (setq t:*seen* (list (sslength ss) dir side some hold))"
+                 " (princ))")
+        s = list(script())
+        if s and s[0] == 'WALLS':
+            s[0] = walls(vm, pair=(cmd == 'c:CORNERSTP'))
+        try:
+            vm.run(cmd, s + BEAD_TAIL)
+        except LispError as e:
+            raise AssertionError("[%s bead hand-off] %s" % (cmd, e)) from None
+
+        asked = [p for p, _ in vm.prompts]
+        assert any("Bead the steps?" in p for p in asked), \
+            "%s never offered to bead with AUTOBEAD loaded" % cmd
+        got = vm.globals.get('t:*seen*')
+        assert got, "%s never called autobead-build" % cmd
+        nss, direction, side, some, hold = got
+        assert int(nss) > 0, "%s handed over an empty set" % cmd
+        assert [round(float(v), 6) for v in direction] == [0.0, -500.0, 0.0], \
+            "%s passed %r, not the point that was picked" % (cmd, direction)
+        assert str(side) == "All", "%s passed side %r" % (cmd, side)
+        assert not some, \
+            "%s named individual treads on the All branch: %r" % (cmd, some)
+        assert hold and len(hold) == 1, \
+            "%s held back %r tread(s), not exactly one" % (
+                cmd, hold and len(hold))
+        assert "AUTOBEAD is not loaded" not in said(vm), \
+            "%s says AUTOBEAD is absent while it is loaded" % cmd
+
+        # the held-back point is a real tread: the midpoint of one of
+        # the lines this run drew, not a leftover from anywhere else
+        held = tuple(round(float(v), 6) for v in hold[0])
+        mids = set()
+        for e in vm.entities:
+            if e in vm.deleted:
+                continue
+            pts = [g[1:3] for g in vm.entdata.get(e, [])
+                   if isinstance(g, list) and g and g[0] in (10, 11)]
+            if len(pts) == 2:
+                mids.add(tuple(round((float(a) + float(b)) / 2.0, 6)
+                               for a, b in zip(pts[0], pts[1])))
+        assert held[:2] in mids, \
+            "%s held back %r, which is no line's midpoint" % (cmd, held)
+        seen.append((cmd.split(':')[1], int(nss)))
+
+    print("   %s -- each hands over one held-back tread"
+          % ", ".join("%s: %d objects" % t for t in seen))
+
+
 def main():
     test_every_knob_is_read_and_every_read_is_a_knob()
     test_each_reader_falls_back_to_the_value_the_block_sets()
@@ -601,6 +683,7 @@ def main():
     test_an_unusable_dim_layer_falls_back_to_the_current_one()
     test_a_frozen_current_layer_is_called_out()
     test_autobead_absent_is_said_not_crashed()
+    test_the_bead_hand_off_with_autobead_actually_loaded()
     test_a_selection_that_cannot_be_a_run_stops_with_a_reason()
     test_hemistep_reads_a_curve_it_was_handed()
     print("all tests passed")
