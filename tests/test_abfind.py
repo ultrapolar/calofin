@@ -5,8 +5,9 @@ reaching (distance ...) has to die.
 
 Script values answer the interactive calls in order: a click per
 unnamed stake (getpoint), then a point number (getstring), and - under
-ABMOVE - which suggestion (getkword) and where the note goes
-(getpoint, None = the Auto default).  The "_X" point sweep takes no
+ABMOVE - which suggestion (getpoint under initget 128: a click on a
+marker or its tag, or a typed tag) and where the note goes (getpoint,
+None = the Auto default).  The "_X" point sweep takes no
 scripted answer: ssget "_X" reads the drawing and never prompts, so
 the points the scenario builds are what it finds.  ABFIND loops, so
 None at its point-number prompt is the Enter that ends it; ABMOVE
@@ -716,7 +717,8 @@ def test_abmove_the_marks_it_keeps_are_bylayer():
 
 def test_abmove_prompt_stays_short():
     """Forty-five tags would swamp the command line, so the bracket
-    shows only the words that are not already in the table."""
+    shows only the keywords - and the one prompt takes the click too,
+    so there is no Pick to type first."""
     vm = newvm()
     pts = survey(vm)
     run(vm, 'c:ABMOVE', ['17', 'None'], 'prompt')
@@ -725,9 +727,10 @@ def test_abmove_prompt_stays_short():
     assert [q for q, _ in vm.prompts if 'type its number' in q] == \
         ['\nPick the point, or type its number (Enter to cancel): '], \
         vm.prompts
-    assert asked[0].endswith('[Pick/None/Back] <None>: '), asked[0]
+    assert asked[0] == ('\n  Move Pt.17 - click a marker or its tag, or'
+                        ' type a tag [None/Back] <None>: '), asked[0]
     assert '1A' not in asked[0], asked[0]
-    print("ok  ABMOVE's choice prompt shows Pick/None/Back, not 45 tags")
+    print("ok  ABMOVE's choice prompt shows None/Back, not 45 tags")
 
 
 def test_abmove_moves_the_point():
@@ -895,19 +898,50 @@ def test_a_click_on_a_stake_is_refused():
     print("ok  clicking a stake ties nothing - it is what ties are from")
 
 
+def candidates(vm):
+    """ABMOVE's suggestions for Pt.17, keyed by tag."""
+    got = vm.loads("(abf:candidates '(0.0 0.0) '(240.0 0.0) "
+                   f"'({P17[0]} {P17[1]} 0.0))")
+    return {c[6]: c for c in got}
+
+
+def tag_spots(vm):
+    """Where each tag hangs: {tag: (base, angle, width)}."""
+    got = vm.loads("(abf:tag-spots '(0.0 0.0) '(240.0 0.0) "
+                   f"'({P17[0]} {P17[1]} 0.0) "
+                   "(abf:candidates '(0.0 0.0) '(240.0 0.0) "
+                   f"'({P17[0]} {P17[1]} 0.0)))")
+    return {s[0]: (tuple(s[1]), s[2], s[3]) for s in got}
+
+
 def test_abmove_pick_on_screen():
-    """Clicking a suggestion picks it, the same as typing its number."""
+    """Clicking a suggestion picks it, the same as typing its tag -
+    straight off the one prompt, no Pick first."""
     vm = newvm()
     pts = survey(vm)
-    want = vm.loads("(nth 5 (car (abf:candidates '(0.0 0.0) '(240.0 0.0) "
-                    f"'({P17[0]} {P17[1]} 0.0))))")
+    want = candidates(vm)['R1A'][5]
     run(vm, 'c:ABMOVE',
-        ['17', 'Pick', (want[0] + 2.0, want[1] - 1.0, 0.0), None],
-        'pick')
+        ['17', (want[0] + 2.0, want[1] - 1.0, 0.0), None], 'pick')
     ins = live(vm, 'INSERT', 'POINTS')
     assert pt3(ins[-1][1][10]) == pt3(want), ins[-1][1]
     assert texts(vm, 'FGStep') == ['Moved Pt.17 A from 21\'-1" to 21\'-4"']
+    # ... and says what it took before the note is placed
+    assert any('R1A taken: A 21\'-1" -> 21\'-4"' in m for m in vm.printed), \
+        vm.printed[-6:]
     print("ok  ABMOVE a click on a suggestion picks it")
+
+
+def test_abmove_pick_word_is_a_hint():
+    """The Pick that earlier versions wanted first is answered with
+    a hint, and the click that follows still lands."""
+    vm = newvm()
+    pts = survey(vm)
+    want = candidates(vm)['R1A'][5]
+    run(vm, 'c:ABMOVE',
+        ['17', 'Pick', (want[0] + 2.0, want[1] - 1.0, 0.0), None], 'pick')
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 A from 21\'-1" to 21\'-4"']
+    assert any('Just click it' in m for m in vm.printed), vm.printed[-8:]
+    print("ok  ABMOVE typed Pick is a hint - the prompt takes the click")
 
 
 def test_abmove_pick_miss():
@@ -915,10 +949,194 @@ def test_abmove_pick_miss():
     vm = newvm()
     pts = survey(vm)
     run(vm, 'c:ABMOVE',
-        ['17', 'Pick', (9000.0, 9000.0, 0.0), 'None'], 'pick miss')
+        ['17', (9000.0, 9000.0, 0.0), 'None'], 'pick miss')
     assert texts(vm, 'FGStep') == [], texts(vm, 'FGStep')
     assert len(dims(vm)) == 2, dims(vm)
+    assert len([q for q, _ in vm.prompts if 'type a tag' in q]) == 2
     print("ok  ABMOVE a click that hits nothing re-asks")
+
+
+def test_abmove_click_takes_the_nearest():
+    """A click takes the marker NEAREST it.  It used to take the first
+    in the list within a foot, which near the crossing was always R1A:
+    R1B sits an inch off the point with R1A three inches further on,
+    and a click dead on R1B moved A."""
+    vm = newvm()
+    pts = survey(vm)
+    r1b = candidates(vm)['R1B'][5]
+    run(vm, 'c:ABMOVE', ['17', (r1b[0] + 0.15, r1b[1] + 0.15, 0.0), None],
+        'nearest')
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
+        texts(vm, 'FGStep')
+    print("ok  ABMOVE a click takes the nearest marker, not the first listed")
+
+
+def test_abmove_click_on_a_tag():
+    """The tag is as good a target as its marker - the better one when
+    the markers crowd - and a click on its text picks the reading it
+    names, whatever marker happens to be nearer."""
+    vm = newvm()
+    pts = survey(vm)
+    base, ang, width = tag_spots(vm)['R2B']
+    mid = (base[0] + 0.5 * width * math.cos(ang),
+           base[1] + 0.5 * width * math.sin(ang), 0.0)
+    run(vm, 'c:ABMOVE', ['17', mid, None], 'tag click')
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-8"'], \
+        texts(vm, 'FGStep')
+    print("ok  ABMOVE a click on a tag picks the reading it names")
+
+
+def test_abmove_a_crowded_click_asks():
+    """Zoomed out, a click cannot tell R1B from the markers an inch or
+    three away, so the routine lists what is under it and asks -
+    nearest first, and the nearest is the Enter answer."""
+    vm = newvm()
+    pts = survey(vm)
+    vm.sysvars['VIEWSIZE'] = 2000.0       # 3 px of pickbox = 5.6" now
+    r1b = candidates(vm)['R1B'][5]
+    click = (r1b[0] + 0.15, r1b[1] + 0.15, 0.0)
+    run(vm, 'c:ABMOVE', ['17', click, None, None], 'tie')
+    asked = [q for q, _ in vm.prompts if 'Which one?' in q]
+    assert len(asked) == 1, asked
+    assert asked[0].startswith('\n  Which one? [R1B/'), asked[0]
+    assert '/R2B' in asked[0] and '/R1A' in asked[0], asked[0]
+    assert asked[0].endswith('/Back] <R1B>: '), asked[0]
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
+        texts(vm, 'FGStep')
+    # the same click, answered with one of the others, moves that one
+    vm = newvm()
+    pts = survey(vm)
+    vm.sysvars['VIEWSIZE'] = 2000.0
+    run(vm, 'c:ABMOVE', ['17', click, 'R1A', None], 'tie answered')
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 A from 21\'-1" to 21\'-4"'], \
+        texts(vm, 'FGStep')
+    # and Back there is the markers again, nothing moved yet
+    vm = newvm()
+    pts = survey(vm)
+    vm.sysvars['VIEWSIZE'] = 2000.0
+    run(vm, 'c:ABMOVE', ['17', click, 'Back', 'None'], 'tie back')
+    assert texts(vm, 'FGStep') == [], texts(vm, 'FGStep')
+    assert len([q for q, _ in vm.prompts if 'type a tag' in q]) == 2
+    print("ok  ABMOVE a click that cannot tell markers apart asks which")
+
+
+def test_abmove_a_close_zoom_settles_it():
+    """The same click zoomed in is exact: the pickbox spans less than
+    the markers are apart, so nothing is asked."""
+    vm = newvm()
+    pts = survey(vm)
+    vm.sysvars['VIEWSIZE'] = 100.0        # 3 px = 0.28"
+    r1b = candidates(vm)['R1B'][5]
+    run(vm, 'c:ABMOVE', ['17', (r1b[0] + 0.15, r1b[1] + 0.15, 0.0), None],
+        'close zoom')
+    assert [q for q, _ in vm.prompts if 'Which one?' in q] == []
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"']
+    print("ok  ABMOVE zoomed in, the click needs no asking")
+
+
+def test_abmove_typed_tag_any_case():
+    """A tag typed in lower case is the tag."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', ['17', 'r1b', None], 'lower case')
+    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"']
+    print("ok  ABMOVE a tag typed in any case is accepted")
+
+
+def test_abmove_typed_nonsense_re_asks():
+    """Text that is no tag is reported and the prompt re-asks."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', ['17', 'zz', 'None'], 'nonsense')
+    assert texts(vm, 'FGStep') == []
+    assert len([q for q, _ in vm.prompts if 'type a tag' in q]) == 2
+    assert any('"zz" is not one of the tags' in m for m in vm.printed)
+    print("ok  ABMOVE a typed non-tag re-asks")
+
+
+def _seg_samples(base, ang, width, n=12):
+    return [(base[0] + width * k / n * math.cos(ang),
+             base[1] + width * k / n * math.sin(ang)) for k in range(n + 1)]
+
+
+def test_abmove_tags_keep_clear():
+    """The look-alike markers sit an inch or three apart, and a tag
+    beside each piled six onto one spot.  Now every tag hangs off the
+    arc on a leader with daylight to the next one, and none lands on
+    the other arc's markers."""
+    vm = newvm()
+    pts = survey(vm)
+    cands = candidates(vm)
+    spots = tag_spots(vm)
+    assert set(spots) == set(cands), set(cands) - set(spots)
+    hgt = vm.loads('abf:*sug-hgt*')
+    gap = vm.loads('abf:*tag-gap*')
+    rad = vm.loads('abf:*sug-radius*')
+    # tag to tag: no two text strips closer than the daylight
+    tags = sorted(spots)
+    for i, a in enumerate(tags):
+        sa = _seg_samples(*spots[a])
+        for b in tags[i + 1:]:
+            sb = _seg_samples(*spots[b])
+            d = min(math.dist(p, q) for p in sa for q in sb)
+            assert d >= hgt + gap - 1e-6, (a, b, d)
+    # tag to marker: no text strip on any marker's ring
+    for a in tags:
+        sa = _seg_samples(*spots[a])
+        for b, c in cands.items():
+            d = min(math.dist(p, (c[5][0], c[5][1])) for p in sa)
+            assert d >= rad + 0.5 * hgt + gap - 0.5, (a, b, d)
+    # every tag hangs off its own arc, a leader's length from its marker
+    for a in tags:
+        base = spots[a][0]
+        assert math.dist(base[:2], cands[a][5][:2]) >= 10.0 - 1e-6, (a, base)
+    print("ok  ABMOVE's tags hang clear of each other and of the markers")
+
+
+def test_abmove_tags_take_four_quarters():
+    """The two arcs cut the sheet into four quarters, and each half of
+    each group - A grown, A shrunk, B grown, B shrunk - hangs its tags
+    in a quarter of its own."""
+    vm = newvm()
+    pts = survey(vm)
+    cands = candidates(vm)
+    spots = tag_spots(vm)
+    quarters = {}
+    for tag, c in cands.items():
+        base = spots[tag][0][:2]
+        # which side of each ARC the tag hangs: further from the stake
+        # than the point is, or nearer - the arcs curve, so a straight
+        # line through the point would misjudge the far sweep
+        q = (math.dist(base, A) > PA, math.dist(base, B) > PB)
+        half = (c[2], c[4] > c[3])           # moved tape, grown?
+        quarters.setdefault(half, set()).add(q)
+    assert len(quarters) == 4, quarters
+    assert all(len(v) == 1 for v in quarters.values()), quarters
+    assert len(set().union(*quarters.values())) == 4, quarters
+    print("ok  ABMOVE's four half-groups take the four quarters")
+
+
+def test_abmove_tag_on_a_leader():
+    """Each marker gets a leader to its tag, and a tag that would read
+    upside down is turned round, right-justified on its base."""
+    vm = newvm()
+    pts = survey(vm)
+    run(vm, 'c:ABMOVE', ['17', 'None'], 'leaders')
+    leads = ever(vm, 'LINE', SUGL)
+    tags = ever(vm, 'TEXT', SUGL)
+    assert len(leads) == 45 and len(tags) == 45, (len(leads), len(tags))
+    spots = tag_spots(vm)
+    for t in tags:
+        base, ang, _ = spots[t[1]]
+        rot = t.get(50, 0.0)
+        assert rot < math.pi / 2 + 1e-9 or rot > 1.5 * math.pi - 1e-9, \
+            (t[1], rot)
+        if t.get(72) == 2:
+            assert pt3(t[11]) == pt3(base), (t[1], t[11], base)
+        else:
+            assert pt3(t[10]) == pt3(base), (t[1], t[10], base)
+    assert all(l.get(62) == 2 for l in leads)
+    print("ok  ABMOVE's tags hang on leaders and never read upside down")
 
 
 def test_abmove_back_from_the_choice():

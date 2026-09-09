@@ -116,8 +116,7 @@ existed every other tool in the toolset (`BPCALLOUT`, `LHD`, `ABHD`,
 `FITABHD` …) would count them as real survey points. The one you
 choose is a survey point, and *that* is what lands on `POINTS`.
 
-Each carries its tag beside it, and they are listed nearest miss first
-within each group:
+They are listed nearest miss first within each group:
 
 ```
   Where Pt.17 lands if one tape was read wrong - the ones that move A
@@ -157,27 +156,83 @@ miss puts it — an inch out sorts above a foot out, which is why the
 into the sweep: `18'` read as `16'` or `13'`, and `21'` read as `24'`,
 `27'` or `12'`, are all whole feet the sweep already carries.
 
-The prompt itself stays short — forty-five tags in a bracket would
-swamp the command line, so it reads
+### Where the tags hang
+
+The tags do **not** sit beside their markers. The look-alike readings
+land an inch or three apart — `R1B` is 1 1/8" off the point, `R2B`
+2 5/16", `R1A` 3 7/16" — and a tag beside each marker piled half a
+dozen of them onto one spot, unreadable, which is what made the right
+one so hard to pick. So every tag hangs **off** its arc on a short
+leader from its marker, in a row `abf:*tag-standoff*` (10") out from
+the arc, with `abf:*tag-gap*` of daylight between any two. A tag is
+only ever pushed along the row *away* from the point, so the leaders
+never cross.
+
+The two arcs cross at the point and cut the sheet into four quarters,
+and every marker sits *on* an arc — so the quarters are empty, and
+each half of each group takes one: the readings that grew (`1A`,
+`R1A`) and the ones that shrank (`-1A`) lie either side of the
+crossing, and the group that holds B hangs its grown readings outward
+from B and its shrunk ones inward, the group that holds A the other
+way about. Within its quarter a tag runs along the quarter's
+**bisector**, not straight off its own arc: a quarter is as narrow as
+the two ties' crossing angle, and text run straight off one arc walks
+into the other where the crossing is sharp, while text run down the
+middle draws away from both at once. The narrower the quarter, the
+flatter the tags lie to their arc and the further apart along it they
+stand for the daylight to hold; that, and how far the first tag keeps
+from the crossing (where the other arc's nearest markers are), fall
+out of the angle. A tag that would read upside down is turned round
+and right-justified on its base, so it still runs away from its leader.
+
+### Choosing one
+
+One prompt, three ways to answer it:
 
 ```
-  Move Pt.17 - type a tag from the table [Pick/None/Back] <None>:
+  Move Pt.17 - click a marker or its tag, or type a tag [None/Back] <None>:
 ```
 
-and every tag in the table is accepted even though it is not listed
-there. `Pick` clicks one instead.
+**Click** the marker you want, or its tag — the tag is as good a
+target as the marker, and the easier one where the markers crowd. A
+click takes the **nearest** marker or tag. (It used to take the first
+in the *list* within a foot of the click, which near the crossing was
+always `R1A`, whichever marker was under the cursor — `R1B` and `R2B`
+could not be clicked at all.) What was taken is read back before the
+note is placed:
 
-Forty-five rows for this point: twenty sweep steps per held stake,
-with the look-alike readings (`18'-5"`, `18'-8"`, `21'-4"`, `21'-7"`,
-`21'-11"`) sitting where their own miss puts them — at the top of their
-group, since an inch out is nearer than a foot. Fifty readings were
-generated and five collapsed into the sweep: `18'` read as `16'` or
-`13'`, and `21'` read as `24'`, `27'` or `12'`, are all whole feet the
-sweep already carries.
+```
+  R2B taken: B 18'-6" -> 18'-8".
+```
 
-Answer with a tag, or `Pick` and click the one you want. `None` (the
-Enter answer) leaves the point alone and keeps the two dimensions —
-`ABMOVE` has then done exactly what `ABFIND` does.
+When two or more markers sit closer together than the pickbox spans
+at the current zoom, the click cannot tell them apart, and the routine
+says so rather than guess: it lists what is under the click, nearest
+first, and asks —
+
+```
+  3 markers under that click - zoom in, or say which:
+   R1B   B 18'-6" -> 18'-5"
+   R1A   A 21'-1" -> 21'-4"
+   R2B   B 18'-6" -> 18'-8"
+  Which one? [R1B/R1A/R2B/Back] <R1B>:
+```
+
+— the nearest being the Enter answer, and `Back` the markers again.
+Zoom in and the same click is exact: the pickbox (`PICKBOX` pixels,
+read against `VIEWSIZE` and `SCREENSIZE`) shrinks in drawing units,
+and the markers come apart.
+
+**Type a tag** from the table, in any case. Every tag is accepted even
+though the bracket lists only `None` and `Back` — forty-five tags in a
+bracket would swamp the command line — because the prompt is a
+`getpoint` under `(initget 128)`, the same one-prompt-two-answers that
+names the point. Text that is no tag is reported and the prompt
+re-asks. (`Pick`, which earlier versions wanted typed before the
+click, is answered with a hint: the prompt takes the click itself.)
+
+**`None`** (the Enter answer) leaves the point alone and keeps the two
+dimensions — `ABMOVE` has then done exactly what `ABFIND` does.
 
 Either way that is the end of the run. `ABMOVE` settles **one** point
 and stops; run it again for the next one. `ABFIND`, which only
@@ -275,6 +330,8 @@ The shared Back convention (see the root README) applies:
   point's ties and re-asks the number;
 * `Back` at **which suggestion** re-asks the move question — in
   `ABMOVE`, which never asked it, it re-asks the point number instead;
+* `Back` at **`Which one?`** — the tie a click could not settle — is
+  the markers again, nothing chosen;
 * `Back` at **the note** re-asks which suggestion, with the
   suggestions still on screen.
 
@@ -298,10 +355,11 @@ error, or Esc.
 3. `ABMOVE` → `Pick the point, or type its number (Enter to cancel):`
    → `17`, or click the point → read the table
    (`F2` opens the text window if it runs off the command line) →
-   `Move Pt.17 - type a tag from the table [Pick/None/Back] <None>:`
-   → a tag such as `-1B`, or `Pick` and click the marker → `Place the
-   note for Pt.17 [Auto/Back] <Auto>:` → Enter, and the command is
-   done.
+   `Move Pt.17 - click a marker or its tag, or type a tag [None/Back]
+   <None>:` → click the marker or its tag, or type a tag such as
+   `-1B` (a click that cannot tell two markers apart asks
+   `Which one?`) → `Place the note for Pt.17 [Auto/Back] <Auto>:` →
+   Enter, and the command is done.
 4. `ABFINDVER` prints the loaded version.
 
 ## Tunables
@@ -331,7 +389,13 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*sug-radius*   3.0)           ; suggestion marker radius
 (setq abf:*sug-layer*    "ABMOVE-POINTS") ; scratch layer, NOT POINTS
 (setq abf:*sug-color*    2)             ; suggestion colour: yellow
-(setq abf:*sug-hgt*      6.0)           ; suggestion tag height
+(setq abf:*sug-hgt*      5.0)           ; suggestion tag height
+(setq abf:*tag-standoff* 10.0)          ; how far off its arc a tag hangs
+(setq abf:*tag-gap*      1.5)           ; daylight between tags, and from
+                                        ; the other arc's markers
+(setq abf:*tag-width*    0.8)           ; a character's width, as a
+                                        ; fraction of the tag height, for
+                                        ; the strip a click on a tag hits
 (setq abf:*locus-color*  8)             ; guide-line colour: grey
 (setq abf:*locus-ltype*  "DASHED")      ; and its linetype
 (setq abf:*foot-steps*   10)            ; 1-foot steps offered each way
@@ -341,6 +405,13 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*same-eps*     0.125)         ; two suggestions this close
                                         ; are one place
 ```
+
+`abf:*tag-gap*` is measured *across* the tags; along the arc they
+stand further apart than that, by the angle the quarter's bisector
+makes with the arc, so a sharp crossing spreads a group's tags wider
+than a square one does. `abf:*snap*` is still the reach of a click on
+a **marker**; a click on a **tag** has to land on the text itself,
+within the pickbox.
 
 `abf:*foot-steps*` and `abf:*max-shift*` work together: the sweep
 reaches `12 x foot-steps` inches, and `max-shift` is the hard bound on
@@ -389,6 +460,16 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.9** — the suggestion is chosen at **one prompt**: click the
+  marker or its tag, or type the tag — no `Pick` first. A click takes
+  the **nearest** marker or tag (it took the first in the list within
+  a foot, which near the crossing was always `R1A`), and a click that
+  cannot tell two markers apart at the current zoom lists them and
+  asks `Which one?`. The tags hang **off** the arc on leaders, in the
+  four empty quarters between the arcs, spaced so they never overlap
+  each other or the markers (`abf:*tag-standoff*`, `abf:*tag-gap*`),
+  instead of piling up beside markers an inch apart; `abf:*sug-hgt*`
+  is 5".
 * **v1.7** — the moved point is a **copy** of the point it came from
   (block, layer, colour, linetype, lineweight, scale, rotation and
   every attribute, offsets and all) with only its number rewritten,
@@ -426,7 +507,9 @@ click fallback, the misreading arithmetic (readings, look-alike digits,
 transpositions, the shift cap and the suggestion cap), the circle
 crossing, the whole move (new point, ring, note wording, redrawn ties),
 the yellow markers and their tags, the dashed grey guide lines and
-what they span, the `None` and `Pick` answers, the Back steps, the
+what they span, the `None` answer and the click — nearest marker
+or tag, the `Which one?` tie at a coarse zoom, the tags' spacing
+and their four quarters — the Back steps, the
 one-shot shape and the no-point-block fallback — and, for the two
 newest behaviours, that the moved point carries the original's block,
 layer, colour, linetype, lineweight, scale, rotation and both of its

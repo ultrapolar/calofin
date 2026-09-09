@@ -73,9 +73,33 @@
 ;;;   points layer.  They are throwaway, they would inherit the points
 ;;;   layer's colour, and while they existed every other tool in the
 ;;;   toolset would count them as real survey points.  They are listed
-;;;   on the command line nearest miss first within each group: type a
-;;;   tag, or Pick and click the marker you want.  The ONE that is
-;;;   chosen is a survey point, and that is what goes on POINTS.
+;;;   on the command line nearest miss first within each group.  The
+;;;   ONE that is chosen is a survey point, and that is what goes on
+;;;   POINTS.
+;;;
+;;;   The tags do not sit beside their markers.  The look-alike
+;;;   readings land an inch or three apart, and a 6" tag beside each
+;;;   piled half a dozen of them onto one spot, unreadable - which is
+;;;   what made the right one so hard to pick.  So each tag hangs OFF
+;;;   its arc on a short leader, in a row abf:*tag-standoff* out from
+;;;   the arc, with abf:*tag-gap* of daylight to the next tag.  The
+;;;   two arcs cross at the point and cut the sheet into four empty
+;;;   quarters (every marker is ON an arc), and each half of each
+;;;   group takes a quarter of its own, its tags run down the
+;;;   quarter's bisector so they draw away from both arcs at once - no
+;;;   tag lands on the other group's markers, however sharp the
+;;;   crossing.
+;;;
+;;;   Choosing one is ONE prompt: click the marker or the tag you want,
+;;;   type its tag from the table, or Enter for None.  A click takes
+;;;   the NEAREST marker or tag - a tag is as good a target as its
+;;;   marker, and the easier one when the markers crowd.  When two or
+;;;   more sit closer together than the pickbox spans at the current
+;;;   zoom, the click cannot tell them apart and the routine says so:
+;;;   it lists the ones under the click and asks which, the nearest
+;;;   being the Enter answer.  Zoom in and the same click is exact.
+;;;   Whatever was taken is read back with the reading it stands for
+;;;   before the note is placed.
 ;;;
 ;;;   Each group also gets the line it sits on, dashed and grey: a
 ;;;   held tape is a fixed radius off its stake, so everything that
@@ -143,11 +167,12 @@
 ;;; point, the moved point, its ring and its note, with the original
 ;;; ties put back.  Back at "Move Pt.17?" un-draws that point's ties
 ;;; and re-asks the number; Back at the suggestions re-asks "Move
-;;; Pt.17?"; Back at the note re-asks the suggestion.  ABMOVE is the
-;;; same minus its own question: Back at the suggestions re-asks the
-;;; point number, its first question has nothing to go back to, and
-;;; once the point is settled the run is over.  A single U undoes a
-;;; whole run either way -- it is one undo group.
+;;; Pt.17?"; Back at the note re-asks the suggestion; Back at "Which
+;;; one?" (the tie a click could not settle) goes back to the markers.
+;;; ABMOVE is the same minus its own question: Back at the suggestions
+;;; re-asks the point number, its first question has nothing to go back
+;;; to, and once the point is settled the run is over.  A single U
+;;; undoes a whole run either way -- it is one undo group.
 ;;;
 ;;; A missing "CROSS DIMENSIONS" style is NOT invented: the dims are
 ;;; drawn in whatever style is current and the routine says so, so a
@@ -168,7 +193,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.8")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.9")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -220,7 +245,23 @@
                                     ; so a suggestion reads as a
                                     ; suggestion whatever the layer was
                                     ; set to by hand
-(setq abf:*sug-hgt*      6.0)       ; height of a suggestion's tag
+(setq abf:*sug-hgt*      5.0)       ; height of a suggestion's tag -
+                                    ; above the 4" point numbers, and
+                                    ; still narrow enough for the tags
+                                    ; to file past each other
+(setq abf:*tag-standoff* 10.0)      ; how far off its arc the row of
+                                    ; tags hangs, in inches - each tag
+                                    ; on a leader from its marker
+(setq abf:*tag-gap*      1.5)       ; the daylight kept between two
+                                    ; tags, between a tag and the other
+                                    ; arc's markers, in inches.  Along
+                                    ; the arc the tags stand further
+                                    ; apart than that, by the angle
+                                    ; they make with it
+(setq abf:*tag-width*    0.8)       ; a character's width as a fraction
+                                    ; of the tag height - how long the
+                                    ; strip a click on a tag can land
+                                    ; on is taken to be
 (setq abf:*locus-color*  8)         ; colour of the guide line each
                                     ; group of suggestions sits on:
                                     ; grey, so it reads as a guide and
@@ -497,6 +538,22 @@
                 p1 (list (- bx (* h uy)) (+ by (* h ux)) 0.0)
                 p2 (list (+ bx (* h uy)) (- by (* h ux)) 0.0))
           (if (< (abf:dist p1 near) (abf:dist p2 near)) p1 p2))))))
+
+;; How far P is from the segment A-B - the nearest point of it, an end
+;; included.  Locals are not named T: that is a constant in AutoLISP.
+(defun abf:seg-dist (p a b / dx dy l2 u)
+  (setq dx (- (car  b) (car  a))
+        dy (- (cadr b) (cadr a))
+        l2 (+ (* dx dx) (* dy dy)))
+  (if (< l2 abf:*fuzz*)
+    (abf:dist p a)
+    (progn
+      (setq u (/ (+ (* (- (car  p) (car  a)) dx)
+                    (* (- (cadr p) (cadr a)) dy))
+                 l2))
+      (if (< u 0.0) (setq u 0.0))
+      (if (> u 1.0) (setq u 1.0))
+      (abf:dist p (list (+ (car a) (* u dx)) (+ (cadr a) (* u dy)))))))
 
 ;; Midpoint of p1->p2, pushed perpendicular to the tie by dist (dist
 ;; 0.0 puts the dimension line straight inbetween, on the tie itself).
@@ -896,14 +953,137 @@
               (setq out (cons (entlast) out))))
           (reverse out))))))
 
+;; E slid into the already-sorted LST by the size of its first element,
+;; smallest first - the order the tags along a row are handed out in.
+(defun abf:ins-by-abs (e lst)
+  (cond ((null lst) (list e))
+        ((< (abs (car e)) (abs (car (car lst)))) (cons e lst))
+        (t (cons (car lst) (abf:ins-by-abs e (cdr lst))))))
+
+;; The spot every suggestion's tag hangs at, as one (tag base ang width)
+;; per suggestion: BASE is where its leader ends and its text starts,
+;; ANG the direction the text runs from there, WIDTH how far it runs
+;; (abf:*tag-width* of the height per character - an estimate, for
+;; the click test; the text itself is as wide as its font makes it).
+;;
+;; The look-alike readings sit an inch or three apart, and a tag beside
+;; each marker piled half a dozen tags onto one spot: the reason the
+;; right one was so hard to pick.  So the tags hang OFF the arc, on a
+;; row abf:*tag-standoff* out from it, tied to their markers by
+;; leaders, and spaced along the row so that abf:*tag-gap* of daylight
+;; stays between any two.  A tag is only ever pushed along the row
+;; AWAY from the point, so the leaders never cross each other.
+;;
+;; Which side of the arc, and which way does the text run?  The two
+;; arcs cross at the point and cut the sheet into four quarters, and
+;; every marker sits ON an arc - so the quarters are empty, and each
+;; half of each group hangs its tags in a quarter of its own.  The
+;; readings that grew (1A, R1A) and the ones that shrank (-1A) lie
+;; either side of the crossing: the group that holds B hangs its grown
+;; readings outward from B and its shrunk ones inward, and the group
+;; that holds A does it the other way about.  Four halves, four
+;; quarters.  Within its quarter a tag runs along the quarter's
+;; BISECTOR, not straight off its own arc: a quarter is as narrow as
+;; the two ties' crossing angle, and text run straight off one arc
+;; walks into the other where the crossing is sharp.  Run down the
+;; middle it draws away from both arcs at once.  The narrower the
+;; quarter, the flatter the tags lie to their arc and the further
+;; apart along it they have to stand for the daylight to hold - and
+;; the further the first one has to keep from the crossing, where the
+;; other arc's nearest markers sit; both fall out of the angle.
+(defun abf:tag-spots (pa pb pp sugs / out held ctr oth rad a0 a0o half
+                                       lst c d e off nrm ray1 ray2 wedge
+                                       bis across gap first prev slot ang
+                                       base longest)
+  (setq out nil longest 0.0)
+  (foreach c sugs
+    (setq longest (max longest (* (strlen (nth 6 c)) abf:*sug-hgt*
+                                  abf:*tag-width*))))
+  (foreach held (list abf:*b-name* abf:*a-name*)
+    (setq ctr (if (= held abf:*a-name*) pa pb)
+          oth (if (= held abf:*a-name*) pb pa)
+          rad (abf:dist ctr pp)
+          a0  (angle (abf:2d ctr) (abf:2d pp))
+          a0o (angle (abf:2d oth) (abf:2d pp)))
+    (foreach half '(1 -1)
+      ;; this half of the group: the suggestions on one side of the
+      ;; point along the arc, nearest the crossing first, each with
+      ;; its signed angle off the point round the held stake
+      (setq lst nil)
+      (foreach c sugs
+        (if (= (cadr c) held)
+          (progn
+            (setq d (abf:signed-dang
+                      a0 (angle (abf:2d ctr) (abf:2d (nth 5 c)))))
+            (if (= half (if (< d 0.0) -1 1))
+              (setq lst (abf:ins-by-abs (cons d c) lst))))))
+      (if lst
+        (progn
+          ;; the side of the arc, from whether this half's readings
+          ;; grew or shrank - its nearest one says which
+          (setq off (if (> (nth 4 (cdr (car lst)))
+                           (cadddr (cdr (car lst))))
+                      1 -1))
+          (if (= held abf:*a-name*) (setq off (- off)))
+          ;; the quarter: this arc's tangent the way this half runs,
+          ;; and the other arc's tangent on the side the tags hang
+          (setq nrm  (if (> off 0) a0 (+ a0 pi))
+                ray1 (+ a0 (* half 0.5 pi))
+                ray2 (if (> (cos (- (+ a0o (* 0.5 pi)) nrm)) 0.0)
+                       (+ a0o (* 0.5 pi))
+                       (- a0o (* 0.5 pi)))
+                wedge (abs (abf:signed-dang ray1 ray2)))
+          ;; a crossing so flat the two arcs all but lie together
+          ;; would spread the tags to the horizon; treat it as 10
+          ;; degrees, or 170, and let them touch
+          (if (< wedge 0.1745) (setq wedge 0.1745))
+          (if (> wedge 2.9671) (setq wedge 2.9671))
+          ;; the tags turn with the arc, so two at the least spacing
+          ;; lean together by the angle between them over their length
+          ;; - the daylight is widened by what the longest tag loses
+          (setq bis    (+ ray1 (* 0.5 (abf:signed-dang ray1 ray2)))
+                across (+ abf:*sug-hgt* abf:*tag-gap*)
+                gap    (/ (/ across (sin (* 0.5 wedge))) rad)
+                gap    (/ (/ (+ across (* longest gap))
+                             (sin (* 0.5 wedge)))
+                          rad)
+                first  (/ (max across
+                               (/ (+ abf:*sug-radius* (* 0.5 abf:*sug-hgt*)
+                                     abf:*tag-gap*
+                                     (* abf:*tag-standoff* (cos wedge)))
+                                  (sin wedge)))
+                          rad)
+                prev   nil)
+          (foreach e lst
+            (setq d    (car e)
+                  c    (cdr e)
+                  slot (max (abs d) (if prev (+ prev gap) first))
+                  prev slot
+                  ang  (+ a0 (* half slot))
+                  base (polar (abf:2d ctr) ang
+                              (+ rad (* off abf:*tag-standoff*)))
+                  out  (cons (list (nth 6 c)
+                                   (list (car base) (cadr base) 0.0)
+                                   (abf:angnorm (+ bis (* half slot)))
+                                   (* (strlen (nth 6 c)) abf:*sug-hgt*
+                                      abf:*tag-width*))
+                             out)))))))
+  out)
+
 ;; One suggestion on screen: a point where it would sit, a small circle
-;; so it can be seen and clicked, and its tag beside it.  On
-;; abf:*sug-layer*, never the points layer - a suggestion is not one of
-;; the drawing's own points and must not read as one, to the eye or to
-;; the next tool - in abf:*sug-color*, and all of it swept again as
-;; soon as the round ends.
-(defun abf:draw-sug (p tag / out)
-  (setq out nil)
+;; so it can be seen and clicked, and its tag hung off the arc at SPOT
+;; (abf:tag-spots) on a leader from the marker.  On abf:*sug-layer*,
+;; never the points layer - a suggestion is not one of the drawing's
+;; own points and must not read as one, to the eye or to the next tool
+;; - in abf:*sug-color*, and all of it swept again as soon as the round
+;; ends.  A tag whose direction would read upside down is turned round
+;; and right-justified on its base, so it still runs away from the
+;; leader and never across its neighbours.
+(defun abf:draw-sug (p tag spot / out base ang flip)
+  (setq out  nil
+        base (cadr  spot)
+        ang  (caddr spot)
+        flip (and (> ang (* 0.5 pi)) (<= ang (* 1.5 pi))))
   (entmake (list '(0 . "POINT") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
                  (cons 62 abf:*sug-color*) '(100 . "AcDbPoint")
@@ -915,14 +1095,87 @@
                  (list 10 (car p) (cadr p) 0.0)
                  (cons 40 abf:*sug-radius*)))
   (setq out (cons (entlast) out))
-  (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+  (entmake (list '(0 . "LINE") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 abf:*sug-color*) '(100 . "AcDbText")
-                 (list 10 (+ (car  p) abf:*sug-radius*)
-                          (+ (cadr p) abf:*sug-radius*) 0.0)
-                 (cons 40 abf:*sug-hgt*) (cons 1 tag)))
+                 (cons 62 abf:*sug-color*) '(100 . "AcDbLine")
+                 (list 10 (car p) (cadr p) 0.0)
+                 (list 11 (car base) (cadr base) 0.0)))
+  (setq out (cons (entlast) out))
+  (entmake (append
+             (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                   (cons 8 abf:*sug-layer*)
+                   (cons 62 abf:*sug-color*) '(100 . "AcDbText")
+                   (list 10 (car base) (cadr base) 0.0)
+                   (cons 40 abf:*sug-hgt*) (cons 1 tag)
+                   (cons 50 (if flip (abf:angnorm (+ ang pi)) ang)))
+             (if flip
+               (list '(72 . 2) (list 11 (car base) (cadr base) 0.0)))))
   (setq out (cons (entlast) out))
   (reverse out))
+
+;; The pickbox, in drawing units at the current zoom: PICKBOX is a
+;; count of pixels, and VIEWSIZE over the height of SCREENSIZE is the
+;; drawing units one pixel spans.  Two markers closer together than
+;; this are one place to a click at this zoom, so the routine asks
+;; which was meant instead of guessing; zoom in and they come apart.
+;; A session that cannot say (no screen to read) gets abf:*same-eps*,
+;; so only a dead heat asks.
+(defun abf:aperture (/ px vs ss)
+  (setq px (getvar "PICKBOX")
+        vs (getvar "VIEWSIZE")
+        ss (getvar "SCREENSIZE"))
+  (if (and (numberp px) (numberp vs) (> vs 0.0)
+           (listp ss) (numberp (cadr ss)) (> (cadr ss) 0.0))
+    (max abf:*same-eps* (* px (/ vs (cadr ss))))
+    abf:*same-eps*))
+
+;; What a click means: the suggestions under it, nearest first, each
+;; as (distance . suggestion).  A suggestion is under a click that
+;; lands within abf:*snap* of its marker, or on its tag - within the
+;; pickbox of the strip the text runs along - and its distance is to
+;; whichever of the two is the closer, so a click on a tag beats a
+;; marker that merely happens to be near.  Only the ties come back:
+;; the nearest, and whatever the click cannot tell from it at this
+;; zoom (within the pickbox of its distance).  One entry, then, for a
+;; clean click; several when it needs asking about; none for a miss.
+(defun abf:under-click (pk sugs spots / ap hits c sp dm dt d best h out)
+  (setq ap   (abf:aperture)
+        hits nil)
+  (foreach c sugs
+    (setq sp (assoc (nth 6 c) spots)
+          dm (abf:dist pk (nth 5 c))
+          d  nil)
+    (if (<= dm abf:*snap*) (setq d dm))
+    (if sp
+      (progn
+        (setq dt (max 0.0
+                      (- (abf:seg-dist pk (cadr sp)
+                                       (polar (abf:2d (cadr sp))
+                                              (caddr sp) (cadddr sp)))
+                         (* 0.5 abf:*sug-hgt*))))
+        (if (and (<= dt ap) (or (null d) (< dt d))) (setq d dt))))
+    (if d (setq hits (abf:ins-cand (cons d c) hits))))
+  (setq out nil)
+  (if hits
+    (progn
+      (setq best (car (car hits)))
+      (foreach h hits
+        (if (<= (car h) (+ best ap)) (setq out (cons h out))))))
+  (reverse out))
+
+;; The suggestion whose tag reads S, whatever case it was typed in.
+(defun abf:tag-lookup (s sugs / hit c)
+  (setq s (strcase s) hit nil)
+  (foreach c sugs
+    (if (and (null hit) (= (strcase (nth 6 c)) s)) (setq hit c)))
+  hit)
+
+;; What was chosen, read back: the tag and the reading it stands for,
+;; so a click is confirmed before the point moves on it.
+(defun abf:say-taken (sug)
+  (princ (strcat "\n  " (nth 6 sug) " taken: " (caddr sug) " "
+                 (abf:fmt (cadddr sug)) " -> " (abf:fmt (nth 4 sug))
+                 ".")))
 
 ;; Make sure the guide line's linetype exists, with dashes sized for a
 ;; drawing in inches so they read at pool scale.  Pure entmake, no
@@ -1014,7 +1267,7 @@
                         pa pb hist stage done made moves hit sce nm pp
                         pair sugs temps c kws shown ans sug havestyle
                         np newpt newnm tried lasthold ments ring note
-                        npair)
+                        npair spots hits h)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -1199,10 +1452,16 @@
                           stage 1)))
                 (progn
                   (abf:ensure-layer abf:*sug-layer* abf:*sug-color*)
+                  ;; where each tag hangs is worked out for the whole
+                  ;; round at once - the tags share a row - and kept,
+                  ;; because a click on a tag has to find its way back
+                  ;; to the suggestion it names
+                  (setq spots (abf:tag-spots pa pb pp sugs))
                   (foreach c sugs
                     (setq temps (append temps
-                                        (abf:draw-sug (nth 5 c)
-                                                      (nth 6 c)))))
+                                        (abf:draw-sug
+                                          (nth 5 c) (nth 6 c)
+                                          (assoc (nth 6 c) spots)))))
                   ;; and the line each group sits on, in the order the
                   ;; table lists them
                   (setq temps (append temps
@@ -1254,23 +1513,33 @@
                                             (abf:2d (nth 5 c)))))))
                   (setq stage 4))))
 
-             ;; -- 4: which suggestion
+             ;; -- 4: which suggestion.  ONE prompt, three ways to
+             ;;       answer it: click the marker or the tag you want,
+             ;;       type a tag from the table, or Enter for None.
+             ;;       (initget 128) hands typed text back as it is, so
+             ;;       every tag is accepted without being a keyword -
+             ;;       forty-odd of them in the bracket would swamp the
+             ;;       command line - and None/Back stay keywords, so
+             ;;       the bracket lists just those, and a click on it
+             ;;       sends what it shows.
+             ;;
+             ;;       A click takes the NEAREST marker or tag.  The
+             ;;       tags hang clear of each other, so the tag is the
+             ;;       easy target where the markers crowd - and when
+             ;;       two or more sit closer than the pickbox spans at
+             ;;       this zoom, the click cannot tell them apart, and
+             ;;       it says so and asks which, nearest first.  It
+             ;;       used to take the first in the LIST within a foot
+             ;;       of the click, which near the crossing was always
+             ;;       R1A, whichever marker was under the cursor.
              ((= stage 4)
-              ;; every tag is a keyword, so any of them can be typed -
-              ;; but a bracket listing forty-odd of them is unreadable,
-              ;; so the bracket shows only the words that are not in
-              ;; the table.  Everything it DOES show is a keyword, so
-              ;; nothing shown fails when it is clicked.
-              (setq kws "")
-              (foreach c sugs (setq kws (strcat kws (nth 6 c) " ")))
-              (setq kws   (strcat kws "Pick None")
-                    shown "Pick/None"
-                    ans   (abf:askkw
-                            (strcat "  Move Pt." nm
-                                    " - type a tag from the table")
-                            kws shown "None" T))
+              (initget 128 "None Back Undo")
+              (setq ans (getpoint (strcat "\n  Move Pt." nm
+                                          " - click a marker or its"
+                                          " tag, or type a tag"
+                                          " [None/Back] <None>: ")))
               (cond
-                ((eq ans 'ABF-BACK)
+                ((and ans (not (listp ans)) (member ans '("Back" "Undo")))
                  (abf:drop temps)
                  (setq temps nil)
                  ;; ABFIND came here from its own question, so Back
@@ -1283,7 +1552,7 @@
                            stage 1)
                      (princ "\nStepping back one point."))
                    (setq stage 2)))
-                ((= ans "None")
+                ((or (null ans) (and (not (listp ans)) (= ans "None")))
                  (abf:drop temps)
                  (setq temps nil)
                  (princ (strcat "\n  Pt." nm " left where it is."))
@@ -1291,36 +1560,59 @@
                    (setq done T)
                    (setq hist  (cons (list "DIM" pair) hist)
                          stage 1)))
-                ((= ans "Pick")
-                 (initget "Back Undo")
-                 (setq np (getpoint "\n  Click the one you want [Back]: "))
+                ((not (listp ans))
+                 ;; typed: a tag from the table - or the Pick that
+                 ;; earlier versions asked for first, which is now
+                 ;; just what the prompt does
                  (cond
-                   ((null np)
-                    (princ "\n  Nothing clicked - pick from the list."))
-                   ((member np '("Back" "Undo"))
-                    (princ "\n  Back to the list."))
+                   ((member (strcase ans) '("P" "PICK"))
+                    (princ (strcat "\n  Just click it - this prompt"
+                                   " takes the click itself.")))
+                   ((setq sug (abf:tag-lookup ans sugs))
+                    (abf:say-taken sug)
+                    (setq stage 5))
                    (t
-                    (setq sug nil)
-                    (foreach c sugs
-                      (if (and (null sug)
-                               (<= (abf:dist np (nth 5 c)) abf:*snap*))
-                        (setq sug c)))
-                    (if sug
-                      (setq stage 5)
-                      (princ (strcat "\n  No suggestion within "
-                                     (rtos abf:*snap* 4 0)
-                                     " of that click - try again."))))))
+                    (princ (strcat "\n  \"" ans "\" is not one of the"
+                                   " tags - type one from the table,"
+                                   " or click a marker or its tag.")))))
                 (t
-                 ;; initget refuses anything that is not one of the
-                 ;; tags, so the lookup cannot miss - the guard is
-                 ;; there so a future keyword cannot walk off the list
-                 (setq sug nil)
-                 (foreach c sugs
-                   (if (and (null sug) (= (nth 6 c) ans)) (setq sug c)))
-                 (if sug
-                   (setq stage 5)
-                   (princ (strcat "\n  \"" ans "\" is not one of the"
-                                  " tags - nothing moved."))))))
+                 (setq hits (abf:under-click ans sugs spots))
+                 (cond
+                   ((null hits)
+                    (princ (strcat "\n  No marker within "
+                                   (rtos abf:*snap* 4 0)
+                                   " of that click and no tag under it"
+                                   " - try again, or type a tag.")))
+                   ((null (cdr hits))
+                    (setq sug (cdr (car hits)))
+                    (abf:say-taken sug)
+                    (setq stage 5))
+                   (t
+                    ;; the click cannot tell these apart at this zoom:
+                    ;; say what they are, and ask - the nearest is the
+                    ;; Enter answer, and Back is the markers again
+                    (princ (strcat "\n  " (itoa (length hits))
+                                   " markers under that click - zoom"
+                                   " in, or say which:"))
+                    (setq kws "" shown "")
+                    (foreach h hits
+                      (setq c (cdr h))
+                      (princ (strcat "\n   " (abf:pad (nth 6 c) 6)
+                                     (caddr c) " "
+                                     (abf:fmt (cadddr c)) " -> "
+                                     (abf:fmt (nth 4 c))))
+                      (setq kws   (strcat kws (if (= kws "") "" " ")
+                                          (nth 6 c))
+                            shown (strcat shown (if (= shown "") "" "/")
+                                          (nth 6 c))))
+                    (setq ans (abf:askkw "  Which one?" kws shown
+                                         (nth 6 (cdr (car hits))) T))
+                    (cond
+                      ((eq ans 'ABF-BACK)
+                       (princ "\n  Back to the markers."))
+                      ((setq sug (abf:tag-lookup ans sugs))
+                       (abf:say-taken sug)
+                       (setq stage 5))))))))
 
              ;; -- 5: where the note goes, and then the move itself
              (t

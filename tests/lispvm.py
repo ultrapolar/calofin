@@ -230,6 +230,7 @@ class VM:
             # only ever the VM inventing a value; a name not listed here
             # now reads as nil, exactly as AutoCAD answers an unknown one.
             'PDMODE': 0, 'VIEWSIZE': 100.0, 'PLINETYPE': 2, 'PICKFIRST': 1,
+            'PICKBOX': 3,
             'CANNOSCALEVALUE': 1.0, 'DIMSCALE': 1.0, 'FILEDIA': 1,
             'DIMTXT': 0.18, 'TEMPPREFIX': 'C:\\Temp\\',
             'CECOLOR': 'BYLAYER', 'CELTYPE': 'BYLAYER', 'CELWEIGHT': -1,
