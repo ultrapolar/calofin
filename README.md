@@ -371,6 +371,18 @@ python3 tests/test_ariel_anchors.py
 python3 ariel/anchors.py --from-shot deck.png --annotate found.png
 ```
 
+Give it a list of anchors somebody placed by hand and it will say how
+far apart the two are - what it missed, what it invented, how far off
+each centroid is, and whether its click order is the same loop as
+yours, compared as a cycle so a different starting dot is not counted
+as forty-four errors. It exits non-zero when anything is missing or
+extra, so a threshold change can be re-scored against every photo kept
+from a real job:
+
+```
+python3 ariel/anchors.py --from-shot deck.png --score placed.txt
+```
+
 ## Tools (`tools/`)
 
 | Script | What it does |
@@ -492,8 +504,9 @@ python3 tests/test_ariel_anchors.py   # the Ariel anchor placer: the dot
                                       # detector against a mock deck - water,
                                       # brick coping and dappled shade all
                                       # the colour of a marker - plus the
-                                      # three orderings, the confirm loop and
-                                      # the PNG reader
+                                      # three orderings, the confirm loop,
+                                      # the PNG reader, and the score that
+                                      # holds a run to hand-placed anchors
 python3 tests/test_pool_form.py       # a form drives POOL and draws what
                                       # the command line draws
 python3 tests/test_spa_form.py        # the same for SPA, palette wire format

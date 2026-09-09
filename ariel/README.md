@@ -130,6 +130,77 @@ into a PNG. Neither needs Windows, Ariel or a mouse, so a job that came
 out wrong can be diagnosed and the thresholds settled somewhere else
 entirely — and it is how the test suite drives the thing.
 
+## Scoring it against anchors you placed yourself
+
+An opinion about whether the output "looks right" is worth much less
+than a list of anchors a person actually clicked. Give it one and it
+will tell you exactly how far apart the two are:
+
+```
+python3 ariel/anchors.py --from-shot deck.png --score placed.txt
+```
+
+```
+  truth 44   found 43   matched 43   missed 1   invented 0
+  offset: mean 1.2 px, median 1.0, worst 3.6 (your #17)
+  colour: 43 of 43 agree
+  order: your loop, starting at your #4
+
+  missed (yours, not found):
+    #17  455, 270
+```
+
+Four separate questions, because they fail separately and are fixed by
+different knobs:
+
+| Line | What it means when it is wrong |
+| --- | --- |
+| `missed` | a threshold is too tight — `--red-gap`, `--blue-gap`, `--blue-min`, `--min-dot` |
+| `invented` | one is too loose, or `--max-dot` is letting something large through |
+| `offset` | it is finding them but not centring them; every pair a few pixels out is a real fault even when nothing is missing |
+| `order` | compared as a **cycle** — starting at a different dot is the same walk, so only the route is reported, and `walked BACKWARDS` means try `--anticlockwise` |
+
+It exits `0` when nothing is missing or extra and `3` otherwise, so it
+works as a gate: change a threshold, re-score every photo you have kept,
+and know whether you fixed one job by breaking another.
+
+**Making the list.** `--dump-points` writes what the run settled on, in
+click order, in the format `--score` reads:
+
+```
+python ariel\anchors.py --dump-points placed.txt     # after the review step
+```
+
+In a live run that is the list *after* you have corrected it in the
+review window — so the way to get an answer key is to do one job
+properly by hand, dump it, and hold every later run to it. Pair it with
+`--save-shot` and you have both halves:
+
+```
+python ariel\anchors.py --save-shot deck.png --dump-points placed.txt
+```
+
+Coordinates are always relative to the **screenshot**, never the screen,
+so those two files go together on any machine. On a desktop whose
+top-left is not `0,0` — any machine with a monitor to the left of the
+primary one — screen coordinates would put every anchor out by the
+origin. The origin is recorded in the file's header if you need it back.
+
+Offline, `--dump-points` writes what the detector found on its own,
+which is how you freeze a run you are happy with.
+
+The file is plain text and can equally be typed:
+
+```
+# the anchors as clicked into Ariel
+403, 118, blue
+455, 270
+```
+
+`x, y` or `x y`, an optional colour, `#` for a comment. A line that is
+not a point is an error rather than a skip — a silently dropped anchor
+makes the score better and the answer wrong.
+
 ## Multiple monitors, and scaled displays
 
 The program asks Windows for per-monitor DPI awareness before it asks
@@ -152,11 +223,12 @@ the primary one (negative coordinates) included.
 | `ordering.py` | perimeter / reading / nearest, and where number 1 goes |
 | `placement.py` | the confirm-every-one state machine, no I/O at all |
 | `pixmap.py` | PNG in and out, PPM for Tk, and the annotated picture |
+| `score.py` | holding a run against a list of anchors a person placed |
 | `winio.py` | the only Windows in the program: screen, mouse, key hook |
 | `overlay.py` | the three Tk windows |
 | `ArielAnchors.pyw` | double-click launcher |
 
-Five of the seven never touch Windows, which is why
+Six of the eight never touch Windows, which is why
 `tests/test_ariel_anchors.py` can drive detection, ordering, the run
 loop and the file formats on any machine:
 

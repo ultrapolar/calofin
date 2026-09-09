@@ -32,6 +32,8 @@ Run: python3 tests/test_ariel_anchors.py
 """
 
 import colorsys
+import contextlib
+import io
 import math
 import struct
 import os
@@ -49,6 +51,7 @@ import detect       # noqa: E402
 import ordering     # noqa: E402
 import pixmap       # noqa: E402
 import placement    # noqa: E402
+import score        # noqa: E402
 
 CYAN = (0, 229, 255)
 NAVY = (20, 51, 122)
@@ -546,6 +549,191 @@ def test_png_reader_handles_every_row_filter_and_colour_type():
         os.rmdir(folder)
     print("ok  PNG reader unfilters all five row filters, RGB/RGBA/grey alike")
 
+# ------------------------------------------------------------------- score
+#
+# The reference for this program is a pair of screenshots: a deck, and
+# the same deck after an operator clicked all forty-four anchors into
+# Ariel.  The second is an answer key, and these are the checks that
+# make an answer key mean something.
+
+
+def test_point_files_round_trip_and_forgive_formatting():
+    folder = tempfile.mkdtemp(prefix="ariel-test-")
+    path = os.path.join(folder, "points.txt")
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("# a comment\n"
+                         "\n"
+                         "10, 20, blue\n"
+                         "30 40 RED\n"
+                         "  50,60  # trailing comment\n")
+        points = score.read_points(path)
+        assert points == [(10.0, 20.0, "blue"), (30.0, 40.0, "red"),
+                          (50.0, 60.0, None)], points
+
+        score.write_points(path, [(1.5, 2.4), (9, 9)], {0: "red"},
+                           note="from nowhere")
+        again = score.read_points(path)
+        assert again == [(2.0, 2.0, "red"), (9.0, 9.0, None)], again
+
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("10,20\nnot a point\n")
+        try:
+            score.read_points(path)
+        except ValueError as problem:
+            assert "line 2" in str(problem), problem
+        else:
+            raise AssertionError("a bad line must not be skipped -- a "
+                                 "dropped anchor flatters the score")
+    finally:
+        os.unlink(path)
+        os.rmdir(folder)
+    print("ok  point files round trip, and a malformed line is an error")
+
+
+def test_matching_pairs_nearest_first_and_respects_the_tolerance():
+    truth = [(0.0, 0.0), (100.0, 0.0), (200.0, 0.0)]
+    found = [(101.0, 0.0), (0.5, 0.0), (900.0, 900.0)]
+    pairs, missed, extra = score.match(truth, found, 8.0)
+    assert [(t, f) for t, f, _g in pairs] == [(0, 1), (1, 0)], pairs
+    assert missed == [2] and extra == [2], (missed, extra)
+    # A point just outside the tolerance is a miss, not a sloppy match.
+    edge, out_missed, _e = score.match([(0.0, 0.0)], [(8.0, 0.0)], 8.0)
+    assert len(edge) == 1 and not out_missed
+    edge, out_missed, _e = score.match([(0.0, 0.0)], [(8.1, 0.0)], 8.0)
+    assert not edge and out_missed == [0]
+    # Two truths inside one tolerance: the nearer pairing wins, and the
+    # other is reported rather than double-counted.
+    pairs, missed, extra = score.match([(0.0, 0.0), (3.0, 0.0)],
+                                       [(1.0, 0.0)], 8.0)
+    assert [(t, f) for t, f, _g in pairs] == [(0, 0)]
+    assert missed == [1] and extra == []
+    print("ok  matching is nearest-first, one-to-one, and honours the edge")
+
+
+def test_a_rotation_is_the_same_loop_but_a_reversal_is_not():
+    """Where number 1 sits is a preference; which way round is not."""
+    straight = list(range(8))
+    assert score.cycle_match(straight) == ("same", 8)
+    rotated = straight[5:] + straight[:5]
+    assert score.cycle_match(rotated) == ("same", 8), \
+        "starting somewhere else is the same walk"
+    assert score.cycle_match(list(reversed(rotated))) == ("reversed", 8)
+    muddled = [0, 4, 1, 5, 2, 6, 3, 7]
+    direction, agreeing = score.cycle_match(muddled)
+    assert agreeing < 8, "a different route must not read as the same loop"
+    print("ok  a rotated loop scores as the same walk, a reversed one does not")
+
+
+def test_the_score_tells_the_three_failures_apart():
+    """Missed dots, invented dots and a wrong route, on the real fixture."""
+    scene, ring = reference_scene()
+    img = scene.image()
+    truth = [(x, y, None) for (x, y) in ring]
+
+    dots = detect.find_dots(img)
+    points = ordering.sequence([d.point for d in dots], "perimeter")
+    colors = {d.point: d.color for d in dots}
+    by_index = dict((i, colors[p]) for i, p in enumerate(points))
+
+    lines, clean = score.report(truth, points, by_index)
+    assert clean, lines
+    assert "matched 44" in lines[0], lines[0]
+    assert any("your loop" in line and "NOT" not in line for line in lines), \
+        lines
+
+    # A threshold too tight loses the navy markers and nothing else.
+    tight = detect.find_dots(img, detect.Tuning(blue_gap=200))
+    lines, clean = score.report(truth, ordering.sequence(
+        [d.point for d in tight], "perimeter"))
+    assert not clean, "14 missing anchors must not score as clean"
+    assert "missed 14" in lines[0], lines[0]
+    assert any("missed (yours, not found)" in line for line in lines)
+
+    # A max-dot big enough to admit the pool invents exactly one anchor,
+    # at the water's centroid.
+    loose = detect.find_dots(img, detect.Tuning(max_size=400))
+    lines, clean = score.report(truth, ordering.sequence(
+        [d.point for d in loose], "perimeter"))
+    assert not clean and "invented 1" in lines[0], lines[0]
+
+    # The right dots in the wrong order: nothing missing, route wrong.
+    lines, clean = score.report(truth, ordering.sequence(
+        [d.point for d in dots], "reading"))
+    assert clean, "reading order finds the same dots"
+    assert any("NOT your loop" in line for line in lines), lines
+    print("ok  the score separates missed, invented and mis-ordered")
+
+
+def test_score_and_dump_from_the_command_line():
+    scene, ring = reference_scene()
+    folder = tempfile.mkdtemp(prefix="ariel-test-")
+    shot = os.path.join(folder, "deck.png")
+    placed = os.path.join(folder, "placed.txt")
+    dumped = os.path.join(folder, "dumped.txt")
+    try:
+        pixmap.write_png(shot, scene.image())
+        score.write_points(placed, ring)
+
+        def run(argv):
+            """The report is the point of --score, so it prints even under
+            --quiet; capture it rather than let it litter the run."""
+            said = io.StringIO()
+            with contextlib.redirect_stdout(said):
+                code = anchors.main(argv)
+            return code, said.getvalue()
+
+        code, said = run(["--from-shot", shot, "--score", placed, "--quiet"])
+        assert code == 0, said
+        assert "matched 44" in said and "your loop" in said, said
+
+        # A run that cannot see the navy dots must fail the gate.
+        code, said = run(["--from-shot", shot, "--score", placed,
+                          "--blue-gap", "200", "--quiet"])
+        assert code == 3, said
+        assert "missed 14" in said, said
+
+        code, said = run(["--from-shot", shot, "--dump-points", dumped,
+                          "--quiet"])
+        assert code == 0, said
+        again = score.read_points(dumped)
+        assert len(again) == len(ring), again
+        assert all(colour in ("red", "blue") for _x, _y, colour in again)
+        code, said = run(["--from-shot", shot, "--score", dumped, "--quiet"])
+        assert code == 0, \
+            "a dumped list must score clean against the run that wrote it"
+        assert "colour: 44 of 44 agree" in said, said
+
+        # A cropped run reports in the WHOLE picture's coordinates, so a
+        # point file made without --region still scores against one made
+        # with it.  Getting this wrong puts every anchor out by the crop.
+        band = os.path.join(folder, "band.txt")
+        code, said = run(["--from-shot", shot, "--region",
+                          "0,0,%d,90" % scene.width, "--dump-points", band,
+                          "--quiet"])
+        assert code == 0, said
+        top = score.read_points(band)
+        assert top, "the top band of the fixture holds the first row"
+        assert all(0 <= y <= 90 for _x, y, _c in top), top
+        pairs, missed, _extra = score.match(
+            [(x, y) for (x, y) in ring if y <= 90], top, 2.0)
+        assert not missed, "cropping must not shift the coordinates"
+
+        # --score with nothing fixed to score against is refused, not
+        # quietly ignored while the mouse starts clicking.
+        try:
+            anchors.main(["--score", placed])
+        except SystemExit as stop:
+            assert "--from-shot" in str(stop), stop
+        else:
+            raise AssertionError("--score without --from-shot must stop")
+    finally:
+        for name in os.listdir(folder):
+            os.unlink(os.path.join(folder, name))
+        os.rmdir(folder)
+    print("ok  --score gates a run and --dump-points writes the answer key")
+
+
 def test_annotate_marks_every_point():
     img = detect.Image(60, 40, bytes(bytearray(60 * 40 * 3)))
     points = [(15, 12), (40, 28)]
@@ -752,6 +940,11 @@ if __name__ == "__main__":
     test_png_round_trip_and_the_forms_a_grabber_writes()
     test_png_reader_rejects_what_it_cannot_read()
     test_png_reader_handles_every_row_filter_and_colour_type()
+    test_point_files_round_trip_and_forgive_formatting()
+    test_matching_pairs_nearest_first_and_respects_the_tolerance()
+    test_a_rotation_is_the_same_loop_but_a_reversal_is_not()
+    test_the_score_tells_the_three_failures_apart()
+    test_score_and_dump_from_the_command_line()
     test_annotate_marks_every_point()
     test_region_parsing_is_strict()
     test_tuning_follows_the_command_line()

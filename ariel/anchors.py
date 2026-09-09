@@ -59,6 +59,7 @@ import detect        # noqa: E402
 import ordering      # noqa: E402
 import pixmap        # noqa: E402
 import placement     # noqa: E402
+import score         # noqa: E402
 
 #: What one press of an arrow key does, before the Shift multiplier.
 STEP = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
@@ -143,6 +144,23 @@ def build_parser():
     tune.add_argument("--merge", type=float, default=4.0, metavar="PX",
                       help="dots closer than this are one dot (4)")
 
+    check = parser.add_argument_group(
+        "checking it against anchors you placed yourself")
+    check.add_argument("--score", metavar="FILE",
+                       help="compare what was found with a list of points "
+                            "you trust -- what it missed, what it invented, "
+                            "how far off each one is, and whether its "
+                            "click order is your loop. Needs --from-shot; "
+                            "exits non-zero if anything is missing or extra")
+    check.add_argument("--score-tol", type=float, default=score.TOLERANCE,
+                       metavar="PX",
+                       help="how far apart two points can be and still be "
+                            "the same anchor (%g)" % score.TOLERANCE)
+    check.add_argument("--dump-points", metavar="FILE",
+                       help="write the final list, in click order, as a "
+                            "point file -- correct it once in the review "
+                            "window and this is your answer key from then on")
+
     parser.add_argument("--quiet", action="store_true",
                         help="only the closing summary")
     return parser
@@ -214,12 +232,25 @@ def offline(args):
                   % (index + 1, point[0] + origin[0], point[1] + origin[1],
                      dot.color, dot.width, dot.height))
         print("\n  travel: %.0f px" % ordering.walk_length(points))
+    by_index = {i: colors.get(p, "blue") for i, p in enumerate(points)}
     if args.annotate:
-        pixmap.write_png(args.annotate,
-                         pixmap.annotate(shot, points,
-                                         {i: colors.get(p, "blue")
-                                          for i, p in enumerate(points)}))
+        pixmap.write_png(args.annotate, pixmap.annotate(shot, points,
+                                                        by_index))
         say(args, "wrote %s" % args.annotate)
+    placed = [(x + origin[0], y + origin[1]) for (x, y) in points]
+    if args.dump_points:
+        score.write_points(args.dump_points, placed, by_index,
+                           "from %s, %s%s" % (args.from_shot, args.order,
+                                              "" if not args.anticlockwise
+                                              else " anticlockwise"))
+        say(args, "wrote %s" % args.dump_points)
+    if args.score:
+        truth = score.read_points(args.score)
+        lines, clean = score.report(truth, placed, by_index, args.score_tol)
+        print("\nscored against %s (within %g px)"
+              % (args.score, args.score_tol))
+        print("\n".join(lines))
+        return 0 if clean else 3
     return 0
 
 
@@ -311,6 +342,21 @@ def run(args):
         say(args, "placing %d anchors, %s%s"
             % (len(points), order["mode"],
                "" if order["clockwise"] else " anticlockwise"))
+        if args.dump_points:
+            # Relative to the SCREENSHOT, not the screen.  The only thing
+            # that reads this file is --score, and --score runs on a saved
+            # shot -- so on a desktop whose top-left is not 0,0 (any
+            # machine with a monitor to the left of the primary) screen
+            # coordinates would put every anchor out by the origin and the
+            # score would be nonsense.  The origin is in the header so the
+            # mapping back is not lost.
+            score.write_points(
+                args.dump_points,
+                [(x - screen[0], y - screen[1]) for (x, y) in points], None,
+                "relative to the screenshot; screen origin was %d,%d. "
+                "%s%s" % (screen[0], screen[1], order["mode"],
+                          "" if order["clockwise"] else " anticlockwise"))
+            say(args, "wrote %s" % args.dump_points)
 
         winio.focus_window(target)
         time.sleep(args.start_delay)
@@ -412,6 +458,12 @@ def place(args, view, winio, overlay, points, screen):
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.score and not args.from_shot:
+        raise SystemExit(
+            "anchors: --score compares a detection run with a list you "
+            "trust, so it needs a fixed picture to run on: pass "
+            "--from-shot as well. Use --save-shot on the machine to make "
+            "one.")
     if args.from_shot:
         return offline(args)
     return run(args)
