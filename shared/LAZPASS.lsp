@@ -84596,7 +84596,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.15")
+(setq *lazform-version* "v2.16")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -86475,10 +86475,25 @@
 ;;;  is in lzf:dead: E2 F2 F1 E1 have boxes on every sheet whose flow
 ;;;  can reach a Sport, and every bottom that is NOT a Sport greys
 ;;;  them.
+;;;  THE OTHER HALF IS THE DISPATCH, NOT THE CHAIN.  btmspec describes
+;;;  the H/G/F/E/C/D/C2 chain, but POOL routes on the bottom type
+;;;  BEFORE it reaches that chain: pool:hopovaldsp and pool:hopgrecdsp
+;;;  call pool:hopoval / pool:hopgrec on "Normal" and hand every other
+;;;  bottom to pool:hopnormal or pool:hopsport instead.  W and R3 are
+;;;  asked only inside pool:hopoval, L1 and X only inside pool:hopgrec,
+;;;  so on any other bottom all four are questions POOL will never
+;;;  reach.  Un-greyed they were counted live, called filled by the
+;;;  state line and sent by lzf:poolform -- and read by nothing: an
+;;;  Oval on a Wedge bottom draws the same 105 entities with them and
+;;;  without.  T is deliberately NOT in this list: it is the hopper's
+;;;  straight-side check on the oval family, but the Grecian's
+;;;  perimeter block and the Roman's letters mode both ask their own T,
+;;;  so greying it here would hide a box POOL really does ask for.
 (defun lzf:btskip (bt / sp out)
+  (setq out (if (= bt "Normal") nil (list "w" "r3" "l1" "x")))
   (cond
-    ((= bt "Sport") (list "h" "f" "e" "c2"))
-    ((not pool:btmspec) nil)          ; no POOL: grey nothing, ask everything
+    ((= bt "Sport") (append (list "h" "f" "e" "c2") out))
+    ((not pool:btmspec) out)          ; no POOL: only the dispatch is known
     (t
      (setq sp (pool:btmspec bt))
      (if (not (car sp))    (setq out (cons "g" out)))

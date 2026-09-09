@@ -1522,6 +1522,13 @@ def spec_of(bt):
     return [bool(x) for x in bv.globals['test:*sp*'][:4]]
 
 
+#: btmspec describes the H/G/F/E chain, but POOL routes on the bottom
+#: type BEFORE it gets there: pool:hopoval and pool:hopgrec run on
+#: "Normal" alone, and they are the only callers that ask W, R3, L1 and
+#: X.  So every bottom but Normal greys these on top of whatever the
+#: chain says -- see lzf:btskip.
+HOPPER_ONLY = {"w", "r3", "l1", "x"}
+
 for bt in BOTTOMS:
     got = skip_of(bt)
     if bt == "Sport":
@@ -1540,14 +1547,18 @@ for bt in BOTTOMS:
             want |= {"c", "d"}
         if not ask_c2:
             want.add("c2")
+    if bt != "Normal":
+        want |= HOPPER_ONLY
     assert got == want, "%s: greys %r, POOL's own spec says %r" % (bt, got, want)
     print("   %-8s greys %s" % (bt, sorted(got) or "nothing"))
 
 # the two that would actually mislead someone, stated plainly
 assert skip_of("Normal") == {"c", "d", "c2"}, \
     "a Normal hopper draws no side view, so C and D must be greyed"
-assert skip_of("SHallow") == set(), \
-    "SHallow asks everything including C2 -- nothing should be greyed"
+assert skip_of("SHallow") == HOPPER_ONLY, \
+    "SHallow asks the whole chain including C2, so the chain greys " \
+    "nothing -- but it is not a Normal bottom, so the hopper-only " \
+    "letters must still go"
 assert "c2" in skip_of("Wedge") and "c2" not in skip_of("SHallow"), \
     "C2 is a SHallow-only question"
 
@@ -2231,6 +2242,65 @@ assert leaked.get('insq') == 'Outofsquare', \
 assert leaked.get('btype') == 'Normal', \
     "LAZTXT inherited the bottom type from a LAZFORM run: %r" % leaked
 print("   it starts from a clean slate, not from the last LAZFORM run")
+
+
+print("== the hopper letters POOL only asks on a Normal bottom ==")
+# POOL routes on the bottom type BEFORE it reaches the H/G/F/E chain
+# btmspec describes: pool:hopovaldsp and pool:hopgrecdsp call
+# pool:hopoval / pool:hopgrec on "Normal" only.  W and R3 are asked
+# solely inside pool:hopoval, L1 and X solely inside pool:hopgrec, so on
+# any other bottom all four are boxes POOL can never reach.  Until v2.16
+# they stayed live, were counted, were called filled by the state line
+# and were sent -- and read by nothing.
+hv = fresh(with_pool=True)
+HOPPER = ("w", "r3", "l1", "x")
+for shape in ("Oval", "ROUnd", "ROman", "Grecian"):
+    hv.loads('(setq t:*c* (lzf:chart "%s") t:*k* (lzf:keys t:*c*))' % shape)
+    have = [str(k) for k in hv.globals['t:*k*']]
+    on_sheet = [k for k in HOPPER if k in have]
+    assert on_sheet, "%s carries none of the hopper letters" % shape
+    for bt in ("Normal", "Sport", "Wedge", "SLope", "MOdflat", "SHallow"):
+        hv.loads('(setq t:*d* (lzf:dead t:*c* nil "%s"))' % bt)
+        dead = [str(x) for x in (hv.globals['t:*d*'] or [])]
+        greyed = [k for k in on_sheet if k in dead]
+        if bt == "Normal":
+            assert not greyed, \
+                "%s/Normal greys a hopper letter POOL does ask: %r" % (shape, greyed)
+        else:
+            assert greyed == on_sheet, \
+                "%s/%s leaves %r live; POOL never asks them" % (
+                    shape, bt, [k for k in on_sheet if k not in greyed])
+    # T is NOT one of them: the oval family's T is the hopper's, but the
+    # Grecian's perimeter block and the Roman's letters mode ask their
+    # own, so greying it here would hide a live box
+    if "tt" in have:
+        hv.loads('(setq t:*d* (lzf:dead t:*c* nil "Wedge"))')
+        assert "tt" not in [str(x) for x in (hv.globals['t:*d*'] or [])], \
+            "%s greyed T, which its perimeter block still asks" % shape
+print("   W/R3/L1/X grey on every bottom but Normal; T stays live")
+
+# and the reason they must be greyed: POOL draws the same pool either way
+def _oval(extra):
+    v = fresh(with_pool=True)
+    pairs = [("shape", "Oval"), ("insq", "Insquare"), ("btype", "Wedge"),
+             ("tot", 400.0), ("tp", 240.0), ("le", 200.0), ("h", 40.0),
+             ("g", 90.0), ("f", 140.0), ("e", 30.0), ("m", 50.0),
+             ("l", 100.0), ("k", 50.0), ("c", 42.0), ("d", 72.0),
+             ("lr", 100.0), ("rr", 100.0)] + extra
+    lit = " ".join("(cons (quote %s) %s)" % (k, ('"%s"' % x) if isinstance(x, str)
+                                             else repr(x)) for k, x in pairs)
+    v.loads("(setq pool:*form* (list %s))" % lit)
+    v.run('c:POOL', [(0.0, 0.0, 0.0), "Yes"])
+    return ([repr(v.entdata[e]) for e in v.entities if e not in v.deleted],
+            [p for p, _ in v.prompts])
+
+
+bare, bare_p = _oval([])
+fed, fed_p = _oval([("w", 60.0), ("r3", 12.0)])
+assert bare == fed, "W and R3 changed the drawing after all -- re-check lzf:btskip"
+assert not [p for p in fed_p if "W -" in p or "R3" in p], fed_p
+print("   an Oval on a Wedge draws the same %d entities with them and without"
+      % len(bare))
 
 
 print("ALL LAZFORM TESTS PASSED")
