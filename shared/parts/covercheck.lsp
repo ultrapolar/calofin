@@ -229,7 +229,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.12")
+(setq *cchk-version* "v1.13")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -3374,7 +3374,7 @@
                      (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
-        (command "_.UNDO" "_End")
+        (if undo-open (command "_.UNDO" "_End"))
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n\n--- COVERCHECK complete ---"
@@ -3882,7 +3882,7 @@
           (setq undo-open T)))
       (princ "\n--- Building the demo scene ---")
       (cchk:tut-build bp)
-      (command "_.UNDO" "_End")
+      (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
       (setvar "CMDECHO" oldecho)
       (command "_.ZOOM" "_Window"

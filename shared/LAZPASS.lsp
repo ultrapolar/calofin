@@ -27778,7 +27778,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.5")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -28891,7 +28891,7 @@
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
   (acc:run T)
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -28913,7 +28913,7 @@
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
   (acc:run nil)
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -28947,7 +28947,7 @@
   (princ (strcat "\nABCURCHECKRESCUE: " (itoa n)
                  " of this command's own object(s) erased"
                  (if (= ans "All") "" ", declarations kept") "."))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -29033,7 +29033,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.5")
+(setq *abpcheck-version* "v1.6")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -29734,7 +29734,7 @@
                           (abp:dstr abp:*asked*) " of a line.")))
          (princ (strcat "\nReport written on layer " abp:*report-layer*
                         ".  ABPCHECKRESCUE removes both."))))))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -29763,7 +29763,7 @@
     (princ (strcat "\nABPCHECKRESCUE: " (itoa n)
                    " ABPCHECK object(s) removed."))
     (princ "\nABPCHECKRESCUE: nothing of ABPCHECK's left to remove."))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -46415,7 +46415,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.12")
+(setq *cchk-version* "v1.13")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -49560,7 +49560,7 @@
                      (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
-        (command "_.UNDO" "_End")
+        (if undo-open (command "_.UNDO" "_End"))
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n\n--- COVERCHECK complete ---"
@@ -50068,7 +50068,7 @@
           (setq undo-open T)))
       (princ "\n--- Building the demo scene ---")
       (cchk:tut-build bp)
-      (command "_.UNDO" "_End")
+      (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
       (setvar "CMDECHO" oldecho)
       (command "_.ZOOM" "_Window"
@@ -50638,7 +50638,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.13")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.14")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -52257,7 +52257,7 @@
                             0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
-        (command "_.UNDO" "_End")
+        (if undo-open (command "_.UNDO" "_End"))
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n\n--- DIMCHECK complete ---"
@@ -52721,7 +52721,7 @@
   (if (member ans '("Demo" "Both"))
     (dchk:tut-demo))
 
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldecho)
   (princ (strcat "\n\n--- Tutorial finished ---"
@@ -54804,7 +54804,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.4")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.5")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -59542,7 +59542,7 @@
           (if (and en (entget en)) (entdel en))
           (fit:purge-mine fit:*miss-layer*)
           (princ "\nNothing kept - the drawing is unchanged."))))))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (setq fit:*nobottom* nil)
@@ -63068,7 +63068,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.9")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.10")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -66413,7 +66413,7 @@
                      (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
-        (command "_.UNDO" "_End")
+        (if undo-open (command "_.UNDO" "_End"))
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n\n--- LINFINCHECK complete ---"
@@ -67222,7 +67222,7 @@
   (if (member ans '("Demo" "Both"))
     (lfc:tut-demo))
 
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldecho)
   (princ (strcat "\n\n--- Tutorial finished ---"

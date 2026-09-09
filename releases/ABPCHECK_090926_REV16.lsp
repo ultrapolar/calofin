@@ -63,7 +63,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.5")
+(setq *abpcheck-version* "v1.6")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -902,7 +902,7 @@
                           (abp:dstr abp:*asked*) " of a line.")))
          (princ (strcat "\nReport written on layer " abp:*report-layer*
                         ".  ABPCHECKRESCUE removes both."))))))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (abp:sysrestore)
   (princ))
@@ -931,7 +931,7 @@
     (princ (strcat "\nABPCHECKRESCUE: " (itoa n)
                    " ABPCHECK object(s) removed."))
     (princ "\nABPCHECKRESCUE: nothing of ABPCHECK's left to remove."))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (abp:sysrestore)
   (princ))
