@@ -103,9 +103,13 @@ for _p in lsp_files(LISP_DIR):
         ROSTER.append((_m.group(1).upper(), _p.name, _sibs))
 
 #: commands that need more than Enters to reach their close, with the
-#: script that gets them there
+#: script that gets them there.  Every one of these was found the hard
+#: way: the Enter-only sweep could not reach its close, so the bug hid
+#: behind the input it wanted.
 NAMED = {
     "FITABHD": [None, "Rectangle", "Square", 1.0, 15, "Insquare", "No", None],
+    # length, width, height, base point, and No to "place another"
+    "CUSTBLOCK": [84.0, 36.0, 4.0, None, "No"],
 }
 
 print(f"driving {len(ROSTER)} command(s) with undo recording off")
@@ -150,6 +154,12 @@ vm.sysvars["UNDOCTL"] = UNDO_OFF
 vm.run("c:FITABHD", list(NAMED["FITABHD"]))
 undo = [c for c in vm.commands if c and c[0] == "_.UNDO"]
 check("with undo OFF neither half is sent", undo == [], f"{undo}")
+
+# autobead-build is a FUNCTION, not a command, so the sweep above can
+# never reach it -- and it carried the same defect.  Its undo-off run is
+# driven where the driver for it already lives: the step routines are
+# what call it, and tests/test_steps_settings.py has the scripts that
+# get all three of them to their bead hand-off.
 
 if failures:
     print(f"\n{len(failures)} undo check(s) FAILED")

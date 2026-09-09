@@ -34090,7 +34090,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.5"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.6"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -34610,7 +34610,7 @@
   ;; -- restore --------------------------------------------------------------
   (setvar "PEDITACCEPT" oldpa)
   (setvar "OSMODE" oldos)
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   ;; the mode pushed at the top comes off on this exit too, not only in
@@ -50215,7 +50215,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.2")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.3")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -50478,7 +50478,7 @@
 
     ;; -- 5. put the drawing back the way it was
     (cbk:restyle odim)
-    (command "_.UNDO" "_End")
+    (if undo-open (command "_.UNDO" "_End"))
     (setq undo-open nil)
     (cal:sysrestore)
 
@@ -52780,7 +52780,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.5")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -52933,7 +52933,7 @@
                 (setvar "OSMODE"  oos)
                 (setvar "CLAYER"  ocl)
                 (setvar "CMDECHO" oce)
-                (command "_.UNDO" "_End")
+                (if undo-open (command "_.UNDO" "_End"))
                 (setq undo-open nil)
                 (princ (strcat "\n" (itoa (length kept))
                                " continued dimension(s) added."))))))))

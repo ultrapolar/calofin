@@ -34,7 +34,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.5")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -187,7 +187,7 @@
                 (setvar "OSMODE"  oos)
                 (setvar "CLAYER"  ocl)
                 (setvar "CMDECHO" oce)
-                (command "_.UNDO" "_End")
+                (if undo-open (command "_.UNDO" "_End"))
                 (setq undo-open nil)
                 (princ (strcat "\n" (itoa (length kept))
                                " continued dimension(s) added."))))))))

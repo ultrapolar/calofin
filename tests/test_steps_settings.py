@@ -669,6 +669,36 @@ def test_the_bead_hand_off_with_autobead_actually_loaded():
           % ", ".join("%s: %d objects" % t for t in seen))
 
 
+def test_the_bead_hand_off_in_a_drawing_with_undo_off():
+    """autobead-build opens its own undo group conditionally -- _Begin
+    errors when recording is off -- and closed it unconditionally, so a
+    drafter with undo off got the beads drawn and then an AutoLISP
+    error, with the OSMODE and PEDITACCEPT putback behind it never
+    reached.  It is a function, not a command, so the command sweep in
+    tests/test_undo_off.py cannot reach it: the step routines are what
+    call it, and this is the shortest path there.
+    """
+    for cmd, (path, script) in sorted(SCRIPT.items()):
+        vm = fresh(path)
+        vm.load(AUTOBEAD)
+        vm.sysvars['UNDOCTL'] = 4          # undo on, recording bit clear
+        s = list(script())
+        if s and s[0] == 'WALLS':
+            s[0] = walls(vm, pair=(cmd == 'c:CORNERSTP'))
+        try:
+            vm.run(cmd, s + BEAD_TAIL)
+        except LispError as e:
+            raise AssertionError(
+                "[%s with undo recording off] %s" % (cmd, e)) from None
+        assert any("Bead the steps?" in p for p, _ in vm.prompts), \
+            "%s never reached the hand-off, so this proves nothing" % cmd
+        assert not [c for c in vm.commands
+                    if c and c[0] == '_.UNDO'], \
+            "%s sent an UNDO command with recording off: %r" % (
+                cmd, [c for c in vm.commands if c and c[0] == '_.UNDO'])
+    print("   and with undo recording off none of them sends an UNDO at all")
+
+
 def main():
     test_every_knob_is_read_and_every_read_is_a_knob()
     test_each_reader_falls_back_to_the_value_the_block_sets()
@@ -684,6 +714,7 @@ def main():
     test_a_frozen_current_layer_is_called_out()
     test_autobead_absent_is_said_not_crashed()
     test_the_bead_hand_off_with_autobead_actually_loaded()
+    test_the_bead_hand_off_in_a_drawing_with_undo_off()
     test_a_selection_that_cannot_be_a_run_stops_with_a_reason()
     test_hemistep_reads_a_curve_it_was_handed()
     print("all tests passed")
