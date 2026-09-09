@@ -2132,4 +2132,85 @@ print("   %d lines, widest %d, in a %s-wide list box; letters all present"
       % (len(art), widest, m.group(1)))
 
 
+print("== LAZASCII and LAZTXT: the two commands nothing ran ==")
+# Both sat in check_registry's UNTESTED list.  The DCL text each one
+# writes was probed above, but neither COMMAND was ever executed, so the
+# dialog cycle around it -- write the file, load it, open the page, fill
+# the lists, close, unload, delete the temp file -- was unasserted, and
+# so was LAZTXT's whole reason to exist: handing POOL its answers.
+
+av = stubbed()
+av.loads('(setq stub:*rcs* \'(0))')          # Cancel out of the viewer
+try:
+    av.run('c:LAZASCII', [])
+except LispError as e:
+    raise AssertionError('[LAZASCII] %s' % e) from None
+assert str(av.globals.get('stub:*opened*')) == 'lazform_ascii', \
+    "LAZASCII opened %r, not the ascii page" % av.globals.get('stub:*opened*')
+assert DRAW['list'], "the pool list box was never filled"
+art = [str(x) for x in av.globals['lzf:*poolart*']]
+assert DRAW['list'] == art, \
+    "the list holds %d rows for %d lines of art" % (len(DRAW['list']), len(art))
+assert any('a text tile, unlike an image tile' in str(p) for p in av.printed), \
+    av.printed
+print("   opens the ascii page, fills the pool list with all %d lines,"
+      % len(art))
+print("   and reports what the probe was for")
+
+# a dialog file that cannot be written is reported and never loaded
+av = stubbed()
+av.loads('(defun lzf:write-dcl () nil)')
+av.run('c:LAZASCII', [])
+assert any('could not write the dialog file' in str(p) for p in av.printed), \
+    av.printed
+assert not av.globals.get('stub:*opened*'), "it opened a page with no file"
+print("   an unwritable dialog file is reported, and nothing is opened")
+
+
+# --- LAZTXT: the text view feeds POOL, or says why it cannot ----------
+tv = stubbed()                                # no POOL in this session
+tv.run('c:LAZTXT', [])
+assert any('POOL is not loaded' in str(p) for p in tv.printed), tv.printed
+assert not tv.globals.get('stub:*opened*'), \
+    "it opened the view with no POOL to hand the answers to"
+print("   without POOL loaded it names the file to APPLOAD and stops")
+
+tv = stubbed(with_pool=True)
+tv.loads('(setq stub:*rcs* \'(0))')           # Cancel
+tv.run('c:LAZTXT', [])
+assert str(tv.globals.get('stub:*opened*')) == 'lazform_txt', \
+    "LAZTXT opened %r" % tv.globals.get('stub:*opened*')
+assert any('cancelled, nothing drawn' in str(p) for p in tv.printed), tv.printed
+assert not tv.entdata, "a cancelled LAZTXT drew something"
+print("   Cancel closes the view and draws nothing")
+
+# Accept: what is typed into the boxes reaches POOL as its answers.
+# POOL itself is replaced by a recorder here on purpose -- driving the
+# whole of c:POOL again would test POOL, and what is untested is
+# LAZTXT's own job: turning the boxes into the form and handing it over.
+# The three states of STANDARDS' form contract are what matter: a filled
+# box is sent, an empty one is not sent at all so POOL asks, and NA is
+# sent as (key . nil) so POOL takes NA for an answer.
+tv = stubbed(with_pool=True)
+tv.loads('(defun pool:run-with-answers (form) (setq t:*handed* form) (princ))')
+tv.loads('(setq stub:*rcs* \'(1))')
+tv.loads('(setq stub:*type* \'(("tp" "480") ("le" "240") ("h" "NA")))')
+tv.run('c:LAZTXT', [])
+out = ''.join(str(p) for p in tv.printed)
+assert 'answers to POOL' in out, out
+handed = tv.globals.get('t:*handed*')
+assert handed, "LAZTXT accepted but handed POOL nothing"
+form = {str(p.a if isinstance(p, Dot) else p[0]):
+        (p.b if isinstance(p, Dot) else (p[1] if len(p) > 1 else None))
+        for p in handed}
+assert float(form['tp']) == 480.0 and float(form['le']) == 240.0, form
+assert 'h' in form and form['h'] is None, \
+    "NA should reach POOL as (h . nil), not %r" % form.get('h')
+assert 'g' not in form, "an empty box was sent instead of left for POOL to ask"
+# the chart's own answers ride along, so POOL never re-asks what the
+# tab strip already decided
+assert str(form.get('shape')) == 'Rectangle', form
+print("   Accept hands POOL the typed boxes, NA as nil, empties not at all")
+
+
 print("ALL LAZFORM TESTS PASSED")
