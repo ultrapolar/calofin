@@ -21,7 +21,14 @@ itself, so a swap added tomorrow is checked the day it lands.  A swap
 whose target has no inputs here FAILS rather than being skipped
 quietly; to excuse one, name it in SKIP with a reason.
 
+The tier makes no difference here and the suite says so: the two
+files it reads are always lisp/<tool> and shared/parts/CALOFIN-LIB.lsp,
+because "the local helper and the cal: one that replaces it" is only a
+question at the standalone tier -- at the grouped tier the local is
+already gone, by construction.
+
 Run: python3 tests/test_cal_parity.py
+     CALOFIN_LISP_ROOT=shared python3 tests/test_cal_parity.py
 """
 
 import ast
@@ -190,10 +197,23 @@ _vms = {}
 
 
 def vm_for(src):
+    """The tool's STANDALONE source and the library, side by side.
+
+    Both are read and evaluated directly rather than through vm.load,
+    which is what CALOFIN_LISP_ROOT remaps: at the grouped tier that
+    remap would hand back the twin, where the local helper has already
+    been replaced by the cal: one -- there would be nothing left to
+    compare, and the run would die on the local's own name.  This
+    comparison only ever means one thing, standalone against library,
+    so it reads the same two files whichever tier the suite is run at.
+    """
     if src not in _vms:
         vm = VM()
-        vm.load(os.path.join(REPO_DIR, src))
-        vm.load(LIB)
+        with open(os.path.join(REPO_DIR, src), encoding="utf-8",
+                  errors="replace") as fh:
+            vm.loads(fh.read())
+        with open(LIB, encoding="utf-8", errors="replace") as fh:
+            vm.loads(fh.read())
         _vms[src] = vm
     return _vms[src]
 
