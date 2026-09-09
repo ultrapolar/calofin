@@ -1257,6 +1257,45 @@ def test_no_points_at_all():
     print("ok  an empty drawing is reported, not crashed on")
 
 
+
+def test_undo_off_is_not_an_error_at_the_end_of_the_run():
+    """abf:run opens its undo group conditionally -- _Begin errors when
+    UNDOCTL's recording bit is clear -- and closed it unconditionally,
+    so a drafter with undo off got the dimensions drawn and then an
+    AutoLISP error, with the OSMODE and CMDECHO putback queued behind it
+    and never reached.  Both commands run through abf:run, so both
+    carried it.
+
+    The sweep in tests/test_undo_off.py cannot catch this one: ABFIND
+    stops before asking anything on an empty drawing (it is in
+    test_cancel_paths' NO_PROMPT for that reason), so a bare VM never
+    reaches the close.  It takes the survey points below to get there.
+    """
+    for cmd, script in (('c:ABFIND', ['17', 'No', None]),
+                        ('c:ABMOVE', ['17', 'None'])):
+        vm = newvm()
+        vm.sysvars['UNDOCTL'] = 4        # undo on, recording bit clear
+        survey(vm)
+        run(vm, cmd, script, cmd + ' with undo recording off')
+        sent = [c for c in vm.commands if c and c[0] == '_.UNDO']
+        assert sent == [], \
+            "%s sent an UNDO command with recording off: %r" % (cmd, sent)
+        assert vm.sysvars['CMDECHO'] == 1 and vm.sysvars['OSMODE'] == 4133, \
+            "%s did not put the settings back: CMDECHO %r OSMODE %r" % (
+                cmd, vm.sysvars['CMDECHO'], vm.sysvars['OSMODE'])
+
+    # and with recording on the bracket is still there, both halves
+    for cmd, script in (('c:ABFIND', ['17', 'No', None]),
+                        ('c:ABMOVE', ['17', 'None'])):
+        vm = newvm()
+        survey(vm)
+        run(vm, cmd, script, cmd + ' with undo recording on')
+        sent = [c for c in vm.commands if c and c[0] == '_.UNDO']
+        assert sent == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']], \
+            "%s: %r" % (cmd, sent)
+    print("ok  undo off is not an error, and undo on still brackets the run")
+
+
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
 
 if __name__ == '__main__':

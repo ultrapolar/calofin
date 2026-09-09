@@ -193,7 +193,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.9")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.10")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -1689,7 +1689,7 @@
          (setvar "CLAYER"  ocl)
          (setvar "OSMODE"  oos)
          (setvar "CMDECHO" oce)
-         (command "_.UNDO" "_End")
+         (if undo-open (command "_.UNDO" "_End"))
          (setq undo-open nil)
 
          (if (= made 0)
