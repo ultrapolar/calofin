@@ -84,7 +84,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.14")
+(setq *lazform-version* "v2.15")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1924,7 +1924,15 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZTXT error: " msg)))
     (princ))
-  (setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil lzf:*chart* c)
+  ;; the same clean slate lzf:show starts from.  The in-square toggle
+  ;; and the bottom-type row have to be reset here too, even though this
+  ;; view carries no tile for either: it READS both when it builds the
+  ;; form (below), so a LAZFORM run earlier in the session used to hand
+  ;; POOL an in-square Wedge here with nothing on screen saying so and
+  ;; no way to change it.
+  (setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil lzf:*chart* c
+        lzf:*insq* nil                  ; out of square, as a run starts
+        lzf:*btype* 0)                  ; Normal, first in the list
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZTXT error: could not write the dialog file."))

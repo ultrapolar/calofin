@@ -2212,5 +2212,25 @@ assert 'g' not in form, "an empty box was sent instead of left for POOL to ask"
 assert str(form.get('shape')) == 'Rectangle', form
 print("   Accept hands POOL the typed boxes, NA as nil, empties not at all")
 
+# The text view carries NO tile for the in-square toggle or the
+# bottom-type row, yet it reads both when it builds the form.  Before
+# v2.15 it reset only lzf:*vals*/*cvals*/*pvals*, so a LAZFORM run
+# earlier in the same session left them set and LAZTXT handed POOL an
+# in-square Wedge with nothing on screen saying so.
+tv = stubbed(with_pool=True)
+tv.loads('(defun pool:run-with-answers (form) (setq t:*handed* form) (princ))')
+tv.loads('(setq lzf:*insq* t lzf:*btype* 2)')   # what a LAZFORM run leaves
+tv.loads('(setq stub:*rcs* \'(1))')
+tv.loads('(setq stub:*type* \'(("tp" "480")))')
+tv.run('c:LAZTXT', [])
+leaked = {str(p.a if isinstance(p, Dot) else p[0]):
+          str(p.b if isinstance(p, Dot) else p[1])
+          for p in tv.globals['t:*handed*']}
+assert leaked.get('insq') == 'Outofsquare', \
+    "LAZTXT inherited the in-square toggle from a LAZFORM run: %r" % leaked
+assert leaked.get('btype') == 'Normal', \
+    "LAZTXT inherited the bottom type from a LAZFORM run: %r" % leaked
+print("   it starts from a clean slate, not from the last LAZFORM run")
+
 
 print("ALL LAZFORM TESTS PASSED")
