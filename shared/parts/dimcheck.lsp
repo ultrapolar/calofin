@@ -118,7 +118,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.13")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.14")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -1737,7 +1737,7 @@
                             0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
-        (command "_.UNDO" "_End")
+        (if undo-open (command "_.UNDO" "_End"))
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n\n--- DIMCHECK complete ---"
@@ -2201,7 +2201,7 @@
   (if (member ans '("Demo" "Both"))
     (dchk:tut-demo))
 
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldecho)
   (princ (strcat "\n\n--- Tutorial finished ---"

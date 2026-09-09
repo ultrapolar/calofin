@@ -108,7 +108,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.4")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.5")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -4997,7 +4997,7 @@
           (if (and en (entget en)) (entdel en))
           (fit:purge-mine fit:*miss-layer*)
           (princ "\nNothing kept - the drawing is unchanged."))))))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (fit:sysrestore)
   (setq fit:*nobottom* nil)

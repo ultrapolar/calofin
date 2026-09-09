@@ -113,7 +113,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.13")
+(setq *spacheck-version* "v1.14")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1018,6 +1018,45 @@
         (if (or (null bestd) (< d bestd)) (setq bestd d best e)))))
   (if best (spachk:dxf 1 best)))
 
+;; WHICH SHEET THE COVER WAS LAID OUT TO.  A taper row can carry more
+;; than one foam sheet -- STANDARD 3-2 and 4-2 each carry two -- and
+;; SPA does not use the first: spa:hbest solves and SCORES every sheet
+;; in the row and keeps the winner, then says which one it took
+;; ("FOAM SHEET USED: 49.50 x 102").  Reading (car opts) here measured
+;; SPA's own drawing against a sheet SPA had explicitly rejected, and
+;; red-flagged it: a 98 x 60 cover on STANDARD 3-2 goes to the 49.5
+;; sheet because 48 would need 3 pieces and that row allows only 2,
+;; and the audit then called the 49 piece an overrun of "the 48.0000
+;; sheet".  The same (car opts) fixed the length check to the wrong
+;; sheet, which can miss a real overrun as easily as invent one.
+;;
+;; So the sheet is chosen from what was DRAWN, and chosen the way that
+;; is safe to be wrong: the one the geometry fits.  If none fits, the
+;; drawing overruns every sheet the row offers, and the complaint is
+;; made against the most generous one -- the widest, then the longest
+;; -- so a reported overrun is one no sheet in the row could have
+;; absorbed.  WIDE / RUN are nil when there is nothing to measure
+;; (no cover outline, no hinges), and then that half does not
+;; discriminate.
+(defun spachk:foampick (opts wide run / best fits opt w l)
+  (foreach opt opts
+    (setq w (car opt) l (cdr opt))
+    (if (and (or (null wide) (<= wide (+ w spachk:*foam-slack*)))
+             (or (null run) (null l) (<= run (+ l spachk:*foam-slack*)))
+             (null fits))
+        (setq fits opt)))
+  (if fits
+      fits
+      (progn                      ; nothing fits: the most generous one
+        (foreach opt opts
+          (if (or (null best)
+                  (> (car opt) (car best))
+                  (and (= (car opt) (car best))
+                       (> (if (cdr opt) (cdr opt) 0.0)
+                          (if (cdr best) (cdr best) 0.0))))
+              (setq best opt)))
+        best)))
+
 (defun spachk:audit-hinges (ss cov grade taper / rows ents hngs labels n xs
                                                  row opts allowed fw fl
                                                  sorted e bb want got
@@ -1052,7 +1091,6 @@
       (if row
         (setq opts (caddr row) allowed (cadddr row))
         (setq opts (list (cons 48.0 96.0)) allowed (list 2 3 4 5)))
-      (setq fw (car (car opts)) fl (cdr (car opts)))
       (setq rows (append rows
                   (list (spachk:row
                           (strcat "Hinges: " (itoa (length sorted))
@@ -1076,6 +1114,19 @@
         (setq maxrun (max maxrun
                           (abs (- (cadr (spachk:dxf 11 e))
                                   (cadr (spachk:dxf 10 e)))))))
+      ;; the widest piece, measured before either check so the sheet can
+      ;; be chosen from the drawing rather than from the row's order
+      (if (and cov (setq bb (cal:bbox-ent cov)))
+          (progn
+            (setq maxpiece 0.0 prev (caar bb))
+            (foreach e sorted
+              (setq maxpiece (max maxpiece
+                                  (- (car (spachk:dxf 10 e)) prev))
+                    prev (car (spachk:dxf 10 e))))
+            (setq maxpiece (max maxpiece (- (caadr bb) prev)))))
+      (setq row (spachk:foampick opts maxpiece maxrun)
+            fw  (car row)
+            fl  (cdr row))
       (if (and fl (> maxrun (+ fl spachk:*foam-slack*)))
         (setq rows (append rows
                     (list (spachk:row
@@ -1094,13 +1145,8 @@
                             (if fl nil 2))))))
       ;; --- piece widths against the foam width.  This one DOES need
       ;;     the cover: a piece is bounded by the outline's edges.
-      (if (and cov (setq bb (cal:bbox-ent cov)))
+      (if maxpiece
         (progn
-          (setq maxpiece 0.0 prev (caar bb))
-          (foreach e sorted
-            (setq maxpiece (max maxpiece (- (car (spachk:dxf 10 e)) prev))
-                  prev (car (spachk:dxf 10 e))))
-          (setq maxpiece (max maxpiece (- (caadr bb) prev)))
           (if (> maxpiece (+ fw spachk:*foam-slack*))
             (setq rows (append rows
                         (list (spachk:row

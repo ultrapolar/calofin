@@ -699,6 +699,60 @@ def test_a_turned_spa_still_reports_its_letters():
     assert lb['A'][0][1] == ys[-1], lb         # ...and topmost
 
 
+
+def test_pickturn_says_which_way_it_actually_went():
+    """The spillway can overrule the long-overall rule in BOTH
+    directions, and what is announced has to match which one happened.
+
+    spa:pickturn is handed pref -- the way round the long-overall rule
+    asks for -- and returns the way round to draw.  When the other way
+    round scores better it flips, and until REV17 it announced a
+    quarter turn either way.  With pref already T that flip means NOT
+    turning, so the command line said the spa was turned when it was
+    left as measured, and spa:advise wrote the same claim into the
+    report block that is drawn on the sheet.  Nothing read it back, so
+    nothing failed: the drawing was right and the note on it was wrong.
+
+    spa:hscore is replaced here rather than driven: the bug is in
+    pickturn's own announcement, and scoring a real spillway into a
+    tie-break needs the whole hinge pass to say anything about it.
+    """
+    def probe(pref):
+        vm = VM()
+        vm.load(LSP)
+        vm.loads('(setq spa:*hingeon* t spa:*spills* (list (list 0.0 10.0)))')
+        vm.loads('(defun spa:foamopts (g tp)'
+                 ' (list (list (cons 48.0 96.0)) (list 2 3 4 5)))')
+        # the second call -- the OTHER way round -- always scores better
+        vm.loads('(setq t:*n* 0)')
+        vm.loads('(defun spa:hscore (c turn opts allowed)'
+                 ' (setq t:*n* (1+ t:*n*)) (if (= t:*n* 1) 1 2))')
+        vm.loads('(setq spa:*spillturn* nil spa:*advice* nil)')
+        vm.loads(f'(setq t:*r* (spa:pickturn {pref} (list "c0") (list "c1")))')
+        return (vm.globals['t:*r*'],
+                vm.globals.get('spa:*spillturn*'),
+                [str(a) for a in (vm.globals.get('spa:*advice*') or [])],
+                ''.join(str(p) for p in vm.printed))
+
+    # the rule wanted it left alone; the spillway turns it
+    turned, spillturn, advice, out = probe('nil')
+    assert turned, "the spillway should have turned it"
+    assert spillturn, "spa:*spillturn* must say the spillway did the turning"
+    assert advice == ['TURNED A QUARTER TURN TO CLEAR THE SPILLWAY'], advice
+    assert 'turned a quarter turn instead' in out, out
+
+    # the rule wanted a quarter turn; the spillway leaves it as measured
+    turned, spillturn, advice, out = probe('t')
+    assert not turned, "the spillway should have left it as measured"
+    assert not spillturn, \
+        "spa:*spillturn* claims a turn that did not happen: %r" % spillturn
+    assert advice == ['LEFT AS MEASURED TO CLEAR THE SPILLWAY'], \
+        "the report block is told the opposite of what was drawn: %r" % advice
+    assert 'left as measured instead' in out, out
+    assert 'turned a quarter turn' not in out, \
+        "the command line announces a turn that did not happen: %r" % out
+
+
 if __name__ == '__main__':
     fails = 0
     for name, fn in sorted(globals().items()):

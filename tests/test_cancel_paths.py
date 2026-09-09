@@ -33,8 +33,7 @@ counts it as tested by construction.
 
 Commands that reach no prompt at all on an empty drawing (they say so
 and stop) or whose first act is a DCL dialog are named in NO_PROMPT so
-a command that starts asking is noticed, not missed.  PADDLE's first
-act is the ActiveX block surface the VM does not carry.
+a command that starts asking is noticed, not missed.
 
 Run: python3 tests/test_cancel_paths.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_cancel_paths.py
@@ -87,8 +86,11 @@ NO_PROMPT = {
     # it, on a drawing that HAS them.
     'VSCONV',
 }
-#: the ActiveX surface the VM does not carry
-NEEDS_ACTIVEX = {'PADDLE'}
+#: the ActiveX surface the VM does not carry.  Empty now: PADDLE was
+#: the one entry, and the VM has carried vla-get-ActiveLayout/-Block,
+#: vla-InsertBlock and the rest since tests/test_paddle.py was written,
+#: so PADDLE is driven here like every other command.
+NEEDS_ACTIVEX = set()
 
 #: commands that ask nothing: they run to completion on an empty drawing
 QUIET = ['COVERCHECKRESCUE', 'DIMCHECKRESCUE', 'LINFINCHECKRESCUE',

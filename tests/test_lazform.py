@@ -1522,6 +1522,13 @@ def spec_of(bt):
     return [bool(x) for x in bv.globals['test:*sp*'][:4]]
 
 
+#: btmspec describes the H/G/F/E chain, but POOL routes on the bottom
+#: type BEFORE it gets there: pool:hopoval and pool:hopgrec run on
+#: "Normal" alone, and they are the only callers that ask W, R3, L1 and
+#: X.  So every bottom but Normal greys these on top of whatever the
+#: chain says -- see lzf:btskip.
+HOPPER_ONLY = {"w", "r3", "l1", "x"}
+
 for bt in BOTTOMS:
     got = skip_of(bt)
     if bt == "Sport":
@@ -1540,14 +1547,18 @@ for bt in BOTTOMS:
             want |= {"c", "d"}
         if not ask_c2:
             want.add("c2")
+    if bt != "Normal":
+        want |= HOPPER_ONLY
     assert got == want, "%s: greys %r, POOL's own spec says %r" % (bt, got, want)
     print("   %-8s greys %s" % (bt, sorted(got) or "nothing"))
 
 # the two that would actually mislead someone, stated plainly
 assert skip_of("Normal") == {"c", "d", "c2"}, \
     "a Normal hopper draws no side view, so C and D must be greyed"
-assert skip_of("SHallow") == set(), \
-    "SHallow asks everything including C2 -- nothing should be greyed"
+assert skip_of("SHallow") == HOPPER_ONLY, \
+    "SHallow asks the whole chain including C2, so the chain greys " \
+    "nothing -- but it is not a Normal bottom, so the hopper-only " \
+    "letters must still go"
 assert "c2" in skip_of("Wedge") and "c2" not in skip_of("SHallow"), \
     "C2 is a SHallow-only question"
 
@@ -2130,6 +2141,166 @@ assert int(m.group(1)) >= widest, (
 assert 'key = "ruler"' in adcl, "no fixed-pitch ruler beside the pool"
 print("   %d lines, widest %d, in a %s-wide list box; letters all present"
       % (len(art), widest, m.group(1)))
+
+
+print("== LAZASCII and LAZTXT: the two commands nothing ran ==")
+# Both sat in check_registry's UNTESTED list.  The DCL text each one
+# writes was probed above, but neither COMMAND was ever executed, so the
+# dialog cycle around it -- write the file, load it, open the page, fill
+# the lists, close, unload, delete the temp file -- was unasserted, and
+# so was LAZTXT's whole reason to exist: handing POOL its answers.
+
+av = stubbed()
+av.loads('(setq stub:*rcs* \'(0))')          # Cancel out of the viewer
+try:
+    av.run('c:LAZASCII', [])
+except LispError as e:
+    raise AssertionError('[LAZASCII] %s' % e) from None
+assert str(av.globals.get('stub:*opened*')) == 'lazform_ascii', \
+    "LAZASCII opened %r, not the ascii page" % av.globals.get('stub:*opened*')
+assert DRAW['list'], "the pool list box was never filled"
+art = [str(x) for x in av.globals['lzf:*poolart*']]
+assert DRAW['list'] == art, \
+    "the list holds %d rows for %d lines of art" % (len(DRAW['list']), len(art))
+assert any('a text tile, unlike an image tile' in str(p) for p in av.printed), \
+    av.printed
+print("   opens the ascii page, fills the pool list with all %d lines,"
+      % len(art))
+print("   and reports what the probe was for")
+
+# a dialog file that cannot be written is reported and never loaded
+av = stubbed()
+av.loads('(defun lzf:write-dcl () nil)')
+av.run('c:LAZASCII', [])
+assert any('could not write the dialog file' in str(p) for p in av.printed), \
+    av.printed
+assert not av.globals.get('stub:*opened*'), "it opened a page with no file"
+print("   an unwritable dialog file is reported, and nothing is opened")
+
+
+# --- LAZTXT: the text view feeds POOL, or says why it cannot ----------
+tv = stubbed()                                # no POOL in this session
+tv.run('c:LAZTXT', [])
+assert any('POOL is not loaded' in str(p) for p in tv.printed), tv.printed
+assert not tv.globals.get('stub:*opened*'), \
+    "it opened the view with no POOL to hand the answers to"
+print("   without POOL loaded it names the file to APPLOAD and stops")
+
+tv = stubbed(with_pool=True)
+tv.loads('(setq stub:*rcs* \'(0))')           # Cancel
+tv.run('c:LAZTXT', [])
+assert str(tv.globals.get('stub:*opened*')) == 'lazform_txt', \
+    "LAZTXT opened %r" % tv.globals.get('stub:*opened*')
+assert any('cancelled, nothing drawn' in str(p) for p in tv.printed), tv.printed
+assert not tv.entdata, "a cancelled LAZTXT drew something"
+print("   Cancel closes the view and draws nothing")
+
+# Accept: what is typed into the boxes reaches POOL as its answers.
+# POOL itself is replaced by a recorder here on purpose -- driving the
+# whole of c:POOL again would test POOL, and what is untested is
+# LAZTXT's own job: turning the boxes into the form and handing it over.
+# The three states of STANDARDS' form contract are what matter: a filled
+# box is sent, an empty one is not sent at all so POOL asks, and NA is
+# sent as (key . nil) so POOL takes NA for an answer.
+tv = stubbed(with_pool=True)
+tv.loads('(defun pool:run-with-answers (form) (setq t:*handed* form) (princ))')
+tv.loads('(setq stub:*rcs* \'(1))')
+tv.loads('(setq stub:*type* \'(("tp" "480") ("le" "240") ("h" "NA")))')
+tv.run('c:LAZTXT', [])
+out = ''.join(str(p) for p in tv.printed)
+assert 'answers to POOL' in out, out
+handed = tv.globals.get('t:*handed*')
+assert handed, "LAZTXT accepted but handed POOL nothing"
+form = {str(p.a if isinstance(p, Dot) else p[0]):
+        (p.b if isinstance(p, Dot) else (p[1] if len(p) > 1 else None))
+        for p in handed}
+assert float(form['tp']) == 480.0 and float(form['le']) == 240.0, form
+assert 'h' in form and form['h'] is None, \
+    "NA should reach POOL as (h . nil), not %r" % form.get('h')
+assert 'g' not in form, "an empty box was sent instead of left for POOL to ask"
+# the chart's own answers ride along, so POOL never re-asks what the
+# tab strip already decided
+assert str(form.get('shape')) == 'Rectangle', form
+print("   Accept hands POOL the typed boxes, NA as nil, empties not at all")
+
+# The text view carries NO tile for the in-square toggle or the
+# bottom-type row, yet it reads both when it builds the form.  Before
+# v2.15 it reset only lzf:*vals*/*cvals*/*pvals*, so a LAZFORM run
+# earlier in the same session left them set and LAZTXT handed POOL an
+# in-square Wedge with nothing on screen saying so.
+tv = stubbed(with_pool=True)
+tv.loads('(defun pool:run-with-answers (form) (setq t:*handed* form) (princ))')
+tv.loads('(setq lzf:*insq* t lzf:*btype* 2)')   # what a LAZFORM run leaves
+tv.loads('(setq stub:*rcs* \'(1))')
+tv.loads('(setq stub:*type* \'(("tp" "480")))')
+tv.run('c:LAZTXT', [])
+leaked = {str(p.a if isinstance(p, Dot) else p[0]):
+          str(p.b if isinstance(p, Dot) else p[1])
+          for p in tv.globals['t:*handed*']}
+assert leaked.get('insq') == 'Outofsquare', \
+    "LAZTXT inherited the in-square toggle from a LAZFORM run: %r" % leaked
+assert leaked.get('btype') == 'Normal', \
+    "LAZTXT inherited the bottom type from a LAZFORM run: %r" % leaked
+print("   it starts from a clean slate, not from the last LAZFORM run")
+
+
+print("== the hopper letters POOL only asks on a Normal bottom ==")
+# POOL routes on the bottom type BEFORE it reaches the H/G/F/E chain
+# btmspec describes: pool:hopovaldsp and pool:hopgrecdsp call
+# pool:hopoval / pool:hopgrec on "Normal" only.  W and R3 are asked
+# solely inside pool:hopoval, L1 and X solely inside pool:hopgrec, so on
+# any other bottom all four are boxes POOL can never reach.  Until v2.16
+# they stayed live, were counted, were called filled by the state line
+# and were sent -- and read by nothing.
+hv = fresh(with_pool=True)
+HOPPER = ("w", "r3", "l1", "x")
+for shape in ("Oval", "ROUnd", "ROman", "Grecian"):
+    hv.loads('(setq t:*c* (lzf:chart "%s") t:*k* (lzf:keys t:*c*))' % shape)
+    have = [str(k) for k in hv.globals['t:*k*']]
+    on_sheet = [k for k in HOPPER if k in have]
+    assert on_sheet, "%s carries none of the hopper letters" % shape
+    for bt in ("Normal", "Sport", "Wedge", "SLope", "MOdflat", "SHallow"):
+        hv.loads('(setq t:*d* (lzf:dead t:*c* nil "%s"))' % bt)
+        dead = [str(x) for x in (hv.globals['t:*d*'] or [])]
+        greyed = [k for k in on_sheet if k in dead]
+        if bt == "Normal":
+            assert not greyed, \
+                "%s/Normal greys a hopper letter POOL does ask: %r" % (shape, greyed)
+        else:
+            assert greyed == on_sheet, \
+                "%s/%s leaves %r live; POOL never asks them" % (
+                    shape, bt, [k for k in on_sheet if k not in greyed])
+    # T is NOT one of them: the oval family's T is the hopper's, but the
+    # Grecian's perimeter block and the Roman's letters mode ask their
+    # own, so greying it here would hide a live box
+    if "tt" in have:
+        hv.loads('(setq t:*d* (lzf:dead t:*c* nil "Wedge"))')
+        assert "tt" not in [str(x) for x in (hv.globals['t:*d*'] or [])], \
+            "%s greyed T, which its perimeter block still asks" % shape
+print("   W/R3/L1/X grey on every bottom but Normal; T stays live")
+
+# and the reason they must be greyed: POOL draws the same pool either way
+def _oval(extra):
+    v = fresh(with_pool=True)
+    pairs = [("shape", "Oval"), ("insq", "Insquare"), ("btype", "Wedge"),
+             ("tot", 400.0), ("tp", 240.0), ("le", 200.0), ("h", 40.0),
+             ("g", 90.0), ("f", 140.0), ("e", 30.0), ("m", 50.0),
+             ("l", 100.0), ("k", 50.0), ("c", 42.0), ("d", 72.0),
+             ("lr", 100.0), ("rr", 100.0)] + extra
+    lit = " ".join("(cons (quote %s) %s)" % (k, ('"%s"' % x) if isinstance(x, str)
+                                             else repr(x)) for k, x in pairs)
+    v.loads("(setq pool:*form* (list %s))" % lit)
+    v.run('c:POOL', [(0.0, 0.0, 0.0), "Yes"])
+    return ([repr(v.entdata[e]) for e in v.entities if e not in v.deleted],
+            [p for p, _ in v.prompts])
+
+
+bare, bare_p = _oval([])
+fed, fed_p = _oval([("w", 60.0), ("r3", 12.0)])
+assert bare == fed, "W and R3 changed the drawing after all -- re-check lzf:btskip"
+assert not [p for p in fed_p if "W -" in p or "R3" in p], fed_p
+print("   an Oval on a Wedge draws the same %d entities with them and without"
+      % len(bare))
 
 
 print("ALL LAZFORM TESTS PASSED")

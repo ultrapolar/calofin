@@ -35,7 +35,7 @@
 ;;;            LISPLABVER   print the loaded version
 ;;; ======================================================================
 
-(setq *lisplab-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *lisplab-version* "v1.3")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -1027,7 +1027,7 @@
     "lab:qsort, lab:sort-by for lesson 2.  Every sort takes its"
     "comparator as an argument, so they work on anything."
     ""))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (lab:sysrestore)
   (princ))

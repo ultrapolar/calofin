@@ -882,6 +882,74 @@ def test_the_tunables_block_holds_every_knob_each_explained():
     assert not missing, missing
 
 
+def test_a_multi_sheet_taper_is_audited_against_the_sheet_spa_used():
+    """A taper row can carry more than one foam sheet, and SPA does not
+    take the first: spa:hbest solves and scores EVERY sheet in the row,
+    keeps the winner and says which one it took ("FOAM SHEET USED:
+    49.50 x 102").  spachk:audit-hinges read (car opts) and measured
+    the drawing against a sheet SPA had explicitly rejected.
+
+    A 98 x 60 cover on STANDARD 3-2 is the case: 48" would need three
+    pieces and that row allows only two, so SPA lays it out to the
+    49.5" sheet and draws one hinge at x=49 -- and SPACHECK called that
+    an overrun of "the 48.0000 sheet", red-flagging a drawing SPA had
+    just produced to its own rules.  The length half was fixed to the
+    wrong sheet the same way, which can miss a real overrun as easily
+    as invent one.
+
+    Every hinge case in this file used 4-3 or 1-3/8, both single-sheet
+    rows, which is exactly why the disagreement was invisible here.
+    """
+    for taper in ('3-2', '4-2'):
+        vm = build([None, 'Coversize', 'Rectangle', None, 98.0, 60.0,
+                    'Yes', '90', 'Yes', 'No', None, taper, 'No'])
+        add_block(vm, 'STANDARD', taper)
+        said = "".join(str(x) for x in vm.printed)
+        assert 'FOAM SHEET USED: 49.50 x 102' in said, \
+            "SPA did not take the second sheet on %s: %s" % (
+                taper, [l for l in said.split(chr(10)) if 'FOAM' in l])
+        txt = report_of(vm)
+        bad = [p for p in problems(txt) if 'Foam' in p]
+        assert not bad, \
+            "SPACHECK reds SPA's own %s drawing: %r" % (taper, bad)
+        assert 'within 49.5000, OK' in txt, \
+            "%s was not measured against the 49.5 sheet SPA used" % taper
+        assert 'within 102.0000, OK' in txt, \
+            "%s was not measured against the 102 sheet SPA used" % taper
+
+    # and a single-sheet row still measures against its only sheet
+    vm = build([None, 'Coversize', 'Rectangle', None, 98.0, 60.0,
+                'Yes', '90', 'Yes', 'No', None, '4-3', 'No'])
+    add_block(vm, 'STANDARD', '4-3')
+    txt = report_of(vm)
+    assert 'within 48.0000, OK' in txt and 'within 144.0000, OK' in txt, \
+        "a single-sheet taper stopped using its own sheet"
+
+
+def test_a_real_foam_overrun_is_still_reported():
+    """The picker must not turn into "whatever passes".  When the
+    drawing fits no sheet the row offers, the complaint is still made --
+    against the most generous sheet, so a reported overrun is one no
+    sheet in the row could have absorbed."""
+    vm = build([None, 'Coversize', 'Rectangle', None, 98.0, 60.0,
+                'Yes', '90', 'Yes', 'No', None, '3-2', 'No'])
+    add_block(vm, 'STANDARD', '3-2')
+    # widen one piece past every sheet in the row by moving the hinge
+    vm.loads('(setq t:*h* (ssget "_X" (list (cons 8 "SPA-HINGE"))))')
+    hs = vm.globals.get('t:*h*')
+    if hs and len(hs) > 1:
+        e = hs[1]
+        data = vm.entdata[e]
+        for i, g in enumerate(data):
+            if isinstance(g, list) and g and g[0] in (10, 11):
+                data[i] = [g[0], 95.0] + list(g[2:])
+        txt = report_of(vm)
+        bad = [p for p in problems(txt) if 'Foam width' in p]
+        assert bad, "a 95-wide piece fits no sheet in 3-2, but nothing was said"
+        assert '49.5000' in bad[0], \
+            "the overrun should be reported against the widest sheet: %r" % bad
+
+
 if __name__ == '__main__':
     fails = 0
     for name, fn in sorted(globals().items()):

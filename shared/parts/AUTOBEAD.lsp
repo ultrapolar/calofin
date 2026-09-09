@@ -56,7 +56,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.5"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.6"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -576,7 +576,7 @@
   ;; -- restore --------------------------------------------------------------
   (setvar "PEDITACCEPT" oldpa)
   (setvar "OSMODE" oldos)
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   ;; the mode pushed at the top comes off on this exit too, not only in

@@ -265,6 +265,11 @@ class VM:
         self.error_mode_underflow = 0   # pops with nothing pushed
         self.globals[Sym('*push-error-using-command*')] = T
         self.globals[Sym('*pop-error-mode*')] = T
+        #: the AutoCAD environment strings getenv/setenv read and write.
+        #: Per-VM and empty, never the process environment: a test that
+        #: read the real one would pass or fail by what the machine
+        #: running it had exported.
+        self.env = {}
         self.undo_groups = 0       # _.UNDO _Begin / _End balance
         self.undo_marks = 0        # StartUndoMark / EndUndoMark balance
         self.undo_log = []         # 'start' / 'end', in order
@@ -1358,8 +1363,36 @@ def _ssadd(vm, a):
     return ss
 
 
-BUILTINS[Sym('sslength')] = lambda vm, a: len(a[0]) - 1
-BUILTINS[Sym('ssname')] = lambda vm, a: a[0][int(a[1]) + 1]
+def _is_ss(v):
+    return isinstance(v, list) and v and v[0] == '<ss>'
+
+
+@bi('sslength')
+def _sslength(vm, a):
+    """(sslength ss) -- and NOT (sslength nil).  An empty ssget gives
+    nil, not an empty set, so this is the trap LISPLAB teaches by name;
+    AutoLISP answers it with "bad argument type: lselsetp nil".  It has
+    to be a LispError and not a Python one, because only a LispError
+    reaches *error* and only a LispError is caught by
+    vl-catch-all-apply -- a TypeError escaping here would take the whole
+    test run down instead of the one routine that forgot to check."""
+    if not _is_ss(a[0] if a else None):
+        raise LispError("sslength: bad argument type: lselsetp "
+                        f"{a[0] if a else None!r}", vm)
+    return len(a[0]) - 1
+
+
+@bi('ssname')
+def _ssname(vm, a):
+    """(ssname ss i) -- the i-th entity, or NIL past the end.  Running
+    off the end is not an error in AutoLISP, which is what lets
+    (while (setq e (ssname ss i)) ...) terminate; a nil set, though,
+    is the same bad argument type sslength refuses."""
+    if not _is_ss(a[0] if a else None):
+        raise LispError("ssname: bad argument type: lselsetp "
+                        f"{a[0] if a else None!r}", vm)
+    i = int(num(a[1]))
+    return a[0][i + 1] if 0 <= i < len(a[0]) - 1 else NIL
 
 
 def _dxf(vm, e, code):
@@ -1392,6 +1425,20 @@ def _filt_one(vm, e, code, want):
     "border" finds an entity on "BORDER" and "COVER*" finds them all.
     Everything else compares straight."""
     got = _dxf(vm, e, code)
+    if code == 410 and (got is NIL or got is None):
+        # 410 is the layout an entity lives in, and AutoCAD reports it
+        # for EVERY graphical entity -- "Model" for everything in model
+        # space.  The VM models one space and only stamps 410 on the
+        # entities that carry it explicitly, so without this default a
+        # filter of (410 . "Model") -- the documented way to keep "_X"
+        # from sweeping the paper-space tabs, which LISPLAB teaches as
+        # a trap to avoid -- matched NOTHING here.  Six tools scope
+        # their sweep that way (AutoDim, CDCREATE, PADDLE, POINTRENAMER,
+        # xftconv, covercheck); every one of them selected an empty set
+        # in the VM while the same code finds the whole drawing in
+        # AutoCAD, so the tests were reading the "nothing found" branch
+        # and passing on it.
+        got = 'Model'
     if isinstance(want, str):
         if not isinstance(got, str):
             return False
@@ -2354,11 +2401,62 @@ def _bulge_arc_pts(p1, p2, bulge):
     return _arc_pts(cx, cy, abs(r), a0, a1)
 
 
+def _block_pts(vm, name, seen=None):
+    """The definition's geometry, in the block's own coordinates.  Each
+    sub-entity is read through the same _ent_pts every drawing entity
+    uses, by lending it an entdata slot for the length of the call --
+    nested INSERTs recurse, and a definition that contains itself stops
+    at SEEN instead of running the stack out."""
+    seen = set() if seen is None else seen
+    if name in seen:
+        return []
+    seen = seen | {name}
+    out = []
+    for alist in vm.blocks.get(name, []):
+        tmp = Ent()
+        vm.entdata[tmp] = list(alist)
+        try:
+            if _dxf(vm, tmp, 0) == 'INSERT':
+                out += _insert_pts(vm, tmp, seen)
+            else:
+                out += _ent_pts(vm, tmp)
+        finally:
+            del vm.entdata[tmp]
+    return out
+
+
+def _insert_pts(vm, e, seen=None):
+    """An INSERT's extents: its definition's geometry scaled, rotated
+    and moved onto the insertion point.  Reading only group 10 -- which
+    is what the generic branch below would do -- collapses every block
+    reference to a point, and a bounding box measured that way reports
+    a zero-size pad as happily as a real one."""
+    name = _dxf(vm, e, 2)
+    pts = _block_pts(vm, str(name), seen)
+    if not pts:
+        return []
+    ip = pt(_dxf(vm, e, 10))
+    xs = _dxf(vm, e, 41)
+    ys = _dxf(vm, e, 42)
+    xs = num(xs) if isinstance(xs, (int, float)) else 1.0
+    ys = num(ys) if isinstance(ys, (int, float)) else 1.0
+    rot = _dxf(vm, e, 50)
+    rot = num(rot) if isinstance(rot, (int, float)) else 0.0
+    c, s = math.cos(rot), math.sin(rot)
+    out = []
+    for x, y in pts:
+        x, y = x * xs, y * ys
+        out.append((ip[0] + x * c - y * s, ip[1] + x * s + y * c))
+    return out
+
+
 def _ent_pts(vm, e):
     """Points whose extents are the entity's bounding box.  Text is
     reduced to its insertion point -- the VM has no font metrics, so a
     box around an MTEXT would be a guess dressed as a measurement."""
     t = _dxf(vm, e, 0)
+    if t == 'INSERT':
+        return _insert_pts(vm, e)
     if t == 'LWPOLYLINE':
         vs = [pt(v) for v in _all_dxf(vm, e, 10)]
         bs = [num(b) for b in _all_dxf(vm, e, 42)]
@@ -2413,6 +2511,50 @@ def _vla_getboundingbox(vm, a):
     vm.set(a[1], [min(xs), min(ys), 0.0])
     vm.set(a[2], [max(xs), max(ys), 0.0])
     return NIL
+
+
+@bi('findfile')
+def _findfile(vm, a):
+    """(findfile name) -- the full path, or nil when the support path
+    does not hold it.  Nil is the answer a test wants nearly always: it
+    is what sends a routine down its "the file is not installed"
+    branch, which is the branch a drafter without the shared drive
+    takes.  A suite that needs a hit defines its own findfile, and a
+    defun shadows this the way AutoLISP's does.
+
+    Without it PADDLE could not run at all: paddle--ensure-block asks
+    for the pad drawing before it does anything else, so c:PADDLE and
+    c:TUTORIALPADDLE both died on an undefined function and no suite
+    could execute either."""
+    name = a[0]
+    if not isinstance(name, str) or not name:
+        return NIL
+    return os.path.abspath(name) if os.path.isfile(name) else NIL
+
+
+@bi('getenv')
+def _getenv(vm, a):
+    """(getenv name) -- an AutoCAD environment string, nil when unset.
+    Per-VM, not the process environment: a test must not read whatever
+    the machine running it happens to have exported."""
+    return vm.env.get(str(a[0]), NIL)
+
+
+@bi('setenv')
+def _setenv(vm, a):
+    """(setenv name value) -- stores it, and returns the value the way
+    the real one does.  Values are always strings in AutoCAD, so a
+    number written here reads back as its printed form, which is the
+    round-trip a routine that stores a setting depends on."""
+    v = a[1]
+    vm.env[str(a[0])] = v if isinstance(v, str) else _rtos_default(v)
+    return v
+
+
+def _rtos_default(v):
+    if isinstance(v, float) and v == int(v):
+        return str(int(v))
+    return str(v)
 
 
 @bi('*push-error-using-command*')
@@ -2512,6 +2654,13 @@ def _vla_item(vm, a):
     tblobjname hands out, so a Lock put here shows in group 70 there.
     A name the table does not hold throws, as the real collection's
     Key-not-found does."""
+    if a[0] == BLOCK_COLLECTION:
+        # the Blocks collection answers with the DEFINITION, not with
+        # anything in the drawing -- what PADDLE deletes to drop the
+        # throwaway definition its file import leaves behind
+        if str(a[1]) not in vm.tables.get('BLOCK', set()):
+            raise LispError(f'vla-Item: no block named {a[1]!r}', vm)
+        return BlockDef(str(a[1]))
     if a[0] != LAYER_COLLECTION:
         raise LispError(f'vla-Item: unsupported collection {a[0]!r}', vm)
     rec = _tblobjname(vm, ['LAYER', a[1]])
@@ -2572,6 +2721,129 @@ def _vla_put_lock(vm, a):
     name = _group(vm, a[0], 2, 'vla-put-Lock')
     vm.lock_log.append((str(name).upper(), on))
     return NIL
+
+
+#: The layout, its block (model space) and the block-definition
+#: collection.  PADDLE is the one tool that reaches the drawing through
+#: this path instead of entmake: it asks the layout for its block and
+#: hands that to vla-InsertBlock.  Without these the whole routine --
+#: c:PADDLE and c:TUTORIALPADDLE both -- was unrunnable here, which is
+#: why tests/test_cancel_paths.py had to carry a NEEDS_ACTIVEX exemption
+#: for it and no suite ever executed either command.
+LAYOUT_OBJECT = '<active-layout>'
+MODEL_SPACE = '<model-space>'
+BLOCK_COLLECTION = '<blocks>'
+
+
+class BlockDef:
+    """One entry of the Blocks collection.  vla-Item hands it out and
+    vla-Delete drops the definition it names."""
+    __slots__ = ('name',)
+
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self):
+        return f"<block {self.name!r}>"
+
+
+@bi('vla-get-activelayout')
+def _vla_get_activelayout(vm, a):
+    _doc(vm, a, 'vla-get-ActiveLayout')
+    return LAYOUT_OBJECT
+
+
+@bi('vla-get-block')
+def _vla_get_block(vm, a):
+    """(vla-get-Block layout) -- the block a layout draws into, i.e.
+    model space when TILEMODE is on.  Only the layout has one; asking
+    the document is the mistake that reads as nil in AutoLISP and then
+    fails one call later, so it throws here instead."""
+    if not a or a[0] != LAYOUT_OBJECT:
+        raise LispError('vla-get-Block: not a layout: '
+                        f'{a[0] if a else None!r}', vm)
+    return MODEL_SPACE
+
+
+@bi('vla-get-blocks')
+def _vla_get_blocks(vm, a):
+    _doc(vm, a, 'vla-get-Blocks')
+    return BLOCK_COLLECTION
+
+
+@bi('vla-add')
+def _vla_add(vm, a):
+    """(vla-Add layers name) -- the collection's Add.  AutoCAD hands
+    back the EXISTING record when the name is already taken rather than
+    erroring, so a routine that adds a layer it may already have does
+    not need to look first."""
+    if not a or a[0] != LAYER_COLLECTION:
+        raise LispError(f'vla-Add: unsupported collection '
+                        f'{a[0] if a else None!r}', vm)
+    name = str(a[1])
+    rec = _tblobjname(vm, ['LAYER', name])
+    if rec is not NIL:
+        return rec
+    _entmake(vm, [[Dot(0, 'LAYER'), Dot(100, 'AcDbSymbolTableRecord'),
+                   Dot(100, 'AcDbLayerTableRecord'), Dot(2, name),
+                   Dot(70, 0), Dot(62, 7), Dot(6, 'Continuous')]])
+    return _tblobjname(vm, ['LAYER', name])
+
+
+@bi('vla-insertblock')
+def _vla_insertblock(vm, a):
+    """(vla-InsertBlock space point name xs ys zs rot) -- one INSERT in
+    model space, returned as its ename so a vla-put-Layer lands in the
+    same alist entget reads.  A name the block table does not hold
+    throws, exactly as the real call's "Key not found" does: inserting a
+    block that was never defined is the failure paddle--ensure-block
+    exists to prevent, and swallowing it here would hide that."""
+    if not a or a[0] != MODEL_SPACE:
+        raise LispError('vla-InsertBlock: not a space: '
+                        f'{a[0] if a else None!r}', vm)
+    ip = pt(a[1])
+    name = str(a[2])
+    if name not in vm.tables.get('BLOCK', set()):
+        raise LispError(f'vla-InsertBlock: no block named {name!r}', vm)
+    xs, ys, zs = (num(a[3]), num(a[4]), num(a[5])) if len(a) > 5 \
+        else (1.0, 1.0, 1.0)
+    rot = num(a[6]) if len(a) > 6 else 0.0
+    e = Ent()
+    vm.entities.append(e)
+    vm.entdata[e] = [Dot(0, 'INSERT'), Dot(2, name), Dot(8, vm.sysvars['CLAYER']),
+                     [10, ip[0], ip[1], ip[2] if len(ip) > 2 else 0.0],
+                     Dot(41, xs), Dot(42, ys), Dot(43, zs),
+                     Dot(50, rot), Dot(66, 0)]
+    return e
+
+
+@bi('vla-delete')
+def _vla_delete(vm, a):
+    """Erase an entity, or drop a block definition.  Unlike entdel this
+    one does not toggle: a second Delete on the same object is the
+    ActiveX error a caller wraps in vl-catch-all-apply."""
+    o = a[0]
+    if isinstance(o, BlockDef):
+        if o.name not in vm.tables.get('BLOCK', set()):
+            raise LispError(f'vla-Delete: block {o.name!r} is already gone', vm)
+        vm.tables['BLOCK'].discard(o.name)
+        vm.blocks.pop(o.name, None)
+        return NIL
+    if isinstance(o, Ent) and o in vm.entdata and o not in vm.deleted:
+        vm.deleted.add(o)
+        return NIL
+    raise LispError(f'vla-Delete: not a live object: {o!r}', vm)
+
+
+@bi('vlax-3d-point')
+def _vlax_3d_point(vm, a):
+    """(vlax-3d-point x y [z]) or (vlax-3d-point pt).  The real one
+    returns a variant; every caller here feeds it straight back to an
+    ActiveX method, so the point itself stands in for it."""
+    if len(a) == 1:
+        p = pt(a[0])
+        return [num(p[0]), num(p[1]), num(p[2]) if len(p) > 2 else 0.0]
+    return [num(a[0]), num(a[1]), num(a[2]) if len(a) > 2 else 0.0]
 
 
 #: entity property -> DXF group, for the generic get/put pairs

@@ -10692,7 +10692,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "090826 REV16")
+(setq spa:*version* "090926 REV17")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -12798,12 +12798,27 @@
               allowed (cadr fo)
               sp (spa:hscore (if pref c1 c0) pref opts allowed)
               so (spa:hscore (if pref c0 c1) (not pref) opts allowed))
+        ;; Overruling the long-overall rule can go BOTH ways, and what
+        ;; is said has to match which one happened.  pref nil means the
+        ;; rule wanted it left alone and the spillway turns it; pref T
+        ;; means the rule wanted it turned and the spillway leaves it
+        ;; as measured -- announcing a quarter turn there described the
+        ;; opposite of what was drawn, on the command line and in the
+        ;; report block the advice is written into.  spa:*spillturn*
+        ;; goes with the turn, not with the overrule: it is read only
+        ;; beside spa:*turned*, to say WHY the spa was turned.
         (if (> so sp)
             (progn
-              (setq spa:*spillturn* t)
-              (princ (strcat "\nA hinge cannot be got clear of the spillway that way round"
-                             " -- the spa is turned a quarter turn instead."))
-              (spa:advise "TURNED A QUARTER TURN TO CLEAR THE SPILLWAY")
+              (setq spa:*spillturn* (not pref))
+              (if pref
+                  (progn
+                    (princ (strcat "\nA hinge cannot be got clear of the spillway a quarter"
+                                   " turn over -- the spa is left as measured instead."))
+                    (spa:advise "LEFT AS MEASURED TO CLEAR THE SPILLWAY"))
+                  (progn
+                    (princ (strcat "\nA hinge cannot be got clear of the spillway that way round"
+                                   " -- the spa is turned a quarter turn instead."))
+                    (spa:advise "TURNED A QUARTER TURN TO CLEAR THE SPILLWAY")))
               (not pref))
             pref))))
 
@@ -20407,7 +20422,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.9")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.10")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -21823,7 +21838,7 @@
          (setvar "CLAYER"  ocl)
          (setvar "OSMODE"  oos)
          (setvar "CMDECHO" oce)
-         (command "_.UNDO" "_End")
+         (if undo-open (command "_.UNDO" "_End"))
          (setq undo-open nil)
 
          (if (= made 0)
@@ -27763,7 +27778,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.5")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -28876,7 +28891,7 @@
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
   (acc:run T)
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -28898,7 +28913,7 @@
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
   (acc:run nil)
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -28932,7 +28947,7 @@
   (princ (strcat "\nABCURCHECKRESCUE: " (itoa n)
                  " of this command's own object(s) erased"
                  (if (= ans "All") "" ", declarations kept") "."))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -29018,7 +29033,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.5")
+(setq *abpcheck-version* "v1.6")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -29719,7 +29734,7 @@
                           (abp:dstr abp:*asked*) " of a line.")))
          (princ (strcat "\nReport written on layer " abp:*report-layer*
                         ".  ABPCHECKRESCUE removes both."))))))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -29748,7 +29763,7 @@
     (princ (strcat "\nABPCHECKRESCUE: " (itoa n)
                    " ABPCHECK object(s) removed."))
     (princ "\nABPCHECKRESCUE: nothing of ABPCHECK's left to remove."))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (princ))
@@ -34075,7 +34090,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.5"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.6"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -34595,7 +34610,7 @@
   ;; -- restore --------------------------------------------------------------
   (setvar "PEDITACCEPT" oldpa)
   (setvar "OSMODE" oldos)
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
   ;; the mode pushed at the top comes off on this exit too, not only in
@@ -46400,7 +46415,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.12")
+(setq *cchk-version* "v1.13")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -49545,7 +49560,7 @@
                      (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
-        (command "_.UNDO" "_End")
+        (if undo-open (command "_.UNDO" "_End"))
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n\n--- COVERCHECK complete ---"
@@ -50053,7 +50068,7 @@
           (setq undo-open T)))
       (princ "\n--- Building the demo scene ---")
       (cchk:tut-build bp)
-      (command "_.UNDO" "_End")
+      (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
       (setvar "CMDECHO" oldecho)
       (command "_.ZOOM" "_Window"
@@ -50200,7 +50215,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.2")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.3")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -50463,7 +50478,7 @@
 
     ;; -- 5. put the drawing back the way it was
     (cbk:restyle odim)
-    (command "_.UNDO" "_End")
+    (if undo-open (command "_.UNDO" "_End"))
     (setq undo-open nil)
     (cal:sysrestore)
 
@@ -50623,7 +50638,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.13")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.14")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -52242,7 +52257,7 @@
                             0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
-        (command "_.UNDO" "_End")
+        (if undo-open (command "_.UNDO" "_End"))
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n\n--- DIMCHECK complete ---"
@@ -52706,7 +52721,7 @@
   (if (member ans '("Demo" "Both"))
     (dchk:tut-demo))
 
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldecho)
   (princ (strcat "\n\n--- Tutorial finished ---"
@@ -52765,7 +52780,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.5")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -52918,7 +52933,7 @@
                 (setvar "OSMODE"  oos)
                 (setvar "CLAYER"  ocl)
                 (setvar "CMDECHO" oce)
-                (command "_.UNDO" "_End")
+                (if undo-open (command "_.UNDO" "_End"))
                 (setq undo-open nil)
                 (princ (strcat "\n" (itoa (length kept))
                                " continued dimension(s) added."))))))))
@@ -54789,7 +54804,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.4")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.5")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -59527,7 +59542,7 @@
           (if (and en (entget en)) (entdel en))
           (fit:purge-mine fit:*miss-layer*)
           (princ "\nNothing kept - the drawing is unchanged."))))))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
   (setq fit:*nobottom* nil)
@@ -63053,7 +63068,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.9")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.10")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -66398,7 +66413,7 @@
                      (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
-        (command "_.UNDO" "_End")
+        (if undo-open (command "_.UNDO" "_End"))
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n\n--- LINFINCHECK complete ---"
@@ -67207,7 +67222,7 @@
   (if (member ans '("Demo" "Both"))
     (lfc:tut-demo))
 
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldecho)
   (princ (strcat "\n\n--- Tutorial finished ---"
@@ -72545,7 +72560,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.13")
+(setq *spacheck-version* "v1.14")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -73450,6 +73465,45 @@
         (if (or (null bestd) (< d bestd)) (setq bestd d best e)))))
   (if best (spachk:dxf 1 best)))
 
+;; WHICH SHEET THE COVER WAS LAID OUT TO.  A taper row can carry more
+;; than one foam sheet -- STANDARD 3-2 and 4-2 each carry two -- and
+;; SPA does not use the first: spa:hbest solves and SCORES every sheet
+;; in the row and keeps the winner, then says which one it took
+;; ("FOAM SHEET USED: 49.50 x 102").  Reading (car opts) here measured
+;; SPA's own drawing against a sheet SPA had explicitly rejected, and
+;; red-flagged it: a 98 x 60 cover on STANDARD 3-2 goes to the 49.5
+;; sheet because 48 would need 3 pieces and that row allows only 2,
+;; and the audit then called the 49 piece an overrun of "the 48.0000
+;; sheet".  The same (car opts) fixed the length check to the wrong
+;; sheet, which can miss a real overrun as easily as invent one.
+;;
+;; So the sheet is chosen from what was DRAWN, and chosen the way that
+;; is safe to be wrong: the one the geometry fits.  If none fits, the
+;; drawing overruns every sheet the row offers, and the complaint is
+;; made against the most generous one -- the widest, then the longest
+;; -- so a reported overrun is one no sheet in the row could have
+;; absorbed.  WIDE / RUN are nil when there is nothing to measure
+;; (no cover outline, no hinges), and then that half does not
+;; discriminate.
+(defun spachk:foampick (opts wide run / best fits opt w l)
+  (foreach opt opts
+    (setq w (car opt) l (cdr opt))
+    (if (and (or (null wide) (<= wide (+ w spachk:*foam-slack*)))
+             (or (null run) (null l) (<= run (+ l spachk:*foam-slack*)))
+             (null fits))
+        (setq fits opt)))
+  (if fits
+      fits
+      (progn                      ; nothing fits: the most generous one
+        (foreach opt opts
+          (if (or (null best)
+                  (> (car opt) (car best))
+                  (and (= (car opt) (car best))
+                       (> (if (cdr opt) (cdr opt) 0.0)
+                          (if (cdr best) (cdr best) 0.0))))
+              (setq best opt)))
+        best)))
+
 (defun spachk:audit-hinges (ss cov grade taper / rows ents hngs labels n xs
                                                  row opts allowed fw fl
                                                  sorted e bb want got
@@ -73484,7 +73538,6 @@
       (if row
         (setq opts (caddr row) allowed (cadddr row))
         (setq opts (list (cons 48.0 96.0)) allowed (list 2 3 4 5)))
-      (setq fw (car (car opts)) fl (cdr (car opts)))
       (setq rows (append rows
                   (list (spachk:row
                           (strcat "Hinges: " (itoa (length sorted))
@@ -73508,6 +73561,19 @@
         (setq maxrun (max maxrun
                           (abs (- (cadr (spachk:dxf 11 e))
                                   (cadr (spachk:dxf 10 e)))))))
+      ;; the widest piece, measured before either check so the sheet can
+      ;; be chosen from the drawing rather than from the row's order
+      (if (and cov (setq bb (cal:bbox-ent cov)))
+          (progn
+            (setq maxpiece 0.0 prev (caar bb))
+            (foreach e sorted
+              (setq maxpiece (max maxpiece
+                                  (- (car (spachk:dxf 10 e)) prev))
+                    prev (car (spachk:dxf 10 e))))
+            (setq maxpiece (max maxpiece (- (caadr bb) prev)))))
+      (setq row (spachk:foampick opts maxpiece maxrun)
+            fw  (car row)
+            fl  (cdr row))
       (if (and fl (> maxrun (+ fl spachk:*foam-slack*)))
         (setq rows (append rows
                     (list (spachk:row
@@ -73526,13 +73592,8 @@
                             (if fl nil 2))))))
       ;; --- piece widths against the foam width.  This one DOES need
       ;;     the cover: a piece is bounded by the outline's edges.
-      (if (and cov (setq bb (cal:bbox-ent cov)))
+      (if maxpiece
         (progn
-          (setq maxpiece 0.0 prev (caar bb))
-          (foreach e sorted
-            (setq maxpiece (max maxpiece (- (car (spachk:dxf 10 e)) prev))
-                  prev (car (spachk:dxf 10 e))))
-          (setq maxpiece (max maxpiece (- (caadr bb) prev)))
           (if (> maxpiece (+ fw spachk:*foam-slack*))
             (setq rows (append rows
                         (list (spachk:row
@@ -84581,7 +84642,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.14")
+(setq *lazform-version* "v2.16")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -86311,7 +86372,15 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZTXT error: " msg)))
     (princ))
-  (setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil lzf:*chart* c)
+  ;; the same clean slate lzf:show starts from.  The in-square toggle
+  ;; and the bottom-type row have to be reset here too, even though this
+  ;; view carries no tile for either: it READS both when it builds the
+  ;; form (below), so a LAZFORM run earlier in the session used to hand
+  ;; POOL an in-square Wedge here with nothing on screen saying so and
+  ;; no way to change it.
+  (setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil lzf:*chart* c
+        lzf:*insq* nil                  ; out of square, as a run starts
+        lzf:*btype* 0)                  ; Normal, first in the list
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZTXT error: could not write the dialog file."))
@@ -86452,10 +86521,25 @@
 ;;;  is in lzf:dead: E2 F2 F1 E1 have boxes on every sheet whose flow
 ;;;  can reach a Sport, and every bottom that is NOT a Sport greys
 ;;;  them.
+;;;  THE OTHER HALF IS THE DISPATCH, NOT THE CHAIN.  btmspec describes
+;;;  the H/G/F/E/C/D/C2 chain, but POOL routes on the bottom type
+;;;  BEFORE it reaches that chain: pool:hopovaldsp and pool:hopgrecdsp
+;;;  call pool:hopoval / pool:hopgrec on "Normal" and hand every other
+;;;  bottom to pool:hopnormal or pool:hopsport instead.  W and R3 are
+;;;  asked only inside pool:hopoval, L1 and X only inside pool:hopgrec,
+;;;  so on any other bottom all four are questions POOL will never
+;;;  reach.  Un-greyed they were counted live, called filled by the
+;;;  state line and sent by lzf:poolform -- and read by nothing: an
+;;;  Oval on a Wedge bottom draws the same 105 entities with them and
+;;;  without.  T is deliberately NOT in this list: it is the hopper's
+;;;  straight-side check on the oval family, but the Grecian's
+;;;  perimeter block and the Roman's letters mode both ask their own T,
+;;;  so greying it here would hide a box POOL really does ask for.
 (defun lzf:btskip (bt / sp out)
+  (setq out (if (= bt "Normal") nil (list "w" "r3" "l1" "x")))
   (cond
-    ((= bt "Sport") (list "h" "f" "e" "c2"))
-    ((not pool:btmspec) nil)          ; no POOL: grey nothing, ask everything
+    ((= bt "Sport") (append (list "h" "f" "e" "c2") out))
+    ((not pool:btmspec) out)          ; no POOL: only the dispatch is known
     (t
      (setq sp (pool:btmspec bt))
      (if (not (car sp))    (setq out (cons "g" out)))

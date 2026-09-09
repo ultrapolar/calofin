@@ -76,7 +76,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.2")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.3")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -433,7 +433,7 @@
 
     ;; -- 5. put the drawing back the way it was
     (cbk:restyle odim)
-    (command "_.UNDO" "_End")
+    (if undo-open (command "_.UNDO" "_End"))
     (setq undo-open nil)
     (cbk:sysrestore)
 

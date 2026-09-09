@@ -221,7 +221,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "090826 REV16")
+(setq spa:*version* "090926 REV17")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -2372,12 +2372,27 @@
               allowed (cadr fo)
               sp (spa:hscore (if pref c1 c0) pref opts allowed)
               so (spa:hscore (if pref c0 c1) (not pref) opts allowed))
+        ;; Overruling the long-overall rule can go BOTH ways, and what
+        ;; is said has to match which one happened.  pref nil means the
+        ;; rule wanted it left alone and the spillway turns it; pref T
+        ;; means the rule wanted it turned and the spillway leaves it
+        ;; as measured -- announcing a quarter turn there described the
+        ;; opposite of what was drawn, on the command line and in the
+        ;; report block the advice is written into.  spa:*spillturn*
+        ;; goes with the turn, not with the overrule: it is read only
+        ;; beside spa:*turned*, to say WHY the spa was turned.
         (if (> so sp)
             (progn
-              (setq spa:*spillturn* t)
-              (princ (strcat "\nA hinge cannot be got clear of the spillway that way round"
-                             " -- the spa is turned a quarter turn instead."))
-              (spa:advise "TURNED A QUARTER TURN TO CLEAR THE SPILLWAY")
+              (setq spa:*spillturn* (not pref))
+              (if pref
+                  (progn
+                    (princ (strcat "\nA hinge cannot be got clear of the spillway a quarter"
+                                   " turn over -- the spa is left as measured instead."))
+                    (spa:advise "LEFT AS MEASURED TO CLEAR THE SPILLWAY"))
+                  (progn
+                    (princ (strcat "\nA hinge cannot be got clear of the spillway that way round"
+                                   " -- the spa is turned a quarter turn instead."))
+                    (spa:advise "TURNED A QUARTER TURN TO CLEAR THE SPILLWAY")))
               (not pref))
             pref))))
 

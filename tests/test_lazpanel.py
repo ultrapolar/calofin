@@ -1592,6 +1592,101 @@ print("   Run launches the highlighted tool (%s), the panel closing first"
       % LIVE)
 
 
+print("== LAZPIN: the pin editor, end to end ==")
+# c:LAZPIN was in check_registry's UNTESTED list -- the helpers it wires
+# together were covered above, but the command that wires them was run by
+# nothing, so the whole dialog cycle (write the DCL, load it, tick a
+# toggle, accept or cancel, unload, delete the temp file) was unasserted.
+# It is also the ONLY route to lzp:pin-toggle, which is reachable solely
+# through the action_tile string the dialog fires -- check_lisp reports
+# it as a defun nothing calls for exactly that reason.
+PIN = 'AUTODIM'
+
+
+def pinvm(rc, click=None, val="1", stored=""):
+    """A stubbed session whose registry holds STORED, with the pin
+    dialog scripted to fire CLICK and then return RC (1 accept, 0
+    cancel)."""
+    v = stubbed()
+    v.loads('(setq t:*reg* "%s")' % stored)
+    v.loads('(defun vl-registry-read (k n) t:*reg*)')
+    v.loads('(defun vl-registry-write (k n s) (setq t:*reg* s) s)')
+    v.loads("(setq stub:*rcs* '(%d))" % rc)
+    if click:
+        v.loads('(setq stub:*click* "tg_%s" stub:*clickval* "%s")'
+                % (click, val))
+    return v
+
+
+vm = pinvm(1)
+run(vm, 'c:LAZPIN', 'pins-close')
+assert events(vm) == DIALOG, events(vm)
+assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_pins', \
+    "LAZPIN opened %r, not the pin page" % vm.globals.get('stub:*dlgname*')
+assert any('tools pinned' in str(p) for p in vm.printed), vm.printed
+print("   opens the pin page, unloads it and deletes the temp DCL")
+
+# every command on the roster gets a toggle, set from the stored pins
+vm = pinvm(1, stored=PIN)
+run(vm, 'c:LAZPIN', 'pins-tiles')
+tiles = {str(k): str(v) for k, v in
+         ((t[0], t[1]) for t in vm.globals.get('stub:*tiles*') or [])}
+assert tiles.get('tg_%s' % PIN) == '1', \
+    "the stored pin was not ticked: %r" % tiles.get('tg_%s' % PIN)
+assert tiles.get('tg_%s' % LIVE) == '0', \
+    "an unpinned tool came up ticked: %r" % tiles.get('tg_%s' % LIVE)
+assert len([k for k in tiles if k.startswith('tg_')]) == len(PANEL), \
+    "the dialog offered %d toggles for a %d-tool roster" % (
+        len([k for k in tiles if k.startswith('tg_')]), len(PANEL))
+print("   one toggle per tool, ticked to match what is stored")
+
+# accept writes the new list; the tick reached lzp:pin-toggle
+vm = pinvm(1, click=PIN)
+run(vm, 'c:LAZPIN', 'pins-accept')
+assert [str(x) for x in vm.globals.get('lzp:*pins*') or []] == [PIN], \
+    "ticking %s did not pin it: %r" % (PIN, vm.globals.get('lzp:*pins*'))
+assert str(vm.globals.get('t:*reg*')) == PIN, \
+    "accept did not write the pins to the registry: %r" % vm.globals.get('t:*reg*')
+assert any('1 tools pinned' in str(p) for p in vm.printed), vm.printed
+print("   ticking a tool and accepting pins it, and stores it")
+
+# cancel throws the tick away by re-reading the registry, which is the
+# documented behaviour -- not by unwinding the ticks one at a time
+vm = pinvm(0, click=PIN)
+run(vm, 'c:LAZPIN', 'pins-cancel')
+assert not (vm.globals.get('lzp:*pins*') or []), \
+    "cancel kept the tick: %r" % vm.globals.get('lzp:*pins*')
+assert str(vm.globals.get('t:*reg*')) == "", \
+    "cancel wrote to the registry: %r" % vm.globals.get('t:*reg*')
+print("   cancelling re-reads the store, so the tick is discarded")
+
+# and un-ticking a stored pin, accepted, takes it away
+vm = pinvm(1, click=PIN, val="0", stored=PIN)
+run(vm, 'c:LAZPIN', 'pins-untick')
+assert not (vm.globals.get('lzp:*pins*') or []), \
+    "un-ticking left it pinned: %r" % vm.globals.get('lzp:*pins*')
+assert str(vm.globals.get('t:*reg*')) == "", \
+    "un-ticking did not clear the store: %r" % vm.globals.get('t:*reg*')
+print("   un-ticking a pinned tool and accepting removes it")
+
+# a dialog file that cannot be written, and one that cannot be loaded:
+# both are reported, and the unloadable one still deletes its temp file
+vm = pinvm(1)
+vm.loads('(defun lzp:write-dcl () nil)')
+run(vm, 'c:LAZPIN', 'pins-nofile')
+assert any('could not write the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert 'load' not in events(vm), events(vm)
+vm = pinvm(1)
+vm.loads('(defun load_dialog (f) (stub:ev "load") -1)')
+run(vm, 'c:LAZPIN', 'pins-noload')
+assert any('could not load the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert any(e.startswith('delete ') for e in events(vm)), \
+    "a dialog that would not load left its temp file behind: %r" % events(vm)
+print("   an unwritable or unloadable dialog is reported, and cleans up")
+
+
 print("== LAZPANELVER ==")
 vm = fresh()
 vm.run('c:LAZPANELVER', [])

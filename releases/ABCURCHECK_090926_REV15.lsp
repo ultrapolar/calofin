@@ -96,7 +96,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.5")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1299,7 +1299,7 @@
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
   (acc:run T)
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (acc:sysrestore)
   (princ))
@@ -1321,7 +1321,7 @@
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
   (acc:run nil)
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (acc:sysrestore)
   (princ))
@@ -1355,7 +1355,7 @@
   (princ (strcat "\nABCURCHECKRESCUE: " (itoa n)
                  " of this command's own object(s) erased"
                  (if (= ans "All") "" ", declarations kept") "."))
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (acc:sysrestore)
   (princ))

@@ -274,7 +274,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.9")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.10")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -3752,7 +3752,7 @@
                      (trans (list (+ right m) (+ maxy m) 0.0) 0 1)))
           (command "_.ZOOM" "_Center" vc vs))
 
-        (command "_.UNDO" "_End")
+        (if undo-open (command "_.UNDO" "_End"))
         (setq undo-open nil)
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n\n--- LINFINCHECK complete ---"
@@ -4561,7 +4561,7 @@
   (if (member ans '("Demo" "Both"))
     (lfc:tut-demo))
 
-  (command "_.UNDO" "_End")
+  (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldecho)
   (princ (strcat "\n\n--- Tutorial finished ---"

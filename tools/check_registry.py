@@ -236,15 +236,6 @@ UNTESTED = {
     "DDALT": "drone-height toolset: needs an EXIF/GPS photo fixture",
     "DDGPS": "drone-height toolset: needs an EXIF/GPS photo fixture",
     "DDTEST": "drone-height toolset: needs an EXIF/GPS photo fixture",
-    "LAZASCII": "DCL font probe; the dialog API is stubbed per suite",
-    "LAZPIN": "DCL pin editor; the dialog API is stubbed per suite",
-    "LAZTXT": "DCL text view; the dialog API is stubbed per suite",
-    "TUTORIALCOVERCHECK": "tutorial: pauses and a demo scene, no suite yet",
-    "TUTORIALDIMCHECK": "tutorial: pauses and a demo drawing, no suite yet",
-    "TUTORIALDIMSCAN": "alias of TUTORIALDIMCHECK",
-    "TUTORIALLINFINCHECK": "tutorial: pauses and a demo drawing, no suite yet",
-    "TUTORIALLINFINSCAN": "alias of TUTORIALLINFINCHECK",
-    "TUTORIALPADDLE": "tutorial: drives the ActiveX block surface the VM lacks",
 }
 
 
