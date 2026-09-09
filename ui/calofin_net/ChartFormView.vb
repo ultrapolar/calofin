@@ -188,38 +188,75 @@ Friend NotInheritable Class FormWire
     ''' measurement any more, which is the point -- and it must not
     ''' guess: the line NAMES boxes, and a line that named a box the wire
     ''' would happily accept is worse than no line. When the glue is not
-    ''' loaded nothing is reported, which leaves a form exactly as honest
-    ''' as it was before the state line existed.
+    ''' loaded nothing the wire would drop is reported, which leaves a
+    ''' form exactly as honest as it was before the state line existed.
     '''
     ''' The sheet travels as one packed string rather than an alist:
     ''' marshalling dotted pairs through a ResultBuffer is the fiddly,
     ''' fails-at-runtime half of this boundary, and "key=typed;key=typed"
-    ''' is a format the recall store already uses.
+    ''' is a format the recall store already uses. That format is also
+    ''' the one thing the palette must answer for itself: a box holding
+    ''' a ";" or an "=" cannot be put INTO the question, so it is named
+    ''' here rather than silently left out of it.
     ''' </summary>
     Friend Shared Function Unreadable(
             filled As IEnumerable(Of ChartBox)) As HashSet(Of String)
         Dim out As New HashSet(Of String)
-        Dim packed = RecallStore.Pack(filled)
-        If packed.Length = 0 Then Return out
-        Try
-            Dim args As New ResultBuffer(
-                New TypedValue(CInt(LispDataType.Text),
-                               "calofin:unreadable-str"),
-                New TypedValue(CInt(LispDataType.Text), packed))
-            Dim res = AcadApp.Invoke(args)
-            If res Is Nothing Then Return out
-            For Each tv As TypedValue In res
-                If tv.TypeCode <> CInt(LispDataType.Text) Then Continue For
-                Dim s = TryCast(tv.Value, String)
-                If String.IsNullOrEmpty(s) Then Continue For
-                For Each k In s.Split(";"c)
-                    If k.Length > 0 Then out.Add(k)
-                Next
-            Next
-        Catch
-            out.Clear()
-        End Try
+        Dim askable As New List(Of ChartBox)
+        For Each b In filled
+            ' A BOX THE QUESTION CANNOT CARRY is named without asking,
+            ' and it is the one case where that is not a second opinion.
+            ' "key=typed;key=typed" has no escape, so RecallStore.Pack
+            ' drops an entry holding a separator rather than write it
+            ' back scrambled -- right for the store, and exactly wrong
+            ' here: a box silently left out of the question is the one
+            ' box the line could never name, which is the failure the
+            ' line exists to catch. Nothing distof reads carries a ";"
+            ' or an "=", so such a box will be dropped by the wire.
+            If CarriesSeparator(b) Then
+                out.Add(b.Key)
+            Else
+                askable.Add(b)
+            End If
+        Next
+
+        Dim wired As New HashSet(Of String)
+        Dim packed = RecallStore.Pack(askable)
+        If packed.Length > 0 Then
+            Try
+                Dim args As New ResultBuffer(
+                    New TypedValue(CInt(LispDataType.Text),
+                                   "calofin:unreadable-str"),
+                    New TypedValue(CInt(LispDataType.Text), packed))
+                Dim res = AcadApp.Invoke(args)
+                If res IsNot Nothing Then
+                    For Each tv As TypedValue In res
+                        If tv.TypeCode <> CInt(LispDataType.Text) Then Continue For
+                        Dim s = TryCast(tv.Value, String)
+                        If String.IsNullOrEmpty(s) Then Continue For
+                        For Each k In s.Split(";"c)
+                            If k.Length > 0 Then wired.Add(k)
+                        Next
+                    Next
+                End If
+            Catch
+                ' the glue is not loaded: nothing the WIRE would drop
+                ' is named, which leaves the line as honest as it was
+                ' before it existed. The boxes above are not the wire's
+                ' answer and stand either way.
+                wired.Clear()
+            End Try
+        End If
+        For Each k In wired
+            out.Add(k)
+        Next
         Return out
+    End Function
+
+    ''' <summary>Does this box hold one of the separators the question
+    ''' is packed with? Then it cannot be asked about at all.</summary>
+    Private Shared Function CarriesSeparator(b As ChartBox) As Boolean
+        Return b.Text.Contains(";") OrElse b.Text.Contains("=")
     End Function
 
     ''' <summary>
@@ -232,7 +269,8 @@ Friend NotInheritable Class FormWire
     ''' how much of the sheet is filled and what the routine will still
     ''' ask for.
     ''' </summary>
-    Friend Shared Function Line(boxes As IEnumerable(Of ChartBox)) As State
+    Friend Shared Function Line(boxes As IEnumerable(Of ChartBox),
+                                naBad As IEnumerable(Of ChartBox)) As State
         Dim all As New List(Of ChartBox)
         Dim filled As New List(Of ChartBox)
         For Each b In boxes
@@ -259,6 +297,22 @@ Friend NotInheritable Class FormWire
                 "question asked again at the command line.", False)
         End If
 
+        ' THE SECOND SILENT DROP, and the sharper of the two: NA is a
+        ' word the form itself tells you to type, and on a key the
+        ' routine has no NA for it means nothing. lzs:restate holds
+        ' Insert back for it as well, and for a harder reason than
+        ' tidiness -- SPA does not ask a REQ item again once a nil is
+        ' stored, and the flow then does arithmetic on it.
+        Dim na = Letters(naBad)
+        If na.Count > 0 Then
+            Return New State(
+                Plural(na.Count, "Box ", "Boxes ") & AndJoin(na) &
+                " cannot be NA - the routine needs a number " &
+                Plural(na.Count, "there", "in each of them") &
+                ". As typed, the answer would travel as NOT MEASURED " &
+                "and the question would never be asked.", False)
+        End If
+
         Dim asking = all.Count - filled.Count
         If all.Count = 0 Then Return New State("", False)
         If asking = 0 Then
@@ -270,6 +324,19 @@ Friend NotInheritable Class FormWire
             filled.Count.ToString() & " of " & all.Count.ToString() &
             " filled in. The routine will ask at the command line for " &
             "the other " & asking.ToString() & ".", True)
+    End Function
+
+    ''' <summary>The letters a set of boxes prints, in the sheet's own
+    ''' order, falling back to the key for a box with no letter.
+    ''' </summary>
+    Friend Shared Function Letters(
+            boxes As IEnumerable(Of ChartBox)) As List(Of String)
+        Dim out As New List(Of String)
+        If boxes Is Nothing Then Return out
+        For Each b In boxes
+            out.Add(If(b.Letter.Length > 0, b.Letter, b.Key))
+        Next
+        Return out
     End Function
 
     ''' <summary>cal:plural: a line reading "all 1 boxes" is a bug in the
@@ -456,11 +523,15 @@ End Class
 ''' <summary>
 ''' A whole chart form: pick a sheet, fill it in, draw from it.
 '''
-''' <para>One class serves POOL and SPA, because ChartCatalog gives them
-''' the same shape -- which is phase 4 of ui/UI-PLAN.md ("one form kit")
-''' arriving on this surface. What differs is the sheet list, the entry
-''' point and where the recall store lives, and those are constructor
-''' arguments.</para>
+''' <para>One class serves every sheet LAZFORM offers -- eight POOL
+''' pages and five OASIS ones -- because ChartCatalog gives them the
+''' same shape, which is phase 4 of ui/UI-PLAN.md ("one form kit")
+''' arriving on this surface. What differs per sheet is which routine
+''' the form is handed to and which of POOL's two page-wide questions
+''' the page even carries, and all three of those are the catalog's
+''' answer rather than this class's. (The spa sheet has enough of its
+''' own around it -- six list questions, four corners, a second outline
+''' -- to be SpaChartView instead.)</para>
 '''
 ''' <para>The state line is the phase 3 feature, and it holds Draw back
 ''' the way LAZFORM's holds Insert back. It reports what the WIRE will
@@ -499,6 +570,27 @@ Public Class ChartFormView
     Private ReadOnly _picks As New Dictionary(Of String, ComboBox)
     Private ReadOnly _corners As New Dictionary(Of String, ComboBox)
 
+    ''' <summary>
+    ''' What has been typed and what has been picked, BY KEY, kept
+    ''' across a rebuild.
+    '''
+    ''' <para>The rows are thrown away and rebuilt whenever the sheet,
+    ''' or the in-square toggle, changes -- and without this that took
+    ''' everything typed with it. LAZFORM does not: "everything typed
+    ''' lives in lzf:*vals*, keyed, so it survives the switch and is
+    ''' still there if you tab back", and its tab strip IS this
+    ''' picker. A drafter who fills a sheet in and then realises the
+    ''' pool was taped square must not lose the sheet for saying
+    ''' so.</para>
+    '''
+    ''' <para>By key and not by position, exactly as lzf:*vals* is:
+    ''' a key the next sheet does not carry simply waits, and one it
+    ''' does comes back against the same letter it was typed
+    ''' against.</para>
+    ''' </summary>
+    Private ReadOnly _typed As New Dictionary(Of String, String)
+    Private ReadOnly _picked As New Dictionary(Of String, String)
+
     ''' <summary>POOL reads a KEYWORD here, not a yes/no, and the toggle
     ''' also decides which corner rows answer anything and whether the
     ''' cross dims are asked at all.</summary>
@@ -512,6 +604,15 @@ Public Class ChartFormView
     ''' <summary>The bottom, from lzf:*btypes*. Left on its blank row it
     ''' sends nothing and POOL asks.</summary>
     Private ReadOnly _btype As New ComboBox() With {.Width = 120}
+
+    ''' <summary>The row those two sit on, and the half of it the
+    ''' bottom question owns -- so a sheet that carries one and not
+    ''' the other can hide the right piece.</summary>
+    Private ReadOnly _gates As New StackPanel() With {
+        .Orientation = Orientation.Horizontal,
+        .Margin = New Thickness(0, 6, 0, 0)}
+    Private ReadOnly _bottomRow As New StackPanel() With {
+        .Orientation = Orientation.Horizontal}
 
     Private _current As ChartCatalog.Chart
     Private _pool As ChartCatalog.PoolSheet
@@ -540,24 +641,26 @@ Public Class ChartFormView
         head.Children.Add(_picker)
 
         ' the two questions that are about the whole sheet rather than
-        ' any one box, and which change what the rest of it asks
-        Dim gates As New StackPanel() With {
-            .Orientation = Orientation.Horizontal,
-            .Margin = New Thickness(0, 6, 0, 0)}
+        ' any one box, and which change what the rest of it asks.  Both
+        ' are POOL's: an OASIS page carries neither tile, so the row
+        ' goes away entirely on one -- and the L shapes carry the
+        ' toggle but no bottom popup, which is why the two hide
+        ' separately.
         AddHandler _insquare.Checked, Sub() ShowChart(_picker.SelectedIndex)
         AddHandler _insquare.Unchecked, Sub() ShowChart(_picker.SelectedIndex)
-        gates.Children.Add(_insquare)
+        _gates.Children.Add(_insquare)
         _btype.Items.Add("")
         For Each b In ChartCatalog.PoolBottomTypes
             _btype.Items.Add(b)
         Next
         _btype.SelectedIndex = 0
         AddHandler _btype.SelectionChanged, Sub() Restate()
-        gates.Children.Add(New TextBlock() With {
+        _bottomRow.Children.Add(New TextBlock() With {
             .Text = "Bottom", .VerticalAlignment = VerticalAlignment.Center,
             .Margin = New Thickness(0, 0, 6, 0)})
-        gates.Children.Add(_btype)
-        head.Children.Add(gates)
+        _bottomRow.Children.Add(_btype)
+        _gates.Children.Add(_bottomRow)
+        head.Children.Add(_gates)
         DockPanel.SetDock(head, Dock.Top)
         root.Children.Add(head)
 
@@ -601,12 +704,24 @@ Public Class ChartFormView
     ''' keys with no line to sit on.</summary>
     Private Sub ShowChart(index As Integer)
         If index < 0 OrElse index >= _charts.Length Then Return
+        ' before a single row is thrown away
+        Remember()
         _current = _charts(index)
         _pool = ChartCatalog.PoolSheetFor(_current.Key)
         _boxes.Clear()
         _picks.Clear()
         _corners.Clear()
         _rows.Children.Clear()
+
+        ' POOL's two page-wide questions, on the pages that have them.
+        ' The whole row goes on an oasis sheet -- lzf:oasform takes
+        ' neither answer, and lzf:pagekeys puts no bottom-type tile on
+        ' an oasis page -- and the bottom half alone goes on an L,
+        ' which carries the toggle and no popup (lzf:btlive).
+        _gates.Visibility = If(Oasis(), Visibility.Collapsed,
+                               Visibility.Visible)
+        _bottomRow.Visibility = If(BottomLive(), Visibility.Visible,
+                                   Visibility.Collapsed)
 
         _building = True
         Try
@@ -637,6 +752,7 @@ Public Class ChartFormView
                     AddCorner(row)
                 Next
             End If
+            Restore()
         Finally
             _building = False
         End Try
@@ -645,8 +761,74 @@ Public Class ChartFormView
         Restate()
     End Sub
 
+    ''' <summary>Keep what is typed and what is picked before the rows
+    ''' are rebuilt. An emptied box is FORGOTTEN rather than kept at
+    ''' "", so clearing one and coming back does not bring it
+    ''' back.</summary>
+    Private Sub Remember()
+        For Each b In _boxes
+            If b.IsFilled Then
+                _typed(b.Key) = b.Text
+            Else
+                _typed.Remove(b.Key)
+            End If
+        Next
+        For Each key In _picks.Keys
+            _picked(key) = Chosen(_picks(key))
+        Next
+        ' a corner row is remembered under the key its answer travels
+        ' as, so the two dictionaries cannot collide on a stem that
+        ' happens to be spelled like a mode dropdown
+        For Each stem In _corners.Keys
+            _picked(stem & "-ty") = Chosen(_corners(stem))
+        Next
+    End Sub
+
+    ''' <summary>Put back what this sheet carries a box for. Every
+    ''' other key waits: it is not this sheet's question.</summary>
+    Private Sub Restore()
+        For Each b In _boxes
+            Dim v As String = Nothing
+            If _typed.TryGetValue(b.Key, v) Then b.Text = v
+        Next
+    End Sub
+
+    ''' <summary>Put a rebuilt dropdown back on the word it was left
+    ''' on -- by the WORD and not the row number, because two sheets
+    ''' do not have to offer the same choices in the same
+    ''' order.</summary>
+    Private Sub Reselect(combo As ComboBox, slot As String)
+        Dim was As String = Nothing
+        If Not _picked.TryGetValue(slot, was) Then Return
+        If String.IsNullOrEmpty(was) Then Return
+        Dim i = combo.Items.IndexOf(was)
+        If i > 0 Then combo.SelectedIndex = i
+    End Sub
+
     Private Function PoolExtras() As Boolean
         Return _pool.Key IsNot Nothing
+    End Function
+
+    ''' <summary>lzf:oasis-p: this sheet's form goes to OASIS, which
+    ''' also settles that the page carries neither of POOL's two
+    ''' page-wide questions.</summary>
+    Private Function Oasis() As Boolean
+        Return PoolExtras() AndAlso _pool.Oasis
+    End Function
+
+    ''' <summary>lzf:btlive: this page has a bottom-type popup.
+    ''' </summary>
+    Private Function BottomLive() As Boolean
+        Return PoolExtras() AndAlso _pool.Bottom
+    End Function
+
+    ''' <summary>Where this sheet's form goes. The chart decides --
+    ''' "the tab IS the choice" -- and the constructor's entry point
+    ''' is only what a sheet the catalog has no row for falls back
+    ''' to.</summary>
+    Private Function EntryPoint() As String
+        If PoolExtras() Then Return _pool.EntryPoint
+        Return _entryPoint
     End Function
 
     Private Function Cross() As ChartCatalog.ListKey()
@@ -698,6 +880,7 @@ Public Class ChartFormView
             For Each o In p.Options
                 combo.Items.Add(o)
             Next
+            Reselect(combo, p.Key)
             AddHandler combo.SelectionChanged, Sub() Restate()
             _picks(p.Key) = combo
             _rows.Children.Add(PickRow(p.Label, combo))
@@ -732,6 +915,7 @@ Public Class ChartFormView
         For Each t In ChartCatalog.PoolTreatments
             combo.Items.Add(t)
         Next
+        Reselect(combo, row.Stem & "-ty")
         AddHandler combo.SelectionChanged, Sub() Restate()
         _corners(row.Stem) = combo
         _rows.Children.Add(PickRow(row.Label, combo))
@@ -776,7 +960,9 @@ Public Class ChartFormView
     Private Sub Restate()
         If _building Then Return
         If _current.Key Is Nothing Then Return
-        Dim state = FormWire.Line(_boxes)
+        ' LAZFORM has no lzs:*naok* equivalent: an NA travels as NA on
+        ' every pool key, so there is no second complaint to make
+        Dim state = FormWire.Line(LiveBoxes(), Nothing)
         _state.Text = state.Text
         _state.Foreground = If(state.Ready, SystemColors.GrayTextBrush,
                                Brushes.OrangeRed)
@@ -786,6 +972,9 @@ Public Class ChartFormView
 
     ' ------------------------------------------------------------- actions
 
+    ''' <summary>Clear means clear: what is remembered across a
+    ''' rebuild goes with the boxes, or the next toggle would put it
+    ''' all back.</summary>
     Private Sub ClearSheet()
         For Each b In _boxes
             b.Text = ""
@@ -797,6 +986,8 @@ Public Class ChartFormView
             combo.SelectedIndex = 0
         Next
         _btype.SelectedIndex = 0
+        _typed.Clear()
+        _picked.Clear()
         Restate()
     End Sub
 
@@ -811,7 +1002,10 @@ Public Class ChartFormView
     Private Sub Recall()
         If _current.Key Is Nothing Then Return
         Dim had = RecallStore.Read(_recallKey, _current.Key)
-        For Each b In _boxes
+        ' the empty LIVE boxes: lzf:recall's own set. Putting a number
+        ' into a box this run will not ask about would show an answer
+        ' that is not going anywhere.
+        For Each b In LiveBoxes()
             If b.IsFilled Then Continue For
             Dim v As String = Nothing
             If had.TryGetValue(b.Key, v) Then b.Text = v
@@ -837,6 +1031,41 @@ Public Class ChartFormView
         Return Chosen(combo)
     End Function
 
+    ''' <summary>
+    ''' The boxes this run will actually ask about.
+    '''
+    ''' <para>lzf:livekeys, and the half of it the palette can answer
+    ''' without keeping a second copy of a rule: a corner SIZE box is
+    ''' live only when its own dropdown takes a size. "A greyed box is
+    ''' withheld from the routine whatever is in it, so neither
+    ''' complaining about its contents nor counting it as still to ask
+    ''' would be true" -- and the state line did both. It counted four
+    ''' sizes nobody would be asked for, and it held Draw back over
+    ''' rubbish typed in a box that was never going to
+    ''' travel.</para>
+    '''
+    ''' <para>The OTHER half of lzf:livekeys is lzf:dead, which reads
+    ''' the bottom type and the mode dropdowns too. That one is a rule
+    ''' rather than a table and stays in the Lisp -- see the README --
+    ''' so the line still counts a box lzf:dead would have greyed.
+    ''' </para>
+    ''' </summary>
+    Private Function LiveBoxes() As List(Of ChartBox)
+        Dim out As New List(Of ChartBox)
+        For Each b In _boxes
+            If Not b.Key.EndsWith("-sz", StringComparison.Ordinal) Then
+                out.Add(b)
+                Continue For
+            End If
+            Dim stem = b.Key.Substring(0, b.Key.Length - 3)
+            ' a "-sz" key that is not a corner row's is somebody else's
+            ' box and none of this rule's business
+            If Not _corners.ContainsKey(stem) OrElse
+               Sized(CornerPick(stem)) Then out.Add(b)
+        Next
+        Return out
+    End Function
+
     ''' <summary>Does this treatment carry a size? lzf:csized, as
     ''' words.</summary>
     Private Shared Function Sized(treatment As String) As Boolean
@@ -851,29 +1080,47 @@ Public Class ChartFormView
     ''' <summary>
     ''' Hand the sheet to the routine, through calofin.lsp's wire.
     '''
-    ''' The shape word is a LITERAL and travels as written -- it is not
-    ''' always the chart's key, so sending the key would draw the wrong
-    ''' pool on six of the sixteen sheets -- and so is every gate the
-    ''' chart implies, the in-square keyword, the bottom type and every
-    ''' dropdown. Everything typed is a MEASURE and is read on the other
-    ''' side.
+    ''' <para>WHICH routine is the sheet's own answer. Five of
+    ''' LAZFORM's thirteen pages are OASIS pages, and lzf:run reads
+    ''' that off the chart rather than off anything the drafter does
+    ''' -- the tab IS the choice. An oasis form is also SHORTER by
+    ''' POOL's two page-wide questions: lzf:oasform takes no
+    ''' in-square keyword and no bottom type, because an oasis page
+    ''' carries neither tile.</para>
+    '''
+    ''' <para>The shape word is a LITERAL and travels as written -- it
+    ''' is not always the chart's key, so sending the key would draw
+    ''' the wrong pool on six of the sixteen sheets -- and so is every
+    ''' gate the chart implies, the in-square keyword, the bottom type
+    ''' and every dropdown. Everything typed is a MEASURE and is read
+    ''' on the other side.</para>
     ''' </summary>
     Private Sub Run()
         If _current.Key Is Nothing Then Return
 
-        Dim insquare = _insquare.IsChecked.GetValueOrDefault()
+        Dim oasis = Oasis()
+        Dim insquare = Not oasis AndAlso
+                       _insquare.IsChecked.GetValueOrDefault()
         Dim literals As New List(Of String)
         Dim measures As New List(Of String)
         literals.Add(LispBridge.StrPair("shape", _current.Shape))
-        literals.Add(LispBridge.StrPair(
-            "insq", If(insquare, ChartCatalog.InSquare,
-                       ChartCatalog.OutOfSquare)))
+        If Not oasis Then
+            literals.Add(LispBridge.StrPair(
+                "insq", If(insquare, ChartCatalog.InSquare,
+                           ChartCatalog.OutOfSquare)))
+        End If
         For Each g In _current.Gates
             literals.Add(LispBridge.StrPair(g.Key, g.Value))
         Next
-        Dim bottom = Chosen(_btype)
-        If bottom.Length > 0 Then
-            literals.Add(LispBridge.StrPair("btype", bottom))
+        ' a page with no bottom popup sends no bottom type: lzf:poolform
+        ' will not send one a page never asked about, and a dead answer
+        ' sitting in the store unread is harder to reason about than
+        ' none
+        If BottomLive() Then
+            Dim bottom = Chosen(_btype)
+            If bottom.Length > 0 Then
+                literals.Add(LispBridge.StrPair("btype", bottom))
+            End If
         End If
         For Each key In _picks.Keys
             Dim v = Chosen(_picks(key))
@@ -887,7 +1134,7 @@ Public Class ChartFormView
         ' a row with no targets in this state sends nothing at all.
         ' lzf:cornerpairs' rule, and the reason the table carries two
         ' target lists rather than one.
-        Dim sizedKeys As New HashSet(Of String)
+        Dim answered = False
         For Each row In CornerRows()
             Dim ty = CornerPick(row.Stem)
             If ty.Length = 0 Then Continue For
@@ -895,9 +1142,19 @@ Public Class ChartFormView
             If targets Is Nothing Then Continue For
             For Each target In targets
                 literals.Add(LispBridge.StrPair(target & "-ty", ty))
-                If Sized(ty) Then sizedKeys.Add(target & "-sz")
+                answered = True
             Next
         Next
+
+        ' AND THE GATE THOSE TREATMENTS ANSWER TO.  On the sheets that
+        ' put a yes/no in front of the corner questions, lzf:poolform
+        ' answers it Yes for you the moment a row is picked -- without
+        ' it POOL asks, and a No there means every treatment just sent
+        ' is read by nothing.
+        If answered AndAlso PoolExtras() AndAlso _pool.CornerGate Then
+            literals.Add(LispBridge.StrPair(ChartCatalog.CornerGateKey,
+                                            ChartCatalog.CornerGateAnswer))
+        End If
 
         ' the size a row was given rides out under the TARGET's key, not
         ' the row's: the row is where it was typed, the target is what
@@ -930,7 +1187,7 @@ Public Class ChartFormView
 
         RecallStore.Save(_recallKey, _current.Key, _boxes)
         LispBridge.Send(AcadApp.DocumentManager.MdiActiveDocument,
-                        LispBridge.BuildFormCall(_entryPoint, literals,
+                        LispBridge.BuildFormCall(EntryPoint(), literals,
                                                  measures))
     End Sub
 

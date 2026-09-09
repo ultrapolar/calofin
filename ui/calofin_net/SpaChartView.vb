@@ -50,6 +50,20 @@ Public Class SpaChartView
     ''' <summary>The dropdowns, by the key each answers under.</summary>
     Private ReadOnly _picks As New Dictionary(Of String, ComboBox)
 
+    ''' <summary>
+    ''' What has been typed and what has been picked, BY KEY, kept
+    ''' across a rebuild.
+    '''
+    ''' <para>Every row is thrown away and rebuilt when the shape
+    ''' changes, and without this that took the sheet with it. LAZSPA
+    ''' does not: "everything typed lives in lzs:*vals* and
+    ''' lzs:*picks*, keyed, so it survives the switch and is still
+    ''' there if you tab back" -- and its tab strip is this
+    ''' picker.</para>
+    ''' </summary>
+    Private ReadOnly _typed As New Dictionary(Of String, String)
+    Private ReadOnly _picked As New Dictionary(Of String, String)
+
     Private _current As ChartCatalog.Chart
     Private _spa As ChartCatalog.SpaSheet
     Private _building As Boolean
@@ -117,6 +131,8 @@ Public Class SpaChartView
 
     Private Sub ShowChart(index As Integer)
         If index < 0 OrElse index >= ChartCatalog.Spa.Length Then Return
+        ' before a single row is thrown away
+        Remember()
         _current = ChartCatalog.Spa(index)
         _spa = ChartCatalog.SpaSheetFor(_current.Key)
         _hint.Text = If(_spa.Hint, "")
@@ -155,12 +171,52 @@ Public Class SpaChartView
             AddPick("autohinge")
             AddPick("grade")
             AddPick("taper")
+            Restore()
         Finally
             _building = False
         End Try
 
         _sheet.Show(_current.Strokes, _current.Marks, _boxes)
         Restate()
+    End Sub
+
+    ''' <summary>Keep what is typed and what is picked before the rows
+    ''' are rebuilt. An emptied box is FORGOTTEN rather than kept at
+    ''' "", so clearing one and coming back does not bring it
+    ''' back.</summary>
+    Private Sub Remember()
+        For Each b In _boxes
+            If b.IsFilled Then
+                _typed(b.Key) = b.Text
+            Else
+                _typed.Remove(b.Key)
+            End If
+        Next
+        For Each key In _picks.Keys
+            _picked(key) = Picked(key)
+        Next
+    End Sub
+
+    ''' <summary>Put back what this shape carries a box for. Every
+    ''' other key waits: the rectangle's overalls are w2/l2 and the
+    ''' octagon's are b2/a2, so a key the next sheet does not have is
+    ''' not a key it lost.</summary>
+    Private Sub Restore()
+        For Each b In _boxes
+            Dim v As String = Nothing
+            If _typed.TryGetValue(b.Key, v) Then b.Text = v
+        Next
+    End Sub
+
+    ''' <summary>Put a rebuilt dropdown back on the word it was left
+    ''' on -- by the WORD and not the row number, because two shapes
+    ''' need not offer the same choices in the same order.</summary>
+    Private Sub Reselect(combo As ComboBox, slot As String)
+        Dim was As String = Nothing
+        If Not _picked.TryGetValue(slot, was) Then Return
+        If String.IsNullOrEmpty(was) Then Return
+        Dim i = combo.Items.IndexOf(was)
+        If i > 0 Then combo.SelectedIndex = i
     End Sub
 
     Private Function Corners() As ChartCatalog.SpaCornerRow()
@@ -213,6 +269,7 @@ Public Class SpaChartView
             For Each o In q.Options
                 combo.Items.Add(o)
             Next
+            Reselect(combo, key)
             AddHandler combo.SelectionChanged, Sub() Restate()
             _picks(key) = combo
 
@@ -243,6 +300,7 @@ Public Class SpaChartView
         For Each t In ChartCatalog.SpaTreatments
             combo.Items.Add(t)
         Next
+        Reselect(combo, corner.Stem & "-ty")
         AddHandler combo.SelectionChanged, Sub() Restate()
         _picks(corner.Stem & "-ty") = combo
 
@@ -264,7 +322,7 @@ Public Class SpaChartView
 
     Private Sub Restate()
         If _building OrElse _current.Key Is Nothing Then Return
-        Dim state = FormWire.Line(_boxes)
+        Dim state = FormWire.Line(LiveBoxes(), NaBad())
         _state.Text = state.Text
         _state.Foreground = If(state.Ready, SystemColors.GrayTextBrush,
                                Brushes.OrangeRed)
@@ -272,6 +330,9 @@ Public Class SpaChartView
         _recall.IsEnabled = HasStored()
     End Sub
 
+    ''' <summary>Clear means clear: what is remembered across a
+    ''' rebuild goes with the boxes, or the next shape would put it
+    ''' all back.</summary>
     Private Sub ClearSheet()
         For Each b In _boxes
             b.Text = ""
@@ -279,6 +340,8 @@ Public Class SpaChartView
         For Each combo In _picks.Values
             combo.SelectedIndex = 0
         Next
+        _typed.Clear()
+        _picked.Clear()
         Restate()
     End Sub
 
@@ -292,7 +355,8 @@ Public Class SpaChartView
     Private Sub Recall()
         If _current.Key Is Nothing Then Return
         Dim had = RecallStore.Read(RecallStore.SpaKey, _current.Key)
-        For Each b In _boxes
+        ' the empty LIVE boxes: lzs:recall's own set
+        For Each b In LiveBoxes()
             If b.IsFilled Then Continue For
             Dim v As String = Nothing
             If had.TryGetValue(b.Key, v) Then b.Text = v
@@ -309,6 +373,64 @@ Public Class SpaChartView
         If Not _picks.TryGetValue(key, combo) Then Return ""
         If combo.SelectedIndex <= 0 Then Return ""
         Return CStr(combo.SelectedItem)
+    End Function
+
+    ''' <summary>
+    ''' The boxes this run will actually ask about.
+    '''
+    ''' <para>lzs:livekeys, and the half of it the palette can answer
+    ''' without keeping a second copy of a rule: a corner SIZE box is
+    ''' live only when its own dropdown takes a size. Counting one
+    ''' that is not, or holding Draw back over what is typed in it,
+    ''' would both be untrue of a box that cannot travel.</para>
+    '''
+    ''' <para>The other half is lzs:dead -- what the grade, the second
+    ''' outline and the method close off -- which is a rule and stays
+    ''' in the Lisp.</para>
+    ''' </summary>
+    Private Function LiveBoxes() As List(Of ChartBox)
+        Dim out As New List(Of ChartBox)
+        For Each b In _boxes
+            If Not b.Key.EndsWith("-sz", StringComparison.Ordinal) Then
+                out.Add(b)
+                Continue For
+            End If
+            Dim stem = b.Key.Substring(0, b.Key.Length - 3)
+            If Not _picks.ContainsKey(stem & "-ty") OrElse
+               Sized(Picked(stem & "-ty")) Then out.Add(b)
+        Next
+        Return out
+    End Function
+
+    ''' <summary>Is this box answered NA?</summary>
+    Private Shared Function IsNa(b As ChartBox) As Boolean
+        Return String.Equals(b.Text.Trim(), "NA",
+                             StringComparison.OrdinalIgnoreCase)
+    End Function
+
+    ''' <summary>
+    ''' The live boxes reading NA on a key SPA has no NA for.
+    '''
+    ''' <para>lzs:nabad, and the one rule on this sheet that could not
+    ''' be left to the wire. The wire reads NA as nil, which IS the
+    ''' answer on some keys and is a fault on the rest: SPA marks its
+    ''' measurement items REQ / SUG / NAX, and "a REQ item fed a nil
+    ''' is not asked again -- spa:askseqb stores the nil straight into
+    ''' its answers and the flow then does arithmetic on it, which in
+    ''' AutoLISP is an error, not a fallback". lzs:keyanswer demotes
+    ''' those to an empty box; so does Run, and the state line says
+    ''' so rather than dropping them without a word.</para>
+    '''
+    ''' <para>WHICH keys take one is lzs:*naok*, a table, and it comes
+    ''' through the catalog with the rest of the sheet -- there is no
+    ''' rule here beyond looking in it.</para>
+    ''' </summary>
+    Private Function NaBad() As List(Of ChartBox)
+        Dim out As New List(Of ChartBox)
+        For Each b In LiveBoxes()
+            If IsNa(b) AndAlso Not _spa.TakesNa(b.Key) Then out.Add(b)
+        Next
+        Return out
     End Function
 
     ''' <summary>Does this treatment carry a size? lzs:sized, as
@@ -348,6 +470,13 @@ Public Class SpaChartView
             If Not b.IsFilled Then Continue For
             If b.Key.EndsWith("-sz", StringComparison.Ordinal) AndAlso
                Not sizedStems.Contains(b.Key) Then Continue For
+            ' lzs:keyanswer: an NA on a key SPA has no NA for is DEMOTED
+            ' to an empty box. Sending it would put a nil into a REQ
+            ' item, which SPA does not ask again and then does
+            ' arithmetic on -- an error rather than a fallback. The
+            ' state line has already named it and held Draw back; this
+            ' is the same rule at the wire, so the two cannot disagree.
+            If IsNa(b) AndAlso Not _spa.TakesNa(b.Key) Then Continue For
             measures.Add(LispBridge.MeasurePair(b.Key, b.Text))
         Next
 

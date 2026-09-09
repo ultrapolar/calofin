@@ -491,9 +491,12 @@ and a single structure for both would be a lie about the pool.
 step form offers the chart's boxes but not `lzt:asks`' dropdowns and
 counters, which stay command-line questions; `lzf:*oaslive*` is not
 carried, so an OASIS sheet shows every box it has rather than the ones
-its `sub` dropdown makes live; and `lzf:dead` lives only in Lisp, so a
-form shows every box its sheet has and lets the routine ignore what
-this page does not ask about. **The pool-bottom tab stays a
+its `sub` dropdown makes live *(phase 5i found what that understated --
+the sheet was going to POOL at all -- and carries which routine a sheet
+feeds now; which of its boxes the `sub` dropdown makes live is still
+`lzf:dead`'s half and still Lisp's)*; and `lzf:dead` lives only in
+Lisp, so a form shows every box its sheet has and lets the routine
+ignore what this page does not ask about. **The pool-bottom tab stays a
 photograph on purpose** -- the chart tab asks for the same depths and
 the same `btype`, but it cannot show you a SECTION, and choosing a
 bottom is the moment you want to look at one.
@@ -519,6 +522,85 @@ Still open, and genuinely blocked on a machine with a compiler:
   should run the spa form once with a `NotGiven` corner and confirm the
   `?` mark lands, per `ui/PLAN.md` -- and now also type `6'-3"` into a
   box, which the palette could not read until phase 5d and can.
+
+### Phase 5i -- the audit of the VB, and the four things it found *(done 2026-09-09)*
+
+Phase 5h's "not there yet" list named `lzf:*oaslive*` as a missing
+nicety: an OASIS sheet showed every box it has instead of the ones its
+`sub` dropdown makes live. Reading the assembly against the Lisp
+rather than against the plan found the consequence that list had
+understated, and three more.
+
+- **Five of the thirteen sheets went to the wrong routine.**
+  `ChartCatalog.Pool` is `LAZFORM`'s whole tab strip, eight POOL pages
+  and five OASIS ones, and the palette mounted all thirteen on one
+  hard-coded `pool:run-with-answers` -- so *Oasis - Cloud* filled in an
+  oasis sheet and handed `(shape . "Cloud")` to POOL. `lzf:run` reads
+  which routine off the chart, because "the tab IS the choice", and
+  `PoolSheet.EntryPoint` carries that now. With it come the two
+  page-wide questions `lzf:oasform` does not take -- an oasis page has
+  no in-square toggle and no bottom-type tile, so the palette offers
+  neither and sends neither. The bottom popup also comes off the L
+  shapes, which is `lzf:btlive`.
+- **Every rebuild threw the sheet away.** All three DCL forms keep
+  their answers in a keyed store that outlives a page switch and each
+  says so in as many words -- LAZSTEP's is "change the count, come
+  back, and the steps that still exist still carry what was typed
+  against them". The palette rebuilt every row on a chart change, a
+  shape change, a count change or a flick of the in-square toggle, and
+  lost the lot. It keeps them by key now, dropdowns included, and
+  `Clear` clears that memory too.
+- **The state line lied in both directions.** It asked the wire what
+  would be dropped by packing the sheet with `RecallStore.Pack`, which
+  *leaves out* a value carrying a `;` or an `=` -- correct for a store
+  writing one back, and exactly wrong for a question, because a box
+  left out of it is the one box the line could never name. And it
+  counted, and would hold `Draw` back over, a corner size box whose
+  dropdown takes no size: `lzf:livekeys` excludes those precisely so
+  that "neither complaining about its contents nor counting it as still
+  to ask would be true".
+- **The corner gate never travelled.** On the six `lzf:*crecharts*`
+  sheets, `lzf:poolform` answers POOL's "anything to record about the
+  corners?" Yes the moment a row is picked -- "the treatments would be
+  read by nothing if it were left on No". The palette sent the
+  treatments and left the gate for POOL to ask.
+
+- **`NA` reached SPA on keys that have none.** `lzs:keyanswer` demotes
+  an `NA` on any key outside `lzs:*naok*` to an empty box, and the
+  header there says why in as many words: SPA marks its measurement
+  items `REQ` / `SUG` / `NAX`, and "a `REQ` item fed a nil is not asked
+  again -- `spa:askseqb` stores the nil straight into its answers and
+  the flow then does arithmetic on it, which in AutoLISP is an error,
+  not a fallback". The palette sent `(key . nil)` for every `NA`'d box.
+  `lzs:*naok*` is a table, so it travels with the sheet; the form
+  withholds the same boxes the dialog does, and the state line names
+  them and holds `Draw` back, which is `lzs:restate`.
+
+Smaller: the Pool bottom tab's `Draw` refused an unimplemented bottom
+in silence, which reads as a broken palette rather than as a section
+POOL does not have; `ChartFormView.Run` built a `sizedKeys` set nothing
+read; and this README and `gen_ui_charts.py`'s header both still said
+the catalog does not carry `lzf:picks` or the corner tables, which it
+has carried since 5h.
+
+**Still not carried, and still on purpose:** `lzf:dead` and
+`lzs:dead` -- *which* boxes a run asks about given the bottom type, the
+in-square toggle, the mode dropdowns, the grade and the second outline.
+That one is a rule rather than a table and a second copy in VB is the
+drift all of this exists to end, so the state line still counts a box
+those would have greyed, and a dead answer still travels and sits
+unread where `lzf:poolform` would have dropped it. Both are harmless
+and both are the price.
+
+**Also still open**, and named rather than left to be found: the pool
+BOTTOM tab has no state line, so a box there that will not read is
+dropped by the wire without being named. It is the last form on this
+surface outside the `FormWire` kit, and it waits because a
+`BottomField` is not a `ChartBox` -- that tab is still a photograph
+with a field map, and the two types merge the day it is drawn from
+vectors. Its map is now held to `assets/bottoms/fieldmap.json` by
+`tests/test_pool_form.py` in the meantime, since the JSON was pinned to
+POOL and the VB that actually ships was pinned to nothing.
 
 ## After the plan: what nothing was checking
 

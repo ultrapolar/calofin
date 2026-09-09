@@ -33,12 +33,25 @@ palette needs no arc arithmetic of its own and cannot round an oval a
 different way from the panel.  The palette gets polylines and a scale
 factor, and that is the whole of its geometry.
 
-What this does NOT carry, and deliberately: ``lzf:dead``, the cross-dim
-mode dropdowns, ``lzf:picks`` and the corner tables.  Those are RULES,
-not data -- what a page asks about given the bottom type and the
-in-square toggle -- and a second copy in VB is the drift this whole
-exercise exists to stop.  A palette form sends what was typed and lets
-the routine ask for the rest, which is the wire's contract already.
+What this does NOT carry, and deliberately, is ``lzf:dead`` and
+``lzs:dead``: WHICH of a page's boxes this run will actually ask about,
+given the bottom type, the in-square toggle and the mode dropdowns.
+That is a rule rather than a table, and a second copy of it in VB is the
+drift this whole exercise exists to stop.  A palette form sends what was
+typed and lets the routine ask for the rest, which is the wire's
+contract already -- the cost being that the palette's state line counts
+a box the routine would not have asked for.
+
+Everything else those pages are built out of IS carried, because it is a
+table: the cross dims, the mode dropdowns (``lzf:*picks*``), the corner
+rows with both of their target lists, the spa lists and corner
+treatments -- and, per sheet, the three things that decide what a page
+even offers: which routine it feeds (``lzf:oasis-p``), whether it
+carries a bottom-type popup (``lzf:btlive``), and whether a corner row
+answered on it also answers POOL's corner gate (``lzf:*crecharts*``).
+Without that last group the palette cannot dispatch at all: five of the
+thirteen LAZFORM sheets are OASIS pages, and a form built from the other
+eight's rules is handed to the wrong routine.
 """
 
 import argparse
@@ -234,9 +247,17 @@ def read_spa_extras():
         vm.loads("(setq t:*co* (lzs:corners t:*c*))")
         vm.loads("(setq t:*se* (lzs:second t:*c*))")
         vm.loads("(setq t:*hi* (lzs:hint t:*c*))")
+        # WHERE NA IS A REAL ANSWER.  lzs:*naok* is a table, per sheet,
+        # and it has to travel: lzs:keyanswer demotes an NA on any
+        # other key to an empty box, because SPA does not ask a REQ
+        # item again once a nil is stored -- "the flow then does
+        # arithmetic on it, which in AutoLISP is an error, not a
+        # fallback".
+        vm.loads("(setq t:*na* (lzs:naok t:*c*))")
         sheets.append({
             "key": key,
             "hint": str(vm.globals["t:*hi*"] or ""),
+            "naok": [str(k) for k in (vm.globals["t:*na*"] or [])],
             "corners": [(str(d[0]), str(d[1]))
                         for d in (vm.globals["t:*co*"] or [])],
             "second": [(str(d[0]), str(d[1]))
@@ -271,6 +292,23 @@ def read_pool_extras():
     m = re.search(r"\(cons 'insq \(if insq \"(\w+)\" \"(\w+)\"\)\)", src)
     insq = (m.group(1), m.group(2)) if m else ("Insquare", "Outofsquare")
 
+    #: lzf:run's two entry points.  WHICH ONE a sheet goes to is a
+    #: property of the CHART and not of anything the drafter does --
+    #: "the tab IS the choice", lzf:*oaslive*'s own header -- so it has
+    #: to travel with the sheet or the palette cannot dispatch at all.
+    entries = {}
+    for who in ("pool", "oasis"):
+        m = re.search(r"\((%s:run-with-answers) form\)" % who, src)
+        entries[who] = m.group(1) if m else "%s:run-with-answers" % who
+
+    #: the corner gate, from lzf:poolform: on the sheets that put a
+    #: yes/no in front of the corner questions, a row answered here
+    #: answers that gate too -- "the treatments would be read by
+    #: nothing if it were left on No".
+    m = re.search(r"lzf:\*crecharts\*\)\)\s*\(setq out \(cons \(cons "
+                  r"'(\w+)\s+\"([^\"]*)\"\)", src)
+    gate = (m.group(1), m.group(2)) if m else ("crec", "Yes")
+
     sheets = []
     for c in vm.globals["lzf:*charts*"]:
         key = str(c[0])
@@ -278,6 +316,16 @@ def read_pool_extras():
         vm.loads("(setq t:*x* (lzf:cross t:*c*))")
         vm.loads("(setq t:*p* (lzf:picks t:*c*))")
         vm.loads("(setq t:*co* (lzf:corners t:*c*))")
+        # WHICH ROUTINE, and which of POOL's two page-wide questions
+        # this sheet even carries.  All three are the file's own
+        # predicates rather than a list re-typed here: an OASIS page
+        # has no bottom-type tile (lzf:pagekeys) and lzf:oasform takes
+        # no in-square keyword, and the L shapes have no bottom popup
+        # at all (lzf:*nobtype*).
+        vm.loads("(setq t:*o* (if (lzf:oasis-p t:*c*) 1 0))")
+        vm.loads("(setq t:*b* (if (and (lzf:btlive t:*c*) "
+                 "(not (lzf:oasis-p t:*c*))) 1 0))")
+        vm.loads('(setq t:*g* (if (member "%s" lzf:*crecharts*) 1 0))' % key)
         sheets.append({
             "key": key,
             "cross": [(str(d[0]), str(d[1]))
@@ -289,14 +337,21 @@ def read_pool_extras():
                          [str(x) for x in (d[2] or [])],
                          [str(x) for x in (d[3] or [])])
                         for d in (vm.globals["t:*co*"] or [])],
+            "oasis": bool(int(vm.globals["t:*o*"])),
+            "bottom": bool(int(vm.globals["t:*b*"])),
+            "cornergate": bool(int(vm.globals["t:*g*"])),
         })
-    return treatments, sized, btypes, insq, sheets
+    return treatments, sized, btypes, insq, entries, gate, sheets
 
 
 # ------------------------------------------------------------ emitting
 
 def vbstr(s):
     return '"' + s.replace('"', '""') + '"'
+
+
+def vbbool(b):
+    return "True" if b else "False"
 
 
 def stroke_lines(items, indent):
@@ -448,12 +503,15 @@ def spa_block(lists, treatments, sized, gap, sheets):
                            "," if j < len(sh["second"]) - 1 else "")
                         for j, (k, lb) in enumerate(sh["second"])],
                        "            "))
-        L[-1] += ")" + ("," if i < len(sheets) - 1 else "")
+        L[-1] += ","
+        add("            New String() {%s})%s"
+            % (", ".join(vbstr(k) for k in sh["naok"]),
+               "," if i < len(sheets) - 1 else ""))
     add("    }")
     return L
 
 
-def pool_block(treatments, sized, btypes, insq, sheets):
+def pool_block(treatments, sized, btypes, insq, entries, gate, sheets):
     """The LAZFORM-only tables."""
     L = []
     add = L.append
@@ -480,6 +538,23 @@ def pool_block(treatments, sized, btypes, insq, sheets):
     add("    ''' not a yes/no: POOL reads a keyword.</summary>")
     add("    Public Const InSquare As String = %s" % vbstr(insq[0]))
     add("    Public Const OutOfSquare As String = %s" % vbstr(insq[1]))
+    add("")
+    add("    ''\' <summary>lzf:run's two entry points. A sheet feeds one")
+    add("    ''\' routine or the other and WHICH is a property of the")
+    add("    ''\' chart rather than of anything the drafter does -- the")
+    add("    ''\' tab IS the choice -- so PoolSheet.EntryPoint answers it")
+    add("    ''\' per sheet and the form asks rather than assuming.")
+    add("    ''\' </summary>")
+    add("    Public Const PoolEntry As String = %s" % vbstr(entries["pool"]))
+    add("    Public Const OasisEntry As String = %s" % vbstr(entries["oasis"]))
+    add("")
+    add("    ''\' <summary>POOL's corner gate, from lzf:poolform: on the")
+    add("    ''\' sheets that put a yes/no in front of the corner")
+    add("    ''\' questions, a corner row answered on the form answers")
+    add("    ''\' that gate too -- without it the treatments would be")
+    add("    ''\' read by nothing if the gate were left on No.</summary>")
+    add("    Public Const CornerGateKey As String = %s" % vbstr(gate[0]))
+    add("    Public Const CornerGateAnswer As String = %s" % vbstr(gate[1]))
     add("")
     add("    ''' <summary>One keyword dropdown on a pool sheet. SECTION is")
     add("    ''' lzf:*picks*' own: \"cross\" ties the dropdown to the cross")
@@ -543,15 +618,41 @@ def pool_block(treatments, sized, btypes, insq, sheets):
     add("        Public ReadOnly Cross As ListKey()")
     add("        Public ReadOnly Picks As PoolPick()")
     add("        Public ReadOnly Corners As PoolCornerRow()")
+    add("        ''\' <summary>lzf:oasis-p: this sheet's form goes to")
+    add("        ''\' OASIS, which also means the page carries neither of")
+    add("        ''\' POOL's two page-wide questions -- lzf:oasform takes")
+    add("        ''\' no in-square keyword, and lzf:pagekeys puts no")
+    add("        ''\' bottom-type tile on an oasis page.</summary>")
+    add("        Public ReadOnly Oasis As Boolean")
+    add("        ''\' <summary>lzf:btlive: the bottom-type popup is on")
+    add("        ''\' this page. The L shapes have none (lzf:*nobtype*),")
+    add("        ''\' and neither does an oasis sheet.</summary>")
+    add("        Public ReadOnly Bottom As Boolean")
+    add("        ''\' <summary>lzf:*crecharts*: a corner row answered here")
+    add("        ''\' also answers POOL's corner gate.</summary>")
+    add("        Public ReadOnly CornerGate As Boolean")
     add("")
     add("        Public Sub New(key As String, cross As ListKey(),")
     add("                       picks As PoolPick(),")
-    add("                       corners As PoolCornerRow())")
+    add("                       corners As PoolCornerRow(),")
+    add("                       oasis As Boolean, bottom As Boolean,")
+    add("                       cornerGate As Boolean)")
     add("            Me.Key = key")
     add("            Me.Cross = cross")
     add("            Me.Picks = picks")
     add("            Me.Corners = corners")
+    add("            Me.Oasis = oasis")
+    add("            Me.Bottom = bottom")
+    add("            Me.CornerGate = cornerGate")
     add("        End Sub")
+    add("")
+    add("        ''\' <summary>The routine this sheet's form is handed")
+    add("        ''\' to.</summary>")
+    add("        Public ReadOnly Property EntryPoint As String")
+    add("            Get")
+    add("                Return If(Oasis, OasisEntry, PoolEntry)")
+    add("            End Get")
+    add("        End Property")
     add("    End Structure")
     add("")
     add("    Public Shared ReadOnly PoolSheets As PoolSheet() = {")
@@ -581,7 +682,11 @@ def pool_block(treatments, sized, btypes, insq, sheets):
                         for j, (k, lb, ins, outs)
                         in enumerate(sh["corners"])],
                        "            "))
-        L[-1] += ")" + ("," if i < len(sheets) - 1 else "")
+        L[-1] += ","
+        add("            %s, %s, %s)%s"
+            % (vbbool(sh["oasis"]), vbbool(sh["bottom"]),
+               vbbool(sh["cornergate"]),
+               "," if i < len(sheets) - 1 else ""))
     add("    }")
     add("")
     add("    ''' <summary>The pool extras for a sheet, or one with a")
@@ -798,14 +903,35 @@ Public NotInheritable Class ChartCatalog
         ''' PER SHAPE: the rectangle's pair is w2/l2, the octagon's is
         ''' b2/a2 plus the cut face f2.</summary>
         Public ReadOnly Second As ListKey()
+        ''' <summary>lzs:*naok*: the keys where NA really is an answer
+        ''' on this sheet.  An NA anywhere else is demoted to an empty
+        ''' box by lzs:keyanswer, and must be here too -- SPA does not
+        ''' ask a REQ item again once a nil is stored, and the flow
+        ''' then does arithmetic on it, which in AutoLISP is an error
+        ''' rather than a fallback.</summary>
+        Public ReadOnly NaOk As String()
 
         Public Sub New(key As String, hint As String,
-                       corners As SpaCornerRow(), second As ListKey())
+                       corners As SpaCornerRow(), second As ListKey(),
+                       naOk As String())
             Me.Key = key
             Me.Hint = hint
             Me.Corners = corners
             Me.Second = second
+            Me.NaOk = naOk
         End Sub
+
+        ''' <summary>Is NA an answer to this key on this sheet?
+        ''' </summary>
+        Public Function TakesNa(key As String) As Boolean
+            If NaOk Is Nothing Then Return False
+            For Each k In NaOk
+                If String.Equals(k, key, StringComparison.Ordinal) Then
+                    Return True
+                End If
+            Next
+            Return False
+        End Function
     End Structure
 
     ''' <summary>One step routine: the command a drafter knows it by,

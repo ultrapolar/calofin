@@ -32,11 +32,18 @@ Public Class CalofinPalette
             ' sheet the palette never had.  POOL's bottom stays a tab of
             ' its own because it is a different drawing: a section, with
             ' the depths on it, and LAZFORM keeps them apart too.
+            '
+            ' This is LAZFORM's WHOLE tab strip, oasis pages included.
+            ' Which routine a sheet feeds is the sheet's own answer --
+            ' lzf:run reads it off the chart -- so the entry point named
+            ' here is only what a sheet the catalog has no row for would
+            ' fall back to.
             _ps.AddVisual("Pool chart", New ChartFormView(
-                ChartCatalog.Pool, "pool:run-with-answers",
+                ChartCatalog.Pool, ChartCatalog.PoolEntry,
                 RecallStore.PoolKey,
                 "Pick the sheet, fill in what you have. Anything left " &
-                "blank is asked for at the command line."))
+                "blank is asked for at the command line. The Oasis " &
+                "sheets are here too, and go to OASIS."))
             _ps.AddVisual("Steps", New StepFormView())
             _ps.AddVisual("Spa", New SpaChartView())
             _ps.AddVisual("Pool bottom", New PoolFormView())

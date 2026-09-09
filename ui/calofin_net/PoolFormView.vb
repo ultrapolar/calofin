@@ -239,6 +239,14 @@ Public Class PoolFormView
         .Margin = New Thickness(0, 6, 0, 0),
         .Visibility = Visibility.Collapsed}
 
+    ''' <summary>Draw. A bottom POOL cannot draw turns it off: Run has
+    ''' always refused one -- there is no keyword to send it under --
+    ''' but it refused in silence, and a button that answers a press
+    ''' with nothing at all reads as a broken palette rather than as a
+    ''' section POOL does not have.</summary>
+    Private ReadOnly _draw As New Button() With {
+        .Content = "Draw", .Padding = New Thickness(14, 4, 14, 4)}
+
     Private _current As PoolBottom
 
     Public Sub New()
@@ -281,9 +289,7 @@ Public Class PoolFormView
             .Orientation = Orientation.Horizontal,
             .HorizontalAlignment = HorizontalAlignment.Right,
             .Margin = New Thickness(0, 8, 0, 0)}
-        Dim draw As New Button() With {
-            .Content = "Draw", .Padding = New Thickness(14, 4, 14, 4)}
-        AddHandler draw.Click, Sub() Run()
+        AddHandler _draw.Click, Sub() Run()
         Dim clear As New Button() With {
             .Content = "Clear", .Padding = New Thickness(10, 4, 10, 4),
             .Margin = New Thickness(0, 0, 6, 0)}
@@ -296,7 +302,7 @@ Public Class PoolFormView
                 End If
             End Sub
         buttons.Children.Add(clear)
-        buttons.Children.Add(draw)
+        buttons.Children.Add(_draw)
         DockPanel.SetDock(buttons, Dock.Bottom)
         panel.Children.Add(buttons)
 
@@ -319,6 +325,7 @@ Public Class PoolFormView
         _rows.Children.Clear()
         _canvas.Children.Clear()
         _overlay.Clear()
+        _draw.IsEnabled = b IsNot Nothing AndAlso b.Supported
         If b Is Nothing Then Return
 
         If b.Supported Then

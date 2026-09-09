@@ -18,9 +18,10 @@ runtime.
 ## The one rule
 
 **This assembly contains no drawing logic.** It collects answers and
-formats them into a call on `spa:run-with-answers`. Every geometry rule,
-default, corner treatment and dimension stays in `SPA.LSP`, unchanged and
-unaware a form was involved.
+formats them into a call on the routine's own `*:run-with-answers` —
+POOL's, OASIS's, SPA's or a step routine's. Every geometry rule,
+default, corner treatment and dimension stays in the `.lsp`, unchanged
+and unaware a form was involved.
 
 That is not tidiness for its own sake. It keeps a BricsCAD port a
 UI-shell rewrite against their source-compatible .NET API rather than a
@@ -115,6 +116,19 @@ its blurb, run the generator.
 The sheet `LAZFORM` draws, in the palette: pick one of the thirteen
 charts, fill in the boxes, press Draw.
 
+**Thirteen, and five of them are OASIS pages.** Which routine a sheet
+feeds is a property of the chart and not of anything the drafter does —
+the tab *is* the choice, which is `lzf:*oaslive*`'s own words — so
+`PoolSheet.EntryPoint` carries it and the form asks the sheet rather
+than assuming. An oasis form is also shorter by POOL's two page-wide
+questions: `lzf:oasform` takes neither an in-square keyword nor a
+bottom type, because an oasis page carries neither tile, so neither is
+offered and neither is sent.
+
+That was not theoretical. The palette used to mount all thirteen on one
+hard-coded `pool:run-with-answers`, so picking *Oasis - Cloud* filled in
+an oasis sheet and handed `(shape . "Cloud")` to POOL.
+
 It is **drawn, not photographed**. `ChartSheet` renders
 `ChartCatalog`'s polylines onto a canvas and puts a box at the
 **midpoint of each dimension line** — so no box has a position of its
@@ -147,6 +161,21 @@ All the rows are shown either way. Which one is live is settled at Draw;
 a row that vanished as a toggle moved would take whatever was typed in
 it with it.
 
+And a corner row answered here answers **POOL's corner gate** as well,
+on the six sheets that put a yes/no in front of the corner questions.
+That is `lzf:poolform`'s rule and it is not decoration: leave the gate
+for POOL to ask, answer it No, and every treatment the form just sent
+is read by nothing.
+
+**Nothing typed is lost to a rebuild.** Change the sheet, or flick the
+in-square toggle, and every row is thrown away and built again — so
+what was typed is kept by key and put back, exactly as
+`lzf:*vals*` keeps it on the panel ("it survives the switch and is
+still there if you tab back"). A drafter who fills a sheet in and then
+realises the pool was taped square must not lose the sheet for saying
+so. `Clear` clears that memory too, or the next toggle would put it all
+back.
+
 Every key gets a row in the column beside the chart as well, including
 the ones with a box on the drawing. That is `lzf:*charts*`' own
 decision and it is kept for its reason: a sheet read as two kinds of
@@ -167,8 +196,17 @@ It **asks the wire** what would be dropped (`calofin:unreadable-str`)
 rather than deciding for itself. The palette does not read a
 measurement any more, and a line that named a box the wire would happily
 accept would be worse than no line at all. With the glue not loaded,
-nothing is named and the form is exactly as honest as it was before the
-line existed.
+nothing the wire would drop is named and the form is exactly as honest
+as it was before the line existed.
+
+The one thing it answers for itself is the question's own format. The
+sheet travels as `key=typed;key=typed`, which has no escape, so
+`RecallStore.Pack` leaves out an entry holding a `;` or an `=` rather
+than write it back scrambled — right for the store, and exactly wrong
+for the question: a box quietly left out of it is the one box the line
+could never name, which is the failure the line exists to catch. Such a
+box is named without asking, because nothing `distof` reads carries
+either character.
 
 **Recall last** puts the last accepted sheet for *this chart* back into
 the **empty** boxes only, so it can never overwrite a number just typed
@@ -225,12 +263,26 @@ estimates". Drawn from the vectors, a box needs no position at all: it
 belongs at the **midpoint of its dimension line**, in the chart's own
 0..1000 co-ordinates.
 
-What the catalog deliberately does **not** carry is `lzf:dead`, the
-cross-dim mode dropdowns, `lzf:picks` and the corner tables. Those are
-rules -- what a page asks about given the bottom type and the in-square
-toggle -- and a second copy of a rule in VB is the drift all of this
-exists to end. A form sends what was typed; the routine asks for the
-rest, which is the wire's contract already.
+What the catalog deliberately does **not** carry is `lzf:dead` and
+`lzs:dead`: *which* of a page's boxes this run will actually ask about,
+given the bottom type, the in-square toggle and the mode dropdowns.
+That one is a rule rather than a table, and a second copy of a rule in
+VB is the drift all of this exists to end. A form sends what was typed
+and the routine asks for the rest, which is the wire's contract
+already — the cost being that the palette's state line counts a box the
+routine would not have asked for, and that a dead answer travels and
+sits unread where `lzf:poolform` would have dropped it. Both are
+harmless and both are the price of not keeping a second copy of
+`lzf:dead`.
+
+Everything else those pages are built out of **is** carried, because
+each of them is a table: the cross dims, the mode dropdowns, the corner
+rows with both of their target lists, the spa lists and treatments —
+and, per sheet, the three answers that decide what a page even offers:
+which routine it feeds (`lzf:oasis-p`), whether it has a bottom-type
+popup (`lzf:btlive`, which the L shapes do not), and whether a corner
+row answered on it also answers POOL's corner gate
+(`lzf:*crecharts*`).
 
 `tests/test_ui_charts.py` reads the VB back and holds every sheet,
 dimension and outline point to the Lisp table it came from.
@@ -279,6 +331,17 @@ corner rows, `lzs:*second*` for the other outline's overalls (keys that
 are **per shape**: the rectangle's pair is `w2`/`l2`, the octagon's is
 `b2`/`a2` plus the cut face `f2`), `lzs:*lists*` for the six dropdowns
 and `lzs:*ctreat*` for the corner treatments.
+
+**`NA` is only an answer where SPA has one.** `lzs:*naok*` names the
+keys per sheet — a rectangle's `l` and `l2`, and nothing else — and
+`lzs:keyanswer` demotes an `NA` anywhere else to an empty box. That is
+not tidiness: SPA marks its measurement items `REQ` / `SUG` / `NAX`,
+and *a `REQ` item fed a nil is not asked again* — `spa:askseqb` stores
+the nil and the flow then does arithmetic on it, which in AutoLISP is
+an error rather than a fallback. The table travels with the sheet, the
+form withholds such a box exactly as the dialog does, and the state
+line names it and holds `Draw` back — which is `lzs:restate`, where
+either an unreadable box or a bad `NA` greys `Insert`.
 
 **The corner dropdown speaks the sheet legend** — `90` / `Radius` /
 `Diagonal` — and the palette sends those words as written. SPA
@@ -329,8 +392,18 @@ authority:
 
 The other six are listed on the tab but disabled, with the reason in a
 tooltip, so the screen matches the paper and the gap is visible rather
-than looking like something you failed to find. A `btype` the form sends
-that isn't one of the six is ignored and POOL asks as usual.
+than looking like something you failed to find. **Draw is disabled on
+one of them** as well: `Run` has always refused a bottom with no keyword
+to send, but it refused in silence, and a button that answers a press
+with nothing at all reads as a broken palette rather than as a section
+POOL does not have.
+
+This tab has **no state line**, which is the one place the four forms
+differ: a box here that will not read as a measurement is dropped by the
+wire without being named. It is the last thing on this surface still
+waiting for the `FormWire` kit, and it waits because a `BottomField`
+is not a `ChartBox` — the bottom tab is still a photograph with a field
+map, and the two types merge the day it is drawn from vectors.
 
 The depths needed a different mechanism from everything else. The plan
 chain (`H G F E`, or `E2 F2 G F1 E1` on a Sport) is keyed through
@@ -374,6 +447,15 @@ The distinction the whole feature rests on, and how a box says which:
 | `NA` typed in it | `(key . nil)` | **blank**, the measurement was not taken |
 | a measurement | `(key . 84.0)` | that value, no prompt |
 | anything else | key omitted | not supplied — **ask**, and the state line says which box was dropped |
+
+Two forms withhold an `NA` before it reaches that table, each mirroring
+one rule its own routine could not be left to apply: a **tread** on the
+step sheet, where `NA` is what *ends* a run and would draw fewer steps
+than the sheet in front of you (`lzt:form`), and a **spa key with no
+`NA`**, where a nil lands in a `REQ` item SPA never asks again
+(`lzs:keyanswer`). Both are table lookups rather than opinions about
+the box, and both are named on the state line rather than dropped in
+silence.
 
 **The palette does not read the measurement.** It sends the box's text
 as typed, through `calofin.lsp`:

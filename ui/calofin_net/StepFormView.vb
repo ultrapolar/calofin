@@ -40,6 +40,20 @@ Public Class StepFormView
                    "step count back into the empty boxes"}
 
     Private ReadOnly _boxes As New List(Of ChartBox)
+
+    ''' <summary>
+    ''' What has been typed, BY KEY, kept across a rebuild.
+    '''
+    ''' <para>The drawing IS the count, so changing the count throws
+    ''' every row away and builds another -- and without this that took
+    ''' the flight with it. LAZSTEP does not, and says why in as many
+    ''' words: "everything typed lives in lzt:*vals*, keyed, so it
+    ''' survives the switch: change the count, come back, and the steps
+    ''' that still exist still carry what was typed against
+    ''' them."</para>
+    ''' </summary>
+    Private ReadOnly _typed As New Dictionary(Of String, String)
+
     Private _current As ChartCatalog.StepChart
 
     Public Sub New()
@@ -146,6 +160,8 @@ Public Class StepFormView
 
     Private Sub ShowSheet()
         If Routine.Command Is Nothing OrElse Steps < 1 Then Return
+        ' before a single row is thrown away
+        Remember()
         _current = ChartCatalog.StepChartFor(Routine.Command, Steps)
         _boxes.Clear()
         _rows.Children.Clear()
@@ -165,11 +181,36 @@ Public Class StepFormView
             For Each b In _boxes
                 _rows.Children.Add(MakeRow(b))
             Next
+            Restore()
         Finally
             _building = False
         End Try
         _sheet.Show(_current.Strokes, New ChartCatalog.Mark() {}, _boxes)
         Restate()
+    End Sub
+
+    ''' <summary>Keep what is typed before the rows are rebuilt. An
+    ''' emptied box is FORGOTTEN rather than kept at "", so clearing
+    ''' one and coming back does not bring it back.</summary>
+    Private Sub Remember()
+        For Each b In _boxes
+            If b.IsFilled Then
+                _typed(b.Key) = b.Text
+            Else
+                _typed.Remove(b.Key)
+            End If
+        Next
+    End Sub
+
+    ''' <summary>Put back what this drawing carries a box for. A tread
+    ''' the shorter flight does not have simply waits -- and comes
+    ''' back if the count goes up again, against the same tread it was
+    ''' measured on.</summary>
+    Private Sub Restore()
+        For Each b In _boxes
+            Dim v As String = Nothing
+            If _typed.TryGetValue(b.Key, v) Then b.Text = v
+        Next
     End Sub
 
     Private Function MakeRow(box As ChartBox) As FrameworkElement
@@ -199,7 +240,9 @@ Public Class StepFormView
     Private Sub Restate()
         If _building Then Return
         If _current.Routine Is Nothing Then Return
-        Dim state = FormWire.Line(_boxes)
+        ' LAZSTEP has no lzs:*naok* equivalent either; its one NA rule
+        ' is the tread, and that is mirrored in Run rather than said
+        Dim state = FormWire.Line(_boxes, Nothing)
         _state.Text = state.Text
         _state.Foreground = If(state.Ready, SystemColors.GrayTextBrush,
                                Brushes.OrangeRed)
@@ -207,10 +250,14 @@ Public Class StepFormView
         _recall.IsEnabled = HasStored()
     End Sub
 
+    ''' <summary>Clear means clear: what is remembered across a
+    ''' rebuild goes with the boxes, or the next count would put it
+    ''' all back.</summary>
     Private Sub ClearSheet()
         For Each b In _boxes
             b.Text = ""
         Next
+        _typed.Clear()
         Restate()
     End Sub
 

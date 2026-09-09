@@ -406,3 +406,59 @@ unread = sorted(sent - readable)
 assert not unread, \
     "the pool field map sends keys POOL.LSP never reads: %s" % unread
 print("   %d field-map keys, every one readable" % len(sent))
+
+
+# --------------------------------------------------------------------
+# ...and the VB carries the same map.  BottomCatalog.Load() is the list
+# that actually ships -- the JSON is only "the file the positions are
+# tuned in", which its own header and PoolFormView's both say -- so a
+# key added to one and not the other would leave the check above
+# guarding a file nothing reads.  Every other table in the palette is
+# generated for exactly this reason; this one is still typed twice, so
+# it is compared instead.
+# --------------------------------------------------------------------
+print("== field map: the VB tab carries the same twelve ==")
+
+VB = os.path.join(os.path.dirname(__file__), '..', 'ui', 'calofin_net',
+                  'PoolFormView.vb')
+_vb = open(VB, encoding='utf-8', errors='replace').read()
+
+_blocks = _re.findall(
+    r'Dim (\w+) As New PoolBottom\(\) With \{(.*?)\}\s*\n(.*?)\n\s*out'
+    r'\.Add\(\1\)', _vb, _re.S)
+_vbmap = {}
+for _name, _head, _body in _blocks:
+    _img = _re.search(r'\.ImageFile = "([^"]*)"', _head).group(1)
+    _bt = _re.search(r'\.BType = "([^"]*)"', _head)
+    _vbmap[_img] = {
+        'btype': _bt.group(1) if _bt else None,
+        'fields': [(k, l, float(x), float(y)) for k, l, x, y in _re.findall(
+            r'F\("([^"]*)",\s*"([^"]*)",\s*\n?\s*"[^"]*",\s*'
+            r'([\d.]+),\s*([\d.]+)\)', _body)]}
+
+_map = json.load(open(FIELDMAP))
+assert len(_vbmap) == len(_map['supported']), \
+    "the VB offers %d drawable bottoms, the field map %d" \
+    % (len(_vbmap), len(_map['supported']))
+
+for _name, _spec in _map['supported'].items():
+    _got = _vbmap.get(_spec['image'])
+    assert _got is not None, "%s is in the field map and not in the VB" % _name
+    assert _got['btype'] == _spec['btype'], \
+        "%s: the VB sends btype %r, the field map says %r" \
+        % (_name, _got['btype'], _spec['btype'])
+    # the LETTER is the one the chart prints, which is not always the
+    # POOL key: the sloping shallow end prints C1 where POOL says C
+    _want = [(d['key'], d.get('chartLetter', d['letter']), d['x'], d['y'])
+             for d in _spec['dimensions']]
+    assert _got['fields'] == _want, \
+        "%s: the VB and the field map disagree\n  VB   %r\n  json %r" \
+        % (_name, _got['fields'], _want)
+
+_vbwhy = _re.findall(r'out\.Add\(New PoolBottom\(\) With \{\s*\.Title = '
+                     r'"([^"]*)"', _vb, _re.S)
+_jswhy = [d['title'] for d in _map['notImplemented']]
+assert sorted(_vbwhy) == sorted(_jswhy), \
+    "the VB greys out %r, the field map %r" % (sorted(_vbwhy), sorted(_jswhy))
+print("   %d drawable bottoms and %d greyed, keys, letters and fractions "
+      "all agreeing" % (len(_vbmap), len(_vbwhy)))

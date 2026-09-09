@@ -199,14 +199,35 @@ Public NotInheritable Class ChartCatalog
         ''' PER SHAPE: the rectangle's pair is w2/l2, the octagon's is
         ''' b2/a2 plus the cut face f2.</summary>
         Public ReadOnly Second As ListKey()
+        ''' <summary>lzs:*naok*: the keys where NA really is an answer
+        ''' on this sheet.  An NA anywhere else is demoted to an empty
+        ''' box by lzs:keyanswer, and must be here too -- SPA does not
+        ''' ask a REQ item again once a nil is stored, and the flow
+        ''' then does arithmetic on it, which in AutoLISP is an error
+        ''' rather than a fallback.</summary>
+        Public ReadOnly NaOk As String()
 
         Public Sub New(key As String, hint As String,
-                       corners As SpaCornerRow(), second As ListKey())
+                       corners As SpaCornerRow(), second As ListKey(),
+                       naOk As String())
             Me.Key = key
             Me.Hint = hint
             Me.Corners = corners
             Me.Second = second
+            Me.NaOk = naOk
         End Sub
+
+        ''' <summary>Is NA an answer to this key on this sheet?
+        ''' </summary>
+        Public Function TakesNa(key As String) As Boolean
+            If NaOk Is Nothing Then Return False
+            For Each k In NaOk
+                If String.Equals(k, key, StringComparison.Ordinal) Then
+                    Return True
+                End If
+            Next
+            Return False
+        End Function
     End Structure
 
     ''' <summary>One step routine: the command a drafter knows it by,
@@ -1678,6 +1699,23 @@ Public NotInheritable Class ChartCatalog
     Public Const InSquare As String = "Insquare"
     Public Const OutOfSquare As String = "Outofsquare"
 
+    ''' <summary>lzf:run's two entry points. A sheet feeds one
+    ''' routine or the other and WHICH is a property of the
+    ''' chart rather than of anything the drafter does -- the
+    ''' tab IS the choice -- so PoolSheet.EntryPoint answers it
+    ''' per sheet and the form asks rather than assuming.
+    ''' </summary>
+    Public Const PoolEntry As String = "pool:run-with-answers"
+    Public Const OasisEntry As String = "oasis:run-with-answers"
+
+    ''' <summary>POOL's corner gate, from lzf:poolform: on the
+    ''' sheets that put a yes/no in front of the corner
+    ''' questions, a corner row answered on the form answers
+    ''' that gate too -- without it the treatments would be
+    ''' read by nothing if the gate were left on No.</summary>
+    Public Const CornerGateKey As String = "crec"
+    Public Const CornerGateAnswer As String = "Yes"
+
     ''' <summary>One keyword dropdown on a pool sheet. SECTION is
     ''' lzf:*picks*' own: "cross" ties the dropdown to the cross
     ''' dims -- in square there are none, so there is no mode to
@@ -1740,15 +1778,41 @@ Public NotInheritable Class ChartCatalog
         Public ReadOnly Cross As ListKey()
         Public ReadOnly Picks As PoolPick()
         Public ReadOnly Corners As PoolCornerRow()
+        ''' <summary>lzf:oasis-p: this sheet's form goes to
+        ''' OASIS, which also means the page carries neither of
+        ''' POOL's two page-wide questions -- lzf:oasform takes
+        ''' no in-square keyword, and lzf:pagekeys puts no
+        ''' bottom-type tile on an oasis page.</summary>
+        Public ReadOnly Oasis As Boolean
+        ''' <summary>lzf:btlive: the bottom-type popup is on
+        ''' this page. The L shapes have none (lzf:*nobtype*),
+        ''' and neither does an oasis sheet.</summary>
+        Public ReadOnly Bottom As Boolean
+        ''' <summary>lzf:*crecharts*: a corner row answered here
+        ''' also answers POOL's corner gate.</summary>
+        Public ReadOnly CornerGate As Boolean
 
         Public Sub New(key As String, cross As ListKey(),
                        picks As PoolPick(),
-                       corners As PoolCornerRow())
+                       corners As PoolCornerRow(),
+                       oasis As Boolean, bottom As Boolean,
+                       cornerGate As Boolean)
             Me.Key = key
             Me.Cross = cross
             Me.Picks = picks
             Me.Corners = corners
+            Me.Oasis = oasis
+            Me.Bottom = bottom
+            Me.CornerGate = cornerGate
         End Sub
+
+        ''' <summary>The routine this sheet's form is handed
+        ''' to.</summary>
+        Public ReadOnly Property EntryPoint As String
+            Get
+                Return If(Oasis, OasisEntry, PoolEntry)
+            End Get
+        End Property
     End Structure
 
     Public Shared ReadOnly PoolSheets As PoolSheet() = {
@@ -1767,7 +1831,8 @@ Public NotInheritable Class ChartCatalog
             New PoolCornerRow("cornerb", "Corner B (bottom right)", New String() {}, New String() {"cornerb"}),
             New PoolCornerRow("cornerc", "Corner C (top right)", New String() {}, New String() {"cornerc"}),
             New PoolCornerRow("cornerd", "Corner D (top left)", New String() {}, New String() {"cornerd"})
-            }),
+            },
+            False, True, False),
         New PoolSheet("Oval",
             New ListKey() {
             New ListKey("x0", "Cross dim 1"),
@@ -1778,7 +1843,8 @@ Public NotInheritable Class ChartCatalog
             New PoolPick() {
             New PoolPick("cmode", "Cross dims measured from", "cross", New String() {"(ask)", "Corner", "Middle", "Ends"})
             },
-            New PoolCornerRow() {}),
+            New PoolCornerRow() {},
+            False, True, False),
         New PoolSheet("ROman",
             New ListKey() {
             New ListKey("ac", "Cross dim body A-C"),
@@ -1790,7 +1856,8 @@ Public NotInheritable Class ChartCatalog
             New PoolCornerRow("cornerb", "Corner B (bottom right)", New String() {}, New String() {"cornerb"}),
             New PoolCornerRow("cornerc", "Corner C (top right)", New String() {}, New String() {"cornerc"}),
             New PoolCornerRow("cornerd", "Corner D (top left)", New String() {}, New String() {"cornerd"})
-            }),
+            },
+            False, True, True),
         New PoolSheet("Grecian",
             New ListKey() {
             New ListKey("x0", "Cross dim 1"),
@@ -1802,7 +1869,8 @@ Public NotInheritable Class ChartCatalog
             New PoolCornerRow() {
             New PoolCornerRow("bodycorners", "Body corners (all four)", New String() {"bodycorners"}, New String() {"cornera", "cornerb", "cornerc", "cornerd"}),
             New PoolCornerRow("endcorners", "End-tip corners (LT LB RT RB)", New String() {"endcorners"}, New String() {"cornerlt", "cornerlb", "cornerrt", "cornerrb"})
-            }),
+            },
+            False, True, True),
         New PoolSheet("GRSquare",
             New ListKey() {
             New ListKey("x0", "Cross dim 1"),
@@ -1814,7 +1882,8 @@ Public NotInheritable Class ChartCatalog
             New PoolCornerRow() {
             New PoolCornerRow("bodycorners", "Body corners (all four)", New String() {"bodycorners"}, New String() {"cornera", "cornerb", "cornerc", "cornerd"}),
             New PoolCornerRow("endcorners", "End-tip corners (LT LB RT RB)", New String() {"endcorners"}, New String() {"cornerlt", "cornerlb", "cornerrt", "cornerrb"})
-            }),
+            },
+            False, True, True),
         New PoolSheet("L",
             New ListKey() {
             New ListKey("ac", "Cross dim A-C"),
@@ -1833,11 +1902,13 @@ Public NotInheritable Class ChartCatalog
             New PoolCornerRow() {
             New PoolCornerRow("outercorners", "Outer corners (all five)", New String() {"outercorners"}, New String() {"outercorners"}),
             New PoolCornerRow("innercorner", "Reverse corner E", New String() {"innercorner"}, New String() {"innercorner"})
-            }),
+            },
+            False, False, True),
         New PoolSheet("ROUnd",
             New ListKey() {},
             New PoolPick() {},
-            New PoolCornerRow() {}),
+            New PoolCornerRow() {},
+            False, True, False),
         New PoolSheet("OCtagon",
             New ListKey() {
             New ListKey("x0", "Cross dim 1"),
@@ -1849,39 +1920,45 @@ Public NotInheritable Class ChartCatalog
             New PoolCornerRow() {
             New PoolCornerRow("bodycorners", "Body corners (all four)", New String() {"bodycorners"}, New String() {"cornera", "cornerb", "cornerc", "cornerd"}),
             New PoolCornerRow("endcorners", "End-tip corners (LT LB RT RB)", New String() {"endcorners"}, New String() {"cornerlt", "cornerlb", "cornerrt", "cornerrb"})
-            }),
+            },
+            False, True, True),
         New PoolSheet("OACenter",
             New ListKey() {},
             New PoolPick() {
             New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
             },
-            New PoolCornerRow() {}),
+            New PoolCornerRow() {},
+            True, False, False),
         New PoolSheet("OATopRight",
             New ListKey() {},
             New PoolPick() {
             New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
             },
-            New PoolCornerRow() {}),
+            New PoolCornerRow() {},
+            True, False, False),
         New PoolSheet("OACloud",
             New ListKey() {},
             New PoolPick() {
             New PoolPick("sub", "Cloud bottom", "run", New String() {"(ask)", "Straight", "Rounded"}),
             New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
             },
-            New PoolCornerRow() {}),
+            New PoolCornerRow() {},
+            True, False, False),
         New PoolSheet("OAKidney",
             New ListKey() {},
             New PoolPick() {
             New PoolPick("sub", "Kidney type", "run", New String() {"(ask)", "True", "Asymmetric"}),
             New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
             },
-            New PoolCornerRow() {}),
+            New PoolCornerRow() {},
+            True, False, False),
         New PoolSheet("OANXT",
             New ListKey() {},
             New PoolPick() {
             New PoolPick("detail", "Simple or complex", "run", New String() {"(ask)", "Simple", "Complex"})
             },
-            New PoolCornerRow() {})
+            New PoolCornerRow() {},
+            True, False, False)
     }
 
     ''' <summary>The pool extras for a sheet, or one with a
@@ -1944,20 +2021,23 @@ Public NotInheritable Class ChartCatalog
             New ListKey() {
             New ListKey("w2", "Other outline ACROSS"),
             New ListKey("l2", "Other outline UP")
-            }),
+            },
+            New String() {"l", "l2"}),
         New SpaSheet("OCtagon", "B and A alone draw a true square octagon -- NA the cut letters.",
             New SpaCornerRow() {},
             New ListKey() {
             New ListKey("b2", "Other outline ACROSS"),
             New ListKey("a2", "Other outline UP"),
             New ListKey("f2", "Other outline cut FACE")
-            }),
+            },
+            New String() {"a", "s2", "tt", "ss", "s1", "vv", "a2", "f2"}),
         New SpaSheet("ROund", "Leave A empty for a circle; fill it in and the spa is out of round.",
             New SpaCornerRow() {},
             New ListKey() {
             New ListKey("b2", "Other outline ACROSS"),
             New ListKey("a2", "Other outline UP")
-            })
+            },
+            New String() {"a2"})
     }
 
     ''' <summary>The POOL or OASIS sheet of that name, or one with a
