@@ -7,6 +7,9 @@ where every tool lives side by side and can be worked on from a single
 checkout.
 
 ```
+ariel/      Windows helper: places Ariel's deck anchors on the dots in a
+            drone photo. Python, not AutoLISP - not in LAZPASS, not on the
+            palette
 blender/    Blender add-ons (DXF import/export, mesh tools)
 lisp/       AutoLISP tools, one self-contained file each - the source of truth
 releases/   Dated REV-stamped twins of the lisp/ files, flat, GENERATED
@@ -333,6 +336,41 @@ retyped at the keyboard.
 `ui/PLAN.md` was the execution plan for the POOL and SPA halves; the
 design it records (D1-D6) is what got built.
 
+## Ariel anchor placer (`ariel/`)
+
+Windows, Python 3.8+, nothing to install. Ariel (Fisherlea) rectifies a
+near-nadir drone photo to deck scale and the operator then digitises the
+markers taped to the deck - forty-odd of them round a pool - by finding
+each one and clicking it. The finding is mechanical; the checking is
+not. So this finds them and leaves the checking alone:
+
+```
+python ariel\anchors.py           # grab the screen, pick the area, place them
+python ariel\anchors.py --dry-run # the same walk, but never press a button
+```
+
+One screenshot is taken and everything works from it, so what you select
+is provably what gets searched. The dots come back numbered and laid
+over your screen at 1:1 - click to add or remove one, right-click to say
+which is number 1, `o`/`x`/`c` to change the order - and then it clicks
+each anchor and magnifies it at 8x while you say yes, nudge it with the
+arrow keys, or drag it yourself in Ariel and press Enter. The keys are
+read through a low-level hook so Ariel keeps the focus throughout.
+
+It is not an AutoLISP tool and is deliberately in none of the places one
+would be: not in `LAZPASS.lsp`, no `shared/parts/` twin, no `releases/`
+REV twin, not a LAZPANEL caption or a palette button. There is no
+AutoCAD at the point in the job where it runs. `ariel/README.md` has the
+key map, the detection knobs and the reasoning.
+
+Five of its seven modules never touch Windows, so detection, ordering,
+the run loop and the file formats are all testable anywhere:
+
+```
+python3 tests/test_ariel_anchors.py
+python3 ariel/anchors.py --from-shot deck.png --annotate found.png
+```
+
 ## Tools (`tools/`)
 
 | Script | What it does |
@@ -450,6 +488,12 @@ python3 tests/test_cloud_mesher.py    # point cloud mesher
 python3 tests/test_dxf_reader.py      # Merlin import
 python3 tests/test_mesh_layers.py     # Merlin layered export
 python3 tests/test_dewrangler.py      # mesh dewrangler
+python3 tests/test_ariel_anchors.py   # the Ariel anchor placer: the dot
+                                      # detector against a mock deck - water,
+                                      # brick coping and dappled shade all
+                                      # the colour of a marker - plus the
+                                      # three orderings, the confirm loop and
+                                      # the PNG reader
 python3 tests/test_pool_form.py       # a form drives POOL and draws what
                                       # the command line draws
 python3 tests/test_spa_form.py        # the same for SPA, palette wire format

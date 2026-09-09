@@ -43,6 +43,7 @@ on stale work.
 ## Layout
 
 ```
+ariel/      Windows helper for the Ariel anchor step. Python, NOT AutoLISP
 blender/    Blender add-ons (DXF import/export, mesh tools)
 lisp/       AutoLISP tools, one self-contained file each (the source of truth)
 releases/   Dated REV-stamped twins of the lisp/ files, flat, GENERATED
@@ -54,6 +55,19 @@ tests/      Python test suite - stdlib only, no AutoCAD or Blender needed
 ```
 
 See `README.md` for the per-tool command tables.
+
+`ariel/` is outside everything below this line. It drives the mouse and
+the screen so an operator can digitise a drone photo's deck markers
+without hunting for each one; there is no AutoCAD in that step and no
+`.lsp` in the folder. It is therefore **not** in `LAZPASS.lsp`, has no
+`shared/parts/` twin, no `releases/` REV twin, no LAZPANEL caption and
+no palette button, and it needs no `cal:*held-back*` entry either --
+that list is for AutoLISP tools kept out of the bundle, and holding
+back something that was never a member would be a claim that it is one.
+The tier rules, the mirror, the bundle and the registry all read
+`lisp/`, `shared/` and `releases/`, so none of them look at it. Change
+it like ordinary Python: edit, run `python3 tests/test_ariel_anchors.py`,
+done. `ariel/README.md` is its documentation.
 
 ## The tiers a tool moves through
 
