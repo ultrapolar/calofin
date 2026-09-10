@@ -554,7 +554,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "090826 REV15") ; announced on load.  The
+(setq pf:*version*      "091026 REV16") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -1837,6 +1837,13 @@
 (defun pf:temp-kill (en)
   (if (and en (entget en)) (entdel en))
   (pf:temp-drop en))
+
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
+;; a string where a value would be a list or a number, so the type test
+;; is what separates the two.
+(defun pf:back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
 
 ;; ---- "this one is mine" stamping -------------------------------------
 ;; ABHD writes onto layers the drawing may already be using - FGStep in
@@ -3435,29 +3442,40 @@
 ;; Asked identically at the start of a run and again on a Redo -
 ;; Enter keeps the shown value each time.
 
+;; Each takes BACK: non-nil adds Back (and its hidden Undo synonym) to
+;; the prompt and returns PF-BACK when it is answered, so the caller
+;; can re-open the step before it.  Offering Back never loosens the
+;; value check - initget keeps its bits either way.
+
 ;; Maximum distance from a point; remembered in *PF-TOL*.
-(defun pf:ask-tol (/ tol)
-  (initget 6)
+(defun pf:ask-tol (back / tol)
+  (if back (initget 6 "Back Undo") (initget 6))
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
-                             (rtos *PF-TOL* 2 3) ">: ")))
-  (if (null tol) (setq tol *PF-TOL*))
-  (if (> tol *PF-TOL-MAX*)
-    (progn
-      (princ (strcat "\n  (more than " (rtos *PF-TOL-MAX* 2 1)
-                     " and the line is no longer a trace of the points"
-                     " - using " (rtos *PF-TOL-MAX* 2 1) ")"))
-      (setq tol *PF-TOL-MAX*)))
-  (setq *PF-TOL* tol)
-  tol)
+                             (rtos *PF-TOL* 2 3) ">"
+                             (if back " [Back]" "") ": ")))
+  (cond
+    ((pf:back-kw tol) 'PF-BACK)
+    (T
+     (if (null tol) (setq tol *PF-TOL*))
+     (if (> tol *PF-TOL-MAX*)
+       (progn
+         (princ (strcat "\n  (more than " (rtos *PF-TOL-MAX* 2 1)
+                        " and the line is no longer a trace of the points"
+                        " - using " (rtos *PF-TOL-MAX* 2 1) ")"))
+         (setq tol *PF-TOL-MAX*)))
+     (setq *PF-TOL* tol)
+     tol)))
 
 ;; Share of the points allowed off the line, returned as a fraction;
 ;; DEF is the fraction Enter keeps.
-(defun pf:ask-pct (def / pct)
-  (initget 4)
+(defun pf:ask-pct (def back / pct)
+  (if back (initget 4 "Back Undo") (initget 4))
   (setq pct (getint (strcat "\n  Percent of points allowed off <"
                             (itoa (fix (+ 0.5 (* 100.0 def))))
-                            ">: ")))
+                            ">"
+                            (if back " [Back]" "") ": ")))
   (cond
+    ((pf:back-kw pct) 'PF-BACK)
     ((null pct) def)
     ((> pct 100)
      (princ "\n  (more than 100 makes no sense - using 100)")
@@ -3465,15 +3483,112 @@
     (T (/ pct 100.0))))
 
 ;; Curve cap; remembered in *PF-MAX-ARCS* (nil = no cap).
-(defun pf:ask-cap (/ mx)
-  (initget 4 "None")
+(defun pf:ask-cap (back / mx)
+  (if back (initget 4 "None Back Undo") (initget 4 "None"))
   (setq mx (getint (strcat "\n  Maximum curves <"
                            (if *PF-MAX-ARCS* (itoa *PF-MAX-ARCS*) "None")
-                           ">: ")))
-  (cond ((null mx) nil)                            ; Enter: keep as-is
-        ((eq 'STR (type mx)) (setq *PF-MAX-ARCS* nil))
-        (T (setq *PF-MAX-ARCS* mx)))
-  *PF-MAX-ARCS*)
+                           ">"
+                           (if back " [None/Back]" "") ": ")))
+  (cond
+    ((pf:back-kw mx) 'PF-BACK)
+    (T
+     (cond ((null mx) nil)                         ; Enter: keep as-is
+           ((eq 'STR (type mx)) (setq *PF-MAX-ARCS* nil))
+           (T (setq *PF-MAX-ARCS* mx)))
+     *PF-MAX-ARCS*)))
+
+;; ---- steps 4, 5 and 6: the declaration loops -------------------------
+;; Each collects a list and draws its dashed marker as it goes, so Back
+;; here means what it means in every other draw-as-you-go loop in the
+;; toolset: take back the item declared last, marker and all, and ask
+;; for it again.  At the first item there is nothing left to take back,
+;; so the whole step re-opens instead and its Yes/No question is asked
+;; again - which is how a wrong Yes gets undone.  Each returns its list
+;; oldest-first, or PF-BACK when the step is to re-open, and leaves the
+;; markers it drew in pf-decl-marks so the caller can sweep them if the
+;; step is later re-opened from the one below it.
+
+(defun pf:declare-walls ( / out go wp1 wp2 mk again res)
+  (setq out nil pf-decl-marks nil go T res nil)
+  (while go
+    (setq pf-phase "picking a straight wall")
+    (initget "Back Undo")
+    (setq wp1 (getpoint "\n  First end of the straight wall [Back]: "))
+    (cond
+      ((pf:back-kw wp1)
+       (if pf-decl-marks
+         (progn (pf:temp-kill (car pf-decl-marks))
+                (setq pf-decl-marks (cdr pf-decl-marks) out (cdr out))
+                (princ "\n  Stepping back one wall."))
+         (progn (princ "\n  Already at the first wall.")
+                (setq go nil res T))))
+      ((null wp1) (setq go nil))
+      (T
+       (setq pf-phase "picking a straight wall")
+       (initget "Back Undo")
+       (setq wp2 (getpoint wp1 "\n  Second end [Back]: "))
+       (cond
+         ;; Back at the second end re-asks the first: nothing was
+         ;; committed yet, so there is no marker to sweep
+         ((pf:back-kw wp2) (princ "\n  Stepping back one point."))
+         ((null wp2) (setq go nil))
+         (T
+          (setq wp1 (cal:2d wp1)
+                wp2 (cal:2d wp2)
+                mk  (pf:temp-add (pf:tag-mine (pf:draw-wall-marker wp1 wp2)))
+                pf-decl-marks (cons mk pf-decl-marks)
+                out (cons (list wp1 wp2) out))
+          (initget "Yes No Back Undo")
+          (setq again (getkword "\n  Another straight line? [Yes/No/Back] <No>: "))
+          (cond
+            ((member again '("Back" "Undo"))
+             (pf:temp-kill (car pf-decl-marks))
+             (setq pf-decl-marks (cdr pf-decl-marks) out (cdr out))
+             (princ "\n  Stepping back one wall."))
+            ((/= again "Yes") (setq go nil))))))))
+  (if res 'PF-BACK (reverse out)))
+
+(defun pf:declare-corners ( / out go wp1 mk res)
+  (setq out nil pf-decl-marks nil go T res nil)
+  (while go
+    (setq pf-phase "picking a sharp corner")
+    (initget "Back Undo")
+    (setq wp1 (getpoint "\n  Corner point (Enter when done) [Back]: "))
+    (cond
+      ((pf:back-kw wp1)
+       (if pf-decl-marks
+         (progn (pf:temp-kill (car pf-decl-marks))
+                (setq pf-decl-marks (cdr pf-decl-marks) out (cdr out))
+                (princ "\n  Stepping back one corner."))
+         (progn (princ "\n  Already at the first corner.")
+                (setq go nil res T))))
+      ((null wp1) (setq go nil))
+      (T (setq wp1 (cal:2d wp1)
+               mk  (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp1)))
+               pf-decl-marks (cons mk pf-decl-marks)
+               out (cons wp1 out)))))
+  (if res 'PF-BACK (reverse out)))
+
+(defun pf:declare-holds ( / out go wp1 mk res)
+  (setq out nil pf-decl-marks nil go T res nil)
+  (while go
+    (setq pf-phase "picking a held point")
+    (initget "Back Undo")
+    (setq wp1 (getpoint "\n  Point to hold exactly (Enter when done) [Back]: "))
+    (cond
+      ((pf:back-kw wp1)
+       (if pf-decl-marks
+         (progn (pf:temp-kill (car pf-decl-marks))
+                (setq pf-decl-marks (cdr pf-decl-marks) out (cdr out))
+                (princ "\n  Stepping back one held point."))
+         (progn (princ "\n  Already at the first held point.")
+                (setq go nil res T))))
+      ((null wp1) (setq go nil))
+      (T (setq wp1 (cal:2d wp1)
+               mk  (pf:temp-add (pf:tag-mine (pf:draw-hold-marker wp1)))
+               pf-decl-marks (cons mk pf-decl-marks)
+               out (cons wp1 out)))))
+  (if res 'PF-BACK (reverse out)))
 
 ;; ---- redo-time editing of walls and corners --------------------------
 ;; A Redo may change more than the numbers: straight walls and sharp
@@ -3499,18 +3614,24 @@
 ;; Add or remove declared straight walls.  Ends snap to the survey
 ;; points; each change is confirmed by name and the dashed markers
 ;; follow.
-(defun pf:edit-walls (dpts / ans wp1 wp2 w1 w2 best bd w d)
-  (setq ans T)
+(defun pf:edit-walls (dpts / ans wp1 wp2 w1 w2 best bd w d res)
+  (setq ans T res nil)
   (while ans
-    (initget "Add Remove Keep")
+    (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
                 "\n  Straight walls (" (itoa (length pf-walls))
-                " declared) - [Add/Remove/Keep] <Keep>: ")))
+                " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
     (cond
+      ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
-       (setq pf-phase "picking a straight wall"
-             wp1      (getpoint "\n  First end of the straight wall: ")
-             wp2      (if wp1 (getpoint wp1 "\n  Second end: ")))
+       (setq pf-phase "picking a straight wall")
+       (initget "Back Undo")
+       (setq wp1 (getpoint "\n  First end of the straight wall [Back]: "))
+       (if (pf:back-kw wp1) (setq wp1 nil wp2 nil)
+         (progn
+           (initget "Back Undo")
+           (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
+           (if (pf:back-kw wp2) (setq wp2 nil))))
        (if wp2
          (progn
            (setq w1 (pf:snap-break wp1 dpts)
@@ -3526,8 +3647,10 @@
        (if (null pf-walls)
          (princ "\n  (no straight walls to remove)")
          (progn
-           (setq pf-phase "removing a straight wall"
-                 wp1      (getpoint "\n  Pick near the straight wall to remove: "))
+           (setq pf-phase "removing a straight wall")
+           (initget "Back Undo")
+           (setq wp1 (getpoint "\n  Pick near the straight wall to remove [Back]: "))
+           (if (pf:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
                (setq wp1 (cal:2d wp1) best nil bd nil)
@@ -3543,22 +3666,26 @@
                (princ (strcat "\n  wall Pt." (pf:pt-name (car best))
                               " - Pt." (pf:pt-name (cadr best))
                               " removed")))))))
-      (T (setq ans nil)))))
+      (T (setq ans nil))))
+  (if res 'PF-BACK))
 
 ;; Add or remove declared sharp corners the same way.  (The corners
 ;; the fitter finds by itself - turns over *PF-CORNER-ANG* - are not
 ;; declarations and cannot be removed here.)
-(defun pf:edit-corners (dpts / ans wp1 w1 best bd w)
-  (setq ans T)
+(defun pf:edit-corners (dpts / ans wp1 w1 best bd w res)
+  (setq ans T res nil)
   (while ans
-    (initget "Add Remove Keep")
+    (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
                 "\n  Sharp corners (" (itoa (length pf-corners))
-                " declared) - [Add/Remove/Keep] <Keep>: ")))
+                " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
     (cond
+      ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
-       (setq pf-phase "picking a sharp corner"
-             wp1      (getpoint "\n  Corner point: "))
+       (setq pf-phase "picking a sharp corner")
+       (initget "Back Undo")
+       (setq wp1 (getpoint "\n  Corner point [Back]: "))
+       (if (pf:back-kw wp1) (setq wp1 nil))
        (if wp1
          (progn
            (setq w1 (pf:snap-break wp1 dpts))
@@ -3573,8 +3700,10 @@
        (if (null pf-corners)
          (princ "\n  (no declared corners to remove)")
          (progn
-           (setq pf-phase "removing a sharp corner"
-                 wp1      (getpoint "\n  Pick the declared corner to remove: "))
+           (setq pf-phase "removing a sharp corner")
+           (initget "Back Undo")
+           (setq wp1 (getpoint "\n  Pick the declared corner to remove [Back]: "))
+           (if (pf:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
                (setq wp1 (cal:2d wp1) best nil bd nil)
@@ -3592,20 +3721,24 @@
                  (pf:temp-add (pf:tag-mine (pf:draw-hold-marker w))))
                (princ (strcat "\n  corner Pt." (pf:pt-name best)
                               " removed")))))))
-      (T (setq ans nil)))))
+      (T (setq ans nil))))
+  (if res 'PF-BACK))
 
 ;; Add or remove HELD points the same way.
-(defun pf:edit-holds (dpts / ans wp1 w1 best bd w)
-  (setq ans T)
+(defun pf:edit-holds (dpts / ans wp1 w1 best bd w res)
+  (setq ans T res nil)
   (while ans
-    (initget "Add Remove Keep")
+    (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
                 "\n  Held points (" (itoa (length pf-holds))
-                " declared) - [Add/Remove/Keep] <Keep>: ")))
+                " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
     (cond
+      ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
-       (setq pf-phase "picking a held point"
-             wp1      (getpoint "\n  Point to hold exactly: "))
+       (setq pf-phase "picking a held point")
+       (initget "Back Undo")
+       (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
+       (if (pf:back-kw wp1) (setq wp1 nil))
        (if wp1
          (progn
            (setq w1 (pf:snap-break wp1 dpts))
@@ -3620,8 +3753,10 @@
        (if (null pf-holds)
          (princ "\n  (no held points to remove)")
          (progn
-           (setq pf-phase "removing a held point"
-                 wp1      (getpoint "\n  Pick the held point to release: "))
+           (setq pf-phase "removing a held point")
+           (initget "Back Undo")
+           (setq wp1 (getpoint "\n  Pick the held point to release [Back]: "))
+           (if (pf:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
                (setq wp1 (cal:2d wp1) best nil bd nil)
@@ -3637,10 +3772,12 @@
                  (pf:temp-add (pf:tag-mine (pf:draw-hold-marker w))))
                (princ (strcat "\n  held Pt." (pf:pt-name best)
                               " released")))))))
-      (T (setq ans nil)))))
+      (T (setq ans nil))))
+  (if res 'PF-BACK))
 
 ;; ---- the command -----------------------------------------------------
 (defun c:ABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
+                    step rstep v mk wallmk cnrmk holdmk pf-decl-marks
                     ss i en ed lay typ ext nunsup nocs
                     segs pts dpts allow loop tour ok stale npt
                     again omits pts2 ent ring pf-omitted
@@ -3698,133 +3835,160 @@
 
   (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
 
-  ;; -- step 1: how close must the line stay to the points? ----------
-  ;; This is the one prompt people misread, so it says in plain words
-  ;; what the number means and which way it moves the result.
-  ;; initget 6 refuses zero and negative values - a zero tolerance
-  ;; would silently collapse the fit into single-point stubs.
-  (setq pf-phase "reading the tolerance")
-  (princ "\n\n  Step 1 of 7 - how far may the fitted line sit from a survey point?")
-  (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
-  (princ "\n  pick two points in the drawing to measure one.")
-  (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
-  (setq tol (pf:ask-tol))
+  ;; -- steps 1 to 6: the settings, walked as one chain --------------
+  ;; Every question after the first offers Back (Undo is its hidden
+  ;; synonym), so a mistyped tolerance or a wrong Yes costs one
+  ;; keystroke instead of the whole run.  STEP is the position in the
+  ;; chain and the only way through it: a step answered Back drops it
+  ;; by one, and a step re-entered from below throws away whatever the
+  ;; earlier pass collected there - markers included - so the second
+  ;; answer replaces the first instead of piling on top of it.
+  (setq step 1 rawwalls nil rawcnrs nil rawholds nil
+        wallmk nil cnrmk nil holdmk nil)
+  (while (<= step 6)
+    (cond
 
-  ;; -- step 2: how many of the points may sit off the line? ---------
-  ;; Enter means the standard share; the answer is per run, on purpose.
-  (setq pf-phase "reading the miss percentage")
-  (princ "\n\n  Step 2 of 7 - what percent of the points may sit OFF the line")
-  (princ "\n  (off, but still within the distance above)?")
-  (princ (strcat "\n  Press Enter for the standard "
-                 (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
-                 " percent."))
-  (setq pf-miss-pct (pf:ask-pct *PF-MISS-PCT*))
+      ;; -- step 1: how close must the line stay to the points? ------
+      ;; This is the one prompt people misread, so it says in plain
+      ;; words what the number means and which way it moves the result.
+      ;; initget 6 refuses zero and negative values - a zero tolerance
+      ;; would silently collapse the fit into single-point stubs.
+      ((= step 1)
+       (setq pf-phase "reading the tolerance")
+       (princ "\n\n  Step 1 of 7 - how far may the fitted line sit from a survey point?")
+       (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
+       (princ "\n  pick two points in the drawing to measure one.")
+       (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
+       ;; the first question of the command: nothing to go back to
+       (setq tol  (pf:ask-tol nil)
+             step 2))
 
-  ;; -- step 3: optional cap on how many curves the result may use ---
-  (setq pf-phase "reading the curve limit")
-  (princ "\n\n  Step 3 of 7 - limit how many curves the result may use?")
-  (princ "\n  Type a whole number, or None for no limit.")
-  (pf:ask-cap)
+      ;; -- step 2: how many of the points may sit off the line? -----
+      ;; Enter means the standard share; the answer is per run, on
+      ;; purpose.
+      ((= step 2)
+       (setq pf-phase "reading the miss percentage")
+       (princ "\n\n  Step 2 of 7 - what percent of the points may sit OFF the line")
+       (princ "\n  (off, but still within the distance above)?")
+       (princ (strcat "\n  Press Enter for the standard "
+                      (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
+                      " percent."))
+       (setq v (pf:ask-pct *PF-MISS-PCT* T))
+       (if (eq v 'PF-BACK)
+         (progn (princ "\n  Stepping back one question.")
+                (setq step 1))
+         (setq pf-miss-pct v
+               step        3)))
 
-  ;; -- step 4: any dead-straight walls to declare? ------------------
-  ;; Each declared wall is marked with a dashed line right away and
-  ;; comes out of the fit as a straight LINE between those two survey
-  ;; points, no matter what the arcs around it are doing.
-  (setq pf-phase "asking about straight lines")
-  (princ "\n\n  Step 4 of 7 - does the pool edge have any dead-straight walls?")
-  (princ "\n  If Yes you will pick the two end points of each (snap to the")
-  (princ "\n  survey points); a dashed line marks each declared wall.")
-  (initget "Yes No")
-  (setq ans      (getkword "\n  Any straight lines? [Yes/No] <No>: ")
-        rawwalls nil)
-  (if (= ans "Yes")
-    (progn
-      (setq go T)
-      (while go
-        (setq pf-phase "picking a straight wall"
-              wp1      (getpoint "\n  First end of the straight wall: "))
-        (if wp1
-          (progn
-            (setq wp2 (getpoint wp1 "\n  Second end: "))
-            (if wp2
-              (progn
-                (setq wp1 (cal:2d wp1) wp2 (cal:2d wp2))
-                ;; the dashed marker is scaffolding: it confirms what
-                ;; you declared, and goes when the command ends
-                (pf:temp-add (pf:tag-mine (pf:draw-wall-marker wp1 wp2)))
-                (setq rawwalls (cons (list wp1 wp2) rawwalls))
-                (initget "Yes No")
-                (if (/= (getkword "\n  Another straight line? [Yes/No] <No>: ")
-                        "Yes")
-                  (setq go nil)))
-              (setq go nil)))
-          (setq go nil)))
-      (setq rawwalls (reverse rawwalls))
-      (if rawwalls
-        (princ (strcat "\n  " (itoa (length rawwalls))
-                       " straight wall(s) noted - the dashed markers on "
-                       *PF-WALL-LAYER*
-                       " clear themselves when the command finishes.")))))
+      ;; -- step 3: optional cap on how many curves the result may use
+      ((= step 3)
+       (setq pf-phase "reading the curve limit")
+       (princ "\n\n  Step 3 of 7 - limit how many curves the result may use?")
+       (princ "\n  Type a whole number, or None for no limit.")
+       (if (eq (pf:ask-cap T) 'PF-BACK)
+         (progn (princ "\n  Stepping back one question.")
+                (setq step 2))
+         (setq step 4)))
 
-  ;; -- step 5: any sharp corners to declare? ------------------------
-  ;; The fitter finds obvious corners itself (turns over
-  ;; *PF-CORNER-ANG*), but a gentler one still reads as a corner on
-  ;; site.  A declared point is exempt from the tangency rule: the fit
-  ;; breaks there instead of rounding it off.
-  (setq pf-phase "asking about sharp corners")
-  (princ "\n\n  Step 5 of 7 - are there any sharp corners the fit must not round off?")
-  (princ "\n  Obvious ones are found automatically; declare the gentler ones here.")
-  (princ "\n  If Yes you will pick each corner point (snap to the survey points).")
-  (initget "Yes No")
-  (setq ans     (getkword "\n  Any sharp corners? [Yes/No] <No>: ")
-        rawcnrs nil)
-  (if (= ans "Yes")
-    (progn
-      (setq go T)
-      (while go
-        (setq pf-phase "picking a sharp corner"
-              wp1      (getpoint "\n  Corner point (Enter when done): "))
-        (if wp1
-          (progn
-            (setq wp1     (cal:2d wp1)
-                  rawcnrs (cons wp1 rawcnrs))
-            (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp1))))
-          (setq go nil)))
-      (setq rawcnrs (reverse rawcnrs))
-      (if rawcnrs
-        (princ (strcat "\n  " (itoa (length rawcnrs))
-                       " corner(s) noted - the markers clear themselves"
-                       " when the command finishes.")))))
+      ;; -- step 4: any dead-straight walls to declare? --------------
+      ;; Each declared wall is marked with a dashed line right away and
+      ;; comes out of the fit as a straight LINE between those two
+      ;; survey points, no matter what the arcs around it are doing.
+      ((= step 4)
+       ;; re-entered from step 5: throw away what the earlier pass
+       ;; declared here, dashed markers and all, so the new answer
+       ;; replaces the old instead of piling on top of it
+       (foreach mk wallmk (pf:temp-kill mk))
+       (setq wallmk nil)
+       (setq pf-phase "asking about straight lines")
+       (princ "\n\n  Step 4 of 7 - does the pool edge have any dead-straight walls?")
+       (princ "\n  If Yes you will pick the two end points of each (snap to the")
+       (princ "\n  survey points); a dashed line marks each declared wall.")
+       (initget "Yes No Back Undo")
+       (setq ans      (getkword "\n  Any straight lines? [Yes/No/Back] <No>: ")
+             rawwalls nil)
+       (cond
+         ((member ans '("Back" "Undo"))
+          (princ "\n  Stepping back one question.")
+          (setq step 3))
+         ((= ans "Yes")
+          (setq rawwalls (pf:declare-walls)
+                wallmk   pf-decl-marks)
+          (if (eq rawwalls 'PF-BACK)
+            (setq rawwalls nil)               ; re-ask this step's Yes/No
+            (progn
+              (if rawwalls
+                (princ (strcat "\n  " (itoa (length rawwalls))
+                               " straight wall(s) noted - the dashed markers on "
+                               *PF-WALL-LAYER*
+                               " clear themselves when the command finishes.")))
+              (setq step 5))))
+         (T (setq step 5))))
 
-  ;; -- step 6: any points that must be held absolutely? -------------
-  ;; Control shots and tie-ins are surveyed as exact positions: a held
-  ;; point always ends a span, so the fit passes through it exactly
-  ;; and the miss allowance can never write it off.
-  (setq pf-phase "asking about held points")
-  (princ "\n\n  Step 6 of 7 - any points that must be held ABSOLUTELY?")
-  (princ "\n  A held point can never be fudged: the line passes through it")
-  (princ "\n  exactly, in every candidate.  If Yes you will pick each one")
-  (princ "\n  (snap to the survey points); a small dashed ring marks it.")
-  (initget "Yes No")
-  (setq ans      (getkword "\n  Any held points? [Yes/No] <No>: ")
-        rawholds nil)
-  (if (= ans "Yes")
-    (progn
-      (setq go T)
-      (while go
-        (setq pf-phase "picking a held point"
-              wp1      (getpoint "\n  Point to hold exactly (Enter when done): "))
-        (if wp1
-          (progn
-            (setq wp1      (cal:2d wp1)
-                  rawholds (cons wp1 rawholds))
-            (pf:temp-add (pf:tag-mine (pf:draw-hold-marker wp1))))
-          (setq go nil)))
-      (setq rawholds (reverse rawholds))
-      (if rawholds
-        (princ (strcat "\n  " (itoa (length rawholds))
-                       " held point(s) noted - the markers clear"
-                       " themselves when the command finishes.")))))
+      ;; -- step 5: any sharp corners to declare? --------------------
+      ;; The fitter finds obvious corners itself (turns over
+      ;; *PF-CORNER-ANG*), but a gentler one still reads as a corner on
+      ;; site.  A declared point is exempt from the tangency rule: the
+      ;; fit breaks there instead of rounding it off.
+      ((= step 5)
+       (foreach mk cnrmk (pf:temp-kill mk))
+       (setq cnrmk nil)
+       (setq pf-phase "asking about sharp corners")
+       (princ "\n\n  Step 5 of 7 - are there any sharp corners the fit must not round off?")
+       (princ "\n  Obvious ones are found automatically; declare the gentler ones here.")
+       (princ "\n  If Yes you will pick each corner point (snap to the survey points).")
+       (initget "Yes No Back Undo")
+       (setq ans     (getkword "\n  Any sharp corners? [Yes/No/Back] <No>: ")
+             rawcnrs nil)
+       (cond
+         ((member ans '("Back" "Undo"))
+          (princ "\n  Stepping back one question.")
+          (setq step 4))
+         ((= ans "Yes")
+          (setq rawcnrs (pf:declare-corners)
+                cnrmk   pf-decl-marks)
+          (if (eq rawcnrs 'PF-BACK)
+            (setq rawcnrs nil)
+            (progn
+              (if rawcnrs
+                (princ (strcat "\n  " (itoa (length rawcnrs))
+                               " corner(s) noted - the markers clear themselves"
+                               " when the command finishes.")))
+              (setq step 6))))
+         (T (setq step 6))))
+
+      ;; -- step 6: any points that must be held absolutely? ---------
+      ;; Control shots and tie-ins are surveyed as exact positions: a
+      ;; held point always ends a span, so the fit passes through it
+      ;; exactly and the miss allowance can never write it off.
+      ((= step 6)
+       (foreach mk holdmk (pf:temp-kill mk))
+       (setq holdmk nil)
+       (setq pf-phase "asking about held points")
+       (princ "\n\n  Step 6 of 7 - any points that must be held ABSOLUTELY?")
+       (princ "\n  A held point can never be fudged: the line passes through it")
+       (princ "\n  exactly, in every candidate.  If Yes you will pick each one")
+       (princ "\n  (snap to the survey points); a small dashed ring marks it.")
+       (initget "Yes No Back Undo")
+       (setq ans      (getkword "\n  Any held points? [Yes/No/Back] <No>: ")
+             rawholds nil)
+       (cond
+         ((member ans '("Back" "Undo"))
+          (princ "\n  Stepping back one question.")
+          (setq step 5))
+         ((= ans "Yes")
+          (setq rawholds (pf:declare-holds)
+                holdmk   pf-decl-marks)
+          (if (eq rawholds 'PF-BACK)
+            (setq rawholds nil)
+            (progn
+              (if rawholds
+                (princ (strcat "\n  " (itoa (length rawholds))
+                               " held point(s) noted - the markers clear"
+                               " themselves when the command finishes.")))
+              (setq step 7))))
+         (T (setq step 7))))))
+
 
   ;; -- step 7: the selection ----------------------------------------
   ;; only entity types this command can actually read, so a sloppy
@@ -4089,19 +4253,47 @@
                        ;; walls and corners may change for the retry
                        (princ "\n\n  Straight walls and sharp corners can change too -")
                        (princ "\n  Enter keeps each list as it is.")
-                       (setq pf-phase "editing straight walls")
-                       (pf:edit-walls dpts)
-                       (setq pf-phase "editing sharp corners")
-                       (pf:edit-corners dpts)
-                       (setq pf-phase "editing held points")
-                       (pf:edit-holds dpts)
-                       (princ "\n\n  New settings - Enter keeps each one as it is.")
-                       (setq pf-phase "reading the tolerance"
-                             tol      (pf:ask-tol))
-                       (setq pf-phase "reading the miss percentage"
-                             pf-miss-pct (pf:ask-pct pf-miss-pct))
-                       (setq pf-phase "reading the curve limit")
-                       (pf:ask-cap)
+                       ;; the Redo settings are a chain like the opening
+                       ;; questions, and walk back the same way: Back at
+                       ;; any of the six re-opens the one before it, and
+                       ;; Back at the first has nowhere to go
+                       (setq rstep 1)
+                       (while (<= rstep 6)
+                         (cond
+                           ((= rstep 1)
+                            (setq pf-phase "editing straight walls")
+                            (pf:edit-walls dpts)   ; first: no Back out
+                            (setq rstep 2))
+                           ((= rstep 2)
+                            (setq pf-phase "editing sharp corners")
+                            (setq rstep (if (eq (pf:edit-corners dpts) 'PF-BACK)
+                                          (progn (princ "\n  Stepping back one question.") 1)
+                                          3)))
+                           ((= rstep 3)
+                            (setq pf-phase "editing held points")
+                            (setq rstep (if (eq (pf:edit-holds dpts) 'PF-BACK)
+                                          (progn (princ "\n  Stepping back one question.") 2)
+                                          4)))
+                           ((= rstep 4)
+                            (princ "\n\n  New settings - Enter keeps each one as it is.")
+                            (setq pf-phase "reading the tolerance"
+                                  v        (pf:ask-tol T))
+                            (if (eq v 'PF-BACK)
+                              (progn (princ "\n  Stepping back one question.")
+                                     (setq rstep 3))
+                              (setq tol v rstep 5)))
+                           ((= rstep 5)
+                            (setq pf-phase "reading the miss percentage"
+                                  v        (pf:ask-pct pf-miss-pct T))
+                            (if (eq v 'PF-BACK)
+                              (progn (princ "\n  Stepping back one question.")
+                                     (setq rstep 4))
+                              (setq pf-miss-pct v rstep 6)))
+                           ((= rstep 6)
+                            (setq pf-phase "reading the curve limit")
+                            (setq rstep (if (eq (pf:ask-cap T) 'PF-BACK)
+                                          (progn (princ "\n  Stepping back one question.") 5)
+                                          7)))))
                        (setq allow (cal:ceil (* (pf:misspct)
                                                (length dpts))))
                        ;; the point order must forget the omitted ones

@@ -14,6 +14,12 @@ lisp/abhd/abhd.lsp|pf:bottom-draw|setq|pf-phase
 lisp/abhd/abhd.lsp|pf:bottom|setq-global|*pf-hop-off*
 lisp/abhd/abhd.lsp|pf:bottom|setq|pf-phase
 lisp/abhd/abhd.lsp|pf:compare|setq|pf-phase
+lisp/abhd/abhd.lsp|pf:declare-corners|setq|pf-decl-marks
+lisp/abhd/abhd.lsp|pf:declare-corners|setq|pf-phase
+lisp/abhd/abhd.lsp|pf:declare-holds|setq|pf-decl-marks
+lisp/abhd/abhd.lsp|pf:declare-holds|setq|pf-phase
+lisp/abhd/abhd.lsp|pf:declare-walls|setq|pf-decl-marks
+lisp/abhd/abhd.lsp|pf:declare-walls|setq|pf-phase
 lisp/abhd/abhd.lsp|pf:dim-style|setq|pf-dim-warned
 lisp/abhd/abhd.lsp|pf:edit-corners|setq|pf-corners
 lisp/abhd/abhd.lsp|pf:edit-corners|setq|pf-phase
@@ -740,6 +746,12 @@ shared/parts/abhd.lsp|pf:bottom-draw|setq|pf-phase
 shared/parts/abhd.lsp|pf:bottom|setq-global|*pf-hop-off*
 shared/parts/abhd.lsp|pf:bottom|setq|pf-phase
 shared/parts/abhd.lsp|pf:compare|setq|pf-phase
+shared/parts/abhd.lsp|pf:declare-corners|setq|pf-decl-marks
+shared/parts/abhd.lsp|pf:declare-corners|setq|pf-phase
+shared/parts/abhd.lsp|pf:declare-holds|setq|pf-decl-marks
+shared/parts/abhd.lsp|pf:declare-holds|setq|pf-phase
+shared/parts/abhd.lsp|pf:declare-walls|setq|pf-decl-marks
+shared/parts/abhd.lsp|pf:declare-walls|setq|pf-phase
 shared/parts/abhd.lsp|pf:dim-style|setq|pf-dim-warned
 shared/parts/abhd.lsp|pf:edit-corners|setq|pf-corners
 shared/parts/abhd.lsp|pf:edit-corners|setq|pf-phase
