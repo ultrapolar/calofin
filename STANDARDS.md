@@ -188,6 +188,13 @@ markers in `pf-decl-marks` for exactly that).
 folded, no file that takes the keyword and then ignores it), and the
 threaded chains walked backwards through the VM.
 
+The prompts that offer NO Back are written down too, in
+`tools/back_baseline.txt`, one line each with the reason - so a new
+one-way prompt fails `make check` rather than joining them silently.
+A helper that takes a `back` argument counts as offering it: that is
+the repo's idiom for "the caller decides", and it is how every typed
+prompt takes Back, since a `getstring` cannot be armed with `initget`.
+
 **Pause.** One spelling, everywhere (indent to match a tutorial's
 layout if needed; the text never varies):
 

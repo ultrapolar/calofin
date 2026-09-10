@@ -247,6 +247,11 @@ python3 tools/check_lisp.py [f]  # parens, arity, stray top-level atoms,
 python3 tools/check_scope.py [f] # locals used without being declared
                                  # (tools/scope_baseline.txt holds the
                                  # accepted module globals)
+python3 tools/check_back.py      # every prompt that offers no Back is
+        [--update-baseline]      # one somebody decided about:
+                                 # tools/back_baseline.txt holds the set
+                                 # and the reason for each, and a NEW
+                                 # one-way prompt fails the check
 python3 tools/check_registry.py  # every tool registered everywhere it has
                     [--fix]      # to be -- panel, loader, README counts,
                                  # the VB palette catalog and its probe

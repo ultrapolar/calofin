@@ -215,6 +215,20 @@ boundaries:
   re-ask a measurement that failed a range check; Back there would step
   out of the check rather than back a question, so they do not offer it.
 
+One more rule decides whether Back is *offered* at all: a question the
+run would answer the same way twice cannot be gone back to. `ABFIND`
+asks for its B stake with Back only when the A stake was CLICKED - when
+the drawing numbers a point with A's own name, ABFIND finds it instead
+of asking, and re-asking would find the same point again and walk
+straight forward. That is a deadlock, not a way back, and it is the
+same reason a form-supplied answer is spent as it is read.
+
+Everything else in the tree either offers Back today or is written down
+in `tools/back_baseline.txt` with the reason it does not - one line per
+prompt, and `make check` fails on a new one-way prompt that is not
+there. `tests/test_back_nav.py` walks the threaded chains themselves,
+at both tiers.
+
 New prompts should follow this convention - it is
 part of the shared prompt standard in [STANDARDS.md](STANDARDS.md), and
 `tests/test_back_nav.py` holds it: the static half reads every `.lsp`

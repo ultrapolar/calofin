@@ -21,6 +21,7 @@ check:
 	$(PY) tools/check_standards.py
 	$(PY) tools/check_lisp.py
 	$(PY) tools/check_scope.py
+	$(PY) tools/check_back.py
 	$(PY) tools/check_vb.py
 
 verify:
@@ -33,6 +34,7 @@ verify:
 lint:
 	$(PY) tools/check_lisp.py
 	$(PY) tools/check_scope.py
+	$(PY) tools/check_back.py
 	$(PY) tools/check_vb.py
 
 test:

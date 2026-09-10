@@ -1,0 +1,119 @@
+# Every prompt in lisp/ that offers no Back, and why.
+# One line per site: file|the defun asking|what it asks|why.
+#
+# The reasons are the ones README.md's "Going back a step"
+# sets out.  A NEW line here is a decision: thread the prompt
+# into its chain, or say here which reason it falls under.
+# Regenerate with: python3 tools/check_back.py --update-baseline
+lisp/abhd/abhd.lsp|c:ABHD|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
+lisp/abhd/abhd.lsp|c:TUTORIALABHD|\n Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/abhd/abhd.lsp|pf:bottom|\n\n Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>:|past committed geometry
+lisp/abhd/abhd.lsp|pf:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
+lisp/abhd/abhd.lsp|pf:tut-demo|\n Keep the demo drawing to poke at? [Yes/No] <No>:|demo / tutorial
+lisp/abhd/abhd.lsp|pf:tut-demo|\n Pick a clear spot for it:|demo / tutorial
+lisp/abhd/abhd.lsp|pf:tut-pause|\n --- press Enter to continue ---|demo / tutorial
+lisp/abpcheck/ABPCHECK.lsp|abp:asklimit|\n < >:|helper: its callers ask it as the first question of their branch
+lisp/autobead/AUTOBEAD.lsp|autobead-pause|\n [Enter] to continue:|pause
+lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\n Click a side to bead toward:|demo / tutorial
+lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\nErase the demo pool and its bead? [Yes/No] <Yes>:|demo / tutorial
+lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\nPick an empty spot for the demo pool:|demo / tutorial
+lisp/autobead/AUTOBEAD.lsp|c:TUTORIALAUTOBEAD|\nAUTOBEAD tutorial - read the Checks, or watch a live Demo? \n [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/bpcallout/BPCALLOUT.lsp|c:BPCALLOUT|\nClick a bad point (a ringed one un-rings it, Enter when done):|reselection loop - clicking again undoes it
+lisp/cabhd/CABHD.lsp|c:CABHD|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
+lisp/cabhd/CABHD.lsp|cab:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
+lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
+lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
+lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>:|first of the option chain; only the selection is in front of it
+lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nPick the FIRST wall of the corner:|first of the two wall picks - the SECOND one backs into it
+lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nStep - step width <Enter = fit to walls>:|part of the step the next tread prompt takes back
+lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
+lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nPick a clear spot (about 250 x 250 needed):|demo / tutorial
+lisp/cornerstp/CORNERSTP.lsp|cs-tut-pause||demo / tutorial
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nDimension the steps? [Yes/No] <Yes>:|first question after the picks; only the selection is in front of it
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nDraw the reconstructed boundary through the step ends? [Yes/No] <Yes>:|past committed geometry
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nPick a point on the side the steps go:|the only question in its branch; the selection is in front of it
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nPick the point on the curve to measure from:|the only question in its branch; the selection is in front of it
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nStep - step width <Enter = fit to the curve>: <Enter = >: :|part of the step the next tread prompt takes back
+lisp/cornerstp/HEMISTEP.lsp|c:TUTORIALHEMISTEP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
+lisp/cornerstp/HEMISTEP.lsp|c:TUTORIALHEMISTEP|\nPick a clear spot (about 300 x 150 needed):|demo / tutorial
+lisp/cornerstp/HEMISTEP.lsp|hs-tut-pause||demo / tutorial
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nDimension the steps? [Yes/No] <Yes>:|first question after the picks; only the selection is in front of it
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nPick a point on the side the steps go:|the only question in its branch; the selection is in front of it
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nPick the line the steps run OFF OF:|the only question in its branch; the selection is in front of it
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nStep width (the same for every step):|part of the step the next tread prompt takes back
+lisp/cornerstp/NORMIESTEP.lsp|c:TUTORIALNORMIESTEP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
+lisp/cornerstp/NORMIESTEP.lsp|c:TUTORIALNORMIESTEP|\nPick a clear spot (about 250 x 120 needed):|demo / tutorial
+lisp/cornerstp/NORMIESTEP.lsp|ns-tut-pause||demo / tutorial
+lisp/covercheck/covercheck.lsp|c:TUTORIALCOVERCHECK|\nPick a base point for the demo, clear of your real geometry <0,0>:|demo / tutorial
+lisp/covercheck/covercheck.lsp|cchk:ask-ny|[Yes/No] <No>:|helper: every caller asks it as a first question about one item
+lisp/covercheck/covercheck.lsp|cchk:ask-yn|[Yes/No] <Yes>:|helper: every caller asks it as a first question about one item
+lisp/covercheck/covercheck.lsp|cchk:confirm-move|\n [Move/Keep/Pick] <Move>:|first question about one reviewed item
+lisp/covercheck/covercheck.lsp|cchk:review-olap|\n Flag to fix, or Leave as is? [Flag/Leave] <Flag>:|first question about one reviewed item
+lisp/covercheck/covercheck.lsp|cchk:review-olap|\n Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>:|first question about one reviewed item
+lisp/dim_continue/dim_continue.lsp|c:DIMCONTEND|\nContinue from another dimension? [Yes/No] <No>:|past committed geometry
+lisp/dimcheck/dimcheck.lsp|c:TUTORIALDIMCHECK|\n Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/dimcheck/dimcheck.lsp|dchk:ask-yn|[Yes/No] <Yes>:|helper: every caller asks it as a first question about one item
+lisp/dimcheck/dimcheck.lsp|dchk:confirm-move|\n [Move/Keep/Pick] <Move>:|first question about one reviewed item
+lisp/dimcheck/dimcheck.lsp|dchk:review-olap|\n Flag to fix, or Leave as is? [Flag/Leave] <Flag>:|first question about one reviewed item
+lisp/dimcheck/dimcheck.lsp|dchk:review-olap|\n Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>:|first question about one reviewed item
+lisp/dimcheck/dimcheck.lsp|dchk:tut-demo|\n Pick an empty spot for the practice drawing:|demo / tutorial
+lisp/dimcheck/dimcheck.lsp|dchk:tut-pause|\n --- press Enter to continue ---|demo / tutorial
+lisp/drone_height/DroneDistortion.lsp|c:DDCAL|\nApparent (traced) size in the drawing - type it or pick 2 points:|first of DDCAL's three; the other two back into it
+lisp/drone_height/DroneDistortion.lsp|c:DDSET|\nDrone height ABOVE THE DECK, in FEET < > :|DDSET's only question
+lisp/drone_height/DroneHeightGPS.lsp|c:DDELEV|\nLatitude (decimal degrees, negative = South):|first of DDELEV's two; the longitude backs into it
+lisp/drone_height/DroneHeightGPS.lsp|c:DDGPS|\nPick a point in the drawing for the height report:|first question of the command
+lisp/fitabhd/FITABHD.lsp|fit:omit-loop|\n Point to leave out - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
+lisp/lhd/lhd.lsp|c:LHD|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
+lisp/lhd/lhd.lsp|lh:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] <2>:|the fit picker - Redo is its way back
+lisp/linfincheck/linfincheck.lsp|c:LINFINCHECK|\n Type the overall step height or pick two points <skip>:|the only question in its branch; Enter skips it
+lisp/linfincheck/linfincheck.lsp|c:TUTORIALLINFINCHECK|\n Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/linfincheck/linfincheck.lsp|lfc:ask-yn|[Yes/No] <Yes>:|helper: every caller asks it as a first question about one item
+lisp/linfincheck/linfincheck.lsp|lfc:confirm-move|\n [Move/Keep/Pick] <Move>:|first question about one reviewed item
+lisp/linfincheck/linfincheck.lsp|lfc:review-olap|\n Flag to fix, or Leave as is? [Flag/Leave] <Flag>:|first question about one reviewed item
+lisp/linfincheck/linfincheck.lsp|lfc:review-olap|\n Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>:|first question about one reviewed item
+lisp/linfincheck/linfincheck.lsp|lfc:tut-demo|\n Pick an empty spot for the practice drawing:|demo / tutorial
+lisp/linfincheck/linfincheck.lsp|lfc:tut-pause|\n --- press Enter to continue ---|demo / tutorial
+lisp/lintxtchk/LINTXTCHK.lsp|c:LINTXTCHK|\nPick top-left point for LINTXTCHK checklist:|demo / tutorial
+lisp/lisplab/LISPLAB.lsp|c:LISPLAB|\nDemo size unit <5.0>:|demo / tutorial
+lisp/lisplab/LISPLAB.lsp|c:LISPLAB|\nPick a clear spot for the demo (about 1000 x 500 needed) <0,0>:|demo / tutorial
+lisp/lisplab/LISPLAB.lsp|lab:pause|\n--- press Enter to continue ---|pause
+lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nDraw a live demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
+lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nErase the demonstration? [Yes/No] <No>:|demo / tutorial
+lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nPick a clear spot for the demo <0,0>:|demo / tutorial
+lisp/paddle/PADDLE.lsp|paddle--pause|\n [ press ENTER to continue ]|pause
+lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nClick to pick direction / offset side:|follows a resize already applied to the drawing
+lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
+lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
+lisp/perp_points/cperp_points.lsp|cperp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|first question of the command; only the selection is in front
+lisp/perp_points/perp_points.lsp|c:PERPPTS|\nClick to pick direction / offset side:|follows a resize already applied to the drawing
+lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
+lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
+lisp/perp_points/perp_points.lsp|perp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|first question of the command; only the selection is in front
+lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\n --- press Enter to continue ---|demo / tutorial
+lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nA point is required - insertion point:|demo / tutorial
+lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nDemo size <100>:|demo / tutorial
+lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nInsertion point for the demo:|demo / tutorial
+lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nKeep the demo drawing? [Keep/Erase] <Keep>:|demo / tutorial
+lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nWhat would you like? [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\n --- press Enter to continue ---|demo / tutorial
+lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nA point is required - insertion point:|demo / tutorial
+lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nDemo size <100>:|demo / tutorial
+lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nInsertion point for the demo:|demo / tutorial
+lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nKeep the demo drawing? [Keep/Erase] <Keep>:|demo / tutorial
+lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nWhat would you like? [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/pool/POOL.LSP|pool:ask|\n :|the re-ask after a failed range check - Back would leave the check
+lisp/pool/TUTORIALPOOL.LSP|tutorial:pause|\nPress ENTER for the next topic (X then ENTER to stop here):|demo / tutorial
+lisp/poolside/POOLSIDE.lsp|psd:ask|\n :|the re-ask after a failed range check - Back would leave the check
+lisp/spa/TUTORIALSPA.LSP|c:TUTORIALSPA|\nShow me [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/spa/TUTORIALSPA.LSP|tut:demo|\nWhere shall the demo go <0,0>:|demo / tutorial
+lisp/spa/TUTORIALSPA.LSP|tut:pause|\n [Enter to carry on, X to stop]|demo / tutorial
+lisp/spa/TUTORIALSPA.LSP|tut:sheet|\nPoint for the reference sheet <skip>:|demo / tutorial
+lisp/spacheck/SPACHECK.lsp|spachk:demo|\nPick an empty spot for the practice drawing:|demo / tutorial
+lisp/spacheck/SPACHECK.lsp|spachk:demo-say|\n (Enter to go on)|demo / tutorial
+lisp/standards_checker/src/acady-ui.lsp|acady-ui-highlight|\nPress Enter to return to results...|pause
+lisp/standards_checker/src/acady-ui.lsp|acady-ui-zoom|\nPress Enter to return to results...|pause
+lisp/stockcover/STOCKCOVER.lsp|c:STOCKCOVER|\nStock drawing name < > :|first of its own chain - the which-one pick backs into it

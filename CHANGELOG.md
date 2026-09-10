@@ -53,12 +53,22 @@ at the wall was in the same position for a different reason -- it was
 asked after the undo group opened -- so it moved in front of it and
 now re-opens the dimension question.
 
+**Two more pairs closed on the way out.** ABFIND ties two stakes and
+asks for them in order; Back at the second re-asks the first, but only
+when the first was CLICKED - a drawing that numbers it makes the
+re-ask find the same point and walk forward, which is a deadlock rather
+than a way back. DIMCHECK's and LINFINCHECK's reference sheet is three
+questions and now chains all three.
+
 **What still has no Back has a reason, and the reasons are written
-down.** The root `README.md` names three: a selection cannot be typed
+down.** The root `README.md` names four: a selection cannot be typed
 at, a question past committed geometry answers to the draw-as-you-go
 rule instead (Back at the prompt inside the loop takes the last step
-back, drawing and all), and a re-ask that is itself the correction of a
-failed range check.
+back, drawing and all), a re-ask that is itself the correction of a
+failed range check, and a question the run would answer the same way
+twice. Of 338 prompt sites in the tree, the 119 that offer no Back all
+fall into one of those, plus the pauses, the demos and the first
+question of each command.
 
 **`U` works wherever `B` does**, which was already true and is now
 proven rather than trusted: `tests/test_back_nav.py` reads every `.lsp`
