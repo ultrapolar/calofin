@@ -258,6 +258,23 @@ def live(vm, lay=None):
     return out
 
 
+# ------------------------------- 3b. the typed predicate, actually run
+
+print("\ntyped prompts: the predicate says yes to all four, in any case")
+
+vm = newvm(('abhd', 'abhd.lsp'))
+#: the mirror swaps ABHD's own copy for the library's, so the grouped
+#: tier answers to the cal: name instead
+PRED = ('pf:back-word' if vm.loads("(if pf:back-word T)")
+        else 'cal:back-word-p')
+for word, want in (('b', True), ('B', True), ('Back', True), ('BACK', True),
+                   ('u', True), ('U', True), ('undo', True), ('UNDO', True),
+                   ('bk', False), ('', False), ('back up', False)):
+    got = bool(vm.loads('(%s "%s")' % (PRED, word)))
+    check("typed %-9r is %s" % (word, "Back" if want else "not Back"),
+          got == want)
+
+
 # --------------------------------------------------- 4. ABHD walks back
 
 print("\nABHD: the seven-step chain, walked backwards")
