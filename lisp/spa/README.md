@@ -210,6 +210,13 @@ its first question.
 
 Two places worth knowing:
 
+* The **three questions before any measuring** — the drawing mode
+  (water's edge or cover size), the spa shape, and the insertion base
+  point — are one chain like the rest. The shape is the one that shapes
+  every question after it, so `Back` at the base point re-asks it and
+  `Back` at the shape re-asks the mode. Thermo-Light settles the mode
+  without asking, so on the way back that step is stepped over rather
+  than stopped on.
 * The **spillaway loop** commits as it goes, so Back at the top of it
   *removes the spillaway just committed* — and with it the no-go zone
   and the report row it would have made — before re-asking

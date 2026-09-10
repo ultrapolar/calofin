@@ -985,6 +985,14 @@ into the side lengths, and so on right to the front of the run. Two
 `Back`s go back two questions; keep going and you reach the first
 question, which simply re-asks itself.
 
+The front of the run is the **three questions before any measuring** —
+in-square or out-of-square, the pool shape, and the insertion base
+point — and they are part of the chain too. The shape is the worst of
+the three to get wrong, since every question after it comes from that
+answer; `Back` at the base point re-asks it, and `Back` at the shape
+re-asks the in-square question. Before this the only fix was to quit
+and start the command again.
+
 Auto-answered questions are stepped over on the way back (the L pool's
 `E` when `H+G+F` already span the section), and everything else
 behaves exactly as before — `NA`, `0` where it's legal, and the

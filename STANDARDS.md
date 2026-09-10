@@ -164,9 +164,29 @@ case (and say so), the first question of a command never offers Back.
 Feedback wording on the way back:
 
 ```
-Stepping back one <point|step|dimension>.
+Stepping back one <point|step|dimension|question>.
 Already at the first <point|step|dimension>.
 ```
+
+A chain of questions is walked with a step counter, not by nesting: one
+`while` over a `cond`, each arm setting the counter to the step it wants
+next.  Where a question is only asked on some runs, the chain carries a
+DIRECTION as well, so a step that puts no question moves the counter the
+way the chain was already going instead of always forward -- Back then
+lands on the last question actually asked rather than stopping on one
+that was never put.  `c:CORNERSTP`'s `qstep`/`qdir` is the reference; the
+`step`/`rstep` chains in `abhd.lsp` are the same shape without the
+conditional steps.
+
+A step re-entered from below throws away what the earlier pass collected
+there, scaffolding included, so the second answer replaces the first
+rather than piling on top of it (`pf:declare-walls` publishes its
+markers in `pf-decl-marks` for exactly that).
+
+`tests/test_back_nav.py` holds both halves: the invariant read off every
+`.lsp` in the tier (Undo beside every Back, the typed predicate, case
+folded, no file that takes the keyword and then ignores it), and the
+threaded chains walked backwards through the VM.
 
 **Pause.** One spelling, everywhere (indent to match a tutorial's
 layout if needed; the text never varies):
@@ -930,10 +950,12 @@ several assert prompt text:
   `lisp/spa/README.md`, `lisp/cdcallout/README.md` (Back),
   `ui/calofin_net/README.md`.
 
-### 8.6 Remaining, reviewed 2026-08-27
+### 8.6 Remaining, reviewed 2026-09-10
 
 The 2026-08-27 streamlining pass closed everything above not
-explicitly kept open.  What remains, each a deliberate deferral:
+explicitly kept open, and the 2026-09-10 Back pass closed the
+prompt-navigation entry below.  What remains, each a deliberate
+deferral:
 
 * SPA's spillaway corner-pick keywords (8.3) -- no hotkey scheme
   chosen yet.
@@ -947,7 +969,25 @@ explicitly kept open.  What remains, each a deliberate deferral:
   `ns-askkw`/`ns-asktreat` take the Back sentinel exactly as the
   library pair do (the last 4-arg `askkw` holdout), Back at the
   corner treatment re-opens the step-width question, and both helpers
-  joined the mirror swap map.
+  joined the mirror swap map.  Its SIZE follow-ups (the radius, the
+  offset, the cut face, and the Offset/Cut question that says which of
+  the last two is being given) now re-open the treatment keyword the
+  same way.
+* ~~A prompt that could offer Back and does not~~ **DONE, repo-wide,
+  2026-09-10.**  Every question chain that had a predecessor and no way
+  back to it got one: ABHD's, CABHD's and LHD's seven-, eight- and
+  six-step settings and their declaration loops, CORNERSTP's six
+  options and all three step tools' bead questions, PERPPTS/CPERPPTS's
+  width amount, join and dimension style, POOL's and SPA's
+  shape-and-base opening, POOLSIDE's, the three checkers' Move/Keep/Pick
+  pick and reference sheet, AUTOBEAD's clicked steps, ABCURCHECK's
+  declarations, BPCALLOUT's callout text and STOCKCOVER's which-one.
+  What is left without Back is left on purpose, and the root
+  `README.md` names the three reasons: the prompt straight after a
+  selection with nothing else in front of it, the question past
+  committed geometry (where Back at the prompt inside the loop is the
+  rule that applies), and a re-ask that is itself the correction of a
+  failed range check.  `tests/test_back_nav.py` is the guard.
 * `cal:askkw`'s signature still takes a hand-written SHOWN bracket
   where section 4's reference derives it from the keyword list.  The
   mirror pins `spa:askkw`/`pool:askkw` to it, so aligning the

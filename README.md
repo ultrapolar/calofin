@@ -164,25 +164,60 @@ value: `B`, `BACK`, `U` or `UNDO` alone, any case (the prompt says
 so). The first question of a command has nothing to go back to, so it
 never offers Back.
 
+A question that is only asked on some runs is stepped OVER on the way
+back rather than stopped on, so Back always lands on the last question
+you were actually asked. `CORNERSTP` announces six settings but puts
+two of them only when the corner has a diagonal; Back at the third
+lands on the first when it does not. Answers a form supplied are spent
+as they are read, so backing into one of those asks it at the keyboard
+instead of answering it again and walking straight forward.
+
 In loops that draw as they go - `PERPPTS`/`CPERPPTS` offset points,
 `CORNERSTP`/`HEMISTEP`/`NORMIESTEP` treads, `ABHD`/`ADAB` slope
-waypoints, `CDCALLOUT` dimensions, `ABFIND` ties - Back
+waypoints and declared walls, corners and held points, `LHD`
+declarations, `CDCALLOUT` dimensions, `ABFIND` ties, `AUTOBEAD`
+beaded steps, `ABCURCHECK` discontinuities - Back
 also removes the
 just-committed point or step (its lines and its dimensions) before
-re-asking. `BPCALLOUT` works by
-reselection instead: clicking a ringed point again un-rings it.
+re-asking. At the FIRST item there is nothing left to remove, so the
+question that opened the loop is asked again - which is how a wrong
+Yes gets undone. `BPCALLOUT` works by
+reselection instead: clicking a ringed point again un-rings it, and
+Back at its callout text re-opens the picking.
 Feedback wording is shared too: `Stepping back one
-<point|step|dimension>.` on the way back, `Already at the first
-<point|step|dimension>.` when there is nowhere left to go.
+<point|step|dimension|question>.` on the way back, `Already at the
+first <point|step|dimension>.` when there is nowhere left to go.
 
-Every interactive multi-step tool supports this, with one boundary:
-AutoCAD object selections cannot take keywords, so a command whose
-only remaining input is a selection (`PADDLE`, `DIMCONTEND`) has no
-prompt left that could offer Back - and Back cannot be *typed at* a
-selection either, though several tools (`WCALST`, `XFTCONV`,
-`AUTOBEAD`, `AUTODIM`) re-open their selection when you Back at the
-prompt after it. New prompts should follow this convention - it is
-part of the shared prompt standard in [STANDARDS.md](STANDARDS.md).
+Every interactive multi-step tool supports this, with three
+boundaries:
+
+* **Selections.** AutoCAD object selections cannot take keywords, so a
+  command whose only remaining input is a selection (`PADDLE`,
+  `DIMCONTEND`) has no prompt left that could offer Back - and Back
+  cannot be *typed at* a selection either, though several tools
+  (`WCALST`, `XFTCONV`, `AUTOBEAD`, `AUTODIM`) re-open their selection
+  when you Back at the prompt after it. Where the question straight
+  after a selection has nothing else in front of it - `CABHD`'s point
+  cutoff, `LHD`'s output height - it offers no Back; both are asked
+  again at a Redo.
+* **Past the drawing.** Once a run has committed geometry, Back at the
+  next question would have to erase rather than re-ask, so it is the
+  draw-as-you-go rule that applies instead: Back at the prompt *inside*
+  the loop takes the last step back, drawing and all. That is why
+  `CORNERSTP`'s step WIDTH offers no Back (the tread prompt for the
+  next step takes the whole step back), and why the side-profile and
+  bead questions that follow a finished run do not.
+* **A re-ask that is already a correction.** `pool:ask` and `psd:ask`
+  re-ask a measurement that failed a range check; Back there would step
+  out of the check rather than back a question, so they do not offer it.
+
+New prompts should follow this convention - it is
+part of the shared prompt standard in [STANDARDS.md](STANDARDS.md), and
+`tests/test_back_nav.py` holds it: the static half reads every `.lsp`
+for the invariant the prompt text cannot show you (Undo beside every
+Back, the typed `B`/`BACK`/`U`/`UNDO` predicate, case folded, and no
+file that takes the keyword and then ignores it), and the driven half
+walks the threaded chains backwards through the interpreter.
 
 ### `ABCDEF` vs `ALTABCDEF`, and `CHECK` vs `CCPRECHECK`
 

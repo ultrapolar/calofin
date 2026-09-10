@@ -6,6 +6,50 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.7 -- 2026-09-10
+
+One pass, one idea: a question you can answer is a question you should
+be able to un-answer. `Back` (with `U` for `Undo` beside it) was already
+the repo-wide convention and already worked at most measurement
+prompts -- but a lot of the questions that decide what a run even IS
+were still one-way. Getting the pool shape wrong meant quitting POOL;
+mistyping ABHD's miss percentage meant quitting ABHD; picking the wrong
+side to bead meant Escape and a re-selection.
+
+**Every question chain that had a predecessor now has a way back to
+it.** ABHD, CABHD and LHD walk their settings chains (seven, eight and
+six announced steps) in both directions, declaration loops included --
+Back there takes back the wall, corner or held point declared last,
+dashed marker and all, and off the first item it re-opens the Yes/No
+that started the loop. CORNERSTP's six options do the same, and because
+two of them are only asked when the corner has a diagonal, the chain
+carries a DIRECTION: a question this run never put is stepped over on
+the way back rather than stopped on. POOL, SPA and POOLSIDE open with
+their shape and their base point as one chain. PERPPTS and CPERPPTS
+grew Back at the width amount, the join and the dimension style;
+NORMIESTEP at its corner-treatment sizes; the three step tools at their
+bead questions; DIMCHECK, COVERCHECK and LINFINCHECK at the Move/Keep/
+Pick pick and their reference sheet; AUTOBEAD at its clicked steps;
+ABCURCHECK at its declarations; BPCALLOUT at its callout text;
+STOCKCOVER at "which one?".
+
+**What still has no Back has a reason, and the reasons are written
+down.** The root `README.md` names three: the prompt straight after a
+selection with nothing else in front of it (a selection cannot be
+backed into), a question past committed geometry (there the
+draw-as-you-go rule applies instead -- Back at the prompt inside the
+loop takes the last step back, drawing and all), and a re-ask that is
+itself the correction of a failed range check.
+
+**`U` works wherever `B` does**, which was already true and is now
+proven rather than trusted: `tests/test_back_nav.py` reads every `.lsp`
+in the tier for the invariant the prompt text cannot show you -- Undo
+beside every Back in every `initget` list, the typed `B`/`BACK`/`U`/
+`UNDO` predicate spelled the same way everywhere and matched case-
+folded, and no file that accepts the keyword and then only tests for
+`"Back"`. The other half of the same test walks each threaded chain
+backwards through the interpreter, at both tiers.
+
 ## v3.6 -- 2026-09-08
 
 Two passes that landed together, and they are the same idea twice: a
