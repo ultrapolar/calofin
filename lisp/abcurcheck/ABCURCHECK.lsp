@@ -96,7 +96,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.6")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1168,7 +1168,13 @@
 ;; checked back against the geometry when it lands on nothing, and what
 ;; it leaves behind is the undeclared list the report is really about.
 
-(defun acc:declare-loop (declared / done ans p best bd q d)
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getpoint hands a keyword back as a string
+;; where a point would be a list, so the type test separates them.
+(defun acc:back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
+
+(defun acc:declare-loop (declared / done ans p best bd q d added)
   (setq done nil)
   (while (not done)
     (princ (strcat "\n  " (itoa (length declared))
@@ -1177,14 +1183,30 @@
     (setq ans (acc:ask "Declared discontinuities" "Add Remove Keep" "Keep" nil))
     (cond
       ((= ans "Add")
-       (setq p T)
+       ;; Back takes back the declaration just made; with none left it
+       ;; re-opens the Add/Remove/Keep question above
+       (setq p T added nil)
        (while p
-         (setq p (getpoint "\n  Pick a discontinuity (Enter = done): "))
-         (if p (setq declared (cons (acc:2d p) declared)))))
+         (initget "Back Undo")
+         (setq p (getpoint "\n  Pick a discontinuity (Enter = done) [Back]: "))
+         (cond
+           ((acc:back-kw p)
+            ;; (> added 0), not just ADDED: zero is not false in LISP,
+            ;; so the count has to be compared, not tested
+            (if (and added (> added 0))
+              (progn (setq declared (cdr declared)
+                           added    (1- added))
+                     (princ "\n  Stepping back one discontinuity."))
+              (progn (princ "\n  Already at the first discontinuity.")
+                     (setq p nil))))
+           (p (setq declared (cons (acc:2d p) declared)
+                    added    (if added (1+ added) 1))))))
       ((= ans "Remove")
        (setq p T)
        (while p
-         (setq p (getpoint "\n  Pick the declaration to drop (Enter = done): "))
+         (initget "Back Undo")
+         (setq p (getpoint "\n  Pick the declaration to drop (Enter = done) [Back]: "))
+         (if (acc:back-kw p) (setq p nil))
          (if p
            (progn
              (setq p (acc:2d p) best nil bd nil)

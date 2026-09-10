@@ -45,7 +45,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *bpcallout-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.9")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -251,7 +251,11 @@
     (princ (strcat "\nNo survey points found in the drawing - clicks"
                    " will be ringed where picked and named \"?\".")))
 
-  (setq picked nil)
+  ;; the rings and the text are one chain: Back at the text placement
+  ;; re-opens the picking, where a ringed point clicked again un-rings
+  ;; it - which is how BPCALLOUT has always taken a pick back
+  (setq picked nil txtpt 'RETRY)
+  (while (eq txtpt 'RETRY)
   (while (setq pk (getpoint
                     "\nClick a bad point (a ringed one un-rings it, Enter when done): "))
     (setq hit (bp:nearest-point pk cands))
@@ -277,21 +281,30 @@
                          bp:*pt-prefix* bp:*unknown* "."))))))
 
   (if (null picked)
-    (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
+    (progn
+      (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
+      (setq txtpt nil))
     (progn
       (setq picked (reverse picked)             ; back to click order
             names  (mapcar 'cadr picked)
             phrase (bp:phrase names)
             lastpt (car (last picked)))
+      (initget "Back Undo")
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"
-                                    " the last ring>: ")))
-      (if (null txtpt)                          ; Enter: tuck it beside
-        (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
-                          (- (cadr lastpt) bp:*text-gap*))))
-      (bp:draw-text txtpt phrase)
-      (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
-                     " point(s) ringed on layer " bp:*layer*
-                     ";  \"" phrase "\""))))
+                                    " the last ring> [Back]: ")))
+      (cond
+        ((and (= (type txtpt) 'STR) (member txtpt '("Back" "Undo")))
+         (princ "\n  Stepping back to the picking.")
+         (setq picked (reverse picked)          ; back to newest-first
+               txtpt  'RETRY))
+        (T
+         (if (null txtpt)                       ; Enter: tuck it beside
+           (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
+                             (- (cadr lastpt) bp:*text-gap*))))
+         (bp:draw-text txtpt phrase)
+         (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
+                        " point(s) ringed on layer " bp:*layer*
+                        ";  \"" phrase "\"")))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (princ))

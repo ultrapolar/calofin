@@ -28034,7 +28034,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.6")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -29030,7 +29030,13 @@
 ;; checked back against the geometry when it lands on nothing, and what
 ;; it leaves behind is the undeclared list the report is really about.
 
-(defun acc:declare-loop (declared / done ans p best bd q d)
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getpoint hands a keyword back as a string
+;; where a point would be a list, so the type test separates them.
+(defun acc:back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
+
+(defun acc:declare-loop (declared / done ans p best bd q d added)
   (setq done nil)
   (while (not done)
     (princ (strcat "\n  " (itoa (length declared))
@@ -29039,14 +29045,30 @@
     (setq ans (acc:ask "Declared discontinuities" "Add Remove Keep" "Keep" nil))
     (cond
       ((= ans "Add")
-       (setq p T)
+       ;; Back takes back the declaration just made; with none left it
+       ;; re-opens the Add/Remove/Keep question above
+       (setq p T added nil)
        (while p
-         (setq p (getpoint "\n  Pick a discontinuity (Enter = done): "))
-         (if p (setq declared (cons (cal:2d p) declared)))))
+         (initget "Back Undo")
+         (setq p (getpoint "\n  Pick a discontinuity (Enter = done) [Back]: "))
+         (cond
+           ((acc:back-kw p)
+            ;; (> added 0), not just ADDED: zero is not false in LISP,
+            ;; so the count has to be compared, not tested
+            (if (and added (> added 0))
+              (progn (setq declared (cdr declared)
+                           added    (1- added))
+                     (princ "\n  Stepping back one discontinuity."))
+              (progn (princ "\n  Already at the first discontinuity.")
+                     (setq p nil))))
+           (p (setq declared (cons (cal:2d p) declared)
+                    added    (if added (1+ added) 1))))))
       ((= ans "Remove")
        (setq p T)
        (while p
-         (setq p (getpoint "\n  Pick the declaration to drop (Enter = done): "))
+         (initget "Back Undo")
+         (setq p (getpoint "\n  Pick the declaration to drop (Enter = done) [Back]: "))
+         (if (acc:back-kw p) (setq p nil))
          (if p
            (progn
              (setq p (cal:2d p) best nil bd nil)
@@ -37337,7 +37359,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *bpcallout-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.9")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -37543,7 +37565,11 @@
     (princ (strcat "\nNo survey points found in the drawing - clicks"
                    " will be ringed where picked and named \"?\".")))
 
-  (setq picked nil)
+  ;; the rings and the text are one chain: Back at the text placement
+  ;; re-opens the picking, where a ringed point clicked again un-rings
+  ;; it - which is how BPCALLOUT has always taken a pick back
+  (setq picked nil txtpt 'RETRY)
+  (while (eq txtpt 'RETRY)
   (while (setq pk (getpoint
                     "\nClick a bad point (a ringed one un-rings it, Enter when done): "))
     (setq hit (bp:nearest-point pk cands))
@@ -37569,21 +37595,30 @@
                          bp:*pt-prefix* bp:*unknown* "."))))))
 
   (if (null picked)
-    (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
+    (progn
+      (princ "\nBPCALLOUT: nothing picked - nothing drawn.")
+      (setq txtpt nil))
     (progn
       (setq picked (reverse picked)             ; back to click order
             names  (mapcar 'cadr picked)
             phrase (bp:phrase names)
             lastpt (car (last picked)))
+      (initget "Back Undo")
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"
-                                    " the last ring>: ")))
-      (if (null txtpt)                          ; Enter: tuck it beside
-        (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
-                          (- (cadr lastpt) bp:*text-gap*))))
-      (bp:draw-text txtpt phrase)
-      (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
-                     " point(s) ringed on layer " bp:*layer*
-                     ";  \"" phrase "\""))))
+                                    " the last ring> [Back]: ")))
+      (cond
+        ((and (= (type txtpt) 'STR) (member txtpt '("Back" "Undo")))
+         (princ "\n  Stepping back to the picking.")
+         (setq picked (reverse picked)          ; back to newest-first
+               txtpt  'RETRY))
+        (T
+         (if (null txtpt)                       ; Enter: tuck it beside
+           (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
+                             (- (cadr lastpt) bp:*text-gap*))))
+         (bp:draw-text txtpt phrase)
+         (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
+                        " point(s) ringed on layer " bp:*layer*
+                        ";  \"" phrase "\"")))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (princ))

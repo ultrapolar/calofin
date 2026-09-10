@@ -526,6 +526,43 @@ check("...and U is the same answer as Back there",
       said(vm).count("Stepping back one question") == 2)
 
 
+# ------------------------------- 11. ABCURCHECK and BPCALLOUT
+
+print("\nABCURCHECK: the declarations are a list too")
+
+vm = newvm(('abcurcheck', 'ABCURCHECK.lsp'))
+declared = vm.loads("(setq acc-test-declared nil)")
+vm.script = ['Add', (10.0, 10.0), 'Back', 'Back', 'Keep']
+vm.loads("(setq acc-test-out (acc:declare-loop nil))")
+out = said(vm)
+check("Back takes back the discontinuity just declared",
+      "Stepping back one discontinuity" in out)
+check("...and off the first it re-opens Add/Remove/Keep",
+      "Already at the first discontinuity" in out)
+check("...leaving nothing declared",
+      vm.get(__import__('lispvm').Sym('acc-test-out')) in ([], None, False)
+      or not vm.get(__import__('lispvm').Sym('acc-test-out')))
+
+print("\nBPCALLOUT: Back at the text re-opens the picking")
+
+vm = newvm(('bpcallout', 'BPCALLOUT.lsp'))
+for x, num in ((0.0, 1), (10.0, 2)):
+    vm.loads('(entmake (list \'(0 . "INSERT") \'(8 . "POINTS")'
+             ' \'(2 . "ab_pt") (list 10 %r 0.0 0.0)))' % x)
+    vm.loads('(entmake (list \'(0 . "ATTRIB") \'(2 . "number")'
+             ' (cons 1 "%d")))' % num)
+vm.run('c:BPCALLOUT',
+       [(0.0, 0.0), None,            # ring one point, then Enter
+        'Back',                      # ...at the text: back to the picking
+        (10.0, 0.0), None,           # ring the other one too
+        (50.0, 50.0)])               # place the text
+out = said(vm)
+check("Back at the text placement goes back to the picking",
+      "Stepping back to the picking" in out)
+check("...and the rings already made are still there",
+      "2 point(s) ringed" in out, out[-120:])
+
+
 # ------------------------------------------------------------------ done
 
 print()
