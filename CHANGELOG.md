@@ -79,6 +79,35 @@ folded, and no file that accepts the keyword and then only tests for
 `"Back"`. The other half of the same test walks each threaded chain
 backwards through the interpreter, at both tiers.
 
+## v3.8 -- 2026-09-10
+
+`Same` was already the way to repeat a step tread, and `S` already
+typed it -- STANDARDS section 2 has said "capitals are the hotkey"
+since the beginning. Nobody could tell, because the prompt read
+`[Back/Same] <Enter = done>` and stopped there. It reads
+`[Back/Same] <Enter = done, Same = 24>` now, in all three step tools:
+the letter comes from the bracket, and the number says what pressing it
+will do.
+
+**The step WIDTH gained it too**, which is where the gap actually was.
+At a tread prompt Enter means *done*; at a width prompt it means *fit
+to the walls*. Neither can also mean "the last one", so repeating a
+width meant retyping it every step. `Same` (S) does it now, in
+CORNERSTP and in HEMISTEP's curve modes, and the prompt names the
+number: `[Same] <Enter = fit to walls, Same = 30>`.
+
+Only a width you GAVE is one `Same` repeats -- a step fitted to the
+walls has no typed number behind it, so `Same` after one goes back to
+the last width you actually entered, and the prompt says which.
+
+**Where Enter already repeats the last value, `Same` is not offered.**
+PERPPTS' point lengths, the three side-profile depth ladders and
+HEMISTEP's widths in base-line mode all show `<Enter = 24>` already;
+adding a second word for one answer is a worse prompt, not a kinder
+one. That rule, and the two conditions that have to hold before `Same`
+appears at all, are now in STANDARDS' keyword table beside Yes/No and
+the rest -- it had been an ad-hoc word in three files until now.
+
 ## v3.6 -- 2026-09-08
 
 Two passes that landed together, and they are the same idea twice: a

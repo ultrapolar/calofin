@@ -69,10 +69,11 @@
 ;;;         - Enter at a step tread prompt = done.
 ;;;         - Back at a step tread prompt steps back one step: it
 ;;;           removes the step just drawn (its line and its dimensions).
-;;;           Undo, the old keyword, is still accepted.  Same repeats
-;;;           the previous step tread.
+;;;           Undo, the old keyword, is still accepted.  Same - typed
+;;;           S - repeats the previous step tread.
 ;;;         - Enter at a width prompt fits that step to the curve in
-;;;           the curve modes, or repeats the previous width in LINE
+;;;           the curve modes, where Same (S) is then what repeats the
+;;;           previous width; or repeats the previous width in LINE
 ;;;           mode.
 ;;;   7.  The hemisphere is then rebuilt as one polyline of arc segments
 ;;;       through every step end.  In LINE mode you are asked for one
@@ -226,7 +227,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.15") ; printed on load and at command start so a
+(setq *hs-version* "v3.16") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1163,7 +1164,10 @@
                             (strcat "\nStep " (itoa n)
                                     " - step tread [Back"
                                     (if lastdep "/Same" "") "]"
-                                    " <Enter = done>: ")))
+                                    (if lastdep
+                                      (strcat " <Enter = done, Same = "
+                                              (rtos lastdep) ">: ")
+                                      " <Enter = done>: "))))
                 (if (= (type dep) 'STR)
                   (cond
                     ((or (= dep "Back") (= dep "Undo"))
@@ -1183,13 +1187,26 @@
         ;; first step) fall back to the keyboard, its key now spent
         (setq wid (hs-fnum (hs-fnkey "width" n)))
         (progn
-          (initget 6)
+          ;; In the curve modes Enter is spoken for - it fits the step to
+          ;; the curve - so repeating the last width needs Same (S, per
+          ;; STANDARDS section 2).  In base-line mode Enter IS the last
+          ;; width, so there is nothing for Same to add and it is not
+          ;; offered.
+          (if (and cmode lastwid) (initget 6 "Same") (initget 6))
           (setq wid (getdist (strcat "\nStep " (itoa n) " - step width "
                                      (cond
-                                       (cmode "<Enter = fit to the curve>: ")
+                                       (cmode
+                                        (strcat
+                                          (if lastwid "[Same] " "")
+                                          "<Enter = fit to the curve"
+                                          (if lastwid
+                                            (strcat ", Same = " (rtos lastwid))
+                                            "")
+                                          ">: "))
                                        (lastwid (strcat "<Enter = "
                                                         (rtos lastwid) ">: "))
-                                       (T ": ")))))))
+                                       (T ": ")))))
+          (if (= (type wid) 'STR) (setq wid lastwid))))
       (if (null wid)
         (cond
           (cmode   (setq wid 'FIT))
@@ -1658,9 +1675,10 @@
   (princ "\n     it anchors the boundary; no chord is drawn there.")
   (princ "\n  2. Then STEP TREAD, WIDTH, repeating.  Every step tread is")
   (princ "\n     from the previous step - never a running total.  Enter at")
-  (princ "\n     a step tread = done; Back steps back one step; Same repeats.")
-  (princ "\n     Enter at a width fits the step to the curve (curve modes)")
-  (princ "\n     or repeats the previous width (line mode).")
+  (princ "\n     a step tread = done; Back steps back one step; Same (S)")
+  (princ "\n     repeats.  Enter at a width fits the step to the curve (curve")
+  (princ "\n     modes) - Same (S) repeats the previous width there - or")
+  (princ "\n     repeats the previous width itself (line mode).")
   (princ "\n  3. One last distance to the back of the curve places the crown,")
   (princ "\n     and the boundary polyline is drawn through the step ends.")
   (princ "\n  4. Finally you may add a SIDE PROFILE, read FROM THE WALL:")

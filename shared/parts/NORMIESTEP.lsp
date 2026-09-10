@@ -1866,7 +1866,7 @@
   (princ "\n  3. Dimension the steps? [Yes/No]")
   (princ "\n  4. Step treads, one per step, each from the previous")
   (princ "\n     tread.  Enter = done, Back = step back one (removes")
-  (princ "\n     it), Same = repeat the previous step tread.")
+  (princ "\n     it), Same (S) = repeat the previous step tread.")
   (princ "\n  5. Add a side profile? [Yes/No] - the STEP DEPTHS, top")
   (princ "\n     step first: one per step plus the drop after the last")
   (princ "\n     tread (3 steps take 4 depths).  Then pick the top of")

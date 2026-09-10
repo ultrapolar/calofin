@@ -150,6 +150,7 @@ One question, one vocabulary, repo-wide:
 | Declared-feature edit loop | `Add Remove Keep`           | `<Keep>`                              |
 | Tutorial selector          | `Checks Demo Both`          | `<Both>`                              |
 | Demo cleanup               | `Keep Erase`                | `<Keep>`                              |
+| Repeat the last value      | `Same`                      | offered only where a previous value exists AND `Enter` is already taken; the prompt names the number |
 | Multi-fit pick             | `1 2 3 All None Redo`       | `<2>`                                 |
 | Direction                  | `Clockwise COunterclockwise` | Previous answer (session-remembered, `<Clockwise>` to start); `CW` and `CCW` accepted as hidden synonyms |
 
@@ -194,6 +195,26 @@ one-way prompt fails `make check` rather than joining them silently.
 A helper that takes a `back` argument counts as offering it: that is
 the repo's idiom for "the caller decides", and it is how every typed
 prompt takes Back, since a `getstring` cannot be armed with `initget`.
+
+**Same.** Where a measurement is asked once per item -- a step tread, a
+step width -- the way to repeat the last one is `Same`, typed `S` by
+rule 2's capitals. It is offered only when BOTH are true: a previous
+value of that kind exists, and `Enter` is already spoken for by
+something else (`<Enter = done>`, `<Enter = fit to walls>`). Where
+`Enter` already means "the last one", `Same` adds nothing and is not
+offered -- two words for one answer is a worse prompt, not a kinder one.
+
+The prompt names the number it would repeat, so the offer is concrete
+rather than a promise the reader has to take on trust:
+
+```
+Step 2 - step tread [Back/Same] <Enter = done, Same = 24>:
+Step 2 - step width [Same] <Enter = fit to walls, Same = 30>:
+```
+
+A width the routine worked out for itself is not a number `Same` can
+repeat -- only one the user gave. `Same` after a step fitted to the
+walls repeats the last width TYPED, and the prompt says which that is.
 
 **Pause.** One spelling, everywhere (indent to match a tutorial's
 layout if needed; the text never varies):

@@ -25,7 +25,7 @@ lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nAdd a side profile? [Yes/No] <Yes>:|p
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>:|first of the option chain; only the selection is in front of it
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nPick the FIRST wall of the corner:|first of the two wall picks - the SECOND one backs into it
-lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nStep - step width <Enter = fit to walls>:|part of the step the next tread prompt takes back
+lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nStep - step width [Same] <Enter = fit to walls , Same = >:|part of the step the next tread prompt takes back
 lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nPick a clear spot (about 250 x 250 needed):|demo / tutorial
 lisp/cornerstp/CORNERSTP.lsp|cs-tut-pause||demo / tutorial
@@ -35,7 +35,7 @@ lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nDimension the steps? [Yes/No] <Yes>:|fi
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nDraw the reconstructed boundary through the step ends? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nPick a point on the side the steps go:|the only question in its branch; the selection is in front of it
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nPick the point on the curve to measure from:|the only question in its branch; the selection is in front of it
-lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nStep - step width <Enter = fit to the curve>: <Enter = >: :|part of the step the next tread prompt takes back
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nStep - step width [Same] <Enter = fit to the curve , Same = >: <Enter = >: :|part of the step the next tread prompt takes back
 lisp/cornerstp/HEMISTEP.lsp|c:TUTORIALHEMISTEP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/cornerstp/HEMISTEP.lsp|c:TUTORIALHEMISTEP|\nPick a clear spot (about 300 x 150 needed):|demo / tutorial
 lisp/cornerstp/HEMISTEP.lsp|hs-tut-pause||demo / tutorial

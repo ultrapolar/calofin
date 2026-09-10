@@ -775,6 +775,84 @@ check("...and the sheet still lands once the answers stand",
       "Reference sheet placed" in out)
 
 
+# ------------------------------- 15. Same: repeating the last number
+
+print("\nSame (S): offered where Enter cannot mean 'the last one'")
+
+
+def cornerstp_vm():
+    vm = newvm(('cornerstp', 'CORNERSTP.lsp'))
+    vm.loads('(entmake (list (cons 0 "LINE")'
+             ' (list 10 0.0 0.0 0.0) (list 11 200.0 0.0 0.0)))')
+    vm.loads('(entmake (list (cons 0 "LINE")'
+             ' (list 10 0.0 0.0 0.0) (list 11 0.0 200.0 0.0)))')
+    return vm, list(vm.entities)
+
+
+def steps_of(vm):
+    """The tread lines, as lengths: they run across the corner, so the
+    two ends have the same x+y."""
+    import math
+    out = []
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        data = vm.entdata.get(e, [])
+        if not any(getattr(g, 'a', None) == 0 and getattr(g, 'b', None) == 'LINE'
+                   for g in data):
+            continue
+        pts = {g[0]: tuple(g[1:3]) for g in data
+               if isinstance(g, list) and g and g[0] in (10, 11)}
+        if 10 in pts and 11 in pts:
+            a, b = pts[10], pts[11]
+            if abs((a[0] + a[1]) - (b[0] + b[1])) < 1e-6 and a != b:
+                out.append(round(math.dist(a, b), 4))
+    return sorted(out)
+
+
+def cornerstp_run(answers):
+    vm, walls = cornerstp_vm()
+    try:
+        vm.run('c:CORNERSTP',
+               [None, walls, None, "No", "No"] + answers + [None, "No"])
+    except Exception:
+        pass
+    return vm
+
+# S at both prompts draws exactly what retyping draws
+typed = steps_of(cornerstp_run([24.0, 30.0, 24.0, 30.0, 24.0, 30.0]))
+samed = steps_of(cornerstp_run([24.0, 30.0, "S", "S", "S", "S"]))
+check("S at the tread and the width draws what retyping draws",
+      typed == samed and len(typed) == 3, "%r vs %r" % (typed, samed))
+
+vm = cornerstp_run([24.0, 30.0, "s", "s"])
+asked = [p for p, _v in vm.prompts]
+check("...and lower-case s is the same answer",
+      len([p for p in asked if 'step tread' in p]) >= 3)
+
+# the offer names the number, so S is not a promise you have to trust
+check("the tread prompt names the tread Same would repeat",
+      any('step tread' in p and 'Same = 24' in p for p in asked),
+      [p.strip() for p in asked if 'step tread' in p][:2])
+check("the width prompt names the width Same would repeat",
+      any('step width' in p and 'Same = 30' in p for p in asked),
+      [p.strip() for p in asked if 'step width' in p][:2])
+
+# ...and it is not offered before there is one to repeat
+first_tread = [p for p in asked if 'Step 1 - step tread' in p]
+first_width = [p for p in asked if 'Step 1 - step width' in p]
+check("Same is absent from the first tread - nothing to repeat yet",
+      first_tread and 'Same' not in first_tread[0], first_tread[:1])
+check("...and from the first width", first_width and 'Same' not in first_width[0],
+      first_width[:1])
+
+# Enter still means what it meant: done, and fit to the walls
+vm = cornerstp_run([24.0, None, 24.0, None])
+check("Enter at the width still fits the step to the walls, not Same",
+      len(steps_of(vm)) == 2 and len(set(steps_of(vm))) == 2,
+      steps_of(vm))
+
+
 # ------------------------------------------------------------------ done
 
 print()
