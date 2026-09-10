@@ -112,8 +112,12 @@ for tool, px in STEPS.items():
     src = open(os.path.join(HERE, '..', 'lisp', 'cornerstp', tool + '.lsp'),
                encoding='ascii').read()
     check("%s offers All/Some/None for the side walls" % tool,
-          '(initget "All Some None")' in src
-          and '" [All/Some/None]"' in src)
+          '(initget "All Some None Back Undo")' in src
+          and '" [All/Some/None/Back]"' in src)
+    check("%s lets that answer be taken back, as AUTOBEAD's own does"
+          % tool,
+          '(%s-back-kw bdir)' % px in src
+          and '(%s-back-word s)' % px in src)
     check("%s hands the answer straight to the engine" % tool,
           'bss bdir\n                      bside\n' in src)
     check("%s holds back the last step drawn" % tool,

@@ -387,6 +387,40 @@ check("...then re-opens the question before the loop",
 check("nothing ends up declared", "corner(s) and" not in out)
 
 
+# ------------------------------------------ 7. CORNERSTP's option chain
+
+print("\nCORNERSTP: the options, and the questions this run never asked")
+
+vm = newvm(('cornerstp', 'CORNERSTP.lsp'))
+vm.loads('(entmake (list (cons 0 "LINE")'
+         ' (list 10 0.0 0.0 0.0) (list 11 200.0 0.0 0.0)))')
+vm.loads('(entmake (list (cons 0 "LINE")'
+         ' (list 10 0.0 0.0 0.0) (list 11 0.0 200.0 0.0)))')
+walls = list(vm.entities)
+vm.run('c:CORNERSTP',
+       [None, walls,                 # pickfirst probe, then the selection
+        None,                        # direction: Enter = Inside
+        'Back',                      # dims -> back past two unasked questions
+        'Outside',                   # direction again
+        'B',                         # dims -> back            (short form)
+        None,                        # direction: Inside
+        'No',                        # dims
+        'Back',                      # bench -> back to dims
+        'No',                        # dims
+        'No',                        # bench
+        24.0, None, None,            # one tread, then Enter to stop
+        'No'])                       # side profile? (AUTOBEAD is not
+                                     # loaded here, so no bead question)
+out = said(vm)
+asked = [p for p, _v in vm.prompts if 'inside out' in p]
+check("Back at the dims question re-asks the direction", len(asked) == 3)
+check("...stepping straight over the two this run never put",
+      "Measure step treads" not in out and "parallel to the diagonal" not in out)
+check("B and Back are the same answer there", out.count("Stepping back one question") == 3)
+check("Back at the bench question re-asks the dims",
+      len([p for p, _v in vm.prompts if 'Dimension the steps' in p]) == 4)
+
+
 # ------------------------------------------------------------------ done
 
 print()

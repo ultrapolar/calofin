@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_090826_REV41-313-37.lsp
+;;; STEPS_091026_REV42-314-38.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v4.1 -> REV41   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.13 -> REV313   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v3.7 -> REV37   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     CORNERSTP.lsp   v4.2 -> REV42   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.14 -> REV314   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v3.8 -> REV38   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v4.1) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v4.2) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -267,7 +267,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.1") ; printed on load and at command start so a
+(setq *cs-version* "v4.2") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -489,6 +489,17 @@
 ;; A setting that has to be a number: V when it is one, DFLT when it is
 ;; not.
 (defun cs-num (v dflt) (if (numberp v) v dflt))
+
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
+;; a string where a value would be a list or a number.
+(defun cs-back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
+
+;; T when a TYPED string means "go back a step" - typed prompts cannot
+;; take initget keywords, so there Back is typed like a value.
+(defun cs-back-word (s)
+  (and s (member (strcase s) '("B" "BACK" "U" "UNDO"))))
 
 ;; *cs-tol-inch* expressed in the drawing's units (INSUNITS); inches
 ;; when the drawing is unitless
@@ -775,7 +786,8 @@
                        bnw bno bnk bnsd bnrm bnf bnpe bact bu1 bu2
                        bns bnfar bnff bnl
                        tlist tvals tds drops pd ix ppt pw
-                       px py totr totd cnrs ca cb pfo pgap fsteps fkey)
+                       px py totr totd cnrs ca cb pfo pgap fsteps fkey
+                       qstep qdir bstep)
 
   (defun *error* (msg)
     (cs-fclear)                     ; both exits clear the form store
@@ -983,166 +995,235 @@
     (diag (setq mid (cs-mid2 (car diag) (cadr diag))))
     (arcr (setq mid (cs-arcpt c r (* 0.5 (+ a1 a2))))))
 
-  ;; ---- 5. draw direction ----------------------------------------------
-  ;; the form answers first; when it does not, the bracket is exactly
-  ;; the keyword list (STANDARDS section 1 rule 1) and the explanation
-  ;; lives in the question text
-  (if (null (setq key (cs-fkw 'direction "Inside Outside" "Inside")))
-    (progn
-      (initget "Inside Outside")
-      (setq key (getkword "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: "))))
-  (setq outflag (= key "Outside"))
+  ;; ---- 5 to 7b: the option questions, walked as one chain -------------
+  ;; Nothing is drawn until section 8, so these five decisions can be
+  ;; taken over: every one after the first offers Back (Undo is its
+  ;; hidden synonym) and re-opens the one before it, re-running the
+  ;; geometry that sits between them - the measuring axis in particular,
+  ;; which the tread-mode answer turns, so a second pass has to start
+  ;; from the unturned one.
+  ;;
+  ;; Not every run asks every question: the measuring point needs a
+  ;; diagonal or a fillet, the tread mode needs a diagonal, and the
+  ;; bench is inside-out only.  QDIR remembers which way the chain is
+  ;; travelling so a question this run does not put is stepped straight
+  ;; over rather than stopped on.
+  ;;
+  ;; A form-supplied answer is consumed as it is used (STANDARDS 7.2),
+  ;; so backing into a question the form filled in re-asks it at the
+  ;; keyboard instead of answering it again and walking forward.
+  (setq qstep 1 qdir 1)
+  (while (<= qstep 5)
+    (cond
 
-  ;; ---- 5a. starting point (inside out only) ---------------------------
-  (if (and mid (not outflag))
-    (progn
-      (if (null (setq key (cs-fkw 'measure "Middle True" "Middle")))
-        (progn
-          (initget "Middle True")
-          (setq key (getkword
-            "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True] <Middle>: "))))
-      (setq start (if (= key "True") corner mid)))
-    (setq start corner))
+      ;; -- 5. draw direction ------------------------------------------
+      ;; the form answers first; when it does not, the bracket is exactly
+      ;; the keyword list (STANDARDS section 1 rule 1) and the
+      ;; explanation lives in the question text.  This is the first
+      ;; question of the command, so it offers no Back.
+      ((= qstep 1)
+       (if (null (setq key (cs-fkw 'direction "Inside Outside" "Inside")))
+         (progn
+           (initget "Inside Outside")
+           (setq key (getkword "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: "))))
+       (setq outflag (= key "Outside")
+             qstep   2
+             qdir    1))
 
-  ;; ---- 6. tread orientation / measuring direction toward the pool ----
-  ;; BIS  = direction the step treads are measured along
-  ;; PERP = direction the step edges run (treads are drawn along PERP)
-  (setq d1  (cs-unit (cs-vec corner (cs-far w1 corner)))
-        d2  (cs-unit (cs-vec corner (cs-far w2 corner)))
-        bis (cs-unit (mapcar '+ d1 d2)))
-  (if (null bis)
-    (progn (princ "\nThe walls are collinear - cannot find a step direction.")
-           (exit)))
-  (if (and mid (< (cs-dot bis (cs-vec corner mid)) 0.0))
-    (setq bis (cs-scl bis -1.0)))
-  (if diag
-    (progn
-      ;; one key answers whichever pair this run offers; a word the
-      ;; live prompt does not list falls through to the prompt
-      (if (null (setq key (cs-fkw 'treadmode
-                                  (if outflag "Parallel Equidistant"
-                                              "Parallel True")
-                                  "Parallel")))
-        (if outflag
-          (progn
-            (initget "Parallel Equidistant")
-            (setq key (getkword (strcat
-              "\nSteps parallel to the diagonal, or equidistant"
-              " from the true corner? [Parallel/Equidistant] <Parallel>: "))))
-          (progn
-            (initget "Parallel True")
-            (setq key (getkword
-              "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True] <Parallel>: ")))))
-      (if (not (member key '("True" "Equidistant")))
-        (progn
-          ;; treads parallel to the diagonal; step treads measured square to it
-          (setq perp (cs-unit (cs-vec (car diag) (cadr diag)))
-                bis  (cs-perp90 perp))
-          (if (< (cs-dot bis (cs-vec corner mid)) 0.0)
-            (setq bis (cs-scl bis -1.0)))))))
-  (if (null perp)
-    ;; treads perpendicular to the true-angle (equal-angle) bisector
-    (setq perp (cs-unit (cs-perp90 bis))))
+      ;; -- 5a. starting point (inside out only) -----------------------
+      ((= qstep 2)
+       (if (and mid (not outflag))
+         (progn
+           (if (null (setq key (cs-fkw 'measure "Middle True" "Middle")))
+             (progn
+               (initget "Middle True Back Undo")
+               (setq key (getkword
+                 "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True/Back] <Middle>: "))))
+           (if (member key '("Back" "Undo"))
+             (progn (princ "\n  Stepping back one question.")
+                    (setq qstep 1 qdir -1))
+             (setq start (if (= key "True") corner mid)
+                   qstep 3
+                   qdir  1)))
+         ;; not asked this run - carry on the way the chain was going
+         (progn (setq start corner)
+                (setq qstep (+ qstep qdir)))))
 
-  (if outflag
-    (princ (strcat "\nOutermost step is bounded to the walls; drawing"
-                   " back in toward the corner (direction "
-                   (angtos (angle '(0.0 0.0 0.0) bis)) ")."))
-    (princ (strcat "\nMeasuring from "
-                   (if (equal start corner 1e-9)
-                     "the true corner"
-                     "the middle of the diagonal/arc")
-                   " toward the pool (direction "
-                   (angtos (angle '(0.0 0.0 0.0) bis)) ").")))
+      ;; -- 6. tread orientation / measuring direction toward the pool --
+      ;; BIS  = direction the step treads are measured along
+      ;; PERP = direction the step edges run (treads are drawn along PERP)
+      ((= qstep 3)
+       (setq d1   (cs-unit (cs-vec corner (cs-far w1 corner)))
+             d2   (cs-unit (cs-vec corner (cs-far w2 corner)))
+             bis  (cs-unit (mapcar '+ d1 d2))
+             perp nil)
+       (if (null bis)
+         (progn (princ "\nThe walls are collinear - cannot find a step direction.")
+                (exit)))
+       (if (and mid (< (cs-dot bis (cs-vec corner mid)) 0.0))
+         (setq bis (cs-scl bis -1.0)))
+       (if diag
+         (progn
+           ;; one key answers whichever pair this run offers; a word the
+           ;; live prompt does not list falls through to the prompt
+           (if (null (setq key (cs-fkw 'treadmode
+                                       (if outflag "Parallel Equidistant"
+                                                   "Parallel True")
+                                       "Parallel")))
+             (if outflag
+               (progn
+                 (initget "Parallel Equidistant Back Undo")
+                 (setq key (getkword (strcat
+                   "\nSteps parallel to the diagonal, or equidistant"
+                   " from the true corner? [Parallel/Equidistant/Back] <Parallel>: "))))
+               (progn
+                 (initget "Parallel True Back Undo")
+                 (setq key (getkword
+                   "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True/Back] <Parallel>: ")))))
+           (if (member key '("Back" "Undo"))
+             (progn (princ "\n  Stepping back one question.")
+                    (setq qstep 2 qdir -1))
+             (if (not (member key '("True" "Equidistant")))
+               (progn
+                 ;; treads parallel to the diagonal; step treads measured
+                 ;; square to it
+                 (setq perp (cs-unit (cs-vec (car diag) (cadr diag)))
+                       bis  (cs-perp90 perp))
+                 (if (< (cs-dot bis (cs-vec corner mid)) 0.0)
+                   (setq bis (cs-scl bis -1.0)))))))
+         ;; no diagonal, so no question here: on the way back, keep going
+         (if (< qdir 0) (setq qstep 2)))
+       (if (= qstep 3)                  ; still here: the axis is settled
+         (progn
+           (if (null perp)
+             ;; treads perpendicular to the true-angle (equal-angle) bisector
+             (setq perp (cs-unit (cs-perp90 bis))))
+           (if outflag
+             (princ (strcat "\nOutermost step is bounded to the walls; drawing"
+                            " back in toward the corner (direction "
+                            (angtos (angle '(0.0 0.0 0.0) bis)) ")."))
+             (princ (strcat "\nMeasuring from "
+                            (if (equal start corner 1e-9)
+                              "the true corner"
+                              "the middle of the diagonal/arc")
+                            " toward the pool (direction "
+                            (angtos (angle '(0.0 0.0 0.0) bis)) ").")))
+           ;; preview the measuring axis and the tread direction
+           (setq reflen (max (distance corner (cs-far w1 corner))
+                             (distance corner (cs-far w2 corner))))
+           (grdraw (trans start 0 1)
+                   (trans (cs-add start (cs-scl bis reflen)) 0 1) 4 0)
+           (grdraw (trans (cs-add start (cs-scl perp (* 0.25 reflen))) 0 1)
+                   (trans (cs-add start (cs-scl perp (* -0.25 reflen))) 0 1) 2 0)
+           ;; previous edge ends, used to close the step sides (inside out
+           ;; only - outside-in steps start out wall-bounded)
+           (if (not outflag)
+             (progn
+               (cond
+                 (diag (setq prevL (car diag) prevR (cadr diag)))
+                 (arcr (setq prevL (cs-arcpt c r a1) prevR (cs-arcpt c r a2)))
+                 (T    (setq prevL corner prevR corner)))
+               (if (> (cs-dot (cs-vec start prevL) perp)
+                      (cs-dot (cs-vec start prevR) perp))
+                 (setq tmp prevL prevL prevR prevR tmp))))
+           (setq qstep 4 qdir 1))))
 
-  ;; preview the measuring axis and the tread direction
-  (setq reflen (max (distance corner (cs-far w1 corner))
-                    (distance corner (cs-far w2 corner))))
-  (grdraw (trans start 0 1)
-          (trans (cs-add start (cs-scl bis reflen)) 0 1) 4 0)
-  (grdraw (trans (cs-add start (cs-scl perp (* 0.25 reflen))) 0 1)
-          (trans (cs-add start (cs-scl perp (* -0.25 reflen))) 0 1) 2 0)
+      ;; -- 7. dimension the steps? ------------------------------------
+      ((= qstep 4)
+       (if (null (setq fkey (cs-fkw 'dims "Yes No" "Yes")))
+         (progn
+           (initget "Yes No Back Undo")
+           (setq fkey (getkword "\nDimension the steps? [Yes/No/Back] <Yes>: "))))
+       (if (member fkey '("Back" "Undo"))
+         (progn (princ "\n  Stepping back one question.")
+                (setq qstep 3 qdir -1))
+         (progn
+           (setq dimflag (/= "No" fkey))
+           (if dimflag
+             (progn
+               (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
+               (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
+                 (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
+                                "\" not found - step treads use the current style.")))
+               (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
+                 (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
+                                "\" not found - step widths use the current style.")))
+               (if (and *cs-dim-layer* (not (cs-layerok *cs-dim-layer*)))
+                 (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
+                                "\" is missing or not drawable - using the"
+                                " current layer.")))))
+           (setq qstep 5 qdir 1))))
 
-  ;; previous edge ends, used to close the step sides (inside out only -
-  ;; outside-in steps start out wall-bounded)
-  (if (not outflag)
-    (progn
-      (cond
-        (diag (setq prevL (car diag) prevR (cadr diag)))
-        (arcr (setq prevL (cs-arcpt c r a1) prevR (cs-arcpt c r a2)))
-        (T    (setq prevL corner prevR corner)))
-      (if (> (cs-dot (cs-vec start prevL) perp)
-             (cs-dot (cs-vec start prevR) perp))
-        (setq tmp prevL prevL prevR prevR tmp))))
+      ;; -- 7b. a bench along one wall? (inside out only) --------------
+      ;; The bench stands in for a stretch of its wall: steps up to the
+      ;; attachment tread meet the wall, the bench's front edge starts on
+      ;; that tread, and every later step is bounded by the front edge
+      ;; instead.  Outside in walks toward the corner without knowing its
+      ;; step count in advance, so the bench is an inside-out feature.
+      ((= qstep 5)
+       (if outflag
+         (setq qstep (+ qstep qdir))
+         (progn
+           (if (null (setq fkey (cs-fkw 'bench "Yes No" "No")))
+             (progn
+               (initget "Yes No Back Undo")
+               (setq fkey (getkword "\nAdd a bench along a wall? [Yes/No/Back] <No>: "))))
+           (cond
+             ((member fkey '("Back" "Undo"))
+              (princ "\n  Stepping back one question.")
+              (setq qstep 4 qdir -1))
+             ((= "Yes" fkey)
+              (setq bnw nil bno nil bnk nil)
+              (initget "Back Undo")
+              (setq tmp (getpoint "\nPick the wall the bench sits against [Back]: "))
+              (cond
+                ((and (= (type tmp) 'STR) (member tmp '("Back" "Undo")))
+                 (princ "\n  Stepping back one question."))  ; re-ask the bench
+                ((null tmp)
+                 (princ "\nNo wall picked - no bench added.")
+                 (setq qstep 6 qdir 1))
+                (T
+                 (setq tmp  (trans tmp 1 0)
+                       bnsd (if (<= (cs-ptseg tmp (car w1) (cadr w1))
+                                    (cs-ptseg tmp (car w2) (cadr w2)))
+                              1 2)
+                       bnw  (if (= bnsd 1) w1 w2))
+                 ;; its offset and step number can come off the form; both
+                 ;; prompts refuse Enter, so nil falls back to the keyboard
+                 (if (cs-fhas 'benchoffset) (setq bno (cs-fnum 'benchoffset)))
+                 (if (not (numberp bno))
+                   (progn
+                     (initget 7 "Back Undo")
+                     (setq bno (getdist "\nBench offset off the wall (its depth) [Back]: "))))
+                 (if (and (= (type bno) 'STR) (member bno '("Back" "Undo")))
+                   (princ "\n  Stepping back one question.")   ; re-ask the wall
+                   (progn
+                     (if (cs-fhas 'benchstep) (setq bnk (cs-ftake 'benchstep)))
+                     (if (not (= (type bnk) 'INT))
+                       (progn
+                         (initget 7 "Back Undo")
+                         (setq bnk (getint (strcat "\nWhich step is the bench attached"
+                                                   " to (it ends on that tread) [Back]: ")))))
+                     (if (and (= (type bnk) 'STR) (member bnk '("Back" "Undo")))
+                       (progn (princ "\n  Stepping back one question.")
+                              (setq bno nil))          ; re-ask the offset
+                       (progn
+                         ;; the front edge: the bench's wall shifted into the pool
+                         (setq bnrm (cs-unit (cs-perp90 (cs-vec (car bnw) (cadr bnw)))))
+                         (if (< (cs-dot bnrm bis) 0.0) (setq bnrm (cs-scl bnrm -1.0)))
+                         (setq bnf  (list (cs-add (car bnw) (cs-scl bnrm bno))
+                                          (cs-add (cadr bnw) (cs-scl bnrm bno)))
+                               ;; which end of a normalized step that wall bounds
+                               ;; (1 = the E1 end, 2 = the E2 end)
+                               bnpe (if (> (cs-dot (if (= bnsd 1) d1 d2) perp) 0.0)
+                                      2 1))
+                         (princ (strcat "\n  Bench: " (rtos bno) " off that wall;"
+                                        " steps past step " (itoa bnk)
+                                        " run to its front edge."))
+                         (setq qstep 6 qdir 1))))))))
+             (T (setq qstep 6 qdir 1)))))))) 
 
-  ;; ---- 7. dimension the steps? ---------------------------------------
-  (if (null (setq fkey (cs-fkw 'dims "Yes No" "Yes")))
-    (progn
-      (initget "Yes No")
-      (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))))
-  (setq dimflag (/= "No" fkey))
-  (if dimflag
-    (progn
-      (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
-      (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
-        (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
-                       "\" not found - step treads use the current style.")))
-      (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
-        (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
-                       "\" not found - step widths use the current style.")))
-      (if (and *cs-dim-layer* (not (cs-layerok *cs-dim-layer*)))
-        (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
-                       "\" is missing or not drawable - using the"
-                       " current layer.")))))
 
-  ;; ---- 7b. a bench along one wall? (inside out only) ------------------
-  ;; The bench stands in for a stretch of its wall: steps up to the
-  ;; attachment tread meet the wall, the bench's front edge starts on
-  ;; that tread, and every later step is bounded by the front edge
-  ;; instead.  Outside in walks toward the corner without knowing its
-  ;; step count in advance, so the bench is an inside-out feature.
-  (if (not outflag)
-    (progn
-      (if (null (setq fkey (cs-fkw 'bench "Yes No" "No")))
-        (progn
-          (initget "Yes No")
-          (setq fkey (getkword "\nAdd a bench along a wall? [Yes/No] <No>: "))))
-      (if (= "Yes" fkey)
-        (progn
-          (setq tmp (getpoint "\nPick the wall the bench sits against: "))
-          (if (null tmp)
-            (princ "\nNo wall picked - no bench added.")
-            (progn
-              (setq tmp  (trans tmp 1 0)
-                    bnsd (if (<= (cs-ptseg tmp (car w1) (cadr w1))
-                                 (cs-ptseg tmp (car w2) (cadr w2)))
-                           1 2)
-                    bnw  (if (= bnsd 1) w1 w2))
-              ;; its offset and step number can come off the form; both
-              ;; prompts refuse Enter, so nil falls back to the keyboard
-              (if (cs-fhas 'benchoffset) (setq bno (cs-fnum 'benchoffset)))
-              (if (not (numberp bno))
-                (progn
-                  (initget 7)
-                  (setq bno (getdist "\nBench offset off the wall (its depth): "))))
-              (if (cs-fhas 'benchstep) (setq bnk (cs-ftake 'benchstep)))
-              (if (not (= (type bnk) 'INT))
-                (progn
-                  (initget 7)
-                  (setq bnk (getint (strcat "\nWhich step is the bench attached"
-                                            " to (it ends on that tread): ")))))
-              ;; the front edge: the bench's wall shifted into the pool
-              (setq bnrm (cs-unit (cs-perp90 (cs-vec (car bnw) (cadr bnw)))))
-              (if (< (cs-dot bnrm bis) 0.0) (setq bnrm (cs-scl bnrm -1.0)))
-              (setq bnf  (list (cs-add (car bnw) (cs-scl bnrm bno))
-                               (cs-add (cadr bnw) (cs-scl bnrm bno)))
-                    ;; which end of a normalized step that wall bounds
-                    ;; (1 = the E1 end, 2 = the E2 end)
-                    bnpe (if (> (cs-dot (if (= bnsd 1) d1 d2) perp) 0.0)
-                           2 1))
-              (princ (strcat "\n  Bench: " (rtos bno) " off that wall;"
-                             " steps past step " (itoa bnk)
-                             " run to its front edge."))))))))
 
   ;; ---- 8. prompt for each step and draw it ----------------------------
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1442,8 +1523,12 @@
               ;; ask the depths, top step first, with Back support:
               ;; one per step PLUS one more for the drop after the
               ;; last tread, so 3 steps take 4 depths
-              (setq drops nil ix 0)
-              (while (<= ix (length tds))
+              ;; the depths and the pick are one chain: Back at the
+              ;; pick re-opens the LAST depth rather than starting the
+              ;; whole ladder again
+              (setq drops nil ix 0 ppt 'RETRY)
+              (while (eq ppt 'RETRY)
+               (while (<= ix (length tds))
                 (setq pd 'RETRY)
                 (while (eq pd 'RETRY)
                   ;; depth1..depthN and depthafter can come off the
@@ -1483,11 +1568,17 @@
                          (setq pd 'RETRY))
                         ((null pd) (setq pd (car drops))))))) ; Enter = previous
                 (setq drops (cons pd drops) ix (1+ ix)))
+               ;; Place the profile.  It always runs DOWN AND TO THE
+               ;; LEFT from the pick, so there is no side to ask about.
+               (initget "Back Undo")
+               (setq ppt (getpoint (strcat "\nPick the top of the first"
+                                           " tread for the side profile [Back]: ")))
+               (if (cs-back-kw ppt)
+                 (progn (princ "\n  Stepping back one step.")
+                        (setq drops (cdr drops)
+                              ix    (1- ix)
+                              ppt   'RETRY))))
               (setq drops (reverse drops))
-              ;; Place the profile.  It always runs DOWN AND TO THE
-              ;; LEFT from the pick, so there is no side to ask about.
-              (setq ppt (getpoint (strcat "\nPick the top of the first"
-                                          " tread for the side profile: ")))
               (if (null ppt)
                 (princ "\nNo point picked - side profile skipped.")
                 (progn
@@ -1581,42 +1672,67 @@
       (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
                      " if you want these steps beaded."))
       (progn
-        (if (null (setq fkey (cs-fkw 'bead "Yes No" "Yes")))
-          (progn
-            (initget "Yes No")
-            (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
-        (if (/= "No" fkey)
-          (progn
-            (setq btreads (cs-treadents slog)
-                  bsides  (cs-sideents slog)
-                  bnums   nil)
-            (if (null btreads)
-              (princ "\nNo tread lines to bead.")
-              (progn
-                ;; every tread but the last is beaded - the side walls
-                ;; are the question, and None leaves them bare
-                (initget "All Some None")
-                (setq bside (cond ((getkword (strcat "\nWhich steps have"
-                                                     " beaded side walls?"
-                                                     " [All/Some/None]"
-                                                     " <All>: ")))
-                                  ("All")))
-                (if (= bside "Some")
-                  (progn
-                    (princ (strcat "\n  Steps drawn: "
-                                   (cs-numsay btreads)))
-                    (setq bnums (cs-numlist
-                                  (getstring T (strcat "\nStep numbers with"
-                                                       " beaded sides: "))))
-                    (setq bnums (vl-remove-if-not
-                                  '(lambda (k) (assoc k btreads)) bnums))
-                    (if (null bnums)
-                      (progn
-                        (princ (strcat "\n  No step numbers recognized -"
-                                       " beading every side wall full"
-                                       " length."))
-                        (setq bside "All")))))
-                (setq bdir (getpoint "\nClick the side to bead toward: "))
+        ;; the bead questions are a chain of their own: which steps,
+        ;; which numbers when that answer is Some, and which side to
+        ;; bead toward.  Each offers Back and re-opens the one before
+        ;; it; Back at the first re-asks whether to bead at all.
+        (setq bstep 1)
+        (while (<= bstep 4)
+          (cond
+            ((= bstep 1)
+             (if (null (setq fkey (cs-fkw 'bead "Yes No" "Yes")))
+               (progn
+                 (initget "Yes No")
+                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
+             (setq bstep (if (/= "No" fkey) 2 5)))
+            ((= bstep 2)
+             (setq btreads (cs-treadents slog)
+                   bsides  (cs-sideents slog)
+                   bnums   nil)
+             (if (null btreads)
+               (progn (princ "\nNo tread lines to bead.") (setq bstep 5))
+               (progn
+                 ;; every tread but the last is beaded - the side walls
+                 ;; are the question, and None leaves them bare
+                 (initget "All Some None Back Undo")
+                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
+                                                      " beaded side walls?"
+                                                      " [All/Some/None/Back]"
+                                                      " <All>: ")))
+                                   ("All")))
+                 (if (member bside '("Back" "Undo"))
+                   (progn (princ "\n  Stepping back one question.")
+                          (setq bstep 1))
+                   (setq bstep 3)))))
+            ((= bstep 3)
+             (if (/= bside "Some")
+               (setq bstep 4)
+               (progn
+                 (princ (strcat "\n  Steps drawn: " (cs-numsay btreads)))
+                 (setq s (getstring T (strcat "\nStep numbers with"
+                                              " beaded sides (B = back): ")))
+                 (if (cs-back-word s)
+                   (progn (princ "\n  Stepping back one question.")
+                          (setq bstep 2))
+                   (progn
+                     (setq bnums (cs-numlist s))
+                     (setq bnums (vl-remove-if-not
+                                   '(lambda (k) (assoc k btreads)) bnums))
+                     (if (null bnums)
+                       (progn
+                         (princ (strcat "\n  No step numbers recognized -"
+                                        " beading every side wall full"
+                                        " length."))
+                         (setq bside "All")))
+                     (setq bstep 4))))))
+            ((= bstep 4)
+             (initget "Back Undo")
+             (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
+             (if (cs-back-kw bdir)
+               (progn (princ "\n  Stepping back one question.")
+                      (setq bstep (if (= bside "Some") 3 2)))
+               (progn
+                (setq bstep 5)
                 (if (null bdir)
                   (princ "\nNo direction picked - nothing beaded.")
                   (progn
@@ -1643,7 +1759,7 @@
                       ;; the last step drawn still goes over as a step
                       ;; line - it is a breakline like any other - but
                       ;; it is named here so AUTOBEAD leaves it unbeaded
-                      (list (cs-entmid (cdr (last btreads))))))))))))))
+                      (list (cs-entmid (cdr (last btreads)))))))))))))))
   (cs-fclear)                       ; both exits clear the form store
   (princ))
 
@@ -1834,7 +1950,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.13) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.14) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -2064,7 +2180,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.13") ; printed on load and at command start so a
+(setq *hs-version* "v3.14") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2450,6 +2566,17 @@
 ;; not.
 (defun hs-num (v dflt) (if (numberp v) v dflt))
 
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
+;; a string where a value would be a list or a number.
+(defun hs-back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
+
+;; T when a TYPED string means "go back a step" - typed prompts cannot
+;; take initget keywords, so there Back is typed like a value.
+(defun hs-back-word (s)
+  (and s (member (strcase s) '("B" "BACK" "U" "UNDO"))))
+
 ;; *cs-tol-inch* expressed in the drawing's units (INSUNITS); inches
 ;; when the drawing is unitless
 (defun hs-autotol ( / iu b)
@@ -2680,7 +2807,7 @@
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
                       px py totrun totdrop td cnrs pfo pgap fsteps fkey
-                      wnoun)
+                      wnoun bstep s)
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
@@ -3185,8 +3312,11 @@
           ;; the depths, top step first, with Back (Undo accepted
           ;; too): one per step PLUS one more for the drop after the
           ;; last tread, so 3 steps take 4 depths
-          (setq jx 1 drops nil)
-          (while (<= jx (1+ tcount))
+          ;; the depths and the pick are one chain: Back at the pick
+          ;; re-opens the LAST depth rather than starting the ladder again
+          (setq jx 1 drops nil ptop 'RETRY)
+          (while (eq ptop 'RETRY)
+           (while (<= jx (1+ tcount))
             ;; depth1..depthN and depthafter can come off the form,
             ;; spent as they are read; nil reads as Enter, which the
             ;; first depth refuses - that one falls back to the
@@ -3224,11 +3354,17 @@
                (setq drops (cons (car drops) drops) jx (1+ jx)))
               (T
                (setq drops (cons dd drops) jx (1+ jx)))))
+           ;; Placement.  The profile always runs DOWN AND TO THE LEFT
+           ;; from the pick, so there is no side to ask about.
+           (initget "Back Undo")
+           (setq ptop (getpoint (strcat "\nPick the top of " wnoun
+                                        " for the side profile [Back]: ")))
+           (if (hs-back-kw ptop)
+             (progn (princ "\n  Stepping back one step.")
+                    (setq drops (cdr drops)
+                          jx    (1- jx)
+                          ptop  'RETRY))))
           (setq drops (reverse drops))
-          ;; Placement.  The profile always runs DOWN AND TO THE LEFT
-          ;; from the pick, so there is no side to ask about.
-          (setq ptop (getpoint (strcat "\nPick the top of " wnoun
-                                       " for the side profile: ")))
           (if (null ptop)
             (princ "\nNo point picked - side profile skipped.")
             (progn
@@ -3320,41 +3456,66 @@
       (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
                      " if you want these steps beaded."))
       (progn
-        (if (null (setq fkey (hs-fkw 'bead "Yes No" "Yes")))
-          (progn
-            (initget "Yes No")
-            (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
-        (if (/= "No" fkey)
-          (progn
-            (setq btreads (hs-treadents slog)
-                  bnums   nil)
-            (if (null btreads)
-              (princ "\nNo tread lines to bead.")
-              (progn
-                ;; every tread but the last is beaded - the side walls
-                ;; are the question, and None leaves them bare
-                (initget "All Some None")
-                (setq bside (cond ((getkword (strcat "\nWhich steps have"
-                                                     " beaded side walls?"
-                                                     " [All/Some/None]"
-                                                     " <All>: ")))
-                                  ("All")))
-                (if (= bside "Some")
-                  (progn
-                    (princ (strcat "\n  Steps drawn: "
-                                   (hs-numsay btreads)))
-                    (setq bnums (hs-numlist
-                                  (getstring T (strcat "\nStep numbers with"
-                                                       " beaded sides: "))))
-                    (setq bnums (vl-remove-if-not
-                                  '(lambda (k) (assoc k btreads)) bnums))
-                    (if (null bnums)
-                      (progn
-                        (princ (strcat "\n  No step numbers recognized -"
-                                       " beading every side wall full"
-                                       " length."))
-                        (setq bside "All")))))
-                (setq bdir (getpoint "\nClick the side to bead toward: "))
+        ;; the bead questions are a chain of their own: which steps,
+        ;; which numbers when that answer is Some, and which side to
+        ;; bead toward.  Each offers Back and re-opens the one before
+        ;; it; Back at the first re-asks whether to bead at all.
+        (setq bstep 1)
+        (while (<= bstep 4)
+          (cond
+            ((= bstep 1)
+             (if (null (setq fkey (hs-fkw 'bead "Yes No" "Yes")))
+               (progn
+                 (initget "Yes No")
+                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
+             (setq bstep (if (/= "No" fkey) 2 5)))
+            ((= bstep 2)
+             (setq btreads (hs-treadents slog)
+                   bnums   nil)
+             (if (null btreads)
+               (progn (princ "\nNo tread lines to bead.") (setq bstep 5))
+               (progn
+                 ;; every tread but the last is beaded - the side walls
+                 ;; are the question, and None leaves them bare
+                 (initget "All Some None Back Undo")
+                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
+                                                      " beaded side walls?"
+                                                      " [All/Some/None/Back]"
+                                                      " <All>: ")))
+                                   ("All")))
+                 (if (member bside '("Back" "Undo"))
+                   (progn (princ "\n  Stepping back one question.")
+                          (setq bstep 1))
+                   (setq bstep 3)))))
+            ((= bstep 3)
+             (if (/= bside "Some")
+               (setq bstep 4)
+               (progn
+                 (princ (strcat "\n  Steps drawn: " (hs-numsay btreads)))
+                 (setq s (getstring T (strcat "\nStep numbers with"
+                                              " beaded sides (B = back): ")))
+                 (if (hs-back-word s)
+                   (progn (princ "\n  Stepping back one question.")
+                          (setq bstep 2))
+                   (progn
+                     (setq bnums (hs-numlist s))
+                     (setq bnums (vl-remove-if-not
+                                   '(lambda (k) (assoc k btreads)) bnums))
+                     (if (null bnums)
+                       (progn
+                         (princ (strcat "\n  No step numbers recognized -"
+                                        " beading every side wall full"
+                                        " length."))
+                         (setq bside "All")))
+                     (setq bstep 4))))))
+            ((= bstep 4)
+             (initget "Back Undo")
+             (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
+             (if (hs-back-kw bdir)
+               (progn (princ "\n  Stepping back one question.")
+                      (setq bstep (if (= bside "Some") 3 2)))
+               (progn
+                (setq bstep 5)
                 (if (null bdir)
                   (princ "\nNo direction picked - nothing beaded.")
                   (progn
@@ -3381,7 +3542,7 @@
                       ;; the last step drawn still goes over as a step
                       ;; line - it is a breakline like any other - but
                       ;; it is named here so AUTOBEAD leaves it unbeaded
-                      (list (hs-entmid (cdr (last btreads))))))))))))))
+                      (list (hs-entmid (cdr (last btreads)))))))))))))))
   (hs-fclear)                       ; both exits clear the form store
   (princ))
 
@@ -3565,7 +3726,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v3.7) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v3.8) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -3805,7 +3966,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.7") ; printed on load and at command start so a
+(setq *ns-version* "v3.8") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -4151,6 +4312,17 @@
 ;; not.
 (defun ns-num (v dflt) (if (numberp v) v dflt))
 
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
+;; a string where a value would be a list or a number.
+(defun ns-back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
+
+;; T when a TYPED string means "go back a step" - typed prompts cannot
+;; take initget keywords, so there Back is typed like a value.
+(defun ns-back-word (s)
+  (and s (member (strcase s) '("B" "BACK" "U" "UNDO"))))
+
 ;; *cs-tol-inch* expressed in the drawing's units (INSUNITS); inches
 ;; when the drawing is unitless
 (defun ns-autotol ( / iu b)
@@ -4487,7 +4659,8 @@
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
-                        tt cnrs ca cb pfo pgap lastinn fsteps fkey)
+                        tt cnrs ca cb pfo pgap lastinn fsteps fkey
+                        bstep)
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
@@ -5148,8 +5321,11 @@
           ;; keyword, is a hidden synonym): one per step PLUS one
           ;; more for the drop after the last tread, so 3 steps
           ;; take 4 depths
-          (setq drops nil k 1)
-          (while (<= k (1+ nsteps))
+          ;; the depths and the pick are one chain: Back at the pick
+          ;; re-opens the LAST depth rather than starting the ladder again
+          (setq drops nil k 1 wpu 'RETRY)
+          (while (eq wpu 'RETRY)
+           (while (<= k (1+ nsteps))
             ;; depth1..depthN and depthafter can come off the form,
             ;; spent as they are read; nil reads as Enter, which the
             ;; first depth refuses - that one falls back to the
@@ -5182,11 +5358,17 @@
                (setq drops (cons (car drops) drops) k (1+ k)))
               (T
                (setq drops (cons dv drops) k (1+ k)))))
+           ;; Where the profile goes.  It always runs DOWN AND TO THE
+           ;; LEFT from the pick, so there is no side to ask about.
+           (initget "Back Undo")
+           (setq wpu (getpoint (strcat "\nPick the top of the first tread"
+                                       " for the side profile [Back]: ")))
+           (if (ns-back-kw wpu)
+             (progn (princ "\n  Stepping back one step.")
+                    (setq drops (cdr drops)
+                          k     (1- k)
+                          wpu   'RETRY))))
           (setq drops (reverse drops))
-          ;; Where the profile goes.  It always runs DOWN AND TO THE
-          ;; LEFT from the pick, so there is no side to ask about.
-          (setq wpu (getpoint (strcat "\nPick the top of the first tread"
-                                      " for the side profile: ")))
           (if (null wpu)
             (princ "\nNo point picked - no side profile drawn.")
             (progn
@@ -5281,47 +5463,72 @@
       (princ (strcat "\nAUTOBEAD is not loaded - APPLOAD AUTOBEAD.lsp"
                      " if you want these steps beaded."))
       (progn
-        (if (null (setq fkey (ns-fkw 'bead "Yes No" "Yes")))
-          (progn
-            (initget "Yes No")
-            (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
-        (if (/= "No" fkey)
-          (progn
-            (setq btreads (ns-treadents slog)
-                  bnums   nil)
-            (if (null btreads)
-              (princ "\nNo tread lines to bead.")
-              (progn
-                ;; every tread but the last is beaded - the side walls
-                ;; are the question, and None leaves them bare
-                (initget "All Some None")
-                (setq bside (cond ((getkword (strcat "\nWhich steps have"
-                                                     " beaded side walls?"
-                                                     " [All/Some/None]"
-                                                     " <All>: ")))
-                                  ("All")))
-                (if (= bside "Some")
-                  (progn
-                    (princ (strcat "\n  Steps drawn: "
-                                   (ns-numsay btreads)))
-                    (setq bnums (ns-numlist
-                                  (getstring T (strcat "\nStep numbers with"
-                                                       " beaded sides: "))))
-                    (setq bnums (vl-remove-if-not
-                                  '(lambda (k) (assoc k btreads)) bnums))
-                    (if (null bnums)
-                      (progn
-                        (princ (strcat "\n  No step numbers recognized -"
-                                       " beading every side wall full"
-                                       " length."))
-                        (setq bside "All")))))
-                (setq bdir (getpoint "\nClick the side to bead toward: "))
+        ;; the bead questions are a chain of their own: which steps,
+        ;; which numbers when that answer is Some, and which side to
+        ;; bead toward.  Each offers Back and re-opens the one before
+        ;; it; Back at the first re-asks whether to bead at all.
+        (setq bstep 1)
+        (while (<= bstep 4)
+          (cond
+            ((= bstep 1)
+             (if (null (setq fkey (ns-fkw 'bead "Yes No" "Yes")))
+               (progn
+                 (initget "Yes No")
+                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
+             (setq bstep (if (/= "No" fkey) 2 5)))
+            ((= bstep 2)
+             (setq btreads (ns-treadents slog)
+                   bnums   nil)
+             (if (null btreads)
+               (progn (princ "\nNo tread lines to bead.") (setq bstep 5))
+               (progn
+                 ;; every tread but the last is beaded - the side walls
+                 ;; are the question, and None leaves them bare
+                 (initget "All Some None Back Undo")
+                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
+                                                      " beaded side walls?"
+                                                      " [All/Some/None/Back]"
+                                                      " <All>: ")))
+                                   ("All")))
+                 (if (member bside '("Back" "Undo"))
+                   (progn (princ "\n  Stepping back one question.")
+                          (setq bstep 1))
+                   (setq bstep 3)))))
+            ((= bstep 3)
+             (if (/= bside "Some")
+               (setq bstep 4)
+               (progn
+                 (princ (strcat "\n  Steps drawn: " (ns-numsay btreads)))
+                 (setq s (getstring T (strcat "\nStep numbers with"
+                                              " beaded sides (B = back): ")))
+                 (if (ns-back-word s)
+                   (progn (princ "\n  Stepping back one question.")
+                          (setq bstep 2))
+                   (progn
+                     (setq bnums (ns-numlist s))
+                     (setq bnums (vl-remove-if-not
+                                   '(lambda (k) (assoc k btreads)) bnums))
+                     (if (null bnums)
+                       (progn
+                         (princ (strcat "\n  No step numbers recognized -"
+                                        " beading every side wall full"
+                                        " length."))
+                         (setq bside "All")))
+                     (setq bstep 4))))))
+            ((= bstep 4)
+             (initget "Back Undo")
+             (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
+             (if (ns-back-kw bdir)
+               (progn (princ "\n  Stepping back one question.")
+                      (setq bstep (if (= bside "Some") 3 2)))
+               (progn
+                (setq bstep 5)
                 (if (null bdir)
                   (princ "\nNo direction picked - nothing beaded.")
                   (progn
-                    ;; the treads, the sides and their corner pieces, and
-                    ;; the line(s) the run came off: the pool lines of
-                    ;; this pocket, which is what AUTOBEAD beads
+                    ;; the treads, anything the run drew for its walls,
+                    ;; and the lines it came off: the pool lines of this
+                    ;; pocket, which is what AUTOBEAD beads
                     (setq bss (ssadd))
                     (foreach pr btreads (ssadd (cdr pr) bss))
                     (foreach be bsides
@@ -5342,7 +5549,7 @@
                       ;; the last step drawn still goes over as a step
                       ;; line - it is a breakline like any other - but
                       ;; it is named here so AUTOBEAD leaves it unbeaded
-                      (list (ns-entmid (cdr (last btreads))))))))))))))
+                      (list (ns-entmid (cdr (last btreads)))))))))))))))
   (ns-fclear)                       ; both exits clear the form store
   (princ))
 
