@@ -124,7 +124,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "090826 REV24")
+(setq pool:*version* "091026 REV25")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1038,17 +1038,21 @@
 ;; asked.  Checked against the same list the prompt offers: an unknown
 ;; shape would fall through the cond at the foot of c:POOL into the
 ;; rectangle branch and draw the wrong pool without saying so.
-(defun pool:fshape ( / v)
+(defun pool:fshape (back / v)
   (if (pool:fhas 'shape) (setq v (pool:ftake 'shape)))
   (if (and v (= (type v) 'STR)
            (member v '("Rectangle" "Grecian" "ROman" "L" "LAzyl"
                        "Oval" "OCtagon" "ROUnd" "MUtt")))
       v
       (progn
-        (initget 1 "Rectangle Grecian ROman L LAzyl Oval OCtagon ROUnd MUtt")
-        (getkword
-          (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
-                  "OCtagon/ROUnd/MUtt]: ")))))
+        ;; initget 1 still refuses Enter with Back on the list, so the
+        ;; shape is as required as it ever was
+        (initget 1 (strcat "Rectangle Grecian ROman L LAzyl Oval OCtagon"
+                           " ROUnd MUtt" (if back " Back Undo" "")))
+        (setq v (getkword
+                  (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
+                          "OCtagon/ROUnd/MUtt" (if back "/Back" "") "]: ")))
+        (if (member v '("Back" "Undo")) 'POOL-BACK v))))
 
 ;; Run POOL with a form's answers already in hand.  Nothing happens
 ;; here that the direct path misses: a caller may equally set
@@ -8066,7 +8070,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* undo-open ptype base)
+(defun c:POOL ( / *error* undo-open ptype base pstep)
 
   (defun *error* (msg)
     (if (and msg
@@ -8116,26 +8120,48 @@
   (setvar "LUNITS" 4)
   (princ "\nDistances may be typed as 25'6\", 25'-6-1/2\" or 25'6.5 (plain numbers = inches).")
 
+  ;; The three questions in front of every measurement - in-square,
+  ;; shape, base point - are one chain.  The two after the first offer
+  ;; Back and re-open the one before them, which matters most at the
+  ;; shape: it is the answer the whole run hangs off, and until now the
+  ;; only way to change it was to start again.  A form-supplied answer
+  ;; is spent as it is read (STANDARDS 7.2), so backing into a question
+  ;; the form filled in asks it at the keyboard.
+  ;;
   ;; In-square pools are built true to the side measurements and need
   ;; no diagonals; out-of-square pools take the usual cross-dim route.
-  (setq pool:*insq*
-        (= "Insquare"
-           (pool:askkwf 'insq "Is the pool in-square or out-of-square"
-                        "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
-  (if pool:*insq*
-      (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
-
-  ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO)
+  ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO):
   ;; the six common shapes first, then the rarely-used ones; type RO
   ;; for a roman, ROU for a round, MU for a mutt (mixed ends).
-  (setq ptype (pool:fshape))
-
-  ;; the base point is picked with the user's own snaps still live;
-  ;; only afterwards do snaps drop for the command-fed drawing work
-  (setq base (if (pool:fhas 'base)
-                 (pool:ftake 'base)
-                 (getpoint "\nInsertion base point <0,0>: "))
-        pool:*base* (if (and base (listp base))
+  (setq pstep 1)
+  (while (<= pstep 3)
+    (cond
+      ((= pstep 1)
+       (setq pool:*insq*
+             (= "Insquare"
+                (pool:askkwf 'insq "Is the pool in-square or out-of-square"
+                             "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
+       (if pool:*insq*
+           (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
+       (setq pstep 2))
+      ((= pstep 2)
+       (setq ptype (pool:fshape T))
+       (if (eq ptype 'POOL-BACK)
+         (progn (princ "\nStepping back one question.") (setq pstep 1))
+         (setq pstep 3)))
+      ((= pstep 3)
+       ;; the base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work
+       (if (pool:fhas 'base)
+         (setq base  (pool:ftake 'base)
+               pstep 4)
+         (progn
+           (initget "Back Undo")
+           (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+           (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+             (progn (princ "\nStepping back one question.") (setq pstep 2))
+             (setq pstep 4)))))))
+  (setq pool:*base* (if (and base (listp base))
                         (list (car base) (cadr base))
                         (list 0.0 0.0)))
   (setvar "OSMODE" 0)

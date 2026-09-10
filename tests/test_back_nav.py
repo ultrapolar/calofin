@@ -421,6 +421,39 @@ check("Back at the bench question re-asks the dims",
       len([p for p, _v in vm.prompts if 'Dimension the steps' in p]) == 4)
 
 
+# ------------------------------------- 8. POOL and SPA: shape and base
+
+print("\nPOOL / SPA: the three questions in front of every measurement")
+
+for tool, cmd, rel, lead, shape, first in (
+        ("POOL", 'c:POOL', ('pool', 'POOL.LSP'), [],
+         'Rectangle', 'in-square or out-of-square'),
+        ("SPA", 'c:SPA', ('spa', 'SPA.LSP'), [None],
+         'Rectangle', "water's edge or the cover size")):
+    vm = newvm(rel)
+    try:
+        vm.run(cmd, lead + [
+            'Watersedge' if tool == 'SPA' else 'Insquare',
+            'Back',                       # shape -> the question before it
+            'Coversize' if tool == 'SPA' else 'Outofsquare',
+            shape,
+            'B',                          # base point -> shape (short form)
+            shape,
+            (0.0, 0.0)] + [None] * 90)
+    except Exception:
+        pass                              # the measurements run out; the
+                                          # questions under test are done
+    out = said(vm)
+    firsts = [p for p, _v in vm.prompts if first in p]
+    shapes = [p for p, _v in vm.prompts if 'shape [' in p]
+    check("%s: Back at the shape re-asks the question before it" % tool,
+          len(firsts) == 2, "%d asked" % len(firsts))
+    check("%s: B at the base point re-asks the shape" % tool,
+          len(shapes) == 3, "%d asked" % len(shapes))
+    check("%s: and it says which way it moved" % tool,
+          "Stepping back one question" in out)
+
+
 # ------------------------------------------------------------------ done
 
 print()

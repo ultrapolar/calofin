@@ -278,7 +278,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.10")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.11")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -825,17 +825,29 @@
                  "  (" (lfc:color-name *lfc-sugg-color*) " +), "
                  (lfc:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
-  (initget "Move Keep Pick")
-  (setq ans (getkword
-              "\n  [Move/Keep/Pick] <Move>: "))
-  (cond
-    ((or (null ans) (= ans "Move")) 'move)
-    ((= ans "Keep") 'keep)
-    (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
+  ;; the pick is a second question, so Back at it re-asks the first
+  ;; rather than falling through to Move
+  (setq ans 'RETRY)
+  (while (eq ans 'RETRY)
+    (initget "Move Keep Pick")
+    (setq ans (getkword
+                "\n  [Move/Keep/Pick] <Move>: "))
+    (cond
+      ((or (null ans) (= ans "Move")) (setq ans 'move))
+      ((= ans "Keep") (setq ans 'keep))
+      (T
+       (initget "Back Undo")
+       (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
                                     (lfc:color-name *lfc-sugg-color*)
-                                    " +>: ")))
-       (if newp newp 'move))))
+                                    " +> [Back]: ")))
+       (cond
+         ((and (= (type newp) 'STR) (member newp '("Back" "Undo")))
+          (princ "\n  Stepping back one question.")
+          (setq ans 'RETRY))
+         (newp (setq ans newp))
+         (T (setq ans 'move))))))
+  ans)
 
 (defun lfc:mtext (ins height width text layer / e)
   ;; entmake an MTEXT, splitting text into 250-char DXF chunks

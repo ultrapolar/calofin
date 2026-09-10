@@ -224,7 +224,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "090926 REV17")
+(setq spa:*version* "091026 REV18")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1103,7 +1103,7 @@
 ;; asked.  Checked against the same list the prompt offers: an unknown
 ;; shape would fall through the cond at the foot of c:SPA into the
 ;; rectangle branch and draw the wrong spa without saying so.
-(defun spa:fshape ( / v)
+(defun spa:fshape (back / v)
   (if (spa:fhas 'shape) (setq v (spa:ftake 'shape)))
   ;; the shape word is matched WITHOUT case, and comes back in the
   ;; canonical spelling.  A chart or a palette written against the old
@@ -1115,9 +1115,14 @@
       v
       (progn
         ;; ROUnd, not ROund: one capitalisation repo-wide (POOL's list
-        ;; needs RO for ROman, so the shared abbreviation is ROU)
-        (initget 1 "Rectangle OCtagon ROUnd")
-        (getkword "\nSpa shape [Rectangle/OCtagon/ROUnd]: "))))
+        ;; needs RO for ROman, so the shared abbreviation is ROU).
+        ;; initget 1 still refuses Enter with Back on the list, so the
+        ;; shape is as required as it ever was
+        (initget 1 (strcat "Rectangle OCtagon ROUnd"
+                           (if back " Back Undo" "")))
+        (setq v (getkword (strcat "\nSpa shape [Rectangle/OCtagon/ROUnd"
+                                  (if back "/Back" "") "]: ")))
+        (if (member v '("Back" "Undo")) 'CAL-BACK v))))
 
 ;; THERMOLIGHT closes the water's-edge question the same way the block
 ;; does; spa:askdetails calls it again so a store armed past c:SPA's
@@ -3661,7 +3666,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:SPA ( / *error* undo-open stype base)
+(defun c:SPA ( / *error* undo-open stype base sstep)
 
   (defun *error* (msg)
     (if (and msg
@@ -3713,29 +3718,53 @@
   ;; the form's grade/taper land HERE, before the Thermo-Light branch,
   ;; so a form grade of THERMOLIGHT behaves exactly like the block's
   (spa:formdetails)
-  (if (spa:thermop)
-      (progn
-        (spa:setmode "Coversize")
-        (setq spa:*taper* spa:*thermotaper*)
-        (princ "\nThermo-Light: the water's edge and the cover size are the same.")
-        (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
-      (spa:setmode
-        (spa:askkwf 'mode
-                    "Is this drawing at the water's edge or the cover size"
-                    "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
-  (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
-                 (if spa:*perdash* " (dashed)" "")
-                 "; overalls read <measurement> over \"" spa:*sfx* "\"."))
-
-  ;; ------------------------------------------------ shape
-  (setq stype (spa:fshape))
-
-  ;; the base point is picked with the user's own snaps still live;
-  ;; only afterwards do snaps drop for the command-fed drawing work
-  (setq base (if (spa:fhas 'base)
-                 (spa:ftake 'base)
-                 (getpoint "\nInsertion base point <0,0>: "))
-        spa:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+  ;; The three questions in front of every measurement - the drawing
+  ;; mode, the shape, the base point - are one chain.  The two after
+  ;; the first offer Back and re-open the one before them, which
+  ;; matters most at the shape: it is the answer the whole run hangs
+  ;; off, and until now the only way to change it was to start again.
+  ;; A form-supplied answer is spent as it is read (STANDARDS 7.2), so
+  ;; backing into a question the form filled in asks it at the
+  ;; keyboard.  Thermo-Light settles the mode without asking, so on the
+  ;; way back that step is stepped over rather than stopped on.
+  (setq sstep 1)
+  (while (<= sstep 3)
+    (cond
+      ((= sstep 1)
+       (if (spa:thermop)
+           (progn
+             (spa:setmode "Coversize")
+             (setq spa:*taper* spa:*thermotaper*)
+             (princ "\nThermo-Light: the water's edge and the cover size are the same.")
+             (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
+           (spa:setmode
+             (spa:askkwf 'mode
+                         "Is this drawing at the water's edge or the cover size"
+                         "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
+       (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
+                      (if spa:*perdash* " (dashed)" "")
+                      "; overalls read <measurement> over \"" spa:*sfx* "\"."))
+       (setq sstep 2))
+      ((= sstep 2)
+       (setq stype (spa:fshape T))
+       (if (eq stype 'CAL-BACK)
+         (progn (princ "\nStepping back one question.") (setq sstep 1))
+         (setq sstep 3)))
+      ((= sstep 3)
+       ;; the base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work
+       (if (spa:fhas 'base)
+         (setq base  (spa:ftake 'base)
+               sstep 4)
+         (progn
+           (initget "Back Undo")
+           (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+           (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+             (progn (princ "\nStepping back one question.") (setq sstep 2))
+             (setq sstep 4)))))))
+  (setq spa:*base* (if (and base (listp base))
+                       (list (car base) (cadr base))
+                       (list 0.0 0.0)))
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers

@@ -975,7 +975,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "090826 REV24")
+(setq pool:*version* "091026 REV25")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1862,17 +1862,21 @@
 ;; asked.  Checked against the same list the prompt offers: an unknown
 ;; shape would fall through the cond at the foot of c:POOL into the
 ;; rectangle branch and draw the wrong pool without saying so.
-(defun pool:fshape ( / v)
+(defun pool:fshape (back / v)
   (if (pool:fhas 'shape) (setq v (pool:ftake 'shape)))
   (if (and v (= (type v) 'STR)
            (member v '("Rectangle" "Grecian" "ROman" "L" "LAzyl"
                        "Oval" "OCtagon" "ROUnd" "MUtt")))
       v
       (progn
-        (initget 1 "Rectangle Grecian ROman L LAzyl Oval OCtagon ROUnd MUtt")
-        (getkword
-          (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
-                  "OCtagon/ROUnd/MUtt]: ")))))
+        ;; initget 1 still refuses Enter with Back on the list, so the
+        ;; shape is as required as it ever was
+        (initget 1 (strcat "Rectangle Grecian ROman L LAzyl Oval OCtagon"
+                           " ROUnd MUtt" (if back " Back Undo" "")))
+        (setq v (getkword
+                  (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
+                          "OCtagon/ROUnd/MUtt" (if back "/Back" "") "]: ")))
+        (if (member v '("Back" "Undo")) 'CAL-BACK v))))
 
 ;; Run POOL with a form's answers already in hand.  Nothing happens
 ;; here that the direct path misses: a caller may equally set
@@ -8800,7 +8804,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* undo-open ptype base)
+(defun c:POOL ( / *error* undo-open ptype base pstep)
 
   (defun *error* (msg)
     (if (and msg
@@ -8850,26 +8854,48 @@
   (setvar "LUNITS" 4)
   (princ "\nDistances may be typed as 25'6\", 25'-6-1/2\" or 25'6.5 (plain numbers = inches).")
 
+  ;; The three questions in front of every measurement - in-square,
+  ;; shape, base point - are one chain.  The two after the first offer
+  ;; Back and re-open the one before them, which matters most at the
+  ;; shape: it is the answer the whole run hangs off, and until now the
+  ;; only way to change it was to start again.  A form-supplied answer
+  ;; is spent as it is read (STANDARDS 7.2), so backing into a question
+  ;; the form filled in asks it at the keyboard.
+  ;;
   ;; In-square pools are built true to the side measurements and need
   ;; no diagonals; out-of-square pools take the usual cross-dim route.
-  (setq pool:*insq*
-        (= "Insquare"
-           (pool:askkwf 'insq "Is the pool in-square or out-of-square"
-                        "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
-  (if pool:*insq*
-      (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
-
-  ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO)
+  ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO):
   ;; the six common shapes first, then the rarely-used ones; type RO
   ;; for a roman, ROU for a round, MU for a mutt (mixed ends).
-  (setq ptype (pool:fshape))
-
-  ;; the base point is picked with the user's own snaps still live;
-  ;; only afterwards do snaps drop for the command-fed drawing work
-  (setq base (if (pool:fhas 'base)
-                 (pool:ftake 'base)
-                 (getpoint "\nInsertion base point <0,0>: "))
-        pool:*base* (if (and base (listp base))
+  (setq pstep 1)
+  (while (<= pstep 3)
+    (cond
+      ((= pstep 1)
+       (setq pool:*insq*
+             (= "Insquare"
+                (pool:askkwf 'insq "Is the pool in-square or out-of-square"
+                             "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
+       (if pool:*insq*
+           (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
+       (setq pstep 2))
+      ((= pstep 2)
+       (setq ptype (pool:fshape T))
+       (if (eq ptype 'CAL-BACK)
+         (progn (princ "\nStepping back one question.") (setq pstep 1))
+         (setq pstep 3)))
+      ((= pstep 3)
+       ;; the base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work
+       (if (pool:fhas 'base)
+         (setq base  (pool:ftake 'base)
+               pstep 4)
+         (progn
+           (initget "Back Undo")
+           (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+           (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+             (progn (princ "\nStepping back one question.") (setq pstep 2))
+             (setq pstep 4)))))))
+  (setq pool:*base* (if (and base (listp base))
                         (list (car base) (cadr base))
                         (list 0.0 0.0)))
   (setvar "OSMODE" 0)
@@ -10692,7 +10718,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "090926 REV17")
+(setq spa:*version* "091026 REV18")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -11571,7 +11597,7 @@
 ;; asked.  Checked against the same list the prompt offers: an unknown
 ;; shape would fall through the cond at the foot of c:SPA into the
 ;; rectangle branch and draw the wrong spa without saying so.
-(defun spa:fshape ( / v)
+(defun spa:fshape (back / v)
   (if (spa:fhas 'shape) (setq v (spa:ftake 'shape)))
   ;; the shape word is matched WITHOUT case, and comes back in the
   ;; canonical spelling.  A chart or a palette written against the old
@@ -11583,9 +11609,14 @@
       v
       (progn
         ;; ROUnd, not ROund: one capitalisation repo-wide (POOL's list
-        ;; needs RO for ROman, so the shared abbreviation is ROU)
-        (initget 1 "Rectangle OCtagon ROUnd")
-        (getkword "\nSpa shape [Rectangle/OCtagon/ROUnd]: "))))
+        ;; needs RO for ROman, so the shared abbreviation is ROU).
+        ;; initget 1 still refuses Enter with Back on the list, so the
+        ;; shape is as required as it ever was
+        (initget 1 (strcat "Rectangle OCtagon ROUnd"
+                           (if back " Back Undo" "")))
+        (setq v (getkword (strcat "\nSpa shape [Rectangle/OCtagon/ROUnd"
+                                  (if back "/Back" "") "]: ")))
+        (if (member v '("Back" "Undo")) 'CAL-BACK v))))
 
 ;; THERMOLIGHT closes the water's-edge question the same way the block
 ;; does; spa:askdetails calls it again so a store armed past c:SPA's
@@ -14129,7 +14160,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:SPA ( / *error* undo-open stype base)
+(defun c:SPA ( / *error* undo-open stype base sstep)
 
   (defun *error* (msg)
     (if (and msg
@@ -14181,29 +14212,53 @@
   ;; the form's grade/taper land HERE, before the Thermo-Light branch,
   ;; so a form grade of THERMOLIGHT behaves exactly like the block's
   (spa:formdetails)
-  (if (spa:thermop)
-      (progn
-        (spa:setmode "Coversize")
-        (setq spa:*taper* spa:*thermotaper*)
-        (princ "\nThermo-Light: the water's edge and the cover size are the same.")
-        (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
-      (spa:setmode
-        (spa:askkwf 'mode
-                    "Is this drawing at the water's edge or the cover size"
-                    "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
-  (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
-                 (if spa:*perdash* " (dashed)" "")
-                 "; overalls read <measurement> over \"" spa:*sfx* "\"."))
-
-  ;; ------------------------------------------------ shape
-  (setq stype (spa:fshape))
-
-  ;; the base point is picked with the user's own snaps still live;
-  ;; only afterwards do snaps drop for the command-fed drawing work
-  (setq base (if (spa:fhas 'base)
-                 (spa:ftake 'base)
-                 (getpoint "\nInsertion base point <0,0>: "))
-        spa:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+  ;; The three questions in front of every measurement - the drawing
+  ;; mode, the shape, the base point - are one chain.  The two after
+  ;; the first offer Back and re-open the one before them, which
+  ;; matters most at the shape: it is the answer the whole run hangs
+  ;; off, and until now the only way to change it was to start again.
+  ;; A form-supplied answer is spent as it is read (STANDARDS 7.2), so
+  ;; backing into a question the form filled in asks it at the
+  ;; keyboard.  Thermo-Light settles the mode without asking, so on the
+  ;; way back that step is stepped over rather than stopped on.
+  (setq sstep 1)
+  (while (<= sstep 3)
+    (cond
+      ((= sstep 1)
+       (if (spa:thermop)
+           (progn
+             (spa:setmode "Coversize")
+             (setq spa:*taper* spa:*thermotaper*)
+             (princ "\nThermo-Light: the water's edge and the cover size are the same.")
+             (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
+           (spa:setmode
+             (spa:askkwf 'mode
+                         "Is this drawing at the water's edge or the cover size"
+                         "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
+       (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
+                      (if spa:*perdash* " (dashed)" "")
+                      "; overalls read <measurement> over \"" spa:*sfx* "\"."))
+       (setq sstep 2))
+      ((= sstep 2)
+       (setq stype (spa:fshape T))
+       (if (eq stype 'CAL-BACK)
+         (progn (princ "\nStepping back one question.") (setq sstep 1))
+         (setq sstep 3)))
+      ((= sstep 3)
+       ;; the base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work
+       (if (spa:fhas 'base)
+         (setq base  (spa:ftake 'base)
+               sstep 4)
+         (progn
+           (initget "Back Undo")
+           (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+           (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+             (progn (princ "\nStepping back one question.") (setq sstep 2))
+             (setq sstep 4)))))))
+  (setq spa:*base* (if (and base (listp base))
+                       (list (car base) (cadr base))
+                       (list 0.0 0.0)))
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
@@ -47022,7 +47077,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.13")
+(setq *cchk-version* "v1.14")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -47564,17 +47619,29 @@
                  "  (" (cchk:color-name *cchk-sugg-color*) " +), "
                  (cchk:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
-  (initget "Move Keep Pick")
-  (setq ans (getkword
-              "\n  [Move/Keep/Pick] <Move>: "))
-  (cond
-    ((or (null ans) (= ans "Move")) 'move)
-    ((= ans "Keep") 'keep)
-    (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
+  ;; the pick is a second question, so Back at it re-asks the first
+  ;; rather than falling through to Move
+  (setq ans 'RETRY)
+  (while (eq ans 'RETRY)
+    (initget "Move Keep Pick")
+    (setq ans (getkword
+                "\n  [Move/Keep/Pick] <Move>: "))
+    (cond
+      ((or (null ans) (= ans "Move")) (setq ans 'move))
+      ((= ans "Keep") (setq ans 'keep))
+      (T
+       (initget "Back Undo")
+       (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
                                     (cchk:color-name *cchk-sugg-color*)
-                                    " +>: ")))
-       (if newp newp 'move))))
+                                    " +> [Back]: ")))
+       (cond
+         ((and (= (type newp) 'STR) (member newp '("Back" "Undo")))
+          (princ "\n  Stepping back one question.")
+          (setq ans 'RETRY))
+         (newp (setq ans newp))
+         (T (setq ans 'move))))))
+  ans)
 
 (defun cchk:mtext (ins height width text layer / e)
   ;; entmake an MTEXT, splitting text into 250-char DXF chunks
@@ -51245,7 +51312,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.14")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.15")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -51717,17 +51784,29 @@
                  "  (" (dchk:color-name *dchk-sugg-color*) " +), "
                  (dchk:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
-  (initget "Move Keep Pick")
-  (setq ans (getkword
-              "\n  [Move/Keep/Pick] <Move>: "))
-  (cond
-    ((or (null ans) (= ans "Move")) 'move)
-    ((= ans "Keep") 'keep)
-    (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
+  ;; the pick is a second question, so Back at it re-asks the first
+  ;; rather than falling through to Move
+  (setq ans 'RETRY)
+  (while (eq ans 'RETRY)
+    (initget "Move Keep Pick")
+    (setq ans (getkword
+                "\n  [Move/Keep/Pick] <Move>: "))
+    (cond
+      ((or (null ans) (= ans "Move")) (setq ans 'move))
+      ((= ans "Keep") (setq ans 'keep))
+      (T
+       (initget "Back Undo")
+       (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
                                     (dchk:color-name *dchk-sugg-color*)
-                                    " +>: ")))
-       (if newp newp 'move))))
+                                    " +> [Back]: ")))
+       (cond
+         ((and (= (type newp) 'STR) (member newp '("Back" "Undo")))
+          (princ "\n  Stepping back one question.")
+          (setq ans 'RETRY))
+         (newp (setq ans newp))
+         (T (setq ans 'move))))))
+  ans)
 
 (defun dchk:mtext (ins height width text layer / e)
   ;; entmake an MTEXT, splitting text into 250-char DXF chunks
@@ -63837,7 +63916,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.10")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.11")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -64384,17 +64463,29 @@
                  "  (" (lfc:color-name *lfc-sugg-color*) " +), "
                  (lfc:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
-  (initget "Move Keep Pick")
-  (setq ans (getkword
-              "\n  [Move/Keep/Pick] <Move>: "))
-  (cond
-    ((or (null ans) (= ans "Move")) 'move)
-    ((= ans "Keep") 'keep)
-    (t (setq newp (getpoint (strcat "\n  Pick the spot for " label
+  ;; the pick is a second question, so Back at it re-asks the first
+  ;; rather than falling through to Move
+  (setq ans 'RETRY)
+  (while (eq ans 'RETRY)
+    (initget "Move Keep Pick")
+    (setq ans (getkword
+                "\n  [Move/Keep/Pick] <Move>: "))
+    (cond
+      ((or (null ans) (= ans "Move")) (setq ans 'move))
+      ((= ans "Keep") (setq ans 'keep))
+      (T
+       (initget "Back Undo")
+       (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
                                     (lfc:color-name *lfc-sugg-color*)
-                                    " +>: ")))
-       (if newp newp 'move))))
+                                    " +> [Back]: ")))
+       (cond
+         ((and (= (type newp) 'STR) (member newp '("Back" "Undo")))
+          (princ "\n  Stepping back one question.")
+          (setq ans 'RETRY))
+         (newp (setq ans newp))
+         (T (setq ans 'move))))))
+  ans)
 
 (defun lfc:mtext (ins height width text layer / e)
   ;; entmake an MTEXT, splitting text into 250-char DXF chunks
