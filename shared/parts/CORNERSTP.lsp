@@ -245,7 +245,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.2") ; printed on load and at command start so a
+(setq *cs-version* "v4.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -903,16 +903,24 @@
     (T
      (princ (strcat "\n" (itoa (length straights))
                     " straight walls were selected."))
-     (while (null w1)
-       (setq tmp (getpoint "\nPick the FIRST wall of the corner: "))
-       (if (null tmp) (progn (princ "\nNothing picked.") (exit)))
-       (setq w1 (cs-nearseg straights (trans tmp 1 0))))
      (while (null w2)
-       (setq tmp (getpoint "\nPick the SECOND wall of the corner: "))
-       (if (null tmp) (progn (princ "\nNothing picked.") (exit)))
-       (setq w2 (cs-nearseg straights (trans tmp 1 0)))
-       (if (equal w1 w2) (progn (princ "\nThat is the same wall.")
-                                (setq w2 nil))))
+       (while (null w1)
+         (setq tmp (getpoint "\nPick the FIRST wall of the corner: "))
+         (if (null tmp) (progn (princ "\nNothing picked.") (exit)))
+         (setq w1 (cs-nearseg straights (trans tmp 1 0))))
+       ;; the second pick only means anything beside the first, so Back
+       ;; here re-asks the first rather than ending the command
+       (initget "Back Undo")
+       (setq tmp (getpoint "\nPick the SECOND wall of the corner [Back]: "))
+       (cond
+         ((cs-back-kw tmp)
+          (princ "\n  Stepping back one question.")
+          (setq w1 nil))
+         ((null tmp) (princ "\nNothing picked.") (exit))
+         (T
+          (setq w2 (cs-nearseg straights (trans tmp 1 0)))
+          (if (equal w1 w2) (progn (princ "\nThat is the same wall.")
+                                   (setq w2 nil))))))
      (setq lines (list w1 w2))
      ;; a straight segment sitting between the two picked walls on the
      ;; same polyline is the chamfer; otherwise look for a fillet arc

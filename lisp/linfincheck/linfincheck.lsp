@@ -274,7 +274,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.11")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.12")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -4557,12 +4557,23 @@
       (if (lfc:ask-yn "\n  Drop that list into the drawing as a reference sheet?")
         (progn
           (lfc:ensure-layer *lfc-report-layer* *lfc-report-color*)
-          (setq ins (getpoint "\n  Pick the top-left corner for the sheet: "))
+          ;; the corner and the height are one chain: Back at the
+          ;; height re-asks the corner
+          (setq h 'RETRY)
+          (while (eq h 'RETRY)
+            (setq ins (getpoint "\n  Pick the top-left corner for the sheet: "))
+            (if (null ins)
+              (setq h nil)
+              (progn
+                (initget "Back Undo")
+                (setq h (getdist (strcat "\n  Text height <"
+                                         (rtos *lfc-report-hfall*) "> [Back]: ")))
+                (if (and (= (type h) 'STR) (member h '("Back" "Undo")))
+                  (progn (princ "\n  Stepping back one question.")
+                         (setq h 'RETRY ins nil))))))
           (if ins
             (progn
-              (setq h   (getdist (strcat "\n  Text height <"
-                                        (rtos *lfc-report-hfall*) ">: "))
-                    h   (if h h *lfc-report-hfall*)
+              (setq h   (if h h *lfc-report-hfall*)
                     ins (trans ins 1 0))
               (lfc:mtext ins h (* *lfc-sheet-chars* h)
                           (lfc:join (lfc:tut-checklist) "\\P")

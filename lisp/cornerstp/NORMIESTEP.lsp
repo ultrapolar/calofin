@@ -236,7 +236,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.8") ; printed on load and at command start so a
+(setq *ns-version* "v3.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -930,7 +930,7 @@
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
                         tt cnrs ca cb pfo pgap lastinn fsteps fkey
-                        bstep)
+                        bstep rredo)
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
@@ -1230,49 +1230,75 @@
     (princ (strcat "\nBack corners: already drawn on the U - using them"
                    " as they are."))
     (progn
-      (cond
+      ;; The size questions below only mean anything beside the treatment
+      ;; keyword, so Back at any of them re-asks the keyword and comes
+      ;; round again - Square or NotGiven then need no size at all.  The
+      ;; re-ask offers no Back of its own: the width behind it settled
+      ;; when the loop above let the treatment stand.
+      (setq rredo T)
+      (while rredo
+       (setq rredo nil)
+       (cond
         ((= rtype "Radius")
          ;; treat-sz is its radius; the prompt refuses Enter, so nil
          ;; falls back to the keyboard
          (if (ns-fhas 'treat-sz) (setq rrad (ns-fnum 'treat-sz)))
          (if (not (numberp rrad))
            (progn
-             (initget 7)
-             (setq rrad (getdist (strcat "\nRadius for " rsubj ": ")))))
-         (setq roff rrad))
+             (initget 7 "Back Undo")
+             (setq rrad (getdist (strcat "\nRadius for " rsubj " [Back]: ")))))
+         (if (ns-back-kw rrad)
+           (progn (princ "\n  Stepping back one question.")
+                  (setq rrad  nil
+                        rtype (ns-ftreat rsubj rtype nil)
+                        rredo T))
+           (setq roff rrad)))
         ((= rtype "Cut")
          ;; the offset and the cut face are the two legs and the
          ;; hypotenuse of the same 45 degree triangle, so either one
          ;; gives the other; cutgiven says which one treat-sz is
          (if (null (setq fkey (ns-fkw 'cutgiven "Offset Cut" "Offset")))
            (progn
-             (initget "Offset Cut")
+             (initget "Offset Cut Back Undo")
              (setq fkey (getkword
                           (strcat "\nIs the cut given as its"
-                                  " [Offset/Cut] <Offset>: ")))))
-         (if (= "Cut" fkey)
+                                  " [Offset/Cut/Back] <Offset>: ")))))
+         (if (member fkey '("Back" "Undo"))
+           (progn (princ "\n  Stepping back one question.")
+                  (setq rtype (ns-ftreat rsubj rtype nil)
+                        rredo T))
            (progn
-             (if (ns-fhas 'treat-sz) (setq rcut (ns-fnum 'treat-sz)))
-             (if (not (numberp rcut))
+             (if (= "Cut" fkey)
                (progn
-                 (initget 7)
-                 (setq rcut (getdist (strcat "\nCut face length for "
-                                             rsubj ": ")))))
-             (setq roff (/ rcut (sqrt 2.0))))
-           (progn
-             (if (ns-fhas 'treat-sz) (setq roff (ns-fnum 'treat-sz)))
-             (if (not (numberp roff))
+                 (if (ns-fhas 'treat-sz) (setq rcut (ns-fnum 'treat-sz)))
+                 (if (not (numberp rcut))
+                   (progn
+                     (initget 7 "Back Undo")
+                     (setq rcut (getdist (strcat "\nCut face length for "
+                                                 rsubj " [Back]: ")))))
+                 (if (ns-back-kw rcut)
+                   (setq rcut nil rredo T)
+                   (setq roff (/ rcut (sqrt 2.0)))))
                (progn
-                 (initget 7)
-                 (setq roff (getdist "\nOffset back along each line: "))))
-             (setq rcut (* roff (sqrt 2.0)))))
-         (princ (strcat "\n  A 45 degree cut on " rsubj ": offset "
-                        (rtos roff) " each way, cut face "
-                        (rtos rcut) ".")))
+                 (if (ns-fhas 'treat-sz) (setq roff (ns-fnum 'treat-sz)))
+                 (if (not (numberp roff))
+                   (progn
+                     (initget 7 "Back Undo")
+                     (setq roff (getdist "\nOffset back along each line [Back]: "))))
+                 (if (ns-back-kw roff)
+                   (setq roff nil rredo T)
+                   (setq rcut (* roff (sqrt 2.0))))))
+             ;; a Back on the size re-asks which of the two was given,
+             ;; not the treatment keyword: that IS the question before it
+             (if rredo
+               (princ "\n  Stepping back one question.")
+               (princ (strcat "\n  A 45 degree cut on " rsubj ": offset "
+                              (rtos roff) " each way, cut face "
+                              (rtos rcut) "."))))))
         ((= rtype "NotGiven")
          (princ (strcat "\n  Not Given: " rsubj " are drawn square, and"
                         " a note on the drawing says the treatment was"
-                        " never recorded."))))
+                        " never recorded.")))))
       ;; a U has its arms already, so the corner is built into the sides
       ;; the treads trim to - and drawn once the run is done.  NotGiven
       ;; is not cut in: its geometry is square, like Square's.

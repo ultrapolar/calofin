@@ -114,7 +114,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.15")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.16")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2327,12 +2327,23 @@
       (if (dchk:ask-yn "\n  Drop that list into the drawing as a reference sheet?")
         (progn
           (dchk:ensure-layer *dchk-report-layer* *dchk-report-color*)
-          (setq ins (getpoint "\n  Pick the top-left corner for the sheet: "))
+          ;; the corner and the height are one chain: Back at the
+          ;; height re-asks the corner
+          (setq h 'RETRY)
+          (while (eq h 'RETRY)
+            (setq ins (getpoint "\n  Pick the top-left corner for the sheet: "))
+            (if (null ins)
+              (setq h nil)
+              (progn
+                (initget "Back Undo")
+                (setq h (getdist (strcat "\n  Text height <"
+                                         (rtos *dchk-report-hfall*) "> [Back]: ")))
+                (if (and (= (type h) 'STR) (member h '("Back" "Undo")))
+                  (progn (princ "\n  Stepping back one question.")
+                         (setq h 'RETRY ins nil))))))
           (if ins
             (progn
-              (setq h   (getdist (strcat "\n  Text height <"
-                                        (rtos *dchk-report-hfall*) ">: "))
-                    h   (if h h *dchk-report-hfall*)
+              (setq h   (if h h *dchk-report-hfall*)
                     ins (trans ins 1 0))
               (dchk:mtext ins h (* *dchk-sheet-chars* h)
                           (dchk:join (dchk:tut-checklist) "\\P")

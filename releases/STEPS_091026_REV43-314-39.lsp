@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_091026_REV42-314-38.lsp
+;;; STEPS_091026_REV43-314-39.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v4.2 -> REV42   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     CORNERSTP.lsp   v4.3 -> REV43   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
 ;;;     HEMISTEP.lsp    v3.14 -> REV314   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v3.8 -> REV38   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     NORMIESTEP.lsp  v3.9 -> REV39   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v4.2) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v4.3) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -267,7 +267,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.2") ; printed on load and at command start so a
+(setq *cs-version* "v4.3") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -937,16 +937,24 @@
     (T
      (princ (strcat "\n" (itoa (length straights))
                     " straight walls were selected."))
-     (while (null w1)
-       (setq tmp (getpoint "\nPick the FIRST wall of the corner: "))
-       (if (null tmp) (progn (princ "\nNothing picked.") (exit)))
-       (setq w1 (cs-nearseg straights (trans tmp 1 0))))
      (while (null w2)
-       (setq tmp (getpoint "\nPick the SECOND wall of the corner: "))
-       (if (null tmp) (progn (princ "\nNothing picked.") (exit)))
-       (setq w2 (cs-nearseg straights (trans tmp 1 0)))
-       (if (equal w1 w2) (progn (princ "\nThat is the same wall.")
-                                (setq w2 nil))))
+       (while (null w1)
+         (setq tmp (getpoint "\nPick the FIRST wall of the corner: "))
+         (if (null tmp) (progn (princ "\nNothing picked.") (exit)))
+         (setq w1 (cs-nearseg straights (trans tmp 1 0))))
+       ;; the second pick only means anything beside the first, so Back
+       ;; here re-asks the first rather than ending the command
+       (initget "Back Undo")
+       (setq tmp (getpoint "\nPick the SECOND wall of the corner [Back]: "))
+       (cond
+         ((cs-back-kw tmp)
+          (princ "\n  Stepping back one question.")
+          (setq w1 nil))
+         ((null tmp) (princ "\nNothing picked.") (exit))
+         (T
+          (setq w2 (cs-nearseg straights (trans tmp 1 0)))
+          (if (equal w1 w2) (progn (princ "\nThat is the same wall.")
+                                   (setq w2 nil))))))
      (setq lines (list w1 w2))
      ;; a straight segment sitting between the two picked walls on the
      ;; same polyline is the chamfer; otherwise look for a fillet arc
@@ -3726,7 +3734,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v3.8) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v3.9) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -3966,7 +3974,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.8") ; printed on load and at command start so a
+(setq *ns-version* "v3.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -4660,7 +4668,7 @@
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
                         tt cnrs ca cb pfo pgap lastinn fsteps fkey
-                        bstep)
+                        bstep rredo)
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
@@ -4960,49 +4968,75 @@
     (princ (strcat "\nBack corners: already drawn on the U - using them"
                    " as they are."))
     (progn
-      (cond
+      ;; The size questions below only mean anything beside the treatment
+      ;; keyword, so Back at any of them re-asks the keyword and comes
+      ;; round again - Square or NotGiven then need no size at all.  The
+      ;; re-ask offers no Back of its own: the width behind it settled
+      ;; when the loop above let the treatment stand.
+      (setq rredo T)
+      (while rredo
+       (setq rredo nil)
+       (cond
         ((= rtype "Radius")
          ;; treat-sz is its radius; the prompt refuses Enter, so nil
          ;; falls back to the keyboard
          (if (ns-fhas 'treat-sz) (setq rrad (ns-fnum 'treat-sz)))
          (if (not (numberp rrad))
            (progn
-             (initget 7)
-             (setq rrad (getdist (strcat "\nRadius for " rsubj ": ")))))
-         (setq roff rrad))
+             (initget 7 "Back Undo")
+             (setq rrad (getdist (strcat "\nRadius for " rsubj " [Back]: ")))))
+         (if (ns-back-kw rrad)
+           (progn (princ "\n  Stepping back one question.")
+                  (setq rrad  nil
+                        rtype (ns-ftreat rsubj rtype nil)
+                        rredo T))
+           (setq roff rrad)))
         ((= rtype "Cut")
          ;; the offset and the cut face are the two legs and the
          ;; hypotenuse of the same 45 degree triangle, so either one
          ;; gives the other; cutgiven says which one treat-sz is
          (if (null (setq fkey (ns-fkw 'cutgiven "Offset Cut" "Offset")))
            (progn
-             (initget "Offset Cut")
+             (initget "Offset Cut Back Undo")
              (setq fkey (getkword
                           (strcat "\nIs the cut given as its"
-                                  " [Offset/Cut] <Offset>: ")))))
-         (if (= "Cut" fkey)
+                                  " [Offset/Cut/Back] <Offset>: ")))))
+         (if (member fkey '("Back" "Undo"))
+           (progn (princ "\n  Stepping back one question.")
+                  (setq rtype (ns-ftreat rsubj rtype nil)
+                        rredo T))
            (progn
-             (if (ns-fhas 'treat-sz) (setq rcut (ns-fnum 'treat-sz)))
-             (if (not (numberp rcut))
+             (if (= "Cut" fkey)
                (progn
-                 (initget 7)
-                 (setq rcut (getdist (strcat "\nCut face length for "
-                                             rsubj ": ")))))
-             (setq roff (/ rcut (sqrt 2.0))))
-           (progn
-             (if (ns-fhas 'treat-sz) (setq roff (ns-fnum 'treat-sz)))
-             (if (not (numberp roff))
+                 (if (ns-fhas 'treat-sz) (setq rcut (ns-fnum 'treat-sz)))
+                 (if (not (numberp rcut))
+                   (progn
+                     (initget 7 "Back Undo")
+                     (setq rcut (getdist (strcat "\nCut face length for "
+                                                 rsubj " [Back]: ")))))
+                 (if (ns-back-kw rcut)
+                   (setq rcut nil rredo T)
+                   (setq roff (/ rcut (sqrt 2.0)))))
                (progn
-                 (initget 7)
-                 (setq roff (getdist "\nOffset back along each line: "))))
-             (setq rcut (* roff (sqrt 2.0)))))
-         (princ (strcat "\n  A 45 degree cut on " rsubj ": offset "
-                        (rtos roff) " each way, cut face "
-                        (rtos rcut) ".")))
+                 (if (ns-fhas 'treat-sz) (setq roff (ns-fnum 'treat-sz)))
+                 (if (not (numberp roff))
+                   (progn
+                     (initget 7 "Back Undo")
+                     (setq roff (getdist "\nOffset back along each line [Back]: "))))
+                 (if (ns-back-kw roff)
+                   (setq roff nil rredo T)
+                   (setq rcut (* roff (sqrt 2.0))))))
+             ;; a Back on the size re-asks which of the two was given,
+             ;; not the treatment keyword: that IS the question before it
+             (if rredo
+               (princ "\n  Stepping back one question.")
+               (princ (strcat "\n  A 45 degree cut on " rsubj ": offset "
+                              (rtos roff) " each way, cut face "
+                              (rtos rcut) "."))))))
         ((= rtype "NotGiven")
          (princ (strcat "\n  Not Given: " rsubj " are drawn square, and"
                         " a note on the drawing says the treatment was"
-                        " never recorded."))))
+                        " never recorded.")))))
       ;; a U has its arms already, so the corner is built into the sides
       ;; the treads trim to - and drawn once the run is done.  NotGiven
       ;; is not cut in: its geometry is square, like Square's.

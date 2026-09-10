@@ -454,6 +454,41 @@ for tool, cmd, rel, lead, shape, first in (
           "Stepping back one question" in out)
 
 
+# ------------------------------ 9. NORMIESTEP's corner-treatment sizes
+
+print("\nNORMIESTEP: the size only means something beside the treatment")
+
+def normiestep(treatment):
+    """One NORMIESTEP run off a square corner, with TREATMENT answering
+    the corner question and whatever follows it."""
+    vm = newvm(('cornerstp', 'NORMIESTEP.lsp'))
+    vm.loads('(entmake (list (cons 0 "LINE") (list 10 0.0 0.0 0.0)'
+             ' (list 11 200.0 0.0 0.0)))')
+    vm.loads('(entmake (list (cons 0 "LINE") (list 10 0.0 0.0 0.0)'
+             ' (list 11 0.0 200.0 0.0)))')
+    vm.run('c:NORMIESTEP',
+           [None, list(vm.entities), (100.0, 0.0), 60.0]
+           + list(treatment)
+           + ["No", 12.0, 12.0, None, "No"])
+    return vm
+
+vm = normiestep(("Radius", "Back", "Cut", "Offset", 6.0))
+out = said(vm)
+treats = [p for p, _v in vm.prompts if "treated?" in p]
+check("Back at the radius re-asks how the corners are treated",
+      len(treats) == 2, "%d asked" % len(treats))
+check("...and the answer that replaces it is the one that runs",
+      any("Offset back along each line" in p for p, _v in vm.prompts))
+check("...saying which way it moved", "Stepping back one question" in out)
+
+vm = normiestep(("Cut", "Back", "Radius", 9.0))
+treats = [p for p, _v in vm.prompts if "treated?" in p]
+check("Back at the Offset/Cut question re-asks the treatment too",
+      len(treats) == 2, "%d asked" % len(treats))
+check("...and a Radius answer then asks for a radius",
+      any("Radius for" in p for p, _v in vm.prompts))
+
+
 # ------------------------------------------------------------------ done
 
 print()
