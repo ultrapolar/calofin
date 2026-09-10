@@ -477,6 +477,38 @@ for tool, cmd, rel, lead, shape, first in (
           "Stepping back one question" in out)
 
 
+# ---------------------- 7b. CORNERSTP: the outermost step's width
+
+print("\nCORNERSTP: outside in asks a width, and it is a setting like the rest")
+
+vm = newvm(('cornerstp', 'CORNERSTP.lsp'))
+vm.loads('(entmake (list (cons 0 "LINE")'
+         ' (list 10 0.0 0.0 0.0) (list 11 200.0 0.0 0.0)))')
+vm.loads('(entmake (list (cons 0 "LINE")'
+         ' (list 10 0.0 0.0 0.0) (list 11 0.0 200.0 0.0)))')
+try:
+    vm.run('c:CORNERSTP',
+           [None, list(vm.entities),
+            'Outside',                  # draw the steps outside in
+            'No',                       # dimension them?
+            'Back',                     # the width -> back past the bench,
+            'Yes',                      #   which outside in never asks
+            'U',                        # ...and back once more
+            'No',
+            30.0,                       # the outermost width
+            24.0, None, 'No'])
+except Exception:
+    pass
+out = said(vm)
+asked = [p for p, _v in vm.prompts if 'Dimension the steps' in p]
+widths = [p for p, _v in vm.prompts if 'outermost' in p]
+check("Back at the outermost width re-asks the dims question",
+      len(asked) == 3, "%d asked" % len(asked))
+check("...stepping over the bench, which outside in never puts",
+      not any('bench' in p for p, _v in vm.prompts))
+check("...and B and U both do it", len(widths) == 3, "%d asked" % len(widths))
+
+
 # ------------------------- 8b. HEMISTEP: dims and the width at the wall
 
 print("\nHEMISTEP: two decisions before the undo group, so one chain")
@@ -637,6 +669,35 @@ check("Back at the text placement goes back to the picking",
       "Stepping back to the picking" in out)
 check("...and the rings already made are still there",
       "2 point(s) ringed" in out, out[-120:])
+
+
+# --------------------------------- 12. FITABHD's pool bottom
+
+print("\nFITABHD: the bottom's first question backs out of the bottom")
+
+vm = newvm(('fitabhd', 'FITABHD.lsp'))
+vm.sysvars['CMDECHO'] = 1
+vm.sysvars['OSMODE'] = 4133
+layer(vm, 'POINTS')
+ents = survey(vm, [(0.0, 0.0), (120.0, 0.0), (240.0, 0.0), (240.0, 90.0),
+                   (240.0, 180.0), (120.0, 180.0), (0.0, 180.0), (0.0, 90.0)])
+vm.run('c:FITABHD',
+       [None, "Rectangle", "Square", 1.0, 15, "Insquare", "No",
+        ents, "Keep",
+        "Yes",                       # add the bottom?
+        'Back',                      #   ...the deep-end pick backs out of it
+        "Yes",                       # asked again
+        (240.0, 90.0),               # the deep end
+        'B',                         # the first break -> back to the pick
+        (240.0, 90.0),               #   picked again
+        "36", "72", "12", "12"])
+out = said(vm)
+check("Back at the deep-end pick re-asks whether to add the bottom",
+      len([p for p, _v in vm.prompts if 'bottom of the pool' in p]) == 2)
+check("Back at the first break re-opens the deep-end pick",
+      len([p for p, _v in vm.prompts if 'DEEP end' in p]) == 3)
+check("...and the hopper still draws once the answers stand",
+      "standard hopper drawn" in out, out[-160:])
 
 
 # ------------------------------------------------------------------ done

@@ -33,6 +33,16 @@ Pick pick and their reference sheet; AUTOBEAD at its clicked steps;
 ABCURCHECK at its declarations; BPCALLOUT at its callout text;
 STOCKCOVER at "which one?".
 
+**A first question that opens a sub-block backs out of it.** FITABHD's
+pool bottom asks for the deep end and then four measurements; the four
+stepped backwards through each other and the pick did not, so a Yes you
+did not mean was Escape or nothing. It re-opens the "add the bottom?"
+question now, and the first break re-opens the pick. CORNERSTP's
+outside-in runs ask a width for the outermost step - a setting, not a
+tread - and it moved in front of the undo group to join the option
+chain, where Back at it lands on the dimension question (outside in
+never asks about a bench, so that step is passed over).
+
 **A question straight after a selection re-opens that selection.**
 `WCALST`, `XFTCONV`, `AUTOBEAD` and `AUTODIM` already did this; CABHD's
 point cutoff and LHD's output height do it now, which means the two

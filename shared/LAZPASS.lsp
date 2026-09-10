@@ -39983,7 +39983,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.3") ; printed on load and at command start so a
+(setq *cs-version* "v4.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -40725,7 +40725,7 @@
   ;; so backing into a question the form filled in re-asks it at the
   ;; keyboard instead of answering it again and walking forward.
   (setq qstep 1 qdir 1)
-  (while (<= qstep 5)
+  (while (<= qstep 6)
     (cond
 
       ;; -- 5. draw direction ------------------------------------------
@@ -40933,9 +40933,30 @@
                                         " steps past step " (itoa bnk)
                                         " run to its front edge."))
                          (setq qstep 6 qdir 1))))))))
-             (T (setq qstep 6 qdir 1)))))))) 
+             (T (setq qstep 6 qdir 1))))))
 
-
+      ;; -- 7c. the outermost step's width (outside in only) -----------
+      ;; Outside in starts at the far end, so its first step's width is a
+      ;; setting like the rest of these rather than part of the tread
+      ;; loop.  It is asked HERE, in front of the undo group, so Back can
+      ;; re-open the question before it - inside the group it could not,
+      ;; and a second _Begin is not an option.
+      ((= qstep 6)
+       (if (not outflag)
+         (setq qstep (+ qstep qdir))
+         (if (cs-fhas 'outerwidth)
+           (setq wid   (cs-fnum 'outerwidth)
+                 qstep 7)
+           (progn
+             (initget 6 "Back Undo")
+             (setq wid (getdist
+                         "\nWidth of the furthest (outermost) step [Back]: "))
+             (if (cs-back-kw wid)
+               (progn (princ "\n  Stepping back one question.")
+                      (setq wid   nil
+                            qstep 5
+                            qdir  -1))
+               (setq qstep 7 qdir 1))))))))
 
   ;; ---- 8. prompt for each step and draw it ----------------------------
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -40953,11 +40974,7 @@
 
     ;; ========== OUTSIDE IN: outermost step first, then walk in ==========
     (progn
-      (if (cs-fhas 'outerwidth)
-        (setq wid (cs-fnum 'outerwidth))
-        (progn
-          (initget 6)
-          (setq wid (getdist "\nWidth of the furthest (outermost) step: "))))
+      ;; WID came off step 7c above, where it could still be taken back
       (if (null wid)
         (princ "\nNo width given - nothing drawn.")
         (progn
@@ -55658,7 +55675,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.5")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.6")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -59903,12 +59920,24 @@
 ;; the two break stations and the two offsets (Back steps backwards),
 ;; then draws the whole bottom square to the leg's own frame.
 (defun fit:bottom (res / legs pick leg best bd lg d step go db sb so bo
-                        v w lay pts lines ln p1w p2w h1 h2 w1 w2 mid)
-  (setq legs (fit:legs res))
-  (setq pick (getpoint "\nPick a point at the DEEP end of the pool: "))
-  (if (null pick)
-    (princ "\nFITABHD: no deep end picked - no bottom drawn.")
-    (progn
+                        v w lay pts lines ln p1w p2w h1 h2 w1 w2 mid
+                        redo out)
+  (setq legs (fit:legs res) redo T out nil)
+  (while redo
+   (setq redo nil)
+   ;; the pick is the first question of the bottom, so Back here hands
+   ;; the whole thing back to the Yes/No that opened it; a Back at the
+   ;; first break below re-opens the pick instead
+   (initget "Back Undo")
+   (setq pick (getpoint "\nPick a point at the DEEP end of the pool [Back]: "))
+   (cond
+    ((and (= (type pick) 'STR) (member pick '("Back" "Undo")))
+     (princ "\n  Stepping back one question.")
+     (setq out 'CAL-BACK))
+    ((null pick)
+     (princ "\nFITABHD: no deep end picked - no bottom drawn."))
+    (T
+     (progn
       (setq best nil bd nil)
       (foreach lg legs
         (setq d (cal:dist (cal:2d pick) (car lg)))
@@ -59921,8 +59950,13 @@
           ((= step 1)
            (setq v (fit:get-off
                      "Deep break - how far from the deep end wall?"
-                     fit:*brk-deep* nil))
-           (setq fit:*brk-deep* v db (car v) step 2))
+                     fit:*brk-deep* T))
+           (if (eq v 'CAL-BACK)
+             ;; step 0 says "the pick again": the draw below is gated on
+             ;; step 4 having been reached, so nothing runs on the way out
+             (progn (princ "\nStepping back one step.")
+                    (setq go nil step 0))
+             (setq fit:*brk-deep* v db (car v) step 2)))
           ((= step 2)
            (setq v (fit:get-off
                      "Shallow break - how far from the deep end wall?"
@@ -59995,14 +60029,22 @@
                          (fit:ftin (- (- (nth 4 leg) so)
                                       (+ (nth 3 leg) so)))
                          " wide."))
-          (princ "\nDeep-break stubs are dashed; the K/L/M string reads from the shallow side."))))))
+          (princ "\nDeep-break stubs are dashed; the K/L/M string reads from the shallow side.")))
+     (if (= step 0) (setq redo T))))))
+  out)
 
 ;; A Round pool's bottom is a concentric hopper ring.
 (defun fit:round-bottom (res / prm r v off c)
+  ;; one question, and the only thing in front of it is the Yes/No that
+  ;; opened the bottom - so Back hands it back
   (setq prm (fit:rget res 'prm)
         r   (fit:pget prm 'r)
         v   (fit:get-off "Hopper offset in from the wall"
-                         fit:*hop-back* nil))
+                         fit:*hop-back* T))
+  (if (eq v 'CAL-BACK)
+    (progn (princ "\n  Stepping back one question.")
+           'CAL-BACK)
+    (progn
   (setq off (car v))
   (if (>= off (- r 1.0))
     (princ "\n  (that offset leaves no hopper - nothing drawn)")
@@ -60016,7 +60058,7 @@
       (fit:tag-mine (fit:make-circle c (- r off) fit:*pool-layer*))
       (fit:tag-mine (fit:make-dim c (cal:v+ c (list (- r off) 0.0)) nil))
       (princ (strcat "\nFITABHD: hopper ring drawn at "
-                     (fit:ftin off) " in from the wall.")))))
+                     (fit:ftin off) " in from the wall.")))))))
 
 ;; ---- the questions ---------------------------------------------------
 ;; All five in one place, with Back stepping backwards through them,
@@ -60272,7 +60314,7 @@
 
 (defun c:FITABHD ( / *error* undo-open set ptype treat tol pct oos bowed
                     ss n res verts en swept ans again dpts
-                    fit-pts fit-npt fit-ptnames fit-omit fit-pick)
+                    fit-pts fit-npt fit-ptnames fit-omit fit-pick botback)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -60380,17 +60422,24 @@
           (princ (strcat "\nKept - the outline moved to layer "
                          fit:*pool-layer* " in ByLayer colour."))
           ;; cover mode answers this No without asking: a cover sheet
-          ;; is the perimeter and nothing below it
-          (if (and (not fit:*nobottom*)
-                   (cal:askyn (if (= ptype "ROUnd")
-                                "Add the bottom of the pool (hopper ring)?"
-                                "Add the bottom of the pool (standard hopper)?")
-                              "No" nil))
-            (if (= ptype "ROUnd")
-              (fit:round-bottom res)
-              (fit:bottom res))
-            (if fit:*nobottom*
-              (princ "\nCover sheet - the pool bottom was skipped."))))
+          ;; is the perimeter and nothing below it.  The bottom's own
+          ;; first question backs out to this one, so the two are a
+          ;; chain: CAL-BACK from either bottom re-asks it.
+          (setq botback T)
+          (while botback
+            (setq botback nil)
+            (if (and (not fit:*nobottom*)
+                     (cal:askyn (if (= ptype "ROUnd")
+                                  "Add the bottom of the pool (hopper ring)?"
+                                  "Add the bottom of the pool (standard hopper)?")
+                                "No" nil))
+              (if (eq 'CAL-BACK
+                      (if (= ptype "ROUnd")
+                        (fit:round-bottom res)
+                        (fit:bottom res)))
+                (setq botback T))
+              (if fit:*nobottom*
+                (princ "\nCover sheet - the pool bottom was skipped.")))))
          (T
           (fit:omit-clear)
           (if (and en (entget en)) (entdel en))

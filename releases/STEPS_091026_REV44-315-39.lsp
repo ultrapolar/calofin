@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_091026_REV43-315-39.lsp
+;;; STEPS_091026_REV44-315-39.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,7 +8,7 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v4.3 -> REV43   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     CORNERSTP.lsp   v4.4 -> REV44   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
 ;;;     HEMISTEP.lsp    v3.15 -> REV315   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
 ;;;     NORMIESTEP.lsp  v3.9 -> REV39   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v4.3) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v4.4) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -267,7 +267,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.3") ; printed on load and at command start so a
+(setq *cs-version* "v4.4") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -1021,7 +1021,7 @@
   ;; so backing into a question the form filled in re-asks it at the
   ;; keyboard instead of answering it again and walking forward.
   (setq qstep 1 qdir 1)
-  (while (<= qstep 5)
+  (while (<= qstep 6)
     (cond
 
       ;; -- 5. draw direction ------------------------------------------
@@ -1229,9 +1229,30 @@
                                         " steps past step " (itoa bnk)
                                         " run to its front edge."))
                          (setq qstep 6 qdir 1))))))))
-             (T (setq qstep 6 qdir 1)))))))) 
+             (T (setq qstep 6 qdir 1))))))
 
-
+      ;; -- 7c. the outermost step's width (outside in only) -----------
+      ;; Outside in starts at the far end, so its first step's width is a
+      ;; setting like the rest of these rather than part of the tread
+      ;; loop.  It is asked HERE, in front of the undo group, so Back can
+      ;; re-open the question before it - inside the group it could not,
+      ;; and a second _Begin is not an option.
+      ((= qstep 6)
+       (if (not outflag)
+         (setq qstep (+ qstep qdir))
+         (if (cs-fhas 'outerwidth)
+           (setq wid   (cs-fnum 'outerwidth)
+                 qstep 7)
+           (progn
+             (initget 6 "Back Undo")
+             (setq wid (getdist
+                         "\nWidth of the furthest (outermost) step [Back]: "))
+             (if (cs-back-kw wid)
+               (progn (princ "\n  Stepping back one question.")
+                      (setq wid   nil
+                            qstep 5
+                            qdir  -1))
+               (setq qstep 7 qdir 1))))))))
 
   ;; ---- 8. prompt for each step and draw it ----------------------------
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1249,11 +1270,7 @@
 
     ;; ========== OUTSIDE IN: outermost step first, then walk in ==========
     (progn
-      (if (cs-fhas 'outerwidth)
-        (setq wid (cs-fnum 'outerwidth))
-        (progn
-          (initget 6)
-          (setq wid (getdist "\nWidth of the furthest (outermost) step: "))))
+      ;; WID came off step 7c above, where it could still be taken back
       (if (null wid)
         (princ "\nNo width given - nothing drawn.")
         (progn
