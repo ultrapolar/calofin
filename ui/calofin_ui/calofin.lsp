@@ -69,7 +69,7 @@
     ;; Points
     "ABCDEF" "ALTABCDEF" "XYPLOT" "ABFIND" "ABMOVE" "PERPPTS" "CPERPPTS"
     "XFTCONV" "XFTRECONV" "POINTRENAMER" "CONSTELLATION"
-    "SOCONV" "SORECONV" "VSCONV" "VSRECONV"
+    "SOCONV" "SORECONV" "VSCONV" "VSRECONV" "G2MCONV" "G2MRECONV"
     "DRONE" "TYDRN" "TYLERDRONESUITE"
     ;; deprecated but still shipped standalone (lisp/standards_checker/)
     "MATCHSTD" "ACADY-SCAN"))

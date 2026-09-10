@@ -24,11 +24,12 @@
 ;;; reach for while doing that job, in columns that follow the work:
 ;;; read somebody's export in, lay the shape out, tie the points, build
 ;;; the steps, dimension and check.  Converters lead on Pool and Spa
-;;; because that is where they fall in the work -- XFTCONV, SOCONV and
-;;; VSCONV all answer "here is a survey somebody else exported", which
-;;; happens before anything is drawn.  Two of the three were reachable
-;;; only from Rest until now, so a drafter doing a pool job never saw
-;;; them, and XFTCONV was filed under Shape, which it never was.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
+;;; because that is where they fall in the work -- XFTCONV, SOCONV,
+;;; VSCONV and G2MCONV all answer "here is a drawing somebody else
+;;; exported", which happens before anything is drawn.  Two of the
+;;; first three were reachable only from Rest until now, so a drafter
+;;; doing a pool job never saw them, and XFTCONV was filed under Shape,
+;;; which it never was.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
 ;;; the same four names the VB.NET palette in ui/calofin_net uses --
 ;;; hold the whole roster filed by what each tool IS.  A tool that
 ;;; serves two jobs is on both, so there are more buttons than commands.
@@ -100,7 +101,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.12")
+(setq *lazpanel-version* "v3.13")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -240,6 +241,8 @@
     ("FITABHD"          "Typed template fit")
     ("FITABHDCOVER"     "Typed template fit, no bottom")
     ("FLOORDIM"         "Floor dims")
+    ("G2MCONV"          "G2M plan onto shop layers")
+    ("G2MRECONV"        "G2M conversion, undone")
     ("HEMISTEP"         "Hemi step")
     ("LAZFORM"          "Pool from a filled-in chart")
     ("LAZTXT"           "The same form, drawn in tiles")
@@ -314,6 +317,8 @@
       "SORECONV"
       "VSCONV"
       "VSRECONV"
+      "G2MCONV"
+      "G2MRECONV"
       )
      ("Shape"
       "POOL"
@@ -389,6 +394,8 @@
       "SORECONV"
       "VSCONV"
       "VSRECONV"
+      "G2MCONV"
+      "G2MRECONV"
       )
      ("Shape, dims & check"
       "SPA"
@@ -481,6 +488,8 @@
       "SORECONV"
       "VSCONV"
       "VSRECONV"
+      "G2MCONV"
+      "G2MRECONV"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"

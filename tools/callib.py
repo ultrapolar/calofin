@@ -30,7 +30,14 @@ RULE = ";;; " + "=" * 70
 #: the standard ``(setq *tool-version* "v2.2")``; VERSION2 is the
 #: pool/spa ``(setq ns:*version* "MMDDYY REV##")`` style, whose banner
 #: names its own date so a re-run is a no-op.
-VERSION = re.compile(r'\*[a-z]+-version\*\s+"v(\d+)\.(\d+)"')
+#:
+#: The name half takes DIGITS as well as letters.  It read ``[a-z]+``
+#: until G2MCONV arrived, and a tool whose name carries a digit then had
+#: no version banner as far as this regex was concerned: release_lisp.py
+#: reported it "no version banner - skipped" and quietly left it out of
+#: releases/, which is exactly the drift check_standards.py exists to
+#: catch.  It is a limit of the pattern, not a rule about names.
+VERSION = re.compile(r'\*[a-z0-9]+-version\*\s+"v(\d+)\.(\d+)"')
 VERSION2 = re.compile(r'\*version\*\s+"(\d{6}) REV(\d{2})"')
 
 DEFUN = re.compile(r"^\(defun\s+([^\s()]+)", re.MULTILINE)

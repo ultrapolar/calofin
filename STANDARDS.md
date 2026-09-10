@@ -406,8 +406,9 @@ one-line purpose, platform, commands:
 ```
 
 **Version banner** -- one form only, read by `tools/release_lisp.py`
-(regex: `\*[a-z]+-version\*\s+"v(\d+)\.(\d+)"`; lowercase name, `v`,
-one dot). Bump it with every change and regenerate `releases/`:
+(regex: `\*[a-z0-9]+-version\*\s+"v(\d+)\.(\d+)"`; lowercase name --
+digits allowed, `G2MCONV` has one -- `v`, one dot). Bump it with every
+change and regenerate `releases/`:
 
 ```lisp
 (setq *toolname-version* "v1.0")   ; announced on load; release_lisp.py
