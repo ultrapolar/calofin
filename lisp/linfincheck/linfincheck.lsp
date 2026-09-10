@@ -274,7 +274,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.12")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.13")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -4523,7 +4523,7 @@
         (princ "\n  Left in place - one U removes the whole tutorial."))
       (princ))))
 
-(defun c:TUTORIALLINFINCHECK ( / *error* oldecho undo-open ans l ins h)
+(defun c:TUTORIALLINFINCHECK ( / *error* oldecho undo-open ans l ins h sstep)
   (defun *error* (msg)
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
@@ -4554,32 +4554,44 @@
     (progn
       (foreach l (lfc:tut-checklist) (princ (strcat "\n" l)))
       (princ "\n")
-      (if (lfc:ask-yn "\n  Drop that list into the drawing as a reference sheet?")
-        (progn
-          (lfc:ensure-layer *lfc-report-layer* *lfc-report-color*)
-          ;; the corner and the height are one chain: Back at the
-          ;; height re-asks the corner
-          (setq h 'RETRY)
-          (while (eq h 'RETRY)
-            (setq ins (getpoint "\n  Pick the top-left corner for the sheet: "))
-            (if (null ins)
-              (setq h nil)
-              (progn
-                (initget "Back Undo")
-                (setq h (getdist (strcat "\n  Text height <"
-                                         (rtos *lfc-report-hfall*) "> [Back]: ")))
-                (if (and (= (type h) 'STR) (member h '("Back" "Undo")))
-                  (progn (princ "\n  Stepping back one question.")
-                         (setq h 'RETRY ins nil))))))
-          (if ins
-            (progn
-              (setq h   (if h h *lfc-report-hfall*)
-                    ins (trans ins 1 0))
-              (lfc:mtext ins h (* *lfc-sheet-chars* h)
-                          (lfc:join (lfc:tut-checklist) "\\P")
-                          *lfc-report-layer*)
-              (princ "\n  Reference sheet placed (one U removes it)."))
-            (princ "\n  No point picked - sheet skipped."))))))
+      ;; the sheet's three questions are one chain: Back at the corner
+      ;; re-asks whether to drop the sheet at all, Back at the height
+      ;; re-asks the corner
+      (setq sstep 1)
+      (while (<= sstep 3)
+        (cond
+          ((= sstep 1)
+           (if (lfc:ask-yn "\n  Drop that list into the drawing as a reference sheet?")
+             (progn (lfc:ensure-layer *lfc-report-layer* *lfc-report-color*)
+                    (setq sstep 2))
+             (setq sstep 4)))
+          ((= sstep 2)
+           (initget "Back Undo")
+           (setq ins (getpoint
+                       "\n  Pick the top-left corner for the sheet [Back]: "))
+           (cond
+             ((and (= (type ins) 'STR) (member ins '("Back" "Undo")))
+              (princ "\n  Stepping back one question.")
+              (setq ins nil sstep 1))
+             ((null ins)
+              (princ "\n  No point picked - sheet skipped.")
+              (setq sstep 4))
+             (T (setq sstep 3))))
+          ((= sstep 3)
+           (initget "Back Undo")
+           (setq h (getdist (strcat "\n  Text height <"
+                                    (rtos *lfc-report-hfall*) "> [Back]: ")))
+           (if (and (= (type h) 'STR) (member h '("Back" "Undo")))
+             (progn (princ "\n  Stepping back one question.")
+                    (setq sstep 2))
+             (progn
+               (setq h   (if h h *lfc-report-hfall*)
+                     ins (trans ins 1 0))
+               (lfc:mtext ins h (* *lfc-sheet-chars* h)
+                         (lfc:join (lfc:tut-checklist) "\\P")
+                         *lfc-report-layer*)
+               (princ "\n  Reference sheet placed (one U removes it).")
+               (setq sstep 4))))))))
 
   (if (member ans '("Demo" "Both"))
     (lfc:tut-demo))

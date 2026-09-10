@@ -752,6 +752,29 @@ check("...so B offers no Back either: re-asking A would find it again",
               for p, _v in vm.prompts))
 
 
+# ------------------------- 14. the checkers' reference sheet
+
+print("\nDIMCHECK: the reference sheet is three questions, not one and a half")
+
+vm = newvm(('dimcheck', 'dimcheck.lsp'))
+vm.run('c:TUTORIALDIMCHECK',
+       ['Checks',
+        'Yes',                       # drop the list in as a sheet?
+        'Back',                      #   the corner -> back to that question
+        'Yes',                       # asked again
+        (10.0, 10.0),                # the corner
+        'U',                         #   the height -> back to the corner
+        (20.0, 20.0),                # the corner again
+        None])                       # the height: Enter keeps the default
+out = said(vm)
+check("Back at the corner re-asks whether to drop the sheet in",
+      len([p for p, _v in vm.prompts if 'reference sheet' in p]) == 2)
+check("Back at the height re-asks the corner",
+      len([p for p, _v in vm.prompts if 'top-left corner' in p]) == 3)
+check("...and the sheet still lands once the answers stand",
+      "Reference sheet placed" in out)
+
+
 # ------------------------------------------------------------------ done
 
 print()
