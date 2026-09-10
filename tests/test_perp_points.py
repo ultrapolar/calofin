@@ -62,7 +62,10 @@ vlax-curve-getParamAtDist vlax-curve-getDistAtPoint vlax-curve-getFirstDeriv
 vlax-curve-getStartPoint vlax-curve-getEndPoint
 """.split())
 
-KEYWORDS = {"T", "Yes", "No", "Undo", "STR"}
+# Bare symbols the code compares against rather than reads as
+# variables: the initget answers, the type name, and RETRY - the
+# sentinel a question sets to send its chain round again.
+KEYWORDS = {"T", "Yes", "No", "Undo", "STR", "RETRY"}
 
 # Version banners: deliberate globals set once at load time and read by
 # the load message; tools/release_lisp.py stamps the dated releases/
@@ -1038,8 +1041,53 @@ def main():
     test_perppts_says_so_when_the_drawing_refuses_the_resize()
     test_the_width_question_reads_the_same_in_both_routines()
     test_rescale_says_whether_the_drawing_took_it()
+    test_perppts_walks_its_chains_back()
     test_perppts_pops_the_error_mode_on_every_exit()
     print("\nall tests passed")
+
+
+def test_perppts_walks_its_chains_back():
+    """Back at the three questions that grew one.
+
+    Each is a second question whose answer only makes sense next to the
+    first: the amount a width changed by, the way the points are joined,
+    and the dimension style asked once the rounds are done.  Back at any
+    of them re-opens the one in front of it, and B and U mean the same
+    thing there as Back does.
+    """
+    # the amount re-opens "has that width changed?"
+    vm, _pl = run_perppts([CLICK, 3, 10.0, 12.0, 14.0, "Straight",
+                           "No", "STandard"],
+                          width=["Grew", "Back", None])
+    said = "".join(vm.printed)
+    asked = [p for p, _v in vm.prompts if "Has that width changed" in p]
+    assert len(asked) == 2, "Back at the amount must re-ask the width"
+    assert "Stepping back one question" in said, said[-200:]
+
+    # ...and U is the same answer as Back there
+    vm, _pl = run_perppts([CLICK, 2, 10.0, 12.0, "No", "STandard"],
+                          width=["New", "U", None])
+    asked = [p for p, _v in vm.prompts if "Has that width changed" in p]
+    assert len(asked) == 2, "U must be taken as Back at the new width"
+
+    # the join re-opens the LAST length, guide node and all
+    vm, pl = run_perppts([CLICK, 3, 10.0, 12.0, 14.0, "Back", 16.0,
+                          "Straight", "No", "STandard"])
+    said = "".join(vm.printed)
+    assert "Stepping back one point." in said, said[-200:]
+    lengths = [p for p, _v in vm.prompts if "Length for point 3" in p]
+    assert len(lengths) == 2, "Back at the join must re-ask point 3"
+    assert poly_verts(vm, pl[0])[2][1] == 16.0, \
+        "the re-entered length is the one that gets drawn"
+    assert len(vm.dims) == 3, \
+        "the point taken back must not leave a spare dimension"
+
+    # the dimension style re-opens "repeat?"
+    vm, _pl = run_perppts([CLICK, 2, 10.0, 12.0, "No", "B", "No",
+                           "STandard"])
+    asked = [p for p, _v in vm.prompts if "Repeat on the new polyline" in p]
+    assert len(asked) == 2, "B at the style must re-ask whether to repeat"
+    print("  PERPPTS walks its width, join and style questions back")
 
 
 def test_perppts_pops_the_error_mode_on_every_exit():

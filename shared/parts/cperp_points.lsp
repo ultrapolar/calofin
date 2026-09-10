@@ -113,7 +113,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.10")
+(setq *cperp-version* "v0.11")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -242,30 +242,52 @@
 ;; to, or nil when it has not -- so an unchanged answer skips the resize
 ;; altogether and the command behaves exactly as it always did.  d is
 ;; the width the drawing carries now.
-(defun cperp:ask-width (d / kws ans v w)
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getdist/getpoint/getint hand a keyword back as
+;; a string where a value would be a number or a list.
+(defun cperp:back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
+
+(defun cperp:ask-width (d / kws ans v w out done)
   (princ (strcat "\nOverall width, end to end: " (rtos d) "."))
-  (setq kws "Grew Shrank New Unchanged")
-  (initget kws)
-  (setq ans (getkword (strcat "\nHas that width changed? ["
-                              (vl-string-translate " " "/" kws)
-                              "] <Unchanged>: ")))
-  (cond
-    ((or (null ans) (= ans "Unchanged")) nil)
-    ((= ans "Grew")
-     (initget 7)                              ; a real, positive amount
-     (+ d (getdist "\nHow much wider? ")))
-    ((= ans "Shrank")
-     (while (null w)
-       (initget 7)
-       (setq v (getdist "\nHow much narrower? "))
-       (if (< v d)
-         (setq w (- d v))
-         (princ "\nThat is the whole width or more - nothing would be left.")))
-     w)
-    (t                                        ; New: the width itself
-     (initget 6)                              ; Enter keeps what is drawn
-     (setq v (getdist (strcat "\nNew overall width <" (rtos d) ">: ")))
-     (if (or (null v) (equal v d 1e-9)) nil v))))
+  (setq kws "Grew Shrank New Unchanged" done nil out nil)
+  ;; the amount is a second question, so Back at it re-asks the first
+  ;; rather than abandoning the resize
+  (while (null done)
+    (setq done T w nil)
+    (initget kws)
+    (setq ans (getkword (strcat "\nHas that width changed? ["
+                                (vl-string-translate " " "/" kws)
+                                "] <Unchanged>: ")))
+    (cond
+      ((or (null ans) (= ans "Unchanged")) (setq out nil))
+      ((= ans "Grew")
+       (initget 7 "Back Undo")                ; a real, positive amount
+       (setq v (getdist "\nHow much wider? [Back]: "))
+       (if (cperp:back-kw v)
+         (progn (princ "\nStepping back one question.") (setq done nil))
+         (setq out (+ d v))))
+      ((= ans "Shrank")
+       (while (and done (null w))
+         (initget 7 "Back Undo")
+         (setq v (getdist "\nHow much narrower? [Back]: "))
+         (cond
+           ((cperp:back-kw v)
+            (princ "\nStepping back one question.")
+            (setq done nil))
+           ((< v d) (setq w (- d v)))
+           (T (princ "\nThat is the whole width or more - nothing would be left."))))
+       (setq out w))
+      (T                                      ; New: the width itself
+       (initget 6 "Back Undo")                ; Enter keeps what is drawn
+       (setq v (getdist (strcat "\nNew overall width <" (rtos d) "> [Back]: ")))
+       (cond
+         ((cperp:back-kw v)
+          (princ "\nStepping back one question.")
+          (setq done nil))
+         ((or (null v) (equal v d 1e-9)) (setq out nil))
+         (T (setq out v))))))
+  out)
 
 ;; Scale en about ctr (a point in the current UCS) by k.  T when the
 ;; drawing took it, nil when it would not -- a locked, frozen or
@@ -547,10 +569,12 @@
          (princ "\nNeed at least 2 points.")
          (setq n nil))
         ((> n 100)
-         (initget "Yes No")
+         ;; Back is listed because it is what a hand reaches for here,
+         ;; and it means what No means - ask the count again
+         (initget "Yes No Back Undo")
          (setq ans (getkword
                      (strcat "\n" (itoa n) " points means " (itoa n)
-                             " dimensions. Continue? [Yes/No] <No>: ")))
+                             " dimensions. Continue? [Yes/No/Back] <No>: ")))
          (if (not (equal ans "Yes")) (setq n nil)))))
     (setq lastN n)
 
@@ -661,15 +685,24 @@
             i        (1+ i)))
     (setq total (+ total (length newPts)))
 
-    ;; --- repeat? -----------------------------------------------------
-    (initget "Yes No")
-    (setq again (getkword "\nRepeat on the new polyline? [Yes/No] <No>: "))
-    (if (null again) (setq again "No")))
+    ;; --- repeat?, and when not, the dimension style ------------------
+    ;; the two are one chain: Back at the style re-asks whether to
+    ;; repeat, which is the question in front of it
+    (setq again 'RETRY)
+    (while (eq again 'RETRY)
+      (initget "Yes No")
+      (setq again (getkword "\nRepeat on the new polyline? [Yes/No] <No>: "))
+      (if (null again) (setq again "No"))
+      (if (equal again "No")
+        (progn
+          (initget "STandard SIde Back Undo")
+          (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
+                                      "SIDE STANDARD? [STandard/SIde/Back] <STandard>: ")))
+          (if (member ans '("Back" "Undo"))
+            (progn (princ "\nStepping back one question.")
+                   (setq again 'RETRY)))))))
 
-  ;; --- 6. dimension style, then draw every dimension ------------------
-  (initget "STandard SIde")
-  (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
-                              "SIDE STANDARD? [STandard/SIde] <STandard>: ")))
+  ;; --- 6. draw every dimension in the chosen style --------------------
   (setq dimStyle (if (equal ans "SIde") "SIDE STANDARD" "STANDARD INCHES"))
   (if (tblsearch "DIMSTYLE" dimStyle)
     (command "._-DIMSTYLE" "_Restore" dimStyle)

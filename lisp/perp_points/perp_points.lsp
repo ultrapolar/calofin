@@ -114,7 +114,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.11")
+(setq *perp-version* "v0.12")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -475,34 +475,56 @@
 ;; direction of travel and the offset side are left alone, and the shape
 ;; between the ends is carried along with it.
 
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getdist/getpoint/getint hand a keyword back as
+;; a string where a value would be a number or a list.
+(defun perp:back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
+
 ;; Ask whether the overall width has changed.  Returns the width to work
 ;; to, or nil when it has not -- so an unchanged answer skips the resize
 ;; altogether and the command behaves exactly as it always did.  d is
 ;; the width the drawing carries now.
-(defun perp:ask-width (d / kws ans v w)
+(defun perp:ask-width (d / kws ans v w out done)
   (princ (strcat "\nOverall width, end to end: " (rtos d) "."))
-  (setq kws "Grew Shrank New Unchanged")
-  (initget kws)
-  (setq ans (getkword (strcat "\nHas that width changed? ["
-                              (vl-string-translate " " "/" kws)
-                              "] <Unchanged>: ")))
-  (cond
-    ((or (null ans) (= ans "Unchanged")) nil)
-    ((= ans "Grew")
-     (initget 7)                              ; a real, positive amount
-     (+ d (getdist "\nHow much wider? ")))
-    ((= ans "Shrank")
-     (while (null w)
-       (initget 7)
-       (setq v (getdist "\nHow much narrower? "))
-       (if (< v d)
-         (setq w (- d v))
-         (princ "\nThat is the whole width or more - nothing would be left.")))
-     w)
-    (t                                        ; New: the width itself
-     (initget 6)                              ; Enter keeps what is drawn
-     (setq v (getdist (strcat "\nNew overall width <" (rtos d) ">: ")))
-     (if (or (null v) (equal v d 1e-9)) nil v))))
+  (setq kws "Grew Shrank New Unchanged" done nil out nil)
+  ;; the amount is a second question, so Back at it re-asks the first
+  ;; rather than abandoning the resize
+  (while (null done)
+    (setq done T w nil)
+    (initget kws)
+    (setq ans (getkword (strcat "\nHas that width changed? ["
+                                (vl-string-translate " " "/" kws)
+                                "] <Unchanged>: ")))
+    (cond
+      ((or (null ans) (= ans "Unchanged")) (setq out nil))
+      ((= ans "Grew")
+       (initget 7 "Back Undo")                ; a real, positive amount
+       (setq v (getdist "\nHow much wider? [Back]: "))
+       (if (perp:back-kw v)
+         (progn (princ "\nStepping back one question.") (setq done nil))
+         (setq out (+ d v))))
+      ((= ans "Shrank")
+       (while (and done (null w))
+         (initget 7 "Back Undo")
+         (setq v (getdist "\nHow much narrower? [Back]: "))
+         (cond
+           ((perp:back-kw v)
+            (princ "\nStepping back one question.")
+            (setq done nil))
+           ((< v d) (setq w (- d v)))
+           (T (princ "\nThat is the whole width or more - nothing would be left."))))
+       (setq out w))
+      (T                                      ; New: the width itself
+       (initget 6 "Back Undo")                ; Enter keeps what is drawn
+       (setq v (getdist (strcat "\nNew overall width <" (rtos d) "> [Back]: ")))
+       (cond
+         ((perp:back-kw v)
+          (princ "\nStepping back one question.")
+          (setq done nil))
+         ((or (null v) (equal v d 1e-9)) (setq out nil))
+         (T (setq out v))))))
+  out)
 
 ;; Scale en about ctr (a point in the current UCS) by k.  T when the
 ;; drawing took it, nil when it would not -- a locked, frozen or
@@ -805,11 +827,13 @@
          (princ "\nNeed at least 2 points.")
          (setq n nil))
         ((> n 100)
-         ;; guard against a mistyped count creating thousands of entities
-         (initget "Yes No")
+         ;; guard against a mistyped count creating thousands of entities;
+         ;; Back is listed because it is what a hand reaches for here, and
+         ;; it means what No means - ask the count again
+         (initget "Yes No Back Undo")
          (setq ans (getkword
                      (strcat "\n" (itoa n) " points means " (itoa n)
-                             " dimensions. Continue? [Yes/No] <No>: ")))
+                             " dimensions. Continue? [Yes/No/Back] <No>: ")))
          (if (not (equal ans "Yes")) (setq n nil)))))
     (setq lastN n)
 
@@ -830,8 +854,11 @@
     ;; rejected, so a dimension is never degenerate and the offset can
     ;; never flip to the wrong side.
     (setvar "CLAYER" "PERPPTS-TEMP")
-    (setq newPts '() guideEnts '() i 0)
-    (while (< i n)
+    ;; the lengths and the join are one chain: Back at the join takes
+    ;; back the last point - guide node and all - and asks for it again
+    (setq newPts '() guideEnts '() i 0 join 'RETRY)
+    (while (eq join 'RETRY)
+     (while (< i n)
       (setq base (nth i basePts))
       (initget 6 "Back Undo")                ; no zero, no negative
       (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
@@ -866,7 +893,6 @@
          (setq guideEnts (cons (entlast) guideEnts)
                tmpEnts   (cons (entlast) tmpEnts))
          (setq i (1+ i)))))
-    (setq newPts (reverse newPts))
 
     ;; --- straight lines, arcs, or both -------------------------------
     ;; Straight is what this routine has always drawn and stays the
@@ -885,26 +911,38 @@
         (setq join "Straight"))
       (setq join nil))
     (while (null join)
-      (initget kws)
+      (initget (strcat kws " Back Undo"))
       (setq join (getkword (strcat "\nRound " (itoa iter)
                                    " - how should the points be joined? ["
                                    (vl-string-translate " " "/" kws)
-                                   "] <" lastJoin ">: ")))
+                                   "/Back] <" lastJoin ">: ")))
       (if (null join) (setq join lastJoin))   ; Enter = same as last round
-      ;; Mixed is not an answer on its own - it needs the segment list,
-      ;; and Back returns to the question above rather than guessing
-      (if (equal join "Mixed")
-        (while (and join (null picks))
-          (setq reply (getstring T
-                        (strcat "\nWhich segments are arcs (1 to "
-                                (itoa nseg) ", e.g. 1 3-5)? (B = back): ")))
-          (cond
-            ((member (strcase reply) '("B" "BACK" "U" "UNDO"))
-             (setq join nil))
-            ((setq picks (perp:parse-segs reply nseg)))
-            (t (princ (strcat "\nSegment numbers run 1 to " (itoa nseg)
-                              " - single numbers, ranges like 3-5, or"
-                              " both.")))))))
+      (cond
+        ;; back to the length that was just given: the guide node goes
+        ;; with it, and the outer loop re-enters the length prompt
+        ((member join '("Back" "Undo"))
+         (setq i (1- i))
+         (perp:kill (car guideEnts))
+         (setq guideEnts (cdr guideEnts)
+               newPts    (cdr newPts))
+         (princ "\nStepping back one point.")
+         (setq join 'RETRY))
+        ;; Mixed is not an answer on its own - it needs the segment list,
+        ;; and Back returns to the question above rather than guessing
+        ((equal join "Mixed")
+         (while (and join (null picks))
+           (setq reply (getstring T
+                         (strcat "\nWhich segments are arcs (1 to "
+                                 (itoa nseg) ", e.g. 1 3-5)? (B = back): ")))
+           (cond
+             ((member (strcase reply) '("B" "BACK" "U" "UNDO"))
+              (setq join nil))
+             ((setq picks (perp:parse-segs reply nseg)))
+             (t (princ (strcat "\nSegment numbers run 1 to " (itoa nseg)
+                               " - single numbers, ranges like 3-5, or"
+                               " both."))))))))
+     )
+    (setq newPts (reverse newPts))
     (setq lastJoin join)
 
     ;; --- connect the new points with a polyline ----------------------
@@ -951,15 +989,24 @@
     ;; the polyline just built becomes the path for the next round
     (setq path newPts)
 
-    ;; --- repeat? -----------------------------------------------------
-    (initget "Yes No")
-    (setq again (getkword "\nRepeat on the new polyline? [Yes/No] <No>: "))
-    (if (null again) (setq again "No")))
+    ;; --- repeat?, and when not, the dimension style ------------------
+    ;; the two are one chain: Back at the style re-asks whether to
+    ;; repeat, which is the question in front of it
+    (setq again 'RETRY)
+    (while (eq again 'RETRY)
+      (initget "Yes No")
+      (setq again (getkword "\nRepeat on the new polyline? [Yes/No] <No>: "))
+      (if (null again) (setq again "No"))
+      (if (equal again "No")
+        (progn
+          (initget "STandard SIde Back Undo")
+          (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
+                                      "SIDE STANDARD? [STandard/SIde/Back] <STandard>: ")))
+          (if (member ans '("Back" "Undo"))
+            (progn (princ "\nStepping back one question.")
+                   (setq again 'RETRY)))))))
 
-  ;; --- 8. dimension style, then draw every dimension ------------------
-  (initget "STandard SIde")
-  (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
-                              "SIDE STANDARD? [STandard/SIde] <STandard>: ")))
+  ;; --- 8. draw every dimension in the chosen style --------------------
   (setq dimStyle (if (equal ans "SIde") "SIDE STANDARD" "STANDARD INCHES"))
   (if (tblsearch "DIMSTYLE" dimStyle)
     (command "._-DIMSTYLE" "_Restore" dimStyle)
