@@ -42,6 +42,8 @@ DRONE             Drone cleanup routine
 FITABHD           Fits a typed pool template through surveyed points
 FITABHDCOVER      FITABHD for a cover sheet - skips the bottom question
 FLOORDIM          Floor dimensioning
+G2MCONV           Puts a G2M architectural pool plan onto the shop's layers and styles
+G2MRECONV         Undoes a G2MCONV run - layers, appearance, text and dimension styles
 HEMISTEP          Hemi step layout
 LAZFORM           Fill the dimension chart in and draw the pool from it
 LAZFORMCOVER      LAZFORM for a cover sheet - the pool-bottom gate closed

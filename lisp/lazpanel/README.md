@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 74 of them across 169 buttons, because the pages come in two kinds
+-- 76 of them across 175 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both. (Both numbers are
 *checked*, not counted by hand: `tools/check_registry.py` computes them
 off the tree and `make check` fails when the prose disagrees.)
@@ -68,8 +68,8 @@ reach for them.
 | `SORECONV` | `LAZTXT` | `CDCALLOUT` | `NORMIESTEP` | `LITELINFINSCAN` |
 | `VSCONV` | `OASIS` | `BPCALLOUT` | `AUTOBEAD` | `DIMCHECK` |
 | `VSRECONV` | `ABHD` |  | `PERPPTS` | `DIMSCAN` |
-|  | `ADAB` |  | `CPERPPTS` |  |
-|  | `FITABHD` |  |  |  |
+| `G2MCONV` | `ADAB` |  | `CPERPPTS` |  |
+| `G2MRECONV` | `FITABHD` |  |  |  |
 
 **Cover** -- 3 columns, in the order the work runs:
 
@@ -95,19 +95,20 @@ reach for them.
 | `SORECONV` | `AUTODIM` |
 | `VSCONV` | `SPACHECK` |
 | `VSRECONV` | `SPACHECKSCAN` |
-|  | `LITESPACHECKSCAN` |
-|  | `DIMCHECK` |
+| `G2MCONV` | `LITESPACHECKSCAN` |
+| `G2MRECONV` | `DIMCHECK` |
 |  | `DIMSCAN` |
 
 **Why converters lead.** The job pages are laid out in the order the
 work runs, and reading somebody else's export happens before anything
-is drawn -- so `XFTCONV`, `SOCONV` and `VSCONV` are the first column on
-both. It is also where they were hardest to find: `SOCONV` and `VSCONV`
-were reachable only from `Rest`, so a drafter doing a pool job never
-saw them, and `XFTCONV` sat under **Shape**, which it never was.
-(`Rest` is the complement of the three named jobs, so the two that
-moved left it automatically -- the test recomputes that and would have
-failed if they had not.)
+is drawn -- so `XFTCONV`, `SOCONV`, `VSCONV` and `G2MCONV` are the
+first column on both. It is also where they were hardest to find:
+`SOCONV` and `VSCONV` were reachable only from `Rest`, so a drafter
+doing a pool job never saw them, and `XFTCONV` sat under **Shape**,
+which it never was. (`Rest` is the complement of the three named jobs,
+so the two that moved left it automatically -- the test recomputes that
+and would have failed if they had not. `G2MCONV` was placed here from
+the start, for the same reason, and so was never on `Rest` at all.)
 
 **Each reverter sits under its converter**, in the same column. A
 `RECONV` is looked for in exactly one situation -- the conversion just
@@ -156,7 +157,7 @@ them, so a tool you cannot place in a job is still one tab away.
 | Group | Buttons |
 | --- | --- |
 | Layout | LAZFORM, LAZTXT, LAZFORMCOVER, LAZSPA, SPA, POOL, POOLCOVER, POOLSIDE, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, LINGUTTER, LINGUTTERSCAN, PADDLE, AUTOBEAD, LAZSTEP, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, STOCKCOVER, WCALST, CUSTBLOCK |
-| Points | ABCDEF, ALTABCDEF, XYPLOT, CONSTELLATION, ABFIND, ABMOVE, POINTRENAMER, PERPPTS, CPERPPTS, XFTCONV, XFTRECONV, SOCONV, SORECONV, VSCONV, VSRECONV, DRONE, TYDRN, TYLERDRONESUITE |
+| Points | ABCDEF, ALTABCDEF, XYPLOT, CONSTELLATION, ABFIND, ABMOVE, POINTRENAMER, PERPPTS, CPERPPTS, XFTCONV, XFTRECONV, SOCONV, SORECONV, VSCONV, VSRECONV, G2MCONV, G2MRECONV, DRONE, TYDRN, TYLERDRONESUITE |
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
 | Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, ABCURCHECK, ABCURCHECKSCAN, ABPCHECK, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
 

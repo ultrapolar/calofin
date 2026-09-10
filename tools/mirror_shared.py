@@ -1109,6 +1109,17 @@ TOOLS = {
         },
         'drop_globals': [],
     },
+    # The same for the third converter.  Its DASHED2 maker is NOT
+    # generic -- ABHD and FITABHD keep their own copies of that one and
+    # the library has never carried it -- so the layer creator is again
+    # the only swap.
+    'G2MCONV': {
+        'src': 'lisp/g2mconv/G2MCONV.lsp',
+        'swap': {
+            'g2m:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
     # Layer creator, angle normalizer, and the strict 3-point
     # circumcenter -- the library form, not ABHD's looser 2-element one
     # (which stays out; see shared/README.md).
