@@ -700,6 +700,58 @@ check("...and the hopper still draws once the answers stand",
       "standard hopper drawn" in out, out[-160:])
 
 
+# ------------------------------------- 13. ABFIND's two stakes
+
+print("\nABFIND: two stakes, and Back only where there is a question behind")
+
+def abfind_vm(a_named):
+    """A drawing with three survey points.  A_NAMED gives the first one
+    the A stake's own number, which is what makes ABFIND find it rather
+    than ask for it."""
+    vm = newvm(('abfind', 'ABFIND.lsp'))
+    vm.tables['DIMSTYLE'].add('CROSS DIMENSIONS')
+    vm.tables['BLOCK'] = {'ab_pt'}
+    layer(vm, 'POINTS', 2)
+    vm.sysvars['CLAYER'] = '0'
+    vm.sysvars['DIMSTYLE'] = 'STANDARD'
+    names = ['A' if a_named else '1', '2', '3']
+    for (x, y), nm in zip([(0.0, 0.0), (100.0, 0.0), (50.0, 80.0)], names):
+        vm.loads('(entmake (list \'(0 . "INSERT") \'(2 . "ab_pt")'
+                 ' \'(8 . "POINTS") (list 10 %r %r 0.0)))' % (x, y))
+        vm.loads('(entmake (list \'(0 . "ATTRIB") \'(2 . "number")'
+                 ' (cons 1 "%s")))' % nm)
+    return vm
+
+vm = abfind_vm(a_named=False)
+try:
+    vm.run('c:ABFIND',
+           [(0.0, 0.0),               # the A stake, clicked
+            'Back',                   # the B stake -> back to A
+            (0.0, 0.0),               # A again
+            (100.0, 0.0),             # B
+            '17', 'No', None])
+except Exception:
+    pass
+out = said(vm)
+check("Back at the B stake re-asks the A stake",
+      len([p for p, _v in vm.prompts if 'Pick the A stake' in p]) == 2)
+check("...and says so", "Stepping back one stake" in out)
+check("the A stake itself offers no Back - nothing is behind it",
+      not any('Pick the A stake' in p and '[Back]' in p
+              for p, _v in vm.prompts))
+
+vm = abfind_vm(a_named=True)
+try:
+    vm.run('c:ABFIND', [(100.0, 0.0), '17', 'No', None])
+except Exception:
+    pass
+check("a NAMED A stake is found rather than asked",
+      "Stake A found" in said(vm))
+check("...so B offers no Back either: re-asking A would find it again",
+      not any('Pick the B stake' in p and '[Back]' in p
+              for p, _v in vm.prompts))
+
+
 # ------------------------------------------------------------------ done
 
 print()

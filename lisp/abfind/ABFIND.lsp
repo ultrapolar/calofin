@@ -193,7 +193,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.10")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.11")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -470,7 +470,7 @@
 ;; Where a stake is: the point named NAME when the drawing names one,
 ;; otherwise a click (snapped to the nearest survey point when there is
 ;; one under it).  nil when the user presses Enter instead.
-(defun abf:stake (name cands / hit pk)
+(defun abf:stake (name cands back / hit pk)
   (if (setq hit (abf:find-point name cands))
     (progn
       (princ (strcat "\n  Stake " name " found at Pt."
@@ -480,19 +480,23 @@
       (princ (strcat "\nNo point is numbered \"" name
                      "\" in this drawing - click the " name
                      " stake instead."))
-      (if (setq pk (getpoint (strcat "\nPick the " name
-                                     " stake (Enter to cancel): ")))
-        (progn
-          (setq hit (abf:nearest pk cands))
-          (if hit
-            (progn
-              (princ (strcat "\n  Taken from Pt." (abf:cd-nm hit) "."))
-              (abf:cd-pt hit))
-            (progn
-              (princ (strcat "\n  No survey point within "
-                             (rtos abf:*snap* 4 0)
-                             " of the click - using the click itself."))
-              (list (car pk) (cadr pk) 0.0))))))))
+      (if back (initget "Back Undo"))
+      (setq pk (getpoint (strcat "\nPick the " name
+                                 " stake (Enter to cancel)"
+                                 (if back " [Back]" "") ": ")))
+      (cond
+        ((and back (= (type pk) 'STR) (member pk '("Back" "Undo"))) 'ABF-BACK)
+        (pk
+         (setq hit (abf:nearest pk cands))
+         (if hit
+           (progn
+             (princ (strcat "\n  Taken from Pt." (abf:cd-nm hit) "."))
+             (abf:cd-pt hit))
+           (progn
+             (princ (strcat "\n  No survey point within "
+                            (rtos abf:*snap* 4 0)
+                            " of the click - using the click itself."))
+             (list (car pk) (cadr pk) 0.0))))))))
 
 ;;; ---------------------- geometry --------------------------------------
 
@@ -1267,7 +1271,7 @@
                         pa pb hist stage done made moves hit sce nm pp
                         pair sugs temps c kws shown ans sug havestyle
                         np newpt newnm tried lasthold ments ring note
-                        npair spots hits h)
+                        npair spots hits h astep)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -1301,8 +1305,27 @@
                      " reads in the drawing (\"35\" or \"Pt.35\")."))
       ;; -- the two stakes, before OSMODE goes down: a drawing that
       ;;    does not name them wants object snap for the clicks
-      (setq pa (abf:stake abf:*a-name* cands))
-      (if pa (setq pb (abf:stake abf:*b-name* cands)))
+      ;; the two stakes are a chain: Back at B re-asks A.  Back is only
+      ;; ON THE TABLE when A was CLICKED - when the drawing names it
+      ;; there is no question behind this one, and re-asking it would
+      ;; find the same point again and walk straight forward, which is a
+      ;; deadlock rather than a way back (STANDARDS 7.2, same reason).
+      (setq astep 1)
+      (while (<= astep 2)
+        (cond
+          ((= astep 1)
+           (setq pa    (abf:stake abf:*a-name* cands nil)
+                 astep 2))
+          ((= astep 2)
+           (if (null pa)
+             (setq astep 3)
+             (progn
+               (setq pb (abf:stake abf:*b-name* cands
+                                   (null (abf:find-point abf:*a-name* cands))))
+               (if (eq pb 'ABF-BACK)
+                 (progn (princ "\n  Stepping back one stake.")
+                        (setq pb nil astep 1))
+                 (setq astep 3)))))))
       (cond
         ((null pa)
          (princ (strcat "\nNo " abf:*a-name* " stake - nothing drawn.")))
