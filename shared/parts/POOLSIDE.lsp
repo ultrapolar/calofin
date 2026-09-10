@@ -58,7 +58,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.2")
+(setq *poolside-version* "v1.3")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -515,15 +515,24 @@
   (princ "\nSide view only -- the floor dimensions, no plan.")
   (princ "\nDistances may be typed as 8'6\", 8'-6-1/2\" or 8'6.5 (plain numbers = inches).")
 
-  (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
-                         "Normal" nil))
-
-  ;; the base point is picked with the user's own snaps still live;
-  ;; only afterwards do snaps drop for the command-fed drawing work.
-  ;; It is the top LEFT of the section -- the waterline at the left
-  ;; wall -- so the section hangs off a known corner.
-  (setq base (getpoint "\nInsertion base point (top left of the section) <0,0>: ")
-        psd:*base* (if (and base (listp base))
+  ;; the bottom type and the base point are the two questions in front
+  ;; of every measurement, so they are asked as a chain: Back at the
+  ;; base point re-asks the type, which is the answer the rest of the
+  ;; run is shaped by
+  (setq base 'RETRY)
+  (while (eq base 'RETRY)
+    (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
+                           "Normal" nil))
+    ;; the base point is picked with the user's own snaps still live;
+    ;; only afterwards do snaps drop for the command-fed drawing work.
+    ;; It is the top LEFT of the section -- the waterline at the left
+    ;; wall -- so the section hangs off a known corner.
+    (initget "Back Undo")
+    (setq base (getpoint "\nInsertion base point (top left of the section) [Back] <0,0>: "))
+    (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+      (progn (princ "\nStepping back one question.")
+             (setq base 'RETRY))))
+  (setq psd:*base* (if (and base (listp base))
                        (list (car base) (cadr base))
                        (list 0.0 0.0)))
   (setvar "OSMODE" 0)

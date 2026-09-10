@@ -9863,7 +9863,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.2")
+(setq *poolside-version* "v1.3")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -10320,15 +10320,24 @@
   (princ "\nSide view only -- the floor dimensions, no plan.")
   (princ "\nDistances may be typed as 8'6\", 8'-6-1/2\" or 8'6.5 (plain numbers = inches).")
 
-  (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
-                         "Normal" nil))
-
-  ;; the base point is picked with the user's own snaps still live;
-  ;; only afterwards do snaps drop for the command-fed drawing work.
-  ;; It is the top LEFT of the section -- the waterline at the left
-  ;; wall -- so the section hangs off a known corner.
-  (setq base (getpoint "\nInsertion base point (top left of the section) <0,0>: ")
-        psd:*base* (if (and base (listp base))
+  ;; the bottom type and the base point are the two questions in front
+  ;; of every measurement, so they are asked as a chain: Back at the
+  ;; base point re-asks the type, which is the answer the rest of the
+  ;; run is shaped by
+  (setq base 'RETRY)
+  (while (eq base 'RETRY)
+    (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
+                           "Normal" nil))
+    ;; the base point is picked with the user's own snaps still live;
+    ;; only afterwards do snaps drop for the command-fed drawing work.
+    ;; It is the top LEFT of the section -- the waterline at the left
+    ;; wall -- so the section hangs off a known corner.
+    (initget "Back Undo")
+    (setq base (getpoint "\nInsertion base point (top left of the section) [Back] <0,0>: "))
+    (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+      (progn (princ "\nStepping back one question.")
+             (setq base 'RETRY))))
+  (setq psd:*base* (if (and base (listp base))
                        (list (car base) (cadr base))
                        (list 0.0 0.0)))
   (setvar "OSMODE" 0)
@@ -34545,7 +34554,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.6"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.7"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -35076,7 +35085,7 @@
 
 ;; ---- AUTOBEAD --------------------------------------------------------------
 
-(defun c:AUTOBEAD ( / *error* ss dirpt stage done ans sidewalls treadpts p )
+(defun c:AUTOBEAD ( / *error* ss dirpt stage done ans sidewalls treadpts p go)
   ;; Nothing to put back at this level: the questions change no setting
   ;; and open no group -- autobead-build carries the handler that does
   ;; that work, and it is the innermost one while the build runs.  This
@@ -35135,18 +35144,39 @@
             (progn
               (prompt (strcat "\nClick each step (tread) that has beaded"
                               " side walls."))
-              (while (setq p (getpoint
-                               "\n  Click a step <Enter = done>: "))
-                (setq treadpts (cons (trans p 1 0) treadpts)))
-              (if (null treadpts)
+              ;; the clicks are a list built one at a time, so Back
+              ;; means here what it means in every other such loop:
+              ;; take back the one clicked last.  With none left there
+              ;; is nothing to take back, so the question that opened
+              ;; the loop is asked again.
+              (setq go T)
+              (while go
+                (initget "Back Undo")
+                (setq p (getpoint "\n  Click a step <Enter = done> [Back]: "))
+                (cond
+                  ((and (= (type p) 'STR) (member p '("Back" "Undo")))
+                   (if treadpts
+                     (progn (setq treadpts (cdr treadpts))
+                            (prompt "\n  Stepping back one step."))
+                     (progn (prompt "\n  Already at the first step.")
+                            (setq go nil stage 3 sidewalls nil))))
+                  ((null p) (setq go nil))
+                  (T (setq treadpts (cons (trans p 1 0) treadpts)))))
+              (if (and sidewalls (null treadpts))
                 (progn
                   (prompt (strcat "\nNo steps clicked - side walls will"
                                   " be beaded full length."))
                   (setq sidewalls "All")))))
-          ;; nothing is held back here: the selection is the user's own,
-          ;; so there is no "last step drawn" for AUTOBEAD to know about
-          (autobead-build ss dirpt sidewalls treadpts nil)
-          (setq done T))))))
+          ;; a Back off the first click cleared SIDEWALLS and left
+          ;; STAGE where it was, so the question is put again rather
+          ;; than the bead being built from no answer
+          (if sidewalls
+            (progn
+              ;; nothing is held back here: the selection is the user's
+              ;; own, so there is no "last step drawn" for AUTOBEAD to
+              ;; know about
+              (autobead-build ss dirpt sidewalls treadpts nil)
+              (setq done T))))))))
   (princ))
 
 ;; ---- AUTOBEADVER -----------------------------------------------------------

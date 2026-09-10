@@ -489,6 +489,43 @@ check("...and a Radius answer then asks for a radius",
       any("Radius for" in p for p, _v in vm.prompts))
 
 
+# ------------------------------------ 10. AUTOBEAD and POOLSIDE
+
+print("\nAUTOBEAD: the clicked steps are a list, so Back pops one")
+
+vm = newvm(('autobead', 'AUTOBEAD.lsp'))
+layer(vm, 'POOL', 4)
+vm.loads('(entmake (list \'(0 . "LINE") \'(8 . "POOL")'
+         ' (list 10 0.0 0.0 0.0) (list 11 96.0 0.0 0.0)))')
+wall = vm.entities[-1]
+vm.run('c:AUTOBEAD',
+       [None, [wall], (0.0, 24.0, 0.0), "Some",
+        (0.0, 12.0, 0.0),            # click one step
+        'Back',                      # ...take it back
+        'Back',                      # ...nothing left: re-open the question
+        "All"])
+out = said(vm)
+check("Back pops the step clicked last", "Stepping back one step" in out)
+check("...and off the first it says so", "Already at the first step" in out)
+check("...then re-asks which steps have beaded side walls",
+      len([p for p, _v in vm.prompts if "beaded side walls" in p]) == 2)
+
+print("\nPOOLSIDE: the bottom type and the base point")
+
+vm = newvm(('poolside', 'POOLSIDE.lsp'))
+try:
+    vm.run('c:POOLSIDE',
+           ['Normal', 'Back', 'Normal', 'U', 'Normal', (0.0, 0.0)]
+           + [None] * 60)
+except Exception:
+    pass                              # the measurements run out past here
+types = [p for p, _v in vm.prompts if "Bottom type" in p]
+check("Back at the base point re-asks the bottom type",
+      len(types) == 3, "%d asked" % len(types))
+check("...and U is the same answer as Back there",
+      said(vm).count("Stepping back one question") == 2)
+
+
 # ------------------------------------------------------------------ done
 
 print()
