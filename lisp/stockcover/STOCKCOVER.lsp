@@ -48,7 +48,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.6") ; printed on load and at command
+(setq *stockcover-version* "v1.7") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -344,115 +344,126 @@
                   (stock:say "no anchor points highlighted - using the box corners.")))
 
               ;; ------------------------------------- which stock file
-              (setq last (stock:getenv *stock-env-last*))
-              (setq name
-                (getstring t
-                  (strcat "\nStock drawing name"
-                          (if last (strcat " <" last ">") "") ": ")))
-              (if (= name "") (setq name last))
-              (if (null name)
-                (stock:say "no name given.")
+              ;; the name and the which-one pick are one chain: Back at
+              ;; the pick re-asks the name, so a search that turned up
+              ;; the wrong dozen costs one keystroke instead of the
+              ;; whole command.
+              (setq last (stock:getenv *stock-env-last*)
+                    pick 'RETRY)
+              (while (eq pick 'RETRY)
+                (setq pick nil
+                      file nil)
+                (setq name
+                  (getstring t
+                    (strcat "\nStock drawing name"
+                            (if last (strcat " <" last ">") "") ": ")))
+                (if (= name "") (setq name last))
+                (if (null name)
+                  (stock:say "no name given.")
+                  (progn
+                    (setq hits (stock:match name files))
+                    (cond
+                      ((null hits)
+                       (stock:say (strcat "no stock drawing matches \"" name
+                                          "\" - try STOCKLIST.")))
+                      ((= (length hits) 1) (setq file (car hits)))
+                      (t
+                       (stock:say (strcat (itoa (length hits))
+                                          " drawings match \"" name "\":"))
+                       (setq i 1)
+                       (foreach f hits
+                         (princ (strcat "\n  " (itoa i) ". "
+                                        (vl-filename-base f)))
+                         (setq i (1+ i)))
+                       (initget 7 "Back Undo")
+                       (setq pick (getint "\nWhich one? [Back]: "))
+                       (if (and (= (type pick) 'STR)
+                                (member pick '("Back" "Undo")))
+                         (progn (stock:say "stepping back one question.")
+                                (setq pick 'RETRY))
+                         (setq file (if (and (>= pick 1)
+                                             (<= pick (length hits)))
+                                      (nth (1- pick) hits)))))))))
+              (if (null file)
+                (stock:say "no drawing picked.")
                 (progn
-                  (setq hits (stock:match name files))
-                  (cond
-                    ((null hits)
-                     (stock:say (strcat "no stock drawing matches \"" name
-                                        "\" - try STOCKLIST.")))
-                    (t
-                     (if (= (length hits) 1)
-                       (setq file (car hits))
-                       (progn
-                         (stock:say (strcat (itoa (length hits))
-                                            " drawings match \"" name "\":"))
-                         (setq i 1)
-                         (foreach f hits
-                           (princ (strcat "\n  " (itoa i) ". "
-                                          (vl-filename-base f)))
-                           (setq i (1+ i)))
-                         (initget 7)
-                         (setq pick (getint "\nWhich one? "))
-                         (setq file (if (and (>= pick 1) (<= pick (length hits)))
-                                      (nth (1- pick) hits)))))
-                     (if (null file)
-                       (stock:say "no drawing picked.")
-                       (progn
-                         (setq path (stock:path folder file))
-                         (setenv *stock-env-last* name)
-                         (stock:say (strcat "using " path))
+                  (setq path (stock:path folder file))
+                  (setenv *stock-env-last* name)
+                  (stock:say (strcat "using " path))
 
-                         ;; ------------------------------- bring it in
-                         (setvar "CMDECHO" 0)
-                         (setvar "OSMODE" 0)
-                         (setvar "INSUNITS" 0) ; no silent unit rescale
-                         (setvar "ATTREQ" 0)
-                         (setvar "ATTDIA" 0)
-                         ;; only when undo is recording - _Begin in a drawing with UNDO
-                         ;; off (bit 1 of UNDOCTL clear) errors out of the command
-                         (if (= 1 (logand 1 (getvar "UNDOCTL")))
-                           (progn
-                             (command "_.UNDO" "_Begin")
-                             (setq undone t)))
+                  ;; ------------------------------- bring it in
+                  (setvar "CMDECHO" 0)
+                  (setvar "OSMODE" 0)
+                  (setvar "INSUNITS" 0) ; no silent unit rescale
+                  (setvar "ATTREQ" 0)
+                  (setvar "ATTDIA" 0)
+                  ;; only when undo is recording - _Begin in a drawing with UNDO
+                  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+                  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+                    (progn
+                      (command "_.UNDO" "_Begin")
+                      (setq undone t)))
 
-                         (setq bname (stock:uniq-block))
-                         (setq mark (entlast))
-                         (setq bname (stock:insert path bname))
-                         (if (null bname)
-                           (stock:say (strcat "could not read " path))
-                           (progn
-                             (if *stock-explode*
-                               (command "_.EXPLODE" (entlast) ""))
-                             (setq ss-new (stock:new-ents mark))
-                             (if (null ss-new)
-                               (stock:say (strcat path " brought nothing in."))
-                               (progn
-                                 (setq sbb (stock:bbox ss-new))
-                                 (if (null sbb)
-                                   (stock:say "could not measure the stock geometry.")
-                                   (progn
-                                     (setq ssz (stock:size sbb))
-                                     (stock:say (strcat "stock geometry: "
-                                                        (stock:fmt ssz)))
+                  (setq bname (stock:uniq-block))
+                  (setq mark (entlast))
+                  (setq bname (stock:insert path bname))
+                  (if (null bname)
+                    (stock:say (strcat "could not read " path))
+                    (progn
+                      (if *stock-explode*
+                        (command "_.EXPLODE" (entlast) ""))
+                      (setq ss-new (stock:new-ents mark))
+                      (if (null ss-new)
+                        (stock:say (strcat path " brought nothing in."))
+                        (progn
+                          (setq sbb (stock:bbox ss-new))
+                          (if (null sbb)
+                            (stock:say "could not measure the stock geometry.")
+                            (progn
+                              (setq ssz (stock:size sbb))
+                              (stock:say (strcat "stock geometry: "
+                                                 (stock:fmt ssz)))
 
-                                     ;; ------------------ anchor check
-                                     (setq sanch (stock:anchors ss-new))
-                                     (if (null sanch)
-                                       (progn
-                                         (setq sanch (list (car sbb) (cadr sbb)))
-                                         (stock:say "no anchor points in the stock file - using its box corners.")))
-                                     ;; the bottom-left -> top-right
-                                     ;; spans should agree; when they do
-                                     ;; not, the wrong file was probably
-                                     ;; named - say so, loudly, but the
-                                     ;; placement stays anchored as-is
-                                     (setq dx (- (car (stock:span sanch))
-                                                 (car (stock:span tanch)))
-                                           dy (- (cadr (stock:span sanch))
-                                                 (cadr (stock:span tanch))))
-                                     (if (or (> (abs dx) *stock-anchor-tol*)
-                                             (> (abs dy) *stock-anchor-tol*))
-                                       (progn
-                                         (stock:say (strcat "ANCHORS DO NOT AGREE: the stock's span is off by "
-                                                            (rtos dx 2 3) " across and "
-                                                            (rtos dy 2 3) " up."))
-                                         (stock:say "check you named the right stock drawing - one U rolls this back.")))
+                              ;; ------------------ anchor check
+                              (setq sanch (stock:anchors ss-new))
+                              (if (null sanch)
+                                (progn
+                                  (setq sanch (list (car sbb) (cadr sbb)))
+                                  (stock:say "no anchor points in the stock file - using its box corners.")))
+                              ;; the bottom-left -> top-right
+                              ;; spans should agree; when they do
+                              ;; not, the wrong file was probably
+                              ;; named - say so, loudly, but the
+                              ;; placement stays anchored as-is
+                              (setq dx (- (car (stock:span sanch))
+                                          (car (stock:span tanch)))
+                                    dy (- (cadr (stock:span sanch))
+                                          (cadr (stock:span tanch))))
+                              (if (or (> (abs dx) *stock-anchor-tol*)
+                                      (> (abs dy) *stock-anchor-tol*))
+                                (progn
+                                  (stock:say (strcat "ANCHORS DO NOT AGREE: the stock's span is off by "
+                                                     (rtos dx 2 3) " across and "
+                                                     (rtos dy 2 3) " up."))
+                                  (stock:say "check you named the right stock drawing - one U rolls this back.")))
 
-                                     ;; ------------------------- place:
-                                     ;; ONE move, bottom-left anchor to
-                                     ;; bottom-left anchor, and it stays
-                                     ;; exactly there
-                                     (command "_.MOVE" ss-new ""
-                                              (car sanch) (car tanch))
-                                     (command "_.ERASE" ss-old "")
-                                     (if *stock-explode*
-                                       (command "_.-PURGE" "_B" bname "_N"))
-                                     (stock:say
-                                       (strcat (vl-filename-base file) " placed on the anchor - "
-                                               (itoa (sslength ss-new))
-                                               " object(s) in, "
-                                               (itoa (sslength ss-old))
-                                               " out."))))))))
-                         (command "_.UNDO" "_End")
-                         (setq undone nil)))))))))))))
+                              ;; ------------------------- place:
+                              ;; ONE move, bottom-left anchor to
+                              ;; bottom-left anchor, and it stays
+                              ;; exactly there
+                              (command "_.MOVE" ss-new ""
+                                       (car sanch) (car tanch))
+                              (command "_.ERASE" ss-old "")
+                              (if *stock-explode*
+                                (command "_.-PURGE" "_B" bname "_N"))
+                              (stock:say
+                                (strcat (vl-filename-base file) " placed on the anchor - "
+                                        (itoa (sslength ss-new))
+                                        " object(s) in, "
+                                        (itoa (sslength ss-old))
+                                        " out."))))))))
+                  (command "_.UNDO" "_End")
+                  (setq undone nil)))))))))
 
   (stock:restore)
   (princ))
