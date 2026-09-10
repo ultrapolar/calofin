@@ -246,6 +246,36 @@ check("...and re-opens the question that started the loop",
 check("...leaving nothing declared", "straight wall(s) noted" not in said)
 
 
+# -------------------------------------------------- 5. CABHD walks back
+
+print("\nCABHD: the same chain, one step longer")
+
+with contextlib.redirect_stdout(io.StringIO()):
+    import test_cabhd as C                    # noqa: E402  (runs its own suite)
+
+vm, ents = C.survey_vm()
+vm.run('c:CABHD',
+       [None,                       # the pickfirst probe
+        None,                       # step 1  tolerance     Enter
+        30,                         # step 2  percent
+        'Back',                     # step 3  cap     -> step 2
+        None,                       # step 2  percent       Enter
+        'U',                        # step 3  cap     -> step 2   (synonym)
+        None,                       # step 2  percent       Enter
+        None,                       # step 3  cap           Enter
+        'B',                        # step 4  walls   -> step 3   (short form)
+        None,                       # step 3  cap           Enter
+        'No',                       # step 4  walls
+        'Back',                     # step 5  corners -> step 4
+        'No', 'No', 'No',           # steps 4, 5, 6
+        ents, None, "2"])           # selection, cutoff, keep
+said = ''.join(vm.printed)
+check("Back at step 3 re-asks step 2", said.count("Step 2 of 8") >= 3)
+check("B and U are both taken as Back",
+      said.count("Step 3 of 8") >= 3 and said.count("Step 4 of 8") >= 2)
+check("the chain says which way it moved", "Stepping back one question" in said)
+
+
 # ------------------------------------------------------------------ done
 
 print()

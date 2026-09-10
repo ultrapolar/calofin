@@ -49,6 +49,12 @@ lisp/cabhd/CABHD.lsp|cab:add-point|setq|pts
 lisp/cabhd/CABHD.lsp|cab:ask-cap|setq-global|*cab-max-arcs*
 lisp/cabhd/CABHD.lsp|cab:ask-tol|setq-global|*cab-tol*
 lisp/cabhd/CABHD.lsp|cab:compare|setq|cab-phase
+lisp/cabhd/CABHD.lsp|cab:declare-corners|setq|cab-decl-marks
+lisp/cabhd/CABHD.lsp|cab:declare-corners|setq|cab-phase
+lisp/cabhd/CABHD.lsp|cab:declare-holds|setq|cab-decl-marks
+lisp/cabhd/CABHD.lsp|cab:declare-holds|setq|cab-phase
+lisp/cabhd/CABHD.lsp|cab:declare-walls|setq|cab-decl-marks
+lisp/cabhd/CABHD.lsp|cab:declare-walls|setq|cab-phase
 lisp/cabhd/CABHD.lsp|cab:edit-corners|setq|cab-corners
 lisp/cabhd/CABHD.lsp|cab:edit-corners|setq|cab-phase
 lisp/cabhd/CABHD.lsp|cab:edit-holds|setq|cab-holds
@@ -442,6 +448,12 @@ shared/parts/CABHD.lsp|cab:add-point|setq|pts
 shared/parts/CABHD.lsp|cab:ask-cap|setq-global|*cab-max-arcs*
 shared/parts/CABHD.lsp|cab:ask-tol|setq-global|*cab-tol*
 shared/parts/CABHD.lsp|cab:compare|setq|cab-phase
+shared/parts/CABHD.lsp|cab:declare-corners|setq|cab-decl-marks
+shared/parts/CABHD.lsp|cab:declare-corners|setq|cab-phase
+shared/parts/CABHD.lsp|cab:declare-holds|setq|cab-decl-marks
+shared/parts/CABHD.lsp|cab:declare-holds|setq|cab-phase
+shared/parts/CABHD.lsp|cab:declare-walls|setq|cab-decl-marks
+shared/parts/CABHD.lsp|cab:declare-walls|setq|cab-phase
 shared/parts/CABHD.lsp|cab:edit-corners|setq|cab-corners
 shared/parts/CABHD.lsp|cab:edit-corners|setq|cab-phase
 shared/parts/CABHD.lsp|cab:edit-holds|setq|cab-holds

@@ -199,7 +199,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v1.9")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.0")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -1092,8 +1092,15 @@
        (if (= ans "All")
          (setq cut nil)
          (progn
-           (setq wp (getpoint "\n  Pick the LAST point that belongs to the pool edge: "))
+           ;; Back here re-asks the number rather than abandoning the
+           ;; cutoff: the pick is one prompt further in, not a step of
+           ;; its own
+           (initget "Back Undo")
+           (setq wp (getpoint "\n  Pick the LAST point that belongs to the pool edge [Back]: "))
            (cond
+             ((cab:back-kw wp)
+              (princ "\n  Stepping back one question.")
+              (setq done nil))
              ((null wp) (setq cut out))
              ((setq q (cab:nearest (cal:2d wp) dall))
               (setq cut (cab:pt-key q))
@@ -1101,14 +1108,17 @@
                              " (number " (itoa cut) ")")))
              (T (setq cut out))))))
       (T (setq cut ans)))
-    (if (and cut (< (cab:cut-count dall cut) lim))
-      (progn
-        (princ (strcat "\n  (up to " (itoa cut) " leaves "
-                       (itoa (cab:cut-count dall cut))
-                       " point(s) and a fit needs at least " (itoa lim)
-                       " - try a higher number, or All)"))
-        (setq done nil))
-      (setq out cut)))
+    ;; a Back has already asked to go round again: it is not an answer,
+    ;; so it is neither judged against the minimum nor remembered
+    (if done
+      (if (and cut (< (cab:cut-count dall cut) lim))
+        (progn
+          (princ (strcat "\n  (up to " (itoa cut) " leaves "
+                         (itoa (cab:cut-count dall cut))
+                         " point(s) and a fit needs at least " (itoa lim)
+                         " - try a higher number, or All)"))
+          (setq done nil))
+        (setq out cut))))
   out)
 
 ;; T when P was picked at a point the cutoff has since left out.  A
@@ -1828,6 +1838,19 @@
     (if (and en (entget en)) (entdel en)))
   (setq cab-temp nil))
 
+;; Scaffolding removed early - when a Back re-opens the step that
+;; drew it - rather than at command end.
+(defun cab:temp-kill (en)
+  (if (and en (entget en)) (entdel en))
+  (cab:temp-drop en))
+
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
+;; a string where a value would be a list or a number, so the type test
+;; is what separates the two.
+(defun cab:back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
+
 ;; ---- "this one is mine" stamping -------------------------------------
 ;; CABHD writes onto layers the drawing may already be using - FGStep in
 ;; particular - so it must never clear a layer wholesale.  Everything it
@@ -2525,29 +2548,40 @@
 ;; Asked identically at the start of a run and again on a Redo -
 ;; Enter keeps the shown value each time.
 
+;; Each takes BACK: non-nil adds Back (and its hidden Undo synonym) to
+;; the prompt and returns CAB-BACK when it is answered, so the caller
+;; can re-open the step before it.  Offering Back never loosens the
+;; value check - initget keeps its bits either way.
+
 ;; Maximum distance from a point; remembered in *CAB-TOL*.
-(defun cab:ask-tol (/ tol)
-  (initget 6)
+(defun cab:ask-tol (back / tol)
+  (if back (initget 6 "Back Undo") (initget 6))
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
-                             (rtos *CAB-TOL* 2 3) ">: ")))
-  (if (null tol) (setq tol *CAB-TOL*))
-  (if (> tol *CAB-TOL-MAX*)
-    (progn
-      (princ (strcat "\n  (more than " (rtos *CAB-TOL-MAX* 2 1)
-                     " and the line is no longer a trace of the points"
-                     " - using " (rtos *CAB-TOL-MAX* 2 1) ")"))
-      (setq tol *CAB-TOL-MAX*)))
-  (setq *CAB-TOL* tol)
-  tol)
+                             (rtos *CAB-TOL* 2 3) ">"
+                             (if back " [Back]" "") ": ")))
+  (cond
+    ((cab:back-kw tol) 'CAB-BACK)
+    (T
+     (if (null tol) (setq tol *CAB-TOL*))
+     (if (> tol *CAB-TOL-MAX*)
+       (progn
+         (princ (strcat "\n  (more than " (rtos *CAB-TOL-MAX* 2 1)
+                        " and the line is no longer a trace of the points"
+                        " - using " (rtos *CAB-TOL-MAX* 2 1) ")"))
+         (setq tol *CAB-TOL-MAX*)))
+     (setq *CAB-TOL* tol)
+     tol)))
 
 ;; Share of the points allowed off the line, returned as a fraction;
 ;; DEF is the fraction Enter keeps.
-(defun cab:ask-pct (def / pct)
-  (initget 4)
+(defun cab:ask-pct (def back / pct)
+  (if back (initget 4 "Back Undo") (initget 4))
   (setq pct (getint (strcat "\n  Percent of points allowed off <"
                             (itoa (fix (+ 0.5 (* 100.0 def))))
-                            ">: ")))
+                            ">"
+                            (if back " [Back]" "") ": ")))
   (cond
+    ((cab:back-kw pct) 'CAB-BACK)
     ((null pct) def)
     ((> pct 100)
      (princ "\n  (more than 100 makes no sense - using 100)")
@@ -2555,15 +2589,112 @@
     (T (/ pct 100.0))))
 
 ;; Curve cap; remembered in *CAB-MAX-ARCS* (nil = no cap).
-(defun cab:ask-cap (/ mx)
-  (initget 4 "None")
+(defun cab:ask-cap (back / mx)
+  (if back (initget 4 "None Back Undo") (initget 4 "None"))
   (setq mx (getint (strcat "\n  Maximum curves <"
                            (if *CAB-MAX-ARCS* (itoa *CAB-MAX-ARCS*) "None")
-                           ">: ")))
-  (cond ((null mx) nil)                            ; Enter: keep as-is
-        ((eq 'STR (type mx)) (setq *CAB-MAX-ARCS* nil))
-        (T (setq *CAB-MAX-ARCS* mx)))
-  *CAB-MAX-ARCS*)
+                           ">"
+                           (if back " [None/Back]" "") ": ")))
+  (cond
+    ((cab:back-kw mx) 'CAB-BACK)
+    (T
+     (cond ((null mx) nil)                         ; Enter: keep as-is
+           ((eq 'STR (type mx)) (setq *CAB-MAX-ARCS* nil))
+           (T (setq *CAB-MAX-ARCS* mx)))
+     *CAB-MAX-ARCS*)))
+
+;; ---- steps 4, 5 and 6: the declaration loops -------------------------
+;; Each collects a list and draws its dashed marker as it goes, so Back
+;; here means what it means in every other draw-as-you-go loop in the
+;; toolset: take back the item declared last, marker and all, and ask
+;; for it again.  At the first item there is nothing left to take back,
+;; so the whole step re-opens instead and its Yes/No question is asked
+;; again - which is how a wrong Yes gets undone.  Each returns its list
+;; oldest-first, or CAB-BACK when the step is to re-open, and leaves the
+;; markers it drew in cab-decl-marks so the caller can sweep them if the
+;; step is later re-opened from the one below it.
+
+(defun cab:declare-walls ( / out go wp1 wp2 mk again res)
+  (setq out nil cab-decl-marks nil go T res nil)
+  (while go
+    (setq cab-phase "picking a straight wall")
+    (initget "Back Undo")
+    (setq wp1 (getpoint "\n  First end of the straight wall [Back]: "))
+    (cond
+      ((cab:back-kw wp1)
+       (if cab-decl-marks
+         (progn (cab:temp-kill (car cab-decl-marks))
+                (setq cab-decl-marks (cdr cab-decl-marks) out (cdr out))
+                (princ "\n  Stepping back one wall."))
+         (progn (princ "\n  Already at the first wall.")
+                (setq go nil res T))))
+      ((null wp1) (setq go nil))
+      (T
+       (setq cab-phase "picking a straight wall")
+       (initget "Back Undo")
+       (setq wp2 (getpoint wp1 "\n  Second end [Back]: "))
+       (cond
+         ;; Back at the second end re-asks the first: nothing was
+         ;; committed yet, so there is no marker to sweep
+         ((cab:back-kw wp2) (princ "\n  Stepping back one point."))
+         ((null wp2) (setq go nil))
+         (T
+          (setq wp1 (cal:2d wp1)
+                wp2 (cal:2d wp2)
+                mk  (cab:temp-add (cab:tag-mine (cab:draw-wall-marker wp1 wp2)))
+                cab-decl-marks (cons mk cab-decl-marks)
+                out (cons (list wp1 wp2) out))
+          (initget "Yes No Back Undo")
+          (setq again (getkword "\n  Another straight line? [Yes/No/Back] <No>: "))
+          (cond
+            ((member again '("Back" "Undo"))
+             (cab:temp-kill (car cab-decl-marks))
+             (setq cab-decl-marks (cdr cab-decl-marks) out (cdr out))
+             (princ "\n  Stepping back one wall."))
+            ((/= again "Yes") (setq go nil))))))))
+  (if res 'CAB-BACK (reverse out)))
+
+(defun cab:declare-corners ( / out go wp1 mk res)
+  (setq out nil cab-decl-marks nil go T res nil)
+  (while go
+    (setq cab-phase "picking a sharp corner")
+    (initget "Back Undo")
+    (setq wp1 (getpoint "\n  Corner point (Enter when done) [Back]: "))
+    (cond
+      ((cab:back-kw wp1)
+       (if cab-decl-marks
+         (progn (cab:temp-kill (car cab-decl-marks))
+                (setq cab-decl-marks (cdr cab-decl-marks) out (cdr out))
+                (princ "\n  Stepping back one corner."))
+         (progn (princ "\n  Already at the first corner.")
+                (setq go nil res T))))
+      ((null wp1) (setq go nil))
+      (T (setq wp1 (cal:2d wp1)
+               mk  (cab:temp-add (cab:tag-mine (cab:draw-corner-marker wp1)))
+               cab-decl-marks (cons mk cab-decl-marks)
+               out (cons wp1 out)))))
+  (if res 'CAB-BACK (reverse out)))
+
+(defun cab:declare-holds ( / out go wp1 mk res)
+  (setq out nil cab-decl-marks nil go T res nil)
+  (while go
+    (setq cab-phase "picking a held point")
+    (initget "Back Undo")
+    (setq wp1 (getpoint "\n  Point to hold exactly (Enter when done) [Back]: "))
+    (cond
+      ((cab:back-kw wp1)
+       (if cab-decl-marks
+         (progn (cab:temp-kill (car cab-decl-marks))
+                (setq cab-decl-marks (cdr cab-decl-marks) out (cdr out))
+                (princ "\n  Stepping back one held point."))
+         (progn (princ "\n  Already at the first held point.")
+                (setq go nil res T))))
+      ((null wp1) (setq go nil))
+      (T (setq wp1 (cal:2d wp1)
+               mk  (cab:temp-add (cab:tag-mine (cab:draw-hold-marker wp1)))
+               cab-decl-marks (cons mk cab-decl-marks)
+               out (cons wp1 out)))))
+  (if res 'CAB-BACK (reverse out)))
 
 ;; ---- redo-time editing of walls and corners --------------------------
 ;; A Redo may change more than the numbers: straight walls and sharp
@@ -2589,18 +2720,24 @@
 ;; Add or remove declared straight walls.  Ends snap to the survey
 ;; points; each change is confirmed by name and the dashed markers
 ;; follow.
-(defun cab:edit-walls (dpts / ans wp1 wp2 w1 w2 best bd w d)
-  (setq ans T)
+(defun cab:edit-walls (dpts / ans wp1 wp2 w1 w2 best bd w d res)
+  (setq ans T res nil)
   (while ans
-    (initget "Add Remove Keep")
+    (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
                 "\n  Straight walls (" (itoa (length cab-walls))
-                " declared) - [Add/Remove/Keep] <Keep>: ")))
+                " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
     (cond
+      ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
-       (setq cab-phase "picking a straight wall"
-             wp1      (getpoint "\n  First end of the straight wall: ")
-             wp2      (if wp1 (getpoint wp1 "\n  Second end: ")))
+       (setq cab-phase "picking a straight wall")
+       (initget "Back Undo")
+       (setq wp1 (getpoint "\n  First end of the straight wall [Back]: "))
+       (if (cab:back-kw wp1) (setq wp1 nil wp2 nil)
+         (progn
+           (initget "Back Undo")
+           (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
+           (if (cab:back-kw wp2) (setq wp2 nil))))
        (if wp2
          (progn
            (setq w1 (cab:snap-pick wp1 dpts)
@@ -2616,8 +2753,10 @@
        (if (null cab-walls)
          (princ "\n  (no straight walls to remove)")
          (progn
-           (setq cab-phase "removing a straight wall"
-                 wp1      (getpoint "\n  Pick near the straight wall to remove: "))
+           (setq cab-phase "removing a straight wall")
+           (initget "Back Undo")
+           (setq wp1 (getpoint "\n  Pick near the straight wall to remove [Back]: "))
+           (if (cab:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
                (setq wp1 (cal:2d wp1) best nil bd nil)
@@ -2633,22 +2772,26 @@
                (princ (strcat "\n  wall Pt." (cab:pt-name (car best))
                               " - Pt." (cab:pt-name (cadr best))
                               " removed")))))))
-      (T (setq ans nil)))))
+      (T (setq ans nil))))
+  (if res 'CAB-BACK))
 
 ;; Add or remove declared sharp corners the same way.  (The corners
 ;; the fitter finds by itself - turns over *CAB-CORNER-ANG* - are not
 ;; declarations and cannot be removed here.)
-(defun cab:edit-corners (dpts / ans wp1 w1 best bd w)
-  (setq ans T)
+(defun cab:edit-corners (dpts / ans wp1 w1 best bd w res)
+  (setq ans T res nil)
   (while ans
-    (initget "Add Remove Keep")
+    (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
                 "\n  Sharp corners (" (itoa (length cab-corners))
-                " declared) - [Add/Remove/Keep] <Keep>: ")))
+                " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
     (cond
+      ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
-       (setq cab-phase "picking a sharp corner"
-             wp1      (getpoint "\n  Corner point: "))
+       (setq cab-phase "picking a sharp corner")
+       (initget "Back Undo")
+       (setq wp1 (getpoint "\n  Corner point [Back]: "))
+       (if (cab:back-kw wp1) (setq wp1 nil))
        (if wp1
          (progn
            (setq w1 (cab:snap-pick wp1 dpts))
@@ -2663,8 +2806,10 @@
        (if (null cab-corners)
          (princ "\n  (no declared corners to remove)")
          (progn
-           (setq cab-phase "removing a sharp corner"
-                 wp1      (getpoint "\n  Pick the declared corner to remove: "))
+           (setq cab-phase "removing a sharp corner")
+           (initget "Back Undo")
+           (setq wp1 (getpoint "\n  Pick the declared corner to remove [Back]: "))
+           (if (cab:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
                (setq wp1 (cal:2d wp1) best nil bd nil)
@@ -2682,20 +2827,24 @@
                  (cab:temp-add (cab:tag-mine (cab:draw-hold-marker w))))
                (princ (strcat "\n  corner Pt." (cab:pt-name best)
                               " removed")))))))
-      (T (setq ans nil)))))
+      (T (setq ans nil))))
+  (if res 'CAB-BACK))
 
 ;; Add or remove HELD points the same way.
-(defun cab:edit-holds (dpts / ans wp1 w1 best bd w)
-  (setq ans T)
+(defun cab:edit-holds (dpts / ans wp1 w1 best bd w res)
+  (setq ans T res nil)
   (while ans
-    (initget "Add Remove Keep")
+    (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
                 "\n  Held points (" (itoa (length cab-holds))
-                " declared) - [Add/Remove/Keep] <Keep>: ")))
+                " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
     (cond
+      ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
-       (setq cab-phase "picking a held point"
-             wp1      (getpoint "\n  Point to hold exactly: "))
+       (setq cab-phase "picking a held point")
+       (initget "Back Undo")
+       (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
+       (if (cab:back-kw wp1) (setq wp1 nil))
        (if wp1
          (progn
            (setq w1 (cab:snap-pick wp1 dpts))
@@ -2710,8 +2859,10 @@
        (if (null cab-holds)
          (princ "\n  (no held points to remove)")
          (progn
-           (setq cab-phase "removing a held point"
-                 wp1      (getpoint "\n  Pick the held point to release: "))
+           (setq cab-phase "removing a held point")
+           (initget "Back Undo")
+           (setq wp1 (getpoint "\n  Pick the held point to release [Back]: "))
+           (if (cab:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
                (setq wp1 (cal:2d wp1) best nil bd nil)
@@ -2727,7 +2878,8 @@
                  (cab:temp-add (cab:tag-mine (cab:draw-hold-marker w))))
                (princ (strcat "\n  held Pt." (cab:pt-name best)
                               " released")))))))
-      (T (setq ans nil)))))
+      (T (setq ans nil))))
+  (if res 'CAB-BACK))
 
 ;; Which build is loaded - the first thing to check when a run does
 ;; something the notes above say it should not.
@@ -2737,6 +2889,7 @@
 
 ;; ---- CABHD: the perimeter, and nothing but ---------------------------
 (defun c:CABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
+                    step rstep v mk wallmk cnrmk holdmk cab-decl-marks
                     ss i en ed lay typ ext nunsup nocs dall cut0 ent
                     segs pts dpts allow loop tour ok stale npt
                     again ring cab-cut cab-allpts cab-ptkeys cab-numbered
@@ -2794,135 +2947,162 @@
   (princ "\n\nCABHD - fit a pool perimeter through the surveyed points,")
   (princ "\n        up to the point number where the edge stops.")
 
-  ;; -- step 1: how close must the line stay to the points? ----------
-  ;; This is the one prompt people misread, so it says in plain words
-  ;; what the number means and which way it moves the result.
-  ;; initget 6 refuses zero and negative values - a zero tolerance
-  ;; would silently collapse the fit into single-point stubs.
-  (setq cab-phase "reading the tolerance")
-  (princ "\n\n  Step 1 of 8 - how far may the fitted line sit from a survey point?")
-  (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
-  (princ "\n  pick two points in the drawing to measure one.")
-  (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
-  (setq tol (cab:ask-tol))
+  ;; -- steps 1 to 6: the settings, walked as one chain --------------
+  ;; Every question after the first offers Back (Undo is its hidden
+  ;; synonym), so a mistyped tolerance or a wrong Yes costs one
+  ;; keystroke instead of the whole run.  STEP is the position in the
+  ;; chain and the only way through it: a step answered Back drops it
+  ;; by one, and a step re-entered from below throws away whatever the
+  ;; earlier pass collected there - markers included - so the second
+  ;; answer replaces the first instead of piling on top of it.
+  (setq step 1 rawwalls nil rawcnrs nil rawholds nil
+        wallmk nil cnrmk nil holdmk nil)
+  (while (<= step 6)
+    (cond
 
-  ;; -- step 2: how many of the points may sit off the line? ---------
-  ;; Enter means the standard share; the answer is per run, on purpose.
-  (setq cab-phase "reading the miss percentage")
-  (princ "\n\n  Step 2 of 8 - what percent of the points may sit OFF the line")
-  (princ "\n  (off, but still within the distance above)?")
-  (princ (strcat "\n  Press Enter for the standard "
-                 (itoa (fix (+ 0.5 (* 100.0 *CAB-MISS-PCT*))))
-                 " percent."))
-  (setq cab-miss-pct (cab:ask-pct *CAB-MISS-PCT*))
+      ;; -- step 1: how close must the line stay to the points? ------
+      ;; This is the one prompt people misread, so it says in plain
+      ;; words what the number means and which way it moves the result.
+      ;; initget 6 refuses zero and negative values - a zero tolerance
+      ;; would silently collapse the fit into single-point stubs.
+      ((= step 1)
+       (setq cab-phase "reading the tolerance")
+       (princ "\n\n  Step 1 of 8 - how far may the fitted line sit from a survey point?")
+       (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
+       (princ "\n  pick two points in the drawing to measure one.")
+       (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
+       ;; the first question of the command: nothing to go back to
+       (setq tol  (cab:ask-tol nil)
+             step 2))
 
-  ;; -- step 3: optional cap on how many curves the result may use ---
-  (setq cab-phase "reading the curve limit")
-  (princ "\n\n  Step 3 of 8 - limit how many curves the result may use?")
-  (princ "\n  Type a whole number, or None for no limit.")
-  (cab:ask-cap)
+      ;; -- step 2: how many of the points may sit off the line? -----
+      ;; Enter means the standard share; the answer is per run, on
+      ;; purpose.
+      ((= step 2)
+       (setq cab-phase "reading the miss percentage")
+       (princ "\n\n  Step 2 of 8 - what percent of the points may sit OFF the line")
+       (princ "\n  (off, but still within the distance above)?")
+       (princ (strcat "\n  Press Enter for the standard "
+                      (itoa (fix (+ 0.5 (* 100.0 *CAB-MISS-PCT*))))
+                      " percent."))
+       (setq v (cab:ask-pct *CAB-MISS-PCT* T))
+       (if (eq v 'CAB-BACK)
+         (progn (princ "\n  Stepping back one question.")
+                (setq step 1))
+         (setq cab-miss-pct v
+               step        3)))
 
-  ;; -- step 4: any dead-straight walls to declare? ------------------
-  ;; Each declared wall is marked with a dashed line right away and
-  ;; comes out of the fit as a straight LINE between those two survey
-  ;; points, no matter what the arcs around it are doing.
-  (setq cab-phase "asking about straight lines")
-  (princ "\n\n  Step 4 of 8 - does the pool edge have any dead-straight walls?")
-  (princ "\n  If Yes you will pick the two end points of each (snap to the")
-  (princ "\n  survey points); a dashed line marks each declared wall.")
-  (princ "\n  Pick them among the points that trace the EDGE - a wall anchored")
-  (princ "\n  past the cutoff asked at step 8 is dropped with the points it used.")
-  (initget "Yes No")
-  (setq ans      (getkword "\n  Any straight lines? [Yes/No] <No>: ")
-        rawwalls nil)
-  (if (= ans "Yes")
-    (progn
-      (setq go T)
-      (while go
-        (setq cab-phase "picking a straight wall"
-              wp1       (getpoint "\n  First end of the straight wall: "))
-        (if wp1
-          (progn
-            (setq wp2 (getpoint wp1 "\n  Second end: "))
-            (if wp2
-              (progn
-                (setq wp1 (cal:2d wp1) wp2 (cal:2d wp2))
-                ;; the dashed marker is scaffolding: it confirms what
-                ;; you declared, and goes when the command ends
-                (cab:temp-add (cab:tag-mine (cab:draw-wall-marker wp1 wp2)))
-                (setq rawwalls (cons (list wp1 wp2) rawwalls))
-                (initget "Yes No")
-                (if (/= (getkword "\n  Another straight line? [Yes/No] <No>: ")
-                        "Yes")
-                  (setq go nil)))
-              (setq go nil)))
-          (setq go nil)))
-      (setq rawwalls (reverse rawwalls))
-      (if rawwalls
-        (princ (strcat "\n  " (itoa (length rawwalls))
-                       " straight wall(s) noted - the dashed markers on "
-                       *CAB-WALL-LAYER*
-                       " clear themselves when the command finishes.")))))
+      ;; -- step 3: optional cap on how many curves the result may use
+      ((= step 3)
+       (setq cab-phase "reading the curve limit")
+       (princ "\n\n  Step 3 of 8 - limit how many curves the result may use?")
+       (princ "\n  Type a whole number, or None for no limit.")
+       (if (eq (cab:ask-cap T) 'CAB-BACK)
+         (progn (princ "\n  Stepping back one question.")
+                (setq step 2))
+         (setq step 4)))
 
-  ;; -- step 5: any sharp corners to declare? ------------------------
-  ;; The fitter finds obvious corners itself (turns over
-  ;; *CAB-CORNER-ANG*), but a gentler one still reads as a corner on
-  ;; site.  A declared point is exempt from the tangency rule: the fit
-  ;; breaks there instead of rounding it off.
-  (setq cab-phase "asking about sharp corners")
-  (princ "\n\n  Step 5 of 8 - are there any sharp corners the fit must not round off?")
-  (princ "\n  Obvious ones are found automatically; declare the gentler ones here.")
-  (princ "\n  If Yes you will pick each corner point (snap to the survey points).")
-  (initget "Yes No")
-  (setq ans     (getkword "\n  Any sharp corners? [Yes/No] <No>: ")
-        rawcnrs nil)
-  (if (= ans "Yes")
-    (progn
-      (setq go T)
-      (while go
-        (setq cab-phase "picking a sharp corner"
-              wp1       (getpoint "\n  Corner point (Enter when done): "))
-        (if wp1
-          (progn
-            (setq wp1     (cal:2d wp1)
-                  rawcnrs (cons wp1 rawcnrs))
-            (cab:temp-add (cab:tag-mine (cab:draw-corner-marker wp1))))
-          (setq go nil)))
-      (setq rawcnrs (reverse rawcnrs))
-      (if rawcnrs
-        (princ (strcat "\n  " (itoa (length rawcnrs))
-                       " corner(s) noted - the markers clear themselves"
-                       " when the command finishes.")))))
+      ;; -- step 4: any dead-straight walls to declare? --------------
+      ;; Each declared wall is marked with a dashed line right away and
+      ;; comes out of the fit as a straight LINE between those two
+      ;; survey points, no matter what the arcs around it are doing.
+      ((= step 4)
+       ;; re-entered from step 5: throw away what the earlier pass
+       ;; declared here, dashed markers and all, so the new answer
+       ;; replaces the old instead of piling on top of it
+       (foreach mk wallmk (cab:temp-kill mk))
+       (setq wallmk nil)
+       (setq cab-phase "asking about straight lines")
+       (princ "\n\n  Step 4 of 8 - does the pool edge have any dead-straight walls?")
+       (princ "\n  If Yes you will pick the two end points of each (snap to the")
+       (princ "\n  survey points); a dashed line marks each declared wall.")
+       (princ "\n  Pick them among the points that trace the EDGE - a wall anchored")
+       (princ "\n  past the cutoff asked at step 8 is dropped with the points it used.")
+       (initget "Yes No Back Undo")
+       (setq ans      (getkword "\n  Any straight lines? [Yes/No/Back] <No>: ")
+             rawwalls nil)
+       (cond
+         ((member ans '("Back" "Undo"))
+          (princ "\n  Stepping back one question.")
+          (setq step 3))
+         ((= ans "Yes")
+          (setq rawwalls (cab:declare-walls)
+                wallmk   cab-decl-marks)
+          (if (eq rawwalls 'CAB-BACK)
+            (setq rawwalls nil)               ; re-ask this step's Yes/No
+            (progn
+              (if rawwalls
+                (princ (strcat "\n  " (itoa (length rawwalls))
+                               " straight wall(s) noted - the dashed markers on "
+                               *CAB-WALL-LAYER*
+                               " clear themselves when the command finishes.")))
+              (setq step 5))))
+         (T (setq step 5))))
 
-  ;; -- step 6: any points that must be held absolutely? -------------
-  ;; Control shots and tie-ins are surveyed as exact positions: a held
-  ;; point always ends a span, so the fit passes through it exactly
-  ;; and the miss allowance can never write it off.
-  (setq cab-phase "asking about held points")
-  (princ "\n\n  Step 6 of 8 - any points that must be held ABSOLUTELY?")
-  (princ "\n  A held point can never be fudged: the line passes through it")
-  (princ "\n  exactly, in every candidate.  If Yes you will pick each one")
-  (princ "\n  (snap to the survey points); a small dashed ring marks it.")
-  (initget "Yes No")
-  (setq ans      (getkword "\n  Any held points? [Yes/No] <No>: ")
-        rawholds nil)
-  (if (= ans "Yes")
-    (progn
-      (setq go T)
-      (while go
-        (setq cab-phase "picking a held point"
-              wp1       (getpoint "\n  Point to hold exactly (Enter when done): "))
-        (if wp1
-          (progn
-            (setq wp1      (cal:2d wp1)
-                  rawholds (cons wp1 rawholds))
-            (cab:temp-add (cab:tag-mine (cab:draw-hold-marker wp1))))
-          (setq go nil)))
-      (setq rawholds (reverse rawholds))
-      (if rawholds
-        (princ (strcat "\n  " (itoa (length rawholds))
-                       " held point(s) noted - the markers clear"
-                       " themselves when the command finishes.")))))
+      ;; -- step 5: any sharp corners to declare? --------------------
+      ;; The fitter finds obvious corners itself (turns over
+      ;; *CAB-CORNER-ANG*), but a gentler one still reads as a corner on
+      ;; site.  A declared point is exempt from the tangency rule: the
+      ;; fit breaks there instead of rounding it off.
+      ((= step 5)
+       (foreach mk cnrmk (cab:temp-kill mk))
+       (setq cnrmk nil)
+       (setq cab-phase "asking about sharp corners")
+       (princ "\n\n  Step 5 of 8 - are there any sharp corners the fit must not round off?")
+       (princ "\n  Obvious ones are found automatically; declare the gentler ones here.")
+       (princ "\n  If Yes you will pick each corner point (snap to the survey points).")
+       (initget "Yes No Back Undo")
+       (setq ans     (getkword "\n  Any sharp corners? [Yes/No/Back] <No>: ")
+             rawcnrs nil)
+       (cond
+         ((member ans '("Back" "Undo"))
+          (princ "\n  Stepping back one question.")
+          (setq step 4))
+         ((= ans "Yes")
+          (setq rawcnrs (cab:declare-corners)
+                cnrmk   cab-decl-marks)
+          (if (eq rawcnrs 'CAB-BACK)
+            (setq rawcnrs nil)
+            (progn
+              (if rawcnrs
+                (princ (strcat "\n  " (itoa (length rawcnrs))
+                               " corner(s) noted - the markers clear themselves"
+                               " when the command finishes.")))
+              (setq step 6))))
+         (T (setq step 6))))
+
+      ;; -- step 6: any points that must be held absolutely? ---------
+      ;; Control shots and tie-ins are surveyed as exact positions: a
+      ;; held point always ends a span, so the fit passes through it
+      ;; exactly and the miss allowance can never write it off.
+      ((= step 6)
+       (foreach mk holdmk (cab:temp-kill mk))
+       (setq holdmk nil)
+       (setq cab-phase "asking about held points")
+       (princ "\n\n  Step 6 of 8 - any points that must be held ABSOLUTELY?")
+       (princ "\n  A held point can never be fudged: the line passes through it")
+       (princ "\n  exactly, in every candidate.  If Yes you will pick each one")
+       (princ "\n  (snap to the survey points); a small dashed ring marks it.")
+       (initget "Yes No Back Undo")
+       (setq ans      (getkword "\n  Any held points? [Yes/No/Back] <No>: ")
+             rawholds nil)
+       (cond
+         ((member ans '("Back" "Undo"))
+          (princ "\n  Stepping back one question.")
+          (setq step 5))
+         ((= ans "Yes")
+          (setq rawholds (cab:declare-holds)
+                holdmk   cab-decl-marks)
+          (if (eq rawholds 'CAB-BACK)
+            (setq rawholds nil)
+            (progn
+              (if rawholds
+                (princ (strcat "\n  " (itoa (length rawholds))
+                               " held point(s) noted - the markers clear"
+                               " themselves when the command finishes.")))
+              (setq step 7))))
+         (T (setq step 7))))))
+
 
   ;; -- step 7: the selection ----------------------------------------
   ;; Select the WHOLE survey - the cutoff at step 8 is what decides how
@@ -3228,19 +3408,47 @@
                        ;; walls and corners may change for the retry
                        (princ "\n\n  Straight walls and sharp corners can change too -")
                        (princ "\n  Enter keeps each list as it is.")
-                       (setq cab-phase "editing straight walls")
-                       (cab:edit-walls dpts)
-                       (setq cab-phase "editing sharp corners")
-                       (cab:edit-corners dpts)
-                       (setq cab-phase "editing held points")
-                       (cab:edit-holds dpts)
-                       (princ "\n\n  New settings - Enter keeps each one as it is.")
-                       (setq cab-phase "reading the tolerance"
-                             tol       (cab:ask-tol))
-                       (setq cab-phase "reading the miss percentage"
-                             cab-miss-pct (cab:ask-pct cab-miss-pct))
-                       (setq cab-phase "reading the curve limit")
-                       (cab:ask-cap)
+                       ;; the Redo settings are a chain like the opening
+                       ;; questions, and walk back the same way: Back at
+                       ;; any of the six re-opens the one before it, and
+                       ;; Back at the first has nowhere to go
+                       (setq rstep 1)
+                       (while (<= rstep 6)
+                         (cond
+                           ((= rstep 1)
+                            (setq cab-phase "editing straight walls")
+                            (cab:edit-walls dpts)   ; first: no Back out
+                            (setq rstep 2))
+                           ((= rstep 2)
+                            (setq cab-phase "editing sharp corners")
+                            (setq rstep (if (eq (cab:edit-corners dpts) 'CAB-BACK)
+                                          (progn (princ "\n  Stepping back one question.") 1)
+                                          3)))
+                           ((= rstep 3)
+                            (setq cab-phase "editing held points")
+                            (setq rstep (if (eq (cab:edit-holds dpts) 'CAB-BACK)
+                                          (progn (princ "\n  Stepping back one question.") 2)
+                                          4)))
+                           ((= rstep 4)
+                            (princ "\n\n  New settings - Enter keeps each one as it is.")
+                            (setq cab-phase "reading the tolerance"
+                                  v        (cab:ask-tol T))
+                            (if (eq v 'CAB-BACK)
+                              (progn (princ "\n  Stepping back one question.")
+                                     (setq rstep 3))
+                              (setq tol v rstep 5)))
+                           ((= rstep 5)
+                            (setq cab-phase "reading the miss percentage"
+                                  v        (cab:ask-pct cab-miss-pct T))
+                            (if (eq v 'CAB-BACK)
+                              (progn (princ "\n  Stepping back one question.")
+                                     (setq rstep 4))
+                              (setq cab-miss-pct v rstep 6)))
+                           ((= rstep 6)
+                            (setq cab-phase "reading the curve limit")
+                            (setq rstep (if (eq (cab:ask-cap T) 'CAB-BACK)
+                                          (progn (princ "\n  Stepping back one question.") 5)
+                                          7)))))
                        (setq allow (cal:ceil (* (cab:misspct)
                                                 (length dpts))))
                        ;; the point order must forget everything the
