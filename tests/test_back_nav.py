@@ -355,12 +355,18 @@ vm.run('c:CABHD',
         'No',                       # step 4  walls
         'Back',                     # step 5  corners -> step 4
         'No', 'No', 'No',           # steps 4, 5, 6
+        ents, 'Back',               # step 8 cutoff -> re-open step 7
+        ents, 'B',                  #   ...again, short form
         ents, None, 'None'])        # selection, cutoff, keep nothing
 out = said(vm)
 check("Back at step 3 re-asks step 2", out.count("Step 2 of 8") >= 3)
 check("B and U are both taken as Back",
       out.count("Step 3 of 8") >= 3 and out.count("Step 4 of 8") >= 2)
 check("the chain says which way it moved", "Stepping back one question" in out)
+check("Back at the cutoff hands the selection back",
+      "Stepping back to the selection" in out)
+check("...and step 7 is put again", out.count("Step 7 of 8") >= 3,
+      "%d" % out.count("Step 7 of 8"))
 
 
 # ---------------------------------------------------- 6. LHD walks back
@@ -471,6 +477,35 @@ for tool, cmd, rel, lead, shape, first in (
           "Stepping back one question" in out)
 
 
+# ------------------------- 8b. HEMISTEP: dims and the width at the wall
+
+print("\nHEMISTEP: two decisions before the undo group, so one chain")
+
+vm = newvm(('cornerstp', 'HEMISTEP.lsp'))
+layer(vm, 'WALLS')
+vm.loads('(entmake (list \'(0 . "LINE") \'(8 . "WALLS")'
+         ' (list 10 0.0 0.0 0.0) (list 11 200.0 0.0 0.0)))')
+vm.run('c:HEMISTEP',
+       [None, list(vm.entities), (100.0, 50.0),
+        'No',                        # dimension the steps?
+        'Back',                      # the wall width -> back to dims
+        'Yes',                       # dims again
+        'U',                         # ...and back once more
+        'No',                        # dims
+        60.0,                        # the width at the wall
+        24.0, 60.0, None, None,      # one step, then Enter to stop,
+                                     # then the distance to the back
+        'No'])                       # side profile? (a base line draws no
+                                     # reconstructed boundary)
+out = said(vm)
+asked = [p for p, _v in vm.prompts if 'Dimension the steps' in p]
+check("Back at the wall width re-asks whether to dimension",
+      len(asked) == 3, "%d asked" % len(asked))
+check("...B and U both do it", out.count("Stepping back one question") == 2)
+check("...and the width that finally stands is the one drawn",
+      "Width at the wall: 60" in out)
+
+
 # ------------------------------ 9. NORMIESTEP's corner-treatment sizes
 
 print("\nNORMIESTEP: the size only means something beside the treatment")
@@ -504,6 +539,30 @@ check("Back at the Offset/Cut question re-asks the treatment too",
       len(treats) == 2, "%d asked" % len(treats))
 check("...and a Radius answer then asks for a radius",
       any("Radius for" in p for p, _v in vm.prompts))
+
+
+# ------------------- 9b. LHD's output height re-opens the selection
+
+print("\nLHD: the height is the only question after the selection")
+
+vm = newvm(('lhd', 'lhd.lsp'))
+layer(vm, 'POINTS')
+for x, y, z in ((0.0, 0.0, 3.0), (60.0, 0.0, 4.0),
+                (60.0, 40.0, 5.0), (0.0, 40.0, 6.0)):
+    vm.loads('(entmake (list \'(0 . "POINT") \'(8 . "POINTS")'
+             ' (list 10 %r %r %r)))' % (x, y, z))
+made = list(vm.entities)
+vm.run('c:LHD',
+       [None, 1.0, None, None, 'Closed', 'Done',
+        made, 'Back',                # the height -> re-open the selection
+        made, 'U',                   #   ...again, hidden synonym
+        made, 'Top', 'None'])
+out = said(vm)
+check("Back at the height hands the selection back",
+      "Stepping back to the selection" in out)
+check("...and U does the same", out.count("Stepping back to the selection") == 2)
+check("...so step 6 is put three times", out.count("Step 6 of 6") >= 3,
+      "%d" % out.count("Step 6 of 6"))
 
 
 # ------------------------------------ 10. AUTOBEAD and POOLSIDE

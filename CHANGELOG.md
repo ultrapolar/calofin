@@ -33,13 +33,22 @@ Pick pick and their reference sheet; AUTOBEAD at its clicked steps;
 ABCURCHECK at its declarations; BPCALLOUT at its callout text;
 STOCKCOVER at "which one?".
 
+**A question straight after a selection re-opens that selection.**
+`WCALST`, `XFTCONV`, `AUTOBEAD` and `AUTODIM` already did this; CABHD's
+point cutoff and LHD's output height do it now, which means the two
+questions that decide what a fit even IS are reachable again without
+quitting. Nothing is drawn at that point and the classifier rebuilds
+every list it fills, so the second pass starts clean. HEMISTEP's width
+at the wall was in the same position for a different reason -- it was
+asked after the undo group opened -- so it moved in front of it and
+now re-opens the dimension question.
+
 **What still has no Back has a reason, and the reasons are written
-down.** The root `README.md` names three: the prompt straight after a
-selection with nothing else in front of it (a selection cannot be
-backed into), a question past committed geometry (there the
-draw-as-you-go rule applies instead -- Back at the prompt inside the
-loop takes the last step back, drawing and all), and a re-ask that is
-itself the correction of a failed range check.
+down.** The root `README.md` names three: a selection cannot be typed
+at, a question past committed geometry answers to the draw-as-you-go
+rule instead (Back at the prompt inside the loop takes the last step
+back, drawing and all), and a re-ask that is itself the correction of a
+failed range check.
 
 **`U` works wherever `B` does**, which was already true and is now
 proven rather than trusted: `tests/test_back_nav.py` reads every `.lsp`

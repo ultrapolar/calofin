@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_091026_REV43-314-39.lsp
+;;; STEPS_091026_REV43-315-39.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -9,7 +9,7 @@
 ;;; order its REV number appears in the filename above:
 ;;;
 ;;;     CORNERSTP.lsp   v4.3 -> REV43   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.14 -> REV314   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     HEMISTEP.lsp    v3.15 -> REV315   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
 ;;;     NORMIESTEP.lsp  v3.9 -> REV39   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
@@ -1958,7 +1958,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.14) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.15) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -2188,7 +2188,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.14") ; printed on load and at command start so a
+(setq *hs-version* "v3.15") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2815,7 +2815,7 @@
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
                       px py totrun totdrop td cnrs pfo pgap fsteps fkey
-                      wnoun bstep s)
+                      wnoun bstep s hstep)
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
@@ -3029,25 +3029,57 @@
   (grdraw (trans (hs-add sp (hs-scl u (* 0.25 reflen))) 0 1)
           (trans (hs-add sp (hs-scl u (* -0.25 reflen))) 0 1) 2 0)
 
-  ;; ---- 3. dimension the steps? -----------------------------------------
-  (if (null (setq fkey (hs-fkw 'dims "Yes No" "Yes")))
-    (progn
-      (initget "Yes No")
-      (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))))
-  (setq dimflag (/= "No" fkey))
-  (if dimflag
-    (progn
-      (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
-      (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
-        (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
-                       "\" not found - step treads use the current style.")))
-      (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
-        (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
-                       "\" not found - step widths use the current style.")))
-      (if (and *cs-dim-layer* (not (hs-layerok *cs-dim-layer*)))
-        (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
-                       "\" is missing or not drawable - using the"
-                       " current layer.")))))
+  ;; ---- 3. dimension the steps?, then the width at the wall -------------
+  ;; Two decisions and nothing drawn between them, so they are one chain:
+  ;; Back at the width re-asks whether to dimension.  Both are settled
+  ;; BEFORE the undo group opens - a question asked inside it could not
+  ;; re-open the one in front without a second _Begin.
+  ;;
+  ;; In base-line mode the first width sits AT the wall: it is the top
+  ;; of the run, so no chord is drawn there (the wall already is one),
+  ;; but it is dimensioned and it anchors both ends of the boundary.
+  ;; In the curve modes the width at the start is set by the curve, so
+  ;; the run begins straight away with a step tread.
+  (setq hstep 1)
+  (while (<= hstep 2)
+    (cond
+      ((= hstep 1)
+       (if (null (setq fkey (hs-fkw 'dims "Yes No" "Yes")))
+         (progn
+           (initget "Yes No")
+           (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))))
+       (setq dimflag (/= "No" fkey))
+       (if dimflag
+         (progn
+           (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
+           (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
+             (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
+                            "\" not found - step treads use the current style.")))
+           (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
+             (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
+                            "\" not found - step widths use the current style.")))
+           (if (and *cs-dim-layer* (not (hs-layerok *cs-dim-layer*)))
+             (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
+                            "\" is missing or not drawable - using the"
+                            " current layer.")))))
+       (setq hstep 2))
+      ((= hstep 2)
+       ;; the curve modes never put this question, so there is nothing
+       ;; here to stop on
+       (if cmode
+         (setq hstep 3)
+         (if (hs-fhas 'wallwidth)
+           ;; nil = no width at the wall, what Enter means there
+           (setq wid   (hs-fnum 'wallwidth)
+                 hstep 3)
+           (progn
+             (initget 6 "Back Undo")
+             (setq wid (getdist
+                         "\nWidth of the step at the wall [Back] <Enter = none>: "))
+             (if (hs-back-kw wid)
+               (progn (princ "\n  Stepping back one question.")
+                      (setq wid nil hstep 1))
+               (setq hstep 3))))))))
 
   ;; ---- 4. widths and step treads, chord by chord -----------------------
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -3063,28 +3095,15 @@
         oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)                  ; quiet the dimstyle/dim commands
 
-  ;; In base-line mode the first width sits AT the wall: it is the top
-  ;; of the run, so no chord is drawn there (the wall already is one),
-  ;; but it is dimensioned and it anchors both ends of the boundary.
-  ;; In the curve modes the width at the start is set by the curve, so
-  ;; the run begins straight away with a step tread.
-  (if (not cmode)
+  (if (and (not cmode) wid)
     (progn
-      (if (hs-fhas 'wallwidth)
-        ;; nil = no width at the wall, what Enter means there
-        (setq wid (hs-fnum 'wallwidth))
-        (progn
-          (initget 6)
-          (setq wid (getdist "\nWidth of the step at the wall <Enter = none>: "))))
-      (if wid
-        (progn
-          (setq wallA   (hs-add sp (hs-scl u (* 0.5 wid)))
-                wallB   (hs-add sp (hs-scl u (* -0.5 wid)))
-                lastwid wid)
-          (if dimflag
-            (hs-dim *cs-width-dimstyle* wallA wallB
-                    (hs-add sp (hs-scl dir (- (hs-nestoff wid txth))))))
-          (princ (strcat "\n  Width at the wall: " (rtos wid) "."))))))
+      (setq wallA   (hs-add sp (hs-scl u (* 0.5 wid)))
+            wallB   (hs-add sp (hs-scl u (* -0.5 wid)))
+            lastwid wid)
+      (if dimflag
+        (hs-dim *cs-width-dimstyle* wallA wallB
+                (hs-add sp (hs-scl dir (- (hs-nestoff wid txth))))))
+      (princ (strcat "\n  Width at the wall: " (rtos wid) "."))))
 
   (while
     (and (not stopf)

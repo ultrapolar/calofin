@@ -52,7 +52,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.1")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.2")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -2226,13 +2226,18 @@
        (= *LH-SHAPE* "Closed"))))
 
 ;; Which elevation the outline is drawn at; remembered in *LH-ZMODE*.
-(defun lh:ask-zmode (/ ans)
-  (initget "Top Bottom Average Zero")
+(defun lh:ask-zmode (back / ans)
+  (if back
+    (initget "Top Bottom Average Zero Back Undo")
+    (initget "Top Bottom Average Zero"))
   (setq ans (getkword (strcat
-              "\n  Draw the outline at which height - [Top/Bottom/Average/Zero] <"
+              "\n  Draw the outline at which height - [Top/Bottom/Average/Zero"
+              (if back "/Back" "") "] <"
               *LH-ZMODE* ">: ")))
-  (if ans (setq *LH-ZMODE* ans))
-  *LH-ZMODE*)
+  (cond
+    ((member ans '("Back" "Undo")) 'LH-BACK)
+    (T (if ans (setq *LH-ZMODE* ans))
+       *LH-ZMODE*)))
 
 ;; The output height ZMODE picks from the elevation list ZS.
 (defun lh:pick-elev (zmode zs / e z sum)
@@ -2444,7 +2449,7 @@
 
 ;; ---- the command -----------------------------------------------------
 (defun c:LHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
-                   step rstep mk decls
+                   step rstep mk decls reselect
                    ss i en ed lay typ ext nunsup nocs closed
                    segs pts dpts allow tour ok stale npt chn sketch
                    texts tx q v zs elev e1 e2
@@ -2647,358 +2652,375 @@
                             *LH-WALL-LAYER*
                             " clear themselves when the command finishes."))))))))
 
-  ;; -- step 6: the selection ----------------------------------------
-  ;; SPLINE and ELLIPSE are let in on purpose - not to fit them, but
-  ;; so the classifier can name them in a useful message; TEXT is let
-  ;; in so elevation labels can ride along with their points.
-  (setq lh-phase "waiting for the selection")
-  (if lh-pick
-    (setq ss lh-pick)
-    (progn
-      (princ "\n\n  Step 6 of 6 - select the laser points (POINT entities on any layer,")
-      (princ (strcat "\n  \"" *LH-POINT-BLOCK* "\" blocks, elevation text) and, if you have one, a rough"))
-      (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
-      (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))))
-  (if (null ss)
-    (princ "\nNothing usable selected (points, and optionally a sketch on the POOL layer).")
-    (progn
-      ;; -- sort the selection into points, elevations and sketch -----
-      (setq lh-phase "reading the selected entities")
-      (setq segs nil pts nil texts nil i 0 nunsup 0 nocs 0
-            npt 0 lh-ptnames nil lh-zvals nil)
-      (while (< i (sslength ss))
-        (setq en  (ssname ss i)
-              ed  (entget en)
-              lay (strcase (cdr (assoc 8 ed)))
-              typ (cdr (assoc 0 ed))
-              ext (cdr (assoc 210 ed))
-              i   (1+ i))
-        ;; geometry drawn in a tilted UCS reads back in its own plane,
-        ;; so a flat 2D fit of it would be wrong - count and warn
-        (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
+  ;; -- steps 6 and the height, as one chain --------------------------
+  ;; RESELECT is set by a Back at the output height, which is the only
+  ;; question the selection has in front of it.  Classification rebuilds
+  ;; every list it fills, so a second pass starts clean.
+  (setq reselect T)
+  (while reselect
+    (setq reselect nil)
+    ;; -- step 6: the selection ----------------------------------------
+    ;; SPLINE and ELLIPSE are let in on purpose - not to fit them, but
+    ;; so the classifier can name them in a useful message; TEXT is let
+    ;; in so elevation labels can ride along with their points.
+    (setq lh-phase "waiting for the selection")
+    (if lh-pick
+      (setq ss lh-pick)
+      (progn
+        (princ "\n\n  Step 6 of 6 - select the laser points (POINT entities on any layer,")
+        (princ (strcat "\n  \"" *LH-POINT-BLOCK* "\" blocks, elevation text) and, if you have one, a rough"))
+        (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
+        (princ "\n  Select objects: ")
+        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))))
+    (if (null ss)
+      (princ "\nNothing usable selected (points, and optionally a sketch on the POOL layer).")
+      (progn
+        ;; -- sort the selection into points, elevations and sketch -----
+        (setq lh-phase "reading the selected entities")
+        (setq segs nil pts nil texts nil i 0 nunsup 0 nocs 0
+              npt 0 lh-ptnames nil lh-zvals nil)
+        (while (< i (sslength ss))
+          (setq en  (ssname ss i)
+                ed  (entget en)
+                lay (strcase (cdr (assoc 8 ed)))
+                typ (cdr (assoc 0 ed))
+                ext (cdr (assoc 210 ed))
+                i   (1+ i))
+          ;; geometry drawn in a tilted UCS reads back in its own plane,
+          ;; so a flat 2D fit of it would be wrong - count and warn
+          (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
+          (cond
+            ;; the survey point block is ALWAYS a point, on any layer
+            ((and (= typ "INSERT")
+                  (= (strcase (cdr (assoc 2 ed))) (strcase *LH-POINT-BLOCK*)))
+             (lh:add-point (lh:2d (cdr (assoc 10 ed)))
+                           (lh:block-number en)
+                           (caddr (cdr (assoc 10 ed)))))
+            ;; a plain POINT counts on ANY layer - laser exports land
+            ;; wherever the converter put them; its Z is its elevation
+            ((= typ "POINT")
+             (lh:add-point (lh:2d (cdr (assoc 10 ed)))
+                           nil
+                           (caddr (cdr (assoc 10 ed)))))
+            ;; a numeric TEXT may be an elevation label - set aside and
+            ;; paired with its nearest point after the pass
+            ((= typ "TEXT")
+             (setq v (cond ((distof (cdr (assoc 1 ed)) 2))
+                           ((distof (cdr (assoc 1 ed)) 4))))
+             (if v
+               (setq texts (cons (cons v (lh:2d (cdr (assoc 10 ed))))
+                                 texts))))
+            ;; curve types we cannot read, on the sketch layer: count
+            ;; them so the user gets told what to do
+            ((and (= lay (strcase *LH-POOL-LAYER*))
+                  (member typ '("SPLINE" "ELLIPSE")))
+             (setq nunsup (1+ nunsup)))
+            ;; LHD's or ABHD's own output lives on the POOL layer too
+            ;; (stamped) - never read it back as a sketch
+            ((and (= lay (strcase *LH-POOL-LAYER*))
+                  (or (assoc -3 (entget en '("LHD")))
+                      (assoc -3 (entget en '("ABHD")))))
+             nil)
+            ;; ordering sketch on the POOL layer
+            ((= lay (strcase *LH-POOL-LAYER*))
+             (setq segs (append segs (lh:ent-segs en))))
+            ;; any other block dropped on the POINTS layer -> a point
+            ((and (= typ "INSERT") (= lay (strcase *LH-POINT-LAYER*)))
+             (lh:add-point (lh:2d (cdr (assoc 10 ed)))
+                           (lh:block-number en)
+                           (caddr (cdr (assoc 10 ed)))))))
+        (if (> nunsup 0)
+          (princ (strcat "\nLHD: warning - " (itoa nunsup)
+                         " SPLINE/ELLIPSE object(s) on layer "
+                         *LH-POOL-LAYER*
+                         " were ignored (only lines, arcs, circles and"
+                         " polylines can be read - explode or convert"
+                         " them first).")))
+        (if (> nocs 0)
+          (princ (strcat "\nLHD: warning - " (itoa nocs)
+                         " selected object(s) are not drawn in the world"
+                         " plane; the fit is flat (XY) and may be wrong."
+                         "  Set UCS to World and flatten them first.")))
+        (setq dpts  (if pts (lh:dedupe pts))
+              allow (lh:ceil (* (lh:misspct) (length dpts))))
+        ;; pair the elevation labels with their points: nearest point
+        ;; within *LH-TEXT-EPS*, and a point's own Z outranks a label
+        (foreach tx texts
+          (setq q (lh:nearest (cdr tx) dpts))
+          (if (and q
+                   (< (lh:dist q (cdr tx)) *LH-TEXT-EPS*)
+                   (not (assoc q lh-zvals)))
+            (setq lh-zvals (cons (cons q (car tx)) lh-zvals))))
+        ;; snap the declared stretch ends and corners onto actual points
+        (setq lh-walls nil)
+        (foreach w rawwalls
+          (setq w1 (lh:nearest (car w) dpts)
+                w2 (lh:nearest (cadr w) dpts))
+          (cond
+            ((or (null w1) (null w2)) nil)
+            ((< (lh:dist w1 w2) *LH-EXACT-EPS*)
+             (princ "\n  (both ends of a declared stretch landed on the same scanned point - that stretch is ignored)"))
+            (T
+             (if (or (> (lh:dist (car w) w1) (* 3.0 tol))
+                     (> (lh:dist (cadr w) w2) (* 3.0 tol)))
+               (princ "\n  (a declared stretch end was picked well away from any scanned point - snapped to the nearest one)"))
+             (setq lh-walls (cons (list w1 w2) lh-walls)))))
+        (setq lh-walls (reverse lh-walls))
+        (setq lh-corners nil)
+        (foreach w rawcnrs
+          (setq w1 (lh:nearest w dpts))
+          (if w1
+            (progn
+              (if (> (lh:dist w w1) (* 3.0 tol))
+                (princ "\n  (a declared corner was picked well away from any scanned point - snapped to the nearest one)"))
+              (setq lh-corners (cons w1 lh-corners)))))
+        (setq lh-corners (reverse lh-corners))
+        ;; held points snap onto scanned points the same way; duplicates
+        ;; collapse to one
+        (setq lh-holds nil)
+        (foreach w rawholds
+          (setq w1 (lh:nearest w dpts))
+          (if w1
+            (progn
+              (if (> (lh:dist w w1) (* 3.0 tol))
+                (princ "\n  (a held point was picked well away from any scanned point - snapped to the nearest one)"))
+              (if (not (lh:memb w1 lh-holds))
+                (setq lh-holds (cons w1 lh-holds))))))
+        (setq lh-holds (reverse lh-holds))
+        (if (> (length dpts) 150)
+          (princ (strcat "\nLHD: " (itoa (length dpts))
+                         " points - ordering and fitting will take a"
+                         " little while, please wait...")))
         (cond
-          ;; the survey point block is ALWAYS a point, on any layer
-          ((and (= typ "INSERT")
-                (= (strcase (cdr (assoc 2 ed))) (strcase *LH-POINT-BLOCK*)))
-           (lh:add-point (lh:2d (cdr (assoc 10 ed)))
-                         (lh:block-number en)
-                         (caddr (cdr (assoc 10 ed)))))
-          ;; a plain POINT counts on ANY layer - laser exports land
-          ;; wherever the converter put them; its Z is its elevation
-          ((= typ "POINT")
-           (lh:add-point (lh:2d (cdr (assoc 10 ed)))
-                         nil
-                         (caddr (cdr (assoc 10 ed)))))
-          ;; a numeric TEXT may be an elevation label - set aside and
-          ;; paired with its nearest point after the pass
-          ((= typ "TEXT")
-           (setq v (cond ((distof (cdr (assoc 1 ed)) 2))
-                         ((distof (cdr (assoc 1 ed)) 4))))
-           (if v
-             (setq texts (cons (cons v (lh:2d (cdr (assoc 10 ed))))
-                               texts))))
-          ;; curve types we cannot read, on the sketch layer: count
-          ;; them so the user gets told what to do
-          ((and (= lay (strcase *LH-POOL-LAYER*))
-                (member typ '("SPLINE" "ELLIPSE")))
-           (setq nunsup (1+ nunsup)))
-          ;; LHD's or ABHD's own output lives on the POOL layer too
-          ;; (stamped) - never read it back as a sketch
-          ((and (= lay (strcase *LH-POOL-LAYER*))
-                (or (assoc -3 (entget en '("LHD")))
-                    (assoc -3 (entget en '("ABHD")))))
-           nil)
-          ;; ordering sketch on the POOL layer
-          ((= lay (strcase *LH-POOL-LAYER*))
-           (setq segs (append segs (lh:ent-segs en))))
-          ;; any other block dropped on the POINTS layer -> a point
-          ((and (= typ "INSERT") (= lay (strcase *LH-POINT-LAYER*)))
-           (lh:add-point (lh:2d (cdr (assoc 10 ed)))
-                         (lh:block-number en)
-                         (caddr (cdr (assoc 10 ed)))))))
-      (if (> nunsup 0)
-        (princ (strcat "\nLHD: warning - " (itoa nunsup)
-                       " SPLINE/ELLIPSE object(s) on layer "
-                       *LH-POOL-LAYER*
-                       " were ignored (only lines, arcs, circles and"
-                       " polylines can be read - explode or convert"
-                       " them first).")))
-      (if (> nocs 0)
-        (princ (strcat "\nLHD: warning - " (itoa nocs)
-                       " selected object(s) are not drawn in the world"
-                       " plane; the fit is flat (XY) and may be wrong."
-                       "  Set UCS to World and flatten them first.")))
-      (setq dpts  (if pts (lh:dedupe pts))
-            allow (lh:ceil (* (lh:misspct) (length dpts))))
-      ;; pair the elevation labels with their points: nearest point
-      ;; within *LH-TEXT-EPS*, and a point's own Z outranks a label
-      (foreach tx texts
-        (setq q (lh:nearest (cdr tx) dpts))
-        (if (and q
-                 (< (lh:dist q (cdr tx)) *LH-TEXT-EPS*)
-                 (not (assoc q lh-zvals)))
-          (setq lh-zvals (cons (cons q (car tx)) lh-zvals))))
-      ;; snap the declared stretch ends and corners onto actual points
-      (setq lh-walls nil)
-      (foreach w rawwalls
-        (setq w1 (lh:nearest (car w) dpts)
-              w2 (lh:nearest (cadr w) dpts))
-        (cond
-          ((or (null w1) (null w2)) nil)
-          ((< (lh:dist w1 w2) *LH-EXACT-EPS*)
-           (princ "\n  (both ends of a declared stretch landed on the same scanned point - that stretch is ignored)"))
+          ((null pts)
+           (princ (strcat "\nNo laser points found (looked for POINT"
+                          " entities, \"" *LH-POINT-BLOCK*
+                          "\" block insertions, and blocks on layer "
+                          *LH-POINT-LAYER* ").")))
+          ((< (length dpts) (if closed 3 2))
+           (princ (strcat "\nAt least "
+                          (if closed "3 distinct points are needed for a closed outline."
+                                     "2 distinct points are needed for an open run."))))
           (T
-           (if (or (> (lh:dist (car w) w1) (* 3.0 tol))
-                   (> (lh:dist (cadr w) w2) (* 3.0 tol)))
-             (princ "\n  (a declared stretch end was picked well away from any scanned point - snapped to the nearest one)"))
-           (setq lh-walls (cons (list w1 w2) lh-walls)))))
-      (setq lh-walls (reverse lh-walls))
-      (setq lh-corners nil)
-      (foreach w rawcnrs
-        (setq w1 (lh:nearest w dpts))
-        (if w1
-          (progn
-            (if (> (lh:dist w w1) (* 3.0 tol))
-              (princ "\n  (a declared corner was picked well away from any scanned point - snapped to the nearest one)"))
-            (setq lh-corners (cons w1 lh-corners)))))
-      (setq lh-corners (reverse lh-corners))
-      ;; held points snap onto scanned points the same way; duplicates
-      ;; collapse to one
-      (setq lh-holds nil)
-      (foreach w rawholds
-        (setq w1 (lh:nearest w dpts))
-        (if w1
-          (progn
-            (if (> (lh:dist w w1) (* 3.0 tol))
-              (princ "\n  (a held point was picked well away from any scanned point - snapped to the nearest one)"))
-            (if (not (lh:memb w1 lh-holds))
-              (setq lh-holds (cons w1 lh-holds))))))
-      (setq lh-holds (reverse lh-holds))
-      (if (> (length dpts) 150)
-        (princ (strcat "\nLHD: " (itoa (length dpts))
-                       " points - ordering and fitting will take a"
-                       " little while, please wait...")))
-      (cond
-        ((null pts)
-         (princ (strcat "\nNo laser points found (looked for POINT"
-                        " entities, \"" *LH-POINT-BLOCK*
-                        "\" block insertions, and blocks on layer "
-                        *LH-POINT-LAYER* ").")))
-        ((< (length dpts) (if closed 3 2))
-         (princ (strcat "\nAt least "
-                        (if closed "3 distinct points are needed for a closed outline."
-                                   "2 distinct points are needed for an open run."))))
-        (T
-         ;; -- order the points ---------------------------------------
-         (setq ok T sketch nil e1 nil e2 nil)
-         (if segs
-           (progn
-             (setq chn (lh:chain segs))
-             (if chn
-               (progn
-                 (setq sketch (cdr chn))
-                 (if (lh:has-arcs sketch)
-                   (princ "\nPOOL sketch found - it only ORDERS the points; the shape comes from the points."))
-                 (if (and closed (not (car chn)))
-                   (princ "\n  (the sketch does not close - fine for ordering, the fit still closes)"))))))
-         (cond
-           (sketch
-            (setq lh-phase "following the sketch order"
-                  tour     (lh:loop-order sketch dpts)))
-           (closed
-            (princ "\nNo sketch selected - ordering the points into a loop automatically.")
-            (setq lh-phase "ordering the points"
-                  tour     (lh:order-points dpts)))
-           (T
-            (princ "\nNo sketch selected - the run's ends are the farthest-apart pair.")
-            (princ "\n  (Redo lets you pick the two ends yourself.)")
-            (setq lh-phase "ordering the points"
-                  tour     (lh:order-points-open dpts nil nil))))
-         ;; -- the output height, when the points carry elevations ----
-         (setq zs (lh:zs-of dpts))
-         (if zs
-           (progn
-             (setq lh-phase "reading the output height")
-             (princ (strcat "\n\n  " (itoa (length zs))
-                            " point(s) carry elevations.  The fit is a flat top-down"))
-             (princ "\n  projection; the elevations only set the height the outline is")
-             (princ "\n  drawn at - the highest point, the lowest, their average, or 0.")
-             (setq elev (lh:pick-elev (lh:ask-zmode) zs)))
-           (setq elev 0.0))
-         (if ok
-           (progn
-             (setq again T)
-             (while again
-               (setq again nil)
-               (if (eq 'REDO (lh:compare tour pts tol allow closed elev))
+           ;; -- order the points ---------------------------------------
+           (setq ok T sketch nil e1 nil e2 nil)
+           (if segs
+             (progn
+               (setq chn (lh:chain segs))
+               (if chn
                  (progn
-                   ;; -- redo: maybe omit points, then re-ask ---------
-                   (setq lh-phase "picking points to omit"
-                         omits    nil)
-                   (princ "\n\nRedoing the fit.  Any points to leave out this time?")
-                   (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
-                   (princ "\n  anything the line should not chase; each gets a dashed ring.")
-                   (if lh-omitted
-                     (princ (strcat "\n  " (itoa (length lh-omitted))
-                                    " point(s) are already out -"
-                                    " picking one of those puts it"
-                                    " BACK IN.")))
-                   (while (setq wp1 (getpoint
-                                      "\n  Point to omit - or a ringed one to restore (Enter when done): "))
-                     (setq wp1 (lh:2d wp1)
-                           w1  (lh:nearest wp1 dpts)
-                           w2  (lh:nearest wp1 (mapcar 'car lh-omitted)))
-                     (cond
-                       ((and w2 (or (null w1)
-                                    (<= (lh:dist wp1 w2)
-                                        (lh:dist wp1 w1))))
-                        (setq ent        (assoc w2 lh-omitted)
-                              pts        (append pts (cadr ent))
-                              dpts       (lh:dedupe pts)
-                              lh-omitted (lh:remove ent lh-omitted)
-                              omits      (lh:remove w2 omits))
-                        (if (and (caddr ent) (entget (caddr ent)))
-                          (progn
-                            (lh:temp-drop (caddr ent))
-                            (entdel (caddr ent))))
-                        (princ (strcat "  - Pt." (lh:pt-name w2)
-                                       " back in")))
-                       (w1
-                        (setq pts2 nil ent nil)
-                        (foreach w pts
-                          (if (< (lh:dist w w1) *LH-EXACT-EPS*)
-                            (setq ent (cons w ent))
-                            (setq pts2 (cons w pts2))))
-                        (setq pts  (reverse pts2)
-                              dpts (lh:dedupe pts)
-                              ring (lh:temp-add (lh:tag-mine
-                                     (lh:draw-corner-marker w1)))
-                              lh-omitted (cons (list w1 ent ring)
-                                               lh-omitted)
-                              omits      (cons w1 omits))
-                        (princ (strcat "  - omitting Pt."
-                                       (lh:pt-name w1))))))
-                   (if omits
-                     (progn
-                       ;; declared stretches and corners anchored on
-                       ;; an omitted point make no sense any more
-                       (setq pts2 nil)
-                       (foreach w lh-walls
-                         (if (not (or (lh:memb (car w) omits)
-                                      (lh:memb (cadr w) omits)))
-                           (setq pts2 (cons w pts2))))
-                       (if (< (length pts2) (length lh-walls))
-                         (princ "\n  (a declared stretch lost an end and was dropped)"))
-                       (setq lh-walls (reverse pts2)
-                             pts2     nil)
-                       (foreach w lh-corners
-                         (if (not (lh:memb w omits))
-                           (setq pts2 (cons w pts2))))
-                       (setq lh-corners (reverse pts2)
-                             pts2       nil)
-                       ;; a held point that was just omitted is out of
-                       ;; the fit entirely - nothing left to hold
-                       (foreach w lh-holds
-                         (if (not (lh:memb w omits))
-                           (setq pts2 (cons w pts2))))
-                       (if (< (length pts2) (length lh-holds))
-                         (princ "\n  (an omitted point was held - its hold went with it)"))
-                       (setq lh-holds (reverse pts2))))
-                   (if lh-omitted
-                     (princ (strcat "\n  " (itoa (length lh-omitted))
-                                    " point(s) omitted in total - "
-                                    (itoa (length dpts))
-                                    " in the fit.")))
-                   (if (< (length dpts) (if closed 3 2))
-                     (princ "\nToo few points remain for a fit - nothing redone.")
-                     (progn
-                       ;; stretches and corners may change for the retry
-                       (princ "\n\n  Straight stretches and sharp corners can change too -")
-                       (princ "\n  Enter keeps each list as it is.")
-                       ;; the Redo settings are a chain like the opening
-                       ;; questions, and walk back the same way: Back at
-                       ;; any of them re-opens the one before it, and
-                       ;; Back at the first has nowhere to go
-                       (setq rstep 1)
-                       (while (<= rstep 7)
-                         (cond
-                           ((= rstep 1)
-                            (setq lh-phase "editing straight stretches")
-                            (lh:edit-walls dpts)      ; first: no Back out
-                            (setq rstep 2))
-                           ((= rstep 2)
-                            (setq lh-phase "editing sharp corners")
-                            (setq rstep (if (eq (lh:edit-corners dpts) 'LH-BACK)
-                                          (progn (princ "\n  Stepping back one question.") 1)
-                                          3)))
-                           ((= rstep 3)
-                            (setq lh-phase "editing held points")
-                            (setq rstep (if (eq (lh:edit-holds dpts) 'LH-BACK)
-                                          (progn (princ "\n  Stepping back one question.") 2)
-                                          4)))
-                           ((= rstep 4)
-                            ;; an open run's ends can be picked by hand
-                            (setq rstep 5)
-                            (if (not closed)
-                              (progn
-                                (setq lh-phase "picking the run's ends")
-                                (initget "Yes No Back Undo")
-                                (setq ans (getkword
-                                            "\n  Pick the two END points of the open run? [Yes/No/Back] <No>: "))
-                                (cond
-                                  ((member ans '("Back" "Undo"))
-                                   (princ "\n  Stepping back one question.")
-                                   (setq rstep 3))
-                                  ((= ans "Yes")
-                                   (initget "Back Undo")
-                                   (setq wp1 (getpoint "\n  First end [Back]: "))
-                                   (if (lh:back-kw wp1) (setq wp1 nil wp2 nil)
-                                     (progn
-                                       (initget "Back Undo")
-                                       (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
-                                       (if (lh:back-kw wp2) (setq wp2 nil))))
-                                   (if wp2
-                                     (setq e1 (lh:snap-break wp1 dpts)
-                                           e2 (lh:snap-break wp2 dpts))))))))
-                           ((= rstep 5)
-                            (princ "\n\n  New settings - Enter keeps each one as it is.")
-                            (setq lh-phase "reading the tolerance"
-                                  v        (lh:ask-tol T))
-                            (if (eq v 'LH-BACK)
-                              (progn (princ "\n  Stepping back one question.")
-                                     (setq rstep 4))
-                              (setq tol v rstep 6)))
-                           ((= rstep 6)
-                            (setq lh-phase "reading the miss percentage"
-                                  v        (lh:ask-pct lh-miss-pct T))
-                            (if (eq v 'LH-BACK)
-                              (progn (princ "\n  Stepping back one question.")
-                                     (setq rstep 5))
-                              (setq lh-miss-pct v rstep 7)))
-                           ((= rstep 7)
-                            (setq lh-phase "reading the curve limit")
-                            (setq rstep (if (eq (lh:ask-cap T) 'LH-BACK)
-                                          (progn (princ "\n  Stepping back one question.") 6)
-                                          8)))))
-                       (setq allow (lh:ceil (* (lh:misspct)
-                                               (length dpts))))
-                       ;; forced ends that were omitted are forgotten
-                       (if (and e1
-                                (not (and (lh:memb e1 dpts)
-                                          (lh:memb e2 dpts))))
-                         (setq e1 nil e2 nil))
-                       ;; the point order must forget the omitted ones
-                       (setq lh-phase "ordering the points")
-                       (cond
-                         (sketch (setq tour (lh:loop-order sketch dpts)))
-                         (closed (setq tour (lh:order-points dpts)))
-                         (T      (setq tour (lh:order-points-open
-                                              dpts e1 e2))))
-                       ;; the output height follows the surviving points
-                       (setq zs   (lh:zs-of dpts)
-                             elev (lh:pick-elev *LH-ZMODE* zs))
-                       (setq again T))))))))))))
+                   (setq sketch (cdr chn))
+                   (if (lh:has-arcs sketch)
+                     (princ "\nPOOL sketch found - it only ORDERS the points; the shape comes from the points."))
+                   (if (and closed (not (car chn)))
+                     (princ "\n  (the sketch does not close - fine for ordering, the fit still closes)"))))))
+           (cond
+             (sketch
+              (setq lh-phase "following the sketch order"
+                    tour     (lh:loop-order sketch dpts)))
+             (closed
+              (princ "\nNo sketch selected - ordering the points into a loop automatically.")
+              (setq lh-phase "ordering the points"
+                    tour     (lh:order-points dpts)))
+             (T
+              (princ "\nNo sketch selected - the run's ends are the farthest-apart pair.")
+              (princ "\n  (Redo lets you pick the two ends yourself.)")
+              (setq lh-phase "ordering the points"
+                    tour     (lh:order-points-open dpts nil nil))))
+           ;; -- the output height, when the points carry elevations ----
+           ;; The only question the selection has in front of it, so a Back
+           ;; here hands the selection back: nothing is drawn yet, and the
+           ;; classifier rebuilds every list it fills.
+           (setq zs (lh:zs-of dpts))
+           (if zs
+             (progn
+               (setq lh-phase "reading the output height")
+               (princ (strcat "\n\n  " (itoa (length zs))
+                              " point(s) carry elevations.  The fit is a flat top-down"))
+               (princ "\n  projection; the elevations only set the height the outline is")
+               (princ "\n  drawn at - the highest point, the lowest, their average, or 0.")
+               (setq v (lh:ask-zmode T))
+               (if (eq v 'LH-BACK)
+                 (progn (princ "\n  Stepping back to the selection.")
+                        (setq reselect T
+                              lh-pick  nil))
+                 (setq elev (lh:pick-elev v zs))))
+             (setq elev 0.0))
+           (if (not reselect)
+             (progn
+               (if ok
+                 (progn
+                   (setq again T)
+                   (while again
+                     (setq again nil)
+                     (if (eq 'REDO (lh:compare tour pts tol allow closed elev))
+                       (progn
+                         ;; -- redo: maybe omit points, then re-ask ---------
+                         (setq lh-phase "picking points to omit"
+                               omits    nil)
+                         (princ "\n\nRedoing the fit.  Any points to leave out this time?")
+                         (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
+                         (princ "\n  anything the line should not chase; each gets a dashed ring.")
+                         (if lh-omitted
+                           (princ (strcat "\n  " (itoa (length lh-omitted))
+                                          " point(s) are already out -"
+                                          " picking one of those puts it"
+                                          " BACK IN.")))
+                         (while (setq wp1 (getpoint
+                                            "\n  Point to omit - or a ringed one to restore (Enter when done): "))
+                           (setq wp1 (lh:2d wp1)
+                                 w1  (lh:nearest wp1 dpts)
+                                 w2  (lh:nearest wp1 (mapcar 'car lh-omitted)))
+                           (cond
+                             ((and w2 (or (null w1)
+                                          (<= (lh:dist wp1 w2)
+                                              (lh:dist wp1 w1))))
+                              (setq ent        (assoc w2 lh-omitted)
+                                    pts        (append pts (cadr ent))
+                                    dpts       (lh:dedupe pts)
+                                    lh-omitted (lh:remove ent lh-omitted)
+                                    omits      (lh:remove w2 omits))
+                              (if (and (caddr ent) (entget (caddr ent)))
+                                (progn
+                                  (lh:temp-drop (caddr ent))
+                                  (entdel (caddr ent))))
+                              (princ (strcat "  - Pt." (lh:pt-name w2)
+                                             " back in")))
+                             (w1
+                              (setq pts2 nil ent nil)
+                              (foreach w pts
+                                (if (< (lh:dist w w1) *LH-EXACT-EPS*)
+                                  (setq ent (cons w ent))
+                                  (setq pts2 (cons w pts2))))
+                              (setq pts  (reverse pts2)
+                                    dpts (lh:dedupe pts)
+                                    ring (lh:temp-add (lh:tag-mine
+                                           (lh:draw-corner-marker w1)))
+                                    lh-omitted (cons (list w1 ent ring)
+                                                     lh-omitted)
+                                    omits      (cons w1 omits))
+                              (princ (strcat "  - omitting Pt."
+                                             (lh:pt-name w1))))))
+                         (if omits
+                           (progn
+                             ;; declared stretches and corners anchored on
+                             ;; an omitted point make no sense any more
+                             (setq pts2 nil)
+                             (foreach w lh-walls
+                               (if (not (or (lh:memb (car w) omits)
+                                            (lh:memb (cadr w) omits)))
+                                 (setq pts2 (cons w pts2))))
+                             (if (< (length pts2) (length lh-walls))
+                               (princ "\n  (a declared stretch lost an end and was dropped)"))
+                             (setq lh-walls (reverse pts2)
+                                   pts2     nil)
+                             (foreach w lh-corners
+                               (if (not (lh:memb w omits))
+                                 (setq pts2 (cons w pts2))))
+                             (setq lh-corners (reverse pts2)
+                                   pts2       nil)
+                             ;; a held point that was just omitted is out of
+                             ;; the fit entirely - nothing left to hold
+                             (foreach w lh-holds
+                               (if (not (lh:memb w omits))
+                                 (setq pts2 (cons w pts2))))
+                             (if (< (length pts2) (length lh-holds))
+                               (princ "\n  (an omitted point was held - its hold went with it)"))
+                             (setq lh-holds (reverse pts2))))
+                         (if lh-omitted
+                           (princ (strcat "\n  " (itoa (length lh-omitted))
+                                          " point(s) omitted in total - "
+                                          (itoa (length dpts))
+                                          " in the fit.")))
+                         (if (< (length dpts) (if closed 3 2))
+                           (princ "\nToo few points remain for a fit - nothing redone.")
+                           (progn
+                             ;; stretches and corners may change for the retry
+                             (princ "\n\n  Straight stretches and sharp corners can change too -")
+                             (princ "\n  Enter keeps each list as it is.")
+                             ;; the Redo settings are a chain like the opening
+                             ;; questions, and walk back the same way: Back at
+                             ;; any of them re-opens the one before it, and
+                             ;; Back at the first has nowhere to go
+                             (setq rstep 1)
+                             (while (<= rstep 7)
+                               (cond
+                                 ((= rstep 1)
+                                  (setq lh-phase "editing straight stretches")
+                                  (lh:edit-walls dpts)      ; first: no Back out
+                                  (setq rstep 2))
+                                 ((= rstep 2)
+                                  (setq lh-phase "editing sharp corners")
+                                  (setq rstep (if (eq (lh:edit-corners dpts) 'LH-BACK)
+                                                (progn (princ "\n  Stepping back one question.") 1)
+                                                3)))
+                                 ((= rstep 3)
+                                  (setq lh-phase "editing held points")
+                                  (setq rstep (if (eq (lh:edit-holds dpts) 'LH-BACK)
+                                                (progn (princ "\n  Stepping back one question.") 2)
+                                                4)))
+                                 ((= rstep 4)
+                                  ;; an open run's ends can be picked by hand
+                                  (setq rstep 5)
+                                  (if (not closed)
+                                    (progn
+                                      (setq lh-phase "picking the run's ends")
+                                      (initget "Yes No Back Undo")
+                                      (setq ans (getkword
+                                                  "\n  Pick the two END points of the open run? [Yes/No/Back] <No>: "))
+                                      (cond
+                                        ((member ans '("Back" "Undo"))
+                                         (princ "\n  Stepping back one question.")
+                                         (setq rstep 3))
+                                        ((= ans "Yes")
+                                         (initget "Back Undo")
+                                         (setq wp1 (getpoint "\n  First end [Back]: "))
+                                         (if (lh:back-kw wp1) (setq wp1 nil wp2 nil)
+                                           (progn
+                                             (initget "Back Undo")
+                                             (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
+                                             (if (lh:back-kw wp2) (setq wp2 nil))))
+                                         (if wp2
+                                           (setq e1 (lh:snap-break wp1 dpts)
+                                                 e2 (lh:snap-break wp2 dpts))))))))
+                                 ((= rstep 5)
+                                  (princ "\n\n  New settings - Enter keeps each one as it is.")
+                                  (setq lh-phase "reading the tolerance"
+                                        v        (lh:ask-tol T))
+                                  (if (eq v 'LH-BACK)
+                                    (progn (princ "\n  Stepping back one question.")
+                                           (setq rstep 4))
+                                    (setq tol v rstep 6)))
+                                 ((= rstep 6)
+                                  (setq lh-phase "reading the miss percentage"
+                                        v        (lh:ask-pct lh-miss-pct T))
+                                  (if (eq v 'LH-BACK)
+                                    (progn (princ "\n  Stepping back one question.")
+                                           (setq rstep 5))
+                                    (setq lh-miss-pct v rstep 7)))
+                                 ((= rstep 7)
+                                  (setq lh-phase "reading the curve limit")
+                                  (setq rstep (if (eq (lh:ask-cap T) 'LH-BACK)
+                                                (progn (princ "\n  Stepping back one question.") 6)
+                                                8)))))
+                             (setq allow (lh:ceil (* (lh:misspct)
+                                                     (length dpts))))
+                             ;; forced ends that were omitted are forgotten
+                             (if (and e1
+                                      (not (and (lh:memb e1 dpts)
+                                                (lh:memb e2 dpts))))
+                               (setq e1 nil e2 nil))
+                             ;; the point order must forget the omitted ones
+                             (setq lh-phase "ordering the points")
+                             (cond
+                               (sketch (setq tour (lh:loop-order sketch dpts)))
+                               (closed (setq tour (lh:order-points dpts)))
+                               (T      (setq tour (lh:order-points-open
+                                                    dpts e1 e2))))
+                             ;; the output height follows the surviving points
+                             (setq zs   (lh:zs-of dpts)
+                                   elev (lh:pick-elev *LH-ZMODE* zs))
+                             (setq again T)))))))))))))))
   ;; sweep the dashed markers and any candidate the user did not keep
   (lh:temp-clear)
   (if undo-open (command "_.UNDO" "_End"))

@@ -982,12 +982,16 @@ deferral:
   shape-and-base opening, POOLSIDE's, the three checkers' Move/Keep/Pick
   pick and reference sheet, AUTOBEAD's clicked steps, ABCURCHECK's
   declarations, BPCALLOUT's callout text and STOCKCOVER's which-one.
-  What is left without Back is left on purpose, and the root
-  `README.md` names the three reasons: the prompt straight after a
-  selection with nothing else in front of it, the question past
-  committed geometry (where Back at the prompt inside the loop is the
-  rule that applies), and a re-ask that is itself the correction of a
-  failed range check.  `tests/test_back_nav.py` is the guard.
+  A question sitting straight after a selection re-opens that
+  selection rather than offering nothing (CABHD's cutoff, LHD's output
+  height), and HEMISTEP's width at the wall moved in front of its undo
+  group so it could reach the question before it.  What is left without
+  Back is left on purpose, and the root `README.md` names the three
+  reasons: a selection cannot be typed at, a question past committed
+  geometry answers to the draw-as-you-go rule instead (Back at the
+  prompt inside the loop takes the last step back), and a re-ask that
+  is itself the correction of a failed range check.
+  `tests/test_back_nav.py` is the guard.
 * `cal:askkw`'s signature still takes a hand-written SHOWN bracket
   where section 4's reference derives it from the keyword list.  The
   mirror pins `spa:askkw`/`pool:askkw` to it, so aligning the

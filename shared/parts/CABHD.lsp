@@ -199,7 +199,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.0")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.1")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -1072,7 +1072,7 @@
 ;; back is always one the fitter can use.  DALL is every selected
 ;; point, cut or not.  Asked again at every Redo, so a cutoff set too
 ;; low or too high costs one prompt, not a whole run.
-(defun cab:ask-cut (dall def / rng ans wp q cut lim done out)
+(defun cab:ask-cut (dall def back / rng ans wp q cut lim done out)
   (setq rng  (cab:key-range dall)
         lim  (min 3 (length dall))
         out  def
@@ -1083,11 +1083,18 @@
                    " to " (itoa (cdr rng)) ".")))
   (while (null done)
     (setq done T)
-    (initget 6 "Pick All")
-    (setq ans (getint (strcat "\n  Include points up to [Pick/All] <"
+    (if back
+      (initget 6 "Pick All Back Undo")
+      (initget 6 "Pick All"))
+    (setq ans (getint (strcat "\n  Include points up to [Pick/All"
+                              (if back "/Back" "") "] <"
                               (if out (itoa out) "All") ">: ")))
     (cond
       ((null ans) (setq cut out))                     ; Enter: unchanged
+      ;; the only question in front of this one is the selection, so
+      ;; Back hands the whole step back to the caller to re-open it
+      ((and (eq 'STR (type ans)) (member ans '("Back" "Undo")))
+       (setq cut 'CAB-BACK out 'CAB-BACK))
       ((eq 'STR (type ans))
        (if (= ans "All")
          (setq cut nil)
@@ -1108,9 +1115,11 @@
                              " (number " (itoa cut) ")")))
              (T (setq cut out))))))
       (T (setq cut ans)))
-    ;; a Back has already asked to go round again: it is not an answer,
-    ;; so it is neither judged against the minimum nor remembered
-    (if done
+    ;; a Back at the PICK has already asked to go round again: it is not
+    ;; an answer, so it is neither judged against the minimum nor
+    ;; remembered.  A Back at the number is an answer of a kind - the
+    ;; sentinel - and leaves by the same door as a settled cutoff.
+    (if (and done (not (eq cut 'CAB-BACK)))
       (if (and cut (< (cab:cut-count dall cut) lim))
         (progn
           (princ (strcat "\n  (up to " (itoa cut) " leaves "
@@ -2890,6 +2899,7 @@
 ;; ---- CABHD: the perimeter, and nothing but ---------------------------
 (defun c:CABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
                     step rstep v mk wallmk cnrmk holdmk cab-decl-marks
+                    reselect reomit
                     ss i en ed lay typ ext nunsup nocs dall cut0 ent
                     segs pts dpts allow loop tour ok stale npt
                     again ring cab-cut cab-allpts cab-ptkeys cab-numbered
@@ -3104,362 +3114,391 @@
          (T (setq step 7))))))
 
 
-  ;; -- step 7: the selection ----------------------------------------
-  ;; Select the WHOLE survey - the cutoff at step 8 is what decides how
-  ;; much of it the perimeter uses, and it can be moved at a Redo, so
-  ;; there is nothing to gain by window-selecting carefully here.
-  ;; only entity types this command can actually read, so a sloppy
-  ;; crossing window over dimensions, hatches or text is harmless.
-  ;; SPLINE and ELLIPSE are let in ON PURPOSE - not to fit them, but
-  ;; so the classifier below can name them in a useful message.
-  (setq cab-phase "waiting for the selection")
-  (if cab-pick
-    (setq ss cab-pick)
-    (progn
-      (princ "\n\n  Step 7 of 8 - select the survey points (POINTS layer or ab_pt")
-      (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
-      (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
-      (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
-  (if (null ss)
-    (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
-    (progn
-      ;; -- sort the selection into perimeter segments and points -----
-      (setq cab-phase "reading the selected entities")
-      (setq segs nil pts nil i 0 nunsup 0 nocs 0
-            npt 0 cab-ptnames nil cab-ptkeys nil cab-allpts nil
-            cab-omitted nil cab-cut nil)
-      (while (< i (sslength ss))
-        (setq en  (ssname ss i)
-              ed  (entget en)
-              lay (strcase (cdr (assoc 8 ed)))
-              typ (cdr (assoc 0 ed))
-              ext (cdr (assoc 210 ed))
-              i   (1+ i))
-        ;; geometry drawn in a tilted UCS reads back in its own plane,
-        ;; so a flat 2D fit of it would be wrong - count and warn
-        (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
+  ;; -- steps 7 and 8: the selection and the cutoff, as one chain -----
+  ;; RESELECT is set by a Back at the cutoff below, which is the only
+  ;; question the selection has in front of it.  Classification rebuilds
+  ;; every list it fills, so a second pass starts clean.
+  (setq reselect T)
+  (while reselect
+    (setq reselect nil)
+    ;; -- step 7: the selection ----------------------------------------
+    ;; Select the WHOLE survey - the cutoff at step 8 is what decides how
+    ;; much of it the perimeter uses, and it can be moved at a Redo, so
+    ;; there is nothing to gain by window-selecting carefully here.
+    ;; only entity types this command can actually read, so a sloppy
+    ;; crossing window over dimensions, hatches or text is harmless.
+    ;; SPLINE and ELLIPSE are let in ON PURPOSE - not to fit them, but
+    ;; so the classifier below can name them in a useful message.
+    (setq cab-phase "waiting for the selection")
+    (if cab-pick
+      (setq ss cab-pick)
+      (progn
+        (princ "\n\n  Step 7 of 8 - select the survey points (POINTS layer or ab_pt")
+        (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
+        (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
+        (princ "\n  Select objects: ")
+        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
+    (if (null ss)
+      (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
+      (progn
+        ;; -- sort the selection into perimeter segments and points -----
+        (setq cab-phase "reading the selected entities")
+        (setq segs nil pts nil i 0 nunsup 0 nocs 0
+              npt 0 cab-ptnames nil cab-ptkeys nil cab-allpts nil
+              cab-omitted nil cab-cut nil)
+        (while (< i (sslength ss))
+          (setq en  (ssname ss i)
+                ed  (entget en)
+                lay (strcase (cdr (assoc 8 ed)))
+                typ (cdr (assoc 0 ed))
+                ext (cdr (assoc 210 ed))
+                i   (1+ i))
+          ;; geometry drawn in a tilted UCS reads back in its own plane,
+          ;; so a flat 2D fit of it would be wrong - count and warn
+          (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
+          (cond
+            ;; survey points stored as block references (e.g. "ab_pt"):
+            ;; a block with this name is ALWAYS a point, on any layer, and
+            ;; its insertion point is taken as the location (the blocks are
+            ;; never exploded - non-destructive).  Checked first so such
+            ;; blocks are never mistaken for perimeter geometry.
+            ((and (= typ "INSERT")
+                  (= (strcase (cdr (assoc 2 ed))) (strcase *CAB-POINT-BLOCK*)))
+             (cab:add-point (cal:2d (cdr (assoc 10 ed)))
+                            (cab:block-number en)))
+            ;; curve types we cannot fit, sitting on the POOL layer: count
+            ;; them so the user gets told what to do, instead of a
+            ;; mystifying "the perimeter does not close" later on
+            ((and (= lay (strcase *CAB-POOL-LAYER*))
+                  (member typ '("SPLINE" "ELLIPSE")))
+             (setq nunsup (1+ nunsup)))
+            ;; CABHD's own stamped work on the POOL layer is never read
+            ;; back as a guide - nor is ABHD's, whose pool-bottom lines
+            ;; live there too and would wreck a fit read as perimeter
+            ((and (= lay (strcase *CAB-POOL-LAYER*))
+                  (or (assoc -3 (entget en '("CABHD")))
+                      (assoc -3 (entget en '("ABHD")))))
+             nil)
+            ;; perimeter / ordering sketch on the POOL layer
+            ((= lay (strcase *CAB-POOL-LAYER*))
+             (setq segs (append segs (cab:ent-segs en))))
+            ;; plain POINT entities on the POINTS layer
+            ((and (= lay (strcase *CAB-POINT-LAYER*)) (= typ "POINT"))
+             (cab:add-point (cal:2d (cdr (assoc 10 ed))) nil))
+            ;; any other block dropped on the POINTS layer -> a point too
+            ((and (= typ "INSERT") (= lay (strcase *CAB-POINT-LAYER*)))
+             (cab:add-point (cal:2d (cdr (assoc 10 ed)))
+                            (cab:block-number en)))))
+        (setq cab-allpts (reverse cab-allpts)      ; selection order
+              dall       (if pts (cal:dedupe pts *CAB-EXACT-EPS*)))
+        (if (> nunsup 0)
+          (princ (strcat "\nCABHD: warning - " (itoa nunsup)
+                         " SPLINE/ELLIPSE object(s) on layer "
+                         *CAB-POOL-LAYER*
+                         " were ignored (only lines, arcs, circles and"
+                         " polylines can be read - explode or convert"
+                         " them first).")))
+        (if (> nocs 0)
+          (princ (strcat "\nCABHD: warning - " (itoa nocs)
+                         " selected object(s) are not drawn in the world"
+                         " plane; the fit is flat (XY) and may be wrong."
+                         "  Set UCS to World and flatten them first.")))
         (cond
-          ;; survey points stored as block references (e.g. "ab_pt"):
-          ;; a block with this name is ALWAYS a point, on any layer, and
-          ;; its insertion point is taken as the location (the blocks are
-          ;; never exploded - non-destructive).  Checked first so such
-          ;; blocks are never mistaken for perimeter geometry.
-          ((and (= typ "INSERT")
-                (= (strcase (cdr (assoc 2 ed))) (strcase *CAB-POINT-BLOCK*)))
-           (cab:add-point (cal:2d (cdr (assoc 10 ed)))
-                          (cab:block-number en)))
-          ;; curve types we cannot fit, sitting on the POOL layer: count
-          ;; them so the user gets told what to do, instead of a
-          ;; mystifying "the perimeter does not close" later on
-          ((and (= lay (strcase *CAB-POOL-LAYER*))
-                (member typ '("SPLINE" "ELLIPSE")))
-           (setq nunsup (1+ nunsup)))
-          ;; CABHD's own stamped work on the POOL layer is never read
-          ;; back as a guide - nor is ABHD's, whose pool-bottom lines
-          ;; live there too and would wreck a fit read as perimeter
-          ((and (= lay (strcase *CAB-POOL-LAYER*))
-                (or (assoc -3 (entget en '("CABHD")))
-                    (assoc -3 (entget en '("ABHD")))))
-           nil)
-          ;; perimeter / ordering sketch on the POOL layer
-          ((= lay (strcase *CAB-POOL-LAYER*))
-           (setq segs (append segs (cab:ent-segs en))))
-          ;; plain POINT entities on the POINTS layer
-          ((and (= lay (strcase *CAB-POINT-LAYER*)) (= typ "POINT"))
-           (cab:add-point (cal:2d (cdr (assoc 10 ed))) nil))
-          ;; any other block dropped on the POINTS layer -> a point too
-          ((and (= typ "INSERT") (= lay (strcase *CAB-POINT-LAYER*)))
-           (cab:add-point (cal:2d (cdr (assoc 10 ed)))
-                          (cab:block-number en)))))
-      (setq cab-allpts (reverse cab-allpts)      ; selection order
-            dall       (if pts (cal:dedupe pts *CAB-EXACT-EPS*)))
-      (if (> nunsup 0)
-        (princ (strcat "\nCABHD: warning - " (itoa nunsup)
-                       " SPLINE/ELLIPSE object(s) on layer "
-                       *CAB-POOL-LAYER*
-                       " were ignored (only lines, arcs, circles and"
-                       " polylines can be read - explode or convert"
-                       " them first).")))
-      (if (> nocs 0)
-        (princ (strcat "\nCABHD: warning - " (itoa nocs)
-                       " selected object(s) are not drawn in the world"
-                       " plane; the fit is flat (XY) and may be wrong."
-                       "  Set UCS to World and flatten them first.")))
-      (cond
-        ((null pts)
-         (princ (strcat "\nNo survey points found (looked for POINT entities on layer "
-                        *CAB-POINT-LAYER* " and \"" *CAB-POINT-BLOCK*
-                        "\" block insertions).")))
-        ((and (null segs) (< (length dall) 3))
-         (princ "\nPoints-only mode needs at least 3 distinct points."))
-        (T
-         ;; -- step 8: how far up the survey is the pool? -------------
-         ;; The rule CABHD exists for.  Everything past the answer is
-         ;; out of the perimeter entirely, so the fit never chases a
-         ;; step, a bench or a depth shot it was never meant to trace.
-         (setq cab-phase "reading the point cutoff")
-         (princ "\n\n  Step 8 of 8 - how far up the point numbers does the pool edge run?")
-         (princ "\n  A survey usually carries on past the pool - steps, benches, deck,")
-         (princ "\n  depth shots - all numbered in the same run.  Everything past the")
-         (princ "\n  number you give is left out of the perimeter: not fitted, not")
-         (princ "\n  counted against the miss allowance, never reported as a miss.")
-         (if (= cab-numbered 0)
-           (princ (strcat "\n  NOTE: none of these points carry a "
-                          *CAB-PT-TAG*
-                          " attribute, so they are counted in the"
-                          "\n  order they came out of the drawing -"
-                          " usually the order they were created,"
-                          "\n  but check the result before trusting it.")))
-         (setq cab-cut  (cab:ask-cut dall nil)
-               cab-phase "applying the point cutoff"
-               pts     (cab:live-pts)
-               dpts    (cal:dedupe pts *CAB-EXACT-EPS*))
-         (if cab-cut
-           (princ (strcat "\n  Up to Pt." (itoa cab-cut) " - "
-                          (itoa (length dpts)) " point(s) in the perimeter, "
-                          (itoa (- (length dall) (length dpts)))
-                          " left out."))
-           (princ (strcat "\n  Using all " (itoa (length dpts))
-                          " point(s).")))
-         ;; the miss allowance: this share of the points (the answer to
-         ;; step 2, rounded UP to a whole point) may sit off the result
-         ;; by up to TOL.  It is a share of the points the cutoff KEPT -
-         ;; the ones it dropped buy no slack, since the line was never
-         ;; asked to go near them
-         (setq allow (cal:ceil (* (cab:misspct) (length dpts))))
-         ;; snap the declared straight-wall ends onto actual survey
-         ;; points - arc and wall endpoints always sit ON points
-         (setq cab-phase "checking the declared walls, corners and holds"
-               cab-walls nil)
-         (foreach w rawwalls
-           (setq w1 (cab:nearest (car w) dpts)
-                 w2 (cab:nearest (cadr w) dpts))
-           (cond
-             ((or (cab:cut-away-p (car w) dall dpts)
-                  (cab:cut-away-p (cadr w) dall dpts))
-              (princ "\n  (a declared wall was anchored past the cutoff - that wall is ignored)"))
-             ((or (null w1) (null w2)) nil)
-             ((< (cal:dist w1 w2) *CAB-EXACT-EPS*)
-              (princ "\n  (both ends of a declared wall landed on the same survey point - that wall is ignored)"))
-             (T
-              (if (or (> (cal:dist (car w) w1) (* 3.0 tol))
-                      (> (cal:dist (cadr w) w2) (* 3.0 tol)))
-                (princ "\n  (a declared wall end was picked well away from any survey point - snapped to the nearest one)"))
-              (setq cab-walls (cons (list w1 w2) cab-walls)))))
-         (setq cab-walls (reverse cab-walls))
-         ;; declared corners snap onto survey points the same way
-         (setq cab-corners nil)
-         (foreach w rawcnrs
-           (setq w1 (cab:nearest w dpts))
-           (cond
-             ((cab:cut-away-p w dall dpts)
-              (princ "\n  (a declared corner was picked past the cutoff - it is ignored)"))
-             (w1
-              (if (> (cal:dist w w1) (* 3.0 tol))
-                (princ "\n  (a declared corner was picked well away from any survey point - snapped to the nearest one)"))
-              (setq cab-corners (cons w1 cab-corners)))))
-         (setq cab-corners (reverse cab-corners))
-         ;; held points snap onto survey points the same way; duplicates
-         ;; collapse to one
-         (setq cab-holds nil)
-         (foreach w rawholds
-           (setq w1 (cab:nearest w dpts))
-           (cond
-             ((cab:cut-away-p w dall dpts)
-              (princ "\n  (a held point was picked past the cutoff - it is ignored)"))
-             (w1
-              (if (> (cal:dist w w1) (* 3.0 tol))
-                (princ "\n  (a held point was picked well away from any survey point - snapped to the nearest one)"))
-              (if (not (cab:memb w1 cab-holds))
-                (setq cab-holds (cons w1 cab-holds))))))
-         (setq cab-holds (reverse cab-holds))
-         (if (> (length dpts) 150)
-           (princ (strcat "\nCABHD: " (itoa (length dpts))
-                          " points - ordering and fitting will take a"
-                          " little while, please wait...")))
-         ;; work out the mode, then hand all three modes to the same
-         ;; compare-and-choose step
-         (setq tour nil loop nil ok T)
-         ;; below three points there is no perimeter to draw in ANY
-         ;; mode; say so here rather than let the fitter hand back an
-         ;; outline AutoCAD will refuse
-         (if (< (length dpts) 3)
-           (progn
-             (princ (strcat "\nCABHD: only " (itoa (length dpts))
-                            " point(s) are in the fit and a perimeter"
-                            " needs at least 3."))
-             (princ "\n  Run it again and give a higher cutoff, or All.")
-             (setq ok nil)))
-         (cond
-           ((null ok) nil)
-           ((null segs)
-            ;; ---- POINTS-ONLY: order the points ourselves ----------
-            (princ "\nNo POOL geometry selected - ordering the points automatically.")
-            (setq cab-phase "ordering the points"
-                  tour      (cab:order-points dpts)))
-           ((null (setq loop (cab:chain segs)))
-            (setq ok nil))                     ; cab:chain said why
-           ((not (cab:has-arcs loop))
-            ;; ---- ORDERING SKETCH: the drawn loop is all straight
-            ;; lines, so it only tells us the ORDER of the points;
-            ;; the shape itself comes from the points
-            (if (< (length dpts) 3)
-              (progn
-                (princ (strcat "\nThe lines-only POOL sketch only orders"
-                               " the points, and at least 3 distinct"
-                               " points are needed to build a shape."))
-                (setq ok nil))
-              (progn
-                (princ "\nPOOL sketch is lines only - using it just to order the points.")
-                (setq cab-phase "following the sketch order"
-                      tour      (cab:loop-order loop dpts)))))
-           (T
-            (princ "\nUsing the drawn POOL perimeter as the guide.")
-            (princ "\n  (only the part of it the kept points reach is re-fitted)")
-            (if cab-walls
-              (princ (strcat "\n  (declared straight walls only steer"
-                             " the points-built fit; here your drawn"
-                             " straight segments are already kept)")))
-            (if cab-holds
-              (princ (strcat "\n  (held points only bind the"
-                             " points-built fit; the drawn shape wins"
-                             " here - the report flags any held point"
-                             " the kept fit missed)")))))
-         (if ok
-           (progn
-             (setq again T)
-             (while again
-               (setq again nil)
-               (if (eq 'REDO (cab:compare tour loop pts dpts tol allow))
+          ((null pts)
+           (princ (strcat "\nNo survey points found (looked for POINT entities on layer "
+                          *CAB-POINT-LAYER* " and \"" *CAB-POINT-BLOCK*
+                          "\" block insertions).")))
+          ((and (null segs) (< (length dall) 3))
+           (princ "\nPoints-only mode needs at least 3 distinct points."))
+          (T
+           ;; -- step 8: how far up the survey is the pool? -------------
+           ;; The rule CABHD exists for.  Everything past the answer is
+           ;; out of the perimeter entirely, so the fit never chases a
+           ;; step, a bench or a depth shot it was never meant to trace.
+           (setq cab-phase "reading the point cutoff")
+           (princ "\n\n  Step 8 of 8 - how far up the point numbers does the pool edge run?")
+           (princ "\n  A survey usually carries on past the pool - steps, benches, deck,")
+           (princ "\n  depth shots - all numbered in the same run.  Everything past the")
+           (princ "\n  number you give is left out of the perimeter: not fitted, not")
+           (princ "\n  counted against the miss allowance, never reported as a miss.")
+           (if (= cab-numbered 0)
+             (princ (strcat "\n  NOTE: none of these points carry a "
+                            *CAB-PT-TAG*
+                            " attribute, so they are counted in the"
+                            "\n  order they came out of the drawing -"
+                            " usually the order they were created,"
+                            "\n  but check the result before trusting it.")))
+           ;; The cutoff is the only question after the selection, so a
+           ;; Back here hands the selection back: the pickfirst set is
+           ;; spent with it, the classifier runs again from scratch, and
+           ;; nothing has been drawn yet for the second pass to trip over.
+           (setq cab-cut (cab:ask-cut dall nil T))
+           (if (eq cab-cut 'CAB-BACK)
+             (progn
+               (princ "\n  Stepping back to the selection.")
+               (setq cab-cut  nil
+                     cab-pick nil
+                     reselect T))
+             (progn
+               (setq cab-phase "applying the point cutoff"
+                     pts       (cab:live-pts)
+                     dpts      (cal:dedupe pts *CAB-EXACT-EPS*))
+               (if cab-cut
+                 (princ (strcat "\n  Up to Pt." (itoa cab-cut) " - "
+                                (itoa (length dpts)) " point(s) in the perimeter, "
+                                (itoa (- (length dall) (length dpts)))
+                                " left out."))
+                 (princ (strcat "\n  Using all " (itoa (length dpts))
+                                " point(s).")))
+               ;; the miss allowance: this share of the points (the answer to
+               ;; step 2, rounded UP to a whole point) may sit off the result
+               ;; by up to TOL.  It is a share of the points the cutoff KEPT -
+               ;; the ones it dropped buy no slack, since the line was never
+               ;; asked to go near them
+               (setq allow (cal:ceil (* (cab:misspct) (length dpts))))
+               ;; snap the declared straight-wall ends onto actual survey
+               ;; points - arc and wall endpoints always sit ON points
+               (setq cab-phase "checking the declared walls, corners and holds"
+                     cab-walls nil)
+               (foreach w rawwalls
+                 (setq w1 (cab:nearest (car w) dpts)
+                       w2 (cab:nearest (cadr w) dpts))
+                 (cond
+                   ((or (cab:cut-away-p (car w) dall dpts)
+                        (cab:cut-away-p (cadr w) dall dpts))
+                    (princ "\n  (a declared wall was anchored past the cutoff - that wall is ignored)"))
+                   ((or (null w1) (null w2)) nil)
+                   ((< (cal:dist w1 w2) *CAB-EXACT-EPS*)
+                    (princ "\n  (both ends of a declared wall landed on the same survey point - that wall is ignored)"))
+                   (T
+                    (if (or (> (cal:dist (car w) w1) (* 3.0 tol))
+                            (> (cal:dist (cadr w) w2) (* 3.0 tol)))
+                      (princ "\n  (a declared wall end was picked well away from any survey point - snapped to the nearest one)"))
+                    (setq cab-walls (cons (list w1 w2) cab-walls)))))
+               (setq cab-walls (reverse cab-walls))
+               ;; declared corners snap onto survey points the same way
+               (setq cab-corners nil)
+               (foreach w rawcnrs
+                 (setq w1 (cab:nearest w dpts))
+                 (cond
+                   ((cab:cut-away-p w dall dpts)
+                    (princ "\n  (a declared corner was picked past the cutoff - it is ignored)"))
+                   (w1
+                    (if (> (cal:dist w w1) (* 3.0 tol))
+                      (princ "\n  (a declared corner was picked well away from any survey point - snapped to the nearest one)"))
+                    (setq cab-corners (cons w1 cab-corners)))))
+               (setq cab-corners (reverse cab-corners))
+               ;; held points snap onto survey points the same way; duplicates
+               ;; collapse to one
+               (setq cab-holds nil)
+               (foreach w rawholds
+                 (setq w1 (cab:nearest w dpts))
+                 (cond
+                   ((cab:cut-away-p w dall dpts)
+                    (princ "\n  (a held point was picked past the cutoff - it is ignored)"))
+                   (w1
+                    (if (> (cal:dist w w1) (* 3.0 tol))
+                      (princ "\n  (a held point was picked well away from any survey point - snapped to the nearest one)"))
+                    (if (not (cab:memb w1 cab-holds))
+                      (setq cab-holds (cons w1 cab-holds))))))
+               (setq cab-holds (reverse cab-holds))
+               (if (> (length dpts) 150)
+                 (princ (strcat "\nCABHD: " (itoa (length dpts))
+                                " points - ordering and fitting will take a"
+                                " little while, please wait...")))
+               ;; work out the mode, then hand all three modes to the same
+               ;; compare-and-choose step
+               (setq tour nil loop nil ok T)
+               ;; below three points there is no perimeter to draw in ANY
+               ;; mode; say so here rather than let the fitter hand back an
+               ;; outline AutoCAD will refuse
+               (if (< (length dpts) 3)
                  (progn
-                   ;; -- redo: maybe omit points, move the cutoff,
-                   ;; re-ask the numbers, draw a fresh trio ---------
-                   (setq cab-phase "picking points to omit")
-                   (princ "\n\nRedoing the fit.  Any points to leave out this time?")
-                   (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
-                   (princ "\n  anything the line should not chase; each gets a dashed ring.")
-                   (princ "\n  (this is for strays one at a time - the cutoff, asked next,")
-                   (princ "\n  is what moves the end of the pool edge.)")
-                   (if cab-omitted
-                     (princ (strcat "\n  " (itoa (length cab-omitted))
-                                    " point(s) are already out -"
-                                    " picking one of those puts it"
-                                    " BACK IN.")))
-                   (while (setq wp1 (getpoint
-                                      "\n  Point to omit - or a ringed one to restore (Enter when done): "))
-                     (setq wp1 (cal:2d wp1)
-                           w1  (cab:nearest wp1 dpts)
-                           w2  (cab:nearest wp1 (mapcar 'car cab-omitted)))
-                     (cond
-                       ;; nearer to an already-omitted point: this
-                       ;; click un-omits it - the point and its
-                       ;; duplicates rejoin the fit, its ring goes
-                       ((and w2 (or (null w1)
-                                    (<= (cal:dist wp1 w2)
-                                        (cal:dist wp1 w1))))
-                        (setq ent (assoc w2 cab-omitted))
-                        (if (and (cadr ent) (entget (cadr ent)))
-                          (progn
-                            (cab:temp-drop (cadr ent))
-                            (entdel (cadr ent))))
-                        (setq cab-omitted (cab:remove ent cab-omitted)
-                              pts         (cab:live-pts)
-                              dpts        (cal:dedupe pts *CAB-EXACT-EPS*))
-                        (princ (strcat "  - Pt." (cab:pt-name w2)
-                                       " back in")))
-                       ;; otherwise omit: pull it - and its duplicates
-                       ;; - out of the fit, the stats and the miss
-                       ;; allowance alike, and remember how to undo it
-                       (w1
-                        (setq ring (cab:temp-add (cab:tag-mine
-                                     (cab:draw-corner-marker w1)))
-                              cab-omitted (cons (list w1 ring) cab-omitted)
-                              pts         (cab:live-pts)
-                              dpts        (cal:dedupe pts *CAB-EXACT-EPS*))
-                        (princ (strcat "  - omitting Pt."
-                                       (cab:pt-name w1))))))
-                   ;; -- the cutoff can move too: the edge may run
-                   ;; further up the survey than the first answer said,
-                   ;; or stop short of it ---------------------------
-                   (setq cab-phase "reading the point cutoff"
-                         cut0      cab-cut)
-                   (princ "\n\n  How far up the point numbers does the pool edge run?")
-                   (princ "\n  Enter keeps the cutoff as it is; All puts every point back.")
-                   (setq cab-cut (cab:ask-cut dall cab-cut))
-                   (if (not (equal cut0 cab-cut))
-                     (setq pts  (cab:live-pts)
-                           dpts (cal:dedupe pts *CAB-EXACT-EPS*)))
-                   (cab:prune-decls dpts)
-                   (princ (strcat "\n  "
-                                  (if cab-cut
-                                    (strcat "Up to Pt." (itoa cab-cut))
-                                    "Every point")
-                                  ", "
-                                  (if cab-omitted
-                                    (strcat (itoa (length cab-omitted))
-                                            " omitted, ")
-                                    "")
-                                  (itoa (length dpts))
-                                  " point(s) in the fit."))
-                   (if (< (length dpts) 3)
-                     (princ "\nToo few points remain for a fit - nothing redone.")
-                     (progn
-                       ;; walls and corners may change for the retry
-                       (princ "\n\n  Straight walls and sharp corners can change too -")
-                       (princ "\n  Enter keeps each list as it is.")
-                       ;; the Redo settings are a chain like the opening
-                       ;; questions, and walk back the same way: Back at
-                       ;; any of the six re-opens the one before it, and
-                       ;; Back at the first has nowhere to go
-                       (setq rstep 1)
-                       (while (<= rstep 6)
-                         (cond
-                           ((= rstep 1)
-                            (setq cab-phase "editing straight walls")
-                            (cab:edit-walls dpts)   ; first: no Back out
-                            (setq rstep 2))
-                           ((= rstep 2)
-                            (setq cab-phase "editing sharp corners")
-                            (setq rstep (if (eq (cab:edit-corners dpts) 'CAB-BACK)
-                                          (progn (princ "\n  Stepping back one question.") 1)
-                                          3)))
-                           ((= rstep 3)
-                            (setq cab-phase "editing held points")
-                            (setq rstep (if (eq (cab:edit-holds dpts) 'CAB-BACK)
-                                          (progn (princ "\n  Stepping back one question.") 2)
-                                          4)))
-                           ((= rstep 4)
-                            (princ "\n\n  New settings - Enter keeps each one as it is.")
-                            (setq cab-phase "reading the tolerance"
-                                  v        (cab:ask-tol T))
-                            (if (eq v 'CAB-BACK)
-                              (progn (princ "\n  Stepping back one question.")
-                                     (setq rstep 3))
-                              (setq tol v rstep 5)))
-                           ((= rstep 5)
-                            (setq cab-phase "reading the miss percentage"
-                                  v        (cab:ask-pct cab-miss-pct T))
-                            (if (eq v 'CAB-BACK)
-                              (progn (princ "\n  Stepping back one question.")
-                                     (setq rstep 4))
-                              (setq cab-miss-pct v rstep 6)))
-                           ((= rstep 6)
-                            (setq cab-phase "reading the curve limit")
-                            (setq rstep (if (eq (cab:ask-cap T) 'CAB-BACK)
-                                          (progn (princ "\n  Stepping back one question.") 5)
-                                          7)))))
-                       (setq allow (cal:ceil (* (cab:misspct)
-                                                (length dpts))))
-                       ;; the point order must forget everything the
-                       ;; omit list and the cutoff took out
-                       (cond
-                         ((null loop)
-                          (setq cab-phase "ordering the points"
-                                tour      (cab:order-points dpts)))
-                         ((not (cab:has-arcs loop))
-                          (setq tour (cab:loop-order loop dpts))))
-                       (setq again T))))))))))))
+                   (princ (strcat "\nCABHD: only " (itoa (length dpts))
+                                  " point(s) are in the fit and a perimeter"
+                                  " needs at least 3."))
+                   (princ "\n  Run it again and give a higher cutoff, or All.")
+                   (setq ok nil)))
+               (cond
+                 ((null ok) nil)
+                 ((null segs)
+                  ;; ---- POINTS-ONLY: order the points ourselves ----------
+                  (princ "\nNo POOL geometry selected - ordering the points automatically.")
+                  (setq cab-phase "ordering the points"
+                        tour      (cab:order-points dpts)))
+                 ((null (setq loop (cab:chain segs)))
+                  (setq ok nil))                     ; cab:chain said why
+                 ((not (cab:has-arcs loop))
+                  ;; ---- ORDERING SKETCH: the drawn loop is all straight
+                  ;; lines, so it only tells us the ORDER of the points;
+                  ;; the shape itself comes from the points
+                  (if (< (length dpts) 3)
+                    (progn
+                      (princ (strcat "\nThe lines-only POOL sketch only orders"
+                                     " the points, and at least 3 distinct"
+                                     " points are needed to build a shape."))
+                      (setq ok nil))
+                    (progn
+                      (princ "\nPOOL sketch is lines only - using it just to order the points.")
+                      (setq cab-phase "following the sketch order"
+                            tour      (cab:loop-order loop dpts)))))
+                 (T
+                  (princ "\nUsing the drawn POOL perimeter as the guide.")
+                  (princ "\n  (only the part of it the kept points reach is re-fitted)")
+                  (if cab-walls
+                    (princ (strcat "\n  (declared straight walls only steer"
+                                   " the points-built fit; here your drawn"
+                                   " straight segments are already kept)")))
+                  (if cab-holds
+                    (princ (strcat "\n  (held points only bind the"
+                                   " points-built fit; the drawn shape wins"
+                                   " here - the report flags any held point"
+                                   " the kept fit missed)")))))
+               (if ok
+                 (progn
+                   (setq again T)
+                   (while again
+                     (setq again nil)
+                     (if (eq 'REDO (cab:compare tour loop pts dpts tol allow))
+                       (progn
+                         ;; -- redo: maybe omit points, move the cutoff,
+                         ;; re-ask the numbers, draw a fresh trio ---------
+                         (setq cab-phase "picking points to omit")
+                         (princ "\n\nRedoing the fit.  Any points to leave out this time?")
+                         (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
+                         (princ "\n  anything the line should not chase; each gets a dashed ring.")
+                         (princ "\n  (this is for strays one at a time - the cutoff, asked next,")
+                         (princ "\n  is what moves the end of the pool edge.)")
+                         (if cab-omitted
+                           (princ (strcat "\n  " (itoa (length cab-omitted))
+                                          " point(s) are already out -"
+                                          " picking one of those puts it"
+                                          " BACK IN.")))
+                         ;; The omit picking and the cutoff are one chain here too:
+                         ;; Back at the cutoff re-opens the picking, where clicking a
+                         ;; ringed point again puts it back in - the same way it is
+                         ;; taken back at the prompt itself.
+                         (setq reomit T)
+                         (while reomit
+                           (setq reomit nil)
+                           (while (setq wp1 (getpoint
+                                              "\n  Point to omit - or a ringed one to restore (Enter when done): "))
+                             (setq wp1 (cal:2d wp1)
+                                   w1  (cab:nearest wp1 dpts)
+                                   w2  (cab:nearest wp1 (mapcar 'car cab-omitted)))
+                             (cond
+                               ;; nearer to an already-omitted point: this
+                               ;; click un-omits it - the point and its
+                               ;; duplicates rejoin the fit, its ring goes
+                               ((and w2 (or (null w1)
+                                            (<= (cal:dist wp1 w2)
+                                                (cal:dist wp1 w1))))
+                                (setq ent (assoc w2 cab-omitted))
+                                (if (and (cadr ent) (entget (cadr ent)))
+                                  (progn
+                                    (cab:temp-drop (cadr ent))
+                                    (entdel (cadr ent))))
+                                (setq cab-omitted (cab:remove ent cab-omitted)
+                                      pts         (cab:live-pts)
+                                      dpts        (cal:dedupe pts *CAB-EXACT-EPS*))
+                                (princ (strcat "  - Pt." (cab:pt-name w2)
+                                               " back in")))
+                               ;; otherwise omit: pull it - and its duplicates
+                               ;; - out of the fit, the stats and the miss
+                               ;; allowance alike, and remember how to undo it
+                               (w1
+                                (setq ring (cab:temp-add (cab:tag-mine
+                                             (cab:draw-corner-marker w1)))
+                                      cab-omitted (cons (list w1 ring) cab-omitted)
+                                      pts         (cab:live-pts)
+                                      dpts        (cal:dedupe pts *CAB-EXACT-EPS*))
+                                (princ (strcat "  - omitting Pt."
+                                               (cab:pt-name w1))))))
+                           ;; -- the cutoff can move too: the edge may run
+                           ;; further up the survey than the first answer said,
+                           ;; or stop short of it ---------------------------
+                           (setq cab-phase "reading the point cutoff"
+                                 cut0      cab-cut)
+                           (princ "\n\n  How far up the point numbers does the pool edge run?")
+                           (princ "\n  Enter keeps the cutoff as it is; All puts every point back.")
+                           (setq cab-cut (cab:ask-cut dall cab-cut T))
+                           (if (eq cab-cut 'CAB-BACK)
+                             (progn (princ "\n  Stepping back to the omit picking.")
+                                    (setq cab-cut cut0
+                                          reomit  T))))
+                         (if (not (equal cut0 cab-cut))
+                           (setq pts  (cab:live-pts)
+                                 dpts (cal:dedupe pts *CAB-EXACT-EPS*)))
+                         (cab:prune-decls dpts)
+                         (princ (strcat "\n  "
+                                        (if cab-cut
+                                          (strcat "Up to Pt." (itoa cab-cut))
+                                          "Every point")
+                                        ", "
+                                        (if cab-omitted
+                                          (strcat (itoa (length cab-omitted))
+                                                  " omitted, ")
+                                          "")
+                                        (itoa (length dpts))
+                                        " point(s) in the fit."))
+                         (if (< (length dpts) 3)
+                           (princ "\nToo few points remain for a fit - nothing redone.")
+                           (progn
+                             ;; walls and corners may change for the retry
+                             (princ "\n\n  Straight walls and sharp corners can change too -")
+                             (princ "\n  Enter keeps each list as it is.")
+                             ;; the Redo settings are a chain like the opening
+                             ;; questions, and walk back the same way: Back at
+                             ;; any of the six re-opens the one before it, and
+                             ;; Back at the first has nowhere to go
+                             (setq rstep 1)
+                             (while (<= rstep 6)
+                               (cond
+                                 ((= rstep 1)
+                                  (setq cab-phase "editing straight walls")
+                                  (cab:edit-walls dpts)   ; first: no Back out
+                                  (setq rstep 2))
+                                 ((= rstep 2)
+                                  (setq cab-phase "editing sharp corners")
+                                  (setq rstep (if (eq (cab:edit-corners dpts) 'CAB-BACK)
+                                                (progn (princ "\n  Stepping back one question.") 1)
+                                                3)))
+                                 ((= rstep 3)
+                                  (setq cab-phase "editing held points")
+                                  (setq rstep (if (eq (cab:edit-holds dpts) 'CAB-BACK)
+                                                (progn (princ "\n  Stepping back one question.") 2)
+                                                4)))
+                                 ((= rstep 4)
+                                  (princ "\n\n  New settings - Enter keeps each one as it is.")
+                                  (setq cab-phase "reading the tolerance"
+                                        v        (cab:ask-tol T))
+                                  (if (eq v 'CAB-BACK)
+                                    (progn (princ "\n  Stepping back one question.")
+                                           (setq rstep 3))
+                                    (setq tol v rstep 5)))
+                                 ((= rstep 5)
+                                  (setq cab-phase "reading the miss percentage"
+                                        v        (cab:ask-pct cab-miss-pct T))
+                                  (if (eq v 'CAB-BACK)
+                                    (progn (princ "\n  Stepping back one question.")
+                                           (setq rstep 4))
+                                    (setq cab-miss-pct v rstep 6)))
+                                 ((= rstep 6)
+                                  (setq cab-phase "reading the curve limit")
+                                  (setq rstep (if (eq (cab:ask-cap T) 'CAB-BACK)
+                                                (progn (princ "\n  Stepping back one question.") 5)
+                                                7)))))
+                             (setq allow (cal:ceil (* (cab:misspct)
+                                                      (length dpts))))
+                             ;; the point order must forget everything the
+                             ;; omit list and the cutoff took out
+                             (cond
+                               ((null loop)
+                                (setq cab-phase "ordering the points"
+                                      tour      (cab:order-points dpts)))
+                               ((not (cab:has-arcs loop))
+                                (setq tour (cab:loop-order loop dpts))))
+                             (setq again T)))))))))))))))
   ;; sweep the dashed wall markers and any candidate the user did not
   ;; keep - the command tidies up after itself
   (cab:temp-clear)

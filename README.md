@@ -194,19 +194,23 @@ boundaries:
 * **Selections.** AutoCAD object selections cannot take keywords, so a
   command whose only remaining input is a selection (`PADDLE`,
   `DIMCONTEND`) has no prompt left that could offer Back - and Back
-  cannot be *typed at* a selection either, though several tools
-  (`WCALST`, `XFTCONV`, `AUTOBEAD`, `AUTODIM`) re-open their selection
-  when you Back at the prompt after it. Where the question straight
-  after a selection has nothing else in front of it - `CABHD`'s point
-  cutoff, `LHD`'s output height - it offers no Back; both are asked
-  again at a Redo.
+  cannot be *typed at* a selection either. Where a question sits
+  straight after a selection with nothing else in front of it, Back
+  there **re-opens the selection**: `WCALST`, `XFTCONV`, `AUTOBEAD` and
+  `AUTODIM` have always done this, and `CABHD`'s point cutoff and
+  `LHD`'s output height do it now. Nothing has been drawn at that
+  point, and the classifier rebuilds every list it fills, so the second
+  pass starts clean.
 * **Past the drawing.** Once a run has committed geometry, Back at the
   next question would have to erase rather than re-ask, so it is the
   draw-as-you-go rule that applies instead: Back at the prompt *inside*
   the loop takes the last step back, drawing and all. That is why
   `CORNERSTP`'s step WIDTH offers no Back (the tread prompt for the
   next step takes the whole step back), and why the side-profile and
-  bead questions that follow a finished run do not.
+  bead questions that follow a finished run do not. A question asked
+  once the undo group is open is the same case - which is why
+  `HEMISTEP` now asks its width at the wall BEFORE opening one, so it
+  can re-open the dimension question in front of it.
 * **A re-ask that is already a correction.** `pool:ask` and `psd:ask`
   re-ask a measurement that failed a range check; Back there would step
   out of the check rather than back a question, so they do not offer it.
