@@ -212,6 +212,7 @@
     ("ABCURCHECK"       "Perimeter continuity")
     ("ABCURCHECKSCAN"   "Perimeter continuity, no marks")
     ("ABPCHECK"         "Survey point offsets")
+    ("ABPCREATE"        "Create a missing point")
     ("ABFIND"           "A/B stake ties")
     ("ABHD"             "Survey perimeter + bottom")
     ("ABHDCOVER"        "Survey perimeter, no bottom")
@@ -259,6 +260,7 @@
     ("LITECOVERSCAN"    "Cover scan, no dims")
     ("LITELINFINSCAN"   "Liner scan, no dims")
     ("LITESPACHECKSCAN" "Spa scan, no dims")
+    ("LOBF"             "Line of best fit")
     ("NORMIESTEP"       "Normie step")
     ("OASIS"            "Freeform pool")
     ("LINGUTTER"        "Gut to perimeter, then pads")
@@ -335,6 +337,7 @@
      ("Points"
       "ABFIND"
       "ABMOVE"
+      "ABPCREATE"
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
@@ -372,6 +375,7 @@
      ("Points"
       "ABFIND"
       "ABMOVE"
+      "ABPCREATE"
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
@@ -440,6 +444,7 @@
       "CONSTELLATION"
       "TYLERDRONESUITE"
       "LAZDIAG"
+      "LOBF"
       )
     )
      ("Layout"
@@ -482,8 +487,10 @@
       "ALTABCDEF"
       "XYPLOT"
       "CONSTELLATION"
+      "LOBF"
       "ABFIND"
       "ABMOVE"
+      "ABPCREATE"
       "POINTRENAMER"
       "PERPPTS"
       "CPERPPTS"

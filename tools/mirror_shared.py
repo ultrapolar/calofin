@@ -347,6 +347,34 @@ TOOLS = {
         # acc:run tests for it by name
         'symbols': {'ACC-BACK': 'CAL-BACK'},
     },
+    # LOBF was written against the library from the start (STANDARDS
+    # section 6): its vector set, the sysvar pair, ensure-layer, pad,
+    # dedupe and the point-block reader are all CALOFIN-LIB bodies under
+    # lobf:, so every one of them comes back out here.  What stays local
+    # is the fitting itself -- the three fits, the gift-wrapped hull they
+    # need, the candidate record and the outlier rule -- which is what
+    # the tool IS, plus lobf:label and lobf:line, because cal:text takes
+    # no colour and the preview turns on drawing each candidate in its
+    # own one.
+    'LOBF': {
+        'src': 'lisp/lobf/LOBF.lsp',
+        'swap': {
+            'lobf:2d': 'cal:2d', 'lobf:dist': 'cal:dist',
+            'lobf:v-': 'cal:v-', 'lobf:v+': 'cal:v+', 'lobf:v*': 'cal:v*',
+            'lobf:dot': 'cal:dot', 'lobf:perp': 'cal:perp',
+            'lobf:vlen': 'cal:vlen', 'lobf:cross': 'cal:cross',
+            'lobf:unit': 'cal:unit', 'lobf:pad': 'cal:pad',
+            'lobf:dedupe': 'cal:dedupe',
+            'lobf:syssave': 'cal:syssave',
+            'lobf:sysrestore': 'cal:sysrestore',
+            'lobf:ensure-layer': 'cal:ensure-layer',
+            'lobf:block-number': 'cal:block-number',
+        },
+        # lobf:syssave already takes its sysvar list, like the library's,
+        # so there is nothing to expand -- but the snapshot global goes
+        # with it, and only the two dropped helpers ever read it
+        'drop_globals': ['lobf:*sysold*'],
+    },
     # ABPCHECK was forked from ABHD and written against the library from
     # the start: everything generic in it -- the vector set, the ask-free
     # helpers, ensure-layer, mtext, the point-block reader -- is a
@@ -1006,6 +1034,8 @@ TOOLS = {
             'abf:block-number': 'cal:block-number', 'abf:2d': 'cal:2d',
             'abf:dist': 'cal:dist', 'abf:angnorm': 'cal:angnorm',
             'abf:signed-dang': 'cal:signed-dang', 'abf:pad': 'cal:pad',
+            'abf:askdist': 'cal:askdist', 'abf:askstr': 'cal:askstr',
+            'abf:trim': 'cal:trim',
         },
         'drop_globals': [],
         'symbols': {
