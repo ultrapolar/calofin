@@ -479,6 +479,7 @@ python3 ariel/anchors.py --from-shot deck.png --score placed.txt
 | `gen_ui_data.py` | Writes the palette's `Generated/CommandCatalog.g.vb` from `lzp:*captions*` / `lzp:*groups*` plus `ui/calofin_net/blurbs.txt`. `--check` fails when the file on disk is not what a fresh run would write, the same contract `releases/` is held to |
 | `gen_ui_charts.py` | Writes the palette's `Generated/ChartCatalog.g.vb` - the vector charts `LAZFORM`, `LAZSPA` and `LAZSTEP` draw, plus the tables that are not geometry: LAZFORM's cross dims, mode dropdowns, corner rows, bottom types and in-square keywords, and LAZSPA's corner rows, second-outline keys, dropdowns and treatments - out of `lzf:*charts*`, `lzs:*charts*`, `lzt:chart` and the four `lzs:*` tables, read through `tests/lispvm.py`. Arcs are flattened by the Lisp's own helper, so the palette draws the same oval the panel does with no arc arithmetic of its own |
 | `check_vb.py` | Static check over the VB palette, for a tree with no VB compiler: blocks opened and closed by the right closer, quotes and parens balanced per logical line, and every member and constructor arity of the assembly's OWN types resolved - which is what holds the hand-written palette to the generated catalog |
+| `check_dcl.py` | Every generated dialog still fits the screen. DCL does not scroll: one wider or taller than the display does not clip, AutoCAD refuses to open it. Each generator is driven to its tallest reachable state - pins and recents full, every chart, every step count - and measured by `dclsize.py`, whose constants are fitted to the one real AutoCAD report there is; `--list` prints every dialog, tallest first |
 | `check_registry.py` | Every place a tool has to be registered - panel caption and placement, loader slot, README counts, the palette catalog and its probe list - with every count computed rather than typed; `--fix` repairs what is not editorial |
 | `check_lazdiag.py` | Every command reports its failures. Four call sites: `lzd:begin` at the top, `lzd:report` in the `*error*` handler, `lzd:watch` after a selection so the report carries the geometry the run was *handed* and not only what it drew, and `lzd:ask` in an ask helper for the transcript. `--fix` wires all four. It also names a command that can reach **no** handler at all - computed from what the body does, so a `*VER` reporter is exempt until the day it grows a prompt - but it will not write the handler, because what one has to put back is the editorial part. Both handler spellings are read, `(defun *error* ...)` and the `(setq *error* (lambda ...))` that `abhd`, `CABHD` and `lhd` use |
 
@@ -575,6 +576,11 @@ python3 tests/test_lazform.py         # LAZFORM - the chart drawn and checked,
 python3 tests/test_lazpanel.py        # LAZPANEL - roster pinned to lisp/,
                                       # DCL well-formed, run with stubs,
                                       # toolbar + generated icon bytes
+python3 tests/test_dcl_size.py        # every generated dialog FITS: the
+                                      # model reproduces the size AutoCAD
+                                      # refused, the pages that overflowed
+                                      # wrap and keep their captions, and
+                                      # Pinned/Recent are capped
 python3 tests/test_cornerstp_geometry.py
 python3 tests/test_cornerstp_bench.py   # CORNERSTP's bench, run in lispvm
 python3 tests/test_cornerstp_profile.py # the side profile all three draw

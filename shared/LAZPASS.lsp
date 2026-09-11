@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.11, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.12, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -94073,7 +94073,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.16")
+(setq *lazform-version* "v2.17")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -94111,6 +94111,14 @@
 ;; ceiling the packer wraps at, never a preference.
 (setq lzf:*tabbudget* 84)       ; the row of chart tabs
 (setq lzf:*rowbudget* 92)       ; a row of paired column boxes
+
+;; The same wall, the other way up.  How many lines of generated DCL
+;; may stack in the column BESIDE the chart before it is split in two.
+;; The Roman and Grecian pages were at 1141px against a 1080px screen,
+;; and four more charts were within 20px of the line, all of them
+;; because the five boxes beside the picture were one tall stack.  The
+;; picture is only ~260px, so the room was always there, sideways.
+(setq lzf:*colbudget* 34)   ; the boxes beside the chart
 
 ;; The chart column: its width in cells, and its height as a share of
 ;; that width (a string, because DCL reads aspect_ratio as one).
@@ -95356,7 +95364,49 @@
 ;; One dialog per chart.  They all live in one generated file so the
 ;; page loop can load_dialog once and switch pages without touching
 ;; the disk again.
-(defun lzf:dcl-one (c / out d l)
+;;  (lzf:*colbudget* itself is set in the TUNABLES block at the top of the file.)
+
+;; Net braces opened by one line of DCL: +1 per {, -1 per }.  What
+;; makes the boxes beside the chart splittable without the builders
+;; above having to know they are being split -- a block is finished
+;; when its own braces balance.
+(defun lzf:brace (s / i n d ch)
+  (setq i 0 n (strlen s) d 0)
+  (while (< i n)
+    (setq i (1+ i) ch (substr s i 1))
+    (cond ((= ch "{") (setq d (1+ d)))
+          ((= ch "}") (setq d (1- d)))))
+  d)
+
+;; LINES -- the interior of the column beside the chart -- wrapped in
+;; one ": column {}", or in two with the boxes shared out between them
+;; when one stack would be too tall.  The split is by weight rather
+;; than by count: "Dimensions" is half the page on its own, so three
+;; small boxes beside it is the balanced answer, not two and two.
+(defun lzf:packcols (lines / blocks blk d l tot run half a b out)
+  (setq blocks nil blk nil d 0)
+  (foreach l lines
+    (setq blk (cons l blk) d (+ d (lzf:brace l)))
+    (if (= d 0) (setq blocks (cons (reverse blk) blocks) blk nil)))
+  (if blk (setq blocks (cons (reverse blk) blocks)))
+  (setq blocks (reverse blocks) tot 0)
+  (foreach blk blocks (setq tot (+ tot (length blk))))
+  (if (or (<= tot lzf:*colbudget*) (< (length blocks) 2))
+    ;; short enough, or nothing to split it on: the page as it was
+    (append (list "    : column {") lines (list "    }"))
+    (progn
+      ;; greedy: keep filling the first column while doing so leaves it
+      ;; no further past halfway than stopping would leave it short
+      (setq run 0 half (/ tot 2) a nil b nil)
+      (foreach blk blocks
+        (if (and (<= (+ run (length blk)) half) (null b))
+          (setq a (append a blk) run (+ run (length blk)))
+          (setq b (append b blk))))
+      (if (null a) (setq a (car blocks) b (apply 'append (cdr blocks))))
+      (setq out (append (list "    : column {") a (list "    }")))
+      (append out (list "    : column {") b (list "    }")))))
+
+(defun lzf:dcl-one (c / out d l col)
   ;; out is consed newest-first and reversed once at the end, so this
   ;; seed list reads BACKWARDS: the label second here puts it second in
   ;; the file, after the line that opens the dialog.  The other way
@@ -95372,9 +95422,11 @@
                           lzf:*chart-a* "; fixed_width = true; "
                           "fixed_height = true; color = -15; }")
                   out))
-  (setq out (cons "    : column {" out))
-  (setq out (cons "      : boxed_column {" out))
-  (setq out (cons "        label = \"Dimensions\";" out))
+  ;; the boxes are built into COL so they can be shared out
+  ;; between columns once their sizes are known
+  (setq col nil)
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons "        label = \"Dimensions\";" col))
   ;; Each dimension is a row: its LETTER as a button, then the box.
   ;; Clicking the letter puts the caret in that box and rings the
   ;; dimension on the chart -- which is as close to clicking the
@@ -95383,76 +95435,76 @@
   ;; chart draws has a row here: the picture is read, the column is
   ;; typed into, and the letter is what ties the two together.
   (foreach d (lzf:dims c)
-    (setq out (cons "        : row {" out))
-    (setq out (cons (strcat "          : button { key = \"pick_"
+    (setq col (cons "        : row {" col))
+    (setq col (cons (strcat "          : button { key = \"pick_"
                             (cadr d) "\"; label = \"" (car d)
                             "\"; fixed_width = true; }")
-                    out))
-    (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
+                    col))
+    (setq col (cons (strcat "          : edit_box { key = \"" (cadr d)
                             "\"; edit_width = 9; label = \"" (nth 7 d)
                             "\"; }")
-                    out))
-    (setq out (cons "        }" out)))
-  (setq out (cons "      }" out))
+                    col))
+    (setq col (cons "        }" col)))
+  (setq col (cons "      }" col))
   (if (lzf:extra c)
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Not on this view\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Not on this view\";" col))
       (foreach l (append
                    (lzf:packrows (lzf:notsport (lzf:extra c)) "        ")
                    (lzf:packrows (lzf:sportof (lzf:extra c)) "        "))
-        (setq out (cons l out)))
-      (setq out (cons "      }" out))))
+        (setq col (cons l col)))
+      (setq col (cons "      }" col))))
   ;; the cross dims, with the question that decides how many of them
   ;; POOL will ask for at the head of the box
   (if (lzf:cross c)
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Cross dims (out-of-square only)\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Cross dims (out-of-square only)\";" col))
       (foreach d (lzf:picks c)
         (if (= (caddr d) "cross")
-            (setq out (cons (lzf:pickline d "        ") out))))
+            (setq col (cons (lzf:pickline d "        ") col))))
       (foreach l (lzf:packrows (lzf:cross c) "        ")
-        (setq out (cons l out)))
-      (setq out (cons "      }" out))))
+        (setq col (cons l col)))
+      (setq col (cons "      }" col))))
   (if (lzf:corners c)
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Corners\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Corners\";" col))
       (foreach d (lzf:corners c)
-        (setq out (cons "        : row {" out))
-        (setq out (cons (strcat "          : popup_list { key = \"" (car d)
+        (setq col (cons "        : row {" col))
+        (setq col (cons (strcat "          : popup_list { key = \"" (car d)
                                 "\"; label = \"" (cadr d)
                                 "\"; edit_width = 9; }")
-                        out))
-        (setq out (cons (strcat "          : edit_box { key = \"" (car d)
+                        col))
+        (setq col (cons (strcat "          : edit_box { key = \"" (car d)
                                 "-sz\"; label = \"size\"; "
                                 "edit_width = 6; fixed_width = true; }")
-                        out))
-        (setq out (cons "        }" out)))
-      (setq out (cons "      }" out))))
-  (setq out (cons "      : boxed_column {" out))
-  (setq out (cons "        label = \"The rest of the run\";" out))
+                        col))
+        (setq col (cons "        }" col)))
+      (setq col (cons "      }" col))))
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons "        label = \"The rest of the run\";" col))
   ;; the in-square toggle and the bottom type are POOL's questions and
   ;; nothing on an oasis answers to either: it is arcs all round, so
   ;; there is no corner to run a tape across, and its floor is asked
   ;; about after the outline is drawn
   (if (not (lzf:oasis-p c))
     (progn
-      (setq out (cons (strcat "        : toggle { key = \"insq\"; "
+      (setq col (cons (strcat "        : toggle { key = \"insq\"; "
                               "label = \"Pool is in-square "
                               "(no cross dims)\"; }")
-                      out))
-      (setq out (cons (strcat "        : popup_list { key = \"btype\"; "
+                      col))
+      (setq col (cons (strcat "        : popup_list { key = \"btype\"; "
                               "label = \"Bottom type\"; }")
-                      out))))
+                      col))))
   ;; the keyword questions that are not about cross dims live here,
   ;; with the toggle and the bottom type
   (foreach d (lzf:picks c)
     (if (= (caddr d) "run")
-        (setq out (cons (lzf:pickline d "        ") out))))
-  (setq out (cons "      }" out))
-  (setq out (cons "    }" out))
+        (setq col (cons (lzf:pickline d "        ") col))))
+  (setq col (cons "      }" col))
+  (setq out (append (reverse (lzf:packcols (reverse col))) out))
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : text { key = \"hint\"; width = 62; "
@@ -95568,6 +95620,12 @@
   (setq out (list
     "lazform_ascii : dialog {"
     "  label = \"LAZFORM  -  can this dialog draw in characters?\";"
+    ;; THE FIVE SECTIONS IN THREE COLUMNS, not one stack.  Stacked,
+    ;; the probe came to 1557px, and AutoCAD will not open a dialog
+    ;; taller than the screen -- so the one dialog whose entire job is
+    ;; to be looked at was the one that could not be.
+    "  : row {"
+    "    : column {"
     "  : boxed_column {"
     "    label = \"1.  Is the dialog font fixed-pitch?\";"
     "    : text { label = \"Twelve characters sit between the bars on every line.\"; }"
@@ -95586,6 +95644,8 @@
     "    : text { label = \"A staircase means indenting works; three bars in one\"; }"
     "    : text { label = \"column means DCL trimmed the spaces and art is impossible.\"; }"
     "  }"
+    "    }"
+    "    : column {"
     "  : boxed_column {"
     "    label = \"3.  The pool, drawn in characters\";"
     "    : text { label = \"    +--------------------------+\"; }"
@@ -95613,6 +95673,8 @@
     "      : text { label = \"--->|\"; width = 7; }"
     "    }"
     "  }"
+    "    }"
+    "    : column {"
     "  : boxed_column {"
     "    label = \"5.  Is a LIST BOX fixed-pitch?\";"
     (strcat "    : text { label = \"A text tile is not.  A list box is a "
@@ -95621,6 +95683,8 @@
             "characters after all.\"; }")
     "    : list_box { key = \"ruler\"; width = 32; height = 5; }"
     "    : list_box { key = \"pool\"; width = 78; height = 18; }"
+    "  }"
+    "    }"
     "  }"
     "  spacer;"
     "  : text { label = \"Tell the session which sections lined up.\"; alignment = centered; }"
@@ -96651,7 +96715,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.19")
+(setq *lazpanel-version* "v3.20")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -96693,6 +96757,34 @@
 ;; stops the dialog opening at all, so this is a ceiling and not a
 ;; preference.  84 fits a laptop screen.
 (setq lzp:*pinbudget* 84)
+
+;; How many captioned buttons may stack in ONE column before a page is
+;; split into more columns.  The width budget above has a twin here for
+;; the same reason: DCL does not scroll in EITHER direction, so a page
+;; taller than the screen does not clip, it refuses to open --
+;;     Dialog too large to fit on screen.
+;;     Requested Size = (436, 1085)   Maximum Size = (1920, 1080)
+;; which is what "Rest" did the day it reached 28 tools, and "Layout"
+;; had quietly passed it at 32.  Rest is COMPUTED -- every tool that is
+;; not on Pool, Cover or Spa lands there -- so the page that broke is
+;; the page every newly registered tool joins, and it would have broken
+;; again at the next one.  16 puts the tallest page near 770px and
+;; leaves room for several rows of pins and recents on top.
+(setq lzp:*colbudget* 16)
+
+;; How many rows the Pinned strip may occupy.  Pins are the one part of
+;; a page whose height the DRAFTER sets, and the note beside lzp:packrow
+;; used to say "pin thirty tools and you get a tall panel, never a
+;; broken one".  That was true when a page was 56 tools in three
+;; columns; it is not true now.  Thirty pins is six rows, which puts the
+;; tallest page at 1053px -- 27px under the limit -- and the next pin
+;; breaks it.  Three rows keeps the worst page under 950px with the
+;; Recent row still to come -- a whole row of slack against the budget
+;; in tools/check_dcl.py, where four rows left less than one, and a
+;; build sitting one row from failing its own check is a build the next
+;; change breaks.  Three rows is around seventeen tools; pins are for
+;; the handful run all day, so the cap is well past what they are for.
+(setq lzp:*pinrowmax* 3)
 
 ;; How many recently launched tools are remembered, newest first.  The
 ;; palette keeps the same number (PaletteMemory.RecentLimit) and
@@ -96858,8 +96950,12 @@
 ;;  drafter already carries; the columns just stop it being a single
 ;;  list of twenty-four.
 ;;
-;;  A column heading of "" means the page is one plain column -- what
-;;  the five category pages are.
+;;  A column heading of "" means the page is laid out as one plain list
+;;  -- what the five category pages and Rest are.  "One list" is not
+;;  "one column": a list too long to stack inside the screen is wrapped
+;;  into balanced columns at lzp:*colbudget*, which is why the table
+;;  below says nothing about how tall a page may be.  It is a list of
+;;  what belongs together, and the fitting is done for it.
 ;;
 ;;  WHY A MULTI-COLUMN PAGE SHOWS THE NAME ALONE.  A button reading
 ;;  "CDCALLOUT  -  Point-to-point cross dims" is about 39 cells wide;
@@ -96867,9 +96963,12 @@
 ;;  wider than the screen -- the dialog simply fails to open.  So the
 ;;  columns carry the meaning in their headings and the buttons carry
 ;;  the command name, which puts the widest page at about 64 cells.
-;;  Single-column pages have the room, and keep the caption on the
-;;  button: the category pages stay the place to go to find out what a
-;;  tool is, and the job pages are the place to go when you know.
+;;  A plain-list page has the room and keeps the caption on the button,
+;;  wrapped or not: the category pages stay the place to go to find out
+;;  what a tool IS, and the job pages are the place to go when you
+;;  know.  Wrapping one costs width rather than meaning -- two captioned
+;;  columns is about 98 cells, well inside the same wall that rules four
+;;  of them out.
 (setq lzp:*groups*
   '(("Pool"
      ("Shape"
@@ -97351,8 +97450,10 @@
 ;;  characters -- would push the dialog past the width DCL refuses to
 ;;  scroll, which does not clip the page, it stops it opening at all.
 ;;  So pins are packed greedily into as many rows as they need, with
-;;  the Pin... button packed last like any other item.  Pin thirty
-;;  tools and you get a tall panel, never a broken one.
+;;  the Pin... button packed last like any other item -- up to
+;;  lzp:*pinrowmax* rows, after which a further pin is REFUSED rather
+;;  than taken: height is the same hard wall width is, and a strip that
+;;  grew without limit would walk a page into it.
 ;;  (lzp:*pinbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzp:pin-label (n) (strcat "    : button { label = \"" n
@@ -97454,13 +97555,24 @@
   (lzp:recent-write)
   lzp:*recent*)
 
+;; Keep the newest lzp:*reclimit* and drop the rest.  lzp:remember caps
+;; what it WRITES, so this looks redundant and is not: a value stored
+;; by another build, or edited by hand, has never been through it, and
+;; Recent is a row on EVERY page -- an over-long one takes all nine
+;; past the screen at once, which is the one failure that cannot be
+;; escaped by moving to another tab.
+(defun lzp:rectrim ( )
+  (while (> (length lzp:*recent*) lzp:*reclimit*)
+    (setq lzp:*recent* (reverse (cdr (reverse lzp:*recent*)))))
+  lzp:*recent*)
+
 (defun lzp:recent-read ( / s)
   (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Recent")))
   (setq lzp:*recent*
     (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
       (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
                         (lzp:split s ";"))))
-  lzp:*recent*)
+  (lzp:rectrim))
 
 (defun lzp:recent-write ( / s n)
   (setq s "")
@@ -97472,7 +97584,36 @@
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
 ;; an edit to that table and nothing else.
-(defun lzp:dcl-one (g / out c col)
+;; NAMES split into as few BALANCED columns as the budget allows: 28
+;; tools at a budget of 16 come out 14 and 14 rather than 16 and 12,
+;; because a page with one full column beside a short one reads as two
+;; different lists.  A page that already fits comes back as a single
+;; column and is emitted exactly as it always was.
+(defun lzp:wrap (names / n cols per rem want out row c)
+  (setq n (length names))
+  (if (<= n lzp:*colbudget*)
+    (list names)
+    (progn
+      ;; the remainder is SHARED OUT, one to a column, rather than left
+      ;; to pile up on the last one: 82 over six columns is four of 14
+      ;; and two of 13, where rounding every column up the same way
+      ;; gives five of 14 and a stub of 12.
+      (setq cols (1+ (/ (1- n) lzp:*colbudget*))   ; columns, rounded up
+            per  (/ n cols)                        ; the even share
+            rem  (- n (* per cols))                ; this many get one more
+            out nil row nil
+            want (if (> rem 0) (1+ per) per))
+      (foreach c names
+        (setq row (cons c row))
+        (if (= (length row) want)
+          (setq out  (cons (reverse row) out)
+                row  nil
+                rem  (1- rem)
+                want (if (> rem 0) (1+ per) per))))
+      (if row (setq out (cons (reverse row) out)))
+      (reverse out))))
+
+(defun lzp:dcl-one (g / out c col cols)
   ;; consed newest-first and reversed at the end, so this seed list
   ;; reads BACKWARDS: the dialog line last here comes out first
   (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
@@ -97487,13 +97628,33 @@
     ;; ONE COLUMN: the page has the width to spare, so every button
     ;; carries its caption -- this is what the category pages are for.
     ((= (length (cdr g)) 1)
-     (setq out (cons "  : boxed_column {" out))
-     (setq out (cons (strcat "    label = \"" (car g) "\";") out))
-     (foreach c (cdr (car (cdr g)))
-       (setq out (cons (strcat "    : button { label = \"" c "  -  "
-                               (lzp:caption c) "\"; key = \"" c "\"; }")
-                       out)))
-     (setq out (cons "  }" out)))
+     (setq cols (lzp:wrap (cdr (car (cdr g)))))
+     (if (= (length cols) 1)
+       ;; fits: the page it has always been, one boxed column
+       (progn
+         (setq out (cons "  : boxed_column {" out))
+         (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+         (foreach c (car cols)
+           (setq out (cons (strcat "    : button { label = \"" c "  -  "
+                                   (lzp:caption c) "\"; key = \"" c "\"; }")
+                           out)))
+         (setq out (cons "  }" out)))
+       ;; too tall for one column, so side by side -- and the captions
+       ;; STAY: a category page is where you go to find out what a tool
+       ;; is, which is the whole reason it carries them.  Plain columns
+       ;; inside the one box, because a border per column would say the
+       ;; halves of one list were separate things.
+       (progn
+         (setq out (cons "  : boxed_row {" out))
+         (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+         (foreach col cols
+           (setq out (cons "    : column {" out))
+           (foreach c col
+             (setq out (cons (strcat "      : button { label = \"" c "  -  "
+                                     (lzp:caption c) "\"; key = \"" c "\"; }")
+                             out)))
+           (setq out (cons "    }" out)))
+         (setq out (cons "  }" out)))))
     ;; SEVERAL COLUMNS, side by side: the heading says what the column
     ;; is for and the buttons carry the command name alone.  Four
     ;; captioned buttons abreast would be about 147 cells wide and the
@@ -97517,27 +97678,24 @@
                   out))
   (reverse (cons "}" out)))
 
-;; The pin editor: every tool on the panel as a toggle, in three
-;; columns so fifty-six of them fit on a screen rather than a scroll
-;; DCL would not give.
-(defun lzp:dcl-pins ( / out cmds n per i j c)
-  (setq cmds (lzp:commands)
-        n    (length cmds)
-        per  (1+ (/ (1- n) 3))
-        i    0)
+;; The pin editor: every tool on the panel as a toggle, in as many
+;; columns as lzp:*colbudget* needs.  It was three FIXED columns, which
+;; was fine at the fifty-six tools of the day and is not at eighty-two:
+;; three columns of twenty-eight is the same 1085px that stopped "Rest"
+;; opening, on the one dialog that grows every time ANY tool is added.
+;; Sharing the page budget means it cannot drift out of step again.
+(defun lzp:dcl-pins ( / out col c)
   (setq out (list "lazpanel_pins : dialog {"
                   "  label = \"LazPanel  -  pinned tools\";"
-                  (strcat "  : text { label = \"Ticked tools sit in the "
-                          "Pinned row on every page.\"; }")
+                  (strcat "  : text { key = \"pinmsg\"; label = \"Ticked "
+                          "tools sit in the Pinned row on every page.\"; }")
                   "  : row {"))
-  (while (< i n)
-    (setq out (append out (list "    : column {")) j 0)
-    (while (and (< j per) (< i n))
-      (setq c (nth i cmds))
+  (foreach col (lzp:wrap (lzp:commands))
+    (setq out (append out (list "    : column {")))
+    (foreach c col
       (setq out (append out
         (list (strcat "      : toggle { label = \"" c
-                      "\"; key = \"tg_" c "\"; }"))))
-      (setq i (1+ i) j (1+ j)))
+                      "\"; key = \"tg_" c "\"; }")))))
     (setq out (append out (list "    }"))))
   (append out
     (list "  }" "  spacer;"
@@ -97630,13 +97788,24 @@
 ;; Read the pins back, dropping any name no longer on the roster: a pin
 ;; left over from an older build must not put a dead button on screen,
 ;; and the roster is the only thing that says what is real.
+;; Drop pins from the END until the strip fits lzp:*pinrowmax* rows.
+;; The cap is enforced as a tool is ticked, but a list stored by a
+;; build that predates the cap has never been through it -- and the
+;; same sentence applies as to a dead name: what is stored must not be
+;; allowed to put a page on screen that cannot open.  The last pinned
+;; go first, so the row the hand has learned is the part that survives.
+(defun lzp:pintrim ( )
+  (while (and lzp:*pins* (> (length (lzp:pinrows)) lzp:*pinrowmax*))
+    (setq lzp:*pins* (reverse (cdr (reverse lzp:*pins*)))))
+  lzp:*pins*)
+
 (defun lzp:pins-read ( / s)
   (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Pins")))
   (setq lzp:*pins*
     (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
       (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
                         (lzp:split s ";"))))
-  lzp:*pins*)
+  (lzp:pintrim))
 
 (defun lzp:pins-write ( / s n)
   (setq s "")
@@ -97645,12 +97814,31 @@
   (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Pins" s))
   lzp:*pins*)
 
+;; set_tile that cannot throw.  pin-toggle runs as a dialog action, so
+;; the tiles are there when a drafter clicks -- but it is also called
+;; directly, by the tests and by anything restoring a stored list, and
+;; set_tile outside a dialog is an error, not a no-op.
+(defun lzp:settile (key val)
+  (vl-catch-all-apply 'set_tile (list key val)))
+
 ;; Pin order is click order: a newly ticked tool goes on the END rather
 ;; than jumping into the middle of a row the hand has already learned.
-(defun lzp:pin-toggle (name val)
+(defun lzp:pin-toggle (name val / was)
   (if (= val "1")
     (if (not (member name lzp:*pins*))
-      (setq lzp:*pins* (append lzp:*pins* (list name))))
+      (progn
+        (setq was        lzp:*pins*
+              lzp:*pins* (append lzp:*pins* (list name)))
+        ;; one pin too many does not make a tall panel, it makes a page
+        ;; that will not open -- so put it back and say why, rather
+        ;; than storing something that breaks the next page opened
+        (if (> (length (lzp:pinrows)) lzp:*pinrowmax*)
+          (progn
+            (setq lzp:*pins* was)
+            (lzp:settile (strcat "tg_" name) "0")
+            (lzp:settile "pinmsg"
+                         (strcat "That is as many as the Pinned row"
+                                 " holds - un-tick one first."))))))
     (setq lzp:*pins* (vl-remove name lzp:*pins*)))
   (princ))
 
@@ -98678,7 +98866,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.11 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.12 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

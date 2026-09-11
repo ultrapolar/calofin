@@ -372,6 +372,7 @@ from `LAZPASS.lsp`.
 | `lzf:*ctreat*` | `'("(ask)" "Square" "Radius" "Cut" "NotGiven")` | what a corner can be: STANDARDS.md's canonical set, `(ask)` first so a row left alone sends nothing. **Order matters** -- `lzf:csized` names the sized treatments by index |
 | `lzf:*tabbudget*` | `84` | how wide the row of chart tabs may be, in DCL character cells. A ceiling: DCL does not scroll |
 | `lzf:*rowbudget*` | `92` | the same for a row of paired column boxes |
+| `lzf:*colbudget*` | `34` | the same wall the other way up: how many lines of generated DCL may stack in the column BESIDE the chart before it is split in two. Roman and Grecian were 1141px tall against a 1080px screen; the picture is only ~260px, so the room was always there sideways |
 | `lzf:*chart-w*` | `52` | the chart column's width, in character cells |
 | `lzf:*chart-a*` | `"0.72"` | and its height, as a share of that width -- a string, because DCL reads `aspect_ratio` as one |
 | `lzf:*poskey*` | `"LazForm_Pos"` | where the dialog remembers its position between restarts (the AutoCAD profile) |

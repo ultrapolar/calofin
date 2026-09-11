@@ -325,6 +325,13 @@ python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
                                  # closer, quotes and parens balanced, and
                                  # every member and constructor arity of
                                  # the assembly's own types resolved
+python3 tools/check_dcl.py       # every generated dialog still FITS: DCL
+                        [--list] # does not scroll, so one past the screen
+                                 # does not clip, it refuses to open.  The
+                                 # generators are driven to their tallest
+                                 # reachable state (pins and recents full,
+                                 # every chart, every step count) and
+                                 # measured by tools/dclsize.py
 python3 tools/gen_ui_data.py     # rewrites the palette's catalog from
                         [--check]# LAZPANEL's tables; --check is the
                                  # staleness half, and check_standards
@@ -334,6 +341,20 @@ python3 tools/gen_ui_charts.py   # the same for the palette's chart
                                  # chart tables
 make check                       # all of the above in one go
 ```
+
+`check_dcl.py` is the one that reads a dialog as a SIZE rather than as
+code. DCL does not scroll in either direction: a dialog wider or taller
+than the screen does not clip and does not scroll -- AutoCAD refuses to
+open it and the command dies where it stands. Nothing else in the tree
+can see that coming, because a dialog's height is never written down;
+it is the sum of whatever the generator emitted, and the generators
+grow every time a tool is registered. LAZPANEL's `Rest` page is the
+case that proved it: every tool not on Pool, Cover or Spa lands there,
+so the page that stopped opening at 28 tools was the page each new tool
+joins -- and `Layout` had passed the same line at 32 without anyone
+clicking it. Both wrap into balanced columns now (`lzp:*colbudget*`),
+and the two strips a drafter grows, Pinned and Recent, are capped both
+at the tick and on the way in from the registry.
 
 `check_standards.py` covers what the other two cannot see, because they
 read one file at a time: a `lisp/` tool with no `shared/` twin, a tool

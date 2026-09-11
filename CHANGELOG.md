@@ -6,6 +6,59 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.12 -- 2026-09-11
+
+**A dialog that does not fit does not open.** DCL does not scroll in
+either direction: a page wider or taller than the screen is not
+clipped and is not scrolled -- AutoCAD refuses it outright, with
+`Dialog too large to fit on screen. Requested Size = (436, 1085)
+Maximum Size = (1920, 1080)`, and the command dies where it stands.
+LAZPANEL's **Rest** page had reached exactly that, so clicking Rest did
+nothing but raise the error. Rest is the page that could least afford
+it: it is COMPUTED -- every tool not on Pool, Cover or Spa lands there
+-- so the page that stopped opening is the page every newly registered
+tool joins, and it would have broken again at the next one regardless.
+
+Nothing in the tree could have caught it, because a dialog's size is
+written down nowhere: it is the sum of whatever the generator emitted.
+So it is computed now. `tools/dclsize.py` reads generated DCL as a tile
+tree and measures it; its constants are fitted to the report above and
+reproduce both of that report's numbers exactly. `tools/check_dcl.py`
+drives every generator to its tallest REACHABLE state -- pins and
+recents full, every chart, every step count -- and fails the build on
+anything within 60px of the limit. It is in `make check`, and
+`tests/test_dcl_size.py` puts the same measurement in `make test`.
+
+Five dialogs were over, only one of which anyone had clicked:
+
+- **Rest** (1085px) and **Layout** (1189px) now wrap into balanced
+  columns at `lzp:*colbudget*`, captions and all -- a category page is
+  where you go to find out what a tool IS, so losing the captions to
+  gain the width would have cost the page its purpose.
+- **LAZFORM's Roman and Grecian** charts (1141px each) pack the boxes
+  beside the picture into two columns instead of one stack. Four more
+  charts were within 20px of the line and came down with them. The
+  picture is only ~260px tall, so the room was always there, sideways.
+- **LAZASCII** (1557px), whose whole job is to be looked at, lays its
+  five sections out in three columns.
+
+And the two strips whose height a DRAFTER sets are capped. The note
+beside the pinned row said "pin thirty tools and you get a tall panel,
+never a broken one"; that was true at 56 tools in three columns and is
+not true at 82 -- thirty pins is 1053px, 27px under the wall, and the
+next pin goes through it. Pinned is held to `lzp:*pinrowmax*` rows, at
+the tick and again on the way in from the registry, where a list stored
+by an older build has never been through the cap. Recent was capped
+only as it was WRITTEN, so a stored value that predates the limit came
+back whole onto every page at once; it is trimmed on read as well.
+
+The pin editor had the same fault from the other end -- three fixed
+columns was 28 rows at 82 tools, the same 1085px, on the one dialog
+that grows every time ANY tool is added. It shares the page budget now,
+so it cannot drift out of step again.
+
+Worst page a drafter can build, pins and recents full: 941px.
+
 ## v3.7 -- 2026-09-10
 
 One pass, one idea: a question you can answer is a question you should

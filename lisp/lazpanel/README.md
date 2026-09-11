@@ -449,6 +449,8 @@ maintains them.
 | `lzp:*poskey*` | `"LazPanel_Pos"` | where the panel remembers its position between restarts: a value in the AutoCAD profile, which is always writable where the registry may not be |
 | `lzp:*pinkey*` | `"HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel"` | where pins and recents live. **The VB palette reads the same key**, so a drafter has one set of pins whichever surface they pinned from -- change it here and in `ui/calofin_net/PaletteMemory.vb` together |
 | `lzp:*pinbudget*` | `84` | how wide a row of pinned or recent buttons may be, in DCL character cells. A ceiling, not a preference: DCL does not scroll, and a row past the screen's width stops the dialog opening at all |
+| `lzp:*colbudget*` | `16` | how many captioned buttons may stack in ONE column before a page wraps into more. The height twin of the budget above, and the same wall: `Rest` reached 1085px against a 1080px screen at 28 tools and stopped opening, `Layout` had passed it at 32. Columns come out balanced, captions kept |
+| `lzp:*pinrowmax*` | `3` | how many rows the Pinned strip may occupy. The one part of a page whose height a drafter sets, so it is capped as a tool is ticked AND on the way in from the registry, where a list stored by an older build has never been through the cap |
 | `lzp:*reclimit*` | `5` | how many recently launched tools are remembered. The palette keeps the same number (`PaletteMemory.RecentLimit`) |
 
 ## Assumptions
