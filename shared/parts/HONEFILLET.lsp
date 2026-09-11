@@ -774,7 +774,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHONEFILLET error: " m)))
+    (if lzd:report (lzd:report "HONEFILLET" *honefillet-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "HONEFILLET" *honefillet-version*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))

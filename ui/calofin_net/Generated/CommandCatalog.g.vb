@@ -109,6 +109,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("G2MRECONV", "G2M conversion, undone", "Undoes a G2MCONV run - layers, appearance, text and dimension styles"),
         New Entry("HEMISTEP", "Hemi step", "Hemi step layout"),
         New Entry("HONEFILLET", "Corner radius, honed", "Bracket two of SMARTFILLET's radii and hone between them at half inches"),
+        New Entry("LAZDIAG", "Error report for the last failure", "Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works"),
         New Entry("LAZFORM", "Pool from a filled-in chart", "Fill the dimension chart in and draw the pool from it"),
         New Entry("LAZFORMCOVER", "Chart to pool, no bottom", "LAZFORM for a cover sheet - the pool-bottom gate closed"),
         New Entry("LAZSPA", "Spa from a filled-in chart", "LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn"),
@@ -239,7 +240,8 @@ Public NotInheritable Class CommandCatalog
             New Entry("SPACHECKSCAN", "Spa sheet scan", "The spa sheet review as one scan"),
             New Entry("LITESPACHECKSCAN", "Spa scan, no dims", "Spa rules only - skips the dimension audit"),
             New Entry("LINTXTCHK", "Liner checklist text", "Places the vinyl-liner QA checklist as drawing text"),
-            New Entry("CCPRECHECK", "Tech flow chart", "Walks the Tech Flow Chart decision tree")
+            New Entry("CCPRECHECK", "Tech flow chart", "Walks the Tech Flow Chart decision tree"),
+            New Entry("LAZDIAG", "Error report for the last failure", "Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works")
         }}
     }
 
@@ -265,7 +267,7 @@ Public NotInheritable Class CommandCatalog
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "CUSTBLOCK", "AUTODIM", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Rest", {
-            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE"})
+            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG"})
         }),
         New Page("Layout", {
             New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "ADAB", "CABHD", "LHD", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
@@ -277,7 +279,7 @@ Public NotInheritable Class CommandCatalog
             New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT"})
         }),
         New Page("Checking", {
-            New Column("", {"CHECK", "DIMARCCHECK", "DIMCHECK", "DIMSCAN", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "LINTXTCHK", "CCPRECHECK"})
+            New Column("", {"CHECK", "DIMARCCHECK", "DIMCHECK", "DIMSCAN", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "LINTXTCHK", "CCPRECHECK", "LAZDIAG"})
         })
     }
 

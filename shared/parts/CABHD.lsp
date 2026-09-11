@@ -1089,6 +1089,7 @@
     (setq ans (getint (strcat "\n  Include points up to [Pick/All"
                               (if back "/Back" "") "] <"
                               (if out (itoa out) "All") ">: ")))
+    (if lzd:ask (lzd:ask "cab:ask-cut" ans))
     (cond
       ((null ans) (setq cut out))                     ; Enter: unchanged
       ;; the only question in front of this one is the selection, so
@@ -2568,6 +2569,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *CAB-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "cab:ask-tol" tol))
   (cond
     ((cab:back-kw tol) 'CAB-BACK)
     (T
@@ -2589,6 +2591,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "cab:ask-pct" pct))
   (cond
     ((cab:back-kw pct) 'CAB-BACK)
     ((null pct) def)
@@ -2604,6 +2607,7 @@
                            (if *CAB-MAX-ARCS* (itoa *CAB-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "cab:ask-cap" mx))
   (cond
     ((cab:back-kw mx) 'CAB-BACK)
     (T

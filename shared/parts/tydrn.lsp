@@ -162,7 +162,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTYDRN error: " msg)))
+    (if lzd:report (lzd:report "TYDRN" *tydrn-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TYDRN" *tydrn-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -451,7 +453,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTYLERDRONESUITE error: " msg)))
+    (if lzd:report (lzd:report "TYLERDRONESUITE" *tydrn-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TYLERDRONESUITE" *tydrn-version*))
   ;; Every calofin stage is checked BEFORE any of them runs.  Half a
   ;; suite is worse than none: TYDRN would have moved the points and
   ;; the operator would find out only mid-run that the padding they ran

@@ -768,7 +768,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCORNERSTP: " msg)))
+    (if lzd:report (lzd:report "CORNERSTP" *cs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CORNERSTP" *cs-version*))
 
   ;; remove the most recently drawn step and roll the state back
   (defun cs-popstep ( / rec e)
@@ -1808,7 +1810,9 @@
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
+    (if lzd:report (lzd:report "TUTORIALCORNERSTP" *cs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCORNERSTP" *cs-version*))
 
   (princ (strcat "\n================ CORNERSTP TUTORIAL " *cs-version*
                  " ================"))

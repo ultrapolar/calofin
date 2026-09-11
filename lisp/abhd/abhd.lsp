@@ -3295,6 +3295,7 @@
   (setq ans (getkword (strcat
               "\n  Slope line from the offset at Pt." nm
               " [Straight/Guided/Points/Back] <Straight>: ")))
+  (if lzd:ask (lzd:ask "pf:ask-slope" ans))
   (setq slopemarks nil)     ; the caller's register of this side's rings
   (cond
     ((member ans '("Back" "Undo")) 'PF-BACK)
@@ -3553,6 +3554,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *PF-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "pf:ask-tol" tol))
   (cond
     ((pf:back-kw tol) 'PF-BACK)
     (T
@@ -3574,6 +3576,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "pf:ask-pct" pct))
   (cond
     ((pf:back-kw pct) 'PF-BACK)
     ((null pct) def)
@@ -3589,6 +3592,7 @@
                            (if *PF-MAX-ARCS* (itoa *PF-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "pf:ask-cap" mx))
   (cond
     ((pf:back-kw mx) 'PF-BACK)
     (T

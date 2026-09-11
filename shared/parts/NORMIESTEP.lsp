@@ -899,7 +899,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nNORMIESTEP: " msg)))
+    (if lzd:report (lzd:report "NORMIESTEP" *ns-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "NORMIESTEP" *ns-version*))
 
   ;; remove the most recently drawn step and roll the state back
   (defun ns-popstep ( / e)
@@ -1829,7 +1831,9 @@
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
+    (if lzd:report (lzd:report "TUTORIALNORMIESTEP" *ns-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALNORMIESTEP" *ns-version*))
 
   (princ (strcat "\n================ NORMIESTEP TUTORIAL " *ns-version*
                  " ================"))

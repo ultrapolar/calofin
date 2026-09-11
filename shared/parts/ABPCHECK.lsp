@@ -684,6 +684,7 @@
 (defun abp:asklimit (msg dflt / v)
   (initget 6)
   (setq v (getdist (strcat "\n" msg " <" (abp:dstr dflt) ">: ")))
+  (if lzd:ask (lzd:ask msg v))
   (if v v dflt))
 
 ;;; -------------------- the commands ------------------------------------
@@ -697,7 +698,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABPCHECK error: " msg)))
+    (if lzd:report (lzd:report "ABPCHECK" *abpcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABPCHECK" *abpcheck-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - probed BEFORE the undo
@@ -781,7 +784,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABPCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "ABPCHECKRESCUE" *abpcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABPCHECKRESCUE" *abpcheck-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO

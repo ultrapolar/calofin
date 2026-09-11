@@ -104,7 +104,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINTXTCHK error: " msg)))
+    (if lzd:report (lzd:report "LINTXTCHK" *lintxtchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINTXTCHK" *lintxtchk-version*))
 
   (setq height  ltc:*height*
         spacing (* height ltc:*spacing*)

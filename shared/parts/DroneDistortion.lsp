@@ -151,7 +151,9 @@
     (setvar "CMDECHO" cmd)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
+    (if lzd:report (lzd:report "DDFIX" *dronedistortion-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "DDFIX" *dronedistortion-version*))
 
   ;; The three questions are staged: Back (Undo works too) at the
   ;; height prompts re-opens the previous one, and a bad value re-asks

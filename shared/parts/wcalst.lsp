@@ -570,8 +570,10 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nWCALST error: " msg))
     )
+    (if lzd:report (lzd:report "WCALST" *wcalst-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "WCALST" *wcalst-version*))
   (setq oldlay (getvar "CLAYER"))
 
   ;; ---- 1.-7. the questions, staged so every prompt after the first

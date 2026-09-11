@@ -182,6 +182,39 @@ In order, in one commit:
 Never hand-edit `releases/` or `shared/LAZPASS.lsp` — both are
 regenerated and your edit will vanish.
 
+### When a tool fails
+
+A failure is not finished when the handler prints a line. Every command
+carries two guarded calls that `tools/check_lazdiag.py --fix` inserts
+and `make check` enforces:
+
+```lisp
+(if lzd:begin  (lzd:begin  "TOOLNAME" *toolname-version*))      ; at the top
+(if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))  ; in *error*
+```
+
+and every ask helper carries one more, straight after its `get*` call:
+
+```lisp
+(if lzd:ask (lzd:ask msg v))
+```
+
+`lisp/lazdiag/LAZDIAG.lsp` is what they reach. It turns a failure into a
+DXF in the user's Downloads folder -- the geometry, the clicks, the
+transcript, the sysvars, the error -- tells the drafter to send it in,
+and asks nothing. The click-into-your-drawing path exists, is reached
+only by typing `LAZDIAG` after a report no folder would take, and is
+never reached automatically.
+
+Three rules for anything added there. It runs from inside `*error*`, so
+**nothing may throw** -- the work happens under `vl-catch-all-apply`
+and a re-entry is refused, not nested. **Nothing may prompt** -- that is
+`LAZDIAG`'s job, from a clean command line. And `lzd:report` goes AFTER
+the sysvar restore and BEFORE the handler's trailing `(princ)`, which is
+its return value. The `(if ...)` guards are what keep a standalone file
+loading alone: an unbound symbol is nil, so with no LAZDIAG present
+every one of these lines is a no-op.
+
 ### Adding or removing a command
 
 A tool is not finished when it draws. It has to be *registered*: a
@@ -258,6 +291,11 @@ python3 tools/check_registry.py  # every tool registered everywhere it has
                                  # list -- with every count computed
                                  # rather than typed; --fix repairs what
                                  # is not editorial
+python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
+                    [--fix]      # lzd:begin at the top and the lzd:report
+                                 # in the *error* handler, plus the one
+                                 # line each ask helper carries to record
+                                 # its prompt; --fix wires what is missing
 python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
                                  # VB compiler: blocks closed by the right
                                  # closer, quotes and parens balanced, and

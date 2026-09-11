@@ -1582,7 +1582,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nABCDEF error: " msg)))
+    (if lzd:report (lzd:report "ABCDEF" *abcdef-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCDEF" *abcdef-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))

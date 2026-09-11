@@ -1209,7 +1209,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" (if cmd cmd "ABFIND") " error: " m)))
+    (if lzd:report (lzd:report "ABFIND" *abfind-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "ABFIND" *abfind-version*))
 
   (setq cmd  (if movep "ABMOVE" "ABFIND")
         oce  (getvar "CMDECHO")

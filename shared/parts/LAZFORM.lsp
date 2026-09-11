@@ -1658,7 +1658,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZASCII error: " msg)))
+    (if lzd:report (lzd:report "LAZASCII" *lazform-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZASCII" *lazform-version*))
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZASCII error: could not write the dialog file."))
@@ -1816,7 +1818,9 @@
     (if f (vl-file-delete f))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZTXT error: " msg)))
+    (if lzd:report (lzd:report "LAZTXT" *lazform-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZTXT" *lazform-version*))
   ;; the same clean slate lzf:show starts from.  The in-square toggle
   ;; and the bottom-type row have to be reset here too, even though this
   ;; view carries no tile for either: it READS both when it builds the
@@ -2298,7 +2302,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZFORM error: " msg)))
+    (if lzd:report (lzd:report "LAZFORM" *lazform-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZFORM" *lazform-version*))
   (setq lzf:*vals* nil
         lzf:*cvals* nil                 ; corner dropdowns back to (ask)
         lzf:*pvals* nil                 ; and the mode dropdowns with them

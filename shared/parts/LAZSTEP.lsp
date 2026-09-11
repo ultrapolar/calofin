@@ -1439,7 +1439,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZSTEP error: " msg)))
+    (if lzd:report (lzd:report "LAZSTEP" *lazstep-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZSTEP" *lazstep-version*))
   (setq lzt:*vals*  nil
         lzt:*sel*   nil
         lzt:*steps* nil

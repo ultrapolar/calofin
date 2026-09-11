@@ -316,7 +316,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCDCREATE error: " m)))
+    (if lzd:report (lzd:report "CDCREATE" *cdcreate-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "CDCREATE" *cdcreate-version*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))

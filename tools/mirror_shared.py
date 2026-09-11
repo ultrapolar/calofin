@@ -589,6 +589,23 @@ TOOLS = {
     # The launcher panel uses no library helpers at all -- it draws
     # nothing and asks nothing -- so its twin is the file plus the
     # shared banner.  Listed anyway so the twin can never drift.
+    'LAZDIAG': {
+        'src': 'lisp/lazdiag/LAZDIAG.lsp',
+        'swap': {
+            'lzd:pad2': 'cal:zeropad2',
+            'lzd:datestr': 'cal:datestr',
+            'lzd:ensure-layer': 'cal:ensure-layer',
+        },
+        # lzd:cancel-p deliberately does NOT swap to cal:error-cancel-p.
+        # The two differ by one guard -- lzd:cancel-p checks that the
+        # message is a string before handing it to strcase -- and that
+        # guard is the point: it runs in lzd:report's cond, which is
+        # OUTSIDE the vl-catch-all-apply the rest of the reporter sits
+        # in, so a throw there would be a throw inside *error* with
+        # nowhere to go.  Not behaviour-identical, so not swapped.
+        'drop_globals': [],
+    },
+
     'LAZPANEL': {
         'src': 'lisp/lazpanel/LAZPANEL.lsp',
         'swap': {},

@@ -477,7 +477,9 @@
     (cal:dimstyrestore)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "TUTORIALSPA" tut:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALSPA" tut:*version*))
 
   (if (null spa:*version*)
       (progn

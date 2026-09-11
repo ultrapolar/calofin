@@ -79,6 +79,73 @@ folded, and no file that accepts the keyword and then only tests for
 `"Back"`. The other half of the same test walks each threaded chain
 backwards through the interpreter, at both tiers.
 
+## v3.9 -- 2026-09-11
+
+A failure used to say one line and stop:
+
+    POOL error: bad argument type: numberp: nil
+
+True, and nearly useless. It does not say which of POOL's forty prompts
+had been answered, what was typed into them, what was on screen, or
+what the drawing looked like when it happened. The drafter shrugs and
+tries again; if it fails twice they report that "POOL is broken", and
+the diagnosis starts from nothing.
+
+**Every calofin command now writes its failure out as a file you can
+send in.** The same crash prints that same line, and then:
+
+    [calofin] POOL v2.7 has FAILED -- this is a bug, not
+    [calofin] something you did wrong.  An error report has been
+    [calofin] written to
+    [calofin]     C:\Users\dm\Downloads\POOL-v2.7-error-2026-09-11-143207.dxf
+    [calofin] SEND THAT FILE IN FOR DIAGNOSIS.
+
+and that DXF holds a copy of the geometry the run drew, whatever it had
+been handed to work on, every point that was clicked labelled with the
+prompt it answered, the transcript prompt by prompt from the start of
+the run, the error text, the last step reached, and AutoCAD's own
+`ERRNO` / `CMDNAMES` / `LASTPROMPT` and sysvars. It is written by hand
+as R12 DXF -- the oldest there is, which every AutoCAD since reads, and
+which needs no handles and no bookkeeping to get wrong inside an error
+handler, where `(command)` is refused and `DXFOUT` is out of reach.
+
+**Nothing is asked and the open drawing is not touched.** An earlier
+shape of this put the report into the current drawing and asked the
+user to click somewhere clear of their work. That is worse in every
+direction: it asks somebody who has just been told their command
+crashed to make a careful decision, it writes into the file they care
+about at the moment they trust it least, "somewhere clear" lands on a
+viewport as often as not, and what they then have to send is the whole
+job drawing. The click-in path survives as a LAST RESORT -- type
+`LAZDIAG` after a report that no folder would take -- and nothing
+reaches it automatically.
+
+`LAZDIAG` typed by hand writes the last failure's report again, which
+is the answer when the folder was read-only the first time. With
+nothing to report it writes a **self test** to the folder a real report
+would go to instead of saying nothing, so a drafter can find out that
+reports will reach them BEFORE the day they need one.
+
+Esc is not a failure and writes nothing: somebody who backs out of POOL
+twenty times a day must not find twenty DXFs in Downloads.
+
+The wiring is not remembered, it is checked. `tools/check_lazdiag.py`
+owns the two lines each command carries -- `lzd:begin` at the top,
+`lzd:report` in the handler, after the sysvar restore and before the
+trailing `(princ)` -- and the one line each ask helper carries to
+record the prompt it just put up; `--fix` inserts what is missing and
+`make check` fails a command that has neither, so the tool added next
+year cannot be the one whose failures stay silent. 93 handlers and 74
+ask helpers were wired by it. Both guards are `(if lzd:report ...)`
+form: an unbound symbol is nil in AutoLISP, so a standalone file
+APPLOADed alone runs them as no-ops and behaves exactly as before.
+
+What it does not do, and says so in the report rather than pretending
+otherwise: AutoLISP hands an error handler a message and nothing else
+-- no stack, no file, no line number. The breadcrumb and the transcript
+are what stand in for one, and between them they name the prompt the
+run died at, which is the question a line number would have answered.
+
 ## v3.8 -- 2026-09-10
 
 `Same` was already the way to repeat a step tread, and `S` already

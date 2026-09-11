@@ -907,8 +907,10 @@
     ;; error mode would stay pushed for the rest of the session
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if lzd:report (lzd:report "XFTCONV" *xft-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "XFTCONV" *xft-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -1201,8 +1203,10 @@
     (xft:restore)
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if lzd:report (lzd:report "XFTRECONV" *xft-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "XFTRECONV" *xft-version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
 

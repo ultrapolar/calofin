@@ -503,7 +503,9 @@ save/restore, one undo group, `(princ)` exit:
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTOOLNAME error: " msg)))
+    (if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TOOLNAME" *toolname-version*))
   (tool:syssave)
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
@@ -514,6 +516,25 @@ save/restore, one undo group, `(princ)` exit:
   (tool:sysrestore)
   (princ))
 ```
+
+**The two LAZDIAG lines are not optional, and not yours to write.**
+`tools/check_lazdiag.py --fix` inserts and maintains both, and
+`make check` fails a command that has neither, because the point of
+them is that EVERY failure produces a report and the one tool that
+forgot is the one somebody will hit.  What they do: `lzd:begin` marks
+where the drawing stood and starts a transcript; `lzd:report`, after
+the settings are back and the undo group is closed, writes the whole
+failure out as a DXF in the user's Downloads folder for them to send
+in -- the geometry, the prompts, the sysvars, the error -- and tells
+them so.  A plain cancel writes nothing.  The `(if ...)` guard is what
+lets a standalone file still load alone: an unbound symbol evaluates to
+nil, so with no LAZDIAG loaded both lines are no-ops and the file
+behaves exactly as it did before.  Never call `lzd:report` before the
+sysvar restore -- the user's settings come back first, always -- and
+never make it the handler's last form, because the trailing `(princ)`
+is the handler's return value.  An ask helper takes one further line,
+`(if lzd:ask (lzd:ask msg v))` straight after its `get*` call, and the
+same script maintains that.
 
 The canonical cancel test is exactly
 `(wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")` -- ten

@@ -271,7 +271,9 @@
     (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
+    (if lzd:report (lzd:report "CDCALLOUT" *cdcallout-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "CDCALLOUT" *cdcallout-version*))
 
   (vl-load-com)
   (setq oce  (getvar "CMDECHO")

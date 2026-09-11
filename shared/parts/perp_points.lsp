@@ -446,6 +446,7 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
+    (if lzd:ask (lzd:ask "perp:ask-width" ans))
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -565,7 +566,9 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
+    (if lzd:report (lzd:report "PERPPTS" *perp-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "PERPPTS" *perp-version*))
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain in perp:finish; harmless no-op guard on older
   ;; releases where it doesn't exist

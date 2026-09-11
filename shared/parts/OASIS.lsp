@@ -820,6 +820,7 @@
       (setq v (getkword (strcat "\n" msg " [" shown
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((member v '("Back" "Undo")) 'OASIS-BACK)
             ((null v) (if dflt dflt (oasis:askkw msg kws shown dflt back)))
             (t v)))))
@@ -857,6 +858,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -1986,6 +1988,7 @@
   (if back (initget "Back Undo"))
   (setq v (getpoint (strcat "\nInsertion base point <0,0>"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "oasis:askbase" v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
@@ -2096,6 +2099,7 @@
     (t
      (initget 7 "Line Back Undo")
      (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
+     (if lzd:ask (lzd:ask msg v))
      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
            ((= (type v) 'STR) "LINE")
            (t v)))))
@@ -2112,6 +2116,7 @@
     (progn
       (initget 0 "Back Undo")
       (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
             ((null v) 0.0)
             (t v)))))
@@ -2181,6 +2186,7 @@
     (progn
       (initget 0 "Tie Back Undo")
       (setq v (getdist (strcat "\n" msg " [Tie/Back] <0>: ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
             ((= (type v) 'STR) "TIE")
             ((null v) 0.0)
@@ -2797,6 +2803,7 @@
     (initget 7 "Back Undo")
     (setq v (getint (strcat "\n" msg " -- tangency change 1-" (itoa n)
                             " [Back]: ")))
+    (if lzd:ask (lzd:ask msg v))
     (cond ((and (= (type v) 'STR) (member v '("Back" "Undo")))
            (setq v 'OASIS-BACK))
           ((and (= (type v) 'INT) (<= v n)))
@@ -2810,6 +2817,7 @@
 (defun oasis:asknear (msg arcs base / v)
   (initget 1 "Back Undo")
   (setq v (getpoint (strcat "\n" msg " [Back]: ")))
+  (if lzd:ask (lzd:ask msg v))
   (if (and (= (type v) 'STR) (member v '("Back" "Undo")))
       'OASIS-BACK
       (oasis:ringnear arcs (list (- (car v) (car base))
@@ -3085,6 +3093,7 @@
                 (strcat "\nHopper offset in from the wall [Back] <"
                         (rtos (cond (oasis:*hopoff-last*) (oasis:*hopoff*)))
                         ">: ")))
+    (if lzd:ask (lzd:ask "oasis:askhopoff" off))
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
        (setq bot 'OASIS-BACK))
@@ -3264,7 +3273,9 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nOASIS error: " msg)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "OASIS" *oasis-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "OASIS" *oasis-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain and the UNDO close above; harmless no-op guard on

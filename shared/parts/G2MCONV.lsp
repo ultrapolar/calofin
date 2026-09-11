@@ -675,7 +675,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nG2MCONV error: " msg)))
+    (if lzd:report (lzd:report "G2MCONV" *g2mconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "G2MCONV" *g2mconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -799,7 +801,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nG2MRECONV error: " msg)))
+    (if lzd:report (lzd:report "G2MRECONV" *g2mconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "G2MRECONV" *g2mconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil

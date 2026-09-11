@@ -1173,6 +1173,7 @@
                             (t " (or NA if not measured)"))
                       (if back " [Back]" "")
                       ": ")))
+    (if lzd:ask (lzd:ask msg v))
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
@@ -1230,6 +1231,7 @@
                                    (back " [Back]")
                                    (t ""))
                              ": ")))
+    (if lzd:ask (lzd:ask msg v))
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
@@ -2237,6 +2239,7 @@
   ;; -- B, BACK, U or UNDO alone, any case -- as the prompt says
   (while (null spa:*taper*)
     (setq v (getstring "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8) [type B to go Back]: "))
+    (if lzd:ask (lzd:ask "spa:askdetails" v))
     (if (spa:backstr v)
         (setq spa:*taper* 'CAL-BACK)
         (progn
@@ -3682,7 +3685,9 @@
     (spa:pvkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "SPA" spa:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPA" spa:*version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
