@@ -89366,7 +89366,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.13")
+(setq *lazpanel-version* "v3.14")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -89577,12 +89577,12 @@
   '(("Pool"
      ("Converters"
       "XFTCONV"
-      "XFTRECONV"
       "SOCONV"
-      "SORECONV"
       "VSCONV"
-      "VSRECONV"
       "G2MCONV"
+      "XFTRECONV"
+      "SORECONV"
+      "VSRECONV"
       "G2MRECONV"
       )
      ("Shape"
@@ -89654,12 +89654,12 @@
      ("Spa"
      ("Converters"
       "XFTCONV"
-      "XFTRECONV"
       "SOCONV"
-      "SORECONV"
       "VSCONV"
-      "VSRECONV"
       "G2MCONV"
+      "XFTRECONV"
+      "SORECONV"
+      "VSRECONV"
       "G2MRECONV"
       )
      ("Shape, dims & check"

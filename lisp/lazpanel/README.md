@@ -63,12 +63,12 @@ reach for them.
 | **Converters** | **Shape** | **Points** | **Steps** | **Dims & check** |
 | --- | --- | --- | --- | --- |
 | `XFTCONV` | `POOL` | `ABFIND` | `LAZSTEP` | `AUTODIM` |
-| `XFTRECONV` | `POOLSIDE` | `ABMOVE` | `CORNERSTP` | `LINFINCHECK` |
-| `SOCONV` | `LAZFORM` | `CDCREATE` | `HEMISTEP` | `LINFINSCAN` |
-| `SORECONV` | `LAZTXT` | `CDCALLOUT` | `NORMIESTEP` | `LITELINFINSCAN` |
-| `VSCONV` | `OASIS` | `BPCALLOUT` | `AUTOBEAD` | `DIMCHECK` |
-| `VSRECONV` | `ABHD` |  | `PERPPTS` | `DIMSCAN` |
-| `G2MCONV` | `ADAB` |  | `CPERPPTS` |  |
+| `SOCONV` | `POOLSIDE` | `ABMOVE` | `CORNERSTP` | `LINFINCHECK` |
+| `VSCONV` | `LAZFORM` | `CDCREATE` | `HEMISTEP` | `LINFINSCAN` |
+| `G2MCONV` | `LAZTXT` | `CDCALLOUT` | `NORMIESTEP` | `LITELINFINSCAN` |
+| `XFTRECONV` | `OASIS` | `BPCALLOUT` | `AUTOBEAD` | `DIMCHECK` |
+| `SORECONV` | `ABHD` |  | `PERPPTS` | `DIMSCAN` |
+| `VSRECONV` | `ADAB` |  | `CPERPPTS` |  |
 | `G2MRECONV` | `FITABHD` |  |  |  |
 
 **Cover** -- 3 columns, in the order the work runs:
@@ -90,12 +90,12 @@ reach for them.
 | **Converters** | **Shape, dims & check** |
 | --- | --- |
 | `XFTCONV` | `SPA` |
-| `XFTRECONV` | `LAZSPA` |
-| `SOCONV` | `CUSTBLOCK` |
-| `SORECONV` | `AUTODIM` |
-| `VSCONV` | `SPACHECK` |
-| `VSRECONV` | `SPACHECKSCAN` |
-| `G2MCONV` | `LITESPACHECKSCAN` |
+| `SOCONV` | `LAZSPA` |
+| `VSCONV` | `CUSTBLOCK` |
+| `G2MCONV` | `AUTODIM` |
+| `XFTRECONV` | `SPACHECK` |
+| `SORECONV` | `SPACHECKSCAN` |
+| `VSRECONV` | `LITESPACHECKSCAN` |
 | `G2MRECONV` | `DIMCHECK` |
 |  | `DIMSCAN` |
 
@@ -110,12 +110,34 @@ so the two that moved left it automatically -- the test recomputes that
 and would have failed if they had not. `G2MCONV` was placed here from
 the start, for the same reason, and so was never on `Rest` at all.)
 
-**Each reverter sits under its converter**, in the same column. A
-`RECONV` is looked for in exactly one situation -- the conversion just
-run turns out to be wrong, or the drawing has to go back to whoever
-exported it -- and the place it is looked for is where the converter
-was. The column name still tells the truth: undoing a conversion is
+**The converters come first, the reverters underneath them**, in the
+one column and in the same order -- `XFTCONV`, `SOCONV`, `VSCONV`,
+`G2MCONV`, then `XFTRECONV`, `SORECONV`, `VSRECONV`, `G2MRECONV`, so
+the fourth button in the lower run undoes the fourth in the upper one.
+The column name still tells the truth: undoing a conversion is
 converting, in the other direction.
+
+Each reverter used to sit directly under its own converter, pairing
+them two by two. That reads well when you already know which export
+you are looking at and badly when you do not: the thing a drafter
+picks from this column nine times out of ten is a *converter*, and
+interleaving made the four of them four apart instead of four in a
+row. A reverter is wanted in exactly one situation -- the conversion
+just run turns out to be wrong, or the drawing has to go back to
+whoever exported it -- and in that situation you are looking for a
+specific name, which a labelled run of four gives you as directly as a
+pair did.
+
+**Why they are not two columns.** Splitting them into `Converters` and
+`Reverters` side by side is the obvious next step and it does not fit:
+a column costs its widest button plus six cells, `G2MRECONV` and
+`XFTRECONV` are nine characters, so a reverters column cannot cost
+less than 15. Pool is already 81 of the 90-cell body budget, which
+would put it at 96 -- and a DCL dialog over the budget does not clip,
+it fails to open. Shortening the headings does not help; the command
+names are what set the width. Spa has the room (41 cells), but a Spa
+that splits and a Pool that cannot would be two different layouts for
+one column, which is worse than either.
 
 **Spa's buttons lost their captions**, and that is the column rule
 biting rather than an oversight: a page laid out in columns shows the

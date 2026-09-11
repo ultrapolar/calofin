@@ -247,7 +247,7 @@ Public NotInheritable Class CommandCatalog
     ''' page answers what a tool IS.</summary>
     Public Shared ReadOnly Pages As Page() = {
         New Page("Pool", {
-            New Column("Converters", {"XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV", "G2MCONV", "G2MRECONV"}),
+            New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
             New Column("Shape", {"POOL", "POOLSIDE", "LAZFORM", "LAZTXT", "OASIS", "ABHD", "ADAB", "FITABHD"}),
             New Column("Points", {"ABFIND", "ABMOVE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
             New Column("Steps", {"LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "AUTOBEAD", "PERPPTS", "CPERPPTS"}),
@@ -259,7 +259,7 @@ Public NotInheritable Class CommandCatalog
             New Column("Pads, dims & check", {"LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTODIM", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Spa", {
-            New Column("Converters", {"XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV", "G2MCONV", "G2MRECONV"}),
+            New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "CUSTBLOCK", "AUTODIM", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Rest", {
