@@ -842,6 +842,7 @@
   ;; group opens, because that command clears the set (the convention
   ;; FITABHD and abhd already carry)
   (setq ss (ssget "_I" abp:*filter*))
+  (if lzd:watch (lzd:watch ss))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -852,7 +853,8 @@
   (if (null ss)
     (progn
       (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")
-      (setq ss (ssget abp:*filter*))))
+      (setq ss (ssget abp:*filter*))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X" abp:*filter*)))
   (if (null ss)
     (princ "\nNothing to check - no points or lines in the drawing.")

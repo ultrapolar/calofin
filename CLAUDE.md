@@ -184,41 +184,64 @@ regenerated and your edit will vanish.
 
 ### When a tool fails
 
-A failure is not finished when the handler prints a line. Every command
-carries two guarded calls that `tools/check_lazdiag.py --fix` inserts
-and `make check` enforces:
+**Every command in this tree reports its failures, and a new one is not
+finished until it does.** A failure is not over when the handler prints
+a line: it is over when the drafter has a file they can send in. That
+is `lisp/lazdiag/LAZDIAG.lsp`, and four guarded call sites reach it:
 
 ```lisp
-(if lzd:begin  (lzd:begin  "TOOLNAME" *toolname-version*))      ; at the top
+(if lzd:begin  (lzd:begin  "TOOLNAME" *toolname-version*))      ; top of the command
 (if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))  ; in *error*
+(if lzd:watch  (lzd:watch ss))                                  ; after a selection
+(if lzd:ask    (lzd:ask msg v))                                 ; in an ask helper
 ```
 
-and every ask helper carries one more, straight after its `get*` call:
+Do not write them by hand. `python3 tools/check_lazdiag.py --fix`
+inserts and maintains all four, and `make check` runs the same check,
+so a tool that is missing any of them cannot ship.
 
-```lisp
-(if lzd:ask (lzd:ask msg v))
-```
+**What `--fix` will not write is the `*error*` handler itself.** What
+belongs in one is the editorial part -- which sysvars this command
+changed, whether an undo group is open, what it drew that has to be
+swept -- and a handler that puts back the wrong thing is a bug the
+drafter meets in the *next* command they run. So write the handler on
+the STANDARDS section 5 skeleton, then run `--fix`. A command with no
+handler at all is named by the check, including one that only prompts
+and saves a setting: a failure there is still a failure somebody has to
+be told about. Seven commands were in that state and now are not.
 
-`lisp/lazdiag/LAZDIAG.lsp` is what they reach. It turns a failure into a
-DXF in the user's Downloads folder -- the geometry, the clicks, the
-transcript, the sysvars, the error -- tells the drafter to send it in,
-and asks nothing. The click-into-your-drawing path exists, is reached
-only by typing `LAZDIAG` after a report no folder would take, and is
-never reached automatically.
+Both handler spellings are recognised -- the `(defun *error* ...)` of
+the skeleton and the `(setq *error* (lambda (msg) ...))` that `abhd`,
+`CABHD` and `lhd` use to save and restore the previous handler. Prefer
+the skeleton in new code. Scanning only for the first spelling is how
+ABHD, ADAB, TUTORIALABHD, CABHD and LHD -- three of the largest tools
+here -- sat reporting nothing while every other command reported
+everything.
 
-Three rules for anything added there. It runs from inside `*error*`, so
-**nothing may throw** -- the work happens under `vl-catch-all-apply`
-and a re-entry is refused, not nested. **Nothing may prompt** -- that is
-`LAZDIAG`'s job, from a clean command line. And `lzd:report` goes AFTER
-the sysvar restore and BEFORE the handler's trailing `(princ)`, which is
-its return value. The `(if ...)` guards are what keep a standalone file
-loading alone: an unbound symbol is nil, so with no LAZDIAG present
-every one of these lines is a no-op.
+What a report holds: a copy of the geometry the run drew AND of the
+selection it was handed, every point clicked labelled with the prompt
+it answered, the transcript prompt by prompt, the error, the last step
+reached, and AutoCAD's own `ERRNO` / `CMDNAMES` / `LASTPROMPT` and
+sysvars. It goes to the user's Downloads folder as
+`TOOL-version-error-date.dxf`. Nothing is asked and the open drawing is
+not touched. The click-into-your-drawing path exists, is reached only
+by typing `LAZDIAG` after a report no folder would take, and is never
+reached automatically.
+
+Three rules for anything added to LAZDIAG itself. It runs from inside
+`*error*`, so **nothing may throw** -- the work happens under
+`vl-catch-all-apply` and a re-entry is refused, not nested. **Nothing
+may prompt** -- that is `LAZDIAG`'s own job, from a clean command line.
+And `lzd:report` goes AFTER the sysvar restore and BEFORE the handler's
+trailing `(princ)`, which is its return value. The `(if ...)` guards are
+what keep a standalone file loading alone: an unbound symbol is nil, so
+with no LAZDIAG present every one of these lines is a no-op.
 
 ### Adding or removing a command
 
-A tool is not finished when it draws. It has to be *registered*: a
-caption and a placement in `lisp/lazpanel/LAZPANEL.lsp`, a slot in
+A tool is not finished when it draws. It has to *report its failures*
+(above) and it has to be *registered*: a caption and a placement in
+`lisp/lazpanel/LAZPANEL.lsp`, a slot in
 `shared/parts/CALOFIN-LOADER.lsp`, a row in `README.md`, four numbers
 in prose that all change when the roster does, a tooltip in
 `ui/calofin_net/blurbs.txt` and a name in `ui/calofin_ui/calofin.lsp`'s
@@ -227,6 +250,7 @@ probe list.
 Do not do that by hand. Run:
 
 ```
+python3 tools/check_lazdiag.py --fix    # the four LAZDIAG call sites
 python3 tools/check_registry.py --fix
 python3 tools/gen_ui_data.py            # the palette's catalog
 ```

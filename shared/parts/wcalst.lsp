@@ -585,6 +585,7 @@
   ;; the first pass through stage 1 takes them; a too-small band or Back
   ;; re-asks interactively.
   (setq wc-pick (ssget "_I" '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch wc-pick))
   (setq stage 1)
   (while (< stage 6)
     (cond
@@ -595,7 +596,8 @@
          (setq ss wc-pick wc-pick nil)
          (progn
            (princ "\nSelect the band of lines (two long sides + rungs): ")
-           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))))
+           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+           (if lzd:watch (lzd:watch ss))))
        (if (not ss) (progn (princ "\nNothing selected.") (exit)))
        (setq segs (wc:build-segs ss))
        (if (< (length segs) wc:*min-segs*)
@@ -610,6 +612,7 @@
       ((= stage 2)
        (initget "Back Undo")
        (setq pick (entsel "\nClick the long side to STRAIGHTEN [Back]: "))
+       (if lzd:watch (lzd:watch pick))
        (cond
          ((= (type pick) 'STR) (setq stage 1))
          ((not pick)
@@ -823,6 +826,7 @@
   ;; equal steps up and down stay equal)
   (princ "\nWindow the STAIR section(s) if any (Enter = none): ")
   (setq ssstairs (ssget))
+  (if lzd:watch (lzd:watch ssstairs))
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a

@@ -2246,6 +2246,7 @@
 (defun spa:readblock ( / sel ed bn att v got)
   (spa:osup)
   (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
+  (if lzd:watch (lzd:watch sel))
   (spa:osdown)
   (if sel
       (progn

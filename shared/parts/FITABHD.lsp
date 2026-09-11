@@ -4770,6 +4770,7 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq fit-pick (ssget "_I" '((0 . "POINT,INSERT"))))
+  (if lzd:watch (lzd:watch fit-pick))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -4793,7 +4794,8 @@
       (princ (strcat "\n\n  Step 7 of 7 - select the survey points (POINTS layer or"
                      "\n  " fit:*point-block* " blocks)."))
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT"))))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (princ (strcat "\nNothing usable selected (POINT entities on layer "

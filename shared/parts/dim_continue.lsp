@@ -109,6 +109,7 @@
     (setq en nil ss nil pl nil kept nil)
     (while (null en)
       (setq tref (entsel "\nSelect the dimension to continue: "))
+      (if lzd:watch (lzd:watch tref))
       (cond
         ((null tref)                                 ; Enter / miss -> quit
            ;; a quoted symbol, not :none - a colon symbol evaluates to
@@ -133,6 +134,7 @@
         ;; -- 2. highlight the drawing to dimension -----------------
         (princ "\nHighlight the drawing to dimension (window/crossing): ")
         (setq ss (ssget))
+        (if lzd:watch (lzd:watch ss))
 
         (if (null ss)
           (princ "\nNothing highlighted -- nothing to do.")

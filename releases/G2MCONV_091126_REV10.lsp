@@ -675,10 +675,12 @@
 ;; highlight first when two plans share one sheet.
 (defun g2m:scope (msg / ss)
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\n" msg " <Enter = whole drawing>: "))
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss) (setq ss (ssget "_X")))))
   ss)
 

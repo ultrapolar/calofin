@@ -79,6 +79,56 @@ folded, and no file that accepts the keyword and then only tests for
 `"Back"`. The other half of the same test walks each threaded chain
 backwards through the interpreter, at both tiers.
 
+## v3.10 -- 2026-09-11
+
+v3.9 made a failure write itself out as a DXF. This is the pass that
+makes that true of EVERY command rather than of most of them, and makes
+it stay true for the tool written next year.
+
+**Three of the largest tools here were reporting nothing.** A handler
+comes in two spellings -- the `(defun *error* ...)` of STANDARDS
+section 5, and the `(setq *error* (lambda (m) ...))` that saves and
+restores the previous one -- and the wiring only ever looked for the
+first. So ABHD, ABHDCOVER, ADAB, TUTORIALABHD, CABHD and LHD were
+invisible to it: not unwired, *unseen*, which is the failure mode a
+check is supposed to make impossible. Both spellings are read now, and
+a lambda handler's `lzd:begin` lands outside the `setq` that holds it
+rather than becoming another argument to it.
+
+**Seven commands had no handler at all**, so there was nothing to wire.
+DDALT, DDCAL, DDSET, DDELEV, DDTEST, STOCKCOVER-CFG and XFTCONV-SETUP
+prompt and save a setting; none of them opens an undo group or changes
+a sysvar, so each has the minimal handler -- say it, report it, return.
+DDINFO, LAZBUTTON and LAZICON followed for the same reason.
+
+`check_lazdiag` now names a command that can reach **no** handler, its
+own or one in a helper it calls, and that is the rule that makes this
+de facto: a tool written later fails `make check` until it has one.
+What counts as needing one is computed from what the body does, never
+from the name -- so a `*VER` reporter is exempt and stops being exempt
+the day it grows a prompt. It reads the code with strings and comments
+masked out, because ABFINDVER prints the line `(commands: ABFIND,
+ABMOVE, ABPCREATE)` and `(commands:` matched `(command`. What `--fix`
+will not do is write the handler: which sysvars to put back and whether
+an undo group is open is the editorial part, and a handler that
+restores the wrong thing is a bug the drafter meets in the *next*
+command they run.
+
+**A report now carries the geometry a run was HANDED**, not only what
+it drew. `lzd:watch` existed and nothing called it, so a tool that fell
+over while walking a selection produced a report with the selection
+missing -- the one thing the failure was about. 95 selection sites
+record themselves now. Whole-database scans (`ssget "_X"`) are skipped
+on purpose: a checking tool sweeps thousands of entities, and copying
+them would bury the failure in the drawing rather than showing it.
+`lzd:gather` caps the whole list, input included, so a big selection
+cannot produce a DXF nobody can open.
+
+The rule is written where it will be read: the session-start hook's
+"Rules that bite", a stated requirement in STANDARDS section 5 with the
+four call sites in a table, CLAUDE.md's new-tool checklist, and
+`make check`.
+
 ## v3.9 -- 2026-09-11
 
 A failure used to say one line and stop:

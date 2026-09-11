@@ -326,6 +326,43 @@ check("...labelled with the prompt it answered",
       any("north-east corner" in (g(e, 1) or "") for e in picks),
       [g(e, 1) for e in picks])
 
+print("a selection is the other half of the geometry")
+
+vm = newvm()
+vm.loads('''(setq i 0)
+(while (< i 6)
+  (entmakex (list '(0 . "CIRCLE") '(8 . "SPA")
+                  (cons 10 (list (float i) 0.0 0.0)) '(40 . 3.0)))
+  (setq i (1+ i)))''')
+vm.loads('(lzd:begin "SPACHECK" "v1.1")')
+vm.loads('(setq ss (ssget "_X"))')
+vm.loads('(if lzd:watch (lzd:watch ss))')
+failing_run(vm, "SPACHECK", "v1.1")
+ents = entities(sections(pairs(only_file(vm)[1]))["ENTITIES"])
+check("a whole selection set is copied, not just its first entity",
+      len([e for e in ents if g(e, 0) == "CIRCLE"]) == 6,
+      "%d circles" % len([e for e in ents if g(e, 0) == "CIRCLE"]))
+
+# the cap is what keeps a report mailable: a checking tool can select
+# thousands, and a DXF of all of them is one nobody can open
+vm = newvm()
+vm.loads("(setq lzd:*max-ents* 12)")
+vm.loads('''(setq i 0)
+(while (< i 60)
+  (entmakex (list '(0 . "CIRCLE") '(8 . "SPA")
+                  (cons 10 (list (float i) 0.0 0.0)) '(40 . 1.0)))
+  (setq i (1+ i)))''')
+vm.loads('(lzd:begin "SPACHECK" "v1.1")')
+vm.loads('(if lzd:watch (lzd:watch (ssget "_X")))')
+failing_run(vm, "SPACHECK", "v1.1")
+body = only_file(vm)[1]
+ents = entities(sections(pairs(body))["ENTITIES"])
+got = len([e for e in ents if g(e, 0) == "CIRCLE"])
+check("a huge selection is capped, not copied whole",
+      got <= 12, "%d entities copied against a cap of 12" % got)
+check("...and the report says it truncated rather than hiding it",
+      "TRUNCATED" in body, "no word of the truncation")
+
 print("the transcript: which question it died on")
 
 vm = newvm()
@@ -564,6 +601,59 @@ vm.run("c:LAZDIAG", [])
 check("c:LAZDIAG's own wired handler writes a report",
       any("LAZDIAG-" in p and "-error-" in p for p in vm.files),
       list(vm.files))
+
+print("the checker that keeps this true for the tool written next")
+
+import check_lazdiag as cz  # noqa: E402
+
+# Both spellings of a handler.  Reading only the first is how ABHD,
+# ADAB, TUTORIALABHD, CABHD and LHD -- three of the largest tools in
+# the tree -- sat reporting nothing while everything else reported.
+FIXTURE = '''(setq *demo-version* "v1.0")
+(defun c:DEMOA ( / *error* undo-open)
+  (defun *error* (msg)
+    (princ (strcat "\\nDEMOA error: " msg))
+    (princ))
+  (setvar "CMDECHO" 0)
+  (princ))
+(defun c:DEMOB ( / *error* old)
+  (setq old *error*
+        *error*
+          (lambda (m)
+            (princ (strcat "\\nDEMOB error: " m))
+            (princ)))
+  (setvar "CMDECHO" 0)
+  (princ))
+(defun c:DEMOVER ()
+  (princ (strcat "\\nDEMO " *demo-version* "  (commands: DEMOA, DEMOB)"))
+  (princ))
+(defun c:DEMOBARE ( / ss)
+  (setq ss (ssget))
+  (princ))
+'''
+mask = cz.code_mask(FIXTURE)
+found = {h["name"] for h in cz.handlers(FIXTURE, mask, "DEMO.lsp")}
+check("a (defun *error* ...) handler is found", "DEMOA" in found, found)
+check("a (setq *error* (lambda ...)) handler is found too",
+      "DEMOB" in found, found)
+
+missing, fixed = cz.wire("DEMO.lsp", FIXTURE, True)
+check("both get their report call, in the handler",
+      fixed.count("(if lzd:report") == 2, fixed.count("(if lzd:report"))
+check("...and their begin call, one per command",
+      fixed.count("(if lzd:begin") == 2, fixed.count("(if lzd:begin"))
+check("a lambda handler's begin lands OUTSIDE the setq that holds it",
+      "(lambda (m)" in fixed
+      and fixed.index("(if lzd:begin (lzd:begin \"DEMOB\"")
+          > fixed.index("(princ)))"),
+      "the begin call became another setq argument")
+check("the selection is watched", "(if lzd:watch" in fixed, "no watch call")
+
+naked = cz.unprotected(FIXTURE, mask, "DEMO.lsp")
+check("a command that does something with no handler is named",
+      naked == ["DEMOBARE"], naked)
+check("...and a version reporter is not, though it prints \"(commands:\"",
+      "DEMOVER" not in naked, naked)
 
 if failures:
     print("\n%d LAZDIAG check(s) FAILED" % len(failures))

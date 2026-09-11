@@ -1920,7 +1920,18 @@
                     (itoa (length lzp:*pins*)) " tools pinned."))))
   (princ))
 
-(defun c:LAZBUTTON ( / tb)
+(defun c:LAZBUTTON ( / *error* tb)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZBUTTON error: " msg)))
+    (if lzd:report (lzd:report "LAZBUTTON" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZBUTTON" *lazpanel-version*))
   (setq tb (vl-catch-all-apply 'lzp:button-init nil))
   (cond
     ((vl-catch-all-error-p tb)
@@ -1933,7 +1944,18 @@
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))
 
-(defun c:LAZICON ( / paths tb btn r w)
+(defun c:LAZICON ( / *error* paths tb btn r w)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZICON error: " msg)))
+    (if lzd:report (lzd:report "LAZICON" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZICON" *lazpanel-version*))
   ;; The icon path is best effort and fails silently on purpose: a
   ;; missing picture must never stop the panel working.  Silence is the
   ;; right default and a poor answer to "why is my button blank", so
