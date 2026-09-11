@@ -375,6 +375,32 @@ TOOLS = {
         # with it, and only the two dropped helpers ever read it
         'drop_globals': ['lobf:*sysold*'],
     },
+    # SPACOVCREATE was written against the library from the start: the
+    # vector set, the string pair, the sysvar pair and the layer maker
+    # are CALOFIN-LIB bodies under its own prefix, so all of them come
+    # back out here.  What stays local is scv:unit (the library's
+    # returns NIL on a zero vector, and every caller here multiplies the
+    # result), scv:ceilv (the library's has no epsilon, and a piece
+    # count of 2.0000000001 must not round to 3) and scv:right, which
+    # the library has no half of -- cal:perp is the LEFT turn only.
+    'SPACOVCREATE': {
+        'src': 'lisp/spacovcreate/SPACOVCREATE.lsp',
+        'swap': {
+            'scv:2d': 'cal:2d',
+            'scv:v+': 'cal:v+', 'scv:v-': 'cal:v-', 'scv:v*': 'cal:v*',
+            'scv:dot': 'cal:dot', 'scv:cross': 'cal:cross',
+            'scv:vlen': 'cal:vlen', 'scv:mid': 'cal:mid',
+            'scv:left': 'cal:perp',
+            'scv:trim': 'cal:trim', 'scv:plural': 'cal:plural',
+            'scv:syssave': 'cal:syssave',
+            'scv:sysrestore': 'cal:sysrestore',
+            'scv:osup': 'cal:osup', 'scv:osdown': 'cal:osdown',
+            'scv:ensure-layer': 'cal:ensure-layer',
+        },
+        # the snapshot global goes with the sysvar pair, and only those
+        # two and cal:osup ever read it
+        'drop_globals': ['scv:*sysold*'],
+    },
     # ABPCHECK was forked from ABHD and written against the library from
     # the start: everything generic in it -- the vector set, the ask-free
     # helpers, ensure-layer, mtext, the point-block reader -- is a

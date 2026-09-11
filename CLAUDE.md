@@ -258,8 +258,8 @@ python3 tools/gen_ui_data.py            # the palette's catalog
 `--fix` inserts the caption row and a `Rest`-page placement, rewrites
 every derived count, bumps LAZPANEL's banner, and then **names the
 three things it will not decide for you**: the caption text, which
-category page (`Layout`/`Points`/`Dimensions`/`Checking`) the tool
-belongs on, and the tooltip blurb. Write those and re-run it.
+category page (`Layout`/`Points`/`Dimensions`/`Converters`/`Checking`)
+the tool belongs on, and the tooltip blurb. Write those and re-run it.
 `make check` runs the same check, so a half-registered tool cannot
 pass.
 

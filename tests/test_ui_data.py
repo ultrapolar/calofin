@@ -93,7 +93,7 @@ check("every caption is the panel's own", not wrong, repr(wrong[:3]))
 groups_block = section('Groups', 'ReadOnly Groups As New Dictionary')
 by_group = {m.group(1): dict((e[0], e[1]) for e in vb_entries(m.group(2)))
             for m in cr.VB_GROUP.finditer(groups_block)}
-check("the four category pages are the palette's groups",
+check("the %d category pages are the palette's groups" % len(cr.CATEGORIES),
       sorted(by_group) == sorted(cr.CATEGORIES), repr(sorted(by_group)))
 
 for group in cr.CATEGORIES:

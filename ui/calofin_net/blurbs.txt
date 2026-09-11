@@ -80,6 +80,7 @@ SORECONV          Undoes a SOCONV run - every object back on the export's own la
 SPA               Spa / hot-tub template layout
 SPACHECK          Audits a spa sheet against what SPA draws
 SPACHECKSCAN      The spa sheet review as one scan
+SPACOVCREATE      Offsets a selected spa outline into its cover and hinges it to the taper
 STAIRDIM          Stair dimensioning
 STOCKCOVER        Replaces a highlighted perimeter with a stock cover drawing
 TYDRN             Text, pool-point and anchor cleanup in one pass
