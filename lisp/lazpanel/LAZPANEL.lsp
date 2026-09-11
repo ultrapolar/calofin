@@ -98,7 +98,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.16")
+(setq *lazpanel-version* "v3.17")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -275,6 +275,7 @@
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
+    ("SPACOVCREATE"     "Spa cover from the spa")
     ("STAIRDIM"         "Stair dims")
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
@@ -403,6 +404,7 @@
      ("Shape, dims & check"
       "SPA"
       "LAZSPA"
+      "SPACOVCREATE"
       "CUSTBLOCK"
       "AUTODIM"
       "SPACHECK"
@@ -451,6 +453,7 @@
       "LAZFORMCOVER"
       "LAZSPA"
       "SPA"
+      "SPACOVCREATE"
       "POOL"
       "POOLCOVER"
       "POOLSIDE"

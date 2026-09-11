@@ -142,6 +142,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("SPA", "Spa template", "Spa / hot-tub template layout"),
         New Entry("SPACHECK", "Spa sheet review", "Audits a spa sheet against what SPA draws"),
         New Entry("SPACHECKSCAN", "Spa sheet scan", "The spa sheet review as one scan"),
+        New Entry("SPACOVCREATE", "Spa cover from the spa", "Offsets a selected spa outline into its cover and hinges it to the taper"),
         New Entry("STAIRDIM", "Stair dims", "Stair dimensioning"),
         New Entry("STOCKCOVER", "Stock cover placement", "Replaces a highlighted perimeter with a stock cover drawing"),
         New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"),
@@ -165,6 +166,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("LAZFORMCOVER", "Chart to pool, no bottom", "LAZFORM for a cover sheet - the pool-bottom gate closed"),
             New Entry("LAZSPA", "Spa from a filled-in chart", "LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn"),
             New Entry("SPA", "Spa template", "Spa / hot-tub template layout"),
+            New Entry("SPACOVCREATE", "Spa cover from the spa", "Offsets a selected spa outline into its cover and hinges it to the taper"),
             New Entry("POOL", "Pool layout", "Full pool layout tool"),
             New Entry("POOLCOVER", "Pool layout, no bottom", "POOL for a cover sheet - the bottom question pre-answered No"),
             New Entry("POOLSIDE", "Pool side view", "POOL's longitudinal section on its own, from the floor run chain"),
@@ -268,13 +270,13 @@ Public NotInheritable Class CommandCatalog
         }),
         New Page("Spa", {
             New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
-            New Column("Shape, dims & check", {"SPA", "LAZSPA", "CUSTBLOCK", "AUTODIM", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMCHECK", "DIMSCAN"})
+            New Column("Shape, dims & check", {"SPA", "LAZSPA", "SPACOVCREATE", "CUSTBLOCK", "AUTODIM", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Rest", {
             New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF"})
         }),
         New Page("Layout", {
-            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "ADAB", "CABHD", "LHD", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
+            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "ADAB", "CABHD", "LHD", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
         }),
         New Page("Points", {
             New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV", "G2MCONV", "G2MRECONV", "DRONE", "TYDRN", "TYLERDRONESUITE"})
