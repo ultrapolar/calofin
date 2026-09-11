@@ -107,7 +107,7 @@ End Class
 ''' <para>It carries what LAZPANEL carries, because the two are the same
 ''' panel on different plumbing: a search over names AND captions, the
 ''' tools you pinned, the last few you launched, and the whole tab strip
-''' -- the four job pages as well as the four categories. The tables all
+''' -- the four job pages as well as the categories. The tables all
 ''' come from Generated\CommandCatalog.g.vb, which is LAZPANEL's own
 ''' roster, so neither surface can offer a tool the other does not.
 ''' </para>

@@ -54,36 +54,36 @@ is remembered across the reopen, like the page and the position.
 
 **The job pages** are what you are actually doing this hour, and each
 is laid out in **columns that follow the work**: lay the shape out, tie
-the points, build the steps, dimension and check. A job is not a flat
-list of two dozen tools -- it is a few short lists in the order you
-reach for them.
+the points, build the steps, convert what somebody sent you, dimension
+and check. A job is not a flat list of two dozen tools -- it is a few
+short lists in the order you reach for them.
 
-**Pool** -- 5 columns, in the order the work runs:
+**Pool** -- 5 columns, converters second to last:
 
-| **Converters** | **Shape** | **Points** | **Steps** | **Dims & check** |
+| **Shape** | **Points** | **Steps** | **Converters** | **Dims & check** |
 | --- | --- | --- | --- | --- |
-| `XFTCONV` | `POOL` | `ABFIND` | `LAZSTEP` | `AUTODIM` |
-| `SOCONV` | `POOLSIDE` | `ABMOVE` | `CORNERSTP` | `LINFINCHECK` |
-| `VSCONV` | `LAZFORM` | `ABPCREATE` | `HEMISTEP` | `LINFINSCAN` |
-| `G2MCONV` | `LAZTXT` | `CDCREATE` | `NORMIESTEP` | `LITELINFINSCAN` |
-| `XFTRECONV` | `OASIS` | `CDCALLOUT` | `AUTOBEAD` | `DIMCHECK` |
-| `SORECONV` | `ABHD` | `BPCALLOUT` | `PERPPTS` | `DIMSCAN` |
-| `VSRECONV` | `ADAB` |  | `CPERPPTS` |  |
-| `G2MRECONV` | `FITABHD` |  |  |  |
+| `POOL` | `ABFIND` | `LAZSTEP` | `XFTCONV` | `AUTODIM` |
+| `POOLSIDE` | `ABMOVE` | `CORNERSTP` | `SOCONV` | `LINFINCHECK` |
+| `LAZFORM` | `ABPCREATE` | `HEMISTEP` | `VSCONV` | `LINFINSCAN` |
+| `LAZTXT` | `CDCREATE` | `NORMIESTEP` | `G2MCONV` | `LITELINFINSCAN` |
+| `OASIS` | `CDCALLOUT` | `AUTOBEAD` | `XFTRECONV` | `DIMCHECK` |
+| `ABHD` | `BPCALLOUT` | `PERPPTS` | `SORECONV` | `DIMSCAN` |
+| `ADAB` |  | `CPERPPTS` | `VSRECONV` |  |
+| `FITABHD` |  |  | `G2MRECONV` |  |
 
-**Cover** -- 3 columns, in the order the work runs:
+**Cover** -- 4 columns, converters second to last:
 
-| **Shape** | **Points** | **Pads, dims & check** |
-| --- | --- | --- |
-| `POOLCOVER` | `ABFIND` | `LINGUTTER` |
-| `LAZFORMCOVER` | `ABMOVE` | `LINGUTTERSCAN` |
-| `OASIS` | `ABPCREATE` | `PADDLE` |
-| `ABHDCOVER` | `CDCREATE` | `AUTODIM` |
-| `FITABHDCOVER` | `CDCALLOUT` | `COVERCHECK` |
-| `STOCKCOVER` | `BPCALLOUT` | `COVERSCAN` |
-| `CUSTBLOCK` |  | `LITECOVERSCAN` |
-| `XFTCONV` |  | `DIMCHECK` |
-| `XFTRECONV` |  | `DIMSCAN` |
+| **Shape** | **Points** | **Converters** | **Pads, dims & check** |
+| --- | --- | --- | --- |
+| `POOLCOVER` | `ABFIND` | `XFTCONV` | `LINGUTTER` |
+| `LAZFORMCOVER` | `ABMOVE` | `XFTRECONV` | `LINGUTTERSCAN` |
+| `OASIS` | `ABPCREATE` |  | `PADDLE` |
+| `ABHDCOVER` | `CDCREATE` |  | `AUTODIM` |
+| `FITABHDCOVER` | `CDCALLOUT` |  | `COVERCHECK` |
+| `STOCKCOVER` | `BPCALLOUT` |  | `COVERSCAN` |
+| `CUSTBLOCK` |  |  | `LITECOVERSCAN` |
+|  |  |  | `DIMCHECK` |
+|  |  |  | `DIMSCAN` |
 
 **Spa** -- 2 columns:
 
@@ -91,24 +91,38 @@ reach for them.
 | --- | --- |
 | `XFTCONV` | `SPA` |
 | `SOCONV` | `LAZSPA` |
-| `VSCONV` | `CUSTBLOCK` |
-| `G2MCONV` | `AUTODIM` |
-| `XFTRECONV` | `SPACHECK` |
-| `SORECONV` | `SPACHECKSCAN` |
-| `VSRECONV` | `LITESPACHECKSCAN` |
-| `G2MRECONV` | `DIMCHECK` |
+| `VSCONV` | `SPACOVCREATE` |
+| `G2MCONV` | `CUSTBLOCK` |
+| `XFTRECONV` | `AUTODIM` |
+| `SORECONV` | `SPACHECK` |
+| `VSRECONV` | `SPACHECKSCAN` |
+| `G2MRECONV` | `LITESPACHECKSCAN` |
+|  | `DIMCHECK` |
 |  | `DIMSCAN` |
 
-**Why converters lead.** The job pages are laid out in the order the
-work runs, and reading somebody else's export happens before anything
-is drawn -- so `XFTCONV`, `SOCONV`, `VSCONV` and `G2MCONV` are the
-first column on both. It is also where they were hardest to find:
-`SOCONV` and `VSCONV` were reachable only from `Rest`, so a drafter
-doing a pool job never saw them, and `XFTCONV` sat under **Shape**,
-which it never was. (`Rest` is the complement of the three named jobs,
-so the two that moved left it automatically -- the test recomputes that
-and would have failed if they had not. `G2MCONV` was placed here from
-the start, for the same reason, and so was never on `Rest` at all.)
+**Why converters are second to last.** They used to lead, on the
+argument that reading somebody else's export happens before anything is
+drawn. That is true of the jobs which start that way and of no others,
+and the others were paying for it: `POOL`, `LAZFORM` and `ABHD` sat one
+column further right than they had to. So the converters now sit
+**second to last** on `Pool` and on `Cover`: past the drawing work, in
+front of the dims-and-check column that ends every job, and still a
+labelled column of their own rather than scattered through the others. `Spa` is two columns wide, where second
+to last *is* the first column, so it keeps the layout it had.
+
+**`Cover` gains the column the other jobs already had.** `XFTCONV` and
+`XFTRECONV` were on that page all along -- filed under **Shape**, which
+a converter never was. `Pool` was fixed of exactly that when it got its
+`Converters` column; `Cover` was missed at the time. It holds those two
+and no more: `SOCONV`, `VSCONV` and `G2MCONV` are not on the `Cover`
+page and this did not put them there.
+
+`SOCONV` and `VSCONV` were once reachable only from `Rest`, so a
+drafter doing a pool job never saw them at all. (`Rest` is the
+complement of the three named jobs, so the two that moved left it
+automatically -- the test recomputes that and would have failed if they
+had not. `G2MCONV` was placed on the job pages from the start, for the
+same reason, and so was never on `Rest`.)
 
 **The converters come first, the reverters underneath them**, in the
 one column and in the same order -- `XFTCONV`, `SOCONV`, `VSCONV`,
@@ -135,9 +149,9 @@ a column costs its widest button plus six cells, `G2MRECONV` and
 less than 15. Pool is already 81 of the 90-cell body budget, which
 would put it at 96 -- and a DCL dialog over the budget does not clip,
 it fails to open. Shortening the headings does not help; the command
-names are what set the width. Spa has the room (41 cells), but a Spa
-that splits and a Pool that cannot would be two different layouts for
-one column, which is worse than either.
+names are what set the width. Spa (41 cells) and Cover (73) have the
+room, but a page that splits beside a Pool that cannot would be two
+different layouts for one column, which is worse than either.
 
 **Spa's buttons lost their captions**, and that is the column rule
 biting rather than an oversight: a page laid out in columns shows the
@@ -172,19 +186,34 @@ find out what a tool *is*, and the job pages are the place to go when
 you already know.
 
 **The category pages** are the roster filed by what each tool *is*
-rather than when you reach for it -- the four the panel has always had,
-and the same four group names the VB palette uses. Everything is on
-them, so a tool you cannot place in a job is still one tab away.
+rather than when you reach for it -- five of them, and the same five
+group names the VB palette uses. Everything is on them, so a tool you
+cannot place in a job is still one tab away.
 
 | Group | Buttons |
 | --- | --- |
-| Layout | LAZFORM, LAZTXT, LAZFORMCOVER, LAZSPA, SPA, POOL, POOLCOVER, POOLSIDE, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, LINGUTTER, LINGUTTERSCAN, PADDLE, AUTOBEAD, LAZSTEP, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, HONEFILLET, STOCKCOVER, WCALST, CUSTBLOCK |
-| Points | ABCDEF, ALTABCDEF, XYPLOT, CONSTELLATION, LOBF, ABFIND, ABMOVE, ABPCREATE, POINTRENAMER, PERPPTS, CPERPPTS, XFTCONV, XFTRECONV, SOCONV, SORECONV, VSCONV, VSRECONV, G2MCONV, G2MRECONV, DRONE, TYDRN, TYLERDRONESUITE |
+| Layout | LAZFORM, LAZTXT, LAZFORMCOVER, LAZSPA, SPA, SPACOVCREATE, POOL, POOLCOVER, POOLSIDE, POOLDEMO, OASIS, FITABHD, FITABHDCOVER, ABHD, ABHDCOVER, ADAB, CABHD, LHD, LINGUTTER, LINGUTTERSCAN, PADDLE, AUTOBEAD, LAZSTEP, CORNERSTP, HEMISTEP, NORMIESTEP, SMARTFILLET, HONEFILLET, STOCKCOVER, WCALST, CUSTBLOCK |
+| Points | ABCDEF, ALTABCDEF, XYPLOT, CONSTELLATION, LOBF, ABFIND, ABMOVE, ABPCREATE, POINTRENAMER, PERPPTS, CPERPPTS, DRONE, TYDRN, TYLERDRONESUITE |
 | Dimensions | AUTODIM, AUTODIMSIDEPOV, STAIRDIM, FLOORDIM, DIMCONTEND, CDCREATE, CDCALLOUT, BPCALLOUT |
-| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, ABCURCHECK, ABCURCHECKSCAN, ABPCHECK, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK |
+| Converters | XFTCONV, SOCONV, VSCONV, G2MCONV, XFTRECONV, SORECONV, VSRECONV, G2MRECONV |
+| Checking | CHECK, DIMARCCHECK, DIMCHECK, DIMSCAN, ABCURCHECK, ABCURCHECKSCAN, ABPCHECK, LINCHECK, LINFINCHECK, LINFINSCAN, LITELINFINSCAN, COVERCHECK, COVERSCAN, LITECOVERSCAN, SPACHECK, SPACHECKSCAN, LITESPACHECKSCAN, LINTXTCHK, CCPRECHECK, LAZDIAG |
+
+**Converters is the fifth**, and the eight in it used to be filed under
+**Points**. A converter does leave points behind, which is how they
+ended up there, but so does half the roster; what the page is for is
+the question *what is this tool*, and the answer for `XFTCONV` is not
+"a way of making points", it is "the thing that reads somebody else's
+export". The job pages have carried a column of that name for a while,
+so the category is the same filing the panel already used, applied on
+the page that files everything. Nothing moved twice: a command sits on
+exactly one category page, which is what lets the VB palette group by
+them without a second opinion, and `tests/test_ui_data.py` fails if one
+is filed under two.
 
 `AUTODIM` and `DIMCHECK`/`DIMSCAN` are on all three jobs, because every
-job ends the same way; 10 commands are shared between jobs in total.
+job ends the same way, and so are `XFTCONV`/`XFTRECONV`, because any of
+the three can begin with somebody else's export; 19 commands sit on
+more than one job page in total.
 
 **The Cover page runs cover twins, not the plain tools.** A cover sheet
 records the perimeter and nothing below it, so `POOLCOVER`,
@@ -221,11 +250,11 @@ answers what a tool *is* rather than what you are doing this hour.
 
 A **tab strip** across the top switches pages: two labelled boxed rows,
 `Find, or by job` (Find / Pool / Cover / Spa / Rest) and `Or by
-category` (Layout / Points / Dimensions / Checking) -- they are not
-nine equal things, and the labels say so. That is both what they mean
-and what keeps the strip narrow -- nine tabs on one row run about 104
-character cells, and DCL will not scroll a dialog wider than the
-screen. Two rows put the widest at 54.
+category` (Layout / Points / Dimensions / Converters / Checking) --
+they are not ten equal things, and the labels say so. That is both what
+they mean and what keeps the strip narrow -- ten tabs on one row run
+about 120 character cells, and DCL will not scroll a dialog wider than
+the screen. Two rows put the widest at 70.
 
 The pages ARE `lzp:*groups*` and the strip layout is `lzp:*rows*` --
 re-ordering the tools, re-grouping them or moving a tab to the other
@@ -237,7 +266,7 @@ roster of its own, it searches the whole one, so it stays out of
 `lzp:commands` folds. `lzp:pages` flattens the strip and is what the
 page loop and the tab wiring both read. The
 status line counts tools rather than buttons (`lzp:commands` folds the
-repeats), so it still reports the whole 57 and not 128. The panel
+repeats), so it still reports the whole 81 and not 186. The panel
 reopens where you left it rather than jumping back to the middle of the
 screen.
 
@@ -256,7 +285,7 @@ brings it back. That is the right way round: the alternative is a panel
 bouncing back in front of the error you are trying to read.
 
 **The Pinned row.** Pins are the answer to "I run four of these
-fifty-six all day": ticked tools sit in a row at the top of *every*
+eighty-one all day": ticked tools sit in a row at the top of *every*
 page, in the order you pinned them, so the ones you actually use stop
 being three tabs apart. `Pin...` on the row opens the editor -- every
 tool as a toggle, three columns -- and so does the `LAZPIN` command.

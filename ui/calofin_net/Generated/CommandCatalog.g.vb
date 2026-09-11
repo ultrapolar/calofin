@@ -21,7 +21,7 @@ Imports System.Collections.Generic
 ''' Every routine the palette offers, in the panel's own words.
 '''
 ''' <para>Four views of one roster: <see cref="All"/> is every
-''' command once, <see cref="Groups"/> is the four category
+''' command once, <see cref="Groups"/> is the category
 ''' pages the Commands tab lists, <see cref="Pages"/> is the
 ''' whole tab strip including the job pages, and
 ''' <see cref="CaptionOf"/> resolves one name.</para>
@@ -47,7 +47,7 @@ Public NotInheritable Class CommandCatalog
 
     ''' <summary>One column of a page: a heading and the commands
     ''' under it.  A heading of "" means the page is one plain
-    ''' column, which is what the four category pages are.</summary>
+    ''' column, which is what the category pages are.</summary>
     Public Structure Column
         Public ReadOnly Heading As String
         Public ReadOnly Commands As String()
@@ -155,7 +155,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("XYPLOT", "X/Y offset plot", "Plot an X/Y sheet, twice: points, and dimensioned")
     }
 
-    ''' <summary>The four category pages, which are the palette's
+    ''' <summary>The category pages, which are the palette's
     ''' groups: lzp:*groups* files every tool into exactly one, so
     ''' this is not a second opinion about where a tool
     ''' belongs.</summary>
@@ -205,14 +205,6 @@ Public NotInheritable Class CommandCatalog
             New Entry("POINTRENAMER", "Renumber points in order", "Hands the survey point numbers back out in perimeter order"),
             New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
             New Entry("CPERPPTS", "Curved perp points", "PERPPTS for a curved run"),
-            New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
-            New Entry("XFTRECONV", "Import cleanup, undone", "Undoes an XFTCONV run - the markers and text back, and the scale with them"),
-            New Entry("SOCONV", "SO survey onto our layers", "Puts an SO site-survey export onto the shop's layers in one pass"),
-            New Entry("SORECONV", "SO conversion, undone", "Undoes a SOCONV run - every object back on the export's own layers"),
-            New Entry("VSCONV", "VS export onto shop layers", "Remaps a VS survey export's numbered layers onto the shop's"),
-            New Entry("VSRECONV", "VS conversion, undone", "Undoes a VSCONV run - layers, properties and the dimension overrides"),
-            New Entry("G2MCONV", "G2M plan onto shop layers", "Puts a G2M architectural pool plan onto the shop's layers and styles"),
-            New Entry("G2MRECONV", "G2M conversion, undone", "Undoes a G2MCONV run - layers, appearance, text and dimension styles"),
             New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
             New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"),
             New Entry("TYLERDRONESUITE", "Drone suite: tidy, pad, CDIM", "The whole drone trace in one - TYDRN, then PADDLE, then CDIM")
@@ -226,6 +218,16 @@ Public NotInheritable Class CommandCatalog
             New Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"),
             New Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"),
             New Entry("BPCALLOUT", "Bad point callout", "Rings clicked bad points and writes the callout")
+        }},
+        {"Converters", {
+            New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
+            New Entry("SOCONV", "SO survey onto our layers", "Puts an SO site-survey export onto the shop's layers in one pass"),
+            New Entry("VSCONV", "VS export onto shop layers", "Remaps a VS survey export's numbered layers onto the shop's"),
+            New Entry("G2MCONV", "G2M plan onto shop layers", "Puts a G2M architectural pool plan onto the shop's layers and styles"),
+            New Entry("XFTRECONV", "Import cleanup, undone", "Undoes an XFTCONV run - the markers and text back, and the scale with them"),
+            New Entry("SORECONV", "SO conversion, undone", "Undoes a SOCONV run - every object back on the export's own layers"),
+            New Entry("VSRECONV", "VS conversion, undone", "Undoes a VSCONV run - layers, properties and the dimension overrides"),
+            New Entry("G2MRECONV", "G2M conversion, undone", "Undoes a G2MCONV run - layers, appearance, text and dimension styles")
         }},
         {"Checking", {
             New Entry("CHECK", "Drawing check", "General drawing check"),
@@ -252,20 +254,21 @@ Public NotInheritable Class CommandCatalog
     }
 
     ''' <summary>Every page of the panel's tab strip, in its order:
-    ''' the job pages first, then the four categories.  A job page
+    ''' the job pages first, then the categories.  A job page
     ''' carries a tool under the work it belongs to; a category
     ''' page answers what a tool IS.</summary>
     Public Shared ReadOnly Pages As Page() = {
         New Page("Pool", {
-            New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
             New Column("Shape", {"POOL", "POOLSIDE", "LAZFORM", "LAZTXT", "OASIS", "ABHD", "ADAB", "FITABHD"}),
             New Column("Points", {"ABFIND", "ABMOVE", "ABPCREATE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
             New Column("Steps", {"LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "AUTOBEAD", "PERPPTS", "CPERPPTS"}),
+            New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
             New Column("Dims & check", {"AUTODIM", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Cover", {
-            New Column("Shape", {"POOLCOVER", "LAZFORMCOVER", "OASIS", "ABHDCOVER", "FITABHDCOVER", "STOCKCOVER", "CUSTBLOCK", "XFTCONV", "XFTRECONV"}),
+            New Column("Shape", {"POOLCOVER", "LAZFORMCOVER", "OASIS", "ABHDCOVER", "FITABHDCOVER", "STOCKCOVER", "CUSTBLOCK"}),
             New Column("Points", {"ABFIND", "ABMOVE", "ABPCREATE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
+            New Column("Converters", {"XFTCONV", "XFTRECONV"}),
             New Column("Pads, dims & check", {"LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTODIM", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Spa", {
@@ -279,10 +282,13 @@ Public NotInheritable Class CommandCatalog
             New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "ADAB", "CABHD", "LHD", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
         }),
         New Page("Points", {
-            New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV", "G2MCONV", "G2MRECONV", "DRONE", "TYDRN", "TYLERDRONESUITE"})
+            New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "DRONE", "TYDRN", "TYLERDRONESUITE"})
         }),
         New Page("Dimensions", {
             New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT"})
+        }),
+        New Page("Converters", {
+            New Column("", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"})
         }),
         New Page("Checking", {
             New Column("", {"CHECK", "DIMARCCHECK", "DIMCHECK", "DIMSCAN", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "LINTXTCHK", "CCPRECHECK", "LAZDIAG"})
