@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, Ent, LispError, Dot  # noqa: E402
+from lispvm import VM, Ent, LispError, Dot, Sym, NIL  # noqa: E402
 
 LSP = os.path.join(os.path.dirname(__file__), '..',
                    'lisp', 'spa', 'SPA.LSP')
@@ -410,8 +410,7 @@ def test_five_piece_hinge_arrangement():
               'Yes', '90',
               'Yes',                # auto-hinge -- asked before the draw
               'No',                 # no spillaway
-              None,                 # no details block
-              '4-3',                # taper
+              '4-3',                # taper (the block was offered up front)
               'No'],                # no second outline
              'hinge/5-piece')
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge',
@@ -422,7 +421,7 @@ def test_three_piece_hinge_arrangement():
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,          # 140/48 -> 3 pieces
               'Yes', '90',
-              'Yes', 'No', None, '4-3', 'No'],
+              'Yes', 'No', '4-3', 'No'],
              'hinge/3-piece')
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge'], hinge_labels(vm)
 
@@ -436,7 +435,7 @@ def test_back_in_the_spillaway_loop():
               'Yes', 'Wall', 'Top', 20.0,   # commit one
               'Back',                        # ... and take it back
               'No',
-              None, '4-3',
+              '4-3',
               'No'],                         # no second outline
              'hinge/spillaway-back')
     rows = [p for p, _ in vm.prompts]
@@ -462,7 +461,7 @@ def test_thermolight_style_all_velcro():
     vm = run([None, 'Coversize', 'Rectangle', None,
               230.0, 60.0,
               'Yes', '90',
-              'Yes', 'No', None, '1-3/8', 'No'],
+              'Yes', 'No', '1-3/8', 'No'],
              'hinge/thermolight-taper')
     assert hinge_labels(vm), "no hinges drawn"
 
@@ -608,7 +607,7 @@ def test_hinge_questions_come_before_the_draw():
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,
               'Yes', '90',
-              'Yes', 'No', None, '4-3',
+              'Yes', 'No', '4-3',
               'No'],
              'turn/order')
     ps = [p for p, _ in vm.prompts]
@@ -629,7 +628,7 @@ def test_a_spillway_no_hinge_can_dodge_turns_the_spa():
               'Yes',                        # auto-hinge
               'Yes', 'Wall', 'Top', 60.0,   # right across the top wall
               'No',
-              None, '4-3',
+              '4-3',
               'No'],
              'turn/top-wall')
     w, l = cover_size(vm)
@@ -652,7 +651,7 @@ def test_a_side_wall_spillway_leaves_the_spa_alone():
               'Yes',
               'Yes', 'Wall', 'Left', 60.0,
               'No',
-              None, '4-3',
+              '4-3',
               'No'],
              'turn/left-wall')
     w, l = cover_size(vm)
@@ -671,7 +670,7 @@ def test_a_spillway_the_hinges_already_clear_turns_nothing():
               'Yes',
               'Yes', 'Wall', 'Top', 20.0,
               'No',
-              None, '4-3',
+              '4-3',
               'No'],
              'turn/no-need')
     w, l = cover_size(vm)
@@ -751,6 +750,118 @@ def test_pickturn_says_which_way_it_actually_went():
     assert 'left as measured instead' in out, out
     assert 'turned a quarter turn' not in out, \
         "the command line announces a turn that did not happen: %r" % out
+
+
+# ----------------------------------------------- the guide and the block
+#
+# Two things a drafter meets at the screen rather than in the geometry:
+# the Spa Cover Details pick is ONE question, and there is a spa in
+# front of them the whole way through.  The two were broken together --
+# the second pick arrived just after the guide had been taken away, so
+# it asked for a click into a drawing that was no longer on the screen.
+
+BLOCK = '''
+  (setq blk (entmakex (list '(0 . "INSERT") '(8 . "0")
+                            '(2 . "Spa Cover Details")
+                            '(10 0.0 300.0) '(66 . 1))))
+  (entmake (list '(0 . "ATTRIB") '(8 . "0") '(2 . "GRADE")
+                 '(1 . "GRADE: Standard")))
+  (entmake (list '(0 . "ATTRIB") '(8 . "0") '(2 . "TAPER")
+                 '(1 . "TAPER: 4-3")))
+  (entmake (list '(0 . "SEQEND") '(8 . "0")))'''
+
+
+def guide_alive(vm):
+    """Guide-preview entities still on the screen, at this moment."""
+    ents = vm.globals.get(Sym('spa:*pvents*'), NIL)
+    if not isinstance(ents, list):
+        return 0
+    return sum(1 for e in ents if e not in vm.deleted)
+
+
+def watched(notes, ans):
+    """A scripted answer that notes what is on the screen as it is
+    reached.  A callable answer is invoked at the prompt itself, which
+    is the only way to see a command mid-run."""
+    def f(vm):
+        notes.append(guide_alive(vm))
+        return ans
+    return f
+
+
+def test_the_details_block_is_asked_for_once():
+    """Skipping the pick is an answer: the taper is typed instead and
+    the block is not asked for again.  It used to come back in the
+    hinge pass -- a second click into a drawing the flow had zoomed
+    away from by then."""
+    vm = run([None,                 # the pick, up front -- skipped
+              'Coversize', 'Rectangle', None,
+              140.0, 60.0,
+              'Yes', '90',
+              'Yes',                # auto-hinge
+              'No',                 # no spillaway
+              '4-3',                # ...so the taper is typed
+              'No'],
+             'block/asked-once')
+    picks = [p for p, _ in vm.prompts if 'Spa Cover Details' in p]
+    assert len(picks) == 1, [p for p, _ in vm.prompts]
+    tapers = [p for p, _ in vm.prompts if 'Taper' in p]
+    assert len(tapers) == 1, [p for p, _ in vm.prompts]
+
+
+def test_a_picked_block_still_answers_the_taper():
+    """The pick that DOES read a taper leaves nothing to type, so the
+    one offer is the whole question either way."""
+    vm = VM()
+    vm.load(LSP)
+    vm.loads(BLOCK)
+    blk = vm.globals['blk']
+    vm.run('c:SPA', [blk,           # the pick, reading both tags
+                     'Coversize', 'Rectangle', None,
+                     140.0, 60.0, 'Yes', '90',
+                     'Yes', 'No',   # auto-hinge, no spillaway
+                     'No'])         # no second outline
+    assert not [p for p, _ in vm.prompts if 'Taper' in p], \
+        "the taper was asked although the block gave it"
+    assert len([p for p, _ in vm.prompts if 'Spa Cover Details' in p]) == 1
+
+
+def test_the_guide_stays_up_until_the_real_spa_replaces_it():
+    """The hinge questions are asked before anything is drawn, so the
+    guide is the only spa on the screen while they are answered.  It
+    used to be taken away as the corners were answered, leaving the
+    rest of the run to be answered at a blank screen."""
+    notes = []
+    run([None, 'Coversize', 'Rectangle', None,
+         140.0, 60.0,
+         'Yes', '90',
+         watched(notes, 'Yes'),     # auto-hinge
+         watched(notes, 'No'),      # spillaway
+         watched(notes, '4-3'),     # taper
+         watched(notes, 'No')],     # second outline -- after the draw
+        'guide/stays-up')
+    assert notes[0] > 0, "the guide was gone by the auto-hinge question"
+    assert notes[1] == notes[0], "the guide thinned out: %r" % (notes,)
+    assert notes[2] == notes[0], "the guide was gone by the taper: %r" % (notes,)
+    assert notes[3] == 0, \
+        "the guide outlived the spa that replaced it: %r" % (notes,)
+
+
+def test_the_octagon_and_round_guides_hand_over_the_same_way():
+    for shape, body in (('OCtagon', [95.0, None,
+                                     'NA', 'NA', 'NA', 'NA', 'NA']),
+                        ('ROund', [84.0])):
+        notes = []
+        run([None, 'Coversize', shape, None] + body
+            + [watched(notes, 'Yes'),   # auto-hinge
+               watched(notes, 'No'),    # spillaway
+               watched(notes, '4-3'),   # taper
+               watched(notes, 'No')],   # second outline -- after the draw
+            'guide/%s' % shape)
+        assert notes[0] > 0 and notes[2] == notes[0], \
+            "%s took its guide away mid-question: %r" % (shape, notes)
+        assert notes[3] == 0, \
+            "%s left its guide on the screen: %r" % (shape, notes)
 
 
 if __name__ == '__main__':

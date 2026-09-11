@@ -11850,7 +11850,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091026 REV18")
+(setq spa:*version* "091126 REV19")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -12080,6 +12080,8 @@
 (setq spa:*pv-olbl* 20.0)       ; ...and an octagon one, which sits tighter
 (setq spa:*pv-cap* 50.0)        ; biggest treatment the guide will draw,
                                 ; so one huge corner cannot swallow it
+(setq spa:*pv-zoom* 0.35)       ; margin round the real spa when the view
+                                ; leaves the guide for it (of its long side)
 
 ;; ---- the foam sheet
 ;;;
@@ -12182,6 +12184,7 @@
 (setq spa:*advice*    nil)           ; hardware recommendations
 (setq spa:*grade*     nil)           ; from the Spa Cover Details block
 (setq spa:*taper*     nil)
+(setq spa:*blockasked* nil)          ; ...which is offered ONCE a run
 ;;; -------------------- small vector helpers --------------------------
 
 (defun spa:unit (p / d)
@@ -13002,6 +13005,23 @@
   (foreach e spa:*pvents*
     (if (and e (entget e)) (entdel e)))
   (setq spa:*pvents* nil))
+
+;; The guide comes down and the real outline goes up in its place.
+;;
+;; The two are not the same size: the guide is drawn at a nominal
+;; 240 x 200 whatever the spa measures, so the window the flow zoomed
+;; to for it is the wrong one for the real thing -- a 7-foot spa lands
+;; as a speck in its corner, which reads as nothing at all.  The view
+;; moves with the handover, so the screen is never without a spa on it.
+;; across / up are the real overalls; every flow draws from (0,0) to
+;; (across, up) before the base point is added.
+(defun spa:pvhandover (across up / m)
+  (spa:pvkill)
+  ;; a floor on the margin so a degenerate size still leaves a window
+  (setq m (max 1.0 (* spa:*pv-zoom* (max across up))))
+  (command "_.ZOOM" "_Window"
+           (spa:wp (list (- 0.0 m) (- 0.0 m)))
+           (spa:wp (list (+ across m) (+ up m)))))
 
 ;;; -------------------- report table -----------------------------------
 
@@ -13826,7 +13846,11 @@
 
 ;; Try to read GRADE and TAPER off a Spa Cover Details block.  Sets the
 ;; globals; either may be left nil.  Returns T when something was read.
+;; The offer is recorded whether or not it read anything: skipping it,
+;; or picking a block with no tags on it, is an answer, and asking again
+;; later is the same question a second time.
 (defun spa:readblock ( / sel ed bn att v got)
+  (setq spa:*blockasked* t)
   (cal:osup)
   (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
   (if lzd:watch (lzd:watch sel))
@@ -13858,8 +13882,13 @@
   ;; reached without going through c:SPA's own consume -- same rules,
   ;; same code, and a no-op when the store was already drained
   (spa:formdetails)
-  (if (and (null spa:*grade*) (null spa:*taper*))
-      (spa:readblock))                  ; not offered earlier -- offer now
+  ;; The pick is offered once a run, up front in c:SPA -- where the
+  ;; drafter's own drawing is still on the screen to click, which by
+  ;; here it need not be.  Skipping it there settled the question: the
+  ;; taper is typed below instead.  A caller that reached this point
+  ;; without going through c:SPA's own read is still offered it.
+  (if (and (null spa:*blockasked*) (null spa:*grade*) (null spa:*taper*))
+      (spa:readblock))
   (if (null spa:*grade*) (setq spa:*grade* "STANDARD"))
   (if (spa:thermop) (setq spa:*taper* spa:*thermotaper*))
   ;; getstring cannot take keywords, so Back is typed like a value here
@@ -14550,7 +14579,6 @@
           nil)))
 
   (spa:stages (list 'rc:sides 'rc:corners))
-  (spa:pvkill)
 
   ;; -------------------------------------------------- hinges, asked now
   ;; The hinge questions come BEFORE anything is drawn because their
@@ -14558,6 +14586,12 @@
   ;; can dodge is dodged by turning the cover instead, and there is no
   ;; turning it once it is on the screen.  The hinges themselves are
   ;; drawn at the end, on whichever outline they belong to.
+  ;;
+  ;; The guide stays up across them, treatments and all.  It is the
+  ;; only spa on the screen until the real one is drawn below, and
+  ;; these questions name its corners and its walls -- taking it away
+  ;; as the corners were answered left the drafter looking at an empty
+  ;; screen for the rest of the questions.
   (spa:hingeask)
 
   ;; -------------------------------------------------- orientation
@@ -14593,6 +14627,8 @@
         mode1 spa:*mode*)
 
   ;; ------------------------------------------- draw the first outline
+  ;; the guide has done its work: it comes off as this goes on
+  (spa:pvhandover w l)
   (spa:drawrect quad corners)
 
   ;; ------------------------------------------- and, if wanted, the other
@@ -14882,7 +14918,6 @@
         s2raw (spa:sq ans 's2)
         ovres (spa:octov aov bov sraw traw s1raw vraw s2raw)
         s (car ovres) tv (cadr ovres) s1 (caddr ovres) v (cadddr ovres))
-  (spa:pvkill)
 
   ;; the sheet letters must close POSITIVE against the overalls; one
   ;; that does not fit is adjusted and the report says so
@@ -14904,7 +14939,9 @@
         (spa:valnote "V LONGER THAN A - ADJUSTED")))
 
   ;; -------------------------------------------------- hinges, asked now
-  ;; before anything is drawn, so a spillaway can still turn the spa
+  ;; before anything is drawn, so a spillaway can still turn the spa --
+  ;; and with the guide still up, because it is the only spa on the
+  ;; screen until the real one is drawn below
   (spa:hingeask)
 
   ;; -------------------------------------------------- orientation
@@ -14934,6 +14971,7 @@
 
   ;; ------------------------------------------- draw the first outline
   ;; one closed polyline, not eight loose lines
+  (spa:pvhandover bov aov)
   (spa:perpoly (mapcar '(lambda (p) (cons p 0.0)) pts))
 
   ;; ------------------------------------------- and, if wanted, the other
@@ -15136,10 +15174,11 @@
               bov (spa:sq ans 'b)
               aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov)))
       (setq aov bov))
-  (spa:pvkill)
 
   ;; hinges are asked before anything is drawn, so a spillaway can still
-  ;; turn the spa (a round one turns too: the spillway travels with it)
+  ;; turn the spa (a round one turns too: the spillway travels with it),
+  ;; and the guide stays up across them -- it is the only spa on the
+  ;; screen until the real one is drawn below
   (spa:hingeask)
 
   ;; an out-of-round spa lies with its long overall west to east, unless
@@ -15161,6 +15200,7 @@
         th (max spa:*th-min* (/ (max bov aov) spa:*th-div*))
         spa:*dashlt* (spa:ltload "DASHED")
         mode1 spa:*mode*)
+  (spa:pvhandover bov aov)
   (spa:perround cen bov aov)
   (if (> (abs (- aov bov)) 1.0e-6)
       (princ "\nThe two overalls differ, so the spa is drawn as an ellipse.")
@@ -15330,7 +15370,8 @@
         spa:*hingerows* nil
         spa:*advice* nil
         spa:*grade* nil
-        spa:*taper* nil)
+        spa:*taper* nil
+        spa:*blockasked* nil)
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
@@ -15343,9 +15384,13 @@
   ;; The Spa Cover Details block is read UP FRONT because its grade can
   ;; settle the next question outright: a Thermo-Light cover's water's
   ;; edge and cover size are the same thing, so there is nothing to ask
-  ;; and nothing to add later.  Skipping here just defers the block to
-  ;; the hinge pass.
+  ;; and nothing to add later.  It is also the ONE place it is asked
+  ;; for: here the drafter's own drawing is still on the screen to
+  ;; click, which after the guide goes up it is not.  Skipping is an
+  ;; answer -- the taper is typed in the hinge pass instead, and a
+  ;; Thermo-Light grade is simply never read.
   (princ "\nThe Spa Cover Details block sets the grade and taper.")
+  (princ "\n(asked once -- skip it and any taper the hinges need is typed later)")
   (spa:readblock)
   ;; the form's grade/taper land HERE, before the Thermo-Light branch,
   ;; so a form grade of THERMOLIGHT behaves exactly like the block's
@@ -15473,7 +15518,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "090826 REV11")
+(setq tut:*version* "091126 REV12")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -15528,9 +15573,11 @@
 (setq tut:*asks*
   (list
     "1.  The Spa Cover Details block -- picked FIRST, because its GRADE"
-    "    decides what comes next.  Enter skips it; the hinge pass will"
-    "    ask again.  GRADE and TAPER are read off the tags, and the"
-    "    'Grade:' / 'Taper:' prefixes are stripped."
+    "    decides what comes next, and because your own drawing is still"
+    "    on the screen to click.  ASKED ONCE: Enter skips it and the"
+    "    taper is typed at the hinge pass instead.  GRADE and TAPER are"
+    "    read off the tags, and the 'Grade:' / 'Taper:' prefixes are"
+    "    stripped."
     "2.  Water's edge or cover size.  NOT asked on Thermo-Light -- the"
     "    two are the same thing there, so it draws the cover size."
     "3.  Shape: Rectangle, Octagon or Round."
@@ -15552,10 +15599,12 @@
     "    Asked one at a time, corner A's answer autofills B, C and D"
     "    -- Enter accepts."
     "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No,"
-    "    then the grade and taper if the block did not give them."
+    "    then the taper, typed, if the block did not give it."
     "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
     "    is dodged by turning the spa, and nothing already on the screen"
     "    can be turned.  The hinges are drawn at the end all the same."
+    "    The grey guide spa stays up across these, and comes down only"
+    "    as the real outline goes up in its place."
     "8.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
     "    Skipped on Thermo-Light."))
