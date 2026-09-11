@@ -637,7 +637,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINFINCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "LINFINCHECKRESCUE" *lfc-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINFINCHECKRESCUE" *lfc-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -2743,14 +2745,18 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINFINCHECK error: " msg)))
+    (if lzd:report (lzd:report "LINFINCHECK" *lfc-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINFINCHECK" *lfc-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to LINFINCHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - LINFINCHECK cancelled."))
@@ -3705,15 +3711,19 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "LINFINCHECK" *lfc-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINFINCHECK" *lfc-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the drawing to " name
                       " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -4400,7 +4410,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALLINFINCHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALLINFINCHECK" *lfc-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALLINFINCHECK" *lfc-version*))
 
   (princ (strcat "\n=================================================="
                  "\n  LINFINCHECK tutorial   [" *lfc-version* "]"

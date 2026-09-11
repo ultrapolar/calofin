@@ -162,7 +162,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTYDRN error: " msg)))
+    (if lzd:report (lzd:report "TYDRN" *tydrn-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TYDRN" *tydrn-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -179,10 +181,12 @@
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
   (setq ss-text (ssget "_I" '((0 . "TEXT"))))
+  (if lzd:watch (lzd:watch ss-text))
   (if (null ss-text)
     (progn
       (prompt "\nSelect text to update <Enter = all text in drawing>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
+      (if lzd:watch (lzd:watch ss-text))
       (if (null ss-text)
         (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
 
@@ -451,7 +455,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTYLERDRONESUITE error: " msg)))
+    (if lzd:report (lzd:report "TYLERDRONESUITE" *tydrn-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TYLERDRONESUITE" *tydrn-version*))
   ;; Every calofin stage is checked BEFORE any of them runs.  Half a
   ;; suite is worse than none: TYDRN would have moved the points and
   ;; the operator would find out only mid-run that the padding they ran

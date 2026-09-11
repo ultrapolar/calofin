@@ -167,9 +167,9 @@ check("the top hit is selected for you, both sides",
 print("== 5. every page of the strip, not just the categories ==")
 
 pages = [str(g[0]) for g in vm.globals['lzp:*groups*']]
-check("the panel has the four job pages and the four categories",
+check("the panel has the four job pages and the five categories",
       pages == ['Pool', 'Cover', 'Spa', 'Rest', 'Layout', 'Points',
-                'Dimensions', 'Checking'], repr(pages))
+                'Dimensions', 'Converters', 'Checking'], repr(pages))
 check("the palette builds a tab per page of the catalog",
       'For Each page In CommandCatalog.Pages' in VB)
 check("and remembers which one it was left on",

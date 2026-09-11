@@ -4,6 +4,10 @@
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
 ;;; Commands:  ABHD - fit the perimeter, then optionally the bottom
+;;;            SIMPABHD - the same fit with NONE of ABHD's three
+;;;                   numbers asked: five ready-made perimeters are
+;;;                   drawn and you keep the one that looks like the
+;;;                   pool (see the SIMPABHD section further down)
 ;;;            ADAB - the pool bottom on its own, over an existing
 ;;;                   perimeter (select the closed polyline or its
 ;;;                   exploded lines/arcs; the survey points sitting
@@ -58,11 +62,32 @@
 ;;;
 ;;; THE MISS ALLOWANCE: the perimeter no longer has to thread every
 ;;; point exactly.  A share of the points - asked per run, standard
-;;; *PF-MISS-PCT* (15%), rounded UP to the nearest whole point - may
-;;; sit off the result by up to the max distance (default 1 unit =
-;;; about an inch, capped at *PF-TOL-MAX*); every other point stays on
-;;; it (within *PF-ON-EPS*).  That slack is spent where it buys the
-;;; most: longer arcs, fewer curves, nicer radii.
+;;; *PF-MISS-PCT* (20%), rounded UP to the nearest whole point - may
+;;; sit off the result by up to the max distance (default 1 unit = one
+;;; inch, capped at *PF-TOL-MAX*); every other point stays on it
+;;; (within *PF-ON-EPS*).  That slack is spent where it buys the most:
+;;; longer arcs, fewer curves, nicer radii.  A fifth of the points an
+;;; inch off is the recommendation because it is what an AB survey of
+;;; a built shell looks like - the three questions at steps 1 to 3 now
+;;; offer one coherent answer rather than three separate ones.
+;;;
+;;; MOVED POINTS ARE NOT SURVEY POINTS: a number carrying the letter
+;;; *PF-MOVED-MARK* ("m") is out of the fit entirely.  ABFIND writes
+;;; "17m" when it copies Pt.17 to a position it worked out from two
+;;; tape readings off a pair of good points - the original was a bad
+;;; shot, and the copy is where that point SHOULD be, not where
+;;; anybody stood.  Holding a perimeter to a deduction dresses it up
+;;; as evidence: the fit bends to meet a position no one measured,
+;;; and the report then claims it held a point that was never there.
+;;; So a moved point is dropped as the selection is read, before the
+;;; point list exists - not ordered into the loop, not fitted, not
+;;; held, not counted against the miss allowance, and never ringed or
+;;; listed as one the line missed.  The original it came from is
+;;; still in the survey and still fitted; only the deduced twin is
+;;; out.  The command says how many it left out, so a survey that
+;;; comes up short is explained rather than mysterious.  Matched
+;;; case-insensitively anywhere in the number, so "17m", "17M" and
+;;; "17m2" are all out.
 ;;;
 ;;; DECLARED STRAIGHT WALLS: the user may declare dead-straight walls
 ;;; up front by picking their two end points; each is marked with a
@@ -220,6 +245,21 @@
                                     ; used to label it as "Pt.17"; a
                                     ; block without it is numbered in
                                     ; selection order
+(setq *PF-MOVED-MARK*   "M")        ; a point number carrying this letter
+                                    ; is a MOVED point - ABFIND writes
+                                    ; "17m" when it copies Pt.17 to a
+                                    ; position worked out from two tape
+                                    ; readings (abf:*moved-suffix*).
+                                    ; That position is a deduction, not
+                                    ; a shot: nobody stood there.  So a
+                                    ; number with this letter in it is
+                                    ; left out of the fit ENTIRELY - not
+                                    ; ordered into the loop, not fitted,
+                                    ; not held, not counted against the
+                                    ; miss allowance and never reported
+                                    ; as a point the line failed to
+                                    ; hold.  Matched case-insensitively
+                                    ; anywhere in the number
 (setq *PF-OUT-LAYER*    "POOL-FIT") ; layer the three candidate fits
                                     ; preview on, with their labels
 (setq *PF-OUT-COLOUR*   3)          ; ...its colour when ABHD creates it
@@ -323,19 +363,91 @@
                                     ;     long as that distance permits
                                     ; Colours and wording are yours to
                                     ; edit; the three mode names are not
+(setq *PF-SIMP-TOL*     1.0)        ; the distance SIMPABHD fits and
+                                    ; measures to.  SIMPABHD asks no
+                                    ; numbers at all, so this is the one
+                                    ; it uses in place of step 1 - and
+                                    ; the one the table's columns are
+                                    ; read against, exactly as the typed
+                                    ; distance is in ABHD's
+(setq *PF-SIMP-COMPARE*             ; the five candidates SIMPABHD draws
+  '(("tight" 1 "red"     "most curves - least error"                nil nil  nil)
+    ("pct"   2 "yellow"  "10% off by 1in, a third as many curves"   0.10 1.0  3.0)
+    ("hold"  3 "green"   "all but the 3 worst held, half as many"   3    1.0  2.0)
+    ("pct"   4 "cyan"    "20% off by 1/2in, a third as many curves" 0.20 0.5  3.0)
+    ("few"   6 "magenta" "fewest curves - still within the distance" nil nil  nil)))
+                                    ; (kind, AutoCAD colour, colour name,
+                                    ; description, share, distance,
+                                    ; points-per-curve).  ABHD asks three
+                                    ; numbers and draws the two ends of
+                                    ; the trade around them; SIMPABHD
+                                    ; asks none and draws the same two
+                                    ; ends around three ready-made
+                                    ; answers, so what is chosen is a
+                                    ; picture rather than a guess at
+                                    ; three settings.  Rows 1 and 5 are
+                                    ; ABHD's own "tight" and "few" - the
+                                    ; least error there is and the fewest
+                                    ; curves that still hold the distance
+                                    ; - and take no share, distance or
+                                    ; cap of their own: capping either
+                                    ; would be asking for the most curves,
+                                    ; or the fewest, and then overruling
+                                    ; the answer.  The three between them
+                                    ; are read as:
+                                    ;   "pct"  - this share of the points
+                                    ;     may sit off the line, by up to
+                                    ;     this distance, with the curve
+                                    ;     cap set to the point count over
+                                    ;     the last number, rounded to the
+                                    ;     nearest whole curve
+                                    ;   "hold" - every point is held but
+                                    ;     this many: the share column is a
+                                    ;     COUNT, not a fraction, and the
+                                    ;     ones given up are the worst the
+                                    ;     fitter meets
+                                    ; Colours and wording are yours to
+                                    ; edit; the four kind names are not
+(setq *PF-SIMP-DEFAULT-FIT* "2")    ; the candidate Enter keeps at
+                                    ; SIMPABHD's choose prompt.  "2" is
+                                    ; the middle of the road - a tenth of
+                                    ; the points an inch off, a third as
+                                    ; many curves as points - and the
+                                    ; nearest of the five to what ABHD
+                                    ; itself recommends
+(if (not (member *PF-SIMP-DEFAULT-FIT* '("1" "2" "3" "4" "5")))
+  (setq *PF-SIMP-DEFAULT-FIT* "2"))
 
 ;; ---- 2. FITTER TUNING ----------------------------------------------
 (setq *PF-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
                                     ; prompt (2 inches): further than
                                     ; that and the line is no longer a
                                     ; trace of the points
-(setq *PF-MISS-PCT*     0.15)       ; share of the points (rounded UP to
+(setq *PF-MISS-PCT*     0.20)       ; share of the points (rounded UP to
                                     ; a whole point) that may sit off the
                                     ; result by up to the tolerance
-                                    ; (about an inch by default) - this
-                                    ; slack is what buys longer spans and
+                                    ; (an inch by default) - this slack
+                                    ; is what buys longer spans and
                                     ; fewer curves.  Step 2 offers it;
-                                    ; the answer is per run, on purpose
+                                    ; the answer is per run, on purpose.
+                                    ; A fifth of an AB survey off by an
+                                    ; inch is what the built shell
+                                    ; actually does: at 15% the fitter
+                                    ; ran out of allowance early in the
+                                    ; loop and paid for the rest of it
+                                    ; in short arcs
+(setq *PF-ARC-DIV*      3.0)        ; the RECOMMENDED curve cap: one
+                                    ; curve per this many survey points,
+                                    ; rounded to the NEAREST whole curve
+                                    ; and never below 1 (pf:rec-arcs).
+                                    ; A third of the points is what a
+                                    ; pool edge reads as - long
+                                    ; overarching arcs with three or so
+                                    ; points under each, rather than one
+                                    ; curve per shot.  It is only what
+                                    ; Enter offers at step 3: a number
+                                    ; typed there wins, and None still
+                                    ; lifts the cap entirely
 (setq *PF-ON-EPS*       0.25)       ; a point within this of the result
                                     ; counts as ON it; only points off by
                                     ; more than this eat into the miss
@@ -554,7 +666,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "091026 REV16") ; announced on load.  The
+(setq pf:*version*      "091126 REV17") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -571,10 +683,23 @@
                                     ; the bottom flow offers first; the
                                     ; first offset typed in a run
                                     ; becomes the next run's default
-;; *PF-MAX-ARCS* : the curve cap the last run was given; nil = no cap.
-;; Asked at step 3 (Enter keeps it, "None" clears it) and remembered
-;; like the two above.  Deliberately not set here at all: it is nil
-;; until something asks, and seeding it would only say so again.
+;; *PF-MAX-ARCS* : the curve cap the last run was given, in one of
+;; three states:
+;;     'AUTO    - the recommendation, worked out from the survey once
+;;                the points are in hand: one curve per *PF-ARC-DIV*
+;;                of them (pf:rec-arcs).  The cap is asked at step 3,
+;;                four steps before the points are selected, so the
+;;                recommendation cannot be a number there - it is a
+;;                RULE that becomes a number at step 7.  This is what
+;;                a fresh session starts on
+;;     a number - that many curves, typed at step 3
+;;     nil      - no cap at all, "None" typed at step 3
+;; Asked at step 3 (Enter keeps whichever it is on) and remembered
+;; like the two above.  Seeded only when unset, like them, which does
+;; mean a mid-session re-load of this file reads a "None" back as
+;; 'AUTO - nil is the one state that cannot be told from never-asked.
+;; Re-typing None at the next step 3 puts it back.
+(if (null *PF-MAX-ARCS*) (setq *PF-MAX-ARCS* 'AUTO))
 ;;
 ;; Cover mode: the pool-bottom question in pf:bottom answers No without
 ;; being asked, so a cover sheet is fitted to its perimeter and stops
@@ -852,6 +977,27 @@
 ;; pf-miss-pct from the user's answer; Enter keeps the standard value.
 (defun pf:misspct ()
   (if pf-miss-pct pf-miss-pct *PF-MISS-PCT*))
+
+;; A curve cap of N points over D of them, rounded to the NEAREST
+;; whole curve and never below 1.  A cap of nothing is not a cap, and
+;; a survey small enough to round to zero is one the fitter will not
+;; reach a cap on anyway.
+(defun pf:div-arcs (n d / c)
+  (setq c (fix (+ 0.5 (/ (float n) d))))
+  (if (< c 1) 1 c))
+
+;; The RECOMMENDED curve cap for N points: one curve per *PF-ARC-DIV*
+;; of them.  SIMPABHD's rows carry their own divisor and go straight
+;; to pf:div-arcs.
+(defun pf:rec-arcs (n) (pf:div-arcs n *PF-ARC-DIV*))
+
+;; The curve cap actually in force over N points, resolving the three
+;; states of *PF-MAX-ARCS*: 'AUTO is the recommendation worked out
+;; from the count, a number is itself, nil is no cap.  Every reader of
+;; the cap goes through here, so the recommendation becomes a number
+;; in exactly one place.
+(defun pf:cap-for (n)
+  (if (eq 'AUTO *PF-MAX-ARCS*) (pf:rec-arcs n) *PF-MAX-ARCS*))
 
 ;; The "on the shape" threshold in force for the current run.  It
 ;; scales with the tolerance (a quarter of it, never below
@@ -1133,14 +1279,37 @@
     (setq sub (entnext sub)))
   val)
 
+;; Is NM the number of a MOVED point - one ABFIND deduced from two tape
+;; readings and numbered "17m" rather than one somebody shot?  The
+;; letter is *PF-MOVED-MARK*, matched anywhere in the number and in
+;; either case, so "17m", "17M" and "17m2" all answer yes.  A point
+;; with no number at all (a bare POINT entity) answers no: there is no
+;; number to carry the letter.
+(defun pf:moved-p (nm)
+  (and nm
+       (eq 'STR (type nm))
+       (wcmatch (strcase nm) (strcat "*" (strcase *PF-MOVED-MARK*) "*"))))
+
 ;; Remember a point and what to call it, so a miss can be reported as
 ;; "Pt.17" using the number in the drawing rather than a private
 ;; index.  Points with no number of their own get the next count.
+;;
+;; A moved point never gets remembered.  It is the one point in the
+;; survey nobody stood on - ABFIND worked out where Pt.17 should have
+;; been and wrote "17m" beside it - so holding the fit to it would be
+;; holding it to a deduction.  Dropping it HERE, before pts exists,
+;; is what makes that true of everything downstream at once: the
+;; ordering walk, the fit, the miss allowance, the unheld rings and
+;; the report all read pts, and none of them can see what was never
+;; put in it.  The count goes to pf-nmoved so the command can say how
+;; many it left out.
 (defun pf:add-point (p nm)
-  (setq npt        (1+ npt)
-        pts        (cons p pts)
-        pf-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
-                         pf-ptnames)))
+  (if (pf:moved-p nm)
+    (setq pf-nmoved (1+ (if pf-nmoved pf-nmoved 0)))
+    (setq npt        (1+ npt)
+          pts        (cons p pts)
+          pf-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
+                           pf-ptnames))))
 
 ;; What to call the surveyed point at Q.
 (defun pf:pt-name (q / nm p)
@@ -2017,13 +2186,17 @@
 ;; Print the hit report for the fit the user kept.  ALLOW is the run's
 ;; miss allowance (how many points were permitted to sit between the
 ;; on-the-shape threshold and the tolerance off the result).
-(defun pf:report (newsegs pts tol allow prior / nl na hiton hitok miss
+(defun pf:report (newsegs pts tol allow prior cmd
+                  / ndist nl na hiton hitok miss
                                                 q s s2 d dmin worst sum
                                                 sumo no nice onpt inner
                                                 ns i te ts kk mk nk
                                                 hw hq pf-on-eps)
-  ;; report against the same on-the-shape threshold the fit used
-  (setq pf-on-eps (max *PF-ON-EPS* (* *PF-ON-FRAC* tol)))
+  ;; report against the same on-the-shape threshold the fit used, and
+  ;; name the cap off the same count the fit was capped by (pf:build
+  ;; reads the distinct points, and PTS here may hold duplicates)
+  (setq pf-on-eps (max *PF-ON-EPS* (* *PF-ON-FRAC* tol))
+        ndist     (length (cal:dedupe pts *PF-EXACT-EPS*)))
   (progn
       ;; -- segment mix, nice radii, arcs anchored on a point --------
       (setq nl 0 na 0 nice 0 onpt 0)
@@ -2071,7 +2244,7 @@
             (if (> kk mk) (setq mk kk))
             (if (> kk (+ *PF-TANG-TOL* 1.0e-6)) (setq nk (1+ nk)))))
         (setq i (1+ i)))
-      (princ (strcat "\nABHD: " (itoa ns) " segments ("
+      (princ (strcat "\n" cmd ": " (itoa ns) " segments ("
                      (itoa nl) " lines + " (itoa na)
                      " curves) written to layer " *PF-POOL-LAYER* "."
                      "\n  Points on the perimeter:      " (itoa hiton)
@@ -2123,8 +2296,9 @@
                            " is off by " (rtos hw 2 4)
                            " - the drawn shape or a declared wall"
                            " overruled it.")))))
-      (if (and *PF-MAX-ARCS* (> na *PF-MAX-ARCS*))
-        (princ (strcat "\n  (the curve cap is " (itoa *PF-MAX-ARCS*)
+      (if (and (pf:cap-for ndist) (> na (pf:cap-for ndist)))
+        (princ (strcat "\n  (the curve cap is "
+                       (itoa (pf:cap-for ndist))
                        " but " (itoa na) " curves was the fewest"
                        " reachable: a closed loop needs at least 2"
                        " segments)")))
@@ -2247,7 +2421,11 @@
         left (cond ((= mode "tight") 0)
                    ((= mode "few")   1000000)
                    (T                allow))
-        cap  (if (= mode "asked") *PF-MAX-ARCS*)
+        ;; the cap's own count is the DISTINCT points - the survey as
+        ;; the drafter sees it.  Not (if tour tour pts) like the drop
+        ;; budget below: that one is a per-span fair share and has
+        ;; always read the list it is prorating over
+        cap  (if (= mode "asked") (pf:cap-for (length dpts)))
         drop (if (= mode "tight")
                0
                (cal:ceil (* *PF-DROP-PCT*
@@ -2257,6 +2435,65 @@
   (if tour
     (pf:coarse-loop tour ftol cap left drop (not (= mode "few")))
     (pf:guided-fit loop pts dpts tol ftol left drop cap)))
+
+;; ---- the five SIMPABHD candidates ------------------------------------
+;; ABHD asks three numbers and draws the two ends of the trade around
+;; them.  SIMPABHD asks none: the two ends are the same two, and the
+;; three between them are ready-made answers (*PF-SIMP-COMPARE*).  So
+;; the fitter is ABHD's, unchanged - only the budgets handed to it
+;; come off a table instead of off the prompts.
+
+;; How many points a SIMPABHD row lets sit OFF the line.  A "pct" row
+;; carries a share of the survey; a "hold" row carries a flat COUNT -
+;; "all but the 3 worst held" is 3 points however big the survey is,
+;; which is the whole point of offering it beside two shares.  The
+;; tight end allows none and the few end allows every one of them.
+(defun pf:row-allow (row n)
+  (cond ((= (car row) "tight") 0)
+        ((= (car row) "few")   n)
+        ((= (car row) "hold")  (fix (nth 4 row)))
+        (T                     (cal:ceil (* (nth 4 row) n)))))
+
+;; Build one SIMPABHD candidate from its row.  The five differ only in
+;; what they are ALLOWED, so they all come out of the same fitter:
+;;   TOL   the row's own FIT distance, or *PF-SIMP-TOL* where it has
+;;         none (the two ends borrow the distance the table is
+;;         measured against, exactly as ABHD's do from step 1).  In
+;;         guided mode this is pf:guided-fit's ftol, NOT its tol: that
+;;         one is the radius a drawn vertex snaps to a survey point
+;;         within and the reach an arc gathers its points over, and it
+;;         has to stay the distance the whole table is read against.
+;;         Handing the tight row its own 0.01 there would snap no
+;;         vertex and gather no point, and the row whose job is the
+;;         least error would come out the coarsest.  ABHD keeps the
+;;         two apart for the same reason.
+;;   LEFT  pf:row-allow above, with the few end's lifted to a number
+;;         no survey reaches - that lift is what lets its arcs run as
+;;         long as the distance permits.
+;;   DROP  how many may end up PAST the distance: none for the tight
+;;         end, and for a "hold" row the same count it is allowed to
+;;         miss by - "all but the 3 worst held" means three points are
+;;         given up, not three plus a share.
+;;   CAP   only the three middle rows carry one.  Capping the row whose
+;;         whole job is to draw the most curves - or the fewest -
+;;         would be asking for that and then overruling the answer.
+(defun pf:simp-build (tour loop pts dpts row
+                      / pf-miss-left pf-on-eps kind n tol left drop cap)
+  (setq kind (car row)
+        n    (length dpts)
+        tol  (cond ((= kind "tight") (min *PF-SIMP-TOL* *PF-TIGHT-TOL*))
+                   ((nth 5 row)      (nth 5 row))
+                   (T                *PF-SIMP-TOL*))
+        left (if (= kind "few") 1000000 (pf:row-allow row n))
+        drop (cond ((= kind "tight") 0)
+                   ((= kind "hold")  (fix (nth 4 row)))
+                   (T (cal:ceil (* *PF-DROP-PCT* n))))
+        cap  (if (nth 6 row) (pf:div-arcs n (nth 6 row)))
+        pf-miss-left left
+        pf-on-eps    (max *PF-ON-EPS* (* *PF-ON-FRAC* tol)))
+  (if tour
+    (pf:coarse-loop tour tol cap left drop (not (= kind "few")))
+    (pf:guided-fit loop pts dpts *PF-SIMP-TOL* tol left drop cap)))
 
 ;; Deviation summary for SEGS against PTS: (worst avg avg-off).
 ;;   worst   - furthest any point sits from the line
@@ -2283,7 +2520,7 @@
 (defun pf:fmt-dev (x)
   (if x (rtos x 2 2) "-"))
 
-;; ---- offer three fits and let the user pick ---------------------------
+;; ---- offer the fits and let the user pick -----------------------------
 ;; Knowing up front how much curve to spend on how much accuracy is the
 ;; hardest part of the command, so instead of asking the user to
 ;; imagine it, draw the two ends of that trade and the middle: the
@@ -2291,15 +2528,34 @@
 ;; fewest curves that still hold the distance.  Each goes on in its own
 ;; colour with what it costs, and the one they point at is kept.
 ;; Everything is judged against the tolerance the user actually typed,
-;; so the columns compare like for like even though the three were not
+;; so the columns compare like for like even though they were not
 ;; built alike.
-(defun pf:compare (tour loop pts dpts tol allow
+;;
+;; SIMP non-nil is SIMPABHD's five instead of ABHD's three: the same
+;; screen, the same table, the same pick - built off *PF-SIMP-COMPARE*
+;; and pf:simp-build rather than off the three answers.  One function
+;; and not two, because everything a drafter reads here - the columns,
+;; the "no fit could hold these" note, the click-or-type pick, the
+;; erase-the-losers rule, Redo - is the same job either way, and the
+;; way two copies of it go wrong is that one of them stops matching
+;; what the other promises.
+(defun pf:compare (tour loop pts dpts tol allow simp
                    / prior vars v e ent lab st onv segs bad allbad first
-                     i pick idx keep ce bb hgt sel picked keyed pr res)
+                     i pick idx keep ce bb hgt sel picked keyed pr res
+                     tbl nfit defl kws word)
   (setq prior (pf:prior-fits))
   (cal:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
-  ;; every candidate is judged against the distance the user typed, so
-  ;; "off the line" means the same thing in all three rows
+  (setq tbl  (if simp *PF-SIMP-COMPARE* *PF-COMPARE*)
+        nfit (length tbl)
+        defl (if simp *PF-SIMP-DEFAULT-FIT* *PF-DEFAULT-FIT*)
+        word (if simp "Five" "Three")
+        kws  "")
+  (setq i 1)
+  (repeat nfit (setq kws (strcat kws (itoa i) " ") i (1+ i)))
+  (setq kws (strcat kws "All None Redo"))
+  ;; every candidate is judged against the distance the user typed (or,
+  ;; in SIMPABHD, the one the table is read against), so "off the line"
+  ;; means the same thing in every row
   (setq onv (max *PF-ON-EPS* (* *PF-ON-FRAC* tol)))
   ;; label height: a twentieth of the shape, so it reads at any zoom
   (setq bb  (pf:bbox pts)
@@ -2307,13 +2563,16 @@
                     (- (cadddr bb) (cadr bb)))
                *PF-LABEL-FRAC*))
   (if (<= hgt 0.0) (setq hgt 1.0))
-  (setq pf-phase "building the three candidate fits"
+  (setq pf-phase (strcat "building the " (strcase word T)
+                         " candidate fits")
         vars     nil
         allbad   nil
         first    T
         i        1)
-  (foreach v *PF-COMPARE*
-    (setq segs (pf:build tour loop pts dpts tol allow (car v))
+  (foreach v tbl
+    (setq segs (if simp
+                 (pf:simp-build tour loop pts dpts v)
+                 (pf:build tour loop pts dpts tol allow (car v)))
           ent  (pf:temp-add
                  (pf:make-pline
                    (mapcar '(lambda (s) (list (car s) (caddr s))) segs)
@@ -2347,7 +2606,7 @@
   (if (null (cadr (car vars)))
     (princ "\nABHD: could not draw the result - is the drawing read-only?")
     (progn
-      (princ (strcat "\n\nThree candidate fits are now drawn on layer "
+      (princ (strcat "\n\n" word " candidate fits are now drawn on layer "
                      *PF-OUT-LAYER*
                      ",\neach numbered on screen in its own colour:\n"))
       (princ "\n   #  segs  curves  worst off  avg all  avg off  not held  ")
@@ -2372,22 +2631,37 @@
                      "\n  \"avg all\" averages every point; \"avg off\""
                      " averages only the points that are off the line"
                      "\n  (further than " (rtos onv 2 3) " from it)."))
-      (princ (strcat "\n  All three are measured against the "
-                     (rtos tol 2 3) " you typed, but only one is built"
-                     " to it:"
-                     "\n  the tight fit spends curves to drive the error"
-                     " towards nothing (it"
-                     "\n  ignores that distance"
-                     (if *PF-MAX-ARCS* " and the curve cap" "")
-                     " and gives up no point at all), the middle one is"
-                     "\n  your settings exactly, and the few fit holds"
-                     " the same distance with as few"
-                     "\n  curves as it can - those two may write off up"
-                     " to " (itoa (cal:ceil (* *PF-DROP-PCT*
-                                              (length (if tour
-                                                        tour
-                                                        pts)))))
-                     " stray point(s) between them."))
+      (if simp
+        (princ (strcat "\n  All five are measured against the "
+                       (rtos tol 2 3) " this command works to, but they"
+                       " are not built alike:"
+                       "\n  fit 1 spends curves to drive the error"
+                       " towards nothing (no point given"
+                       "\n  up, no cap), fit 5 holds that distance with"
+                       " as few curves as it can,"
+                       "\n  and 2, 3 and 4 are three ready-made answers"
+                       " in between - each with its"
+                       "\n  own slack and its own curve cap, printed"
+                       " against it in the last column."
+                       "\n  Nothing here was typed: pick the outline"
+                       " that looks like the pool."))
+        (princ (strcat "\n  All three are measured against the "
+                       (rtos tol 2 3) " you typed, but only one is built"
+                       " to it:"
+                       "\n  the tight fit spends curves to drive the error"
+                       " towards nothing (it"
+                       "\n  ignores that distance"
+                       (if (pf:cap-for (length dpts))
+                         " and the curve cap" "")
+                       " and gives up no point at all), the middle one is"
+                       "\n  your settings exactly, and the few fit holds"
+                       " the same distance with as few"
+                       "\n  curves as it can - those two may write off up"
+                       " to " (itoa (cal:ceil (* *PF-DROP-PCT*
+                                                (length (if tour
+                                                          tour
+                                                          pts)))))
+                       " stray point(s) between them.")))
       (if allbad
         (princ (strcat "\n  NOTE: " (itoa (length allbad))
                        " point(s) could not be held by ANY fit built to"
@@ -2401,19 +2675,21 @@
       ;; number still works for anyone who prefers the keyboard.
       (setq pf-phase "waiting for the choice of fit")
       (princ "\n\n  Click the outline you want to keep, or type its number.")
-      (princ "\n  Redo refits with new settings, and lets you omit points first.")
-      (initget "1 2 3 All None Redo")
+      (princ (if simp
+               "\n  Redo lets you omit points and draw the five again."
+               "\n  Redo refits with new settings, and lets you omit points first."))
+      (initget kws)
       (setq pick (getkword
-                   (strcat "\n  Keep which fit - click one, or"
-                           " [1/2/3/All/None/Redo] <"
-                           *PF-DEFAULT-FIT* ">: ")))
+                   (strcat "\n  Keep which fit - click one, or ["
+                           (if simp "1/2/3/4/5" "1/2/3")
+                           "/All/None/Redo] <" defl ">: ")))
       (if (null pick)
         ;; no keyword typed: give them a click, and fall back to the
         ;; standing default
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
-                                    " Enter for " *PF-DEFAULT-FIT*
-                                    "): ")))
+                                    " Enter for " defl "): ")))
+          (if lzd:watch (lzd:watch sel))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -2424,15 +2700,16 @@
                 (setq i (1+ i)))
               (if (null pick)
                 (progn
-                  (princ (strcat "\n  (that is not one of the three -"
-                                 " keeping " *PF-DEFAULT-FIT* ")"))
-                  (setq pick *PF-DEFAULT-FIT*))))
-            (setq pick *PF-DEFAULT-FIT*))))
+                  (princ (strcat "\n  (that is not one of the "
+                                 (strcase word T) " - keeping "
+                                 defl ")"))
+                  (setq pick defl))))
+            (setq pick defl))))
       ;; anything not explicitly kept stays registered as scaffolding
       ;; and is swept when the command ends
       (cond
         ((= pick "Redo")
-         ;; clear this trio off the screen right away - the caller
+         ;; clear this set off the screen right away - the caller
          ;; asks its questions and draws a fresh one
          (foreach v vars
            (if (and (cadr v) (entget (cadr v))) (entdel (cadr v)))
@@ -2443,10 +2720,12 @@
          (foreach v vars
            (pf:temp-drop (cadr v))
            (foreach e (nth 4 v) (pf:temp-drop e)))
-         (princ "\nKeeping all three, in their preview colours.")
+         (princ (strcat "\nKeeping all " (strcase word T)
+                        ", in their preview colours."))
          (princ "\n  (the number labels are kept too - erase them when done)"))
         ((= pick "None")
-         (princ "\nAll three erased - nothing was added to the drawing."))
+         (princ (strcat "\nAll " (strcase word T)
+                        " erased - nothing was added to the drawing.")))
         (T
          (setq idx (atoi pick) i 1)
          (foreach v vars
@@ -2456,7 +2735,7 @@
              ;; while the report is read
              (if (and (cadr v) (entget (cadr v))) (entdel (cadr v))))
            (setq i (1+ i)))
-         ;; name the aim that was kept, not just its number - the three
+         ;; name the aim that was kept, not just its number - they
          ;; were built to different ends and the report that follows is
          ;; read against the settings as typed
          (if keep
@@ -2469,7 +2748,16 @@
       (if keep
         (progn
           (setq keyed (pf:mark-unheld (caddr keep) (car keep) bb hgt))
-          (pf:report (car keep) pts tol allow prior)
+          ;; the hit report is read against what the KEPT fit was
+          ;; allowed.  In ABHD that is the run's own answer to step 2;
+          ;; in SIMPABHD each row carries its own, so a report under
+          ;; the run's would name a budget that fit never had
+          (pf:report (car keep) pts tol
+                     (if simp
+                       (pf:row-allow (cadddr keep) (length dpts))
+                       allow)
+                     prior
+                     (if simp "SIMPABHD" "ABHD"))
           (if keyed
             (progn
               (princ (strcat "\n  " (itoa (length keyed))
@@ -3195,6 +3483,7 @@
   (setq ans (getkword (strcat
               "\n  Slope line from the offset at Pt." nm
               " [Straight/Guided/Points/Back] <Straight>: ")))
+  (if lzd:ask (lzd:ask "pf:ask-slope" ans))
   (setq slopemarks nil)     ; the caller's register of this side's rings
   (cond
     ((member ans '("Back" "Undo")) 'PF-BACK)
@@ -3438,6 +3727,30 @@
        (setq go nil))))
   (princ))
 
+;; ---- walking the settings chain --------------------------------------
+;; The chain is one chain whichever command is walking it; only the
+;; numbers printed on it move.  ABHD asks all seven steps; SIMPABHD
+;; asks none of the first three, so its step 4 is the drafter's step 1
+;; and its step 7 is step 4.
+
+;; "Step 4 of 7 - " in ABHD, "Step 1 of 4 - " in SIMPABHD.
+(defun pf:step-n (step simp)
+  (strcat "\n\n  Step " (itoa (if simp (- step 3) step))
+          " of " (if simp "4" "7") " - "))
+
+;; Back out of the question at STEP, where LO is the first question
+;; the running command actually asks.  At LO there is nothing behind
+;; this question, so the step re-opens instead - which is what makes
+;; Back at SIMPABHD's first prompt safe rather than a way out of the
+;; run.
+(defun pf:step-back (step lo)
+  (cond ((> step lo)
+         (princ "\n  Stepping back one question.")
+         (1- step))
+        (T
+         (princ "\n  Already at the first question.")
+         step)))
+
 ;; ---- the numeric parameters ------------------------------------------
 ;; Asked identically at the start of a run and again on a Redo -
 ;; Enter keeps the shown value each time.
@@ -3453,6 +3766,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *PF-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "pf:ask-tol" tol))
   (cond
     ((pf:back-kw tol) 'PF-BACK)
     (T
@@ -3474,6 +3788,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "pf:ask-pct" pct))
   (cond
     ((pf:back-kw pct) 'PF-BACK)
     ((null pct) def)
@@ -3482,18 +3797,30 @@
      1.0)
     (T (/ pct 100.0))))
 
-;; Curve cap; remembered in *PF-MAX-ARCS* (nil = no cap).
+;; What the cap prompt shows in its <angle brackets> - the standing
+;; answer in words, since one of the three states is a rule rather
+;; than a number.
+(defun pf:cap-word ()
+  (cond ((eq 'AUTO *PF-MAX-ARCS*) "Auto")
+        (*PF-MAX-ARCS*            (itoa *PF-MAX-ARCS*))
+        (T                        "None")))
+
+;; Curve cap; remembered in *PF-MAX-ARCS* - 'AUTO (a third of the
+;; points), a number, or nil for no cap.  Auto and None are keywords
+;; rather than numbers because neither IS a number: Auto is a rule
+;; that only becomes one once the points are counted.
 (defun pf:ask-cap (back / mx)
-  (if back (initget 4 "None Back Undo") (initget 4 "None"))
-  (setq mx (getint (strcat "\n  Maximum curves <"
-                           (if *PF-MAX-ARCS* (itoa *PF-MAX-ARCS*) "None")
-                           ">"
-                           (if back " [None/Back]" "") ": ")))
+  (if back (initget 4 "Auto None Back Undo") (initget 4 "Auto None"))
+  (setq mx (getint (strcat "\n  Maximum curves <" (pf:cap-word) ">"
+                           (if back " [Auto/None/Back]" " [Auto/None]")
+                           ": ")))
+  (if lzd:ask (lzd:ask "pf:ask-cap" mx))
   (cond
     ((pf:back-kw mx) 'PF-BACK)
     (T
      (cond ((null mx) nil)                         ; Enter: keep as-is
-           ((eq 'STR (type mx)) (setq *PF-MAX-ARCS* nil))
+           ((eq 'STR (type mx))
+            (setq *PF-MAX-ARCS* (if (= mx "Auto") 'AUTO nil)))
            (T (setq *PF-MAX-ARCS* mx)))
      *PF-MAX-ARCS*)))
 
@@ -3775,66 +4102,37 @@
       (T (setq ans nil))))
   (if res 'PF-BACK))
 
-;; ---- the command -----------------------------------------------------
-(defun c:ABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
-                    step rstep v mk wallmk cnrmk holdmk pf-decl-marks
-                    ss i en ed lay typ ext nunsup nocs
-                    segs pts dpts allow loop tour ok stale npt
-                    again omits pts2 ent ring pf-omitted
-                    pf-miss-pct pf-walls pf-corners pf-holds
-                    pf-temp pf-ptnames
-                    pf-dim-warned *error* pf-old-err pf-phase
-                    undo-open pf-pick)
-  ;; report which step failed if anything goes wrong, sweep away any
-  ;; preview geometry drawn so far, then restore the old handler - a
-  ;; cancelled run must not leave dashed markers or candidate outlines
-  ;; lying around
-  (setq pf-temp   nil
-        pf-old-err *error*
-        *error*
-          (lambda (m)
-            (if (and m (not (wcmatch (strcase m)
-                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-              (princ (strcat "\nABHD stopped while "
-                             (if pf-phase pf-phase "starting up")
-                             " -- " m)))
-            (pf:temp-clear)
-            ;; close the group after the sweep so one U takes back the
-            ;; whole run, previews included; only if it ever opened
-            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-            (setq undo-open nil)
-            (setq *error* pf-old-err)
-            ;; cover mode must not outlive the run that asked for it,
-            ;; or the next ABHD would skip its bottom without a word
-            (setq abhd:*nobottom* nil)
-            (princ)))
-
-  ;; sweep leftovers from a run that was interrupted before it could
-  ;; tidy up after itself
-  (setq stale (pf:purge-mine *PF-WALL-LAYER*))
-  (if (> stale 0)
-    (princ (strcat "\nABHD: cleared " (itoa stale)
-                   " leftover marker(s) from layer " *PF-WALL-LAYER*
-                   ".")))
-
-  ;; a pickfirst selection if there is one - kept for step 7, so the
-  ;; survey can be highlighted before the command is typed.  Probed
-  ;; here, before the undo group opens: the typed prompts between here
-  ;; and step 7 leave a pickfirst set alone, a command call would not
-  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-
-  ;; one undo group around the whole fit - a U after ABHD takes back
-  ;; the perimeter, the bottom and the markers in one step (the stale
-  ;; purge above stays outside it, so U does not resurrect old junk)
-  ;; only when undo is recording - _Begin in a drawing with UNDO
-  ;; off (bit 1 of UNDOCTL clear) errors out of the command
-  (if (= 1 (logand 1 (getvar "UNDOCTL")))
-    (progn
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)))
-
-  (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
-
+;; ---- the run itself, shared by ABHD and SIMPABHD ---------------------
+;; Everything from the first question to the last sweep: the settings
+;; chain, the selection, the mode, the candidates and the Redo loop.
+;; SIMP non-nil is SIMPABHD - the same run with its first three
+;; questions not asked and five candidates drawn instead of three.
+;;
+;; One function and not two.  What a second copy would have to keep in
+;; step is not the fitter (that is pf:build's job) but every promise
+;; the run makes around it: that Back walks the chain, that a step
+;; re-entered from below throws away what the earlier pass collected,
+;; that declared walls and holds snap onto survey points and say so
+;; when they were picked wide, that an omitted point takes its wall
+;; with it, that the point order forgets what was omitted.  Those are
+;; the ones that rot quietly.
+;;
+;; It is dynamically scoped on purpose: pf-walls, pf-corners,
+;; pf-holds, pf-ptnames, pf-omitted and pf-miss-pct are bound HERE and
+;; read by the fitter, the reporter and the ask helpers, which is how
+;; they were already bound by the commands this was lifted out of.
+;; pf-phase and pf-temp are deliberately NOT bound here: the caller's
+;; error handler reads the one and sweeps the other, and a binding of
+;; either in this frame would hide the run's own state from the
+;; handler that has to clean up after it.
+(defun pf:fit-session (simp
+                       / cmd lo tol ans go wp1 wp2 rawwalls rawcnrs
+                         rawholds w w1 w2 step rstep v mk wallmk cnrmk
+                         holdmk pf-decl-marks ss i en ed lay typ ext
+                         nunsup nocs segs pts dpts allow loop tour ok
+                         npt pf-nmoved again omits pts2 ent ring
+                         pf-omitted pf-miss-pct pf-walls pf-corners
+                         pf-holds pf-ptnames pf-dim-warned)
   ;; -- steps 1 to 6: the settings, walked as one chain --------------
   ;; Every question after the first offers Back (Undo is its hidden
   ;; synonym), so a mistyped tolerance or a wrong Yes costs one
@@ -3843,8 +4141,16 @@
   ;; by one, and a step re-entered from below throws away whatever the
   ;; earlier pass collected there - markers included - so the second
   ;; answer replaces the first instead of piling on top of it.
-  (setq step 1 rawwalls nil rawcnrs nil rawholds nil
-        wallmk nil cnrmk nil holdmk nil)
+  ;;
+  ;; SIMPABHD starts the SAME chain at step 4.  Its three numbers are
+  ;; not asked, so there is nothing behind the walls question and Back
+  ;; there re-opens it instead of falling out of the run; the internal
+  ;; step numbers do not move, only the ones printed (pf:step-n).
+  (setq step (if simp 4 1) rawwalls nil rawcnrs nil rawholds nil
+        wallmk nil cnrmk nil holdmk nil
+        cmd    (if simp "SIMPABHD" "ABHD")
+        lo     (if simp 4 1))
+  (if simp (setq tol *PF-SIMP-TOL*))
   (while (<= step 6)
     (cond
 
@@ -3855,7 +4161,8 @@
       ;; would silently collapse the fit into single-point stubs.
       ((= step 1)
        (setq pf-phase "reading the tolerance")
-       (princ "\n\n  Step 1 of 7 - how far may the fitted line sit from a survey point?")
+       (princ (strcat (pf:step-n step simp)
+                      "how far may the fitted line sit from a survey point?"))
        (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
        (princ "\n  pick two points in the drawing to measure one.")
        (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
@@ -3868,11 +4175,13 @@
       ;; purpose.
       ((= step 2)
        (setq pf-phase "reading the miss percentage")
-       (princ "\n\n  Step 2 of 7 - what percent of the points may sit OFF the line")
+       (princ (strcat (pf:step-n step simp)
+                      "what percent of the points may sit OFF the line"))
        (princ "\n  (off, but still within the distance above)?")
-       (princ (strcat "\n  Press Enter for the standard "
+       (princ (strcat "\n  Press Enter for the recommended "
                       (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
-                      " percent."))
+                      " percent - a fifth of an AB survey an inch off"
+                      "\n  is what a built shell measures like."))
        (setq v (pf:ask-pct *PF-MISS-PCT* T))
        (if (eq v 'PF-BACK)
          (progn (princ "\n  Stepping back one question.")
@@ -3883,8 +4192,15 @@
       ;; -- step 3: optional cap on how many curves the result may use
       ((= step 3)
        (setq pf-phase "reading the curve limit")
-       (princ "\n\n  Step 3 of 7 - limit how many curves the result may use?")
-       (princ "\n  Type a whole number, or None for no limit.")
+       (princ (strcat (pf:step-n step simp)
+                      "limit how many curves the result may use?"))
+       (princ "\n  Type a whole number, None for no limit, or Auto for the")
+       (princ (strcat "\n  recommended cap - one curve per "
+                      (rtos *PF-ARC-DIV* 2 0)
+                      " points, worked out once they are"
+                      "\n  selected (a "
+                      (itoa (pf:rec-arcs 30))
+                      "-curve cap on a 30-point survey)."))
        (if (eq (pf:ask-cap T) 'PF-BACK)
          (progn (princ "\n  Stepping back one question.")
                 (setq step 2))
@@ -3901,7 +4217,8 @@
        (foreach mk wallmk (pf:temp-kill mk))
        (setq wallmk nil)
        (setq pf-phase "asking about straight lines")
-       (princ "\n\n  Step 4 of 7 - does the pool edge have any dead-straight walls?")
+       (princ (strcat (pf:step-n step simp)
+                      "does the pool edge have any dead-straight walls?"))
        (princ "\n  If Yes you will pick the two end points of each (snap to the")
        (princ "\n  survey points); a dashed line marks each declared wall.")
        (initget "Yes No Back Undo")
@@ -3909,8 +4226,7 @@
              rawwalls nil)
        (cond
          ((member ans '("Back" "Undo"))
-          (princ "\n  Stepping back one question.")
-          (setq step 3))
+          (setq step (pf:step-back step lo)))
          ((= ans "Yes")
           (setq rawwalls (pf:declare-walls)
                 wallmk   pf-decl-marks)
@@ -3934,7 +4250,8 @@
        (foreach mk cnrmk (pf:temp-kill mk))
        (setq cnrmk nil)
        (setq pf-phase "asking about sharp corners")
-       (princ "\n\n  Step 5 of 7 - are there any sharp corners the fit must not round off?")
+       (princ (strcat (pf:step-n step simp)
+                      "are there any sharp corners the fit must not round off?"))
        (princ "\n  Obvious ones are found automatically; declare the gentler ones here.")
        (princ "\n  If Yes you will pick each corner point (snap to the survey points).")
        (initget "Yes No Back Undo")
@@ -3965,7 +4282,8 @@
        (foreach mk holdmk (pf:temp-kill mk))
        (setq holdmk nil)
        (setq pf-phase "asking about held points")
-       (princ "\n\n  Step 6 of 7 - any points that must be held ABSOLUTELY?")
+       (princ (strcat (pf:step-n step simp)
+                      "any points that must be held ABSOLUTELY?"))
        (princ "\n  A held point can never be fudged: the line passes through it")
        (princ "\n  exactly, in every candidate.  If Yes you will pick each one")
        (princ "\n  (snap to the survey points); a small dashed ring marks it.")
@@ -3999,17 +4317,19 @@
   (if pf-pick
     (setq ss pf-pick)
     (progn
-      (princ "\n\n  Step 7 of 7 - select the survey points (POINTS layer or ab_pt")
+      (princ (strcat (pf:step-n 7 simp)
+                     "select the survey points (POINTS layer or ab_pt"))
       (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn
       ;; -- sort the selection into perimeter segments and points -----
       (setq pf-phase "reading the selected entities")
       (setq segs nil pts nil i 0 nunsup 0 nocs 0
-            npt 0 pf-ptnames nil)
+            npt 0 pf-ptnames nil pf-nmoved 0)
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
@@ -4052,17 +4372,24 @@
            (pf:add-point (cal:2d (cdr (assoc 10 ed)))
                          (pf:block-number en)))))
       (if (> nunsup 0)
-        (princ (strcat "\nABHD: warning - " (itoa nunsup)
+        (princ (strcat "\n" cmd ": warning - " (itoa nunsup)
                        " SPLINE/ELLIPSE object(s) on layer "
                        *PF-POOL-LAYER*
                        " were ignored (only lines, arcs, circles and"
                        " polylines can be read - explode or convert"
                        " them first).")))
       (if (> nocs 0)
-        (princ (strcat "\nABHD: warning - " (itoa nocs)
+        (princ (strcat "\n" cmd ": warning - " (itoa nocs)
                        " selected object(s) are not drawn in the world"
                        " plane; the fit is flat (XY) and may be wrong."
                        "  Set UCS to World and flatten them first.")))
+      ;; a moved point is a deduction, not a shot - say how many were
+      ;; left out, so a thin survey is explained rather than mysterious
+      (if (and pf-nmoved (> pf-nmoved 0))
+        (princ (strcat "\n" cmd ": " (itoa pf-nmoved)
+                       " moved point(s) (a \"" *PF-MOVED-MARK*
+                       "\" in the number) left out - nobody stood on"
+                       " one of those, so the line is not held to it.")))
       ;; the miss allowance: this share of the points (the answer to
       ;; step 2, rounded UP to a whole point) may sit off the result
       ;; by up to TOL
@@ -4107,7 +4434,7 @@
               (setq pf-holds (cons w1 pf-holds))))))
       (setq pf-holds (reverse pf-holds))
       (if (> (length dpts) *PF-SLOW-NOTE*)
-        (princ (strcat "\nABHD: " (itoa (length dpts))
+        (princ (strcat "\n" cmd ": " (itoa (length dpts))
                        " points - ordering and fitting will take a"
                        " little while, please wait...")))
       (cond
@@ -4159,7 +4486,7 @@
              (setq again T)
              (while again
                (setq again nil)
-               (if (eq 'REDO (pf:compare tour loop pts dpts tol allow))
+               (if (eq 'REDO (pf:compare tour loop pts dpts tol allow simp))
                  (progn
                    ;; -- redo: maybe omit points, then re-ask the
                    ;; numbers and draw a fresh trio -----------------
@@ -4253,12 +4580,22 @@
                        ;; walls and corners may change for the retry
                        (princ "\n\n  Straight walls and sharp corners can change too -")
                        (princ "\n  Enter keeps each list as it is.")
+                       (if simp
+                         (princ (strcat "\n  (there are no numbers to"
+                                        " re-ask - " cmd
+                                        " works to "
+                                        (rtos *PF-SIMP-TOL* 2 3)
+                                        " and draws the same five.)")))
                        ;; the Redo settings are a chain like the opening
                        ;; questions, and walk back the same way: Back at
                        ;; any of the six re-opens the one before it, and
                        ;; Back at the first has nowhere to go
+                       ;; SIMPABHD asked no numbers, so its Redo has
+                       ;; none to re-ask: the walls, corners and holds
+                       ;; can still change, and so can the omit list
+                       ;; above - that IS its Redo
                        (setq rstep 1)
-                       (while (<= rstep 6)
+                       (while (<= rstep (if simp 3 6))
                          (cond
                            ((= rstep 1)
                             (setq pf-phase "editing straight walls")
@@ -4304,6 +4641,159 @@
                          ((not (pf:has-arcs loop))
                           (setq tour (pf:loop-order loop dpts))))
                        (setq again T))))))))))))
+  (princ))
+
+;; ---- the commands ----------------------------------------------------
+(defun c:ABHD ( / stale pf-temp *error* pf-old-err pf-phase
+                    undo-open pf-pick)
+  ;; report which step failed if anything goes wrong, sweep away any
+  ;; preview geometry drawn so far, then restore the old handler - a
+  ;; cancelled run must not leave dashed markers or candidate outlines
+  ;; lying around
+  (setq pf-temp   nil
+        pf-old-err *error*
+        *error*
+          (lambda (m)
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+              (princ (strcat "\nABHD stopped while "
+                             (if pf-phase pf-phase "starting up")
+                             " -- " m)))
+            (pf:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+            (setq undo-open nil)
+            (setq *error* pf-old-err)
+            ;; cover mode must not outlive the run that asked for it,
+            ;; or the next ABHD would skip its bottom without a word
+            (setq abhd:*nobottom* nil)
+            (if lzd:report (lzd:report "ABHD" pf:*version* m))
+            (princ)))
+          (if lzd:begin (lzd:begin "ABHD" pf:*version*))
+
+  ;; sweep leftovers from a run that was interrupted before it could
+  ;; tidy up after itself
+  (setq stale (pf:purge-mine *PF-WALL-LAYER*))
+  (if (> stale 0)
+    (princ (strcat "\nABHD: cleared " (itoa stale)
+                   " leftover marker(s) from layer " *PF-WALL-LAYER*
+                   ".")))
+
+  ;; a pickfirst selection if there is one - kept for step 7, so the
+  ;; survey can be highlighted before the command is typed.  Probed
+  ;; here, before the undo group opens: the typed prompts between here
+  ;; and step 7 leave a pickfirst set alone, a command call would not
+  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (if lzd:watch (lzd:watch pf-pick))
+
+  ;; one undo group around the whole fit - a U after ABHD takes back
+  ;; the perimeter, the bottom and the markers in one step (the stale
+  ;; purge above stays outside it, so U does not resurrect old junk)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+
+  (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
+
+  (pf:fit-session nil)
+
+  ;; sweep the dashed wall markers and any candidate the user did not
+  ;; keep - the command tidies up after itself
+  (pf:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
+  (setq *error* pf-old-err)   ; restore the previous error handler
+  (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
+  (princ))
+
+;; ---- SIMPABHD: the same fit with nothing to decide first -------------
+;; ABHD's first three questions are the ones that stop a run before it
+;; starts.  How far may the line sit off a point?  What share may be
+;; off?  How many curves?  None of the three can be answered from the
+;; command line, because the answer is the shape they produce - which
+;; is why ABHD draws three of them and lets the drafter point.
+;;
+;; SIMPABHD takes that the rest of the way: it asks NONE of the three
+;; and draws FIVE.  Two are ABHD's own ends of the trade - fit 1 the
+;; least error there is, fit 5 the fewest curves that still hold the
+;; distance - so whatever a typed answer could have produced sits
+;; between them.  The three in the middle are ready-made answers, each
+;; a share, a distance and a curve cap together, printed beside its
+;; outline (*PF-SIMP-COMPARE*).  Everything after that is ABHD: the
+;; same walls, corners and held points, the same selection, the same
+;; table, the same pick, the same report, the same pool bottom.
+;;
+;; It is the same run, not a simpler one - pf:fit-session walks the
+;; same chain from step 4, so a rule ABHD keeps is a rule this keeps.
+(defun c:SIMPABHD ( / stale pf-temp *error* pf-old-err pf-phase
+                        undo-open pf-pick)
+  ;; report which step failed if anything goes wrong, sweep away any
+  ;; preview geometry drawn so far, then restore the old handler - a
+  ;; cancelled run must not leave dashed markers or candidate outlines
+  ;; lying around
+  (setq pf-temp   nil
+        pf-old-err *error*
+        *error*
+          (lambda (m)
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+              (princ (strcat "\nSIMPABHD stopped while "
+                             (if pf-phase pf-phase "starting up")
+                             " -- " m)))
+            (pf:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+            (setq undo-open nil)
+            (setq *error* pf-old-err)
+            ;; cover mode is ABHDCOVER's, and it must not outlive any
+            ;; run that reached the bottom flow with it set
+            (setq abhd:*nobottom* nil)
+            (if lzd:report (lzd:report "SIMPABHD" pf:*version* m))
+            (princ)))
+          (if lzd:begin (lzd:begin "SIMPABHD" pf:*version*))
+
+  ;; sweep leftovers from a run that was interrupted before it could
+  ;; tidy up after itself
+  (setq stale (pf:purge-mine *PF-WALL-LAYER*))
+  (if (> stale 0)
+    (princ (strcat "\nSIMPABHD: cleared " (itoa stale)
+                   " leftover marker(s) from layer " *PF-WALL-LAYER*
+                   ".")))
+
+  ;; a pickfirst selection if there is one - kept for the selection
+  ;; step, so the survey can be highlighted before the command is
+  ;; typed.  Probed here, before the undo group opens: the typed
+  ;; prompts in between leave a pickfirst set alone, a command call
+  ;; would not
+  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (if lzd:watch (lzd:watch pf-pick))
+
+  ;; one undo group around the whole fit - a U after SIMPABHD takes
+  ;; back the perimeter, the bottom and the markers in one step (the
+  ;; stale purge above stays outside it, so U does not resurrect old
+  ;; junk).  Only when undo is recording - _Begin in a drawing with
+  ;; UNDO off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+
+  (princ "\n\nSIMPABHD - fit a pool perimeter, with nothing to decide first.")
+  (princ (strcat "\n  No numbers are asked.  Five perimeters are drawn to "
+                 (rtos *PF-SIMP-TOL* 2 3)
+                 " - the least"
+                 "\n  error there is, the fewest curves that hold it, and"
+                 " three ready-made"
+                 "\n  answers in between - and you keep the one that looks"
+                 " like the pool."))
+
+  (pf:fit-session T)
+
   ;; sweep the dashed wall markers and any candidate the user did not
   ;; keep - the command tidies up after itself
   (pf:temp-clear)
@@ -4339,7 +4829,8 @@
 ;; selected are trimmed by the same rule.  For when the perimeter was
 ;; fitted (or drawn) some other day and only the floor is needed.
 (defun c:ADAB ( / ss i en ed typ ext lay segs pts dpts loop nocs nskip
-                    nall npt stale pf-temp pf-ptnames pf-dim-warned
+                    nall npt pf-nmoved stale pf-temp pf-ptnames
+                    pf-dim-warned
                     *error* pf-old-err pf-phase undo-open pf-pick)
   (setq pf-temp   nil
         pf-old-err *error*
@@ -4354,7 +4845,9 @@
             (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* pf-old-err)
+            (if lzd:report (lzd:report "ADAB" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "ADAB" pf:*version*))
   ;; sweep leftovers from a run interrupted before it could tidy up
   (setq stale (pf:purge-mine *PF-WALL-LAYER*))
   (if (> stale 0)
@@ -4364,6 +4857,7 @@
   ;; a pickfirst selection if there is one, otherwise ask for it -
   ;; probed before the undo group opens, which would clear the set
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch pf-pick))
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -4380,13 +4874,14 @@
       (princ "\n  lines/arcs.  The survey points sitting on it are found by")
       (princ "\n  themselves; select them too only if they live somewhere unusual.")
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (princ "\nNothing usable selected (survey points and the perimeter geometry).")
     (progn
       (setq pf-phase "reading the selected entities")
       (setq segs nil pts nil i 0 nocs 0 nskip 0
-            npt 0 pf-ptnames nil)
+            npt 0 pf-ptnames nil pf-nmoved 0)
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
@@ -4479,6 +4974,13 @@
                (princ (strcat "\n  (" (itoa (- nall (length dpts)))
                               " selected point(s) well off the"
                               " perimeter were set aside)")))))
+         ;; a moved point is a deduction, not a shot - say how many were
+         ;; left out, so a thin survey is explained rather than mysterious
+         (if (and pf-nmoved (> pf-nmoved 0))
+           (princ (strcat "\nADAB: " (itoa pf-nmoved)
+                          " moved point(s) (a \"" *PF-MOVED-MARK*
+                          "\" in the number) left out - nobody stood on"
+                          " one of those, so the line is not held to it.")))
          (if (null dpts)
            (princ (strcat "\nNo survey points sit on this perimeter"
                           " (within " (rtos *PF-PICKUP-EPS* 2 1)
@@ -4543,15 +5045,29 @@
   (princ "\n\nWHAT ABHD NEEDS")
   (princ "\n  * Survey points: ab_pt block inserts (any layer, their number")
   (princ "\n    attribute names them) or POINT entities on layer POINTS.")
+  (princ (strcat "\n  * A number carrying the letter \""
+                 *PF-MOVED-MARK*
+                 "\" is a MOVED point - ABFIND"))
+  (princ "\n    writes \"17m\" when it works out where Pt.17 SHOULD have been")
+  (princ "\n    from two tape readings.  Nobody stood there, so it is left out")
+  (princ "\n    of the fit entirely: not ordered, not fitted, not held, not")
+  (princ "\n    counted against the allowance, never ringed as a miss.  The")
+  (princ "\n    original it came from is still in.  The run says how many went.")
   (princ "\n  * Optionally on layer POOL: a drawn perimeter (guided mode) or a")
   (princ "\n    lines-only connect-the-dots sketch (sets the point order).")
   (princ "\n    With neither, the points are ordered automatically.")
   (pf:tut-pause)
   (princ "\nTHE SEVEN QUESTIONS")
   (princ "\n  1. Max distance a point may sit from the line (2 inch ceiling).")
-  (princ "\n  2. Percent of points allowed off the line (Enter = 15, rounded")
+  (princ (strcat "\n  2. Percent of points allowed off the line (Enter = "
+                 (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
+                 ", rounded"))
   (princ "\n     UP to whole points - the slack that buys longer arcs).")
-  (princ "\n  3. Curve cap (None = unlimited; binds in every mode).")
+  (princ (strcat "\n  3. Curve cap (Enter = Auto: one curve per "
+                 (rtos *PF-ARC-DIV* 2 0)
+                 " points, rounded to"))
+  (princ "\n     the nearest, worked out once they are selected.  None =")
+  (princ "\n     unlimited; either way it binds in every mode).")
   (princ "\n  4. Dead-straight walls: pick both ends, dashed marker, comes out")
   (princ "\n     as a straight LINE no arc may swallow or cross.")
   (princ "\n  5. Sharp corners: pick points where tangency is waived.")
@@ -4559,6 +5075,10 @@
   (princ "\n     never fudged, never spent from the miss allowance; tangency")
   (princ "\n     still applies at them (they are not corners).")
   (princ "\n  7. Select the points (and the POOL guide if you have one).")
+  (princ "\n  SIMPABHD asks NONE of the first three and draws five perimeters")
+  (princ "\n  instead of three - the least error there is, the fewest curves")
+  (princ "\n  that hold an inch, and three ready-made answers in between.")
+  (princ "\n  Everything from question 4 on is the same run, rule for rule.")
   (pf:tut-pause)
   (princ "\nWHAT THE FITTER GUARANTEES")
   (princ "\n  * Arc endpoints sit ON survey points; arc middles pass through a")
@@ -4647,7 +5167,7 @@
 ;; The watching tour: draw it, fit it, choose it, floor it, clean up.
 (defun pf:tut-demo ( / cp tour dpts allow bb hgt cap v segs ent cand
                        kept d1 d2 s1 s2 sp1 sp2 dp1 dp2 back lines q
-                       pts npt pf-ptnames pf-miss-pct pf-walls
+                       pts npt pf-nmoved pf-ptnames pf-miss-pct pf-walls
                        pf-corners pf-holds pf-dim-warned)
   (setq pf-phase "picking a spot for the demo")
   (princ "\n\n  The demo draws a practice pool about 30 ft wide, walks it")
@@ -4664,6 +5184,7 @@
       (cal:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
       (setq cp   (cal:2d cp)
             npt  0
+            pf-nmoved 0
             tour (pf:tut-survey cp)
             dpts (cal:dedupe pts *PF-EXACT-EPS*)
             bb   (pf:bbox dpts)
@@ -4780,7 +5301,9 @@
               (princ (strcat "\nTUTORIALABHD stopped -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
+            (if lzd:report (lzd:report "TUTORIALABHD" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "TUTORIALABHD" pf:*version*))
   (princ (strcat "\n\nTUTORIALABHD - how the ABHD pool fitter works ("
                  pf:*version* ")."))
   ;; one bracket, exactly the keyword list (STANDARDS section 1 rule
@@ -4808,6 +5331,7 @@
 (princ (strcat "\nABHD " pf:*version*
                " loaded.  ABHD fits the pool perimeter through its"
                " points;"))
+(princ "\nSIMPABHD does the same with nothing to decide first;")
 (princ "\nADAB draws the pool bottom over an existing perimeter;")
 (princ "\nTUTORIALABHD (or TUTORIALADAB) walks new users through everything.")
 (princ)

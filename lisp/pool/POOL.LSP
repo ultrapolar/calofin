@@ -858,6 +858,7 @@
   (pool:osup)
   (initget 7)                           ; no null, no zero, no negative
   (setq v (getdist (strcat "\n" msg ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (pool:osdown)
   v)
 
@@ -1098,6 +1099,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (pool:osdown)
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'POOL-BACK)
@@ -1115,6 +1117,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((member v '("Back" "Undo")) 'POOL-BACK)
         ((null v) (if dflt dflt (pool:askkw msg kws shown dflt back)))
         (t v)))
@@ -4295,6 +4298,7 @@
                                         (if dflt (strcat " <" (rtos dflt) ">")
                                             "")
                                         ": ")))
+              (if lzd:ask (lzd:ask subject sz))
               (if (null sz) (setq sz dflt))))
         ;; how far this treatment eats along each wall, at the real
         ;; corner angle -- so the cap holds on a 135-degree bend or a
@@ -8096,7 +8100,9 @@
     (setq pool:*nobottom* nil)
     (if undo-open (setq undo-open (pool:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "POOL" pool:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOL" pool:*version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist

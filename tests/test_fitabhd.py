@@ -4368,6 +4368,54 @@ def test_the_questions_run_and_step_back():
     print("  the questions run, and Back re-opens the last one")
 
 
+def test_a_moved_point_is_not_a_survey_point():
+    """ABFIND numbers a point it DEDUCED "17m"; nobody stood there.
+
+    The whole idea here is that the POINTS place the template, so a
+    deduced position is the one thing that must not get a vote: it
+    would pull a wall to meet a number.  It is dropped as the
+    selection is read, so it never reaches fit-pts at all.
+    """
+    from lispvm import VM, Sym
+
+    vm = VM()
+    vm.load(LISP_FILE)
+    for label, want in (("17", False), ("17m", True), ("17M", True),
+                        ("17m2", True), ("P17A", False), ("", False)):
+        got = vm.loads('(fit:moved-p "%s")' % label) is not None
+        assert got == want, '"%s" read wrong' % label
+    print("  the letter m marks a moved point, in either case, anywhere")
+
+    vm = VM()
+    vm.load(LISP_FILE)
+    vm.loads('(entmake (list \'(0 . "LAYER")'
+             ' \'(100 . "AcDbSymbolTableRecord")'
+             ' \'(100 . "AcDbLayerTableRecord") \'(2 . "POINTS")'
+             ' \'(70 . 0) \'(62 . 7) \'(6 . "Continuous")))')
+    vm.loads("(setq fit-pts nil fit-npt 0 fit-nmoved 0 fit-ptnames nil)")
+    corners = [(0.0, 0.0), (120.0, 0.0), (120.0, 60.0), (0.0, 60.0),
+               (60.0, 0.0), (120.0, 30.0), (60.0, 60.0), (0.0, 30.0)]
+    ents = []
+    #: the ninth is Pt.5 MOVED - well inside the rectangle, so a
+    #: template placed by it could not come out square
+    for i, (x, y) in enumerate(corners + [(30.0, 12.0)], start=1):
+        label = "5m" if i > len(corners) else str(i)
+        vm.loads('(entmake (list \'(0 . "INSERT") \'(2 . "ab_pt")'
+                 ' \'(8 . "POINTS") (list 10 %r %r 0.0)))' % (x, y))
+        ents.append(vm.entities[-1])
+        vm.loads('(entmake (list \'(0 . "ATTRIB") \'(8 . "POINTS")'
+                 ' \'(2 . "number") (cons 1 "%s")))' % label)
+    vm.globals[Sym("$ss")] = ["<ss>"] + ents
+    n = vm.loads("(fit:gather $ss)")
+    said = "".join(vm.printed)
+    assert n == len(corners), "gathered %r, wanted %d" % (n, len(corners))
+    assert vm.loads("fit-nmoved") == 1, vm.loads("fit-nmoved")
+    assert "1 moved point(s)" in said, said[-300:]
+    live = [[float(c) for c in q] for q in vm.loads("fit-pts")]
+    assert all(abs(q[0] - 30.0) > 1e-6 or abs(q[1] - 12.0) > 1e-6
+               for q in live), live
+    print("  a moved point never reaches fit-pts, and the count is said")
+
 def test_the_command_wraps_the_fit():
     """c:FITABHD itself, which nothing had ever run.
 
@@ -4709,6 +4757,7 @@ def main():
     test_lisp_engine_matches_mirror()
     test_the_questions_run_and_step_back()
     test_leaving_points_out_toggles()
+    test_a_moved_point_is_not_a_survey_point()
     test_the_command_wraps_the_fit()
     print("\nall tests passed")
 

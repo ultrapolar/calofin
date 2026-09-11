@@ -97,7 +97,9 @@
     (tutp:finish)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
+    (if lzd:report (lzd:report "TUTORIALPERPPTS" *tutperp-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALPERPPTS" *tutperp-version*))
 
   (setq os (getvar "OSMODE")
         ce (getvar "CMDECHO")

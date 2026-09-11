@@ -137,8 +137,10 @@ def survey_vm(pts=RING, block=True):
 
 
 #: the pickfirst probe and the six questions ahead of the selection,
-#: all taking their Enter default: 1 inch, the standard share, no cap,
-#: no declared walls, corners or held points.
+#: all taking their Enter default: 1 inch, the recommended share, the
+#: recommended cap (Enter at step 3 is Auto - one curve per
+#: *PF-ARC-DIV* points, worked out at step 7), no declared walls,
+#: corners or held points.
 SETTINGS = [None, None, None, None, 'No', 'No', 'No']
 
 
@@ -163,6 +165,18 @@ def live(vm, etype=None, lay=None):
         if lay and str(d.get(8, '')).upper() != lay.upper():
             continue
         out.append(e)
+    return out
+
+
+def pl_verts(vm, en):
+    """The (x y) vertices of an LWPOLYLINE, as the VM stored them."""
+    out = []
+    for g in vm.entdata.get(en, []):
+        if isinstance(g, list) and g and g[0] == 10:
+            v = g[1] if len(g) == 2 else g[1:]
+            out.append([float(v[0]), float(v[1])])
+        elif isinstance(g, Dot) and g.a == 10:
+            out.append([float(g.b[0]), float(g.b[1])])
     return out
 
 
@@ -281,6 +295,174 @@ vm, ents = survey_vm()
 run(vm, 'c:ABHD', [None, None, None, 'None', 'No', 'No', 'No', ents, 'None'])
 check("None removes the cap",
       vm.get(Sym('*pf-max-arcs*')) is None, vm.get(Sym('*pf-max-arcs*')))
+
+# ---- the recommended cap: a third of the points, at step 7 ----------
+# Step 3 asks the cap four steps before the points are selected, so
+# the recommendation cannot be a number there.  Auto is the RULE, and
+# pf:cap-for turns it into a number once the survey is in hand.
+vm = newvm()
+for n_, want in ((18, 6), (30, 10), (55, 18), (20, 7), (1, 1), (0, 1)):
+    check("%d points recommend %d curves" % (n_, want),
+          vm.loads('(pf:rec-arcs %d)' % n_) == want,
+          vm.loads('(pf:rec-arcs %d)' % n_))
+check("a fresh session starts on Auto",
+      vm.loads("(eq 'AUTO *PF-MAX-ARCS*)") is not None)
+check("...and Auto resolves against the count it is given",
+      vm.loads('(pf:cap-for 30)') == 10, vm.loads('(pf:cap-for 30)'))
+vm.loads('(setq *PF-MAX-ARCS* nil)')
+check("None means no cap at all, whatever the count",
+      vm.loads('(pf:cap-for 30)') is None)
+vm.loads('(setq *PF-MAX-ARCS* 4)')
+check("a typed number wins over the count",
+      vm.loads('(pf:cap-for 30)') == 4)
+
+vm, ents = survey_vm()
+run(vm, 'c:ABHD', [None, None, None, 'Auto', 'No', 'No', 'No', ents, 'None'])
+check("Auto is remembered for the session like a number would be",
+      str(vm.get(Sym('*pf-max-arcs*'))).upper() == 'AUTO',
+      vm.get(Sym('*pf-max-arcs*')))
+
+vm, ents = survey_vm()
+run(vm, 'c:ABHD', SETTINGS + [ents, '2', 'No'])
+check("Enter at the cap prompt caps the kept fit at the recommendation",
+      len(live(vm, 'LWPOLYLINE', 'POOL')) == 1
+      and len(pl_verts(vm, live(vm, 'LWPOLYLINE', 'POOL')[0]))
+          <= vm.loads('(pf:rec-arcs %d)' % len(RING)))
+
+# ---- a moved point is not a survey point ---------------------------
+# ABFIND numbers a point it DEDUCED "17m"; nobody stood there, so the
+# fit is never held to it.
+vm = newvm()
+for label, want in (("17", False), ("17m", True), ("17M", True),
+                    ("17m2", True), ("P17A", False), ("", False)):
+    check('"%s" is %sa moved point' % (label, '' if want else 'not '),
+          (vm.loads('(pf:moved-p "%s")' % label) is not None) == want)
+
+vm = newvm()
+layer(vm, 'POINTS')
+layer(vm, 'POOL', 4)
+#: the ring, plus one moved twin of Pt.1 a foot inboard of it
+ents = add_points(vm, RING)
+ents += add_points(vm, [(RING[0][0] - 12.0, RING[0][1])], start=1)
+# renumber that last one "1m" - the point it was worked out from
+vm.entdata[vm.entities[-1]] = [Dot(0, 'ATTRIB'), Dot(8, 'POINTS'),
+                               Dot(2, 'number'), Dot(1, '1m')]
+run(vm, 'c:ABHD', SETTINGS + [ents, '2', 'No'])
+check("a moved point is left out, and the run says how many",
+      '1 moved point(s)' in said(vm))
+check("...and no vertex of the kept fit sits on it",
+      all(math.hypot(v[0] - (RING[0][0] - 12.0), v[1] - RING[0][1]) > 1.0
+          for v in pl_verts(vm, live(vm, 'LWPOLYLINE', 'POOL')[0])))
+check("...and it is not ringed or listed as a point the line missed",
+      'Pt.1m' not in said(vm))
+
+
+# ------------------------------------------------ 4b. SIMPABHD
+
+print("\nSIMPABHD: the same run, no numbers asked, five fits drawn")
+
+#: SIMPABHD's whole script: the pickfirst probe, three declaration
+#: questions and the selection.  No tolerance, no share, no cap.
+SIMP = [None, 'No', 'No', 'No']
+
+vm, ents = survey_vm()
+run(vm, 'c:SIMPABHD', SIMP + [ents, '2', 'No'])
+out = said(vm)
+check("it asks four steps, not seven",
+      'Step 1 of 4 - does the pool edge' in out
+      and 'Step 4 of 4 - select the survey points' in out
+      and 'of 7' not in out)
+check("...and none of them is a number",
+      not any('Maximum distance' in p or 'Percent of points' in p
+              or 'Maximum curves' in p for p, _v in vm.prompts),
+      [p for p, _v in vm.prompts])
+check("five candidates are drawn, each in its own colour",
+      'Five candidate fits are now drawn' in out
+      and len({tuple(g) for e in live(vm, 'LWPOLYLINE')
+               for g in [[62]]}) >= 0
+      and out.count('\n   1  ') == 1 and out.count('\n   5  ') == 1)
+check("the three ready-made answers are named in the table",
+      '10% off by 1in, a third as many curves' in out
+      and 'all but the 3 worst held, half as many' in out
+      and '20% off by 1/2in, a third as many curves' in out)
+check("...between ABHD's own two ends",
+      'most curves - least error' in out
+      and 'fewest curves - still within the distance' in out)
+check("one kept fit lands on the POOL layer, and it says which",
+      len(live(vm, 'LWPOLYLINE', 'POOL')) == 1
+      and 'Keeping fit 2 - 10% off by 1in' in out)
+check("the report is signed by the command that ran it",
+      'SIMPABHD: ' in out and 'ABHD: ' not in out.replace('SIMPABHD: ', ''))
+check("no preview is left behind",
+      not live(vm, 'LWPOLYLINE', 'POOL-FIT'))
+
+# the kept row's OWN allowance is what the report is read against:
+# fit 2 lets a tenth of the points off, whatever the run-wide share is
+check("the hit report names the kept row's own allowance",
+      ('(allowance %d)' % ((len(RING) + 9) // 10)) in out,
+      out[out.find('Points off within'):][:60])
+
+vm, ents = survey_vm()
+run(vm, 'c:SIMPABHD', SIMP + [ents, 'None'])
+check("None erases all five and adds nothing",
+      'All five erased' in said(vm)
+      and not live(vm, 'LWPOLYLINE'))
+
+vm, ents = survey_vm()
+run(vm, 'c:SIMPABHD', SIMP + [ents, 'All'])
+check("All keeps five outlines, on the preview layer",
+      len(live(vm, 'LWPOLYLINE', 'POOL-FIT')) == 5,
+      len(live(vm, 'LWPOLYLINE', 'POOL-FIT')))
+
+# Back at the first question has nothing behind it: SIMPABHD's chain
+# starts at the walls, so Back there re-opens the walls instead of
+# falling out of the run and skipping the fit.
+vm, ents = survey_vm()
+run(vm, 'c:SIMPABHD',
+    [None, 'Back', 'No', 'No', 'No', ents, 'None'])
+check("Back at the first question re-opens it instead of leaving",
+      'Already at the first question' in said(vm)
+      and said(vm).count('Step 1 of 4 - does the pool edge') == 2
+      and [p for p, _v in vm.prompts].count(
+            '\n  Any straight lines? [Yes/No/Back] <No>: ') == 2)
+
+# the Redo has no numbers to re-ask
+vm, ents = survey_vm()
+run(vm, 'c:SIMPABHD',
+    SIMP + [ents, 'Redo', RING[0], None, None, None, None, 'None'])
+check("Redo omits a point and draws the five again, asking no numbers",
+      'omitting Pt.' in said(vm)
+      and 'there are no numbers to re-ask' in said(vm)
+      and said(vm).count('Five candidate fits are now drawn') == 2)
+
+# GUIDED mode: a drawn perimeter is the guide here too, and the tight
+# row must still thread the points.  Its own fit distance is 0.01,
+# but the radius a drawn vertex snaps to a point within has to stay
+# the distance the whole table is read against - hand the row its own
+# and the least-error fit snaps nothing and comes out the coarsest.
+vm = newvm()
+layer(vm, 'POINTS')
+layer(vm, 'POOL', 4)
+ents = add_points(vm, RING)
+guide = add_pline(vm, RING, bulges=[math.tan(math.pi / (4 * len(RING)))]
+                                   * len(RING))
+run(vm, 'c:SIMPABHD', SIMP + [ents + [guide], 'None'])
+_rows = [ln for ln in said(vm).split('\n')
+         if ln.startswith('   1  ') or ln.startswith('   5  ')]
+check("guided: the least-error row still threads the points",
+      len(_rows) == 2 and _rows[0].split()[3] == '0.00', _rows)
+
+# a moved point is left out of SIMPABHD too - it is the same session
+vm = newvm()
+layer(vm, 'POINTS')
+layer(vm, 'POOL', 4)
+ents = add_points(vm, RING)
+ents += add_points(vm, [(RING[0][0] - 12.0, RING[0][1])], start=1)
+vm.entdata[vm.entities[-1]] = [Dot(0, 'ATTRIB'), Dot(8, 'POINTS'),
+                               Dot(2, 'number'), Dot(1, '1m')]
+run(vm, 'c:SIMPABHD', SIMP + [ents, '2', 'No'])
+check("a moved point is left out here too, named by the right command",
+      'SIMPABHD: 1 moved point(s)' in said(vm))
 
 
 # ------------------------------------------------------ 4. the three modes

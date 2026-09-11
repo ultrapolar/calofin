@@ -109,6 +109,7 @@
       (if back (initget 6 "Back Undo") (initget 6))
       (setq v (getdist (strcat "\n" msg (if back " [Back]" "")
                                " <" (rtos last) ">: ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
             ((null v) last)
             (t v)))))
@@ -124,6 +125,7 @@
   ;; section 1 -- the wording itself is section 3's Placement question
   (setq v (getpoint (strcat "\nInsertion base point"
                             (if back " [Back]" "") " <0,0>: ")))
+  (if lzd:ask (lzd:ask "cbk:askbase" v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
@@ -236,7 +238,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCUSTBLOCK error: " m)))
+    (if lzd:report (lzd:report "CUSTBLOCK" *custblock-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "CUSTBLOCK" *custblock-version*))
 
   (setq go T)
   (while go

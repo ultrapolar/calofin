@@ -87,7 +87,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.16")
+(setq *lazform-version* "v2.17")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -125,6 +125,14 @@
 ;; ceiling the packer wraps at, never a preference.
 (setq lzf:*tabbudget* 84)       ; the row of chart tabs
 (setq lzf:*rowbudget* 92)       ; a row of paired column boxes
+
+;; The same wall, the other way up.  How many lines of generated DCL
+;; may stack in the column BESIDE the chart before it is split in two.
+;; The Roman and Grecian pages were at 1141px against a 1080px screen,
+;; and four more charts were within 20px of the line, all of them
+;; because the five boxes beside the picture were one tall stack.  The
+;; picture is only ~260px, so the room was always there, sideways.
+(setq lzf:*colbudget* 34)   ; the boxes beside the chart
 
 ;; The chart column: its width in cells, and its height as a share of
 ;; that width (a string, because DCL reads aspect_ratio as one).
@@ -1370,7 +1378,49 @@
 ;; One dialog per chart.  They all live in one generated file so the
 ;; page loop can load_dialog once and switch pages without touching
 ;; the disk again.
-(defun lzf:dcl-one (c / out d l)
+;;  (lzf:*colbudget* itself is set in the TUNABLES block at the top of the file.)
+
+;; Net braces opened by one line of DCL: +1 per {, -1 per }.  What
+;; makes the boxes beside the chart splittable without the builders
+;; above having to know they are being split -- a block is finished
+;; when its own braces balance.
+(defun lzf:brace (s / i n d ch)
+  (setq i 0 n (strlen s) d 0)
+  (while (< i n)
+    (setq i (1+ i) ch (substr s i 1))
+    (cond ((= ch "{") (setq d (1+ d)))
+          ((= ch "}") (setq d (1- d)))))
+  d)
+
+;; LINES -- the interior of the column beside the chart -- wrapped in
+;; one ": column {}", or in two with the boxes shared out between them
+;; when one stack would be too tall.  The split is by weight rather
+;; than by count: "Dimensions" is half the page on its own, so three
+;; small boxes beside it is the balanced answer, not two and two.
+(defun lzf:packcols (lines / blocks blk d l tot run half a b out)
+  (setq blocks nil blk nil d 0)
+  (foreach l lines
+    (setq blk (cons l blk) d (+ d (lzf:brace l)))
+    (if (= d 0) (setq blocks (cons (reverse blk) blocks) blk nil)))
+  (if blk (setq blocks (cons (reverse blk) blocks)))
+  (setq blocks (reverse blocks) tot 0)
+  (foreach blk blocks (setq tot (+ tot (length blk))))
+  (if (or (<= tot lzf:*colbudget*) (< (length blocks) 2))
+    ;; short enough, or nothing to split it on: the page as it was
+    (append (list "    : column {") lines (list "    }"))
+    (progn
+      ;; greedy: keep filling the first column while doing so leaves it
+      ;; no further past halfway than stopping would leave it short
+      (setq run 0 half (/ tot 2) a nil b nil)
+      (foreach blk blocks
+        (if (and (<= (+ run (length blk)) half) (null b))
+          (setq a (append a blk) run (+ run (length blk)))
+          (setq b (append b blk))))
+      (if (null a) (setq a (car blocks) b (apply 'append (cdr blocks))))
+      (setq out (append (list "    : column {") a (list "    }")))
+      (append out (list "    : column {") b (list "    }")))))
+
+(defun lzf:dcl-one (c / out d l col)
   ;; out is consed newest-first and reversed once at the end, so this
   ;; seed list reads BACKWARDS: the label second here puts it second in
   ;; the file, after the line that opens the dialog.  The other way
@@ -1386,9 +1436,11 @@
                           lzf:*chart-a* "; fixed_width = true; "
                           "fixed_height = true; color = -15; }")
                   out))
-  (setq out (cons "    : column {" out))
-  (setq out (cons "      : boxed_column {" out))
-  (setq out (cons "        label = \"Dimensions\";" out))
+  ;; the boxes are built into COL so they can be shared out
+  ;; between columns once their sizes are known
+  (setq col nil)
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons "        label = \"Dimensions\";" col))
   ;; Each dimension is a row: its LETTER as a button, then the box.
   ;; Clicking the letter puts the caret in that box and rings the
   ;; dimension on the chart -- which is as close to clicking the
@@ -1397,76 +1449,76 @@
   ;; chart draws has a row here: the picture is read, the column is
   ;; typed into, and the letter is what ties the two together.
   (foreach d (lzf:dims c)
-    (setq out (cons "        : row {" out))
-    (setq out (cons (strcat "          : button { key = \"pick_"
+    (setq col (cons "        : row {" col))
+    (setq col (cons (strcat "          : button { key = \"pick_"
                             (cadr d) "\"; label = \"" (car d)
                             "\"; fixed_width = true; }")
-                    out))
-    (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
+                    col))
+    (setq col (cons (strcat "          : edit_box { key = \"" (cadr d)
                             "\"; edit_width = 9; label = \"" (nth 7 d)
                             "\"; }")
-                    out))
-    (setq out (cons "        }" out)))
-  (setq out (cons "      }" out))
+                    col))
+    (setq col (cons "        }" col)))
+  (setq col (cons "      }" col))
   (if (lzf:extra c)
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Not on this view\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Not on this view\";" col))
       (foreach l (append
                    (lzf:packrows (lzf:notsport (lzf:extra c)) "        ")
                    (lzf:packrows (lzf:sportof (lzf:extra c)) "        "))
-        (setq out (cons l out)))
-      (setq out (cons "      }" out))))
+        (setq col (cons l col)))
+      (setq col (cons "      }" col))))
   ;; the cross dims, with the question that decides how many of them
   ;; POOL will ask for at the head of the box
   (if (lzf:cross c)
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Cross dims (out-of-square only)\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Cross dims (out-of-square only)\";" col))
       (foreach d (lzf:picks c)
         (if (= (caddr d) "cross")
-            (setq out (cons (lzf:pickline d "        ") out))))
+            (setq col (cons (lzf:pickline d "        ") col))))
       (foreach l (lzf:packrows (lzf:cross c) "        ")
-        (setq out (cons l out)))
-      (setq out (cons "      }" out))))
+        (setq col (cons l col)))
+      (setq col (cons "      }" col))))
   (if (lzf:corners c)
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Corners\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Corners\";" col))
       (foreach d (lzf:corners c)
-        (setq out (cons "        : row {" out))
-        (setq out (cons (strcat "          : popup_list { key = \"" (car d)
+        (setq col (cons "        : row {" col))
+        (setq col (cons (strcat "          : popup_list { key = \"" (car d)
                                 "\"; label = \"" (cadr d)
                                 "\"; edit_width = 9; }")
-                        out))
-        (setq out (cons (strcat "          : edit_box { key = \"" (car d)
+                        col))
+        (setq col (cons (strcat "          : edit_box { key = \"" (car d)
                                 "-sz\"; label = \"size\"; "
                                 "edit_width = 6; fixed_width = true; }")
-                        out))
-        (setq out (cons "        }" out)))
-      (setq out (cons "      }" out))))
-  (setq out (cons "      : boxed_column {" out))
-  (setq out (cons "        label = \"The rest of the run\";" out))
+                        col))
+        (setq col (cons "        }" col)))
+      (setq col (cons "      }" col))))
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons "        label = \"The rest of the run\";" col))
   ;; the in-square toggle and the bottom type are POOL's questions and
   ;; nothing on an oasis answers to either: it is arcs all round, so
   ;; there is no corner to run a tape across, and its floor is asked
   ;; about after the outline is drawn
   (if (not (lzf:oasis-p c))
     (progn
-      (setq out (cons (strcat "        : toggle { key = \"insq\"; "
+      (setq col (cons (strcat "        : toggle { key = \"insq\"; "
                               "label = \"Pool is in-square "
                               "(no cross dims)\"; }")
-                      out))
-      (setq out (cons (strcat "        : popup_list { key = \"btype\"; "
+                      col))
+      (setq col (cons (strcat "        : popup_list { key = \"btype\"; "
                               "label = \"Bottom type\"; }")
-                      out))))
+                      col))))
   ;; the keyword questions that are not about cross dims live here,
   ;; with the toggle and the bottom type
   (foreach d (lzf:picks c)
     (if (= (caddr d) "run")
-        (setq out (cons (lzf:pickline d "        ") out))))
-  (setq out (cons "      }" out))
-  (setq out (cons "    }" out))
+        (setq col (cons (lzf:pickline d "        ") col))))
+  (setq col (cons "      }" col))
+  (setq out (append (reverse (lzf:packcols (reverse col))) out))
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : text { key = \"hint\"; width = 62; "
@@ -1582,6 +1634,12 @@
   (setq out (list
     "lazform_ascii : dialog {"
     "  label = \"LAZFORM  -  can this dialog draw in characters?\";"
+    ;; THE FIVE SECTIONS IN THREE COLUMNS, not one stack.  Stacked,
+    ;; the probe came to 1557px, and AutoCAD will not open a dialog
+    ;; taller than the screen -- so the one dialog whose entire job is
+    ;; to be looked at was the one that could not be.
+    "  : row {"
+    "    : column {"
     "  : boxed_column {"
     "    label = \"1.  Is the dialog font fixed-pitch?\";"
     "    : text { label = \"Twelve characters sit between the bars on every line.\"; }"
@@ -1600,6 +1658,8 @@
     "    : text { label = \"A staircase means indenting works; three bars in one\"; }"
     "    : text { label = \"column means DCL trimmed the spaces and art is impossible.\"; }"
     "  }"
+    "    }"
+    "    : column {"
     "  : boxed_column {"
     "    label = \"3.  The pool, drawn in characters\";"
     "    : text { label = \"    +--------------------------+\"; }"
@@ -1627,6 +1687,8 @@
     "      : text { label = \"--->|\"; width = 7; }"
     "    }"
     "  }"
+    "    }"
+    "    : column {"
     "  : boxed_column {"
     "    label = \"5.  Is a LIST BOX fixed-pitch?\";"
     (strcat "    : text { label = \"A text tile is not.  A list box is a "
@@ -1635,6 +1697,8 @@
             "characters after all.\"; }")
     "    : list_box { key = \"ruler\"; width = 32; height = 5; }"
     "    : list_box { key = \"pool\"; width = 78; height = 18; }"
+    "  }"
+    "    }"
     "  }"
     "  spacer;"
     "  : text { label = \"Tell the session which sections lined up.\"; alignment = centered; }"
@@ -1658,7 +1722,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZASCII error: " msg)))
+    (if lzd:report (lzd:report "LAZASCII" *lazform-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZASCII" *lazform-version*))
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZASCII error: could not write the dialog file."))
@@ -1816,7 +1882,9 @@
     (if f (vl-file-delete f))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZTXT error: " msg)))
+    (if lzd:report (lzd:report "LAZTXT" *lazform-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZTXT" *lazform-version*))
   ;; the same clean slate lzf:show starts from.  The in-square toggle
   ;; and the bottom-type row have to be reset here too, even though this
   ;; view carries no tile for either: it READS both when it builds the
@@ -2298,7 +2366,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZFORM error: " msg)))
+    (if lzd:report (lzd:report "LAZFORM" *lazform-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZFORM" *lazform-version*))
   (setq lzf:*vals* nil
         lzf:*cvals* nil                 ; corner dropdowns back to (ask)
         lzf:*pvals* nil                 ; and the mode dropdowns with them

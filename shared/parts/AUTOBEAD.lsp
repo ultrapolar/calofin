@@ -371,7 +371,9 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; autobead-flush drain and the UNDO close above; harmless no-op
@@ -596,13 +598,16 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
+    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
   (autobead-ensure-layer *autobead-layer*)
   ;; a pickfirst selection skips straight to the direction question;
   ;; the probe sits OUTSIDE the stage loop so Back at that question
   ;; still lands on the interactive selection, never a re-probe
   (setq ss (ssget "_I" (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+  (if lzd:watch (lzd:watch ss))
   ;; staged: Back (or Undo) at any later prompt re-opens the stage before
   (setq stage (if ss 2 1) done nil)
   (while (not done)
@@ -612,6 +617,7 @@
                        *autobead-filter* "): "))
        (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+       (if lzd:watch (lzd:watch ss))
        (if (null ss)
          (progn
            (prompt (strcat "\nNothing selected on a " *autobead-filter*

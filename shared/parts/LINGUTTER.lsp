@@ -832,10 +832,12 @@
 ;; it, and nothing outside the highlight is read, kept or erased.
 (defun lg:highlight ( / ss)
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nHighlight the area to gut: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   ss)
 
 ;; the highlighted set as a list of enames
@@ -1047,7 +1049,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTER error: " m)))
+    (if lzd:report (lzd:report "LINGUTTER" *lingutter-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "LINGUTTER" *lingutter-version*))
 
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (princ (strcat "\nLINGUTTER " *lingutter-version*))
@@ -1114,7 +1118,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTERSCAN error: " m)))
+    (if lzd:report (lzd:report "LINGUTTERSCAN" *lingutter-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "LINGUTTERSCAN" *lingutter-version*))
   (princ (strcat "\nLINGUTTERSCAN " *lingutter-version*
                  " - reading only, nothing in the drawing is changed."))
   (setq ss (lg:highlight))

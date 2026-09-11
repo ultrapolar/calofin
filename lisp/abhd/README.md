@@ -9,18 +9,24 @@ Every arc runs **from survey point to survey point** and meets its
 neighbour **within 8° of tangent**, so the outline reads as smooth
 while the points stay in charge. No arc may curve much further than
 the points it covers actually do, so a shaky survey comes out as a
-shape rather than a string of loops. Up to 15% of the points (rounded
-up) are allowed to sit about an inch off the result, a tenth of them
+shape rather than a string of loops. Up to 20% of the points (rounded
+up) are allowed to sit an inch off the result, a tenth of them
 may be **given up on entirely** where one is plainly off and holding
-it would break the shape, and you can cap the number of curves
-outright.
+it would break the shape, and the curve count is capped at a third of
+the points unless you say otherwise. Points numbered with an **`m`**
+— ABFIND's mark for a point it *deduced* rather than one somebody shot
+— are left out of the fit altogether.
 
-Three commands ship in the one file: **`ABHD`** runs the whole fit
-(and offers the pool bottom at the end), **`ADAB`** runs just the
-pool-bottom flow over a perimeter that already exists — see
-[ADAB](#adab--the-bottom-on-its-own) — and **`TUTORIALABHD`** (alias
-`TUTORIALADAB`) teaches it all to new users, as a read-through of
-every rule or as a drawn on-screen demo.
+Four commands ship in the one file: **`ABHD`** runs the whole fit
+(and offers the pool bottom at the end), **`SIMPABHD`** runs the same
+fit with **none of the three numbers asked** and five ready-made
+perimeters drawn instead of three — see
+[SIMPABHD](#simpabhd--the-same-fit-with-nothing-to-decide-first) —
+**`ADAB`** runs just the pool-bottom flow over a perimeter that
+already exists — see [ADAB](#adab--the-bottom-on-its-own) — and
+**`TUTORIALABHD`** (alias `TUTORIALADAB`) teaches it all to new users,
+as a read-through of every rule or as a drawn on-screen demo.
+(`ABHDCOVER` is `ABHD` with the bottom question answered No.)
 
 ## Two files, one lisp
 
@@ -81,11 +87,14 @@ Type `TUTORIALABHD` (or `TUTORIALADAB`) and choose:
 ## The miss allowance — fewer curves instead of exactness
 
 The fitted perimeter does **not** have to thread every point exactly.
-A share of the points — **asked at step 2, standard 15%**
+A share of the points — **asked at step 2, recommended 20%**
 (`*PF-MISS-PCT*`), **rounded up** to the nearest whole point — may sit
-off the result by up to the max distance (default `1.0` drawing unit —
-about an inch); every other point stays *on* it. That slack is spent
+off the result by up to the max distance (default `1.0` drawing unit =
+one inch); every other point stays *on* it. That slack is spent
 where it buys the most — longer spans, fewer segments, fewer curves.
+A fifth of an AB survey an inch off is what a built shell actually
+measures like: at 15% the fitter ran out of allowance early in the
+loop and paid for the rest of it in short arcs.
 
 "On it" means within `*PF-ON-EPS*` (**0.25**) or a quarter of the
 tolerance, whichever is larger — the threshold scales so that raising
@@ -202,8 +211,17 @@ nice radii — the snaps that survive are the ones that cost nothing.
 
 ## The curve cap
 
-The command asks for a **maximum number of curves** (`None` =
-unlimited; the answer is remembered for the session). When a fit needs
+The command asks for a **maximum number of curves**. Three answers:
+a whole number, `None` for no cap at all, or **`Auto`** — the
+recommendation, and what a fresh session starts on: **one curve per
+`*PF-ARC-DIV*` (3) survey points, rounded to the nearest whole
+curve**, never below 1. A pool edge reads as long overarching arcs
+with three or so points under each, not one curve per shot, so a
+30-point survey is capped at 10 curves and a 55-point one at 18. The
+cap is asked at step 3 and the points are not selected until step 7,
+so `Auto` cannot be a number at the prompt — it is a **rule** that
+becomes one once the points are in hand. Whichever of the three you
+pick is remembered for the session. When a fit needs
 more curves than allowed, the whole loop is **refitted with a
 progressively relaxed tolerance** until the cap holds — the tangent
 windows stay in force, so capped results stay as smooth as the cap
@@ -260,6 +278,7 @@ table here.
 | `*PF-POINT-LAYER*` / `*PF-POINT-COLOUR*` | `"POINTS"` / 7 | Layer of plain survey `POINT`s (`ab_pt` blocks count on any layer) |
 | `*PF-POINT-BLOCK*` | `"ab_pt"` | Block whose inserts are survey points |
 | `*PF-PT-TAG*` | `"number"` | Attribute tag carrying the point number |
+| `*PF-MOVED-MARK*` | `"M"` | A number carrying this letter is a *moved* point (ABFIND's `17m`) and is left out of the fit entirely |
 | `*PF-OUT-LAYER*` / `*PF-OUT-COLOUR*` | `"POOL-FIT"` / 3 | Layer the three candidates preview on |
 | `*PF-MISS-LAYER*` / `*PF-MISS-COLOUR*` | `"FGStep"` / 1 | Layer for the unheld-point rings and their list |
 | `*PF-MISS-RADIUS*` / `*PF-HOLD-RADIUS*` | `4.0` / half of it | Ring sizes: a miss / corner / omitted point, and a held point |
@@ -272,16 +291,21 @@ table here.
 | `*PF-DEFAULT-FIT*` | `"2"` | The candidate `Enter` keeps at the choose prompt |
 | `*PF-SLOW-NOTE*` | `150` | Above this many points it warns the fit will take a while |
 | `*PF-COMPARE*` | 3 rows | The three aims, their colours and their wording |
+| `*PF-SIMP-COMPARE*` | 5 rows | `SIMPABHD`'s five: the same two ends, plus three ready-made answers, each with its own share, distance and curve cap |
+| `*PF-SIMP-TOL*` | `1.0` | The distance `SIMPABHD` fits and measures to, in place of step 1 |
+| `*PF-SIMP-DEFAULT-FIT*` | `"2"` | The candidate `Enter` keeps at `SIMPABHD`'s choose prompt |
 
 **2. Fitter tuning** — how the perimeter and the bottom come out.
 (The three answers a session remembers — `*PF-TOL*`, `*PF-MAX-ARCS*`
 and `*PF-HOP-OFF*` — are asked each run and live in the state section,
-not here: 1″, no cap and 18″ are where a fresh session starts.)
+not here: 1″, the recommended cap and 18″ are where a fresh session
+starts.)
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `*PF-TOL-MAX*` | `2.0` | Hard ceiling on the max-distance prompt (2″) |
-| `*PF-MISS-PCT*` | `0.15` | Standard share of points allowed off (rounded up) |
+| `*PF-MISS-PCT*` | `0.20` | Recommended share of points allowed off (rounded up) |
+| `*PF-ARC-DIV*` | `3.0` | The recommended curve cap: one curve per this many points, rounded to nearest, never below 1 |
 | `*PF-ON-EPS*` / `*PF-ON-FRAC*` | `0.25` / `0.25` | Within this — or this fraction of the distance typed, whichever is larger — counts as ON the line |
 | `*PF-TIGHT-TOL*` | `0.01` | What the "tight" candidate fits to |
 | `*PF-FIT-EPS*` / `*PF-ANCHOR-EPS*` | `0.01` / twice it | Split a guided arc that misses by more; how near an arc must pass to count as anchored on a point |
@@ -309,6 +333,14 @@ fitter word for word under `*LH-` and `*CAB-`, and
 `tests/test_laser_fit.py` and `tests/test_cabhd.py` compare it code
 for code — so a fitter knob changed in one has to change in all three.
 
+One deliberate exception: `*PF-MISS-PCT*` and `*PF-ARC-DIV*` are not
+fitter knobs but the shares this command *recommends* at its own
+prompts, and the survey behind each command is not the same survey.
+`CABHD` — ABHD's perimeter half, fitting the same AB shots — carries
+both at the same values. `LHD` fits a laser scan, a finer instrument
+than a tape and a rod, and keeps its own 15% with no curve
+recommendation at all.
+
 ## Usage
 
 1. `APPLOAD` → pick `abhd.lsp` (or drag it into the drawing).
@@ -325,12 +357,15 @@ ABHD - fit a pool perimeter through the surveyed points.
 
   Step 2 of 7 - what percent of the points may sit OFF the line
   (off, but still within the distance above)?
-  Press Enter for the standard 15 percent.
-  Percent of points allowed off <15>:
+  Press Enter for the recommended 20 percent - a fifth of an AB survey
+  an inch off is what a built shell measures like.
+  Percent of points allowed off <20>:
 
   Step 3 of 7 - limit how many curves the result may use?
-  Type a whole number, or None for no limit.
-  Maximum curves <None>:
+  Type a whole number, None for no limit, or Auto for the
+  recommended cap - one curve per 3 points, worked out once they are
+  selected (a 10-curve cap on a 30-point survey).
+  Maximum curves <Auto> [Auto/None]:
 
   Step 4 of 7 - does the pool edge have any dead-straight walls?
   If Yes you will pick the two end points of each (snap to the
@@ -356,8 +391,12 @@ ABHD - fit a pool perimeter through the surveyed points.
 The max distance is capped at **2 inches** — anything looser is no
 longer a trace of the points, so a bigger entry is pulled back to 2
 with a note. Distance and curve cap are remembered for the session;
-the percentage resets to the standard 15% each run (`Enter` keeps it).
-So a repeat run is just `ABHD` + `Enter` × 6 + select.
+the percentage resets to the recommended 20% each run (`Enter` keeps
+it).
+So a repeat run is just `ABHD` + `Enter` × 6 + select — and
+`SIMPABHD` is `Enter` × 3 + select, because it asks none of the first
+three at all (see
+[SIMPABHD](#simpabhd--the-same-fit-with-nothing-to-decide-first)).
 
 ### Declaring straight walls
 
@@ -527,6 +566,70 @@ box — lower it and fit 1 gets more exact and busier still.
 Keeping a single fit also unlocks the pool-bottom flow — see
 [The pool bottom (hopper)](#the-pool-bottom-hopper) below (`All` and
 `None` skip it).
+
+## SIMPABHD — the same fit, with nothing to decide first
+
+`ABHD`'s first three questions are the ones that stop a run before it
+starts. How far may the line sit off a point? What share may be off?
+How many curves? **None of the three can honestly be answered from the
+command line**, because the answer *is* the shape they produce — which
+is why `ABHD` draws three of them and lets you point at one.
+
+`SIMPABHD` takes that the rest of the way: it asks **none** of the
+three and draws **five**.
+
+| # | Colour | What it is | Slack | Distance | Curve cap |
+| --- | --- | --- | --- | --- | --- |
+| 1 | red | **Least error there is** — `ABHD`'s `tight` | none | `*PF-TIGHT-TOL*` (0.01) | none |
+| 2 | yellow | 10% off by an inch, a third as many curves | 10% of the points | 1″ | points ÷ 3 |
+| 3 | green | **All but the 3 worst held**, half as many curves | 3 points, a count not a share | 1″ | points ÷ 2 |
+| 4 | cyan | 20% off by half an inch, a third as many curves | 20% of the points | ½″ | points ÷ 3 |
+| 5 | magenta | **Fewest curves that still hold the distance** — `ABHD`'s `few` | lifted | 1″ | none |
+
+Rows 1 and 5 are `ABHD`'s own two ends of the trade, so **whatever a
+typed answer could have produced sits between them**. The three in the
+middle are ready-made answers — a share, a distance and a curve cap
+*together*, which is how they actually behave — printed beside each
+outline. Every curve cap is the point count over its divisor,
+**rounded to the nearest whole curve** and never below 1: 24 points
+give 8 curves at a third, 12 at a half.
+
+All five are **measured against `*PF-SIMP-TOL*` (1″)**, so the columns
+compare like for like even though they were not built alike — exactly
+as `ABHD`'s three are measured against the distance you typed.
+
+Everything else is `ABHD`, rule for rule, because it *is* `ABHD`: the
+same `pf:fit-session` walks the same chain from step 4, so the same
+straight walls, sharp corners and held points are declared, the same
+selection is read, the same table is printed, the same click-or-type
+pick keeps one, the same points are ringed, the same report is written
+and the same pool bottom is offered. Only the numbering moves — four
+steps instead of seven:
+
+```
+  Step 1 of 4 - does the pool edge have any dead-straight walls?
+  Step 2 of 4 - are there any sharp corners the fit must not round off?
+  Step 3 of 4 - any points that must be held ABSOLUTELY?
+  Step 4 of 4 - select the survey points (POINTS layer or ab_pt
+  blocks) and, if you have one, the POOL perimeter or ordering sketch.
+```
+
+`Back` works the same way through those four; at the first of them
+there is nothing behind the question, so `Back` re-opens it instead of
+falling out of the run.
+
+`Redo` still omits points and draws the five again — there are simply
+no numbers for it to re-ask, so it goes straight from the omit list to
+the walls, corners and holds.
+
+The hit report is read against **the kept row's own allowance**, not
+against a run-wide one: each of the five was allowed something
+different, and reporting fit 3 under fit 2's budget would name a
+number that fit never had.
+
+The five rows, their colours and their wording live in
+`*PF-SIMP-COMPARE*` at the top of `abhd.lsp`; the four *kind* names in
+the first column (`tight`, `pct`, `hold`, `few`) are fixed.
 
 ## Points it could not hold
 
@@ -803,7 +906,7 @@ checks against the grouped build.
   a nice increment (feet / half feet / inches) when one still holds
   the points.
 * **Keeps one arc when it's close enough**: if the single arc holds
-  every point within the tolerance and the 15% miss allowance can
+  every point within the tolerance and the 20% miss allowance can
   absorb the off ones, that one arc is kept — fewer curves beats
   exactness.
 * **Splits arcs only as a last resort**: otherwise the segment is

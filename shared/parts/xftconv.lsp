@@ -907,8 +907,10 @@
     ;; error mode would stay pushed for the rest of the session
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if lzd:report (lzd:report "XFTCONV" *xft-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "XFTCONV" *xft-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -928,10 +930,12 @@
   ;; so there is nothing left to step back to.  a selection made before
   ;; the command was typed (pickfirst) skips even that prompt.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (not ss)
     (progn
       (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -1201,8 +1205,10 @@
     (xft:restore)
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if lzd:report (lzd:report "XFTRECONV" *xft-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "XFTRECONV" *xft-version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
 
@@ -1215,10 +1221,12 @@
 
   ;; ---- selection, the same three ways XFTCONV takes it ------------
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (not ss)
     (progn
       (princ "\nSelect the converted survey (Enter = everything in this space): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -1326,7 +1334,18 @@
 ;;;  make sure the pieces exist as soon as the file loads
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV-SETUP ()
+(defun c:XFTCONV-SETUP ( / *error*)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nXFTCONV-SETUP error: " msg)))
+    (if lzd:report (lzd:report "XFTCONV-SETUP" *xft-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "XFTCONV-SETUP" *xft-version*))
   (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
   (xft:ensure-block)
   (princ (strcat "\nLayer \"" *xft-block-layer* "\" and block \"" *xft-block* "\" are ready."))

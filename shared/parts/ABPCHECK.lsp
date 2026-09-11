@@ -684,6 +684,7 @@
 (defun abp:asklimit (msg dflt / v)
   (initget 6)
   (setq v (getdist (strcat "\n" msg " <" (abp:dstr dflt) ">: ")))
+  (if lzd:ask (lzd:ask msg v))
   (if v v dflt))
 
 ;;; -------------------- the commands ------------------------------------
@@ -697,13 +698,16 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABPCHECK error: " msg)))
+    (if lzd:report (lzd:report "ABPCHECK" *abpcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABPCHECK" *abpcheck-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - probed BEFORE the undo
   ;; group opens, because that command clears the set (the convention
   ;; FITABHD and abhd already carry)
   (setq ss (ssget "_I" abp:*filter*))
+  (if lzd:watch (lzd:watch ss))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -714,7 +718,8 @@
   (if (null ss)
     (progn
       (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")
-      (setq ss (ssget abp:*filter*))))
+      (setq ss (ssget abp:*filter*))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X" abp:*filter*)))
   (if (null ss)
     (princ "\nNothing to check - no points or lines in the drawing.")
@@ -781,7 +786,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABPCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "ABPCHECKRESCUE" *abpcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABPCHECKRESCUE" *abpcheck-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO

@@ -18,6 +18,7 @@ ABHDCOVER         ABHD for a cover sheet that stops at the perimeter
 ABLOBF            Fits an OPEN run of arcs and lines through points, between two ends you pick
 ABMOVE            Moves a point, offering every mis-read tape it could be
 ABPCHECK          ABHD's measuring half as a checker - how far each point is off the line
+ABPCREATE         Plots a point that is not there yet from the two readings it was taped at
 ADAB              Freeform perimeter through surveyed points
 ALTABCDEF         ABCDEF with the clockwise corner order
 AUTOBEAD          Offsets selected pool lines toward a clicked side
@@ -47,6 +48,7 @@ G2MCONV           Puts a G2M architectural pool plan onto the shop's layers and 
 G2MRECONV         Undoes a G2MCONV run - layers, appearance, text and dimension styles
 HEMISTEP          Hemi step layout
 HONEFILLET        Bracket two of SMARTFILLET's radii and hone between them at half inches
+LAZDIAG           Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works
 LAZFORM           Fill the dimension chart in and draw the pool from it
 LAZFORMCOVER      LAZFORM for a cover sheet - the pool-bottom gate closed
 LAZSPA            LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn
@@ -72,12 +74,14 @@ POOL              Full pool layout tool
 POOLCOVER         POOL for a cover sheet - the bottom question pre-answered No
 POOLDEMO          Draws a worked example pool end to end
 POOLSIDE          POOL's longitudinal section on its own, from the floor run chain
+SIMPABHD          ABHD with nothing to decide: five ready-made perimeters, keep one
 SMARTFILLET       Fillet a corner after previewing every radius that fits
 SOCONV            Puts an SO site-survey export onto the shop's layers in one pass
 SORECONV          Undoes a SOCONV run - every object back on the export's own layers
 SPA               Spa / hot-tub template layout
 SPACHECK          Audits a spa sheet against what SPA draws
 SPACHECKSCAN      The spa sheet review as one scan
+SPACOVCREATE      Offsets a selected spa outline into its cover and hinges it to the taper
 STAIRDIM          Stair dimensioning
 STOCKCOVER        Replaces a highlighted perimeter with a stock cover drawing
 TYDRN             Text, pool-point and anchor cleanup in one pass

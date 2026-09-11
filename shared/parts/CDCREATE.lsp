@@ -316,7 +316,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCDCREATE error: " m)))
+    (if lzd:report (lzd:report "CDCREATE" *cdcreate-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "CDCREATE" *cdcreate-version*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
@@ -325,10 +327,12 @@
   ;; -- 1. the highlighted lines: a pickfirst selection if there is
   ;;       one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nHighlight the lines to cross-dimension: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
 
   (if (null ss)
     (princ "\nNothing highlighted -- nothing to dimension.")

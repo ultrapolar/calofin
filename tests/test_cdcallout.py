@@ -338,15 +338,117 @@ def test_undo_group_wraps_the_run():
     print("ok  undo group   -> one _Begin before the dims, one _End after")
 
 
-def test_duplicate_number_first_wins():
-    """A drawing carrying the same number twice: the first block found
-    is the one dimensioned to, every time -- never a coin toss."""
+# ---- a number the drawing carries twice --------------------------------
+# Two surveys merged onto one sheet, each numbered from 1: "7" names two
+# different places, and a tie to the wrong one measures nothing anybody
+# taped.  Every point that carries the number is ringed and labelled
+# P1, P2, ... in drawing order, and the label is what you type.
+
+def rings(vm, live_only=False):
+    """The rings and labels drawn on the pick layer."""
+    out = []
+    for e in vm.entities:
+        if live_only and e in vm.deleted:
+            continue
+        d = {}
+        for g in vm.entdata[e]:
+            d.setdefault(getattr(g, 'a', g[0] if isinstance(g, list) else None),
+                         getattr(g, 'b', g[1:] if isinstance(g, list) else None))
+        if str(d.get(8, '')).upper() == 'CDCALLOUT-PICK':
+            out.append(d)
+    return out
+
+
+def test_a_doubled_number_is_asked_about():
+    """Both Pt.7s are ringed and labelled, and the label picks which."""
     vm = newvm()
-    pts = [ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7), ab_pt(vm, 100, 0, 8)]
-    run(vm, ['7', '8', None], 'duplicate')
+    ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7), ab_pt(vm, 100, 0, 8)
+    run(vm, ['7', 'P2', '8', None], 'duplicate')
+    ds = dims(vm)
+    assert len(ds) == 1 and ds[0][13] == [50.0, 50.0, 0.0], ds
+    marks = rings(vm)
+    assert [d.get(1) for d in marks if d.get(0) == 'TEXT'] == ['P1', 'P2'], marks
+    assert [d.get(10)[:2] for d in marks if d.get(0) == 'CIRCLE'] \
+        == [[0.0, 0.0], [50.0, 50.0]], marks
+    # scaffolding, and gone the moment the question is answered
+    assert not rings(vm, live_only=True)
+    print("ok  duplicate    -> both Pt.7s ringed, the label picks one")
+
+
+def test_a_doubled_number_can_be_clicked_instead():
+    """A click takes the nearest of the ringed points - the same answer."""
+    vm = newvm()
+    ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7), ab_pt(vm, 100, 0, 8)
+    run(vm, ['7', [48.0, 52.0, 0.0], '8', None], 'clicked')
+    ds = dims(vm)
+    assert len(ds) == 1 and ds[0][13] == [50.0, 50.0, 0.0], ds
+    print("ok  duplicate    -> a click on one of the rings takes it")
+
+
+def test_the_to_prompt_asks_the_same_way():
+    """And its table says how long the dimension each one would draw is,
+    because the other end of the tie is settled by then."""
+    vm = newvm()
+    ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 7), ab_pt(vm, 0, 240, 7)
+    run(vm, ['1', '7', 'P2', None], 'to prompt')
+    ds = dims(vm)
+    assert len(ds) == 1 and ds[0][14] == [0.0, 240.0, 0.0], ds
+    assert any('from Pt.1' in m for m in vm.printed), vm.printed
+    assert any("20'-0\"" in m for m in vm.printed), vm.printed
+    print("ok  duplicate    -> the TO table measures each candidate's tie")
+
+
+def test_a_number_only_one_point_carries_is_not_asked_about():
+    """The ordinary drawing is never asked anything."""
+    vm = newvm()
+    ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 2)
+    run(vm, ['1', '2', None], 'unique')
+    assert not [q for q, _ in vm.prompts if 'is meant' in q], vm.prompts
+    assert not rings(vm)
+    assert len(dims(vm)) == 1
+    print("ok  duplicate    -> one point per number asks nothing at all")
+
+
+def test_back_and_enter_at_the_pick():
+    """Back re-asks the number; Enter takes none and draws nothing."""
+    vm = newvm()
+    ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7), ab_pt(vm, 100, 0, 8)
+    run(vm, ['7', 'b', '8', '7', 'P1', None], 'back')
+    assert any('Back to the point number' in m for m in vm.printed), vm.printed
+    ds = [d for d in dims(vm) if d.get(13)]
+    assert len(ds) == 1 and ds[0][13] == [100.0, 0.0, 0.0] \
+        and ds[0][14] == [0.0, 0.0, 0.0], ds
+
+    # and at the TO prompt Back re-asks the TO number, not the FROM one
+    vm = newvm()
+    ab_pt(vm, 0, 0, 1), ab_pt(vm, 100, 0, 7), ab_pt(vm, 0, 240, 7)
+    run(vm, ['1', '7', 'b', '7', 'P1', None], 'back at to')
+    # the TO number is asked twice and the FROM number only once: Back
+    # at the pick stepped back ONE question, not two
+    asked = [q for q, _ in vm.prompts]
+    assert len([q for q in asked if q.startswith('\nTo point')]) == 2, asked
+    assert len([q for q in asked if q.startswith('\nFrom point')]) == 2, asked
+    assert asked[-1].startswith('\nFrom point'), asked
+    ds = dims(vm)
+    assert len(ds) == 1 and ds[0][14] == [100.0, 0.0, 0.0], ds
+
+    vm = newvm()
+    ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7), ab_pt(vm, 100, 0, 8)
+    run(vm, ['7', None, None], 'none')
+    assert any('None taken' in m for m in vm.printed), vm.printed
+    assert not dims(vm)
+    assert not rings(vm, live_only=True)
+    print("ok  duplicate    -> Back re-asks the number, Enter takes none")
+
+
+def test_a_stray_label_is_refused_and_re_asked():
+    vm = newvm()
+    ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7), ab_pt(vm, 100, 0, 8)
+    run(vm, ['7', 'P9', 'P1', '8', None], 'stray')
+    assert any('is not one of the labels' in m for m in vm.printed), vm.printed
     ds = dims(vm)
     assert len(ds) == 1 and ds[0][13] == [0.0, 0.0, 0.0], ds
-    print("ok  duplicate    -> the first Pt.7 in the drawing is the one used")
+    print("ok  duplicate    -> a label that names nothing is re-asked")
 
 
 def test_layer_repaired_and_coloured():
@@ -425,7 +527,12 @@ if __name__ == '__main__':
     test_esc_restores_state_and_closes_group()
     test_undo_off()
     test_undo_group_wraps_the_run()
-    test_duplicate_number_first_wins()
+    test_a_doubled_number_is_asked_about()
+    test_a_doubled_number_can_be_clicked_instead()
+    test_the_to_prompt_asks_the_same_way()
+    test_a_number_only_one_point_carries_is_not_asked_about()
+    test_back_and_enter_at_the_pick()
+    test_a_stray_label_is_refused_and_re_asked()
     test_layer_repaired_and_coloured()
     test_point_classifier()
     test_same_spot_tolerance()

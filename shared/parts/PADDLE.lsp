@@ -613,7 +613,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
+    (if lzd:report (lzd:report "PADDLE" *paddle-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "PADDLE" *paddle-version*))
 
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
@@ -633,10 +635,12 @@
   ;; loop -- being handed the loop beats guessing at it beside a title
   ;; block border.
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
       (progn
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
-        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))))
+        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+        (if lzd:watch (lzd:watch ss))))
   (setq perims (paddle--perimeters ss))
 
   (if (not perims)
@@ -720,7 +724,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPADDLE error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALPADDLE" *paddle-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALPADDLE" *paddle-version*))
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
   (vla-StartUndoMark doc)

@@ -507,6 +507,7 @@
   (while (not ans)
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel) (setq ans 'SF-NONE))
@@ -529,6 +530,7 @@
   (while (not ans)
     (initget "Cancel")
     (setq sel (entsel "\nClick the rounded corner you want [Cancel]: "))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel)
@@ -678,7 +680,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSMARTFILLET error: " m)))
+    (if lzd:report (lzd:report "SMARTFILLET" *smartfillet-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "SMARTFILLET" *smartfillet-version*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))

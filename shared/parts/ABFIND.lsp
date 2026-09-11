@@ -11,6 +11,12 @@
 ;;;                        place it could sit if one of the two tapes
 ;;;                        was written down wrong; pick one, it moves,
 ;;;                        and the command is done
+;;;            ABPCREATE   the point is NOT in the drawing: type the
+;;;                        two readings it was taped at, see where
+;;;                        they cross - or, when they cannot, every
+;;;                        place they could have crossed if one of
+;;;                        them was written down wrong - pick one,
+;;;                        name it, and it is plotted and tied
 ;;;            ABFINDVER   print the loaded version
 ;;; ======================================================================
 ;;;
@@ -147,6 +153,145 @@
 ;;;   any other from there: it can be named in a later round of the
 ;;;   same run.
 ;;;
+;;; ABPCREATE
+;;;   The other half of the same problem.  ABFIND and ABMOVE both start
+;;;   from a point that is already plotted; ABPCREATE starts from one
+;;;   that is NOT -- the field sheet has a row for it and the drawing
+;;;   has nothing.  So it asks for the two readings instead of a
+;;;   number:
+;;;
+;;;       A to the new point [Back] <Enter = done>: 21'-1"
+;;;       B to the new point [Back]: 18'-6"
+;;;
+;;;   and crosses them exactly as the survey did.  BOTH readings are
+;;;   drawn whole, as two dashed circles round the stakes -- everywhere
+;;;   each tape reaches -- so the answer is on the sheet either way:
+;;;   where they cross, or that they do not.
+;;;
+;;;   THEY CROSS.  There is one spot on the field side of the A-B line,
+;;;   it is marked, and the only thing left to settle is what the point
+;;;   is called.  Name it and it is plotted and tied, like any other.
+;;;
+;;;   THEY DO NOT CROSS.  Two tapes that fall short of each other, or
+;;;   one arc lying wholly inside the other, cannot place anything --
+;;;   and the two circles on screen say so better than a sentence can.
+;;;   One of the two readings was written down wrong, which is exactly
+;;;   what ABMOVE already knows how to walk: one reading is HELD and
+;;;   the other swept -- a foot at a time, abf:*foot-steps* each way,
+;;;   plus every number it could have been misread as -- and every pair
+;;;   that does cross is offered, tagged 1A, -3B, R1A the same way.
+;;;
+;;;   Each one is drawn with the PAIR it stands for beside it:
+;;;
+;;;       7A  28'-1" / 18'-6"
+;;;
+;;;   because that is what tells the candidates apart here.  ABMOVE's
+;;;   markers all share one pair of readings and differ by where they
+;;;   sit, so its tag alone names them; ABPCREATE's each stand for a
+;;;   DIFFERENT pair, and the pair -- not the position -- is what the
+;;;   drafter is checking against the field sheet.  The tag is still
+;;;   what you type.
+;;;
+;;;   IF NONE OF THEM IS RIGHT.  None (the Enter answer) takes no
+;;;   reading, and the command asks for another pair -- which is the
+;;;   way out when the sheet itself has to be re-read.  Enter at the A
+;;;   reading ends the run.
+;;;
+;;;   NAMING IT.  A point is not created until it is named:
+;;;
+;;;       Number for the new point <24> (B = back): 23
+;;;
+;;;   one past the highest number the drawing already carries is
+;;;   offered, and a number the drawing already uses is refused -- a
+;;;   number names ONE point, and the lookup every tool in this family
+;;;   does takes the first match.  The point itself is built like the
+;;;   drawing's own: the nearest survey point copied for its block,
+;;;   layer, colour, linetype, lineweight, scale, rotation and
+;;;   attribute layout, with the number written and every OTHER
+;;;   attribute left BLANK.  A point that has just been plotted has no
+;;;   elevation and no description, and copying the neighbour's would
+;;;   be inventing one (abf:*new-atts* keeps them for a drawing whose
+;;;   second attribute really is the same on every point).
+;;;
+;;;   Then its two ties are drawn, and it asks for the next pair.
+;;;
+;;; AND WHEN A LOOKUP FINDS NOTHING.  A number typed at ABFIND or
+;;; ABMOVE that names no point used to be reported and re-asked, full
+;;; stop.  It is much more often a point that was never plotted than a
+;;; typo, so both now offer the way forward:
+;;;
+;;;     No point numbered "23" in the drawing.
+;;;     Create Pt.23 from its two readings? [Yes/No/Back] <No>:
+;;;
+;;;   Yes runs everything under ABPCREATE above, with 23 already
+;;;   filled in as the number to offer.  ABFIND then carries on to the
+;;;   next point with the new one plotted and tied; ABMOVE, which
+;;;   settles ONE point, is done -- the point it was asked about now
+;;;   exists, at the reading that was asked for.  No is the Enter
+;;;   answer and re-asks the number, because a typo is the other way
+;;;   to get here and Enter must not plot a point from one.
+;;;
+;;; MORE THAN ONE AB LINE ON THE SHEET.  A drawing can carry two
+;;; surveys - two pools in one yard, or two field sheets merged - and
+;;; then it carries two points named A, two named B, and two of every
+;;; Pt.## after them.  Which pair of stakes a point was taped off is
+;;; then a real question, and the wrong answer draws two ties that
+;;; measure nothing: Pt.1 off the OTHER survey's stakes is not a
+;;; reading anybody took.
+;;;
+;;; An AB LINE is one such pair.  They are worked out once, at the top
+;;; of the run: every A is paired with a B shortest tie first, each
+;;; stake claimed once - a pair of stakes is set out together and
+;;; stands a couple of tape lengths apart, so the shortest tie still
+;;; going is the pair that was set out - and they are labelled L1, L2
+;;; in the order their A stakes appear in the drawing.  A point belongs
+;;; to the line it sits nearest.
+;;;
+;;; A drawing with ONE pair of stakes makes one line, and none of this
+;;; is ever asked or printed.  It is a sheet with two that asks, and it
+;;; asks once:
+;;;
+;;;   * ABFIND and ABMOVE read the line off the FIRST point they are
+;;;     given.  Name a number only one point carries and it is simply
+;;;     taken, and the line it sits on is reported.  Name one that
+;;;     several carry and every one of them is ringed on screen and
+;;;     labelled with its line, with what each was taped at off ITS OWN
+;;;     stakes printed beside it - which is what the field sheet has,
+;;;     and so what tells them apart:
+;;;
+;;;         2 points are numbered "1" - one per AB line, ringed and
+;;;         labelled on screen.
+;;;          tag   A             B
+;;;          ----  ------------  ------------
+;;;          L1    21'-1"        18'-6"
+;;;          L2    16'-4"        22'-0"
+;;;
+;;;         Which AB line is Pt.1 on - click the one you mean, or type
+;;;         its label [Back] <Enter = none>:
+;;;
+;;;   * ABPCREATE has no point to read it off - the point does not
+;;;     exist yet, which is the whole reason for the command - so it
+;;;     asks off the LINES themselves, each ringed at its two stakes
+;;;     with the tie between them dashed and labelled.  So does either
+;;;     of the other two when the number it was given names no point
+;;;     and the answer to "create it?" was Yes.
+;;;
+;;; AND THEN IT STAYS THERE.  The answer is the run's: every point
+;;; after it is taken to be on the same line, so a second doubled
+;;; number is resolved from it and only reported -
+;;;
+;;;     2 points are numbered "2" - the one on L2 taken.
+;;;
+;;; - and the ties are measured from that line's stakes.  Only a number
+;;; whose points include none on that line asks again, because then the
+;;; assumption has nothing to stand on.  A CLICK is never asked about
+;;; either way: it names the point it landed on, whatever that point is
+;;; numbered.
+;;;
+;;; Two points numbered the same ON ONE LINE is a fault in the drawing
+;;; rather than a second survey, and it is still answerable: the second
+;;; takes a letter after the label (L1, L1b).
+;;;
 ;;; THE STAKES.  A and B are looked up by name among the survey points,
 ;;; the same way any other point is: an "ab_pt" INSERT anywhere or any
 ;;; other INSERT on the POINTS layer, named by its "number" attribute
@@ -165,7 +310,11 @@
 ;;; prompt re-asks -- nothing is drawn from a typo or a stray click.
 ;;;
 ;;; Going back a step follows the shared Back convention (see the root
-;;; README).  In ABFIND, B/BACK/U/UNDO typed at the point number undoes
+;;; README).  Back at either of the two questions above re-asks the one
+;;; in front of it: at the ringed points, the point number; at the AB
+;;; lines, the point number that offered to create one - and nothing,
+;;; in an ABPCREATE run, where it is the first question of all.
+;;; In ABFIND, B/BACK/U/UNDO typed at the point number undoes
 ;;; the whole of the last round -- its ties, and, if that round moved a
 ;;; point, the moved point, its ring and its note, with the original
 ;;; ties put back.  Back at "Move Pt.17?" un-draws that point's ties
@@ -196,7 +345,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.11")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.13")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -272,6 +421,38 @@
 (setq abf:*locus-ltype*  "DASHED")  ; and its linetype - created at
                                     ; pool scale when the drawing has
                                     ; no linetype by that name
+(setq abf:*ghost-color*  1)         ; colour of the two whole circles
+                                    ; ABPCREATE draws round the stakes
+                                    ; - everywhere each tape reaches -
+                                    ; in abf:*locus-ltype*: red, so a
+                                    ; pair that cannot cross reads as
+                                    ; wrong at a glance
+(setq abf:*dupe-color*   4)         ; colour of the ring round each
+                                    ; point a number names when it
+                                    ; names more than one, and round
+                                    ; the stakes of each AB line: cyan,
+                                    ; so a real point being chosen
+                                    ; between never reads as a
+                                    ; suggestion (abf:*sug-color*) or
+                                    ; as a point already ringed
+(setq abf:*dupe-radius*  9.0)       ; radius of that ring - wider than
+                                    ; abf:*sug-radius* and than the
+                                    ; ring round a moved point, so the
+                                    ; three never read as one mark
+(setq abf:*line-prefix*  "L")       ; what an AB line is called, on
+                                    ; screen and at the prompt: the
+                                    ; lines are L1, L2, ... in the
+                                    ; order their A stakes appear in
+                                    ; the drawing
+(setq abf:*new-atts*     nil)       ; T makes a CREATED point copy the
+                                    ; other attribute values of the
+                                    ; point it was patterned on (an
+                                    ; elevation, a description) as well
+                                    ; as its layout.  nil leaves them
+                                    ; blank: a point that has just been
+                                    ; plotted has not been measured for
+                                    ; them, and the neighbour's numbers
+                                    ; are not its own
 (setq abf:*foot-steps*   10)        ; how many 1-foot steps are offered
                                     ; each way when a tape is swept: 10
                                     ; up and 10 down, per held stake
@@ -305,6 +486,19 @@
 ;;; Copied from CALOFIN-LIB.lsp (cal:askkw, cal:back-word-p) under this
 ;;; file's own prefix, so the standalone file loads alone -- see
 ;;; STANDARDS.md section 4.  Back sentinel: CAL-BACK.
+
+;; The FIRST of the two readings a new point is taped at.  Zero and a
+;; negative are refused the way askdist's REQ refuses them, but Enter is
+;; left free: this question is the top of ABPCREATE's loop, and Enter is
+;; how a run of it ends -- so it cannot be askdist, whose REQ closes
+;; Enter off.  ENDTEXT says what Enter does here, which is not the same
+;; thing when ABFIND has sent us in mid-run.  Returns the number, nil
+;; for Enter, or CAL-BACK.
+(defun abf:askfirst (msg endtext / v)
+  (initget 6 "Back Undo")
+  (setq v (getdist (strcat "\n" msg " [Back] <Enter = " endtext ">: ")))
+  (if lzd:ask (lzd:ask msg v))
+  (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK v))
 
 ;;; ---------------------- layers ----------------------------------------
 
@@ -370,35 +564,50 @@
         (setq i (1+ i)))))
   (reverse out))
 
-;; One comparable form for a point number, so "35", "Pt.35", "pt 35",
-;; "#35" and "035" all meet in the middle: uppercase, spaces and hashes
-;; dropped, a leading "PT" / "PT." dropped, and a value that reads as a
-;; number rendered numerically (so leading zeros do not matter).  Only
-;; the dot right after PT is a prefix dot - a point genuinely named
-;; "40.5" keeps its decimal.  (CDCALLOUT's cdo:canon.)
-(defun abf:canon (s / out i ch)
-  (setq s (strcase s) out "" i 1)
+;; The NUMBER a typed point name carries: the spelling with the spaces,
+;; the hashes and the "Pt." prefix taken off, and nothing else touched.
+;; Only the dot right after PT is a prefix dot - a point genuinely named
+;; "40.5" keeps its decimal.  This is what the drawing would SHOW, so it
+;; is what a point being created is offered as its number: "Pt.23",
+;; "#23" and "23" all offer "23".
+(defun abf:as-number (s / out i ch)
+  (setq out "" i 1)
   (while (<= i (strlen s))
     (setq ch (substr s i 1))
     (if (not (member ch '(" " "#")))
       (setq out (strcat out ch)))
     (setq i (1+ i)))
-  (if (and (>= (strlen out) 2) (= (substr out 1 2) "PT"))
+  (if (and (>= (strlen out) 2) (= (strcase (substr out 1 2)) "PT"))
     (progn
       (setq out (substr out 3))
       (if (= (substr out 1 1) ".") (setq out (substr out 2)))))
-  (if (distof out 2)
-    (rtos (distof out 2) 2 8)
-    out))
+  out)
 
-;; The survey point the typed number names, or nil.  The first match
-;; wins when a drawing carries the same number twice.
-(defun abf:find-point (s cands / want found c)
-  (setq want (abf:canon s) found nil)
+;; One comparable form for a point number, so "35", "Pt.35", "pt 35",
+;; "#35" and "035" all meet in the middle: the name above, uppercased,
+;; and a value that reads as a number rendered numerically so leading
+;; zeros do not matter.  (CDCALLOUT's cdo:canon.)
+(defun abf:canon (s)
+  (setq s (abf:as-number (strcase s)))
+  (if (distof s 2)
+    (rtos (distof s 2) 2 8)
+    s))
+
+;; EVERY survey point a typed number names, in drawing order.  More
+;; than one of them is a sheet carrying more than one survey - see
+;; "the AB lines" below, where the caller finds out which is meant.
+(defun abf:matches (s cands / want out c)
+  (setq want (abf:canon s) out nil)
   (foreach c cands
-    (if (and (null found) (= (abf:canon (abf:cd-nm c)) want))
-      (setq found c)))
-  found)
+    (if (= (abf:canon (abf:cd-nm c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;; The survey point the typed number names, or nil - the first when a
+;; drawing carries the same number twice.  Every prompt that can ASK
+;; about a duplicate goes through abf:matches instead; this one is for
+;; the places where the question is only "is this number taken?".
+(defun abf:find-point (s cands)
+  (car (abf:matches s cands)))
 
 ;; The survey point nearest to pick PK, when one sits within
 ;; abf:*snap* of it; nil otherwise.  Returns the ((x y z) . name) pair.
@@ -471,6 +680,65 @@
                 p2 (list (+ bx (* h uy)) (- by (* h ux)) 0.0))
           (if (< (cal:dist p1 near) (cal:dist p2 near)) p1 p2))))))
 
+;; Why a reading RA off PA and a reading RB off PB cannot cross, as a
+;; sentence - or nil when they do.  Two circles miss each other two ways
+;; round and they are different mistakes: tapes that fall short of each
+;; other, and one arc that lies wholly inside the other.  A pair that
+;; only just reaches (d exactly ra+rb) touches at one spot and counts as
+;; crossing - abf:circint solves it with h = 0.
+(defun abf:reach (pa pb ra rb / d)
+  (setq d (cal:dist pa pb))
+  (cond
+    ((> d (+ ra rb))
+     (strcat "the two arcs fall " (abf:fmt (- d ra rb))
+             " short of each other"))
+    ((< d (abs (- ra rb)))
+     (strcat (if (> ra rb) abf:*b-name* abf:*a-name*) "'s arc lies "
+             (abf:fmt (- (abs (- ra rb)) d)) " inside "
+             (if (> ra rb) abf:*a-name* abf:*b-name*) "'s"))))
+
+;; A point well off the PA-PB line on side S (+1 to the left of A->B,
+;; -1 to the right), for abf:circint to choose a crossing by.  The two
+;; crossings of any pair of readings mirror across that line, so a
+;; reference far enough off it names the one on its own side wherever
+;; along the line the crossing sits - which a reference NEAR the line
+;; does not.
+(defun abf:side-ref (pa pb s)
+  (polar (abf:loc pa pb 0.0)
+         (+ (angle (cal:2d pa) (cal:2d pb)) (* s 0.5 pi))
+         (cal:dist pa pb)))
+
+;; The side reference a spot PK stands for: which side of the A-B line
+;; it fell on, taken back out to a point that names that side for every
+;; crossing rather than only the ones near PK.  nil when it is ON the
+;; line, which names no side at all.
+(defun abf:click-side (pa pb pk / dx dy cz)
+  (setq dx (- (car  pb) (car  pa))
+        dy (- (cadr pb) (cadr pa))
+        cz (- (* dx (- (cadr pk) (cadr pa)))
+              (* dy (- (car  pk) (car  pa)))))
+  (if (> (abs cz) abf:*fuzz*)
+    (abf:side-ref pa pb (if (> cz 0.0) 1.0 -1.0))))
+
+;; Which side of the A-B line the field is on, read off the survey
+;; itself: the mean of every named point that is not a stake.  A pool is
+;; taped from two stakes standing to one side of it, so the points
+;; already plotted say which side the next one belongs on and nothing
+;; has to be asked.  nil when the drawing carries nothing but the
+;; stakes, or when what it carries averages out onto the line: then
+;; there is genuinely nothing to read, and the caller asks.
+(defun abf:field-ref (pa pb cands / n sx sy c p)
+  (setq n 0 sx 0.0 sy 0.0)
+  (foreach c cands
+    (setq p (abf:cd-pt c))
+    (if (and (> (cal:dist p pa) abf:*fuzz*)
+             (> (cal:dist p pb) abf:*fuzz*))
+      (setq n  (1+ n)
+            sx (+ sx (car  p))
+            sy (+ sy (cadr p)))))
+  (if (> n 0)
+    (abf:click-side pa pb (list (/ sx n) (/ sy n)))))
+
 ;; How far P is from the segment A-B - the nearest point of it, an end
 ;; included.  Locals are not named T: that is a constant in AutoLISP.
 (defun abf:seg-dist (p a b / dx dy l2 u)
@@ -505,6 +773,156 @@
               (+ (cadr m) (* dist (/ dx d)))
               0.0)
         m))))
+
+;;; ---------------------- the AB lines ----------------------------------
+;;; A sheet can carry more than one survey, and each brings its own pair
+;;; of stakes and its own numbering: two points named A, two named B,
+;;; and two of every Pt.## after them.  An AB LINE is one such pair, and
+;;; it is what tells those duplicates apart - Pt.1 taped off THIS A and
+;;; B is a different point from the Pt.1 taped off the other pair, and
+;;; the two ties ABFIND draws are only right if they run to the stakes
+;;; the point was actually surveyed from.
+;;;
+;;; A line is (index a-position b-position tag), the tag being "L1",
+;;; "L2": both its label on screen and the answer you type.  A drawing
+;;; with one pair of stakes makes one line and nothing here is ever
+;;; asked; a drawing that names no stakes makes none, and its stakes are
+;;; clicked the way they always were.
+
+(defun abf:ln-ix  (l) (car    l))
+(defun abf:ln-a   (l) (cadr   l))
+(defun abf:ln-b   (l) (caddr  l))
+(defun abf:ln-tag (l) (cadddr l))
+
+;; Insert (distance a b) into LST, shortest tie first.
+(defun abf:ins-pair (p lst / out done q)
+  (setq out nil done nil)
+  (foreach q lst
+    (if (and (null done) (< (car p) (car q)))
+      (setq done T out (cons p out)))
+    (setq out (cons q out)))
+  (if (null done) (setq out (cons p out)))
+  (reverse out))
+
+;; The AB lines the drawing carries.  Every A is paired with a B,
+;; shortest tie first, each stake claimed once: a pair of stakes is set
+;; out together and stands a couple of tape lengths apart, so the
+;; shortest tie still going is the pair that was set out.  They are
+;; NUMBERED in the order their A stakes appear in the drawing, so L1 is
+;; the first A on the sheet however the pairing fell out.  A stake left
+;; over - three As and two Bs - joins no line, and the caller says so.
+(defun abf:lines (cands / as bs raw a b d p useda usedb pairs out ix)
+  (setq as  (abf:matches abf:*a-name* cands)
+        bs  (abf:matches abf:*b-name* cands)
+        raw nil)
+  (foreach a as
+    (foreach b bs
+      (setq d (cal:dist (abf:cd-pt a) (abf:cd-pt b)))
+      (if (> d abf:*fuzz*)
+        (setq raw (abf:ins-pair (list d a b) raw)))))
+  (setq pairs nil useda nil usedb nil)
+  (foreach p raw
+    (if (and (null (member (cadr  p) useda))
+             (null (member (caddr p) usedb)))
+      (setq useda (cons (cadr  p) useda)
+            usedb (cons (caddr p) usedb)
+            pairs (cons p pairs))))
+  (setq out nil ix 0)
+  (foreach a as
+    (foreach p pairs
+      (if (equal (cadr p) a)
+        (setq ix  (1+ ix)
+              out (cons (list ix (abf:cd-pt a) (abf:cd-pt (caddr p))
+                              (strcat abf:*line-prefix* (itoa ix)))
+                        out)))))
+  (reverse out))
+
+;; How many stakes joined no line: the odd A in a drawing with three of
+;; them and two Bs.  Worth saying out loud - it means a survey on the
+;; sheet has no pair to be measured from.
+(defun abf:spare-stakes (cands lines)
+  (- (+ (length (abf:matches abf:*a-name* cands))
+        (length (abf:matches abf:*b-name* cands)))
+     (* 2 (length lines))))
+
+;; The AB line a point belongs to: the one whose A-B line it sits
+;; nearest.  A survey is taped from its own two stakes and falls around
+;; them, so the nearest pair is the pair it was taped from - and the
+;; readings printed beside each candidate let the drafter check that
+;; against the field sheet before answering.  nil when there are no
+;; lines at all.
+(defun abf:line-of (p lines / best bd l d)
+  (setq best nil bd nil)
+  (foreach l lines
+    (setq d (abf:seg-dist (cal:2d p) (cal:2d (abf:ln-a l))
+                          (cal:2d (abf:ln-b l))))
+    (if (or (null bd) (< d bd)) (setq best l bd d)))
+  best)
+
+;; T when point P belongs to line L.
+(defun abf:on-line-p (p l lines / hit)
+  (and l
+       (setq hit (abf:line-of p lines))
+       (= (abf:ln-ix hit) (abf:ln-ix l))))
+
+;; The ones of HITS that belong to L, in the order they were given.
+(defun abf:on-line (hits l lines / out c)
+  (setq out nil)
+  (foreach c hits
+    (if (abf:on-line-p (abf:cd-pt c) l lines) (setq out (cons c out))))
+  (reverse out))
+
+;; The survey points the field side is read off: one line's own, so one
+;; survey never votes on which side of another survey's A-B line its
+;; pool sits.  Everything, when the drawing makes no lines at all.
+(defun abf:line-pts (l lines cands / out c)
+  (if (null l)
+    cands
+    (progn
+      (setq out nil)
+      (foreach c cands
+        (if (abf:on-line-p (abf:cd-pt c) l lines) (setq out (cons c out))))
+      (reverse out))))
+
+;; T when TAG is already one of the labels in LST.
+(defun abf:tag-used-p (tag lst / hit c)
+  (setq hit nil)
+  (foreach c lst (if (= (car c) tag) (setq hit T)))
+  hit)
+
+;; The points a doubled number names, each labelled with the AB line it
+;; belongs to, as (tag position nil point): (tag position ...) is what
+;; abf:ask-tag reads a click against, and the point is what the answer
+;; stands for.  The label IS the line, because the line is what the
+;; question is really about - so two points on the SAME line, which is
+;; one survey having used a number twice rather than a second survey,
+;; take a letter after it (L1, L1b) so they can still be told apart.
+(defun abf:dupe-tags (hits lines / out c l base tag n)
+  (setq out nil)
+  (foreach c hits
+    (setq l    (abf:line-of (abf:cd-pt c) lines)
+          base (if l (abf:ln-tag l) "?")
+          tag  base
+          n    1)
+    (while (abf:tag-used-p tag out)
+      (setq n   (1+ n)
+            tag (strcat base (chr (+ 96 n)))))
+    (setq out (cons (list tag (abf:cd-pt c) nil c) out)))
+  (reverse out))
+
+;; The entry of such a list whose label reads S.
+(defun abf:dupe-by-tag (s lst / hit c)
+  (setq s (strcase (cal:trim s)) hit nil)
+  (foreach c lst
+    (if (and (null hit) (= (strcase (car c)) s)) (setq hit c)))
+  hit)
+
+;; The line whose tag reads S, whatever case it was typed in.
+(defun abf:line-by-tag (s lines / hit l)
+  (setq s (strcase (cal:trim s)) hit nil)
+  (foreach l lines
+    (if (and (null hit) (= (strcase (abf:ln-tag l)) s)) (setq hit l)))
+  hit)
 
 ;;; ---------------------- readings and misreadings ----------------------
 
@@ -612,8 +1030,10 @@
 
 ;; T when P is already where one of the candidates in LST sits, or
 ;; where the point itself sits - the same place twice is one choice.
+;; PP nil is ABPCREATE, where no point is plotted yet: nothing is "where
+;; it already is", and only the candidates can collide.
 (defun abf:seen-p (p pp lst / hit c)
-  (setq hit (< (cal:dist p pp) abf:*same-eps*))
+  (setq hit (and pp (< (cal:dist p pp) abf:*same-eps*)))
   (foreach c lst
     (if (< (cal:dist p (nth 5 c)) abf:*same-eps*) (setq hit T)))
   hit)
@@ -625,7 +1045,13 @@
 ;; smallest miss first, capped at abf:*max-sugg* (nil = uncapped).  A
 ;; reading the held tape can no longer reach has no crossing and is
 ;; left out.
-(defun abf:group (pa a pb b pp held moved movea
+;;
+;; Two references, not one.  NEAR chooses between the two crossings
+;; every pair of readings has, mirrored across the A-B line; PP is the
+;; place that is already taken.  For ABMOVE they are the same point -
+;; the point as it is drawn now - but ABPCREATE has no point yet, so it
+;; passes the side the field is on as NEAR and nil as PP.
+(defun abf:group (pa a pb b pp near held moved movea
                   / was out dl nd np n cut one k tag reads)
   (setq was   (if movea a b)
         out   nil
@@ -633,8 +1059,8 @@
   (foreach dl (abf:deltas was)
     (setq nd (+ was dl)
           np (if movea
-               (abf:circint pa nd pb b pp)
-               (abf:circint pa a pb nd pp)))
+               (abf:circint pa nd pb b near)
+               (abf:circint pa a pb nd near)))
     (if (and np (not (abf:seen-p np pp out)))
       (progn
         ;; the tag is the answer the user types, so it says what the
@@ -669,8 +1095,39 @@
   (setq a (cal:dist pa pp)
         b (cal:dist pb pp))
   (if (and (> a abf:*fuzz*) (> b abf:*fuzz*))
-    (append (abf:group pa a pb b pp abf:*b-name* abf:*a-name* T)
-            (abf:group pa a pb b pp abf:*a-name* abf:*b-name* nil))))
+    (append (abf:group pa a pb b pp pp abf:*b-name* abf:*a-name* T)
+            (abf:group pa a pb b pp pp abf:*a-name* abf:*b-name* nil))))
+
+;; What a suggestion is drawn and clicked as: its LABEL where it has
+;; one, its tag otherwise.  ABMOVE's markers all share one pair of
+;; readings and differ by where they sit, so the tag alone names them;
+;; ABPCREATE's each stand for a DIFFERENT pair, and the pair is what the
+;; drafter is checking against the field sheet - so it is written beside
+;; the marker rather than left on the command line.  The tag is still
+;; the answer that is typed.
+(defun abf:sug-text (c)
+  (if (nth 7 c) (nth 7 c) (nth 6 c)))
+
+;; The label a created suggestion carries: its tag, then the pair of
+;; readings it stands for - A's first, B's second.
+(defun abf:ab-label (pa pb c)
+  (strcat (nth 6 c) "  " (abf:fmt (cal:dist pa (nth 5 c)))
+          " / " (abf:fmt (cal:dist pb (nth 5 c)))))
+
+;; Every pair of readings A and B COULD have been, if one of the two was
+;; written down wrong, that crosses somewhere: ABMOVE's sweep with no
+;; point to start from.  NEAR is the side of the A-B line the field is
+;; on (abf:field-ref); nothing is plotted yet, so nothing is "the same
+;; place" and every crossing counts.  Each entry takes its label as an
+;; eighth element, which is what abf:sug-text finds.
+(defun abf:create-candidates (pa pb a b near / raw out c)
+  (setq raw (append
+              (abf:group pa a pb b nil near abf:*b-name* abf:*a-name* T)
+              (abf:group pa a pb b nil near abf:*a-name* abf:*b-name* nil))
+        out nil)
+  (foreach c raw
+    (setq out (cons (append c (list (abf:ab-label pa pb c))) out)))
+  (reverse out))
 
 ;;; ---------------------- what gets drawn -------------------------------
 
@@ -822,7 +1279,11 @@
 ;; linetype, lineweight, scale, rotation and extended data, and every
 ;; attribute it carries - same tag, same height, same style, each
 ;; keeping the offset it had from the point.  Only the attribute that
-;; holds the number is written, and only with NM.
+;; holds the number is written, and only with NM -- KEEP says what
+;; happens to the rest.  A point that MOVED is the same point one
+;; reading further on, so ABMOVE keeps them; a point being CREATED has
+;; been measured for none of them, so ABPCREATE blanks them rather than
+;; copy the neighbour's elevation onto a point that has none.
 ;;
 ;; A survey point carries more than a position: the layer the survey
 ;; put it on, a block scaled to the sheet, an elevation or a
@@ -833,8 +1294,8 @@
 ;; Returns the entities it made, or nil when EN is not a block
 ;; reference this drawing can insert again - the caller falls back to
 ;; abf:make-point then.
-(defun abf:copy-point (en p nm / ed atts sub sd base dx dy lay numi
-                                 out i)
+(defun abf:copy-point (en p nm keep / ed atts sub sd base dx dy lay numi
+                                      out i)
   (setq ed (if en (entget en '("*"))))
   (if (and ed
            (= "INSERT" (cdr (assoc 0 ed)))
@@ -857,7 +1318,9 @@
                   (= "ATTRIB" (cdr (assoc 0 sd))))
         (setq sd (abf:shift (abf:shift (abf:cloneable sd) 10 dx dy)
                             11 dx dy))
-        (if (and numi (= i numi)) (setq sd (abf:put sd 1 nm)))
+        (if (and numi (= i numi))
+          (setq sd (abf:put sd 1 nm))
+          (if (not keep) (setq sd (abf:put sd 1 ""))))
         (setq atts (cons sd atts)
               sub  (entnext sub)
               i    (1+ i)))
@@ -879,6 +1342,45 @@
                                (cons 8 lay)))
               (setq out (cons (entlast) out))))
           (reverse out))))))
+
+;; The number to offer for a new point: one past the highest the
+;; drawing already uses, as a string.  A survey numbers its points in
+;; sequence, so the next one is nearly always what is wanted - and it is
+;; only ever the DEFAULT, shown in the prompt and typed over.
+(defun abf:next-number (cands / hi c v)
+  (setq hi 0.0)
+  (foreach c cands
+    (if (setq v (distof (abf:cd-nm c) 2))
+      (if (> v hi) (setq hi v))))
+  (itoa (1+ (fix hi))))
+
+;; The point a new one is patterned on: the survey point nearest to
+;; where it is going, stakes excluded.  A survey point is more than a
+;; position - the layer the survey put it on, a block scaled to the
+;; sheet, an attribute height - and a point invented from this file's
+;; defaults matches none of it, while its neighbours match all of it.
+;; nil when the drawing carries nothing but stakes.
+(defun abf:template (p cands pa pb / best bd c d)
+  (setq best nil bd nil)
+  (foreach c cands
+    (setq d (cal:dist p (abf:cd-pt c)))
+    (if (and (> (cal:dist (abf:cd-pt c) pa) abf:*fuzz*)
+             (> (cal:dist (abf:cd-pt c) pb) abf:*fuzz*)
+             (or (null bd) (< d bd)))
+      (setq best c bd d)))
+  (if best (abf:cd-en best)))
+
+;; A NEW survey point at P numbered NM, built like the drawing's own:
+;; TMPL copied for its block, layer, colour, linetype, lineweight,
+;; scale, rotation and attribute layout, with the number written and
+;; every other attribute left blank unless abf:*new-atts* says to keep
+;; them.  Falls back to abf:make-point when there is nothing to copy -
+;; a drawing with nothing but stakes, or a block it cannot insert again
+;; - so a run never ends with a tie drawn to a point that was not made.
+(defun abf:new-point (tmpl p nm / out)
+  (if (setq out (abf:copy-point tmpl p nm abf:*new-atts*))
+    out
+    (abf:make-point p nm)))
 
 ;; E slid into the already-sorted LST by the size of its first element,
 ;; smallest first - the order the tags along a row are handed out in.
@@ -924,7 +1426,7 @@
                                        base longest)
   (setq out nil longest 0.0)
   (foreach c sugs
-    (setq longest (max longest (* (strlen (nth 6 c)) abf:*sug-hgt*
+    (setq longest (max longest (* (strlen (abf:sug-text c)) abf:*sug-hgt*
                                   abf:*tag-width*))))
   (foreach held (list abf:*b-name* abf:*a-name*)
     (setq ctr (if (= held abf:*a-name*) pa pb)
@@ -992,25 +1494,123 @@
                   out  (cons (list (nth 6 c)
                                    (list (car base) (cadr base) 0.0)
                                    (cal:angnorm (+ bis (* half slot)))
-                                   (* (strlen (nth 6 c)) abf:*sug-hgt*
+                                   (* (strlen (abf:sug-text c)) abf:*sug-hgt*
                                       abf:*tag-width*))
                              out)))))))
   out)
 
-;; One suggestion on screen: a point where it would sit, a small circle
-;; so it can be seen and clicked, and its tag hung off the arc at SPOT
-;; (abf:tag-spots) on a leader from the marker.  On abf:*sug-layer*,
-;; never the points layer - a suggestion is not one of the drawing's
-;; own points and must not read as one, to the eye or to the next tool
-;; - in abf:*sug-color*, and all of it swept again as soon as the round
-;; ends.  A tag whose direction would read upside down is turned round
-;; and right-justified on its base, so it still runs away from the
-;; leader and never across its neighbours.
-(defun abf:draw-sug (p tag spot / out base ang flip)
-  (setq out  nil
-        base (cadr  spot)
-        ang  (caddr spot)
-        flip (and (> ang (* 0.5 pi)) (<= ang (* 1.5 pi))))
+;; Where each ABPCREATE label hangs, as the same (tag base ang width)
+;; spots abf:tag-spots hands back - so the marker drawing, the click
+;; test and the tag lookup are shared between the two.
+;;
+;; ABMOVE's two arcs MEET, at the point as it is drawn now, and its tags
+;; fan out into the four empty quarters round that crossing.
+;; ABPCREATE's do NOT meet - that is the whole of what it is solving -
+;; so there are no quarters and no crossing to hang anything off.  What
+;; it has instead is simpler: only the field-side root of each pair is
+;; taken, so every candidate of a group sits on ONE side of the A-B
+;; line, strung along the arc its held reading draws.  So each label
+;; hangs off that arc on a leader abf:*tag-standoff* long and runs
+;; RADIALLY, straight on out from the stake: the labels radiate like
+;; spokes instead of filing along the arc.
+;;
+;; That is the whole of the layout, and it is radial for a reason.  A
+;; create label is four or five times the length of an ABMOVE tag, and
+;; laid ALONG the arc a label that long cannot be kept clear of its
+;; neighbours: text runs straight while the arc curves, so it climbs
+;; back through the arc and lies across the very markers it labels, and
+;; the sideways shoving it then takes to separate two of them drags
+;; their leaders into long slants that cross each other.  (Both were
+;; measured, not feared: inward, a label passed 1 1/2" from another
+;; candidate's marker; outward, twelve leaders crossed on a 50-foot
+;; baseline.)  Two rays out of one centre at different angles never
+;; meet, so radial labels cannot overlap at all, whatever the readings
+;; are.  What is left to keep is the DAYLIGHT between two of them, and
+;; that is tightest at the end of the spokes nearer the stake:
+;; abf:*sug-hgt* plus abf:*tag-gap* there, which on a pool-sized arc is
+;; a degree or two, so a label nudged round to get it keeps a leader
+;; that is as good as radial.  A reading barely longer than the label
+;; itself needs tens of degrees instead and its leaders do slant across
+;; each other - which is the right way round to fail: an untidy leader
+;; can be read past and two labels on top of each other cannot.
+;;
+;; Which WAY each fan points is the other half, and it is what keeps
+;; the two groups off each other: a group points away from the other
+;; arc - outward when that arc lies inside its own, inward otherwise.
+;; Two tapes that fall short both point inward, into their own discs,
+;; and those two discs do not touch - that is what falling short MEANS.
+;; One arc inside the other puts the outer group outside everything and
+;; the inner one deeper in.  Either way the two fans cannot reach each
+;; other, so the only spacing left to do is within a group.
+(defun abf:create-spots (pa pb ra rb sugs / out held ctr oth rad orad a0
+                                           lst c d e sgn off brad inner
+                                           step longest prev slot ang
+                                           base wid)
+  (setq out nil)
+  (foreach held (list abf:*b-name* abf:*a-name*)
+    (setq ctr  (if (= held abf:*a-name*) pa pb)
+          oth  (if (= held abf:*a-name*) pb pa)
+          rad  (if (= held abf:*a-name*) ra rb)
+          orad (if (= held abf:*a-name*) rb ra)
+          ;; the arcs come nearest each other along the line joining the
+          ;; stakes, whichever way they miss, so that is where the row
+          ;; starts from
+          a0   (angle (cal:2d ctr) (cal:2d oth))
+          lst  nil
+          longest 0.0)
+    (foreach c sugs
+      (if (= (cadr c) held)
+        (setq longest (max longest
+                           (* (strlen (abf:sug-text c)) abf:*sug-hgt*
+                              abf:*tag-width*))
+              lst     (abf:ins-by-abs
+                        (cons (cal:signed-dang
+                                a0 (angle (cal:2d ctr)
+                                          (cal:2d (nth 5 c))))
+                              c)
+                        lst))))
+    (if lst
+      (progn
+        (setq sgn   (if (< (car (car lst)) 0.0) -1 1)
+              off   (if (< (+ (cal:dist ctr oth) orad) rad) 1 -1)
+              ;; a reading shorter than the standoff would put an
+              ;; inward row of labels through its own stake and out the
+              ;; far side, so the row is never taken past it
+              brad  (max 1.0 (+ rad (* off abf:*tag-standoff*)))
+              ;; where two neighbouring spokes come closest: the end of
+              ;; the text nearer the stake.  A reading small enough for
+              ;; an inward label to reach past the stake itself has no
+              ;; such end, and is held off it instead
+              inner (if (> off 0) brad (max 1.0 (- brad longest)))
+              step  (/ (+ abf:*sug-hgt* abf:*tag-gap*) inner)
+              prev  nil)
+        (foreach e lst
+          (setq d    (car e)
+                c    (cdr e)
+                wid  (* (strlen (abf:sug-text c)) abf:*sug-hgt*
+                        abf:*tag-width*)
+                slot (if prev (max (abs d) prev) (abs d))
+                prev (+ slot step)
+                ang  (+ a0 (* sgn slot))
+                base (polar (cal:2d ctr) ang brad)
+                out  (cons (list (nth 6 c)
+                                 (list (car base) (cadr base) 0.0)
+                                 ;; the spoke runs on OUT from the base,
+                                 ;; or back in toward the stake
+                                 (cal:angnorm (if (> off 0) ang (+ ang pi)))
+                                 wid)
+                           out))))))
+  out)
+
+;; A suggestion's MARKER: a point where it would sit and a small circle
+;; round it, so it can be seen and clicked.  On abf:*sug-layer*, never
+;; the points layer - a suggestion is not one of the drawing's own
+;; points and must not read as one, to the eye or to the next tool - in
+;; abf:*sug-color*, and swept again as soon as the round ends.  Drawn on
+;; its own where there is nothing to choose between (ABPCREATE's two
+;; readings crossed, so there is one spot and no tag to hang off it).
+(defun abf:mark (p / out)
+  (setq out nil)
   (entmake (list '(0 . "POINT") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
                  (cons 62 abf:*sug-color*) '(100 . "AcDbPoint")
@@ -1022,6 +1622,132 @@
                  (list 10 (car p) (cadr p) 0.0)
                  (cons 40 abf:*sug-radius*)))
   (setq out (cons (entlast) out))
+  (reverse out))
+
+;; One whole reading: the circle of everywhere one tape reaches, centred
+;; on its stake, dashed and in abf:*ghost-color*.  ABPCREATE draws both,
+;; so a pair that cannot cross SHOWS that it cannot - two arcs with the
+;; gap between them on screen - instead of only saying so; and where it
+;; does cross, the crossing is on the sheet where the marker sits.  The
+;; two are also the lines the two groups of suggestions sit on, which is
+;; why ABPCREATE draws no separate locus the way ABMOVE does.
+(defun abf:ghost (ctr rad)
+  (abf:ensure-dashed)
+  (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                 (cons 8 abf:*sug-layer*)
+                 (cons 62 abf:*ghost-color*)
+                 (cons 6 abf:*locus-ltype*)
+                 '(100 . "AcDbCircle")
+                 (list 10 (car ctr) (cadr ctr) 0.0)
+                 (cons 40 rad)))
+  (list (entlast)))
+
+;; A ring round something the run is asking the drafter to choose
+;; between: one of several points a number names, or the stakes of one
+;; AB line.  Wider than a suggestion's marker and a different colour,
+;; because what it rings is a REAL point already in the drawing, not a
+;; place one might move to.  Scaffolding all the same - the suggestion
+;; layer, swept at the end of the round.
+(defun abf:dupe-ring (p)
+  (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                 (cons 8 abf:*sug-layer*)
+                 (cons 62 abf:*dupe-color*) '(100 . "AcDbCircle")
+                 (list 10 (car p) (cadr p) 0.0)
+                 (cons 40 abf:*dupe-radius*)))
+  (list (entlast)))
+
+;; The tag that says which one it is, up and to the right of the ring so
+;; it clears both the ring and the point's own number underneath it.
+(defun abf:dupe-tag (p tag)
+  (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                 (cons 8 abf:*sug-layer*)
+                 (cons 62 abf:*dupe-color*) '(100 . "AcDbText")
+                 (list 10 (+ (car  p) abf:*dupe-radius*)
+                          (+ (cadr p) abf:*dupe-radius*) 0.0)
+                 (cons 40 abf:*sug-hgt*) (cons 1 tag)))
+  (list (entlast)))
+
+;; One of several points a number names: ringed, and labelled with the
+;; AB line it belongs to.  The label is the answer, so two points on the
+;; SAME line - a number a survey used twice, which is a drawing fault
+;; rather than a second survey - are told apart by a letter after it.
+(defun abf:mark-dupe (p tag)
+  (append (abf:dupe-ring p) (abf:dupe-tag p tag)))
+
+;; One AB line drawn whole: both stakes ringed, the tie between them
+;; dashed, and the line's tag at the middle of it.  This is what
+;; ABPCREATE shows when it asks which line a point it is about to plot
+;; belongs to - there is no point to ring yet, so the lines themselves
+;; are what is picked between.
+(defun abf:mark-line (l / out)
+  (abf:ensure-dashed)
+  (setq out (append (abf:dupe-ring (abf:ln-a l))
+                    (abf:dupe-ring (abf:ln-b l))))
+  (entmake (list '(0 . "LINE") '(100 . "AcDbEntity")
+                 (cons 8 abf:*sug-layer*)
+                 (cons 62 abf:*dupe-color*)
+                 (cons 6 abf:*locus-ltype*) '(100 . "AcDbLine")
+                 (list 10 (car (abf:ln-a l)) (cadr (abf:ln-a l)) 0.0)
+                 (list 11 (car (abf:ln-b l)) (cadr (abf:ln-b l)) 0.0)))
+  (setq out (append out (list (entlast))))
+  (append out (abf:dupe-tag (abf:loc (abf:ln-a l) (abf:ln-b l) 0.0)
+                            (abf:ln-tag l))))
+
+;; How far a click landed from one of the things on screen: from the
+;; point, or - for an AB line, which is given as its two stakes - from
+;; the tie itself, so anywhere along it picks that line.
+(defun abf:tag-dist (pk s)
+  (if (caddr s)
+    (abf:seg-dist (cal:2d pk) (cal:2d (cadr s)) (cal:2d (caddr s)))
+    (cal:dist pk (cadr s))))
+
+;; Which of the ringed things was meant.  ONE prompt, the way stage 4
+;; asks about suggestions: click the one you want, or type its tag.
+;; SPOTS is ((tag position [second-position]) ...).  A click takes the
+;; NEAREST - there is nothing else on the layer to hit, and what was
+;; taken is read back before anything is drawn from it - so no click is
+;; refused for being a few feet out.  Returns the tag, 'CAL-BACK, or
+;; nil for Enter.
+(defun abf:ask-tag (msg spots back / ans best bd s d)
+  (initget 128)
+  (setq ans (getpoint (strcat msg (if back " [Back]" "")
+                              " <Enter = none>: ")))
+  (if lzd:ask (lzd:ask msg ans))
+  (cond
+    ((null ans) nil)
+    ((and (not (listp ans)) (cal:back-word-p ans))
+     (if back
+       'CAL-BACK
+       (progn (princ "\n  Nothing to step back to.") 'ABF-AGAIN)))
+    ((listp ans)
+     (setq best nil bd nil)
+     (foreach s spots
+       (setq d (abf:tag-dist ans s))
+       (if (or (null bd) (< d bd)) (setq best (car s) bd d)))
+     best)
+    (t
+     (setq best nil)
+     (foreach s spots
+       (if (and (null best)
+                (= (strcase (cal:trim ans)) (strcase (car s))))
+         (setq best (car s))))
+     (if best
+       best
+       (progn (princ (strcat "\n  \"" ans "\" is not one of the labels"
+                             " - type one of them, or click the one you"
+                             " want."))
+              'ABF-AGAIN)))))
+
+;; One suggestion on screen: its marker, and its tag hung off the arc at
+;; SPOT (abf:tag-spots, or abf:create-spots) on a leader from the
+;; marker.  A tag whose direction would read upside down is turned round
+;; and right-justified on its base, so it still runs away from the
+;; leader and never across its neighbours.
+(defun abf:draw-sug (p tag spot / out base ang flip)
+  (setq out  (reverse (abf:mark p))
+        base (cadr  spot)
+        ang  (caddr spot)
+        flip (and (> ang (* 0.5 pi)) (<= ang (* 1.5 pi))))
   (entmake (list '(0 . "LINE") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
                  (cons 62 abf:*sug-color*) '(100 . "AcDbLine")
@@ -1104,6 +1830,13 @@
                  (abf:fmt (cadddr sug)) " -> " (abf:fmt (nth 4 sug))
                  ".")))
 
+;; The same, for a pair being CREATED: which reading moved and which
+;; was held, because here the PAIR is what was chosen, not a place.
+(defun abf:say-made (sug)
+  (princ (strcat "\n  " (nth 6 sug) " taken: " (caddr sug) " "
+                 (abf:fmt (cadddr sug)) " -> " (abf:fmt (nth 4 sug))
+                 ", " (cadr sug) " held.")))
+
 ;; Make sure the guide line's linetype exists, with dashes sized for a
 ;; drawing in inches so they read at pool scale.  Pure entmake, no
 ;; command calls.  (pf:ensure-dashed, abhd.lsp:1566.)  A drawing that
@@ -1160,41 +1893,51 @@
   (foreach e lst (if (and e (null (entget e))) (entdel e))))
 
 ;;; ---------------------- the engine ------------------------------------
-;;; ABFIND and ABMOVE are one flow: ABMOVE is ABFIND plus the two
-;;; questions that move the point, so they share this and differ by the
-;;; MOVEP flag.  The *error* handler lives here rather than in the
+;;; ABFIND, ABMOVE and ABPCREATE are one flow, and MODE is which of them
+;;; is running: FIND, MOVE or CREATE.  ABMOVE is ABFIND plus the two
+;;; questions that move the point; ABPCREATE is the same machinery
+;;; entered from the other end, with two readings in place of a number.
+;;; All three share the stakes, the crossing arithmetic, the markers,
+;;; the one pick prompt and the putback, which is why they are one defun
+;;; and not three.  The *error* handler lives here rather than in the
 ;;; command defuns because this is where the state it has to put back
 ;;; is - it is localized in the arglist just the same, so the previous
 ;;; handler comes back when the run ends (STANDARDS.md section 5).
 ;;;
-;;; The two differ in shape as well as in questions.  ABFIND rinses and
-;;; repeats, so it keeps a history and Back takes the last round away
-;;; again, whatever that round did:
+;;; They differ in shape as well as in questions.  ABFIND and ABPCREATE
+;;; rinse and repeat, so they keep a history and Back takes the last
+;;; round away again, whatever that round did:
 ;;;
 ;;;     ("DIM"  pair)
 ;;;     ("MOVE" old-pair new-pair moved-point-ents ring note)
+;;;     ("NEW"  pair new-point-ents)
 ;;;
-;;; ABMOVE does ONE point - it was typed to move one - and ends as soon
-;;; as that point is settled, so it keeps no history.  A single U
-;;; undoes the whole run either way.
+;;; ABMOVE does ONE point - it was typed to settle one - and ends as
+;;; soon as that point is settled, whether it moved it or created it, so
+;;; it keeps no history.  A single U undoes the whole run either way.
 
 (defun abf:undo-round (r)
-  (if (= (car r) "DIM")
-    (abf:drop (cadr r))
-    (progn
-      (abf:drop (caddr r))                 ; the dims to where it moved
-      (abf:drop (cadddr r))                ; the moved point
-      (abf:drop (list (nth 4 r) (nth 5 r))); its ring and its note
-      (abf:undrop (cadr r)))))             ; the dims it had before
+  (cond
+    ((= (car r) "DIM") (abf:drop (cadr r)))
+    ((= (car r) "NEW")
+     (abf:drop (cadr r))                   ; the ties to the new point
+     (abf:drop (caddr r)))                 ; and the point itself
+    (t
+     (abf:drop (caddr r))                  ; the dims to where it moved
+     (abf:drop (cadddr r))                 ; the moved point
+     (abf:drop (list (nth 4 r) (nth 5 r))) ; its ring and its note
+     (abf:undrop (cadr r)))))              ; the dims it had before
 
 ;; NOTE: no local here may be named after a function this routine calls
 ;; - an AutoLISP local SHADOWS the function of the same name for the
 ;; whole call (the BPCALLOUT v1.0 lesson).
-(defun abf:run (movep / *error* undo-open oce ocl oos odim cmd cands
-                        pa pb hist stage done made moves hit sce nm pp
-                        pair sugs temps c kws shown ans sug havestyle
-                        np newpt newnm tried lasthold ments ring note
-                        npair spots hits h astep)
+(defun abf:run (mode / *error* undo-open oce ocl oos odim cmd cands
+                       pa pb hist stage done made moves hit sce nm pp
+                       pair sugs temps c kws shown ans sug havestyle
+                       np newpt newnm tried lasthold ments ring note
+                       npair spots hits h astep movep createp near ra rb
+                       why fromfind built deft tmpl pents mk
+                       lines curln pend lsel dtag dupes l)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -1209,9 +1952,18 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" (if cmd cmd "ABFIND") " error: " m)))
+    (if lzd:report (lzd:report "ABFIND" *abfind-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "ABFIND" *abfind-version*))
 
-  (setq cmd  (if movep "ABMOVE" "ABFIND")
+  (setq movep   (eq mode 'MOVE)
+        ;; createp is the ROUND, not the command: ABFIND and ABMOVE
+        ;; raise it too when a number they were given names no point and
+        ;; the answer to "create it?" was Yes
+        createp (eq mode 'CREATE)
+        cmd  (cond ((eq mode 'MOVE)   "ABMOVE")
+                   ((eq mode 'CREATE) "ABPCREATE")
+                   (t                 "ABFIND"))
         oce  (getvar "CMDECHO")
         ocl  (getvar "CLAYER")
         oos  (getvar "OSMODE")
@@ -1224,37 +1976,79 @@
                    cmd " has nothing to tie to."))
     (progn
       (princ (strcat "\n" (itoa (length cands)) " named survey point(s)"
-                     " found.  Click one, or type its number as it"
-                     " reads in the drawing (\"35\" or \"Pt.35\")."))
-      ;; -- the two stakes, before OSMODE goes down: a drawing that
-      ;;    does not name them wants object snap for the clicks
-      ;; the two stakes are a chain: Back at B re-asks A.  Back is only
-      ;; ON THE TABLE when A was CLICKED - when the drawing names it
-      ;; there is no question behind this one, and re-asking it would
-      ;; find the same point again and walk straight forward, which is a
-      ;; deadlock rather than a way back (STANDARDS 7.2, same reason).
-      (setq astep 1)
-      (while (<= astep 2)
-        (cond
-          ((= astep 1)
-           (setq pa    (abf:stake abf:*a-name* cands nil)
-                 astep 2))
-          ((= astep 2)
-           (if (null pa)
-             (setq astep 3)
-             (progn
-               (setq pb (abf:stake abf:*b-name* cands
-                                   (null (abf:find-point abf:*a-name* cands))))
-               (if (eq pb 'CAL-BACK)
-                 (progn (princ "\n  Stepping back one stake.")
-                        (setq pb nil astep 1))
-                 (setq astep 3)))))))
+                     " found."
+                     (if createp
+                       (strcat "  Give the two readings the new point"
+                               " was taped at.")
+                       (strcat "  Click one, or type its number as it"
+                               " reads in the drawing (\"35\" or"
+                               " \"Pt.35\")."))))
+      ;; -- the stakes.  A sheet can carry more than one survey, and
+      ;;    then it carries more than one A, more than one B, and more
+      ;;    than one of every number after them.  abf:lines pairs the
+      ;;    stakes up into AB LINES; which line the run is on decides
+      ;;    which stakes the ties are measured from AND which of two
+      ;;    points numbered the same is meant.
+      (setq lines (abf:lines cands)
+            curln nil
+            pend  nil)
+      ;; only worth saying where a pair was actually made: a drawing
+      ;; that names one stake and not the other is asked to click the
+      ;; missing one, which says it better than a count would
+      (if (and lines (> (abf:spare-stakes cands lines) 0))
+        (princ (strcat "\n" (itoa (abf:spare-stakes cands lines))
+                       " stake(s) pair with nothing - a survey on this"
+                       " sheet has no " abf:*a-name* "/" abf:*b-name*
+                       " pair to be measured from.")))
+      (if (< (length lines) 2)
+        ;; the ordinary sheet: one pair of stakes, or none named.
+        ;; before OSMODE goes down, because a drawing that does not name
+        ;; them wants object snap for the clicks.
+        ;; the two stakes are a chain: Back at B re-asks A.  Back is only
+        ;; ON THE TABLE when A was CLICKED - when the drawing names it
+        ;; there is no question behind this one, and re-asking it would
+        ;; find the same point again and walk straight forward, which is a
+        ;; deadlock rather than a way back (STANDARDS 7.2, same reason).
+        (progn
+          (setq astep 1)
+          (while (<= astep 2)
+            (cond
+              ((= astep 1)
+               (setq pa    (abf:stake abf:*a-name* cands nil)
+                     astep 2))
+              ((= astep 2)
+               (if (null pa)
+                 (setq astep 3)
+                 (progn
+                   (setq pb (abf:stake abf:*b-name* cands
+                                       (null (abf:find-point abf:*a-name* cands))))
+                   (if (eq pb 'CAL-BACK)
+                     (progn (princ "\n  Stepping back one stake.")
+                            (setq pb nil astep 1))
+                     (setq astep 3)))))))
+          (setq curln (car lines)))
+        ;; more than one survey on the sheet.  Which line the run is on
+        ;; is not settled here, because the drafter cannot answer it
+        ;; here: ABFIND and ABMOVE read it off the first point they are
+        ;; given, with the points that carry that number ringed (stage
+        ;; 1), and a run that is PLOTTING a point - ABPCREATE, or either
+        ;; of the other two creating one - has no point to read it off,
+        ;; so it is asked off the lines themselves (stage 11).
+        (progn
+          (setq pend T)
+          (princ (strcat "\n" (itoa (length lines)) " AB lines on this"
+                         " sheet - " abf:*a-name* " and " abf:*b-name*
+                         " are each numbered more than once, so every"
+                         " point number may be too."))
+          (princ (strcat "\n  Which line the run is on is settled by the"
+                         " first point it handles, and every point after"
+                         " it is taken to be on the same one."))))
       (cond
-        ((null pa)
+        ((and (null pend) (null pa))
          (princ (strcat "\nNo " abf:*a-name* " stake - nothing drawn.")))
-        ((null pb)
+        ((and (null pend) (null pb))
          (princ (strcat "\nNo " abf:*b-name* " stake - nothing drawn.")))
-        ((< (cal:dist pa pb) abf:*fuzz*)
+        ((and (null pend) (< (cal:dist pa pb) abf:*fuzz*))
          (princ (strcat "\nThe " abf:*a-name* " and " abf:*b-name*
                         " stakes sit on the same spot - two tapes off"
                         " one stake cannot place anything.")))
@@ -1276,20 +2070,51 @@
                           "\" instead.  Create the style (or start"
                           " from the standard template) and re-run.")))
 
+         ;; -- which side of the A-B line the field is on.  Two
+         ;;    readings cross TWICE, mirrored across the line joining
+         ;;    the stakes, so a point built from a pair has to be told
+         ;;    which of the two is meant.  The survey already says: the
+         ;;    points it has plotted are all on one side of that line.
+         ;;    Only a drawing carrying nothing but the stakes says
+         ;;    nothing, and only that one is asked (stage 8).  ABFIND
+         ;;    and ABMOVE need it too, because either can end up
+         ;;    creating a point.
+         ;;
+         ;;    On a sheet with more than one AB line it is read off THAT
+         ;;    line's own points: another survey sits wherever it sits,
+         ;;    and letting it vote would put the new point on the wrong
+         ;;    side of this one.  A run whose line is not settled yet
+         ;;    (ABFIND and ABMOVE, stage 1) reads it when the line is.
+         (if (null pend)
+           (setq near (abf:field-ref pa pb
+                                     (abf:line-pts curln lines cands))))
+
          ;; -- the round loop.  A round is one point:
-         ;;      1  which point       -- its two ties are drawn
+         ;;      1  which point       -- its two ties are drawn.  A
+         ;;                              number that names none offers
+         ;;                              to CREATE it, which is stage 6
          ;;      2  move it?          -- ABFIND only: it measures, so
          ;;                              it asks before going looking.
          ;;                              ABMOVE was typed to move a
          ;;                              point and goes straight on
          ;;      3  work out where it could go, and show it (no
          ;;         question of its own)
-         ;;      4  which suggestion
+         ;;      4  which suggestion  -- shared: the one pick prompt,
+         ;;                              for a move and for a creation
          ;;      5  where the note goes, and then the move itself
+         ;;      6  the A reading     -- ABPCREATE starts here
+         ;;      7  the B reading
+         ;;      8  which side of A-B  (only when the drawing is mute)
+         ;;      9  cross the two, or show why they cannot and work out
+         ;;         the pairs they could have been (no question)
+         ;;     10  name it, and then build it
          ;;    Each question backs out into the one before it.  ABFIND
-         ;;    goes round again after every round, moved or not;
+         ;;    and ABPCREATE go round again after every round;
          ;;    ABMOVE settles its one point and ends.
-         (setq hist nil stage 1 done nil made 0 moves 0 temps nil)
+         (setq hist nil done nil made 0 moves 0 built 0 temps nil
+               stage (cond ((and createp pend) 11)
+                           (createp 6)
+                           (t 1)))
          (while (not done)
            (cond
 
@@ -1316,12 +2141,16 @@
                  (if hist
                    (progn
                      (abf:undo-round (car hist))
-                     ;; a MOVE round put exactly one point into the
-                     ;; lookup, and Back always pops the newest round,
-                     ;; so the newest entry is the one it added
+                     ;; a MOVE and a NEW round each put exactly one
+                     ;; point into the lookup, and Back always pops the
+                     ;; newest round, so the newest entry is the one it
+                     ;; added
+                     (if (member (car (car hist)) '("MOVE" "NEW"))
+                       (setq cands (cdr cands)))
                      (if (= (car (car hist)) "MOVE")
-                       (setq moves (1- moves)
-                             cands (cdr cands)))
+                       (setq moves (1- moves)))
+                     (if (= (car (car hist)) "NEW")
+                       (setq built (1- built)))
                      (setq hist (cdr hist)
                            made (1- made))
                      (princ "\nStepping back one point."))
@@ -1329,21 +2158,145 @@
                 (t
                  ;; a click names the survey point under it, exactly as
                  ;; a typed number names one; nothing under it names
-                 ;; nothing, and is reported the way a typo is
-                 (setq hit (if (listp ans)
-                             (abf:nearest ans cands)
-                             (abf:find-point ans cands)))
+                 ;; nothing, and is reported the way a typo is.  A click
+                 ;; is never ambiguous - it names the point it landed
+                 ;; on, whatever that point is numbered - so only a
+                 ;; typed number can reach the question below.
+                 (setq hit nil dupes nil)
+                 (if (listp ans)
+                   (setq hit (abf:nearest ans cands))
+                   (progn
+                     (setq dupes (abf:matches ans cands)
+                           lsel  (if (and curln (> (length dupes) 1))
+                                   (abf:on-line dupes curln lines)))
+                     (cond
+                       ;; one point carries it: the ordinary sheet, and
+                       ;; the ordinary sheet is never asked anything
+                       ((< (length dupes) 2) (setq hit (car dupes)))
+                       ;; the run is already on an AB line and exactly
+                       ;; one of them is on it - that is the convention:
+                       ;; once a line is settled the rest of the run
+                       ;; stays on it, so this one is not asked again,
+                       ;; only reported
+                       ((= (length lsel) 1)
+                        (setq hit (car lsel))
+                        (princ (strcat "\n  " (itoa (length dupes))
+                                       " points are numbered \""
+                                       (abf:as-number ans) "\" - the one"
+                                       " on " (abf:ln-tag curln)
+                                       " taken.")))
+                       ;; otherwise ask: ring them all, print what each
+                       ;; was taped at off ITS OWN stakes - which is
+                       ;; what the field sheet has, and so what tells
+                       ;; them apart - and take a click or a label
+                       (t
+                        (cal:ensure-layer abf:*sug-layer* abf:*sug-color*)
+                        (abf:drop temps)
+                        (setq dtag  (abf:dupe-tags dupes lines)
+                              temps nil)
+                        (foreach c dtag
+                          (setq temps (append temps
+                                              (abf:mark-dupe (cadr c)
+                                                             (car c)))))
+                        (princ (strcat "\n  " (itoa (length dupes))
+                                       " points are numbered \""
+                                       (abf:as-number ans) "\" - one per"
+                                       " AB line, ringed and labelled on"
+                                       " screen."
+                                       (if curln
+                                         (strcat "  None of them is on "
+                                                 (abf:ln-tag curln) ".")
+                                         "")))
+                        (princ (strcat "\n   " (cal:pad "tag" 6)
+                                       (cal:pad abf:*a-name* 14)
+                                       abf:*b-name*))
+                        (princ (strcat "\n   " (cal:pad "----" 6)
+                                       (cal:pad "------------" 14)
+                                       "------------"))
+                        (foreach c dtag
+                          (setq l (abf:line-of (cadr c) lines))
+                          (princ (strcat "\n   " (cal:pad (car c) 6)
+                                         (cal:pad
+                                           (abf:fmt (cal:dist (abf:ln-a l)
+                                                              (cadr c)))
+                                           14)
+                                         (abf:fmt (cal:dist (abf:ln-b l)
+                                                            (cadr c))))))
+                        (setq lsel (abf:ask-tag
+                                     (strcat "\n  Which AB line is Pt."
+                                             (abf:as-number ans)
+                                             " on - click the one you"
+                                             " mean, or type its label")
+                                     dtag T))
+                        (abf:drop temps)
+                        (setq temps nil)
+                        (cond
+                          ;; Back re-asks the number itself: that is the
+                          ;; question in front of this one
+                          ((eq lsel 'CAL-BACK)
+                           (princ "\n  Back to the point number."))
+                          ((or (null lsel) (eq lsel 'ABF-AGAIN))
+                           (princ (strcat "\n  None taken - nothing"
+                                          " drawn.")))
+                          (t
+                           (setq hit (cadddr (abf:dupe-by-tag lsel
+                                                              dtag)))))))))
+                 ;; the AB line is settled by the first point the run
+                 ;; handles, and every point after it is taken to be on
+                 ;; the same one - that is what lets the answer above be
+                 ;; assumed rather than asked a second time
+                 (if (and hit pend)
+                   (progn
+                     (setq curln (abf:line-of (abf:cd-pt hit) lines)
+                           pa    (abf:ln-a curln)
+                           pb    (abf:ln-b curln)
+                           pend  nil
+                           near  (abf:field-ref
+                                   pa pb
+                                   (abf:line-pts curln lines cands)))
+                     (princ (strcat "\n  On AB line " (abf:ln-tag curln)
+                                    " (" abf:*a-name* " to " abf:*b-name*
+                                    " " (abf:fmt (cal:dist pa pb))
+                                    ") - the rest of the run stays on"
+                                    " it."))))
                  (cond
+                   ;; a click on nothing is a stray click and is simply
+                   ;; reported; a NUMBER that names nothing is far more
+                   ;; often a point that was never plotted than a typo,
+                   ;; so that one is offered the way forward.  No is the
+                   ;; Enter answer, because a typo is the other way to
+                   ;; get here and Enter must not plot a point from one
+                   ;; a number that named points and was then declined
+                   ;; or backed out of at the pick has said its piece
+                   ;; already - it is not a typo and must not raise the
+                   ;; offer to plot a point that is plainly in the
+                   ;; drawing twice over
+                   ((and (null hit) dupes))
                    ((null hit)
                     (if (listp ans)
                       (princ (strcat "\n  No survey point within "
                                      (rtos abf:*snap* 4 0)
                                      " of that click - nothing drawn."))
-                      (princ (strcat "\n  No point numbered \"" ans
-                                     "\" in the drawing - nothing"
-                                     " drawn."))))
-                   ((or (< (cal:dist (abf:cd-pt hit) pa) abf:*fuzz*)
-                        (< (cal:dist (abf:cd-pt hit) pb) abf:*fuzz*))
+                      (progn
+                        (princ (strcat "\n  No point numbered \"" ans
+                                       "\" in the drawing."))
+                        (setq mk (cal:askyn
+                                   (strcat "  Create Pt."
+                                           (abf:as-number ans)
+                                           " from its two readings?")
+                                   "No" T))
+                        (if (eq mk T)
+                          (setq newnm    (abf:as-number ans)
+                                createp  T
+                                fromfind T
+                                ;; there is no point to read the AB line
+                                ;; off - a point that does not exist is
+                                ;; the reason we are here - so a sheet
+                                ;; with more than one asks for it first
+                                stage    (if pend 11 6))))))
+                   ((and pa pb
+                         (or (< (cal:dist (abf:cd-pt hit) pa) abf:*fuzz*)
+                             (< (cal:dist (abf:cd-pt hit) pb) abf:*fuzz*)))
                     (princ (strcat "\n  Pt." (abf:cd-nm hit) " IS a"
                                    " stake - the ties are measured"
                                    " FROM it.")))
@@ -1480,32 +2433,51 @@
              ;;       R1A, whichever marker was under the cursor.
              ((= stage 4)
               (initget 128 "None Back Undo")
-              (setq ans (getpoint (strcat "\n  Move Pt." nm
-                                          " - click a marker or its"
-                                          " tag, or type a tag"
-                                          " [None/Back] <None>: ")))
+              (setq ans (getpoint
+                          (if createp
+                            (strcat "\n  "
+                                    (if newnm (strcat "Pt." newnm)
+                                        "The new point")
+                                    " - click a marker or its label, or"
+                                    " type a tag [None/Back] <None>: ")
+                            (strcat "\n  Move Pt." nm
+                                    " - click a marker or its"
+                                    " tag, or type a tag"
+                                    " [None/Back] <None>: "))))
               (cond
                 ((and ans (not (listp ans)) (member ans '("Back" "Undo")))
                  (abf:drop temps)
                  (setq temps nil)
                  ;; ABFIND came here from its own question, so Back
                  ;; re-asks that; ABMOVE came straight from the point
-                 ;; number, so Back re-asks that instead
-                 (if movep
-                   (progn
-                     (abf:drop pair)
-                     (setq made  (1- made)
-                           stage 1)
-                     (princ "\nStepping back one point."))
-                   (setq stage 2)))
+                 ;; number, so Back re-asks that instead; and a round
+                 ;; that is creating a point came from the two readings
+                 (cond
+                   (createp (setq stage 7))
+                   (movep
+                    (abf:drop pair)
+                    (setq made  (1- made)
+                          stage 1)
+                    (princ "\nStepping back one point."))
+                   (t (setq stage 2))))
                 ((or (null ans) (and (not (listp ans)) (= ans "None")))
                  (abf:drop temps)
                  (setq temps nil)
-                 (princ (strcat "\n  Pt." nm " left where it is."))
-                 (if movep
-                   (setq done T)
-                   (setq hist  (cons (list "DIM" pair) hist)
-                         stage 1)))
+                 ;; None here is the way out of a pair that cannot be
+                 ;; made to work: nothing is taken, and the command asks
+                 ;; for another pair of readings
+                 (if createp
+                   (progn
+                     (princ (strcat "\n  No reading taken - read the"
+                                    " sheet again and give another"
+                                    " pair."))
+                     (setq stage 6))
+                   (progn
+                     (princ (strcat "\n  Pt." nm " left where it is."))
+                     (if movep
+                       (setq done T)
+                       (setq hist  (cons (list "DIM" pair) hist)
+                             stage 1)))))
                 ((not (listp ans))
                  ;; typed: a tag from the table - or the Pick that
                  ;; earlier versions asked for first, which is now
@@ -1515,8 +2487,9 @@
                     (princ (strcat "\n  Just click it - this prompt"
                                    " takes the click itself.")))
                    ((setq sug (abf:tag-lookup ans sugs))
-                    (abf:say-taken sug)
-                    (setq stage 5))
+                    (if createp (abf:say-made sug) (abf:say-taken sug))
+                    (setq newpt (nth 5 sug)
+                          stage (if createp 10 5)))
                    (t
                     (princ (strcat "\n  \"" ans "\" is not one of the"
                                    " tags - type one from the table,"
@@ -1531,8 +2504,9 @@
                                    " - try again, or type a tag.")))
                    ((null (cdr hits))
                     (setq sug (cdr (car hits)))
-                    (abf:say-taken sug)
-                    (setq stage 5))
+                    (if createp (abf:say-made sug) (abf:say-taken sug))
+                    (setq newpt (nth 5 sug)
+                          stage (if createp 10 5)))
                    (t
                     ;; the click cannot tell these apart at this zoom:
                     ;; say what they are, and ask - the nearest is the
@@ -1557,8 +2531,343 @@
                       ((eq ans 'CAL-BACK)
                        (princ "\n  Back to the markers."))
                       ((setq sug (abf:tag-lookup ans sugs))
-                       (abf:say-taken sug)
-                       (setq stage 5))))))))
+                       (if createp (abf:say-made sug) (abf:say-taken sug))
+                       (setq newpt (nth 5 sug)
+                             stage (if createp 10 5)))))))))
+
+             ;; -- 11: which AB line, on a sheet that carries more than
+             ;;        one.  A run that is PLOTTING a point comes here
+             ;;        first: there is no point yet to read the line
+             ;;        off, so the lines themselves are what is picked
+             ;;        between - each ringed at its two stakes with the
+             ;;        tie between them dashed and labelled.  Asked
+             ;;        once per run: the answer stands for every point
+             ;;        after it, which is the whole convention.
+             ((= stage 11)
+              (cal:ensure-layer abf:*sug-layer* abf:*sug-color*)
+              (abf:drop temps)
+              (setq temps nil lsel nil)
+              (foreach l lines
+                (setq temps (append temps (abf:mark-line l))))
+              (princ (strcat "\n  " (itoa (length lines)) " AB lines,"
+                             " each ringed at its stakes and labelled on"
+                             " the tie between them."))
+              (princ (strcat "\n   " (cal:pad "tag" 6)
+                             abf:*a-name* " to " abf:*b-name*))
+              (princ (strcat "\n   " (cal:pad "----" 6) "------------"))
+              (foreach l lines
+                (princ (strcat "\n   " (cal:pad (abf:ln-tag l) 6)
+                               (abf:fmt (cal:dist (abf:ln-a l)
+                                                  (abf:ln-b l))))))
+              (setq dtag (abf:ask-tag
+                           (strcat "\n  Which AB line is "
+                                   (if newnm (strcat "Pt." newnm)
+                                       "the new point")
+                                   " taped off - click it, or type its"
+                                   " label")
+                           (mapcar '(lambda (x) (list (abf:ln-tag x)
+                                                      (abf:ln-a x)
+                                                      (abf:ln-b x)))
+                                   lines)
+                           T))
+              (cond
+                ((eq dtag 'ABF-AGAIN))          ; re-ask, nothing moved
+                ((eq dtag 'CAL-BACK)
+                 (abf:drop temps)
+                 (setq temps nil)
+                 ;; the point number is the question in front of this
+                 ;; one when that is what sent us here; ABPCREATE has
+                 ;; nothing in front of its first question
+                 (if fromfind
+                   (progn
+                     (setq createp nil fromfind nil newnm nil stage 1)
+                     (princ "\n  Back to the point number."))
+                   (princ "\n  Already at the first question.")))
+                ((null dtag)
+                 (abf:drop temps)
+                 (setq temps nil)
+                 (princ (strcat "\n  No AB line taken - a point is"
+                                " plotted off two stakes, and which two"
+                                " is the first thing to settle."))
+                 (if fromfind
+                   (setq createp nil fromfind nil newnm nil stage 1)
+                   (setq done T)))
+                (t
+                 (abf:drop temps)
+                 (setq lsel  (abf:line-by-tag dtag lines)
+                       temps nil
+                       curln lsel
+                       pa    (abf:ln-a lsel)
+                       pb    (abf:ln-b lsel)
+                       pend  nil
+                       near  (abf:field-ref
+                               pa pb (abf:line-pts curln lines cands))
+                       stage 6)
+                 (princ (strcat "\n  " (abf:ln-tag lsel) " taken: "
+                                abf:*a-name* " and " abf:*b-name* " "
+                                (abf:fmt (cal:dist pa pb))
+                                " apart - the rest of the run stays on"
+                                " it.")))))
+
+             ;; -- 6: the A reading.  ABPCREATE's first question, and
+             ;;       where ABFIND and ABMOVE land when the number they
+             ;;       were given names no point and the answer to
+             ;;       "create it?" was Yes.  Enter ends an ABPCREATE run
+             ;;       but only abandons a creation the other two offered,
+             ;;       so the prompt says which of the two it is doing
+             ;;       rather than leaving it to be found out.
+             ((= stage 6)
+              (setq ans (abf:askfirst
+                          (strcat "  " abf:*a-name* " to "
+                                  (if newnm (strcat "Pt." newnm)
+                                      "the new point"))
+                          (if fromfind "cancel" "done")))
+              (cond
+                ((eq ans 'CAL-BACK)
+                 (cond
+                   ;; the point number is the question in front of this
+                   ;; one when that is what sent us here
+                   (fromfind
+                    (setq createp nil fromfind nil newnm nil stage 1)
+                    (princ "\n  Back to the point number."))
+                   (hist
+                    (abf:undo-round (car hist))
+                    ;; a MOVE and a NEW round each put exactly one point
+                    ;; into the lookup, and Back always pops the newest
+                    ;; round, so the newest entry is the one it added
+                    (if (member (car (car hist)) '("MOVE" "NEW"))
+                      (setq cands (cdr cands)))
+                    (if (= (car (car hist)) "MOVE")
+                      (setq moves (1- moves)))
+                    (if (= (car (car hist)) "NEW")
+                      (setq built (1- built)))
+                    (setq hist (cdr hist)
+                          made (1- made))
+                    (princ "\nStepping back one point."))
+                   (t (princ "\nAlready at the first point."))))
+                ((null ans)
+                 (if fromfind
+                   (progn
+                     (princ (strcat "\n  Pt." newnm " not created."))
+                     (setq createp nil fromfind nil newnm nil stage 1))
+                   (setq done T)))
+                (t (setq ra ans stage 7))))
+
+             ;; -- 7: the B reading.  Required, with no Enter of its
+             ;;       own: a point is crossed from TWO tapes and there
+             ;;       is no such thing as half of the pair.
+             ((= stage 7)
+              (setq ans (cal:askdist 'REQ
+                          (strcat "  " abf:*b-name* " to "
+                                  (if newnm (strcat "Pt." newnm)
+                                      "the new point"))
+                          nil T))
+              (if (eq ans 'CAL-BACK)
+                (setq stage 6)
+                (setq rb ans stage 8)))
+
+             ;; -- 8: which side of the A-B line.  Skipped whenever the
+             ;;       survey answers it, which is every drawing that has
+             ;;       plotted anything at all - so this question is the
+             ;;       one nobody normally sees.
+             ((= stage 8)
+              (if near
+                (setq stage 9)
+                (progn
+                  (princ (strcat "\n  Nothing but the stakes is"
+                                 " plotted, so the drawing does not say"
+                                 " which side of " abf:*a-name* "-"
+                                 abf:*b-name* " the pool is on - and"
+                                 " two readings cross on both."))
+                  (initget "Back Undo")
+                  (setq ans (getpoint
+                              (strcat "\n  Click roughly where "
+                                      (if newnm (strcat "Pt." newnm)
+                                          "the new point")
+                                      " belongs [Back]: ")))
+                  (cond
+                    ((null ans)
+                     (princ (strcat "\n  Nothing clicked - the readings"
+                                    " again."))
+                     (setq stage 7))
+                    ((not (listp ans)) (setq stage 7))
+                    ((setq near (abf:click-side pa pb ans))
+                     (setq stage 9))
+                    (t
+                     (princ (strcat "\n  That is on the " abf:*a-name*
+                                    "-" abf:*b-name* " line itself,"
+                                    " which names no side - click to"
+                                    " one side of it.")))))))
+
+             ;; -- 9: cross the two readings.  Nothing is asked here.
+             ;;       Both are drawn WHOLE, as the circle of everywhere
+             ;;       each tape reaches, so the answer is on the sheet
+             ;;       either way: they meet at one spot on the field
+             ;;       side, and the only thing left to settle is what
+             ;;       the point is called - or they cannot meet at all,
+             ;;       and the pairs they could have been are worked out
+             ;;       and shown exactly the way ABMOVE shows a move.
+             ((= stage 9)
+              (abf:drop temps)
+              (cal:ensure-layer abf:*sug-layer* abf:*sug-color*)
+              (setq why   (abf:reach pa pb ra rb)
+                    sugs  nil
+                    spots nil
+                    temps (append (abf:ghost pa ra) (abf:ghost pb rb)))
+              (if (null why)
+                (progn
+                  (setq newpt (abf:circint pa ra pb rb near)
+                        temps (append temps (abf:mark newpt)))
+                  (princ (strcat "\n  " abf:*a-name* " " (abf:fmt ra)
+                                 " and " abf:*b-name* " " (abf:fmt rb)
+                                 " cross on the field side - marked."))
+                  (setq stage 10))
+                (progn
+                  (princ (strcat "\n\n  " abf:*a-name* " " (abf:fmt ra)
+                                 " and " abf:*b-name* " " (abf:fmt rb)
+                                 " cannot cross: " why
+                                 " - both are drawn whole, so the gap"
+                                 " is on screen."))
+                  (setq sugs (abf:create-candidates pa pb ra rb near))
+                  (if (null sugs)
+                    (progn
+                      (princ (strcat "\n  No reading within "
+                                     (abf:fmt abf:*max-shift*)
+                                     " of either makes the two meet -"
+                                     " read the sheet again and give"
+                                     " another pair."))
+                      (abf:drop temps)
+                      (setq temps nil stage 6))
+                    (progn
+                      ;; where each label hangs is worked out for the
+                      ;; whole round at once - each is spaced off the
+                      ;; ones before it - and kept, because a click on
+                      ;; one has to find its way back to the pair it
+                      ;; names
+                      (setq spots (abf:create-spots pa pb ra rb sugs))
+                      (foreach c sugs
+                        (setq temps
+                              (append temps
+                                      (abf:draw-sug
+                                        (nth 5 c) (abf:sug-text c)
+                                        (assoc (nth 6 c) spots)))))
+                      (setq tried (+ (length (abf:deltas ra))
+                                     (length (abf:deltas rb))))
+                      (princ (strcat "\n\n  Where "
+                                     (if newnm (strcat "Pt." newnm)
+                                         "the new point")
+                                     " can sit if one of those two was"
+                                     " written down wrong - the ones"
+                                     " that move " abf:*a-name*
+                                     " first, then " abf:*b-name*
+                                     " (smallest change first):"))
+                      (if (> tried (length sugs))
+                        (princ (strcat "\n  "
+                                       (itoa (- tried (length sugs)))
+                                       " of the " (itoa tried)
+                                       " readings are not offered: they"
+                                       " still do not reach the other"
+                                       " tape"
+                                       (if abf:*max-sugg*
+                                         ", or are past the list cap"
+                                         "")
+                                       ".")))
+                      (princ (strcat "\n   " (cal:pad "tag" 6)
+                                     (cal:pad "moves" 7)
+                                     (cal:pad "by" 14)
+                                     (cal:pad abf:*a-name* 14)
+                                     abf:*b-name*))
+                      (princ (strcat "\n   " (cal:pad "----" 6)
+                                     (cal:pad "-----" 7)
+                                     (cal:pad "------------" 14)
+                                     (cal:pad "------------" 14)
+                                     "------------"))
+                      (setq lasthold nil)
+                      (foreach c sugs
+                        ;; a blank line where the held stake changes:
+                        ;; the two answers read as two blocks, not one
+                        ;; long list
+                        (if (and lasthold (/= lasthold (cadr c)))
+                          (princ "\n"))
+                        (setq lasthold (cadr c))
+                        (princ
+                          (strcat "\n   " (cal:pad (nth 6 c) 6)
+                                  (cal:pad (caddr c) 7)
+                                  (cal:pad
+                                    (strcat
+                                      (if (> (nth 4 c) (cadddr c))
+                                        "+" "-")
+                                      (abf:fmt (abs (- (nth 4 c)
+                                                       (cadddr c)))))
+                                    14)
+                                  (cal:pad
+                                    (abf:fmt (cal:dist pa (nth 5 c))) 14)
+                                  (abf:fmt (cal:dist pb (nth 5 c))))))
+                      (setq stage 4))))))
+
+             ;; -- 10: name it, and then build it.  A point is not
+             ;;        created until it is named: the number is what
+             ;;        every tool in this family looks it up by, so an
+             ;;        unnamed one would be a point nothing can find.
+             ((= stage 10)
+              (setq deft (if newnm newnm (abf:next-number cands))
+                    ans  (cal:askstr "  Number for the new point"
+                                     deft T))
+              (cond
+                ;; back to the pick when there was one to make, and to
+                ;; the readings themselves when the pair simply crossed
+                ((eq ans 'CAL-BACK) (setq stage (if sugs 4 7)))
+                ((= (cal:trim ans) "")
+                 (princ (strcat "\n  A point has to be numbered - the"
+                                " number is what every later lookup"
+                                " finds it by.")))
+                ((abf:find-point ans cands)
+                 (princ (strcat "\n  Pt." (cal:trim ans) " is already in"
+                                " the drawing - a number names ONE"
+                                " point, so give this one another.")))
+                (t
+                 (setq newnm (cal:trim ans))
+                 ;; the circles and the markers have done their job
+                 (abf:drop temps)
+                 (setq temps nil)
+                 (cal:ensure-layer abf:*point-layer* abf:*point-color*)
+                 (setq tmpl  (abf:template newpt cands pa pb)
+                       pents (abf:new-point tmpl newpt newnm)
+                       pair  (abf:dim-pair pa pb newpt havestyle)
+                       made  (1+ made)
+                       built (1+ built)
+                       ;; and it is a point like any other from here:
+                       ;; the next round can name it, tie it or move it
+                       cands (cons (list newpt newnm (car pents)) cands))
+                 (princ (strcat "\n  Pt." newnm " created:  "
+                                abf:*a-name* " "
+                                (abf:fmt (cal:dist pa newpt)) "   "
+                                abf:*b-name* " "
+                                (abf:fmt (cal:dist pb newpt))
+                                "  dimensioned."))
+                 (princ
+                   (if tmpl
+                     (strcat "\n  Built like the survey point nearest"
+                             " it"
+                             (if abf:*new-atts* ""
+                               " - its other attributes left blank")
+                             ".")
+                     (strcat "\n  Nothing but stakes to pattern it on -"
+                             " built on " abf:*point-layer*
+                             " from this file's own defaults.")))
+                 (if movep
+                   ;; ABMOVE settles ONE point, and a point that did not
+                   ;; exist is settled by existing
+                   (progn
+                     (princ (strcat "\n  Pt." newnm " is where those two"
+                                    " readings put it - run " cmd
+                                    " again to move it."))
+                     (setq done T))
+                   (setq hist    (cons (list "NEW" pair pents) hist)
+                         newnm   nil
+                         fromfind nil
+                         createp (eq mode 'CREATE)
+                         stage   (if (eq mode 'CREATE) 6 1))))))
 
              ;; -- 5: where the note goes, and then the move itself
              (t
@@ -1587,7 +2896,7 @@
                   (cal:ensure-layer abf:*point-layer* abf:*point-color*)
                   (setq newnm (strcat nm abf:*moved-suffix*)
                         ments (if (setq ments
-                                    (abf:copy-point sce newpt newnm))
+                                    (abf:copy-point sce newpt newnm T))
                                 ments
                                 (abf:make-point newpt newnm)))
                   (cal:ensure-layer abf:*ring-layer* 1)
@@ -1639,7 +2948,9 @@
          (setq undo-open nil)
 
          (if (= made 0)
-           (princ (strcat "\n" cmd ": nothing dimensioned."))
+           (princ (strcat "\n" cmd (if (eq mode 'CREATE)
+                                     ": no point created."
+                                     ": nothing dimensioned.")))
            (princ (strcat "\n" cmd ": " (itoa made) " point"
                           (if (= made 1) "" "s") " tied to "
                           abf:*a-name* " and " abf:*b-name*
@@ -1651,25 +2962,35 @@
            (princ (strcat "\n" cmd ": " (itoa moves) " point"
                           (if (= moves 1) "" "s") " moved - ringed on "
                           abf:*ring-layer* " where "
-                          (if (= moves 1) "it" "they") " came off.")))))))
+                          (if (= moves 1) "it" "they") " came off.")))
+         (if (> built 0)
+           (princ (strcat "\n" cmd ": " (itoa built) " point"
+                          (if (= built 1) "" "s") " created from "
+                          (if (= built 1) "its" "their")
+                          " two readings.")))))))
   (princ))
 
 ;;; ---------------------- commands --------------------------------------
 
 (defun c:ABFIND ()
-  (abf:run nil))
+  (abf:run 'FIND))
 
 (defun c:ABMOVE ()
-  (abf:run T))
+  (abf:run 'MOVE))
+
+(defun c:ABPCREATE ()
+  (abf:run 'CREATE))
 
 (defun c:ABFINDVER ()
   (princ (strcat "\nABFIND " *abfind-version*
-                 "  (commands: ABFIND, ABMOVE)"))
+                 "  (commands: ABFIND, ABMOVE, ABPCREATE)"))
   (princ))
 
 (princ (strcat "\nABFIND " *abfind-version*
                " loaded.  Commands: ABFIND (dim Pt.## from the "
                abf:*a-name* " and " abf:*b-name*
                " stakes), ABMOVE (the same, and move it to where a"
-               " misread tape would put it)."))
+               " misread tape would put it), ABPCREATE (plot a point"
+               " that is not there yet from the two readings it was"
+               " taped at)."))
 (princ)

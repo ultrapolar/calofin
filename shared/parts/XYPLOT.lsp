@@ -756,7 +756,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nXYPLOT error: " msg)))
+    (if lzd:report (lzd:report "XYPLOT" *xyplot-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "XYPLOT" *xyplot-version*))
   (vl-load-com)
   (princ (strcat "\nXYPLOT " *xyplot-version*))
   ;; ---- the questions: Back at the second re-opens the first -------------

@@ -240,7 +240,18 @@
 ;;;  STOCKCOVER-CFG
 ;;; -------------------------------------------------------------------
 
-(defun c:STOCKCOVER-CFG (/ cur f new)
+(defun c:STOCKCOVER-CFG ( / *error* cur f new)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nSTOCKCOVER-CFG error: " msg)))
+    (if lzd:report (lzd:report "STOCKCOVER-CFG" *stockcover-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "STOCKCOVER-CFG" *stockcover-version*))
   (setq cur (stock:folder))
   (stock:say (strcat "stock folder is now: " cur))
   ;; getfiled on any DWG inside the folder is the portable folder picker
@@ -284,7 +295,9 @@
       (progn
         (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
         (princ "\nNothing was left half done - use U to roll the run back.")))
+    (if lzd:report (lzd:report "STOCKCOVER" *stockcover-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "STOCKCOVER" *stockcover-version*))
 
   (setq oscm   (getvar "CMDECHO")
         osos   (getvar "OSMODE")
@@ -312,10 +325,12 @@
       ;; a highlight made before the command was typed (pickfirst) is
       ;; the perimeter - only ask when there is none
       (setq ss-old (ssget "_I"))
+      (if lzd:watch (lzd:watch ss-old))
       (if (null ss-old)
         (progn
           (princ "\nHighlight the perimeter to be replaced: ")
-          (setq ss-old (ssget))))
+          (setq ss-old (ssget))
+          (if lzd:watch (lzd:watch ss-old))))
       (if (null ss-old)
         (stock:say "nothing highlighted - nothing to replace.")
         (progn

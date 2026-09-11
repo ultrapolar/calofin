@@ -72,7 +72,7 @@ for _p in lsp_files(LISP_DIR):
 #: headline commands that stop before asking anything on an empty
 #: drawing, or open a DCL dialog first -- no prompt for an Esc to land on
 NO_PROMPT = {
-    'ABFIND', 'ABMOVE', 'CDCALLOUT', 'POOLDEMO',
+    'ABFIND', 'ABMOVE', 'ABPCREATE', 'CDCALLOUT', 'POOLDEMO',
     'LAZFORM', 'LAZFORMCOVER', 'LAZSPA', 'LAZSTEP', 'LAZTXT',
     # its pre-flight check runs before its first question, and PADDLE
     # is in another file this VM never loads, so it names the missing
@@ -80,6 +80,13 @@ NO_PROMPT = {
     # tests/test_tydrn_suite.py drives its prompt and its handler, Esc
     # included, with the stages stubbed.
     'TYLERDRONESUITE',
+    # LAZDIAG never asks: with nothing to report it writes a self test
+    # to the folder a real report would go to, and with something to
+    # report it writes that.  The one prompt it owns is lzd:paste, the
+    # last resort reached only when no folder would take the file, and
+    # a VM whose TEMPPREFIX is writable never gets there.  It is in
+    # QUIET below, where that silence is asserted rather than assumed.
+    'LAZDIAG',
     # an empty drawing carries none of the VS layers, so its layer check
     # runs before its first question: it says which layers it looked for
     # and stops.  tests/test_vsconv.py drives the prompt, and the Esc at
@@ -94,7 +101,7 @@ NEEDS_ACTIVEX = set()
 
 #: commands that ask nothing: they run to completion on an empty drawing
 QUIET = ['COVERCHECKRESCUE', 'DIMCHECKRESCUE', 'LINFINCHECKRESCUE',
-         'TUTORIALCOVERCHECKCLEAN', 'XFTCONV-SETUP']
+         'TUTORIALCOVERCHECKCLEAN', 'XFTCONV-SETUP', 'LAZDIAG']
 
 #: commands whose first act is a file dialog, or a look for a folder no
 #: setting names: Cancel there, or nothing there, ends the run

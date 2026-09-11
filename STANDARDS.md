@@ -503,7 +503,9 @@ save/restore, one undo group, `(princ)` exit:
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTOOLNAME error: " msg)))
+    (if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TOOLNAME" *toolname-version*))
   (tool:syssave)
   (setvar "CMDECHO" 0)
   (command "_.UNDO" "_Begin")
@@ -514,6 +516,53 @@ save/restore, one undo group, `(princ)` exit:
   (tool:sysrestore)
   (princ))
 ```
+
+**EVERY COMMAND REPORTS ITS FAILURES.  This is not optional, and the
+lines are not yours to write.**  A tool is not finished when it draws
+and it is not finished when it prints an error -- it is finished when a
+failure in it produces a file somebody can diagnose from.  That is the
+whole of the rule, and it applies to the tool written next year exactly
+as it applies to the seventy in the tree today.
+
+Four call sites, all of them maintained by
+`tools/check_lazdiag.py --fix`, and `make check` runs the same check so
+a command that is missing any of them cannot ship:
+
+| Where | The line | What it buys the report |
+| --- | --- | --- |
+| top of the command | `(if lzd:begin (lzd:begin "TOOL" *tool-version*))` | which tool, which version, and where the drawing stood before it ran |
+| in the `*error*` handler | `(if lzd:report (lzd:report "TOOL" *tool-version* msg))` | the report itself: the DXF, and the words telling the drafter to send it |
+| after a selection | `(if lzd:watch (lzd:watch ss))` | the geometry the run was HANDED, not just what it drew |
+| in an ask helper | `(if lzd:ask (lzd:ask msg v))` | the transcript -- which question it died on |
+
+The one thing `--fix` will NOT write is the `*error*` handler itself,
+because what belongs in one is the editorial part: which sysvars this
+command changed, whether an undo group is open, what it drew that has
+to be swept.  A handler that puts back the wrong thing is a bug the
+drafter meets in the NEXT command they run.  So **write the handler**,
+on the skeleton above, and let `--fix` do the rest.  A command with no
+handler at all fails the check by name -- including one that only
+prompts and saves a setting, because a failure there is still a failure
+somebody has to be told about.
+
+What the lines do: `lzd:begin` marks where the drawing stood and starts
+a transcript; `lzd:report`, after the settings are back and the undo
+group is closed, writes the whole failure out as a DXF in the user's
+Downloads folder for them to send in -- the geometry, the clicks, the
+prompts, the sysvars, the error -- and tells them so.  A plain cancel
+writes nothing.  The `(if ...)` guard is what lets a standalone file
+still load alone: an unbound symbol evaluates to nil, so with no
+LAZDIAG loaded every one of these lines is a no-op and the file behaves
+exactly as it did before.
+
+Two placement rules inside the handler.  Never call `lzd:report` before
+the sysvar restore -- the user's settings come back first, always --
+and never make it the handler's last form, because the trailing
+`(princ)` is the handler's return value.  Both spellings of a handler
+are recognised, the `(defun *error* ...)` of the skeleton and the
+`(setq *error* (lambda (msg) ...))` that `abhd`, `CABHD` and `lhd` use
+to save and restore the previous one; prefer the skeleton in new code.
+
 
 The canonical cancel test is exactly
 `(wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")` -- ten

@@ -138,6 +138,7 @@
                                 (vl-string-translate " " "/" kwlist)
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
+    (if lzd:ask (lzd:ask prompt ans))
     (if (and (null ans) dflt) (setq ans dflt))
   )
   (if (member ans '("Back" "Undo"))
@@ -620,7 +621,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nCCPRECHECK error: " msg)))
+    (if lzd:report (lzd:report "CCPRECHECK" *ccprecheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CCPRECHECK" *ccprecheck-version*))
 
   (setq *chk:log* nil product nil)
   (princ "\n--- Tech Flow Chart checklist ---")

@@ -443,7 +443,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nVSCONV error: " msg)))
+    (if lzd:report (lzd:report "VSCONV" *vsconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "VSCONV" *vsconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -480,6 +482,7 @@
           (prompt (strcat "\nSelect the VS import <Enter = every VS layer"
                           " in the drawing>: "))
           (setq ss (ssget filter))
+          (if lzd:watch (lzd:watch ss))
           (if (null ss) (setq ss (ssget "_X" filter)))))
 
       ;; The destinations have to exist, and be usable, before anything
@@ -605,7 +608,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nVSRECONV error: " msg)))
+    (if lzd:report (lzd:report "VSRECONV" *vsconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "VSRECONV" *vsconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -620,10 +625,12 @@
   ;; drawing lives too -- so the record is what says which objects came
   ;; from an export, and nothing else is touched whatever is selected.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 

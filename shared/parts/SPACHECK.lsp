@@ -1818,15 +1818,19 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "SPACHECK" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to " name " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to scan.")
@@ -1862,15 +1866,19 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSPACHECK error: " msg)))
+    (if lzd:report (lzd:report "SPACHECK" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to SPACHECK (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to check.")
@@ -1935,7 +1943,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSPACHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "SPACHECKRESCUE" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPACHECKRESCUE" *spacheck-version*))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   (setq ss (ssget "_X") i 0 n 0)
@@ -2279,7 +2289,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALSPACHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALSPACHECK" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALSPACHECK" *spacheck-version*))
   (setq oldecho (getvar "CMDECHO") oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
   (setq ans (cal:askkw "Show me" "Checks Demo Both" "Checks/Demo/Both" "Both" nil))

@@ -6,6 +6,59 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.12 -- 2026-09-11
+
+**A dialog that does not fit does not open.** DCL does not scroll in
+either direction: a page wider or taller than the screen is not
+clipped and is not scrolled -- AutoCAD refuses it outright, with
+`Dialog too large to fit on screen. Requested Size = (436, 1085)
+Maximum Size = (1920, 1080)`, and the command dies where it stands.
+LAZPANEL's **Rest** page had reached exactly that, so clicking Rest did
+nothing but raise the error. Rest is the page that could least afford
+it: it is COMPUTED -- every tool not on Pool, Cover or Spa lands there
+-- so the page that stopped opening is the page every newly registered
+tool joins, and it would have broken again at the next one regardless.
+
+Nothing in the tree could have caught it, because a dialog's size is
+written down nowhere: it is the sum of whatever the generator emitted.
+So it is computed now. `tools/dclsize.py` reads generated DCL as a tile
+tree and measures it; its constants are fitted to the report above and
+reproduce both of that report's numbers exactly. `tools/check_dcl.py`
+drives every generator to its tallest REACHABLE state -- pins and
+recents full, every chart, every step count -- and fails the build on
+anything within 60px of the limit. It is in `make check`, and
+`tests/test_dcl_size.py` puts the same measurement in `make test`.
+
+Five dialogs were over, only one of which anyone had clicked:
+
+- **Rest** (1085px) and **Layout** (1189px) now wrap into balanced
+  columns at `lzp:*colbudget*`, captions and all -- a category page is
+  where you go to find out what a tool IS, so losing the captions to
+  gain the width would have cost the page its purpose.
+- **LAZFORM's Roman and Grecian** charts (1141px each) pack the boxes
+  beside the picture into two columns instead of one stack. Four more
+  charts were within 20px of the line and came down with them. The
+  picture is only ~260px tall, so the room was always there, sideways.
+- **LAZASCII** (1557px), whose whole job is to be looked at, lays its
+  five sections out in three columns.
+
+And the two strips whose height a DRAFTER sets are capped. The note
+beside the pinned row said "pin thirty tools and you get a tall panel,
+never a broken one"; that was true at 56 tools in three columns and is
+not true at 82 -- thirty pins is 1053px, 27px under the wall, and the
+next pin goes through it. Pinned is held to `lzp:*pinrowmax*` rows, at
+the tick and again on the way in from the registry, where a list stored
+by an older build has never been through the cap. Recent was capped
+only as it was WRITTEN, so a stored value that predates the limit came
+back whole onto every page at once; it is trimmed on read as well.
+
+The pin editor had the same fault from the other end -- three fixed
+columns was 28 rows at 82 tools, the same 1085px, on the one dialog
+that grows every time ANY tool is added. It shares the page budget now,
+so it cannot drift out of step again.
+
+Worst page a drafter can build, pins and recents full: 941px.
+
 ## v3.7 -- 2026-09-10
 
 One pass, one idea: a question you can answer is a question you should
@@ -78,6 +131,191 @@ beside every Back in every `initget` list, the typed `B`/`BACK`/`U`/
 folded, and no file that accepts the keyword and then only tests for
 `"Back"`. The other half of the same test walks each threaded chain
 backwards through the interpreter, at both tiers.
+
+## v3.11 -- 2026-09-11
+
+Three changes to the AB perimeter fitters, all of them about the same
+thing: what the drafter should have to decide, and what the drawing
+already knows.
+
+**A point numbered with an `m` is not a survey point.** ABFIND writes
+`17m` when it copies Pt.17 to a position it worked out from two tape
+readings off a pair of good points -- the original was a bad shot, and
+the copy is where that point SHOULD be, not where anybody stood. ABHD,
+ADAB, CABHD and FITABHD were all fitting it like any other shot, so a
+perimeter bent to meet a deduction and the hit report then claimed it
+held a point nobody measured. It is dropped as the selection is read
+now, before the point list exists, which is what makes it true of
+everything downstream at once: not ordered into the loop, not fitted,
+not held, not counted against the miss allowance, and never ringed or
+listed as one the line missed. The original it came from is still in.
+Each command says how many it left out, so a survey that comes up
+short is explained rather than mysterious. In CABHD this is NOT the
+cutoff and NOT the omit list: both of those keep a point and decide
+about it, and a moved point is not in the survey to be decided about.
+LHD is deliberately not in this list -- it fits laser scans, where an
+`m` in a label is as likely to be metres as a moved point.
+
+**ABHD's recommended answers now describe an AB survey.** The miss
+share Enter offers goes from 15% to **20%**: a fifth of the points an
+inch off is what a built shell actually measures like, and at 15% the
+fitter ran out of allowance early in the loop and paid for the rest of
+it in short arcs. The curve cap gains a third state, **`Auto`**, which
+is what a fresh session now starts on: one curve per `*PF-ARC-DIV*`
+(3) survey points, rounded to the nearest whole curve. A pool edge
+reads as long overarching arcs with three or so points under each, not
+one curve per shot. `Auto` cannot be a number at the prompt -- the cap
+is asked at step 3 and the points are not selected until step 7 -- so
+it is a RULE that becomes a number once the survey is in hand, and
+every reader of the cap goes through `pf:cap-for` so it becomes one in
+exactly one place. `None` still lifts the cap entirely. CABHD carries
+both, because it promises the same fit as ABHD, rule for rule; LHD
+keeps its own 15% and gains no recommendation, because a laser scan is
+a finer instrument than a tape and a rod, and a cap of a third of a
+scan's points is not a cap.
+
+**SIMPABHD: the same fit, with nothing to decide first.** ABHD's first
+three questions are the ones that stop a run before it starts -- how
+far off may the line sit, what share may be off, how many curves --
+and none of them can honestly be answered from the command line,
+because the answer IS the shape they produce. That is why ABHD draws
+three and lets you point at one. SIMPABHD takes it the rest of the
+way: it asks NONE of the three and draws FIVE. Two are ABHD's own ends
+of the trade (the least error there is, and the fewest curves that
+still hold an inch), so whatever a typed answer could have produced
+sits between them; the three in the middle are ready-made answers -- a
+share, a distance and a curve cap TOGETHER, which is how they actually
+behave -- printed beside each outline: 10% off by an inch with a third
+as many curves as points, all but the 3 worst points held with half as
+many, and 20% off by half an inch with a third as many.
+
+It is not a copy of ABHD. Both commands walk one `pf:fit-session`,
+lifted out of `c:ABHD` unchanged, so the same straight walls, sharp
+corners and held points are declared, the same selection is read, the
+same table is printed, the same pick keeps one, the same points are
+ringed and the same pool bottom is offered. SIMPABHD enters that chain
+at step 4 and its steps print as 1 to 4; `Back` at the first of them
+re-opens it rather than falling out of the run. `pf:compare` grew one
+argument and serves both tables. What a second copy would have had to
+keep in step is not the fitter but every promise the run makes around
+it, and those are the ones that rot quietly.
+
+## v3.10 -- 2026-09-11
+
+v3.9 made a failure write itself out as a DXF. This is the pass that
+makes that true of EVERY command rather than of most of them, and makes
+it stay true for the tool written next year.
+
+**Three of the largest tools here were reporting nothing.** A handler
+comes in two spellings -- the `(defun *error* ...)` of STANDARDS
+section 5, and the `(setq *error* (lambda (m) ...))` that saves and
+restores the previous one -- and the wiring only ever looked for the
+first. So ABHD, ABHDCOVER, ADAB, TUTORIALABHD, CABHD and LHD were
+invisible to it: not unwired, *unseen*, which is the failure mode a
+check is supposed to make impossible. Both spellings are read now, and
+a lambda handler's `lzd:begin` lands outside the `setq` that holds it
+rather than becoming another argument to it.
+
+**Seven commands had no handler at all**, so there was nothing to wire.
+DDALT, DDCAL, DDSET, DDELEV, DDTEST, STOCKCOVER-CFG and XFTCONV-SETUP
+prompt and save a setting; none of them opens an undo group or changes
+a sysvar, so each has the minimal handler -- say it, report it, return.
+DDINFO, LAZBUTTON and LAZICON followed for the same reason.
+
+`check_lazdiag` now names a command that can reach **no** handler, its
+own or one in a helper it calls, and that is the rule that makes this
+de facto: a tool written later fails `make check` until it has one.
+What counts as needing one is computed from what the body does, never
+from the name -- so a `*VER` reporter is exempt and stops being exempt
+the day it grows a prompt. It reads the code with strings and comments
+masked out, because ABFINDVER prints the line `(commands: ABFIND,
+ABMOVE, ABPCREATE)` and `(commands:` matched `(command`. What `--fix`
+will not do is write the handler: which sysvars to put back and whether
+an undo group is open is the editorial part, and a handler that
+restores the wrong thing is a bug the drafter meets in the *next*
+command they run.
+
+**A report now carries the geometry a run was HANDED**, not only what
+it drew. `lzd:watch` existed and nothing called it, so a tool that fell
+over while walking a selection produced a report with the selection
+missing -- the one thing the failure was about. 95 selection sites
+record themselves now. Whole-database scans (`ssget "_X"`) are skipped
+on purpose: a checking tool sweeps thousands of entities, and copying
+them would bury the failure in the drawing rather than showing it.
+`lzd:gather` caps the whole list, input included, so a big selection
+cannot produce a DXF nobody can open.
+
+The rule is written where it will be read: the session-start hook's
+"Rules that bite", a stated requirement in STANDARDS section 5 with the
+four call sites in a table, CLAUDE.md's new-tool checklist, and
+`make check`.
+
+## v3.9 -- 2026-09-11
+
+A failure used to say one line and stop:
+
+    POOL error: bad argument type: numberp: nil
+
+True, and nearly useless. It does not say which of POOL's forty prompts
+had been answered, what was typed into them, what was on screen, or
+what the drawing looked like when it happened. The drafter shrugs and
+tries again; if it fails twice they report that "POOL is broken", and
+the diagnosis starts from nothing.
+
+**Every calofin command now writes its failure out as a file you can
+send in.** The same crash prints that same line, and then:
+
+    [calofin] POOL v2.7 has FAILED -- this is a bug, not
+    [calofin] something you did wrong.  An error report has been
+    [calofin] written to
+    [calofin]     C:\Users\dm\Downloads\POOL-v2.7-error-2026-09-11-143207.dxf
+    [calofin] SEND THAT FILE IN FOR DIAGNOSIS.
+
+and that DXF holds a copy of the geometry the run drew, whatever it had
+been handed to work on, every point that was clicked labelled with the
+prompt it answered, the transcript prompt by prompt from the start of
+the run, the error text, the last step reached, and AutoCAD's own
+`ERRNO` / `CMDNAMES` / `LASTPROMPT` and sysvars. It is written by hand
+as R12 DXF -- the oldest there is, which every AutoCAD since reads, and
+which needs no handles and no bookkeeping to get wrong inside an error
+handler, where `(command)` is refused and `DXFOUT` is out of reach.
+
+**Nothing is asked and the open drawing is not touched.** An earlier
+shape of this put the report into the current drawing and asked the
+user to click somewhere clear of their work. That is worse in every
+direction: it asks somebody who has just been told their command
+crashed to make a careful decision, it writes into the file they care
+about at the moment they trust it least, "somewhere clear" lands on a
+viewport as often as not, and what they then have to send is the whole
+job drawing. The click-in path survives as a LAST RESORT -- type
+`LAZDIAG` after a report that no folder would take -- and nothing
+reaches it automatically.
+
+`LAZDIAG` typed by hand writes the last failure's report again, which
+is the answer when the folder was read-only the first time. With
+nothing to report it writes a **self test** to the folder a real report
+would go to instead of saying nothing, so a drafter can find out that
+reports will reach them BEFORE the day they need one.
+
+Esc is not a failure and writes nothing: somebody who backs out of POOL
+twenty times a day must not find twenty DXFs in Downloads.
+
+The wiring is not remembered, it is checked. `tools/check_lazdiag.py`
+owns the two lines each command carries -- `lzd:begin` at the top,
+`lzd:report` in the handler, after the sysvar restore and before the
+trailing `(princ)` -- and the one line each ask helper carries to
+record the prompt it just put up; `--fix` inserts what is missing and
+`make check` fails a command that has neither, so the tool added next
+year cannot be the one whose failures stay silent. 93 handlers and 74
+ask helpers were wired by it. Both guards are `(if lzd:report ...)`
+form: an unbound symbol is nil in AutoLISP, so a standalone file
+APPLOADed alone runs them as no-ops and behaves exactly as before.
+
+What it does not do, and says so in the report rather than pretending
+otherwise: AutoLISP hands an error handler a message and nothing else
+-- no stack, no file, no line number. The breadcrumb and the transcript
+are what stand in for one, and between them they name the prompt the
+run died at, which is the question a line number would have answered.
 
 ## v3.8 -- 2026-09-10
 

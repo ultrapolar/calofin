@@ -648,10 +648,12 @@
 ;; highlight first when two plans share one sheet.
 (defun g2m:scope (msg / ss)
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\n" msg " <Enter = whole drawing>: "))
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss) (setq ss (ssget "_X")))))
   ss)
 
@@ -675,7 +677,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nG2MCONV error: " msg)))
+    (if lzd:report (lzd:report "G2MCONV" *g2mconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "G2MCONV" *g2mconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -799,7 +803,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nG2MRECONV error: " msg)))
+    (if lzd:report (lzd:report "G2MRECONV" *g2mconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "G2MRECONV" *g2mconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil

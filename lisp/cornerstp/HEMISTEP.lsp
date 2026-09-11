@@ -867,7 +867,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHEMISTEP: " msg)))
+    (if lzd:report (lzd:report "HEMISTEP" *hs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "HEMISTEP" *hs-version*))
 
   ;; remove the most recently drawn step and roll the state back
   (defun hs-popstep ( / e)
@@ -918,11 +920,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the base curve (arc, circle"
                      " or polyline), or the curve plus its axis line:"))
-      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -1653,7 +1657,9 @@
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
+    (if lzd:report (lzd:report "TUTORIALHEMISTEP" *hs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALHEMISTEP" *hs-version*))
 
   (princ (strcat "\n================ HEMISTEP TUTORIAL " *hs-version*
                  " ================"))

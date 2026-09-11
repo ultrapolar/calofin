@@ -182,10 +182,66 @@ In order, in one commit:
 Never hand-edit `releases/` or `shared/LAZPASS.lsp` — both are
 regenerated and your edit will vanish.
 
+### When a tool fails
+
+**Every command in this tree reports its failures, and a new one is not
+finished until it does.** A failure is not over when the handler prints
+a line: it is over when the drafter has a file they can send in. That
+is `lisp/lazdiag/LAZDIAG.lsp`, and four guarded call sites reach it:
+
+```lisp
+(if lzd:begin  (lzd:begin  "TOOLNAME" *toolname-version*))      ; top of the command
+(if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))  ; in *error*
+(if lzd:watch  (lzd:watch ss))                                  ; after a selection
+(if lzd:ask    (lzd:ask msg v))                                 ; in an ask helper
+```
+
+Do not write them by hand. `python3 tools/check_lazdiag.py --fix`
+inserts and maintains all four, and `make check` runs the same check,
+so a tool that is missing any of them cannot ship.
+
+**What `--fix` will not write is the `*error*` handler itself.** What
+belongs in one is the editorial part -- which sysvars this command
+changed, whether an undo group is open, what it drew that has to be
+swept -- and a handler that puts back the wrong thing is a bug the
+drafter meets in the *next* command they run. So write the handler on
+the STANDARDS section 5 skeleton, then run `--fix`. A command with no
+handler at all is named by the check, including one that only prompts
+and saves a setting: a failure there is still a failure somebody has to
+be told about. Seven commands were in that state and now are not.
+
+Both handler spellings are recognised -- the `(defun *error* ...)` of
+the skeleton and the `(setq *error* (lambda (msg) ...))` that `abhd`,
+`CABHD` and `lhd` use to save and restore the previous handler. Prefer
+the skeleton in new code. Scanning only for the first spelling is how
+ABHD, ADAB, TUTORIALABHD, CABHD and LHD -- three of the largest tools
+here -- sat reporting nothing while every other command reported
+everything.
+
+What a report holds: a copy of the geometry the run drew AND of the
+selection it was handed, every point clicked labelled with the prompt
+it answered, the transcript prompt by prompt, the error, the last step
+reached, and AutoCAD's own `ERRNO` / `CMDNAMES` / `LASTPROMPT` and
+sysvars. It goes to the user's Downloads folder as
+`TOOL-version-error-date.dxf`. Nothing is asked and the open drawing is
+not touched. The click-into-your-drawing path exists, is reached only
+by typing `LAZDIAG` after a report no folder would take, and is never
+reached automatically.
+
+Three rules for anything added to LAZDIAG itself. It runs from inside
+`*error*`, so **nothing may throw** -- the work happens under
+`vl-catch-all-apply` and a re-entry is refused, not nested. **Nothing
+may prompt** -- that is `LAZDIAG`'s own job, from a clean command line.
+And `lzd:report` goes AFTER the sysvar restore and BEFORE the handler's
+trailing `(princ)`, which is its return value. The `(if ...)` guards are
+what keep a standalone file loading alone: an unbound symbol is nil, so
+with no LAZDIAG present every one of these lines is a no-op.
+
 ### Adding or removing a command
 
-A tool is not finished when it draws. It has to be *registered*: a
-caption and a placement in `lisp/lazpanel/LAZPANEL.lsp`, a slot in
+A tool is not finished when it draws. It has to *report its failures*
+(above) and it has to be *registered*: a caption and a placement in
+`lisp/lazpanel/LAZPANEL.lsp`, a slot in
 `shared/parts/CALOFIN-LOADER.lsp`, a row in `README.md`, four numbers
 in prose that all change when the roster does, a tooltip in
 `ui/calofin_net/blurbs.txt` and a name in `ui/calofin_ui/calofin.lsp`'s
@@ -194,6 +250,7 @@ probe list.
 Do not do that by hand. Run:
 
 ```
+python3 tools/check_lazdiag.py --fix    # the four LAZDIAG call sites
 python3 tools/check_registry.py --fix
 python3 tools/gen_ui_data.py            # the palette's catalog
 ```
@@ -201,8 +258,8 @@ python3 tools/gen_ui_data.py            # the palette's catalog
 `--fix` inserts the caption row and a `Rest`-page placement, rewrites
 every derived count, bumps LAZPANEL's banner, and then **names the
 three things it will not decide for you**: the caption text, which
-category page (`Layout`/`Points`/`Dimensions`/`Checking`) the tool
-belongs on, and the tooltip blurb. Write those and re-run it.
+category page (`Layout`/`Points`/`Dimensions`/`Converters`/`Checking`)
+the tool belongs on, and the tooltip blurb. Write those and re-run it.
 `make check` runs the same check, so a half-registered tool cannot
 pass.
 
@@ -258,11 +315,23 @@ python3 tools/check_registry.py  # every tool registered everywhere it has
                                  # list -- with every count computed
                                  # rather than typed; --fix repairs what
                                  # is not editorial
+python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
+                    [--fix]      # lzd:begin at the top and the lzd:report
+                                 # in the *error* handler, plus the one
+                                 # line each ask helper carries to record
+                                 # its prompt; --fix wires what is missing
 python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
                                  # VB compiler: blocks closed by the right
                                  # closer, quotes and parens balanced, and
                                  # every member and constructor arity of
                                  # the assembly's own types resolved
+python3 tools/check_dcl.py       # every generated dialog still FITS: DCL
+                        [--list] # does not scroll, so one past the screen
+                                 # does not clip, it refuses to open.  The
+                                 # generators are driven to their tallest
+                                 # reachable state (pins and recents full,
+                                 # every chart, every step count) and
+                                 # measured by tools/dclsize.py
 python3 tools/gen_ui_data.py     # rewrites the palette's catalog from
                         [--check]# LAZPANEL's tables; --check is the
                                  # staleness half, and check_standards
@@ -272,6 +341,20 @@ python3 tools/gen_ui_charts.py   # the same for the palette's chart
                                  # chart tables
 make check                       # all of the above in one go
 ```
+
+`check_dcl.py` is the one that reads a dialog as a SIZE rather than as
+code. DCL does not scroll in either direction: a dialog wider or taller
+than the screen does not clip and does not scroll -- AutoCAD refuses to
+open it and the command dies where it stands. Nothing else in the tree
+can see that coming, because a dialog's height is never written down;
+it is the sum of whatever the generator emitted, and the generators
+grow every time a tool is registered. LAZPANEL's `Rest` page is the
+case that proved it: every tool not on Pool, Cover or Spa lands there,
+so the page that stopped opening at 28 tools was the page each new tool
+joins -- and `Layout` had passed the same line at 32 without anyone
+clicking it. Both wrap into balanced columns now (`lzp:*colbudget*`),
+and the two strips a drafter grows, Pinned and Recent, are capped both
+at the tick and on the way in from the registry.
 
 `check_standards.py` covers what the other two cannot see, because they
 read one file at a time: a `lisp/` tool with no `shared/` twin, a tool

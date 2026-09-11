@@ -217,6 +217,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((member v '("Back" "Undo")) 'HN-BACK)
         ((null v) (if dflt dflt (hn:askkw msg kws shown dflt back)))
         (t v)))
@@ -664,6 +665,7 @@
   (while (not ans)
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel) (setq ans 'HN-NONE))
@@ -688,6 +690,7 @@
   (while (not ans)
     (initget "Cancel")
     (setq sel (entsel (strcat "\n" msg " [Cancel]: ")))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel)
@@ -867,7 +870,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHONEFILLET error: " m)))
+    (if lzd:report (lzd:report "HONEFILLET" *honefillet-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "HONEFILLET" *honefillet-version*))
 
   (vl-load-com)
   (hn:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
