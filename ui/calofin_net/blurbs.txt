@@ -60,6 +60,7 @@ LINTXTCHK         Places the vinyl-liner QA checklist as drawing text
 LITECOVERSCAN     Cover rules only - skips the dimension audit
 LITELINFINSCAN    Liner rules only - skips the dimension audit
 LITESPACHECKSCAN  Spa rules only - skips the dimension audit
+LOBF              Fits a construction line through points that should be on one line
 NORMIESTEP        Normie step layout
 OASIS             Continuous-tangent pool drawn live from envelope and radii
 PADDLE            Paddle perimeter pads

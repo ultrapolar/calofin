@@ -123,6 +123,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("LITECOVERSCAN", "Cover scan, no dims", "Cover rules only - skips the dimension audit"),
         New Entry("LITELINFINSCAN", "Liner scan, no dims", "Liner rules only - skips the dimension audit"),
         New Entry("LITESPACHECKSCAN", "Spa scan, no dims", "Spa rules only - skips the dimension audit"),
+        New Entry("LOBF", "Line of best fit", "Fits a construction line through points that should be on one line"),
         New Entry("NORMIESTEP", "Normie step", "Normie step layout"),
         New Entry("OASIS", "Freeform pool", "Continuous-tangent pool drawn live from envelope and radii"),
         New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
@@ -191,6 +192,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("ALTABCDEF", "Clockwise rectangle plot", "ABCDEF with the clockwise corner order"),
             New Entry("XYPLOT", "X/Y offset plot", "Plot an X/Y sheet, twice: points, and dimensioned"),
             New Entry("CONSTELLATION", "Points from cross dims", "Places points from the distances between them, inside a known box"),
+            New Entry("LOBF", "Line of best fit", "Fits a construction line through points that should be on one line"),
             New Entry("ABFIND", "A/B stake ties", "Ties Pt.## back to the A and B survey stakes"),
             New Entry("ABMOVE", "Move mis-taped point", "Moves a point, offering every mis-read tape it could be"),
             New Entry("POINTRENAMER", "Renumber points in order", "Hands the survey point numbers back out in perimeter order"),
@@ -263,13 +265,13 @@ Public NotInheritable Class CommandCatalog
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "CUSTBLOCK", "AUTODIM", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Rest", {
-            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE"})
+            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LOBF"})
         }),
         New Page("Layout", {
             New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "ADAB", "CABHD", "LHD", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
         }),
         New Page("Points", {
-            New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "ABFIND", "ABMOVE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV", "G2MCONV", "G2MRECONV", "DRONE", "TYDRN", "TYLERDRONESUITE"})
+            New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV", "G2MCONV", "G2MRECONV", "DRONE", "TYDRN", "TYLERDRONESUITE"})
         }),
         New Page("Dimensions", {
             New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT"})

@@ -81,6 +81,7 @@ lisp/lintxtchk/LINTXTCHK.lsp|c:LINTXTCHK|\nPick top-left point for LINTXTCHK che
 lisp/lisplab/LISPLAB.lsp|c:LISPLAB|\nDemo size unit <5.0>:|demo / tutorial
 lisp/lisplab/LISPLAB.lsp|c:LISPLAB|\nPick a clear spot for the demo (about 1000 x 500 needed) <0,0>:|demo / tutorial
 lisp/lisplab/LISPLAB.lsp|lab:pause|\n--- press Enter to continue ---|pause
+lisp/lobf/LOBF.lsp|lobf:askfit|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nDraw a live demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nErase the demonstration? [Yes/No] <No>:|demo / tutorial
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nPick a clear spot for the demo <0,0>:|demo / tutorial

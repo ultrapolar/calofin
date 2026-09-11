@@ -98,7 +98,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.14")
+(setq *lazpanel-version* "v3.15")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -254,6 +254,7 @@
     ("LITECOVERSCAN"    "Cover scan, no dims")
     ("LITELINFINSCAN"   "Liner scan, no dims")
     ("LITESPACHECKSCAN" "Spa scan, no dims")
+    ("LOBF"             "Line of best fit")
     ("NORMIESTEP"       "Normie step")
     ("OASIS"            "Freeform pool")
     ("LINGUTTER"        "Gut to perimeter, then pads")
@@ -433,6 +434,7 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
+      "LOBF"
       )
     )
      ("Layout"
@@ -474,6 +476,7 @@
       "ALTABCDEF"
       "XYPLOT"
       "CONSTELLATION"
+      "LOBF"
       "ABFIND"
       "ABMOVE"
       "POINTRENAMER"
