@@ -238,6 +238,31 @@ Back, the typed `B`/`BACK`/`U`/`UNDO` predicate, case folded, and no
 file that takes the keyword and then ignores it), and the driven half
 walks the threaded chains backwards through the interpreter.
 
+### Repeating the last number
+
+A measurement asked once per item — a step tread, a step width — can be
+repeated with **Same**, typed `S`. It sits beside `Back` in the bracket
+and the prompt names the number it would repeat, so there is nothing to
+remember:
+
+```
+Step 2 - step tread [Back/Same] <Enter = done, Same = 24>:
+Step 2 - step width [Same] <Enter = fit to walls, Same = 30>:
+```
+
+`Same` is offered only where it earns its place: where a previous value
+of that kind exists **and** `Enter` is already spoken for by something
+else. At `CORNERSTP`'s tread prompt Enter means *done*; at its width
+prompt Enter means *fit to the walls* — neither can also mean "the last
+one", so `Same` is what does. Where `Enter` already repeats the last
+value (`PERPPTS`' point lengths, the side-profile depths, `HEMISTEP`'s
+widths in base-line mode) `Same` would be a second word for one answer,
+so it is not offered.
+
+Only a number you gave is one `Same` repeats. A step fitted to the
+walls has no typed width behind it, so `Same` after one goes back to
+the last width you actually entered — and the prompt says which.
+
 ### `ABCDEF` vs `ALTABCDEF`, and `CHECK` vs `CCPRECHECK`
 
 Two pairs of tools collided on the same command name during

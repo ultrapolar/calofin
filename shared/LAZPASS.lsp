@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.7, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.8, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -39855,8 +39855,10 @@
 ;;;       required.  Back at a step tread prompt steps back one step:
 ;;;       it removes the step just drawn (its lines and its dimensions)
 ;;;       so a mistyped number does not cost the whole run (Undo, the
-;;;       old keyword, is still accepted).  Same repeats the previous
-;;;       step tread.  Side (riser) lines are drawn between successive step
+;;;       old keyword, is still accepted).  Same - typed S - repeats the
+;;;       previous step tread, and repeats the previous step WIDTH at the
+;;;       width prompt, where Enter is spoken for by "fit to the walls".
+;;;       Side (riser) lines are drawn between successive step
 ;;;       ends whenever the walls do not already close that edge.
 ;;;   9.  When at least one step was drawn you may add a SIDE PROFILE.
 ;;;       If Yes, you give the step depths (the vertical drops), top
@@ -40006,7 +40008,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.4") ; printed on load and at command start so a
+(setq *cs-version* "v4.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -40514,7 +40516,7 @@
                        bns bnfar bnff bnl
                        tlist tvals tds drops pd ix ppt pw
                        px py totr totd cnrs ca cb pfo pgap fsteps fkey
-                       qstep qdir bstep)
+                       qstep qdir bstep lastwid)
 
   (defun *error* (msg)
     (cs-fclear)                     ; both exits clear the form store
@@ -41114,9 +41116,22 @@
                          ;; nil = fit to the walls, what Enter means
                          (setq wid (cs-fnum (cs-fnkey "width" n)))
                          (progn
-                           (initget 6)
+                           ;; Enter is already spoken for here - it fits the
+                           ;; step to the walls - so repeating the last width
+                           ;; needs a word of its own, and Same is the one the
+                           ;; tread prompt above already uses (S, per
+                           ;; STANDARDS section 2)
+                           (if lastwid (initget 6 "Same") (initget 6))
                            (setq wid (getdist (strcat "\nStep " (itoa n)
-                             " - step width <Enter = fit to walls>: ")))))))))))))))
+                             " - step width"
+                             (if lastwid " [Same]" "")
+                             " <Enter = fit to walls"
+                             (if lastwid (strcat ", Same = " (rtos lastwid)) "")
+                             ">: ")))
+                           (if (= (type wid) 'STR) (setq wid lastwid))))
+                       ;; only a width the user GAVE is one Same can repeat;
+                       ;; a step fitted to the walls has no number to reuse
+                       (if (numberp wid) (setq lastwid wid))))))))))))
 
     ;; ========== INSIDE OUT: from the corner out toward the pool =========
     (while
@@ -41136,7 +41151,11 @@
              (initget 6 (if lastdep "Back Same Undo" "Back Undo"))
              (setq dep (getdist (strcat "\nStep " (itoa n) " - step tread ["
                                         (if lastdep "Back/Same" "Back")
-                                        "] <Enter = done>: ")))
+                                        "]"
+                                        (if lastdep
+                                          (strcat " <Enter = done, Same = "
+                                                  (rtos lastdep) ">: ")
+                                          " <Enter = done>: "))))
              (if (= (type dep) 'STR)
                (cond
                  ((or (= dep "Back") (= dep "Undo")) (cs-popstep) (setq dep 'RETRY))
@@ -41153,9 +41172,20 @@
         ;; the form's width, nil = fit to the walls (what Enter means)
         (setq wid (cs-fnum (cs-fnkey "width" n)))
         (progn
-          (initget 6)
+          ;; Enter fits the step to the walls, so Same is what repeats the
+          ;; last width given (S, per STANDARDS section 2)
+          (if lastwid (initget 6 "Same") (initget 6))
           (setq wid (getdist (strcat "\nStep " (itoa n)
-                                     " - step width <Enter = fit to walls>: ")))))
+                                     " - step width"
+                                     (if lastwid " [Same]" "")
+                                     " <Enter = fit to walls"
+                                     (if lastwid
+                                       (strcat ", Same = " (rtos lastwid))
+                                       "")
+                                     ">: ")))
+          (if (= (type wid) 'STR) (setq wid lastwid))))
+      ;; only a width the user GAVE is one Same can repeat
+      (if (numberp wid) (setq lastwid wid))
       (setq dist (+ dist dep)                       ; step tread held exactly
             p    (cs-add start (cs-scl bis dist))
             ;; past the bench tread the bench's front edge stands in
@@ -41586,7 +41616,10 @@
   (princ "\n     Then click the side to bead toward and AUTOBEAD does the")
   (princ "\n     rest on its own rules - it has to be loaded for this.")
   (princ "\n  At any step tread prompt: Enter = done, Back = step back one")
-  (princ "\n  step (removes it), Same = repeat the previous step tread.")
+  (princ "\n  step (removes it), Same (S) = repeat the previous step tread.")
+  (princ "\n  At a step WIDTH prompt Enter fits the step to the walls, so")
+  (princ "\n  Same (S) is what repeats the last width you typed - and the")
+  (princ "\n  prompt names the number it would repeat.")
   (cs-tut-pause)
   (princ "\nWHAT IT CHECKS AND HANDLES FOR YOU")
   (princ "\n  - warns when the UCS is tilted, a line is not flat, or the")
@@ -41777,10 +41810,11 @@
 ;;;         - Enter at a step tread prompt = done.
 ;;;         - Back at a step tread prompt steps back one step: it
 ;;;           removes the step just drawn (its line and its dimensions).
-;;;           Undo, the old keyword, is still accepted.  Same repeats
-;;;           the previous step tread.
+;;;           Undo, the old keyword, is still accepted.  Same - typed
+;;;           S - repeats the previous step tread.
 ;;;         - Enter at a width prompt fits that step to the curve in
-;;;           the curve modes, or repeats the previous width in LINE
+;;;           the curve modes, where Same (S) is then what repeats the
+;;;           previous width; or repeats the previous width in LINE
 ;;;           mode.
 ;;;   7.  The hemisphere is then rebuilt as one polyline of arc segments
 ;;;       through every step end.  In LINE mode you are asked for one
@@ -41938,7 +41972,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.15") ; printed on load and at command start so a
+(setq *hs-version* "v3.16") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -42861,7 +42895,10 @@
                             (strcat "\nStep " (itoa n)
                                     " - step tread [Back"
                                     (if lastdep "/Same" "") "]"
-                                    " <Enter = done>: ")))
+                                    (if lastdep
+                                      (strcat " <Enter = done, Same = "
+                                              (rtos lastdep) ">: ")
+                                      " <Enter = done>: "))))
                 (if (= (type dep) 'STR)
                   (cond
                     ((or (= dep "Back") (= dep "Undo"))
@@ -42881,13 +42918,26 @@
         ;; first step) fall back to the keyboard, its key now spent
         (setq wid (hs-fnum (hs-fnkey "width" n)))
         (progn
-          (initget 6)
+          ;; In the curve modes Enter is spoken for - it fits the step to
+          ;; the curve - so repeating the last width needs Same (S, per
+          ;; STANDARDS section 2).  In base-line mode Enter IS the last
+          ;; width, so there is nothing for Same to add and it is not
+          ;; offered.
+          (if (and cmode lastwid) (initget 6 "Same") (initget 6))
           (setq wid (getdist (strcat "\nStep " (itoa n) " - step width "
                                      (cond
-                                       (cmode "<Enter = fit to the curve>: ")
+                                       (cmode
+                                        (strcat
+                                          (if lastwid "[Same] " "")
+                                          "<Enter = fit to the curve"
+                                          (if lastwid
+                                            (strcat ", Same = " (rtos lastwid))
+                                            "")
+                                          ">: "))
                                        (lastwid (strcat "<Enter = "
                                                         (rtos lastwid) ">: "))
-                                       (T ": ")))))))
+                                       (T ": ")))))
+          (if (= (type wid) 'STR) (setq wid lastwid))))
       (if (null wid)
         (cond
           (cmode   (setq wid 'FIT))
@@ -43356,9 +43406,10 @@
   (princ "\n     it anchors the boundary; no chord is drawn there.")
   (princ "\n  2. Then STEP TREAD, WIDTH, repeating.  Every step tread is")
   (princ "\n     from the previous step - never a running total.  Enter at")
-  (princ "\n     a step tread = done; Back steps back one step; Same repeats.")
-  (princ "\n     Enter at a width fits the step to the curve (curve modes)")
-  (princ "\n     or repeats the previous width (line mode).")
+  (princ "\n     a step tread = done; Back steps back one step; Same (S)")
+  (princ "\n     repeats.  Enter at a width fits the step to the curve (curve")
+  (princ "\n     modes) - Same (S) repeats the previous width there - or")
+  (princ "\n     repeats the previous width itself (line mode).")
   (princ "\n  3. One last distance to the back of the curve places the crown,")
   (princ "\n     and the boundary polyline is drawn through the step ends.")
   (princ "\n  4. Finally you may add a SIDE PROFILE, read FROM THE WALL:")
@@ -45361,7 +45412,7 @@
   (princ "\n  3. Dimension the steps? [Yes/No]")
   (princ "\n  4. Step treads, one per step, each from the previous")
   (princ "\n     tread.  Enter = done, Back = step back one (removes")
-  (princ "\n     it), Same = repeat the previous step tread.")
+  (princ "\n     it), Same (S) = repeat the previous step tread.")
   (princ "\n  5. Add a side profile? [Yes/No] - the STEP DEPTHS, top")
   (princ "\n     step first: one per step plus the drop after the last")
   (princ "\n     tread (3 steps take 4 depths).  Then pick the top of")
@@ -91333,7 +91384,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.7 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.8 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

@@ -94,8 +94,10 @@
 ;;;       required.  Back at a step tread prompt steps back one step:
 ;;;       it removes the step just drawn (its lines and its dimensions)
 ;;;       so a mistyped number does not cost the whole run (Undo, the
-;;;       old keyword, is still accepted).  Same repeats the previous
-;;;       step tread.  Side (riser) lines are drawn between successive step
+;;;       old keyword, is still accepted).  Same - typed S - repeats the
+;;;       previous step tread, and repeats the previous step WIDTH at the
+;;;       width prompt, where Enter is spoken for by "fit to the walls".
+;;;       Side (riser) lines are drawn between successive step
 ;;;       ends whenever the walls do not already close that edge.
 ;;;   9.  When at least one step was drawn you may add a SIDE PROFILE.
 ;;;       If Yes, you give the step depths (the vertical drops), top
@@ -245,7 +247,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.4") ; printed on load and at command start so a
+(setq *cs-version* "v4.5") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -753,7 +755,7 @@
                        bns bnfar bnff bnl
                        tlist tvals tds drops pd ix ppt pw
                        px py totr totd cnrs ca cb pfo pgap fsteps fkey
-                       qstep qdir bstep)
+                       qstep qdir bstep lastwid)
 
   (defun *error* (msg)
     (cs-fclear)                     ; both exits clear the form store
@@ -1353,9 +1355,22 @@
                          ;; nil = fit to the walls, what Enter means
                          (setq wid (cs-fnum (cs-fnkey "width" n)))
                          (progn
-                           (initget 6)
+                           ;; Enter is already spoken for here - it fits the
+                           ;; step to the walls - so repeating the last width
+                           ;; needs a word of its own, and Same is the one the
+                           ;; tread prompt above already uses (S, per
+                           ;; STANDARDS section 2)
+                           (if lastwid (initget 6 "Same") (initget 6))
                            (setq wid (getdist (strcat "\nStep " (itoa n)
-                             " - step width <Enter = fit to walls>: ")))))))))))))))
+                             " - step width"
+                             (if lastwid " [Same]" "")
+                             " <Enter = fit to walls"
+                             (if lastwid (strcat ", Same = " (rtos lastwid)) "")
+                             ">: ")))
+                           (if (= (type wid) 'STR) (setq wid lastwid))))
+                       ;; only a width the user GAVE is one Same can repeat;
+                       ;; a step fitted to the walls has no number to reuse
+                       (if (numberp wid) (setq lastwid wid))))))))))))
 
     ;; ========== INSIDE OUT: from the corner out toward the pool =========
     (while
@@ -1375,7 +1390,11 @@
              (initget 6 (if lastdep "Back Same Undo" "Back Undo"))
              (setq dep (getdist (strcat "\nStep " (itoa n) " - step tread ["
                                         (if lastdep "Back/Same" "Back")
-                                        "] <Enter = done>: ")))
+                                        "]"
+                                        (if lastdep
+                                          (strcat " <Enter = done, Same = "
+                                                  (rtos lastdep) ">: ")
+                                          " <Enter = done>: "))))
              (if (= (type dep) 'STR)
                (cond
                  ((or (= dep "Back") (= dep "Undo")) (cs-popstep) (setq dep 'RETRY))
@@ -1392,9 +1411,20 @@
         ;; the form's width, nil = fit to the walls (what Enter means)
         (setq wid (cs-fnum (cs-fnkey "width" n)))
         (progn
-          (initget 6)
+          ;; Enter fits the step to the walls, so Same is what repeats the
+          ;; last width given (S, per STANDARDS section 2)
+          (if lastwid (initget 6 "Same") (initget 6))
           (setq wid (getdist (strcat "\nStep " (itoa n)
-                                     " - step width <Enter = fit to walls>: ")))))
+                                     " - step width"
+                                     (if lastwid " [Same]" "")
+                                     " <Enter = fit to walls"
+                                     (if lastwid
+                                       (strcat ", Same = " (rtos lastwid))
+                                       "")
+                                     ">: ")))
+          (if (= (type wid) 'STR) (setq wid lastwid))))
+      ;; only a width the user GAVE is one Same can repeat
+      (if (numberp wid) (setq lastwid wid))
       (setq dist (+ dist dep)                       ; step tread held exactly
             p    (cs-add start (cs-scl bis dist))
             ;; past the bench tread the bench's front edge stands in
@@ -1825,7 +1855,10 @@
   (princ "\n     Then click the side to bead toward and AUTOBEAD does the")
   (princ "\n     rest on its own rules - it has to be loaded for this.")
   (princ "\n  At any step tread prompt: Enter = done, Back = step back one")
-  (princ "\n  step (removes it), Same = repeat the previous step tread.")
+  (princ "\n  step (removes it), Same (S) = repeat the previous step tread.")
+  (princ "\n  At a step WIDTH prompt Enter fits the step to the walls, so")
+  (princ "\n  Same (S) is what repeats the last width you typed - and the")
+  (princ "\n  prompt names the number it would repeat.")
   (cs-tut-pause)
   (princ "\nWHAT IT CHECKS AND HANDLES FOR YOU")
   (princ "\n  - warns when the UCS is tilted, a line is not flat, or the")
