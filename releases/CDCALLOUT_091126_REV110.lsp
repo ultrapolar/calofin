@@ -39,10 +39,41 @@
 ;;; prompt re-asks -- nothing is drawn from a typo.  The whole run is
 ;;; one undo group: a single U takes every dimension away.
 ;;;
+;;; A NUMBER THE DRAWING CARRIES TWICE.  A sheet can hold two surveys --
+;;; two pools in one yard, or two field sheets merged -- and each
+;;; numbers its points from 1, so "1" names two different places.  A tie
+;;; to the wrong one runs across the drawing and measures nothing
+;;; anybody taped, so it is not guessed at: every point carrying the
+;;; number is ringed on screen in cdo:*pick-color* on a throwaway layer
+;;; of its own, labelled P1, P2, ... in drawing order, and the run says
+;;; what tells them apart --
+;;;
+;;;     2 points are numbered "7" - each one is ringed and labelled
+;;;     on screen.
+;;;      tag   from Pt.1
+;;;      ----  ------------
+;;;      P1    8'-4"
+;;;      P2    20'-0"
+;;;
+;;;     Which Pt.7 is meant - click it, or type its label [Back]
+;;;     <Enter = none>:
+;;;
+;;; -- which at the TO prompt is how long the dimension each one would
+;;; draw is, the number the drafter has on the sheet in front of them,
+;;; and at the FROM prompt, where there is no other end yet, is where
+;;; each one sits.  Click the one you want or type its label; Back
+;;; re-asks the number, Enter takes none and draws nothing.  The rings
+;;; go as soon as it is answered.
+;;;
+;;; A number only ONE point carries is taken exactly as it always was:
+;;; nothing is ringed, nothing is asked, nothing is printed.
+;;;
 ;;; Going back a step follows the shared Back convention (see the root
 ;;; README): B/BACK/U/UNDO at the TO prompt re-asks FROM, and Back at
 ;;; the FROM prompt (offered once something is drawn) un-draws the
-;;; last dimension.
+;;; last dimension.  Back at the ringed points re-asks the number they
+;;; came from - the FROM number at the FROM prompt, the TO number at
+;;; the TO prompt - because that is the question in front of them.
 ;;;
 ;;; A missing "CROSS DIMENSIONS" style is NOT invented: the dims are
 ;;; drawn in whatever style is current and the routine says so, so a
@@ -59,7 +90,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcallout-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.10")  ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -106,6 +137,34 @@
                                     ; naming the point.  A block without
                                     ; it lends its first attribute that
                                     ; reads as a number instead
+
+;; -- how a number that names MORE THAN ONE point is asked about
+(setq cdo:*pick-layer* "CDCALLOUT-PICK") ; the rings round the points a
+                                    ; doubled number names get a layer
+                                    ; of their OWN, never the points
+                                    ; layer: they are throwaway, they
+                                    ; would inherit the points layer's
+                                    ; colour, and while they existed
+                                    ; every other tool in the toolset
+                                    ; would count them as real survey
+                                    ; points.  Created when missing, and
+                                    ; erased as soon as the question is
+                                    ; answered
+(setq cdo:*pick-color* 4)           ; colour of that layer, and an
+                                    ; entity override to match: cyan, so
+                                    ; a ring reads as a question and not
+                                    ; as drawn work
+(setq cdo:*pick-radius* 9.0)        ; radius of one of those rings, in
+                                    ; drawing units - wide enough to
+                                    ; stand clear of the point block's
+                                    ; own number
+(setq cdo:*pick-hgt* 5.0)           ; height of the label beside it -
+                                    ; above the 4" point numbers
+(setq cdo:*pick-prefix* "P")        ; what those labels are called, on
+                                    ; screen and at the prompt: P1, P2,
+                                    ; ... in drawing order
+(setq cdo:*prec* 4)                 ; rtos precision for the distances
+                                    ; printed in the table: 4 = 1/16"
 
 ;;; -------------------- point lookup ------------------------------------
 
@@ -180,14 +239,31 @@
 (defun cdo:backp (s)
   (member (strcase s) '("B" "BACK" "U" "UNDO")))
 
-;; The survey point the typed number names, or nil.  The first match
-;; wins when a drawing carries the same number twice.
-(defun cdo:find-point (s cands / want found c)
-  (setq want (cdo:canon s) found nil)
+;; EVERY survey point a typed number names, in drawing order.  A
+;; drawing CAN carry the same number twice - two surveys merged onto one
+;; sheet, each numbering its points from 1 - and then which of them the
+;; tie runs to is a real question with a wrong answer, so the caller
+;; asks it rather than taking the first.
+(defun cdo:matches (s cands / want out c)
+  (setq want (cdo:canon s) out nil)
   (foreach c cands
-    (if (and (null found) (= (cdo:canon (cdr c)) want))
-      (setq found c)))
-  found)
+    (if (= (cdo:canon (cdr c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;; Leading and trailing blanks off a typed answer.
+(defun cdo:trim (s / i n)
+  (setq i 1 n (strlen s))
+  (while (and (<= i n) (= " " (substr s i 1))) (setq i (1+ i)))
+  (while (and (>= n i) (= " " (substr s n 1))) (setq n (1- n)))
+  (if (> i n) "" (substr s i (1+ (- n i)))))
+
+;; A distance as the drawing reads it: feet and inches to cdo:*prec*.
+(defun cdo:fmt (d) (rtos d 4 cdo:*prec*))
+
+;; S padded out to W characters, so the table below lines up.
+(defun cdo:pad (s w)
+  (while (< (strlen s) w) (setq s (strcat s " ")))
+  s)
 
 ;;; -------------------- dimension helpers (CDCREATE's, kept) ------------
 
@@ -271,6 +347,147 @@
       (entupd en)
       t)))
 
+;;; -------------------- which of several points -------------------------
+;;; A number that names ONE point is simply taken, and none of this is
+;;; ever seen.  A number that names several is a sheet carrying two
+;;; surveys, each numbered from 1, and picking the wrong one draws a
+;;; dimension across the drawing that measures nothing anybody taped.
+;;; So every one of them is ringed on screen, labelled P1, P2, ... in
+;;; drawing order, and the label is what you type - or you click the one
+;;; you want, which is the same answer.
+
+;; A ring round one of the points a doubled number names, and the label
+;; that says which it is, up and to the right of the ring so it clears
+;; both the ring and the point's own number underneath it.  Scaffolding:
+;; its own layer, erased the moment the question is answered.
+(defun cdo:mark-pick (p tag / out)
+  (setq out nil)
+  (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                 (cons 8 cdo:*pick-layer*)
+                 (cons 62 cdo:*pick-color*) '(100 . "AcDbCircle")
+                 (list 10 (car p) (cadr p) 0.0)
+                 (cons 40 cdo:*pick-radius*)))
+  (setq out (cons (entlast) out))
+  (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                 (cons 8 cdo:*pick-layer*)
+                 (cons 62 cdo:*pick-color*) '(100 . "AcDbText")
+                 (list 10 (+ (car  p) cdo:*pick-radius*)
+                          (+ (cadr p) cdo:*pick-radius*) 0.0)
+                 (cons 40 cdo:*pick-hgt*) (cons 1 tag)))
+  (cons (entlast) out))
+
+;; Erase a list of entities, skipping any that has gone already.
+(defun cdo:drop (lst / e)
+  (foreach e lst (if (and e (entget e)) (entdel e))))
+
+;; Everything on the pick layer, gone.  The rings are erased as soon as
+;; the question is answered; this is the path Esc takes, where the erase
+;; never runs - and sweeping the LAYER rather than a list is what makes
+;; it safe to call from the error handler, which has no list.
+(defun cdo:sweep ( / ss i)
+  (if (setq ss (ssget "_X" (list (cons 8 cdo:*pick-layer*))))
+    (progn
+      (setq i (sslength ss))
+      (while (> i 0) (entdel (ssname ss (setq i (1- i))))))))
+
+;; The label the Nth candidate carries.
+(defun cdo:pick-tag (n)
+  (strcat cdo:*pick-prefix* (itoa n)))
+
+;; Ring every point HITS names and print what tells them apart: where
+;; each one sits, and - at the TO prompt, where the other end is already
+;; settled - how long the dimension choosing it would draw, which is the
+;; number the drafter is checking against the sheet.  Returns what was
+;; drawn, for the caller to erase.
+(defun cdo:show-picks (nm hits from / out n c)
+  (cdo:ensure-layer cdo:*pick-layer* cdo:*pick-color*)
+  (setq out nil n 0)
+  (foreach c hits
+    (setq n   (1+ n)
+          out (append out (cdo:mark-pick (car c) (cdo:pick-tag n)))))
+  (princ (strcat "\n  " (itoa (length hits)) " points are numbered \""
+                 nm "\" - each one is ringed and labelled on screen."))
+  (princ (strcat "\n   " (cdo:pad "tag" 6)
+                 (if from
+                   (strcat "from Pt." (cdr from))
+                   "at")))
+  (princ (strcat "\n   " (cdo:pad "----" 6)
+                 (if from "------------" "--------------------------")))
+  (setq n 0)
+  (foreach c hits
+    (setq n (1+ n))
+    (princ (strcat "\n   " (cdo:pad (cdo:pick-tag n) 6)
+                   (if from
+                     (cdo:fmt (distance (car from) (car c)))
+                     (strcat (cdo:fmt (car  (car c))) ", "
+                             (cdo:fmt (cadr (car c))))))))
+  out)
+
+;; Which of them was meant.  ONE prompt, two ways to answer it: click
+;; the one you want, or type its label.  (initget 128) hands typed text
+;; back from getpoint as the string it is while a click comes back as
+;; the point it is, which is how the AB tools take both at one prompt
+;; too.  A click takes the NEAREST - there is nothing else on that layer
+;; to hit - and what was taken is read back before anything is drawn.
+;; Returns the point, 'CDO-BACK, or nil for Enter.
+(defun cdo:ask-pick (nm hits / ans best bd n d c)
+  (initget 128)
+  (setq ans (getpoint (strcat "\n  Which Pt." nm
+                              " is meant - click it, or type its"
+                              " label [Back] <Enter = none>: ")))
+  (cond
+    ((null ans) nil)
+    ((and (not (listp ans)) (cdo:backp ans)) 'CDO-BACK)
+    ((listp ans)
+     (setq best nil bd nil n 0)
+     (foreach c hits
+       (setq n (1+ n)
+             d (distance (list (car ans) (cadr ans) 0.0) (car c)))
+       (if (or (null bd) (< d bd)) (setq best (list n c) bd d)))
+     best)
+    (t
+     (setq best nil n 0)
+     (foreach c hits
+       (setq n (1+ n))
+       (if (and (null best)
+                (= (strcase (cdo:trim ans)) (cdo:pick-tag n)))
+         (setq best (list n c))))
+     (if best
+       best
+       (progn (princ (strcat "\n  \"" ans "\" is not one of the labels"
+                             " - type one of them, or click the point"
+                             " you want."))
+              'CDO-AGAIN)))))
+
+;; The one of HITS the typed number names: itself when only one point
+;; carries it, otherwise the one the drafter picked out of the ringed
+;; set.  TEMPS is where the rings are registered so the error handler
+;; can take them away; the caller passes the list it keeps.  Returns
+;; the point, 'CDO-BACK, or nil.
+(defun cdo:settle (s cands from / hits nm drawn out)
+  (setq hits (cdo:matches s cands)
+        ;; the number as the DRAWING spells it, not as it was typed:
+        ;; "pt 01" asks about Pt.1, which is what the rings are beside
+        nm   (if hits (cdr (car hits)) (cdo:trim s)))
+  (cond
+    ((null hits) nil)
+    ((= (length hits) 1) (car hits))
+    (t
+     (setq drawn (cdo:show-picks nm hits from) out 'CDO-AGAIN)
+     (while (eq out 'CDO-AGAIN) (setq out (cdo:ask-pick nm hits)))
+     (cdo:drop drawn)
+     (cond
+       ((eq out 'CDO-BACK) 'CDO-BACK)
+       ((null out)
+        (princ "\n  None taken - nothing drawn.")
+        nil)
+       (t
+        (princ (strcat "\n  " (cdo:pick-tag (car out)) " taken: Pt."
+                       (cdr (cadr out)) " at "
+                       (cdo:fmt (car  (car (cadr out)))) ", "
+                       (cdo:fmt (cadr (car (cadr out)))) "."))
+        (cadr out))))))
+
 ;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
@@ -284,6 +501,10 @@
   ;;    the undo group, or the next U would swallow the user's own work
   (setq olderr *error*)
   (defun *error* (m)
+    ;; the rings round a doubled number are scaffolding, and Esc at the
+    ;; prompt that asks about them is the one way out that never reaches
+    ;; the erase
+    (vl-catch-all-apply 'cdo:sweep nil)
     (if (and odim (not (equal odim (getvar "DIMSTYLE"))))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
     (if ocl (setvar "CLAYER"  ocl))
@@ -358,9 +579,19 @@
                         made    (1- made))
                   (princ "\nStepping back one dimension."))
                 (princ "\nAlready at the first dimension.")))
-             ((null (setq a (cdo:find-point s1 cands)))
-              (princ (strcat "\n  No point numbered \"" s1
-                             "\" in the drawing -- nothing drawn.")))
+             ;; a number the drawing carries TWICE is two surveys on one
+             ;; sheet, and the tie can only run to one of them: every
+             ;; point that carries it is ringed and the question asked.
+             ;; A number only one point carries is simply taken, exactly
+             ;; as it always was
+             ((null (setq a (cdo:settle s1 cands nil)))
+              (if (null (cdo:matches s1 cands))
+                (princ (strcat "\n  No point numbered \"" s1
+                               "\" in the drawing -- nothing drawn."))))
+             ;; Back at the ringed points re-asks the number itself:
+             ;; that is the question in front of it
+             ((eq a 'CDO-BACK)
+              (princ "\n  Back to the point number."))
              (t (setq stage 2))))
           ;; -- TO: a good answer draws the dimension right away and
           ;;    the loop goes back to FROM for the next pair
@@ -372,9 +603,18 @@
               (princ "\n  No second point -- this one skipped.")
               (setq stage 1))
              ((cdo:backp s2) (setq stage 1))
-             ((null (setq b (cdo:find-point s2 cands)))
-              (princ (strcat "\n  No point numbered \"" s2
-                             "\" in the drawing -- nothing drawn.")))
+             ;; the same question, with the other end of the tie already
+             ;; settled - so the table can say how long the dimension
+             ;; each candidate would draw is, which is the number the
+             ;; drafter has on the sheet
+             ((null (setq b (cdo:settle s2 cands a)))
+              (if (null (cdo:matches s2 cands))
+                (princ (strcat "\n  No point numbered \"" s2
+                               "\" in the drawing -- nothing drawn."))))
+             ;; Back at the ringed points re-asks the TO number, which
+             ;; is the question in front of them - NOT the FROM number,
+             ;; which is two questions back and still settled
+             ((eq b 'CDO-BACK) (princ "\n  Back to the point number."))
              ((< (distance (car a) (car b)) cdo:*exact-eps*)
               (princ (strcat "\n  Pt." (cdr a) " and Pt." (cdr b)
                              " sit on the same spot -- nothing to"

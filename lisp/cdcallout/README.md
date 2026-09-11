@@ -53,8 +53,47 @@ genuinely named `40.5` keeps its decimal and is typed `40.5` (or
 A number that names no point in the drawing is reported and the
 prompt re-asks — **nothing is drawn from a typo**. Enter at the TO
 prompt cancels just that round; naming the same point twice is
-caught too. When a drawing carries a duplicate number, the first
-match wins.
+caught too.
+
+## A number the drawing carries twice
+
+A sheet can hold **two surveys** — two pools in one yard, or two field
+sheets merged — and each numbers its points from 1, so `1` names two
+different places. A tie to the wrong one runs across the drawing and
+measures nothing anybody taped, so it is not guessed at.
+
+Every point carrying the number is **ringed** on screen
+(`cdo:*pick-radius*`, 9", in `cdo:*pick-color*`, cyan) on a throwaway
+layer of its own, `CDCALLOUT-PICK`, labelled `P1`, `P2`, … in drawing
+order:
+
+```
+  2 points are numbered "7" - each one is ringed and labelled on screen.
+   tag   from Pt.1
+   ----  ------------
+   P1    8'-4"
+   P2    20'-0"
+
+  Which Pt.7 is meant - click it, or type its label [Back] <Enter = none>:
+```
+
+The column beside each label is what tells them apart. At the **TO**
+prompt it is how long the dimension choosing that one would draw — the
+number the drafter has on the sheet in front of them; at the **FROM**
+prompt, where there is no other end yet, it is where each one sits.
+
+Click the one you want, or type its label. `Back` re-asks the number
+itself; `Enter` takes none and draws nothing. The rings go as soon as
+the question is answered — and on Esc, which is the one way out that
+never reaches the erase, the layer is swept by the error handler.
+
+A number only **one** point carries is taken exactly as it always was:
+nothing is ringed, nothing is asked, nothing is printed.
+
+The sister tools `ABFIND`, `ABMOVE` and `ABPCREATE` answer the same
+question by **AB line** — they measure from the stakes, so which pair
+of stakes is the thing to settle. `CDCALLOUT` ties whichever two points
+you name and measures from neither, so here it is simply *which point*.
 
 ## Going back a step
 
@@ -96,11 +135,17 @@ DIMENSION layer.
 ## Revisions
 
 `CDCALLOUT.lsp` carries the auto-stamped banner
-`(setq *cdcallout-version* "v1.9")` that `tools/release_lisp.py`
+`(setq *cdcallout-version* "v1.10")` that `tools/release_lisp.py`
 reads; run it after any change and the dated twin
-`releases/CDCALLOUT_MMDDYY_REV19.lsp` regenerates itself. Bump the
+`releases/CDCALLOUT_MMDDYY_REV110.lsp` regenerates itself. Bump the
 banner with every revision.
 
+* **v1.10** — a number the drawing carries **twice** is asked about
+  instead of silently taking the first match: every point that carries
+  it is ringed and labelled `P1`, `P2`, … and the table says how long
+  the dimension each one would draw is (at TO) or where it sits (at
+  FROM). Click one or type its label; Back re-asks the number, Enter
+  takes none. A number only one point carries is untouched by any of it.
 * **v1.9** — every knob sits in one configuration block at the top of
   the file, each with its explanation; the layer colour and the
   same-spot tolerance joined the ones already there, and the three
@@ -131,9 +176,15 @@ there, or `setq` it after loading from a startup file:
 | `cdo:*point-block*` | `"ab_pt"` | Block name whose INSERTs are points wherever they sit |
 | `cdo:*point-layer*` | `"POINTS"` | Layer whose INSERTs are always points |
 | `cdo:*pt-tag*` | `"number"` | Attribute naming the point; a block without it lends its first numeric attribute |
+| `cdo:*pick-layer*` | `"CDCALLOUT-PICK"` | Throwaway layer the rings round a doubled number go on — never `POINTS`, where every other tool would count them as survey points |
+| `cdo:*pick-color*` | `4` | Colour of that layer and of the rings on it: cyan, so a ring reads as a question |
+| `cdo:*pick-radius*` | `9.0` | Radius of one of those rings, drawing units |
+| `cdo:*pick-hgt*` | `5.0` | Height of the `P1` / `P2` label beside it |
+| `cdo:*pick-prefix*` | `"P"` | What those labels are called |
+| `cdo:*prec*` | `4` | `rtos` precision for the distances printed in that table; 4 = 1/16" |
 
-The last three are the survey-point classifier `BPCALLOUT` and `LHD`
-share — change them in all three or the tools disagree. (Before v1.9
+`cdo:*point-block*`, `cdo:*point-layer*` and `cdo:*pt-tag*` are the
+survey-point classifier `BPCALLOUT` and `LHD` share — change them in all three or the tools disagree. (Before v1.9
 they were spelled `*CDO-POINT-BLOCK*`, `*CDO-POINT-LAYER*` and
 `*CDO-PT-TAG*`; a startup file that sets them needs the new names.)
 
@@ -145,8 +196,10 @@ Requires the Visual LISP engine (full AutoCAD; LT cannot run this).
 AutoLISP VM and drives `CDCALLOUT` end to end — the style/layer/
 ByLayer fixup, the automatic inbetween placement (and the offset
 tunable), state restoration, the rinse-repeat loop, every number
-spelling, decimal point names, unknown numbers, duplicate numbers,
-cancelled rounds, Back, the missing-style rule, a frozen / locked / off
+spelling, decimal point names, unknown numbers, a doubled number
+(ringed, labelled, picked by label and by click, at both prompts, with
+Back, Enter and a stray label), cancelled rounds, Back, the
+missing-style rule, a frozen / locked / off
 `DIMENSION` layer and its colour knob, the point classifier, the
 same-spot tolerance, UNDO switched off, and Esc mid-run through the
 handler:

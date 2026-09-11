@@ -468,6 +468,103 @@ snapping to the nearest survey point within `abf:*snap*`; a click with
 nothing under it is taken as the stake position itself. Enter at that
 prompt cancels the run.
 
+## More than one AB line
+
+A drawing can carry **two surveys** — two pools in one yard, or two
+field sheets merged. Then it carries two points named `A`, two named
+`B`, and two of every `Pt.##` after them, and which pair of stakes a
+point was taped off is a real question with a wrong answer: `Pt.1` off
+the *other* survey's stakes is not a reading anybody took.
+
+An **AB line** is one such pair. They are worked out once, at the top
+of the run: every `A` is paired with a `B` **shortest tie first**, each
+stake claimed once — a pair of stakes is set out together and stands a
+couple of tape lengths apart, so the shortest tie still going is the
+pair that was set out — and they are labelled `L1`, `L2` in the order
+their `A` stakes appear in the drawing. A point belongs to the line it
+sits **nearest**. A stake that pairs with nothing (three `A`s, two
+`B`s) is reported.
+
+**A drawing with one pair of stakes makes one line, and none of this is
+ever asked or printed.** It is a sheet with two that asks, and it asks
+**once**.
+
+### ABFIND and ABMOVE read it off the first point
+
+Name a number only one point carries and it is simply taken — the line
+it sits on is reported and that is that:
+
+```
+  On AB line L2 (A to B 20'-0") - the rest of the run stays on it.
+```
+
+Name one that several carry and every one of them is **ringed** on
+screen (`abf:*dupe-radius*`, 9", in `abf:*dupe-color*`, cyan, on the
+throwaway `ABMOVE-POINTS` layer) and labelled with its line. Beside
+each, what it was taped at **off its own stakes** — which is what the
+field sheet has, and so what tells them apart:
+
+```
+  2 points are numbered "1" - one per AB line, ringed and labelled on screen.
+   tag   A             B
+   ----  ------------  ------------
+   L1    21'-1"        18'-6"
+   L2    16'-4"        22'-0"
+
+  Which AB line is Pt.1 on - click the one you mean, or type its label [Back] <Enter = none>:
+```
+
+Click the one you mean or type its label. `Back` re-asks the point
+number — the question in front of it — and a number you declined there
+is **not** then treated as one that names nothing: it plainly names two
+points, so the offer to create one is not raised. `Enter` takes none
+and draws nothing.
+
+### ABPCREATE asks off the lines themselves
+
+`ABPCREATE` has no point to read the line off — the point does not
+exist yet, which is the whole reason for the command — so the **lines**
+are what it picks between, each ringed at its two stakes with the tie
+between them dashed and labelled:
+
+```
+  2 AB lines, each ringed at its stakes and labelled on the tie between them.
+   tag   A to B
+   ----  ------------
+   L1    20'-0"
+   L2    18'-6"
+
+  Which AB line is the new point taped off - click it, or type its label [Back] <Enter = none>:
+```
+
+So does `ABFIND` or `ABMOVE` when the number it was given names no
+point and the answer to *"create it?"* was **Yes**. `Back` there
+re-asks the point number.
+
+### And then it stays there
+
+The answer is the **run's**. Every point after it is taken to be on the
+same line, so a second doubled number is answered from it and only
+reported —
+
+```
+  2 points are numbered "2" - the one on L2 taken.
+```
+
+— and the ties are measured from that line's stakes. Only a number
+whose points include **none** on that line asks again, because then the
+assumption has nothing to stand on.
+
+A **click** is never asked about either way: it names the point it
+landed on, whatever that point is numbered.
+
+Two points numbered the same **on one line** is a fault in the drawing
+rather than a second survey, and it is still answerable: the second
+takes a letter after the label (`L1`, `L1b`).
+
+The rings and labels are scaffolding — they go the moment the question
+is answered, like every other marker this tool draws.
+
 ## Naming the point
 
 ```
@@ -487,7 +584,9 @@ name the same point:
 Only the dot right after `Pt` is treated as a prefix — a point
 genuinely named `40.5` keeps its decimal. A number that names no point
 is reported and the prompt re-asks: **nothing is drawn from a typo**.
-When a drawing carries a duplicate number, the first match wins.
+When a drawing carries the number **more than once** — two surveys on
+one sheet — every point that carries it is ringed and you are asked
+which; see [More than one AB line](#more-than-one-ab-line).
 
 **Or click it.** A click is snapped to the survey point within
 `abf:*snap*` (12") of it, and from there it is that point's number that
@@ -511,6 +610,11 @@ The shared Back convention (see the root README) applies:
   `Already at the first point.` when there is nothing left);
 * `Back` at **`Move Pt.17 to a different reading?`** un-draws that
   point's ties and re-asks the number;
+* `Back` at **which AB line is Pt.## on** — the ringed points a
+  doubled number names — re-asks the point number;
+* `Back` at **which AB line is the new point taped off** re-asks the
+  point number that offered to create one; in `ABPCREATE`, where it is
+  the first question of all, there is nothing behind it;
 * `Back` at **which suggestion** re-asks the move question — in
   `ABMOVE`, which never asked it, it re-asks the point number instead;
 * `Back` at **`Which one?`** — the tie a click could not settle — is
@@ -603,6 +707,13 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*locus-ltype*  "DASHED")      ; and its linetype
 (setq abf:*ghost-color*  1)             ; ABPCREATE's two whole reading
                                         ; circles: red, dashed
+(setq abf:*dupe-color*   4)             ; the ring round a point a
+                                        ; doubled number names, and
+                                        ; round an AB line's stakes:
+                                        ; cyan
+(setq abf:*dupe-radius*  9.0)           ; and its radius
+(setq abf:*line-prefix*  "L")           ; what an AB line is called:
+                                        ; L1, L2, ...
 (setq abf:*new-atts*     nil)           ; T = a created point copies its
                                         ; pattern's OTHER attribute
                                         ; values too; nil leaves them
@@ -685,6 +796,19 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.13** — **more than one AB line on the sheet**. Two surveys
+  merged onto one drawing carry two points named `A`, two named `B`,
+  and two of every `Pt.##` after them; the stakes are paired into
+  **AB lines** (`L1`, `L2`, shortest tie first, labelled in drawing
+  order) and the run is on one of them. `ABFIND` and `ABMOVE` read the
+  line off the first point they are given — a doubled number rings
+  every point that carries it and prints what each was taped at off
+  **its own** stakes — and `ABPCREATE`, which has no point to read it
+  off, picks between the lines themselves. The answer then stands for
+  the whole run: a later doubled number is answered from it and only
+  reported. A sheet with one pair of stakes never sees any of it. The
+  field side is read off the chosen line's own points, so one survey
+  no longer votes on another's.
 * **v1.12** — `ABPCREATE`: the point is not in the drawing, so the two
   readings are typed instead of a number. Both are drawn whole, and a
   pair that cannot cross is walked with `ABMOVE`'s own sweep, every
