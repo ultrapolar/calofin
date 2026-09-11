@@ -55,6 +55,18 @@
 ;;; dropped with it and said so, rather than being quietly snapped onto
 ;;; some other point.
 ;;;
+;;; MOVED POINTS ARE NOT SURVEY POINTS, and this is not the cutoff: a
+;;; number carrying the letter *CAB-MOVED-MARK* ("m") is out of the
+;;; fit before the cutoff is even asked.  ABFIND writes "17m" when it
+;;; copies Pt.17 to a position it worked out from two tape readings -
+;;; that is where the point SHOULD be, not where anybody stood, so a
+;;; perimeter held to it reports holding a point nobody measured.  The
+;;; cutoff and the omit list both KEEP a point and decide about it; a
+;;; moved point is not in the survey to be decided about.  Its digits
+;;; would have sorted it right beside the original it came from - the
+;;; original is still in and still fitted; only the deduced twin is
+;;; out.  ABHD's rule, held here word for word; the count is reported.
+;;;
 ;;; TWO MODES, chosen automatically from the selection:
 ;;;   * GUIDED  - the selection contains POOL geometry: the drawn
 ;;;               shape is used as the guide and re-fitted through the
@@ -94,9 +106,9 @@
 ;;;
 ;;; THE MISS ALLOWANCE: the perimeter does not have to thread every
 ;;; point exactly.  A share of the points - asked per run, standard
-;;; *CAB-MISS-PCT* (15%), rounded UP to the nearest whole point - may
-;;; sit off the result by up to the max distance (default 1 unit =
-;;; about an inch, capped at *CAB-TOL-MAX*); every other point stays on
+;;; *CAB-MISS-PCT* (20%), rounded UP to the nearest whole point - may
+;;; sit off the result by up to the max distance (default 1 unit = one
+;;; inch, capped at *CAB-TOL-MAX*); every other point stays on
 ;;; it (within *CAB-ON-EPS*).  That slack is spent where it buys the
 ;;; most: longer arcs, fewer curves, nicer radii.  It is a share of the
 ;;; points the CUTOFF KEPT - the ones it dropped buy no slack, since
@@ -199,7 +211,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.1")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.2")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -221,6 +233,16 @@
 (setq *CAB-PT-TAG*       "number")   ; attribute tag on the point block
                                     ; holding the surveyed point number,
                                     ; used to label it as "Pt.17"
+(setq *CAB-MOVED-MARK*   "M")        ; a point number carrying this letter
+                                    ; is a MOVED point - ABFIND writes
+                                    ; "17m" when it copies Pt.17 to a
+                                    ; position deduced from two tape
+                                    ; readings (abf:*moved-suffix*).
+                                    ; Nobody stood there, so it is out
+                                    ; of the fit entirely; ABHD's
+                                    ; *PF-MOVED-MARK* rule, held here
+                                    ; too.  Matched case-insensitively
+                                    ; anywhere in the number
 (setq *CAB-WALL-LAYER*   "POOL-WALLS"); layer the dashed markers for
                                     ; user-declared straight walls go on
 (setq *CAB-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
@@ -267,12 +289,19 @@
                                     ; allowance below.  Calibrated from a
                                     ; hand-drawn reference trace: ~87% of
                                     ; its points sat within a quarter inch
-(setq *CAB-MISS-PCT*     0.15)       ; share of the points (rounded UP to
+(setq *CAB-MISS-PCT*     0.20)       ; share of the points (rounded UP to
                                     ; a whole point) that may sit off the
                                     ; result by up to the tolerance
-                                    ; (about an inch by default) - this
-                                    ; slack is what buys longer spans and
-                                    ; fewer curves
+                                    ; (an inch by default) - this slack
+                                    ; is what buys longer spans and
+                                    ; fewer curves.  ABHD's
+                                    ; *PF-MISS-PCT*, held equal: the two
+                                    ; commands promise the same fit
+(setq *CAB-ARC-DIV*      3.0)        ; the RECOMMENDED curve cap: one
+                                    ; curve per this many survey points
+                                    ; the cutoff kept, rounded to the
+                                    ; NEAREST whole curve and never below
+                                    ; 1.  ABHD's *PF-ARC-DIV*, held equal
 (setq *CAB-CORNER-ANG*   (/ pi 4.0)) ; a point that turns more than this
                                     ; (45 deg) is a sharp corner: it may
                                     ; start or end a span but never gets
@@ -411,10 +440,14 @@
                                     ; practical purpose: it is not
                                     ; snapped to a nice radius
 (if (null *CAB-TOL*) (setq *CAB-TOL* 1.0)) ; default tolerance, 1 inch
-;; *CAB-MAX-ARCS* : cap on the number of curved segments in the output;
-;; nil = no cap.  The command prompts for it (Enter keeps the current
-;; value, "None" removes the cap) and remembers it for the session,
-;; like *CAB-TOL*.
+;; *CAB-MAX-ARCS* : cap on the number of curved segments in the output,
+;; in one of three states - 'AUTO (the recommendation: one curve per
+;; *CAB-ARC-DIV* points the cutoff kept, worked out at step 7 since
+;; step 3 has no points yet), a number, or nil for no cap at all.  The
+;; command prompts for it (Enter keeps the current value, "Auto" and
+;; "None" pick the other two) and remembers it for the session, like
+;; *CAB-TOL*.  ABHD's *PF-MAX-ARCS*, rule for rule.
+(if (null *CAB-MAX-ARCS*) (setq *CAB-MAX-ARCS* 'AUTO))
 
 ;; ---- circle / arc geometry -----------------------------------------
 
@@ -685,6 +718,18 @@
 ;; cab-miss-pct from the user's answer; Enter keeps the standard value.
 (defun cab:misspct ()
   (if cab-miss-pct cab-miss-pct *CAB-MISS-PCT*))
+
+;; The RECOMMENDED curve cap for N points: one curve per *CAB-ARC-DIV*
+;; of them, rounded to the nearest whole curve, never below 1.
+(defun cab:rec-arcs (n / c)
+  (setq c (fix (+ 0.5 (/ (float n) *CAB-ARC-DIV*))))
+  (if (< c 1) 1 c))
+
+;; The curve cap actually in force over N points, resolving the three
+;; states of *CAB-MAX-ARCS*.  Every reader of the cap goes through
+;; here, so the recommendation becomes a number in exactly one place.
+(defun cab:cap-for (n)
+  (if (eq 'AUTO *CAB-MAX-ARCS*) (cab:rec-arcs n) *CAB-MAX-ARCS*))
 
 ;; The "on the shape" threshold in force for the current run.  It
 ;; scales with the tolerance (a quarter of it, never below
@@ -966,20 +1011,42 @@
     (setq sub (entnext sub)))
   val)
 
+;; Is NM the number of a MOVED point - one ABFIND deduced from two tape
+;; readings and numbered "17m" rather than one somebody shot?  ABHD's
+;; pf:moved-p, held here word for word.
+(defun cab:moved-p (nm)
+  (and nm
+       (eq 'STR (type nm))
+       (wcmatch (strcase nm) (strcat "*" (strcase *CAB-MOVED-MARK*) "*"))))
+
 ;; Remember a point, what to call it, and the number the run sorts it
 ;; by, so a miss can be reported as "Pt.17" using the number in the
 ;; drawing rather than a private index, and the cutoff below knows how
 ;; far up the survey the point sits.  Points with no number of their
 ;; own get the next count.
+;;
+;; A moved point is never remembered - not in pts, not in cab-allpts,
+;; so not in cab:live-pts either, which is what the cutoff and the
+;; omit list rebuild the fit from.  It is a deduction rather than a
+;; shot (see *CAB-MOVED-MARK*), and a perimeter held to a deduction
+;; reports holding a point nobody measured.  Note this is NOT the
+;; cutoff and NOT the omit list: both of those keep the point and
+;; decide about it, and a moved point is not in the survey to decide
+;; about.  Its digits would have sorted it right beside the original
+;; it came from (cab:num-in reads "17m" as 17), which is exactly the
+;; place it must not be.
 (defun cab:add-point (p nm / num)
-  (setq num         (cab:num-in nm)
-        npt         (1+ npt)
-        pts         (cons p pts)
-        cab-allpts  (cons p cab-allpts)
-        cab-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
-                          cab-ptnames)
-        cab-ptkeys  (cons (cons p (if num num npt)) cab-ptkeys))
-  (if num (setq cab-numbered (1+ cab-numbered))))
+  (if (cab:moved-p nm)
+    (setq cab-nmoved (1+ (if cab-nmoved cab-nmoved 0)))
+    (progn
+      (setq num         (cab:num-in nm)
+            npt         (1+ npt)
+            pts         (cons p pts)
+            cab-allpts  (cons p cab-allpts)
+            cab-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
+                              cab-ptnames)
+            cab-ptkeys  (cons (cons p (if num num npt)) cab-ptkeys))
+      (if num (setq cab-numbered (1+ cab-numbered))))))
 
 ;; The whole number a surveyed label carries: the FIRST run of digits
 ;; in it, so "17", "P17" and "17A" all read as seventeen.  nil when the
@@ -2033,13 +2100,16 @@
 ;; Print the hit report for the fit the user kept.  ALLOW is the run's
 ;; miss allowance (how many points were permitted to sit between the
 ;; on-the-shape threshold and the tolerance off the result).
-(defun cab:report (newsegs pts tol allow prior / nl na hiton hitok miss
+(defun cab:report (newsegs pts tol allow prior / ndist nl na hiton hitok
+                                                miss
                                                 q s s2 d dmin worst sum
                                                 sumo no nice onpt inner
                                                 ns i te ts kk mk nk
                                                 hw hq cab-on-eps)
-  ;; report against the same on-the-shape threshold the fit used
-  (setq cab-on-eps (max *CAB-ON-EPS* (* *CAB-ON-FRAC* tol)))
+  ;; report against the same on-the-shape threshold the fit used, and
+  ;; name the cap off the same count the fit was capped by
+  (setq cab-on-eps (max *CAB-ON-EPS* (* *CAB-ON-FRAC* tol))
+        ndist      (length (cal:dedupe pts *CAB-EXACT-EPS*)))
   (progn
       ;; -- segment mix, nice radii, arcs anchored on a point --------
       (setq nl 0 na 0 nice 0 onpt 0)
@@ -2139,8 +2209,9 @@
                            " is off by " (rtos hw 2 4)
                            " - the drawn shape or a declared wall"
                            " overruled it.")))))
-      (if (and *CAB-MAX-ARCS* (> na *CAB-MAX-ARCS*))
-        (princ (strcat "\n  (the curve cap is " (itoa *CAB-MAX-ARCS*)
+      (if (and (cab:cap-for ndist) (> na (cab:cap-for ndist)))
+        (princ (strcat "\n  (the curve cap is "
+                       (itoa (cab:cap-for ndist))
                        " but " (itoa na) " curves was the fewest"
                        " reachable: a closed loop needs at least 2"
                        " segments)")))
@@ -2263,7 +2334,8 @@
         left (cond ((= mode "tight") 0)
                    ((= mode "few")   1000000)
                    (T                allow))
-        cap  (if (= mode "asked") *CAB-MAX-ARCS*)
+        ;; the cap's own count is the DISTINCT points the cutoff kept
+        cap  (if (= mode "asked") (cab:cap-for (length dpts)))
         drop (if (= mode "tight")
                0
                (cal:ceil (* *CAB-DROP-PCT*
@@ -2423,7 +2495,8 @@
                      "\n  the tight fit spends curves to drive the error"
                      " towards nothing (it"
                      "\n  ignores that distance"
-                     (if *CAB-MAX-ARCS* " and the curve cap" "")
+                     (if (cab:cap-for (length dpts))
+                       " and the curve cap" "")
                      " and gives up no point at all), the middle one is"
                      "\n  your settings exactly, and the few fit holds"
                      " the same distance with as few"
@@ -2601,19 +2674,28 @@
      1.0)
     (T (/ pct 100.0))))
 
-;; Curve cap; remembered in *CAB-MAX-ARCS* (nil = no cap).
+;; What the cap prompt shows in its <angle brackets> - the standing
+;; answer in words, since one of the three states is a rule rather
+;; than a number.
+(defun cab:cap-word ()
+  (cond ((eq 'AUTO *CAB-MAX-ARCS*) "Auto")
+        (*CAB-MAX-ARCS*            (itoa *CAB-MAX-ARCS*))
+        (T                         "None")))
+
+;; Curve cap; remembered in *CAB-MAX-ARCS* - 'AUTO (a third of the
+;; points the cutoff kept), a number, or nil for no cap.
 (defun cab:ask-cap (back / mx)
-  (if back (initget 4 "None Back Undo") (initget 4 "None"))
-  (setq mx (getint (strcat "\n  Maximum curves <"
-                           (if *CAB-MAX-ARCS* (itoa *CAB-MAX-ARCS*) "None")
-                           ">"
-                           (if back " [None/Back]" "") ": ")))
+  (if back (initget 4 "Auto None Back Undo") (initget 4 "Auto None"))
+  (setq mx (getint (strcat "\n  Maximum curves <" (cab:cap-word) ">"
+                           (if back " [Auto/None/Back]" " [Auto/None]")
+                           ": ")))
   (if lzd:ask (lzd:ask "cab:ask-cap" mx))
   (cond
     ((cab:back-kw mx) 'CAB-BACK)
     (T
      (cond ((null mx) nil)                         ; Enter: keep as-is
-           ((eq 'STR (type mx)) (setq *CAB-MAX-ARCS* nil))
+           ((eq 'STR (type mx))
+            (setq *CAB-MAX-ARCS* (if (= mx "Auto") 'AUTO nil)))
            (T (setq *CAB-MAX-ARCS* mx)))
      *CAB-MAX-ARCS*)))
 
@@ -2908,6 +2990,7 @@
                     ss i en ed lay typ ext nunsup nocs dall cut0 ent
                     segs pts dpts allow loop tour ok stale npt
                     again ring cab-cut cab-allpts cab-ptkeys cab-numbered
+                    cab-nmoved
                     cab-omitted cab-miss-pct cab-walls cab-corners
                     cab-holds cab-temp cab-ptnames
                     *error* cab-old-err cab-phase undo-open cab-pick)
@@ -3000,9 +3083,10 @@
        (setq cab-phase "reading the miss percentage")
        (princ "\n\n  Step 2 of 8 - what percent of the points may sit OFF the line")
        (princ "\n  (off, but still within the distance above)?")
-       (princ (strcat "\n  Press Enter for the standard "
+       (princ (strcat "\n  Press Enter for the recommended "
                       (itoa (fix (+ 0.5 (* 100.0 *CAB-MISS-PCT*))))
-                      " percent."))
+                      " percent - a fifth of an AB survey an inch off"
+                      "\n  is what a built shell measures like."))
        (setq v (cab:ask-pct *CAB-MISS-PCT* T))
        (if (eq v 'CAB-BACK)
          (progn (princ "\n  Stepping back one question.")
@@ -3014,7 +3098,13 @@
       ((= step 3)
        (setq cab-phase "reading the curve limit")
        (princ "\n\n  Step 3 of 8 - limit how many curves the result may use?")
-       (princ "\n  Type a whole number, or None for no limit.")
+       (princ "\n  Type a whole number, None for no limit, or Auto for the")
+       (princ (strcat "\n  recommended cap - one curve per "
+                      (rtos *CAB-ARC-DIV* 2 0)
+                      " of the points the cutoff keeps,"
+                      "\n  worked out once they are selected (a "
+                      (itoa (cab:rec-arcs 30))
+                      "-curve cap on 30 points)."))
        (if (eq (cab:ask-cap T) 'CAB-BACK)
          (progn (princ "\n  Stepping back one question.")
                 (setq step 2))
@@ -3154,7 +3244,7 @@
         (setq cab-phase "reading the selected entities")
         (setq segs nil pts nil i 0 nunsup 0 nocs 0
               npt 0 cab-ptnames nil cab-ptkeys nil cab-allpts nil
-              cab-omitted nil cab-cut nil)
+              cab-omitted nil cab-cut nil cab-nmoved 0)
         (while (< i (sslength ss))
           (setq en  (ssname ss i)
                 ed  (entget en)
@@ -3212,6 +3302,14 @@
                          " selected object(s) are not drawn in the world"
                          " plane; the fit is flat (XY) and may be wrong."
                          "  Set UCS to World and flatten them first.")))
+        ;; a moved point is a deduction, not a shot - say how many
+        ;; were left out, so a survey that comes up short is
+        ;; explained rather than mysterious
+        (if (and cab-nmoved (> cab-nmoved 0))
+          (princ (strcat "\nCABHD: " (itoa cab-nmoved)
+                         " moved point(s) (a \"" *CAB-MOVED-MARK*
+                         "\" in the number) left out - nobody stood on"
+                         " one of those, so the line is not held to it.")))
         (cond
           ((null pts)
            (princ (strcat "\nNo survey points found (looked for POINT entities on layer "

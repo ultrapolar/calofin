@@ -39,7 +39,7 @@ file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-LAZPASS: calofin v3.6 loaded - 180 commands in one session.
+LAZPASS: calofin v3.6 loaded - 181 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:

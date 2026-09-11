@@ -136,6 +136,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("POOLCOVER", "Pool layout, no bottom", "POOL for a cover sheet - the bottom question pre-answered No"),
         New Entry("POOLDEMO", "Worked pool example", "Draws a worked example pool end to end"),
         New Entry("POOLSIDE", "Pool side view", "POOL's longitudinal section on its own, from the floor run chain"),
+        New Entry("SIMPABHD", "Survey perimeter, no settings", "ABHD with nothing to decide: five ready-made perimeters, keep one"),
         New Entry("SMARTFILLET", "Corner radius, previewed", "Fillet a corner after previewing every radius that fits"),
         New Entry("SOCONV", "SO survey onto our layers", "Puts an SO site-survey export onto the shop's layers in one pass"),
         New Entry("SORECONV", "SO conversion, undone", "Undoes a SOCONV run - every object back on the export's own layers"),
@@ -174,6 +175,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("FITABHDCOVER", "Typed template fit, no bottom", "FITABHD for a cover sheet - skips the bottom question"),
             New Entry("ABHD", "Survey perimeter + bottom", "Fits a pool perimeter and bottom through surveyed points"),
             New Entry("ABHDCOVER", "Survey perimeter, no bottom", "ABHD for a cover sheet that stops at the perimeter"),
+            New Entry("SIMPABHD", "Survey perimeter, no settings", "ABHD with nothing to decide: five ready-made perimeters, keep one"),
             New Entry("ADAB", "Organic shape points", "Freeform perimeter through surveyed points"),
             New Entry("CABHD", "Perimeter-only fit", "ABHD's perimeter half, for a survey that runs past the pool"),
             New Entry("LHD", "Laser outline fit", "Laser-point outline fit, open or closed"),
@@ -256,7 +258,7 @@ Public NotInheritable Class CommandCatalog
     Public Shared ReadOnly Pages As Page() = {
         New Page("Pool", {
             New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
-            New Column("Shape", {"POOL", "POOLSIDE", "LAZFORM", "LAZTXT", "OASIS", "ABHD", "ADAB", "FITABHD"}),
+            New Column("Shape", {"POOL", "POOLSIDE", "LAZFORM", "LAZTXT", "OASIS", "ABHD", "SIMPABHD", "ADAB", "FITABHD"}),
             New Column("Points", {"ABFIND", "ABMOVE", "ABPCREATE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
             New Column("Steps", {"LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "AUTOBEAD", "PERPPTS", "CPERPPTS"}),
             New Column("Dims & check", {"AUTODIM", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "DIMCHECK", "DIMSCAN"})
@@ -274,7 +276,7 @@ Public NotInheritable Class CommandCatalog
             New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF"})
         }),
         New Page("Layout", {
-            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "ADAB", "CABHD", "LHD", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
+            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
         }),
         New Page("Points", {
             New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "XFTCONV", "XFTRECONV", "SOCONV", "SORECONV", "VSCONV", "VSRECONV", "G2MCONV", "G2MRECONV", "DRONE", "TYDRN", "TYLERDRONESUITE"})

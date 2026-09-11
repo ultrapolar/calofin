@@ -25,6 +25,12 @@ one rule added and one half left out:
 * **Left out: the pool bottom.** No shallow/deep breaks, no hopper, no
   slope lines. The command ends at the kept perimeter.
 
+Points numbered with an **`m`** are out too, and out before the cutoff
+is even asked -- ABFIND writes `17m` when it copies Pt.17 to a
+position it *deduced* from two tape readings, so nobody stood there.
+The cutoff and the omit list both keep a point and decide about it; a
+moved point is not in the survey to be decided about.
+
 Everything else is ABHD's: eight questions (max distance from a point,
 percent of points allowed off, curve cap, declared straight walls,
 sharp corners, held points, the selection, then the cutoff), two modes
@@ -71,11 +77,13 @@ All at the top of `CABHD.lsp`; the key ones:
 | `*CAB-POINT-LAYER*` | `"POINTS"` | Layer of plain survey POINTs |
 | `*CAB-POINT-BLOCK*` | `"ab_pt"` | Block whose inserts count as survey points |
 | `*CAB-PT-TAG*` | `"number"` | Attribute tag carrying the point number |
+| `*CAB-MOVED-MARK*` | `"M"` | A number carrying this letter is a *moved* point (ABFIND's `17m`) and is left out of the fit entirely |
 | `*CAB-OUT-LAYER*` | `"POOL-FIT"` | Layer the candidate fits preview on |
 | `*CAB-MISS-LAYER*` | `"FGStep"` | Layer for the missed-point rings and list |
 | `*CAB-WALL-LAYER*` | `"POOL-WALLS"` | Layer for declared-wall markers |
 | `*CAB-TOL-MAX*` | `2.0` | Hard ceiling on the max-distance prompt (2") |
-| `*CAB-MISS-PCT*` | `0.15` | Standard share of points allowed off (rounded up) |
+| `*CAB-MISS-PCT*` | `0.20` | Recommended share of points allowed off (rounded up) |
+| `*CAB-ARC-DIV*` | `3.0` | The recommended curve cap: one curve per this many kept points, rounded to nearest, never below 1 |
 | `*CAB-ON-EPS*` | `0.25` | Within this of the result counts as ON it |
 | `*CAB-CORNER-ANG*` | 45 deg | Turning more than this is a sharp corner |
 | `*CAB-TANG-TOL*` | 8 deg | Tangency window at every arc joint |
@@ -84,12 +92,22 @@ All at the top of `CABHD.lsp`; the key ones:
 
 Its **fitter knobs are shared with ABHD**: the span fitter is ABHD's,
 carried over word for word, so every tuning constant it reads exists
-under all three prefixes (`*PF-`, `*LH-`, `*CAB-`) at the same value --
-the tangency window and its stretch steps, the arc slack, the give-up
-budget and what a written-off point must buy, the curve cap's relaxing
-refits, the bulge clamp. `tests/test_laser_fit.py` and
-`tests/test_cabhd.py` compare that fitter code for code against
-`abhd.lsp`, so a knob moved in one file has to move in all three.
+under all three prefixes (`*PF-`, `*LH-`, `*CAB-`) -- the tangency
+window and its stretch steps, the arc slack, the give-up budget and
+what a written-off point must buy, the curve cap's relaxing refits,
+the bulge clamp -- at the same value, with one deliberate exception.
+`tests/test_laser_fit.py` and `tests/test_cabhd.py` compare that
+fitter code for code against `abhd.lsp`, so a knob moved in one file
+has to move in all three.
+
+The exception is **`*-MISS-PCT*`**, which is not really a fitter knob
+but the share the command *recommends* at its own prompt, and the two
+surveys are not the same survey. `*PF-` and `*CAB-` offer **20%**,
+because an AB survey of a built shell measures that way; `*LH-` stays
+at **15%**, because a laser scan is a finer instrument than a tape and
+a rod. The fitter reads whichever its own command was given, through
+`pf:misspct` / `cab:misspct` / `lh:misspct`, so the shared code is
+still identical.
 
 ## Notes & limitations
 

@@ -73,6 +73,7 @@ POOL              Full pool layout tool
 POOLCOVER         POOL for a cover sheet - the bottom question pre-answered No
 POOLDEMO          Draws a worked example pool end to end
 POOLSIDE          POOL's longitudinal section on its own, from the floor run chain
+SIMPABHD          ABHD with nothing to decide: five ready-made perimeters, keep one
 SMARTFILLET       Fillet a corner after previewing every radius that fits
 SOCONV            Puts an SO site-survey export onto the shop's layers in one pass
 SORECONV          Undoes a SOCONV run - every object back on the export's own layers
