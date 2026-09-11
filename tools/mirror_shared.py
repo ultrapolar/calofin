@@ -963,6 +963,8 @@ TOOLS = {
             'abf:block-number': 'cal:block-number', 'abf:2d': 'cal:2d',
             'abf:dist': 'cal:dist', 'abf:angnorm': 'cal:angnorm',
             'abf:signed-dang': 'cal:signed-dang', 'abf:pad': 'cal:pad',
+            'abf:askdist': 'cal:askdist', 'abf:askstr': 'cal:askstr',
+            'abf:trim': 'cal:trim',
         },
         'drop_globals': [],
         'symbols': {

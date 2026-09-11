@@ -212,6 +212,7 @@
     ("ABCURCHECK"       "Perimeter continuity")
     ("ABCURCHECKSCAN"   "Perimeter continuity, no marks")
     ("ABPCHECK"         "Survey point offsets")
+    ("ABPCREATE"        "Create a missing point")
     ("ABFIND"           "A/B stake ties")
     ("ABHD"             "Survey perimeter + bottom")
     ("ABHDCOVER"        "Survey perimeter, no bottom")
@@ -333,6 +334,7 @@
      ("Points"
       "ABFIND"
       "ABMOVE"
+      "ABPCREATE"
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
@@ -370,6 +372,7 @@
      ("Points"
       "ABFIND"
       "ABMOVE"
+      "ABPCREATE"
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
@@ -479,6 +482,7 @@
       "CONSTELLATION"
       "ABFIND"
       "ABMOVE"
+      "ABPCREATE"
       "POINTRENAMER"
       "PERPPTS"
       "CPERPPTS"

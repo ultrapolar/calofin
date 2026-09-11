@@ -1,9 +1,11 @@
-# ABFIND / ABMOVE — tie a point back to the A and B stakes (AutoLISP)
+# ABFIND / ABMOVE / ABPCREATE — a point and the A and B stakes (AutoLISP)
 
 A pool is surveyed off two stakes, **A** and **B**: every point on the
 field sheet is two tape readings, one from each stake, and the point is
-wherever those two distances cross. These two commands work that way
-round.
+wherever those two distances cross. These three commands work that way
+round: two of them start from a point that is drawn and read its
+distances back, and the third starts from the distances and draws the
+point.
 
 * **`ABFIND`** — name a point (type its number, or click the point
   itself), get the two ties: an aligned dimension from A to the point
@@ -22,6 +24,20 @@ round.
   and its old spot ringed and noted — **one point per run**: moving a
   point is a decision, not a sweep, so the command ends as soon as that
   point is settled.
+* **`ABPCREATE`** — the other end of the same problem: the field sheet
+  has a row and the drawing has nothing. Type the two readings instead
+  of a number. Both are drawn **whole**, as the circle of everywhere
+  each tape reaches, so the answer is on the sheet either way — they
+  cross at one spot, or they visibly cannot. A pair that cannot cross
+  is walked exactly as `ABMOVE` walks a move, and every pair that
+  *does* cross is offered with **the pair written beside it**
+  (`7A  28'-1" / 18'-6"`), because here each candidate stands for a
+  different pair of readings and the pair is what you check against the
+  sheet. Pick one, name it, and the point is plotted and tied.
+
+`ABFIND` and `ABMOVE` hand over to it: a number that names no point is
+offered `Create Pt.23 from its two readings?` rather than only being
+reported.
 
 ## What it does
 
@@ -274,6 +290,173 @@ Pick one and four things happen:
 `Pt.17m` is a survey point like any other once it is made, so the next
 `ABFIND` or `ABMOVE` run finds it by its new number.
 
+### `ABPCREATE`
+
+The point is **not** in the drawing. So there is no number to type and
+nothing to measure from: the two readings are typed instead, and the
+command works forwards.
+
+```
+  A to the new point [Back] <Enter = done>: 21'-1"
+  B to the new point [Back]: 18'-6"
+```
+
+Both are drawn **whole** — one dashed red circle per stake, at the
+reading typed, which is everywhere that tape reaches. Two readings
+place a point where those two circles cross, and drawing them means the
+answer is on the sheet either way instead of only in a sentence.
+
+**They cross.** There is one spot on the field side of the A–B line
+(see below), it is marked in yellow, and the only thing left to settle
+is what the point is called.
+
+**They cannot cross.** Two circles miss each other two ways round, and
+they are different mistakes:
+
+| What is wrong | What it says |
+| --- | --- |
+| the tapes fall short of each other | `the two arcs fall 3'-4" short of each other` |
+| one arc lies wholly inside the other | `B's arc lies 5'-0" inside A's` |
+
+Either way one of the two readings was written down wrong — which is
+exactly what `ABMOVE` already knows how to walk. One reading is **held**
+and the other swept: a foot at a time, `abf:*foot-steps*` each way, plus
+every number it could have been misread as (the table under `ABMOVE`
+above). Every pair that *does* cross is offered, in the same two groups
+and with the same tags: `1A`, `-3B`, `R1A`.
+
+### The pair beside the marker
+
+`ABMOVE`'s markers all share one pair of readings and differ by where
+they sit, so its tag alone names them. `ABPCREATE`'s each stand for a
+**different pair**, and the pair — not the position — is what you are
+checking against the field sheet. So it is written beside the marker:
+
+```
+7A  28'-1" / 18'-6"
+```
+
+the tag, then A's reading and B's. The tag is still what you type. The
+same pair is in the table on the command line, with the change that
+made it:
+
+```
+  A 8'-4" and B 8'-4" cannot cross: the two arcs fall 3'-4" short of
+  each other - both are drawn whole, so the gap is on screen.
+
+  Where the new point can sit if one of those two was written down
+  wrong - the ones that move A first, then B (smallest change first):
+  26 of the 40 readings are not offered: they still do not reach the
+  other tape.
+   tag   moves  by            A             B
+   ----  -----  ------------  ------------  ------------
+   4A    A      +4'-0"        12'-4"        8'-4"
+   5A    A      +5'-0"        13'-4"        8'-4"
+   ...
+   4B    B      +4'-0"        8'-4"         12'-4"
+   ...
+```
+
+The labels **radiate** out of the stake that is holding them, like
+spokes, rather than filing along the arc the way `ABMOVE`'s tags do.
+That is not a style choice: a create label is four or five times the
+length of an `ABMOVE` tag, and text runs straight while an arc curves,
+so a label that long laid along the arc climbs back through it and lies
+across the very markers it labels — and the sideways shoving needed to
+separate two of them drags their leaders into long crossing slants.
+Two rays out of one centre never meet, so radial labels cannot overlap,
+whatever the readings are. Each fan points **away from the other arc**
+(outward when that arc lies inside its own, inward otherwise), which
+keeps the two groups off each other as well: two tapes that fall short
+both point into their own discs, and those two discs do not touch —
+that is what falling short means. The nudge that keeps two spokes apart
+is a degree or two on a pool-sized arc, so the leaders stay as good as
+radial; on a reading barely longer than the label itself it is tens of
+degrees and the leaders do slant across each other, which is the right
+way round to fail — an untidy leader can be read past, two labels on
+top of each other cannot.
+
+### If none of them is right
+
+`None` (the Enter answer) takes no reading and asks for **another
+pair** — the way out when the sheet itself has to be re-read. So does a
+pair nothing within `abf:*max-shift*` can rescue:
+
+```
+  No reading within 10'-0" of either makes the two meet - read the
+  sheet again and give another pair.
+```
+
+`Enter` at the **A** reading ends the run.
+
+### Naming it, and building it
+
+A point is not created until it is named — the number is what every
+tool in this family looks it up by:
+
+```
+  Number for the new point <24> (B = back): 23
+```
+
+One past the highest number the drawing already carries is offered, and
+a number the drawing already uses is **refused**: a number names one
+point, and every lookup here takes the first match.
+
+The point itself is built **like the drawing's own**. The survey point
+nearest to where it is going is the pattern — its block, layer, colour,
+linetype, lineweight, scale, rotation and attribute layout — with the
+number written and every **other** attribute left **blank**. A point
+that has just been plotted has no elevation and no description, and
+copying the neighbour's would be inventing one. Set `abf:*new-atts*` to
+`T` for a drawing whose second attribute really is the same on every
+point. A drawing with nothing but the two stakes has no pattern, and
+that one falls back to `abf:*point-block*` on `abf:*point-layer*` from
+this file's own defaults, and says so.
+
+Then the two ties are drawn, the same as `ABFIND` draws them, and it
+asks for the next pair. `ABPCREATE` **loops** the way `ABFIND` does;
+`Back` at the A reading takes the last point away again, ties and all.
+
+### Which side of the A–B line
+
+Two readings cross **twice**, mirrored across the line joining the
+stakes, so a point built from a pair has to be told which of the two is
+meant. The survey already says: a pool is taped from two stakes
+standing to one side of it, so every point already plotted is on one
+side, and their mean is read for the side. Nothing is asked.
+
+Only a drawing carrying nothing but the two stakes says nothing, and
+only that one is asked:
+
+```
+  Nothing but the stakes is plotted, so the drawing does not say which
+  side of A-B the pool is on - and two readings cross on both.
+  Click roughly where the new point belongs [Back]:
+```
+
+The click picks the **side**, not the spot — the readings place the
+point.
+
+### From `ABFIND` and `ABMOVE`
+
+A number typed at either that names no point used to be reported and
+re-asked, full stop. It is much more often a point that was never
+plotted than a typo, so both now offer the way forward:
+
+```
+  No point numbered "23" in the drawing.
+  Create Pt.23 from its two readings? [Yes/No/Back] <No>:
+```
+
+**Yes** runs everything above with `23` already filled in as the number
+to offer. `ABFIND` then carries on to the next point with the new one
+plotted and tied; `ABMOVE`, which settles **one** point, is done — the
+point it was asked about now exists, at the reading that was asked for.
+**No** is the Enter answer and re-asks the number, because a typo is
+the other way to get here and Enter must not plot a point from one.
+`Back`, and `Enter` at the A reading, both put the number prompt back
+with nothing drawn.
+
 ## Finding the stakes
 
 A and B are looked up by name among the survey points, the same way any
@@ -333,10 +516,21 @@ The shared Back convention (see the root README) applies:
 * `Back` at **`Which one?`** — the tie a click could not settle — is
   the markers again, nothing chosen;
 * `Back` at **the note** re-asks which suggestion, with the
-  suggestions still on screen.
+  suggestions still on screen;
+* in `ABPCREATE`, `Back` at **the A reading** undoes the whole of the
+  last round the same way `ABFIND`'s point number does — the point it
+  created, its number and its ties — or, when it is `ABFIND` or
+  `ABMOVE` that sent you there, re-asks the point number instead;
+* `Back` at **the B reading** re-asks the A reading;
+* `Back` at **which candidate** re-asks the B reading;
+* `Back` at **the number for the new point** re-asks which candidate —
+  or, where the pair simply crossed and nothing was chosen, the B
+  reading.
 
 `ABMOVE`'s first question has nothing to go back to, and once its point
-is settled the run is over — to undo that move, `U`.
+is settled — moved or created — the run is over; to undo that, `U`.
+`ABPCREATE`'s first question is the A reading of its first round, and
+that one says `Already at the first point.`
 
 The whole run is **one undo group**: a single `U` takes it all away.
 The dimension style, current layer, `OSMODE` and `CMDECHO` in force
@@ -345,8 +539,9 @@ error, or Esc.
 
 ## Install & run
 
-1. Load `ABFIND.lsp` (`APPLOAD`, or drag it into the drawing). Both
-   commands come with the one file.
+1. Load `ABFIND.lsp` (`APPLOAD`, or drag it into the drawing). All
+   three commands come with the one file — which is also why `ABFIND`
+   and `ABMOVE` can offer to create a point with nothing else loaded.
 2. `ABFIND` → `Pick the point, or type its number <Enter = done>:` →
    `17`, or click the point → the two ties are drawn →
    `Move Pt.17 to a different reading? [Yes/No/Back] <No>:` →
@@ -360,7 +555,15 @@ error, or Esc.
    `-1B` (a click that cannot tell two markers apart asks
    `Which one?`) → `Place the note for Pt.17 [Auto/Back] <Auto>:` →
    Enter, and the command is done.
-4. `ABFINDVER` prints the loaded version.
+4. `ABPCREATE` → `A to the new point [Back] <Enter = done>:` → `21'-1"`
+   → `B to the new point [Back]:` → `18'-6"` → both arcs are drawn,
+   and either the crossing is marked or the pairs it could have been
+   are → `The new point - click a marker or its label, or type a tag
+   [None/Back] <None>:` → click one, or type a tag such as `7A`, or
+   Enter for another pair → `Number for the new point <24> (B = back):`
+   → `23` → the point is plotted and tied → next pair, or Enter to
+   finish.
+5. `ABFINDVER` prints the loaded version.
 
 ## Tunables
 
@@ -398,6 +601,12 @@ The constants at the top of `ABFIND.lsp`:
                                         ; the strip a click on a tag hits
 (setq abf:*locus-color*  8)             ; guide-line colour: grey
 (setq abf:*locus-ltype*  "DASHED")      ; and its linetype
+(setq abf:*ghost-color*  1)             ; ABPCREATE's two whole reading
+                                        ; circles: red, dashed
+(setq abf:*new-atts*     nil)           ; T = a created point copies its
+                                        ; pattern's OTHER attribute
+                                        ; values too; nil leaves them
+                                        ; blank
 (setq abf:*foot-steps*   10)            ; 1-foot steps offered each way
 (setq abf:*max-shift*    120.0)         ; furthest a suggestion may sit
 (setq abf:*max-sugg*     nil)           ; most per held stake, nil = all
@@ -409,9 +618,12 @@ The constants at the top of `ABFIND.lsp`:
 `abf:*tag-gap*` is measured *across* the tags; along the arc they
 stand further apart than that, by the angle the quarter's bisector
 makes with the arc, so a sharp crossing spreads a group's tags wider
-than a square one does. `abf:*snap*` is still the reach of a click on
-a **marker**; a click on a **tag** has to land on the text itself,
-within the pickbox.
+than a square one does. In `ABPCREATE`, whose labels radiate rather
+than file along the arc, `abf:*sug-hgt*` + `abf:*tag-gap*` is the
+daylight kept between two spokes at the end nearer the stake, where
+they are closest. `abf:*snap*` is still the reach of a click on a
+**marker**; a click on a **tag** or a **label** has to land on the text
+itself, within the pickbox.
 
 `abf:*foot-steps*` and `abf:*max-shift*` work together: the sweep
 reaches `12 x foot-steps` inches, and `max-shift` is the hard bound on
@@ -452,6 +664,19 @@ one of the two answers.
   drawing started from the wrong template is obvious.
 * `ABMOVE-POINTS` is emptied at the end of every round but the layer
   itself stays in the drawing — `PURGE` clears it when you are done.
+  `ABPCREATE`'s markers, labels and reading circles share it.
+* `ABPCREATE` needs the stakes, so it needs the drawing to name them or
+  you to click them — the same as the other two, and a drawing with no
+  named survey point at all stops before it asks anything.
+* `ABPCREATE` varies **one** reading at a time, exactly as `ABMOVE`
+  does: a pair that only crosses once both were wrong is not offered.
+  `None` and another pair is the answer to that, and so is `ABCDEF`,
+  which fits a point against three or four tapes rather than two.
+* A created point is patterned on its nearest neighbour, so a drawing
+  whose points are *not* alike — several surveys merged, two block
+  scales — patterns it on whichever one happens to be nearest. It is
+  said on the command line each time, and the point is an ordinary
+  block reference afterwards: fix it as you would any other.
 * Requires the Visual LISP engine (full AutoCAD; LT cannot run this).
 
 ## Versioning
@@ -460,6 +685,15 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.12** — `ABPCREATE`: the point is not in the drawing, so the two
+  readings are typed instead of a number. Both are drawn whole, and a
+  pair that cannot cross is walked with `ABMOVE`'s own sweep, every
+  workable pair offered with **the pair written beside its marker** and
+  the labels radiating out of the stake that holds them. Pick one, name
+  it — one past the highest number is offered, a number already in use
+  refused — and the point is built like the survey point nearest it
+  (`abf:*new-atts*`) and tied. `ABFIND` and `ABMOVE` offer the same
+  flow when a number names no point.
 * **v1.9** — the suggestion is chosen at **one prompt**: click the
   marker or its tag, or type the tag — no `Pick` first. A click takes
   the **nearest** marker or tag (it took the first in the list within
@@ -501,7 +735,7 @@ the banner.
 ## Tests
 
 `tests/test_abfind.py` loads the real lisp into the repo's AutoLISP VM
-and drives both commands end to end — the tie pair and its style/layer/
+and drives all three commands end to end — the tie pair and its style/layer/
 ByLayer fixup, number spellings, unknown numbers, stake lookup and the
 click fallback, the misreading arithmetic (readings, look-alike digits,
 transpositions, the shift cap and the suggestion cap), the circle
@@ -516,7 +750,25 @@ layer, colour, linetype, lineweight, scale, rotation and both of its
 attributes with only the number rewritten, that it stays off
 `abf:*point-layer*` when its original did, and that a clicked point
 ties and moves exactly as a typed one does (with a click on nothing,
-and a click on a stake, refused):
+and a click on a stake, refused).
+
+For `ABPCREATE` it drives both answers a pair of readings can have: a
+pair that crosses (plotted, named, tied, scaffolding swept, and on the
+side the rest of the survey is on — either side), and one that cannot
+(the gap named, both whole circles drawn dashed at the readings typed,
+every workable pair offered with its own tag and its held tape exactly
+held, each label reading `tag  A / B` for the distances its marker
+really stands at, and the table saying the same). Then the answers to
+it: a click on a marker, `None` and a pair nothing reaches both asking
+for another pair, the next number offered and a number in use refused,
+the point built from its nearest neighbour with the other attributes
+blank and `abf:*new-atts*` keeping them, the drawing with nothing but
+stakes asking for the side and the click picking only that, the whole
+Back chain, the loop and a created round undone whole — and, from the
+other end, that `ABFIND` offers to create a number it cannot find and
+carries on, that `ABMOVE` creates one and is then done, and that both
+Back and Enter at the A reading back out of the offer with nothing
+drawn:
 
 ```
 python3 tests/test_abfind.py                          # standalone tier
