@@ -2,8 +2,10 @@
 # Regenerate with: python3 tools/check_scope.py --update-baseline
 lisp/abhd/abhd.lsp|c:abhd|setq-global|*error*
 lisp/abhd/abhd.lsp|c:adab|setq-global|*error*
+lisp/abhd/abhd.lsp|c:simpabhd|setq-global|*error*
 lisp/abhd/abhd.lsp|c:tutorialabhd|setq-global|*error*
 lisp/abhd/abhd.lsp|pf:add-point|setq|npt
+lisp/abhd/abhd.lsp|pf:add-point|setq|pf-nmoved
 lisp/abhd/abhd.lsp|pf:add-point|setq|pf-ptnames
 lisp/abhd/abhd.lsp|pf:add-point|setq|pts
 lisp/abhd/abhd.lsp|pf:ask-cap|setq-global|*pf-max-arcs*
@@ -28,6 +30,7 @@ lisp/abhd/abhd.lsp|pf:edit-holds|setq|pf-phase
 lisp/abhd/abhd.lsp|pf:edit-walls|setq|pf-phase
 lisp/abhd/abhd.lsp|pf:edit-walls|setq|pf-walls
 lisp/abhd/abhd.lsp|pf:fit-arc-seg|setq|pf-miss-left
+lisp/abhd/abhd.lsp|pf:fit-session|setq|pf-phase
 lisp/abhd/abhd.lsp|pf:guided-fit|setq|bd
 lisp/abhd/abhd.lsp|pf:guided-fit|setq|best
 lisp/abhd/abhd.lsp|pf:guided-fit|setq|pf-miss-left
@@ -41,6 +44,7 @@ lisp/abhd/abhd.lsp|pf:tut-demo|setq|pf-temp
 lisp/autobead/AUTOBEAD.lsp|autobead-say|foreach|l
 lisp/cabhd/CABHD.lsp|c:cabhd|setq-global|*error*
 lisp/cabhd/CABHD.lsp|cab:add-point|setq|cab-allpts
+lisp/cabhd/CABHD.lsp|cab:add-point|setq|cab-nmoved
 lisp/cabhd/CABHD.lsp|cab:add-point|setq|cab-numbered
 lisp/cabhd/CABHD.lsp|cab:add-point|setq|cab-ptkeys
 lisp/cabhd/CABHD.lsp|cab:add-point|setq|cab-ptnames
@@ -117,6 +121,7 @@ lisp/drone_height/DroneHeightGPS.lsp|ddg-fail|foreach|l
 lisp/drone_height/DroneHeightGPS.lsp|ddg-http-get|foreach|prog
 lisp/drone_height/DroneHeightGPS.lsp|ddg-place-text|foreach|ln
 lisp/drone_height/DroneHeightGPS.lsp|ddg-report|foreach|l
+lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-nmoved
 lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-npt
 lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-ptnames
 lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-pts
@@ -441,6 +446,7 @@ lisp/xftconv/xftconv.lsp|xft:collect|foreach|g
 shared/parts/AUTOBEAD.lsp|autobead-say|foreach|l
 shared/parts/CABHD.lsp|c:cabhd|setq-global|*error*
 shared/parts/CABHD.lsp|cab:add-point|setq|cab-allpts
+shared/parts/CABHD.lsp|cab:add-point|setq|cab-nmoved
 shared/parts/CABHD.lsp|cab:add-point|setq|cab-numbered
 shared/parts/CABHD.lsp|cab:add-point|setq|cab-ptkeys
 shared/parts/CABHD.lsp|cab:add-point|setq|cab-ptnames
@@ -498,6 +504,7 @@ shared/parts/DroneHeightGPS.lsp|ddg-fail|foreach|l
 shared/parts/DroneHeightGPS.lsp|ddg-http-get|foreach|prog
 shared/parts/DroneHeightGPS.lsp|ddg-place-text|foreach|ln
 shared/parts/DroneHeightGPS.lsp|ddg-report|foreach|l
+shared/parts/FITABHD.lsp|fit:add-point|setq|fit-nmoved
 shared/parts/FITABHD.lsp|fit:add-point|setq|fit-npt
 shared/parts/FITABHD.lsp|fit:add-point|setq|fit-ptnames
 shared/parts/FITABHD.lsp|fit:add-point|setq|fit-pts
@@ -748,8 +755,10 @@ shared/parts/TUTORIALSPA.lsp|tut:demo|setq-global|spa:*turned*
 shared/parts/TUTORIALSPA.lsp|tut:demo|setq-global|spa:*valnotes*
 shared/parts/abhd.lsp|c:abhd|setq-global|*error*
 shared/parts/abhd.lsp|c:adab|setq-global|*error*
+shared/parts/abhd.lsp|c:simpabhd|setq-global|*error*
 shared/parts/abhd.lsp|c:tutorialabhd|setq-global|*error*
 shared/parts/abhd.lsp|pf:add-point|setq|npt
+shared/parts/abhd.lsp|pf:add-point|setq|pf-nmoved
 shared/parts/abhd.lsp|pf:add-point|setq|pf-ptnames
 shared/parts/abhd.lsp|pf:add-point|setq|pts
 shared/parts/abhd.lsp|pf:ask-cap|setq-global|*pf-max-arcs*
@@ -774,6 +783,7 @@ shared/parts/abhd.lsp|pf:edit-holds|setq|pf-phase
 shared/parts/abhd.lsp|pf:edit-walls|setq|pf-phase
 shared/parts/abhd.lsp|pf:edit-walls|setq|pf-walls
 shared/parts/abhd.lsp|pf:fit-arc-seg|setq|pf-miss-left
+shared/parts/abhd.lsp|pf:fit-session|setq|pf-phase
 shared/parts/abhd.lsp|pf:guided-fit|setq|bd
 shared/parts/abhd.lsp|pf:guided-fit|setq|best
 shared/parts/abhd.lsp|pf:guided-fit|setq|pf-miss-left

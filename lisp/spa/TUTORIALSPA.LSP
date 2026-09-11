@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "090826 REV11")
+(setq tut:*version* "091126 REV12")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -79,9 +79,11 @@
 (setq tut:*asks*
   (list
     "1.  The Spa Cover Details block -- picked FIRST, because its GRADE"
-    "    decides what comes next.  Enter skips it; the hinge pass will"
-    "    ask again.  GRADE and TAPER are read off the tags, and the"
-    "    'Grade:' / 'Taper:' prefixes are stripped."
+    "    decides what comes next, and because your own drawing is still"
+    "    on the screen to click.  ASKED ONCE: Enter skips it and the"
+    "    taper is typed at the hinge pass instead.  GRADE and TAPER are"
+    "    read off the tags, and the 'Grade:' / 'Taper:' prefixes are"
+    "    stripped."
     "2.  Water's edge or cover size.  NOT asked on Thermo-Light -- the"
     "    two are the same thing there, so it draws the cover size."
     "3.  Shape: Rectangle, Octagon or Round."
@@ -103,10 +105,12 @@
     "    Asked one at a time, corner A's answer autofills B, C and D"
     "    -- Enter accepts."
     "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No,"
-    "    then the grade and taper if the block did not give them."
+    "    then the taper, typed, if the block did not give it."
     "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
     "    is dodged by turning the spa, and nothing already on the screen"
     "    can be turned.  The hinges are drawn at the end all the same."
+    "    The grey guide spa stays up across these, and comes down only"
+    "    as the real outline goes up in its place."
     "8.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
     "    Skipped on Thermo-Light."))

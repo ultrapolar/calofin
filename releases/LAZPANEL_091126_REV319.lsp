@@ -104,7 +104,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.18")
+(setq *lazpanel-version* "v3.19")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -280,6 +280,7 @@
     ("POOLCOVER"        "Pool layout, no bottom")
     ("POOLDEMO"         "Worked pool example")
     ("POOLSIDE"         "Pool side view")
+    ("SIMPABHD"         "Survey perimeter, no settings")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SOCONV"           "SO survey onto our layers")
     ("SORECONV"         "SO conversion, undone")
@@ -331,6 +332,7 @@
       "LAZTXT"
       "OASIS"
       "ABHD"
+      "SIMPABHD"
       "ADAB"
       "FITABHD"
       )
@@ -477,6 +479,7 @@
       "FITABHDCOVER"
       "ABHD"
       "ABHDCOVER"
+      "SIMPABHD"
       "ADAB"
       "CABHD"
       "LHD"

@@ -94,9 +94,13 @@ block is read first**, before anything else is asked:
   are ByLayer lines labelled `Velcro Hinge`, matching the hardware chart
   ("Velcro Hinges: Always").
 
-Both are noted under the report table. Skipping the block up front just
-defers it to the hinge pass, where it is asked for again — but then a
-Thermo-Light grade arrives too late for the two rules above.
+Both are noted under the report table. **The block is asked for once**,
+here, where your own drawing is still on the screen to click — by the
+hinge pass it is the grey guide spa that is up, not your drawing.
+Skipping it is therefore an answer, not a postponement: the taper is
+typed at the hinge pass instead, the grade falls back to `Standard`, and
+a Thermo-Light cover has to be told through the block or the form for
+the two rules above to apply.
 
 ## Water's edge vs cover size
 
@@ -478,8 +482,16 @@ architectural units while it is prompting.
 A grey nominal spa is drawn as soon as the shape is picked, and the
 element being measured turns **red** while its prompt is up. On the
 octagon and the round spa the field‑sheet ties (`B`, `A`, `T`, `S`, `S1`,
-`V`, `S2`) are drawn and lit the same way. The guide deletes itself once
-every measurement is in.
+`V`, `S2`) are drawn and lit the same way.
+
+**The guide stays up until the real spa replaces it.** The hinge
+questions — the auto-hinge offer, the spillaways, the taper — are asked
+*before* anything is drawn, because their answers can still turn the
+cover; the guide is the only spa on the screen while they are answered,
+and the spillaway questions name its corners and its walls. It comes
+down at the moment the real outline goes up, and the view moves with it:
+the guide is drawn at a nominal 240 × 200 whatever the spa measures, so
+the window it was shown in is the wrong one for the real thing.
 
 `Back` at any prompt after the first re‑asks the previous question, right
 back across the corner questions into the side lengths.
@@ -524,10 +536,10 @@ Both are answered against the spa **as measured**; the turn, if one is
 taken, is applied afterwards when the zones are worked out.
 
 **2. Grade and taper** — from the "Spa Cover Details" block read at the
-start, or asked for here if that was skipped. The `GRADE` and
-`TAPER` tags are read (`Grade: Standard`, `Taper: 4-2`); Enter types the
-taper instead, and a missing grade means **Standard**. Grade + taper give,
-from the foam sheets:
+start; skipped there, the **taper is typed here** and the block is not
+asked for a second time. The `GRADE` and `TAPER` tags are read
+(`Grade: Standard`, `Taper: 4-2`), and a missing grade means
+**Standard**. Grade + taper give, from the foam sheets:
 
 | | governs |
 | --- | --- |
@@ -686,6 +698,7 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*pv-lbl*` | `22.0` | how far a rectangle corner letter sits out |
 | `spa:*pv-olbl*` | `20.0` | ...and an octagon one, which sits tighter |
 | `spa:*pv-cap*` | `50.0` | biggest treatment the guide will draw, so one huge corner cannot swallow it |
+| `spa:*pv-zoom*` | `0.35` | margin round the real spa when the view leaves the guide for it (of its long side) |
 | `spa:*foamdflt*` | `(list (cons 48.0 96.0))` | assumed when nothing matches |
 | `spa:*foamdpc*` | `(list 2 3 4 5)` | and the counts it will accept |
 | `spa:*thermotaper*` | `"1-3/8"` | the one taper a Thermo-Light comes in |

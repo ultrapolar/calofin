@@ -89,6 +89,19 @@
 ;;; dimensions printed in feet and inches.  Keep it and it moves to
 ;;; the POOL layer in ByLayer colour, like ABHD's.
 ;;;
+;;; MOVED POINTS ARE NOT SURVEY POINTS: a number carrying the letter
+;;; fit:*moved-mark* ("m") is out of the fit entirely.  ABFIND writes
+;;; "17m" when it copies Pt.17 to a position it worked out from two
+;;; tape readings off a pair of good points - that is where the point
+;;; SHOULD be, not where anybody stood.  The whole idea here is that
+;;; the POINTS place the template, so a deduced position is the one
+;;; thing that must not get a vote: it would pull a wall to meet a
+;;; number, and the hit report would then claim the outline held a
+;;; point nobody measured.  Dropped as the selection is read, so it is
+;;; never fitted, never on the omit list and never ringed as a stray.
+;;; The original it came from is still in.  ABHD's rule, held here
+;;; word for word; the count is reported.
+;;;
 ;;; THE POOL BOTTOM assumes a STANDARD HOPPER, so it is generated, not
 ;;; traced: pick which end is deep, type where the two breaks fall and
 ;;; the hopper's side and back offsets, and the bottom is drawn square
@@ -111,7 +124,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.6")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.7")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -122,6 +135,16 @@
                                    ; points; insertion point = location
 (setq fit:*pt-tag*      "number")  ; attribute tag carrying the point
                                    ; number, for the miss report
+(setq fit:*moved-mark*  "M")       ; a point number carrying this letter
+                                   ; is a MOVED point - ABFIND writes
+                                   ; "17m" when it copies Pt.17 to a
+                                   ; position deduced from two tape
+                                   ; readings (abf:*moved-suffix*).
+                                   ; Nobody stood there, so it is out of
+                                   ; the fit entirely; ABHD's
+                                   ; *PF-MOVED-MARK* rule, held here
+                                   ; too.  Matched case-insensitively
+                                   ; anywhere in the number
 (setq fit:*out-layer*   "POOL-FIT"); layer the preview outline goes on
 (setq fit:*miss-layer*  "FGStep")  ; layer the stray-point rings go on;
                                    ; may already be in use, so FITABHD
@@ -3717,12 +3740,28 @@
 ;; POINT entities and other blocks count on the POINTS layer.  The
 ;; run-scoped fit-pts / fit-npt / fit-ptnames are bound by the command.
 
+;; Is NM the number of a MOVED point - one ABFIND deduced from two tape
+;; readings and numbered "17m" rather than one somebody shot?  ABHD's
+;; pf:moved-p, held here word for word.
+(defun fit:moved-p (nm)
+  (and nm
+       (eq 'STR (type nm))
+       (wcmatch (strcase nm) (strcat "*" (strcase fit:*moved-mark*) "*"))))
+
+;; A moved point is never remembered: the template is placed by what
+;; the points prove, and a deduced position proves nothing (see
+;; fit:*moved-mark*).  Dropped here, before fit-pts exists, so the
+;; template fit, the omit list and the miss report all miss it
+;; together.  The count goes to fit-nmoved for the line fit:gather
+;; prints.
 (defun fit:add-point (p nm)
-  (setq fit-npt     (1+ fit-npt)
-        fit-pts     (cons p fit-pts)
-        fit-ptnames (cons (cons p (if (and nm (/= nm "")) nm
-                                    (itoa fit-npt)))
-                          fit-ptnames)))
+  (if (fit:moved-p nm)
+    (setq fit-nmoved (1+ (if fit-nmoved fit-nmoved 0)))
+    (setq fit-npt     (1+ fit-npt)
+          fit-pts     (cons p fit-pts)
+          fit-ptnames (cons (cons p (if (and nm (/= nm "")) nm
+                                      (itoa fit-npt)))
+                            fit-ptnames))))
 
 ;; What to call the surveyed point at Q.
 (defun fit:pt-name (q / nm p)
@@ -3759,6 +3798,14 @@
                    " selected object(s) that are not survey points"
                    " were ignored - the pool TYPE is the guide here,"
                    " not drawn geometry.")))
+  ;; a moved point is a deduction, not a shot - say how many were left
+  ;; out, so a survey that comes up short is explained rather than
+  ;; mysterious (and a type that now lacks its minimum says why)
+  (if (and fit-nmoved (> fit-nmoved 0))
+    (princ (strcat "\nFITABHD: " (itoa fit-nmoved)
+                   " moved point(s) (a \"" fit:*moved-mark*
+                   "\" in the number) left out - nobody stood on one"
+                   " of those, so the template is not placed by it.")))
   (length fit-pts))
 
 ;; ---- the report ------------------------------------------------------
@@ -4751,7 +4798,8 @@
 
 (defun c:FITABHD ( / *error* undo-open set ptype treat tol pct oos bowed
                     ss n res verts en swept ans again dpts
-                    fit-pts fit-npt fit-ptnames fit-omit fit-pick botback)
+                    fit-pts fit-npt fit-nmoved fit-ptnames fit-omit
+                    fit-pick botback)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -4783,7 +4831,7 @@
     (princ (strcat "\nFITABHD: swept " (itoa swept)
                    " leftover preview outline(s) from an earlier run.")))
   (princ "\n\nFITABHD - fit a typical pool's template through the survey points.")
-  (setq fit-pts nil fit-npt 0 fit-ptnames nil fit-omit nil
+  (setq fit-pts nil fit-npt 0 fit-nmoved 0 fit-ptnames nil fit-omit nil
         set (fit:ask-settings (list fit:*ptype* "Square" fit:*tol*
                                     fit:*miss-pct* fit:*oos* fit:*bowed*)
                               7)
