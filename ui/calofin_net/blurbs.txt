@@ -15,6 +15,7 @@ ABCURCHECKSCAN    ABCURCHECK without marking the drawing
 ABFIND            Ties Pt.## back to the A and B survey stakes
 ABHD              Fits a pool perimeter and bottom through surveyed points
 ABHDCOVER         ABHD for a cover sheet that stops at the perimeter
+ABLOBF            Fits an OPEN run of arcs and lines through points, between two ends you pick
 ABMOVE            Moves a point, offering every mis-read tape it could be
 ABPCHECK          ABHD's measuring half as a checker - how far each point is off the line
 ADAB              Freeform perimeter through surveyed points

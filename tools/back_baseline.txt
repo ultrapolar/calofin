@@ -12,6 +12,8 @@ lisp/abhd/abhd.lsp|pf:compare|\n Keep which fit - click one, or [1/2/3/All/None/
 lisp/abhd/abhd.lsp|pf:tut-demo|\n Keep the demo drawing to poke at? [Yes/No] <No>:|demo / tutorial
 lisp/abhd/abhd.lsp|pf:tut-demo|\n Pick a clear spot for it:|demo / tutorial
 lisp/abhd/abhd.lsp|pf:tut-pause|\n --- press Enter to continue ---|demo / tutorial
+lisp/ablobf/ABLOBF.lsp|abl:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] <2>:|the fit picker - Redo is its way back
+lisp/ablobf/ABLOBF.lsp|c:ABLOBF|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/abpcheck/ABPCHECK.lsp|abp:asklimit|\n < >:|helper: its callers ask it as the first question of their branch
 lisp/autobead/AUTOBEAD.lsp|autobead-pause|\n [Enter] to continue:|pause
 lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\n Click a side to bead toward:|demo / tutorial

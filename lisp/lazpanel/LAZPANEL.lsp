@@ -98,7 +98,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.16")
+(setq *lazpanel-version* "v3.17")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -208,6 +208,7 @@
     ("ABCDEF"           "Rectangle plot")
     ("ABCURCHECK"       "Perimeter continuity")
     ("ABCURCHECKSCAN"   "Perimeter continuity, no marks")
+    ("ABLOBF"           "Open best-fit run")
     ("ABPCHECK"         "Survey point offsets")
     ("ABFIND"           "A/B stake ties")
     ("ABHD"             "Survey perimeter + bottom")
@@ -437,6 +438,7 @@
       "CONSTELLATION"
       "TYLERDRONESUITE"
       "LOBF"
+      "ABLOBF"
       )
     )
      ("Layout"
@@ -458,6 +460,7 @@
       "ADAB"
       "CABHD"
       "LHD"
+      "ABLOBF"
       "LINGUTTER"
       "LINGUTTERSCAN"
       "PADDLE"
