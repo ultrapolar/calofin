@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for SPACOVCREATE.lsp -- the cover for a spa that is already drawn.
 
-Four kinds of check, all runnable without AutoCAD:
+Five kinds of check, all runnable without AutoCAD:
 
 * Structural checks read the real .lsp and assert what makes it safe to
   run: pure ASCII, every system variable it changes also saved and
@@ -24,6 +24,12 @@ Four kinds of check, all runnable without AutoCAD:
   taller than it is wide hinged the other way, loose walls chained out
   of order, two loops with the bigger one winning, and the things that
   are flagged rather than fixed.
+* Panel checks hold the half of the greyed button that belongs to this
+  tool: it is on both rosters the two surfaces read, on the pages its
+  README claims, with a caption and a tooltip filled in, and the probe
+  that greys the button changes its answer when the file loads.  The
+  mode_tile that actually greys it is driven on every page of the panel
+  by tests/test_lazpanel.py.
 
 Usage:  python3 tests/test_spacovcreate.py
         CALOFIN_LISP_ROOT=shared python3 tests/test_spacovcreate.py
@@ -50,6 +56,13 @@ else:
     LSP = os.path.join(REPO_DIR, "lisp", "spacovcreate", "SPACOVCREATE.lsp")
     LIB = None
     SPA_LSP = os.path.join(REPO_DIR, "lisp", "spa", "SPA.LSP")
+if ROOT == "shared":
+    PANEL_LSP = os.path.join(REPO_DIR, "shared", "parts", "LAZPANEL.lsp")
+else:
+    PANEL_LSP = os.path.join(REPO_DIR, "lisp", "lazpanel", "LAZPANEL.lsp")
+GLUE_LSP = os.path.join(REPO_DIR, "ui", "calofin_ui", "calofin.lsp")
+CATALOG = os.path.join(REPO_DIR, "ui", "calofin_net", "Generated",
+                       "CommandCatalog.g.vb")
 RELEASES_DIR = os.path.join(REPO_DIR, "releases")
 
 SRC = open(LSP, encoding="ascii").read()    # also asserts pure ASCII
@@ -690,6 +703,105 @@ vm2 = fresh()
 vm2.run("c:SPACOVCREATEVER", [])
 check("SPACOVCREATEVER prints the banner",
       "SPACOVCREATE v" in "".join(vm2.printed))
+
+
+# ============================================== 5. the button greys out =====
+
+print("\nthe button on the panel")
+
+#  A tool on the panel that this session has not loaded must show as a
+#  GREYED button, not a live one that fails when it is pressed.  Both
+#  surfaces work the same way and both read the same two things: a
+#  roster that has to hold the name, and a probe that has to find C:
+#  <name> missing.  tests/test_lazpanel.py drives the real dialog on
+#  every page and asserts the mode_tile that greys it; what is checked
+#  here is the half that belongs to THIS tool -- that it is on the
+#  roster at all, on the pages its README claims, and that the probe
+#  changes its answer when the file loads.
+
+NAME = "SPACOVCREATE"
+
+
+def panel_vm(with_tool):
+    vm = VM()
+    if LIB:
+        vm.load(LIB)
+    vm.load(PANEL_LSP)
+    if with_tool:
+        vm.load(LSP)
+    return vm
+
+
+vm = panel_vm(False)
+check("it is on the panel's roster",
+      NAME in [str(x) for x in (vm.loads("(lzp:commands)") or [])])
+cap = dict((str(c[0]), str(c[1])) for c in vm.loads("lzp:*captions*"))
+check("with a caption, so the button is not blank",
+      cap.get(NAME, "") != "", repr(cap.get(NAME)))
+for page in ("Spa", "Layout"):
+    on = [str(x) for x in (vm.loads(f'(lzp:group-commands "{page}")') or [])]
+    check(f"and a button on the {page} page", NAME in on)
+check("not loaded, the panel's probe says so",
+      vm.loads(f'(lzp:has "{NAME}")') is lispvm.NIL)
+check("  so it is not in the loaded set the greying reads",
+      NAME not in [str(x) for x in (vm.loads("(lzp:loaded)") or [])])
+
+vm = panel_vm(True)
+check("once the file loads, the same probe finds it",
+      vm.loads(f'(lzp:has "{NAME}")') is not lispvm.NIL)
+check("  and it joins the loaded set, so the button lights",
+      NAME in [str(x) for x in (vm.loads("(lzp:loaded)") or [])])
+
+
+def glue_vm(with_tool):
+    vm = VM()
+    vm.load(GLUE_LSP)
+    if with_tool:
+        vm.load(LSP)
+    return vm
+
+
+vm = glue_vm(False)
+check("it is on the VB palette's probe list too",
+      NAME in [str(x) for x in (vm.loads("calofin:*commands*") or [])],
+      "-- without it the palette button can never grey out")
+check("not loaded, that probe says so",
+      vm.loads(f'(calofin:has "{NAME}")') is lispvm.NIL)
+check("  so the palette greys it",
+      NAME not in [str(x) for x in (vm.loads("(calofin:loaded)") or [])])
+vm = glue_vm(True)
+check("once the file loads, the palette enables it",
+      NAME in [str(x) for x in (vm.loads("(calofin:loaded)") or [])])
+
+# The palette's catalog is generated from the panel's tables, and it
+# carries the name in three places that answer three different
+# questions: All is the flat roster the Find list reads, Groups is the
+# four category pages, and Pages is the column layout of the job pages.
+# A name in one and not the others is a button that either cannot be
+# found or cannot be pressed.
+cat = open(CATALOG, encoding="ascii").read()
+
+
+def section(name, end):
+    return cat.split("Public Shared ReadOnly " + name)[1].split(end)[0]
+
+
+entry = f'New Entry("{NAME}", '
+all_rows = [l for l in section("All", "Public Shared ReadOnly").splitlines()
+            if entry in l]
+check("the generated palette catalog lists it once", len(all_rows) == 1,
+      str(all_rows))
+if all_rows:
+    check("  with its caption and its tooltip, neither left empty",
+          '""' not in all_rows[0]
+          and "Spa cover from the spa" in all_rows[0], all_rows[0].strip())
+groups = section("Groups", "Public Shared ReadOnly")
+layout = groups.split('{"Layout", {')[1].split("}}")[0]
+check("  and it is in the catalog's Layout group", entry in layout)
+pages = section("Pages", "End Class")
+for page in ("Spa", "Layout"):
+    col = pages.split(f'New Page("{page}"')[1].split("New Page(")[0]
+    check(f"  and in the {page} page's columns", f'"{NAME}"' in col)
 
 
 # ==================================================================== end ====

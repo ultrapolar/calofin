@@ -900,6 +900,52 @@ print("   Close: nothing ran, close->load->new->start->unload->delete,")
 print("   only the first page's %d commands bound, only %s enabled"
       % (len(first), LIVE))
 
+# EVERY page greys, not just the one the panel opens on.  The block
+# above proves the rule on GROUPS[0] and only there, and seven of the
+# eight pages are not that page: a command that lives nowhere else --
+# SPACOVCREATE is on Spa and Layout and on no other -- could have
+# shipped with a button that never dimmed and every assertion above
+# would still have passed.  So the panel is driven onto each page in
+# turn and the same two things asked of it: this page's commands are
+# the ones wired, and the ones this session has not loaded are the ones
+# greyed.
+#
+# Taken across the pages it says the thing worth saying, about every
+# tool rather than about one: each command on the roster gets a wired
+# button somewhere, and greys there when it is missing.
+wired_anywhere, greyed_anywhere = set(), set()
+for gname in GROUPS:
+    gv = stubbed()
+    gv.loads('(setq lzp:*page* "%s")' % gname)
+    run(gv, 'c:LAZPANEL', 'page ' + gname)
+    assert str(gv.globals.get('stub:*dlgname*')) == \
+        str(gv.loads('(lzp:dlgname "%s")' % gname)), (
+        "the panel did not open on %s" % gname)
+    gv.loads('(setq test:*g* (lzp:group-commands "%s"))' % gname)
+    on_page = {str(x) for x in gv.globals['test:*g*']}
+    acts = {str(a[0]) for a in gv.globals.get('stub:*action*')}
+    dis = {str(x) for x in (gv.globals.get('stub:*disabled*') or [])}
+    assert on_page <= acts, (
+        "%s: buttons with no callback: %r" % (gname, sorted(on_page - acts)))
+    strays = (acts & set(PANEL)) - on_page
+    assert not strays, (
+        "%s: another page's commands were bound: %r" % (gname, sorted(strays)))
+    # nothing is pinned or recent in a fresh session, so every greyed
+    # key here is a page button and the two sets compare directly
+    assert dis == on_page - {LIVE}, (
+        "%s: greyed the wrong buttons: %r" % (gname, sorted(dis ^ (on_page - {LIVE}))))
+    wired_anywhere |= on_page
+    greyed_anywhere |= dis
+assert wired_anywhere == set(PANEL), (
+    "commands on the roster with no button on any page: %r"
+    % sorted(set(PANEL) - wired_anywhere))
+assert greyed_anywhere == set(PANEL) - {LIVE}, (
+    "commands whose button never greys: %r"
+    % sorted((set(PANEL) - {LIVE}) - greyed_anywhere))
+print("   and on ALL %d pages: every one of the %d commands has a wired"
+      % (len(GROUPS), len(PANEL)))
+print("   button that greys when this session has not loaded it")
+
 print("== where it was left outlives the session, not just the reopen ==")
 # lzp:*pos* is deliberately NOT reset between runs -- the panel reopens
 # after every tool it launches -- but it still dies with the file, so
