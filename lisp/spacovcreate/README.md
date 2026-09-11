@@ -220,6 +220,14 @@ APPLOAD `SPACOVCREATE.lsp` on its own, or load the whole build from
 the loaded version. The run is one `UNDO` group, so one `U` rolls the
 whole cover back.
 
+On the panel it sits on the **Spa** page (beside `SPA` and `LAZSPA`) and
+on the **Layout** category page, captioned *Spa cover from the spa*. In
+a session that has not loaded it, **the button is greyed** on both
+surfaces -- `LAZPANEL` greys it from `lzp:loaded`, the VB palette from
+`calofin:*commands*` -- and on the Find page it is listed with
+`(not loaded)` against it rather than offered and then refused. It
+searches by caption as well as by name, so typing *cover* finds it.
+
 ## Tunables
 
 Every knob is in the tunables block at the top of the file and nowhere
