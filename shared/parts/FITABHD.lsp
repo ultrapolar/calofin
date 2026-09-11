@@ -4575,6 +4575,7 @@
        (initget 6 "Back Undo")
        (setq v (getdist (strcat "\nMaximum distance from a point <"
                                 (rtos tol 2 3) "> [Back]: ")))
+       (if lzd:ask (lzd:ask "fit:ask-settings" v))
        (cond
          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
           (princ "\nStepping back one step.")
@@ -4761,7 +4762,9 @@
     ;; cover mode lasts one run: leaked, it would quietly cost the next
     ;; FITABHD its bottom
     (setq fit:*nobottom* nil)
+    (if lzd:report (lzd:report "FITABHD" *fitabhd-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "FITABHD" *fitabhd-version*))
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - kept for step 7, probed

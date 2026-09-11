@@ -584,7 +584,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCOVERCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "COVERCHECKRESCUE" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "COVERCHECKRESCUE" *cchk-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -3053,7 +3055,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCOVERCHECK error: " msg)))
+    (if lzd:report (lzd:report "COVERCHECK" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "COVERCHECK" *cchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
@@ -3441,7 +3445,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "COVERCHECK" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "COVERCHECK" *cchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
@@ -3875,7 +3881,9 @@
     (if fil0 (setvar "FILEDIA" fil0))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALCOVERCHECK" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCOVERCHECK" *cchk-version*))
 
   (cchk:tut-checklist)
 
@@ -3917,7 +3925,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECKCLEAN error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALCOVERCHECKCLEAN" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCOVERCHECKCLEAN" *cchk-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))

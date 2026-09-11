@@ -854,7 +854,9 @@
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
+    (if lzd:report (lzd:report "DDGPS" *droneheightgps-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "DDGPS" *droneheightgps-version*))
 
   ;; 1) pick the photo - start in the last-used folder, else the H: drive
   (setq def (getenv "DDGPS_LastDir"))

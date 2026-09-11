@@ -400,7 +400,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSOCONV error: " msg)))
+    (if lzd:report (lzd:report "SOCONV" *soconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SOCONV" *soconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil)
@@ -476,7 +478,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSORECONV error: " msg)))
+    (if lzd:report (lzd:report "SORECONV" *soconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SORECONV" *soconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil

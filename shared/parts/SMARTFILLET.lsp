@@ -678,7 +678,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSMARTFILLET error: " m)))
+    (if lzd:report (lzd:report "SMARTFILLET" *smartfillet-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "SMARTFILLET" *smartfillet-version*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))

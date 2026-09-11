@@ -284,7 +284,9 @@
       (progn
         (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
         (princ "\nNothing was left half done - use U to roll the run back.")))
+    (if lzd:report (lzd:report "STOCKCOVER" *stockcover-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "STOCKCOVER" *stockcover-version*))
 
   (setq oscm   (getvar "CMDECHO")
         osos   (getvar "OSMODE")

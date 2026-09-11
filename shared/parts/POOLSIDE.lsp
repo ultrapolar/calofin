@@ -175,6 +175,7 @@
   (cal:osup)
   (initget 7)                           ; no null, no zero, no negative
   (setq v (getdist (strcat "\n" msg ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cal:osdown)
   v)
 
@@ -198,6 +199,7 @@
                     (if (eq kind 'REQ) "" " (or NA if not measured)")
                     (if back " [Back]" "")
                     ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cal:osdown)
   (mapcar '(lambda (e c) (psd:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -499,7 +501,9 @@
     (psd:pvkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "POOLSIDE" *poolside-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOLSIDE" *poolside-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist

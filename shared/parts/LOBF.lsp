@@ -634,6 +634,7 @@
   (initget "1 2 3 All None Redo")
   (setq pick (getkword (strcat "\n  Keep which fit - click one, or"
                                " [1/2/3/All/None/Redo] <" dflt ">: ")))
+  (if lzd:ask (lzd:ask "lobf:askfit" pick))
   (if (null pick)
     ;; no keyword typed: give them a click, and fall back to the
     ;; default this run worked out
@@ -820,7 +821,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLOBF error: " msg)))
+    (if lzd:report (lzd:report "LOBF" *lobf-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LOBF" *lobf-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - probed BEFORE the undo

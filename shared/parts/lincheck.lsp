@@ -147,6 +147,7 @@
                                 (vl-string-translate " " "/" kwlist)
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
+    (if lzd:ask (lzd:ask prompt ans))
     (if (and (null ans) dflt) (setq ans dflt))
   )
   (if (member ans '("Back" "Undo"))
@@ -363,7 +364,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nLINCHECK error: " msg)))
+    (if lzd:report (lzd:report "LINCHECK" *lincheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINCHECK" *lincheck-version*))
 
   (setq *lin:log* nil fib nil vin nil)
   (princ "\n--- Liner Tech Drawing Checklist ---")

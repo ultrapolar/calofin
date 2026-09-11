@@ -1342,7 +1342,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZSPA error: " msg)))
+    (if lzd:report (lzd:report "LAZSPA" *lazspa-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZSPA" *lazspa-version*))
   (setq lzs:*vals* nil
         lzs:*picks* nil                 ; every dropdown back to (ask)
         lzs:*pos* nil                   ; the profile decides where this

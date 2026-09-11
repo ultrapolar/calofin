@@ -270,6 +270,14 @@ class VM:
         #: read the real one would pass or fail by what the machine
         #: running it had exported.
         self.env = {}
+        #: Files written by (open ... "w") / write-line, as path -> the
+        #: text written.  In memory for the same reason env is: a suite
+        #: that wrote a real DXF into the tree would leave litter behind
+        #: and would pass or fail by what the running user may write.
+        #: lzd:dxfwrite is asserted against this.
+        self.files = {}
+        self.dirs = set()          # every vl-mkdir that was allowed
+        self.readonly_dirs = set()  # ones where (open ... "w") answers nil
         self.undo_groups = 0       # _.UNDO _Begin / _End balance
         self.undo_marks = 0        # StartUndoMark / EndUndoMark balance
         self.undo_log = []         # 'start' / 'end', in order
@@ -772,7 +780,13 @@ def _type(vm, a):
     if isinstance(v, Ent):
         return Sym('ename')
     if isinstance(v, list):
-        return Sym('list')
+        # A selection set is a list in disguise here, but it is not one
+        # in AutoCAD and code that asks is entitled to the real answer:
+        # lzd:watch takes an ename, a set or a list of either, and told
+        # LIST for a set it would walk the '<ss>' marker as an entity.
+        return Sym('pickset') if _is_ss(v) else Sym('list')
+    if isinstance(v, FileHandle):
+        return Sym('file')
     return Sym('other')
 
 
@@ -1096,6 +1110,31 @@ def _princ(vm, a):
 
 
 BUILTINS[Sym('princ')] = _princ
+def _to_string(v):
+    """(vl-princ-to-string x) -- what princ would have shown, as a
+    string.  The one way to get a symbol or an ename into a message
+    without strcat refusing it, which is how lzd:str takes "anything at
+    all" and gives back something a DXF line can hold."""
+    if v is NIL:
+        return "nil"
+    if v is T:
+        return "T"
+    if isinstance(v, bool):
+        return "T" if v else "nil"
+    if isinstance(v, str):
+        return v
+    if isinstance(v, Sym):
+        return str(v)
+    if isinstance(v, float):
+        return _rtos_default(v)
+    if _is_ss(v):
+        return "<Selection set: %d>" % (len(v) - 1)
+    if isinstance(v, list):
+        return "(" + " ".join(_to_string(x) for x in v) + ")"
+    return str(v)
+
+
+BUILTINS[Sym('vl-princ-to-string')] = lambda vm, a: _to_string(a[0])
 BUILTINS[Sym('prin1')] = lambda vm, a: (a[0] if a else NIL)
 BUILTINS[Sym('print')] = lambda vm, a: (a[0] if a else NIL)
 BUILTINS[Sym('terpri')] = lambda vm, a: NIL
@@ -2530,6 +2569,143 @@ def _findfile(vm, a):
     if not isinstance(name, str) or not name:
         return NIL
     return os.path.abspath(name) if os.path.isfile(name) else NIL
+
+
+class FileHandle:
+    """What (open ...) hands back.  AutoLISP calls the type FILE and
+    prints it as #<file "...">; nothing here looks inside one, it is
+    only ever passed straight back to write-line / read-line / close."""
+
+    def __init__(self, path, mode):
+        self.path = path
+        self.mode = mode
+        self.lines = []
+        self.pos = 0
+        self.closed = False
+
+    def __repr__(self):
+        return '#<file "%s">' % self.path
+
+
+def _dirname(p):
+    p = str(p).replace('/', '\\')
+    i = p.rfind('\\')
+    return p[:i] if i > 0 else NIL
+
+
+@bi('open')
+def _open(vm, a):
+    """(open path mode) -- a file handle, or NIL when it cannot be
+    opened.  The nil is the half that matters: LAZDIAG picks a folder to
+    write its report into by trying each candidate and taking the first
+    that opens, so a test drives that walk by marking folders read-only
+    (vm.readonly_dirs) rather than by chmod on a real one."""
+    path = str(a[0])
+    mode = str(a[1]).lower() if len(a) > 1 else 'r'
+    if mode.startswith('r'):
+        if path not in vm.files:
+            return NIL
+        fh = FileHandle(path, 'r')
+        fh.lines = vm.files[path].split('\n')
+        if fh.lines and fh.lines[-1] == '':
+            fh.lines.pop()
+        return fh
+    d = _dirname(path)
+    if d is not NIL and d in vm.readonly_dirs:
+        return NIL
+    if mode.startswith('a') and path in vm.files:
+        fh = FileHandle(path, 'a')
+        fh.lines = vm.files[path].split('\n')
+        if fh.lines and fh.lines[-1] == '':
+            fh.lines.pop()
+        return fh
+    return FileHandle(path, 'w')
+
+
+@bi('write-line')
+def _write_line(vm, a):
+    """(write-line s [file]) -- with no file it goes to the screen, the
+    way princ does; with one it is a line of the file being built."""
+    s = a[0] if isinstance(a[0], str) else str(a[0])
+    if len(a) < 2 or a[1] is NIL:
+        vm.printed.append(s + "\n")
+        return a[0]
+    fh = a[1]
+    if not isinstance(fh, FileHandle) or fh.closed:
+        raise LispError("write-line: not an open file handle", vm)
+    fh.lines.append(s)
+    # visible before the close, so a test that never closes (a report
+    # cut short by a second error) still sees what got as far as the file
+    vm.files[fh.path] = "\n".join(fh.lines) + "\n"
+    return a[0]
+
+
+@bi('read-line')
+def _read_line(vm, a):
+    """(read-line file) -- the next line, NIL at the end."""
+    fh = a[0] if a else NIL
+    if not isinstance(fh, FileHandle):
+        return NIL
+    if fh.pos >= len(fh.lines):
+        return NIL
+    fh.pos += 1
+    return fh.lines[fh.pos - 1]
+
+
+@bi('close')
+def _close(vm, a):
+    fh = a[0] if a else NIL
+    if isinstance(fh, FileHandle):
+        if fh.mode != 'r':
+            vm.files[fh.path] = ("\n".join(fh.lines) + "\n"
+                                 if fh.lines else "")
+        fh.closed = True
+    return NIL
+
+
+@bi('vl-filename-directory')
+def _vl_filename_directory(vm, a):
+    d = _dirname(a[0])
+    return d if d is not NIL else ""
+
+
+@bi('vl-filename-base')
+def _vl_filename_base(vm, a):
+    p = str(a[0]).replace('/', '\\')
+    p = p[p.rfind('\\') + 1:]
+    i = p.rfind('.')
+    return p[:i] if i > 0 else p
+
+
+@bi('vl-filename-extension')
+def _vl_filename_extension(vm, a):
+    p = str(a[0]).replace('/', '\\')
+    p = p[p.rfind('\\') + 1:]
+    i = p.rfind('.')
+    return p[i:] if i > 0 else NIL
+
+
+@bi('vl-mkdir')
+def _vl_mkdir(vm, a):
+    """(vl-mkdir dir) -- T when it was made or is already there, nil
+    when it could not be.  A read-only parent refuses, which is what
+    sends LAZDIAG on to the next candidate folder."""
+    d = str(a[0]).rstrip('\\/')
+    if _dirname(d) in vm.readonly_dirs or d in vm.readonly_dirs:
+        return NIL
+    vm.dirs.add(d)
+    return T
+
+
+@bi('vl-file-directory-p')
+def _vl_file_directory_p(vm, a):
+    d = str(a[0]).rstrip('\\/')
+    return T if d in vm.dirs else NIL
+
+
+@bi('vl-file-systime')
+def _vl_file_systime(vm, a):
+    return NIL
 
 
 @bi('getenv')

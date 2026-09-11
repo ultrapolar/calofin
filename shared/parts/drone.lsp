@@ -180,7 +180,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDRONE error: " msg)))
+    (if lzd:report (lzd:report "DRONE" *drone-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DRONE" *drone-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil

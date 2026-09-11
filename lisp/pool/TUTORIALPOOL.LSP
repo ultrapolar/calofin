@@ -339,7 +339,9 @@
     (if (and msg
              (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPOOL error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALPOOL" tutorial:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALPOOL" tutorial:*version*))
 
   (if (null pool:*version*)
       (progn
@@ -361,7 +363,9 @@
     (pool:sysrestore)
     (if undo-open (setq undo-open (pool:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "TUTORIALPOOL" tutorial:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALPOOL" tutorial:*version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
   (pool:syssave)

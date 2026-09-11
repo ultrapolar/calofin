@@ -217,6 +217,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((member v '("Back" "Undo")) 'HN-BACK)
         ((null v) (if dflt dflt (hn:askkw msg kws shown dflt back)))
         (t v)))
@@ -867,7 +868,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHONEFILLET error: " m)))
+    (if lzd:report (lzd:report "HONEFILLET" *honefillet-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "HONEFILLET" *honefillet-version*))
 
   (vl-load-com)
   (hn:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))

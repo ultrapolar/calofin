@@ -404,7 +404,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCHECK error: " msg)))
+    (if lzd:report (lzd:report "CHECK" *checkdrawing-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CHECK" *checkdrawing-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))

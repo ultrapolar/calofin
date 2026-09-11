@@ -339,7 +339,9 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
+    (if lzd:report (lzd:report "POOLDEMO" pooldemo:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
   (if (not (member 'pool:hopcalc (atoms-family 0)))
       (princ "\nPOOL.LSP is not loaded -- APPLOAD it first, then run POOLDEMO.")
@@ -357,7 +359,9 @@
     (pool:sysrestore)
     (if undo-open (setq undo-open (pool:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "POOLDEMO" pooldemo:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
   (pool:syssave)

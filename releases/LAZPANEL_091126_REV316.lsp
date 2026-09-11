@@ -243,6 +243,7 @@
     ("G2MRECONV"        "G2M conversion, undone")
     ("HEMISTEP"         "Hemi step")
     ("HONEFILLET"       "Corner radius, honed")
+    ("LAZDIAG"          "Error report for the last failure")
     ("LAZFORM"          "Pool from a filled-in chart")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
@@ -439,6 +440,7 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
+      "LAZDIAG"
       "LOBF"
       )
     )
@@ -535,6 +537,7 @@
       "LITESPACHECKSCAN"
       "LINTXTCHK"
       "CCPRECHECK"
+      "LAZDIAG"
       )
     )))
 
@@ -1712,7 +1715,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZPANEL error: " msg)))
+    (if lzd:report (lzd:report "LAZPANEL" *lazpanel-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZPANEL" *lazpanel-version*))
   ;; NOT reset here: the panel reopens after every tool it launches, and
   ;; coming back to page one in the middle of the screen each time would
   ;; undo the whole point of reopening.  lzp:*page* and lzp:*pos* are
@@ -1893,7 +1898,9 @@
     (if f (vl-file-delete f))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZPIN error: " msg)))
+    (if lzd:report (lzd:report "LAZPIN" *lazpanel-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZPIN" *lazpanel-version*))
   (lzp:pins-read)
   (lzp:recent-read)
   (cond

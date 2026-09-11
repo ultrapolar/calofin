@@ -371,7 +371,9 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; autobead-flush drain and the UNDO close above; harmless no-op
@@ -596,7 +598,9 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
+    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
   (autobead-ensure-layer *autobead-layer*)
   ;; a pickfirst selection skips straight to the direction question;
   ;; the probe sits OUTSIDE the stage loop so Back at that question

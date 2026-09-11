@@ -186,6 +186,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((member v '("Back" "Undo")) 'SF-BACK)
         ((null v) (if dflt dflt (sf:askkw msg kws shown dflt back)))
         (t v)))
@@ -771,7 +772,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSMARTFILLET error: " m)))
+    (if lzd:report (lzd:report "SMARTFILLET" *smartfillet-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "SMARTFILLET" *smartfillet-version*))
 
   (vl-load-com)
   (sf:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))

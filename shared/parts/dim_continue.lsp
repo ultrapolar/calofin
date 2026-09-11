@@ -91,7 +91,9 @@
     (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
+    (if lzd:report (lzd:report "DIMCONTEND" *dimcontinue-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "DIMCONTEND" *dimcontinue-version*))
 
   (setq oce  (getvar "CMDECHO")
         ocl  (getvar "CLAYER")

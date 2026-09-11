@@ -413,6 +413,7 @@
   (setq ans (getpoint (strcat "\n  Which Pt." nm
                               " is meant - click it, or type its"
                               " label [Back] <Enter = none>: ")))
+  (if lzd:ask (lzd:ask "cdo:ask-pick" ans))
   (cond
     ((null ans) nil)
     ((and (not (listp ans)) (cal:back-word-p ans)) 'CDO-BACK)
@@ -492,7 +493,9 @@
     (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
+    (if lzd:report (lzd:report "CDCALLOUT" *cdcallout-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "CDCALLOUT" *cdcallout-version*))
 
   (vl-load-com)
   (setq oce  (getvar "CMDECHO")

@@ -497,6 +497,7 @@
 (defun abf:askfirst (msg endtext / v)
   (initget 6 "Back Undo")
   (setq v (getdist (strcat "\n" msg " [Back] <Enter = " endtext ">: ")))
+  (if lzd:ask (lzd:ask msg v))
   (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK v))
 
 ;;; ---------------------- layers ----------------------------------------
@@ -1711,6 +1712,7 @@
   (initget 128)
   (setq ans (getpoint (strcat msg (if back " [Back]" "")
                               " <Enter = none>: ")))
+  (if lzd:ask (lzd:ask msg ans))
   (cond
     ((null ans) nil)
     ((and (not (listp ans)) (cal:back-word-p ans))
@@ -1950,7 +1952,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" (if cmd cmd "ABFIND") " error: " m)))
+    (if lzd:report (lzd:report "ABFIND" *abfind-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "ABFIND" *abfind-version*))
 
   (setq movep   (eq mode 'MOVE)
         ;; createp is the ROUND, not the command: ABFIND and ABMOVE

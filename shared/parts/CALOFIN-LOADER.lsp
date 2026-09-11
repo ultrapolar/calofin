@@ -102,13 +102,18 @@
   (progn
     (princ (strcat "\n[calofin] build folder: " cal:*dir*))
     (setq cal:*build-loading* T)   ; the library arrives as part of a build
-    ;; The library first -- every tool below calls into it.  POOL and SPA
+    ;; The library first -- every tool below calls into it -- then
+    ;; LAZDIAG, which every tool below calls when it FAILS: the calls are
+    ;; guarded and resolve at run time, so this is not a load-order
+    ;; requirement, but a diagnostic that loads after the things it
+    ;; diagnoses reads like an afterthought and eventually becomes one.
+    ;; POOL and SPA
     ;; precede their demo/tutorial satellites; LINGUTTER follows PADDLE,
     ;; which it hands its stripped drawing to; LAZFORM comes after POOL,
     ;; whose answers it fills in, and the LAZPANEL launcher loads last of
     ;; all, after everything its buttons name.
     (foreach m '(
-                 "CALOFIN-LIB.lsp" "POOL.lsp" "POOLDEMO.lsp"
+                 "CALOFIN-LIB.lsp" "LAZDIAG.lsp" "POOL.lsp" "POOLDEMO.lsp"
                  "TUTORIALPOOL.lsp" "POOLSIDE.lsp"
                  "SPA.lsp" "TUTORIALSPA.lsp"
                  "OASIS.lsp" "abcdef.lsp" "ABFIND.lsp"

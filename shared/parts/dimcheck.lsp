@@ -405,7 +405,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "DIMCHECKRESCUE" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DIMCHECKRESCUE" *dchk-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -1398,7 +1400,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMCHECK error: " msg)))
+    (if lzd:report (lzd:report "DIMCHECK" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DIMCHECK" *dchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
@@ -1797,7 +1801,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMSCAN error: " msg)))
+    (if lzd:report (lzd:report "DIMSCAN" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DIMSCAN" *dchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
@@ -2169,7 +2175,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALDIMCHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALDIMCHECK" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALDIMCHECK" *dchk-version*))
 
   (princ (strcat "\n=================================================="
                  "\n  DIMCHECK tutorial   [" *dchk-version* "]"

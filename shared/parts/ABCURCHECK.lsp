@@ -1224,7 +1224,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECK error: " msg)))
+    (if lzd:report (lzd:report "ABCURCHECK" *abcurcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCURCHECK" *abcurcheck-version*))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1246,7 +1248,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKSCAN error: " msg)))
+    (if lzd:report (lzd:report "ABCURCHECKSCAN" *abcurcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCURCHECKSCAN" *abcurcheck-version*))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1272,7 +1276,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "ABCURCHECKRESCUE" *abcurcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCURCHECKRESCUE" *abcurcheck-version*))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO

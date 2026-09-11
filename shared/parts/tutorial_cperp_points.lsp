@@ -119,7 +119,9 @@
     (tutc:finish)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
+    (if lzd:report (lzd:report "TUTORIALCPERPPTS" *tutcperp-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCPERPPTS" *tutcperp-version*))
 
   ;; one demo round: sample n points along crv by arc length, offset
   ;; each along the left travel normal by (nth i lens), draw guides,
