@@ -121,6 +121,7 @@ lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-npt
 lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-ptnames
 lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-pts
 lisp/fitabhd/FITABHD.lsp|fit:omit-loop|setq|fit-omit
+lisp/honefillet/HONEFILLET.lsp|c:honefillet|setq-global|*error*
 lisp/lhd/lhd.lsp|c:lhd|setq-global|*error*
 lisp/lhd/lhd.lsp|lh:add-point|setq|lh-ptnames
 lisp/lhd/lhd.lsp|lh:add-point|setq|lh-zvals
@@ -502,6 +503,7 @@ shared/parts/FITABHD.lsp|fit:add-point|setq|fit-ptnames
 shared/parts/FITABHD.lsp|fit:add-point|setq|fit-pts
 shared/parts/FITABHD.lsp|fit:omit-loop|setq|fit-omit
 shared/parts/HEMISTEP.lsp|c:hemistep|foreach|e
+shared/parts/HONEFILLET.lsp|c:honefillet|setq-global|*error*
 shared/parts/LINTXTCHK.lsp|c:lintxtchk|foreach|item
 shared/parts/PADDLE.lsp|c:paddle|foreach|pad
 shared/parts/PADDLE.lsp|c:tutorialpaddle|foreach|e
