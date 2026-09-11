@@ -28,7 +28,10 @@
 ;;;                end point that is not on an object is pulled back to
 ;;;                the last object before it, so every dim runs object
 ;;;                to object and none hangs off the end into open
-;;;                drawing.
+;;;                drawing.  Say No and it asks whether you would like
+;;;                pads instead: Yes there hands the plan to PADDLE,
+;;;                which drops a pad at every concave perimeter
+;;;                feature - see "Pads instead of floor dims" below.
 ;;;             Step 5. Places the two overall dims, no input needed:
 ;;;                the plan's full width about 2ft above the topmost
 ;;;                dimension and its full height about 2ft to the left
@@ -86,6 +89,38 @@
 ;;;    dimension is placed on that clear side.  Because only the
 ;;;    highlighted stuff blocks the rays, title borders, notes and
 ;;;    anything else in the drawing cannot get in the way.
+;;;
+;;;  Pads instead of floor dims:
+;;;    Step 4's two answers are alternatives, not a pair.  No to floor
+;;;    dims is followed by "Would you like pads?"; Yes to floor dims is
+;;;    not - a run that is dimensioning the floor is not the run that
+;;;    wants the pads laid out, and asking both questions every time is
+;;;    one question more than the answer needs.  Back at the pad
+;;;    question re-opens the floor dims one, so an answer given by
+;;;    mistake is not a run wasted.
+;;;    Yes to pads hands PADDLE the step-1 plan as a pickfirst
+;;;    selection rather than letting it hunt for one: PADDLE
+;;;    auto-detects the largest closed loop in the WHOLE drawing, and a
+;;;    title block border is a bigger loop than the pool.  Handed the
+;;;    plan, it pads what was just dimensioned and asks nothing - it
+;;;    keeps the lines, arcs and polylines out of what it is given, so
+;;;    a plan drawn without any of those is the one case where it falls
+;;;    back on its own selection prompt.
+;;;    PICKFIRST is switched on for the handoff and put back after -
+;;;    with it at 0, sssetfirst still highlights while PADDLE's
+;;;    (ssget "_I") reads nothing, and the handoff would go quietly
+;;;    missing.  (An Esc inside PADDLE is caught by PADDLE's own
+;;;    handler, which is the innermost one, so this command's never
+;;;    sees it and PICKFIRST is left switched on - AutoCAD's own
+;;;    default, and the state a drafter who never turned it off is in.)
+;;;    The pads go in LAST, once the dims are placed and this command's
+;;;    layer, dimension style, CMDECHO and undo group are back: PADDLE
+;;;    is a command in its own right and must start from the drafter's
+;;;    settings, not this one's.  It opens its own undo mark too, so one
+;;;    U backs the pads out and the next one the dims.
+;;;    PADDLE lives in its own file, so it may not be in the session at
+;;;    all.  Then the dims have still been placed, and saying so beats
+;;;    dying on an undefined function.
 ;;;
 ;;;  Dimension styles - every dimension picks its own, by what it
 ;;;  measures rather than by which step placed it (a style the drawing
@@ -161,8 +196,10 @@
 ;;;      inches without dragging the rest of the chain with it.
 ;;;    * The two floor dims lines are construction lines only - they
 ;;;      are erased once their dimension chain has been created.
-;;;    * Answering No to the floor dims question skips straight to the
-;;;      overall dims; Back at it re-opens the stairs.
+;;;    * Answering No to the floor dims question puts the pad question
+;;;      instead, and the overall dims follow either answer to that;
+;;;      Back at the floor dims question re-opens the stairs, Back at
+;;;      the pad question re-opens the floor dims question.
 ;;;    * Break points closer together than 0.0001 drawing units
 ;;;      (ad:*merge-tol*) are merged so no zero-length dimensions are
 ;;;      created.
@@ -170,7 +207,7 @@
 ;;;      group is opened or closed; the run goes ahead without one.
 ;;; ======================================================================
 
-(setq *autodim-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.9")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -1219,7 +1256,7 @@
               (setq cnt (+ cnt (ad:dimchain pts loc ad:*style-plan*)))))))))
   cnt)
 
-;; ------------------------------------------------- part 3: the floor dims
+;; --------------------------- part 3: the floor dims, or the pads instead
 
 ;; WCS intersection points between the line object and every object in ss
 (defun ad:xpoints (lobj ss / i rtn pts res)
@@ -1364,6 +1401,33 @@
     ((eq out 'AD-BACK) 'AD-BACK)
     ((eq out 'skip) nil)
     (T (car out))))
+
+;; Step 4's other branch.  Hand PADDLE the plan as a pickfirst
+;; selection rather than letting it hunt for one: PADDLE auto-detects
+;; the largest closed loop in the WHOLE drawing, and a title block
+;; border is a bigger loop than the pool.  Handed the plan, it pads
+;; what was just dimensioned and asks nothing - the same handoff
+;; LINGUTTER and TYLERDRONESUITE make.
+;;
+;; PADDLE is its own file, so it may not be in this session: an unbound
+;; c: symbol is nil, which is the test here.  When it is missing the
+;; dims have still been placed, and saying so beats dying on an
+;; undefined function.
+;;
+;; The caller switches PICKFIRST on and puts it back - with it at 0
+;; sssetfirst still highlights while PADDLE's (ssget "_I") reads
+;; nothing, and the handoff would go quietly missing.
+(defun ad:paddle (plan)
+  (if c:PADDLE
+    (progn
+      (prompt "\nHanding the plan to PADDLE for the pads...")
+      (sssetfirst nil plan)
+      (c:PADDLE))
+    (prompt (strcat "\nPADDLE is not loaded, so no pads were placed - the"
+                    " dimensions above are all this run did.  APPLOAD"
+                    " PADDLE.lsp (or shared/LAZPASS.lsp, which is the whole"
+                    " build in one) and type PADDLE.")))
+  (princ))
 
 ;; ---------------------------------------------- part 4: the overall dims
 
@@ -1582,8 +1646,12 @@
 ;; --------------------------------------------------------------- commands
 
 ;; AUTODIM's plan flow, steps 2 to 5: the perimeter, then the stairs,
-;; then the two floor dims lines, then the two overall dims.
-(defun ad:runplan (plan / nper nstair nover nf1 nf2 stage mark3 mark4 v)
+;; then the two floor dims lines - or, when those are turned down, the
+;; pad question - then the two overall dims.  Returns (count pads),
+;; pads being T when the drafter asked for them: the pads themselves go
+;; in after the command has put its own state back, so the answer
+;; travels out of here rather than being acted on mid-run.
+(defun ad:runplan (plan / nper nstair nover nf1 nf2 stage mark3 mark4 v pad)
   (prompt (strcat "\n=== AUTODIM step 2 of 5: perimeter ==="
                   "\nDimensioning the straight lines about the"
                   " perimeter - no input needed..."))
@@ -1591,9 +1659,11 @@
   (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
   ;; steps 3 and 4 walk back through each other: Back at the floor dims
   ;; question re-opens the stairs, erasing what they drew, and Back at
-  ;; the second floor line re-opens the first
+  ;; the second floor line re-opens the first.  Stage 7 is step 4's
+  ;; other branch - the pad question, reached only from No at stage 4 -
+  ;; and Back there re-opens the question that sent it.
   (setq stage 3)
-  (while (< stage 7)
+  (while (< stage 8)
     (cond
       ((= stage 3)
        (prompt "\n=== AUTODIM step 3 of 5: stairs ===")
@@ -1628,7 +1698,7 @@
          (progn
            (setq nf1 (if (numberp v) v 0))    ; 'skip counts as none
            (setq stage 6))))
-      (T
+      ((= stage 6)
        (setq v (ad:getfloor "Floor dims 2 of 2" plan T))
        (if (eq v 'AD-BACK)
          (progn
@@ -1638,7 +1708,25 @@
            (setq stage 5))
          (progn
            (setq nf2 (if (numberp v) v 0))
-           (setq stage 7))))))
+           (setq stage 8))))                  ; floor dims taken - no pads
+      (T
+       ;; step 4's other branch, put only on the runs that turned the
+       ;; floor dims down: the two are alternatives, so a plan that got
+       ;; its floor dims is never asked this
+       (prompt (strcat "\nPADDLE can pad the plan instead: a pad at every"
+                       " concave feature around the perimeter - the inside"
+                       " corners, and the arcs tight enough to need one."
+                       "  The plan you highlighted is handed to it, so"
+                       " there is nothing to pick again, and the pads go"
+                       " in once the dims are placed."))
+       (setq v (ad:askyn "Would you like pads?" "Yes" T))
+       (cond
+         ((eq v 'AD-BACK)
+          (prompt "\nStepping back to the floor dims question.")
+          (setq stage 4))
+         (T (setq pad v)
+            (if (null pad) (prompt "\nNo pads."))
+            (setq stage 8))))))
   (prompt (strcat "\n=== AUTODIM step 5 of 5: overall dims ==="
                   "\nPlacing the overall width about "
                   (ad:numstr ad:*over-feet*) "ft above the topmost dim"
@@ -1647,8 +1735,9 @@
                   " left-most one - no input needed..."))
   (setq nover (ad:overall plan))
   (prompt (strcat "\n" (itoa nover) " overall dimension(s) placed."))
-  ;; the run's total, for AUTODIM's sign-off line
-  (+ nper nstair (if nf1 nf1 0) (if nf2 nf2 0) nover))
+  ;; the run's total, for AUTODIM's sign-off line, and the pad answer
+  ;; for it to act on once its own state is back
+  (list (+ nper nstair (if nf1 nf1 0) (if nf2 nf2 0) nover) pad))
 
 ;; AUTODIM's side-view flow, for when step 1's selection turned out to
 ;; be a flight of steps drawn in side view: the depth of every step
@@ -1663,10 +1752,13 @@
                   " needed..."))
   (setq n (ad:dimsteps (ad:stepchain risers) 1.0 T ad:*style-steps*))
   (prompt (strcat "\n" (itoa n) " step dimension(s) placed."))
-  ;; the run's total, for AUTODIM's sign-off line
-  n)
+  ;; the run's total, for AUTODIM's sign-off line, and no pad answer:
+  ;; pads go at a plan's concave perimeter features, so the side view
+  ;; never puts that question
+  (list n nil))
 
-(defun c:AUTODIM (/ *error* oldcmd olddim oldlay plan risers n undo-open)
+(defun c:AUTODIM (/ *error* oldcmd olddim oldlay oldpick plan risers res n
+                    pad undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -1676,6 +1768,10 @@
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
+    ;; only switched on for the PADDLE handoff, and nil the rest of the
+    ;; run - an Esc in that window is the one this puts back
+    (if oldpick (setvar "PICKFIRST" oldpick))
+    (setq oldpick nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (if lzd:report (lzd:report "AUTODIM" *autodim-version* msg))
@@ -1709,9 +1805,13 @@
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
       (setq oldlay (ad:enterlayer ad:*layer*))
-      (setq n (if (setq risers (ad:stepprofile-p plan))
-                (ad:runsteps risers)
-                (ad:runplan plan)))
+      ;; both flows answer with (count pads); the side view puts no pad
+      ;; question, so its pads are always nil
+      (setq res (if (setq risers (ad:stepprofile-p plan))
+                  (ad:runsteps risers)
+                  (ad:runplan plan))
+            n   (car res)
+            pad (cadr res))
       (ad:skipreport)
       (ad:usestyle olddim)
       (if oldlay (setvar "CLAYER" oldlay))
@@ -1722,7 +1822,23 @@
       (setvar "CMDECHO" oldcmd)
       (prompt (strcat "\nAUTODIM finished - "
                       (if (numberp n) (itoa n) "0")
-                      " dimension(s) placed."))))
+                      " dimension(s) placed."))
+      ;; The pads go in last of all, with this command's layer, style,
+      ;; CMDECHO and undo group already back: PADDLE is a command in its
+      ;; own right, it starts from the drafter's settings rather than
+      ;; this run's, and it opens an undo mark of its own.  The handoff
+      ;; also has to come after the last (command ...) above, which
+      ;; would clear the pickfirst set it puts up.
+      (if pad
+        (progn
+          ;; with PICKFIRST at 0 sssetfirst still highlights while
+          ;; PADDLE's (ssget "_I") reads nothing, and the handoff would
+          ;; go quietly missing
+          (setq oldpick (getvar "PICKFIRST"))
+          (setvar "PICKFIRST" 1)
+          (ad:paddle plan)
+          (setvar "PICKFIRST" oldpick)
+          (setq oldpick nil)))))
   (princ))
 
 (defun c:STAIRDIM (/ *error* oldcmd olddim oldlay n ss0 undo-open)
@@ -1877,5 +1993,5 @@
   (princ (strcat "\nAUTODIM " *autodim-version*))
   (princ))
 
-(princ (strcat "\nAutoDim.lsp " *autodim-version* " loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view)."))
+(princ (strcat "\nAutoDim.lsp " *autodim-version* " loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims or PADDLE's pads + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view)."))
 (princ)
