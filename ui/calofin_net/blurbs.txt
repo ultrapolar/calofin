@@ -46,6 +46,7 @@ FLOORDIM          Floor dimensioning
 G2MCONV           Puts a G2M architectural pool plan onto the shop's layers and styles
 G2MRECONV         Undoes a G2MCONV run - layers, appearance, text and dimension styles
 HEMISTEP          Hemi step layout
+HONEFILLET        Bracket two of SMARTFILLET's radii and hone between them at half inches
 LAZFORM           Fill the dimension chart in and draw the pool from it
 LAZFORMCOVER      LAZFORM for a cover sheet - the pool-bottom gate closed
 LAZSPA            LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn
@@ -61,6 +62,7 @@ LINTXTCHK         Places the vinyl-liner QA checklist as drawing text
 LITECOVERSCAN     Cover rules only - skips the dimension audit
 LITELINFINSCAN    Liner rules only - skips the dimension audit
 LITESPACHECKSCAN  Spa rules only - skips the dimension audit
+LOBF              Fits a construction line through points that should be on one line
 NORMIESTEP        Normie step layout
 OASIS             Continuous-tangent pool drawn live from envelope and radii
 PADDLE            Paddle perimeter pads

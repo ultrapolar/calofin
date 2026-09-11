@@ -170,14 +170,19 @@ def test_short_leg_caps_the_radius():
 
 def test_candidates_and_arc():
     vm = newvm()
-    assert call(vm, 'sf:candidates', [98.0]) == [6.0, 12.0, 18.0, 24.0,
-                                                 30.0, 36.0, 42.0, 48.0], \
-        "8 previews at most, from 6 up in 6s"
-    assert call(vm, 'sf:howmany', [98.0]) == 16, \
-        "16 radii really fit -- the cap has to know what it hid"
-    assert call(vm, 'sf:candidates', [17.0]) == [6.0, 12.0]
-    assert call(vm, 'sf:candidates', [5.0]) is NIL, \
-        "nothing fits under 6 -- and nil is the empty list"
+    assert call(vm, 'sf:candidates', [98.0]) == [3.0, 6.0, 9.0, 12.0, 18.0,
+                                                 24.0, 30.0, 36.0, 42.0,
+                                                 48.0], \
+        "10 previews at most: the 6s, with the two extras merged in"
+    assert call(vm, 'sf:howmany', [98.0]) == 18, \
+        "16 sixes and 2 extras really fit -- the cap must know what it hid"
+    assert call(vm, 'sf:candidates', [17.0]) == [3.0, 6.0, 9.0, 12.0]
+    assert call(vm, 'sf:candidates', [5.0]) == [3.0], \
+        "the 3 is the whole reason a 5-inch corner is not a dead end"
+    assert call(vm, 'sf:candidates', [2.0]) is NIL, \
+        "nothing fits under 3 -- and nil is the empty list"
+    assert abs(call(vm, 'sf:smallest', []) - 3.0) < 1e-9, \
+        "the smallest on offer is an extra, not sf:*first*"
 
     e1 = line(vm, (0, 0), (100, 0))
     e2 = line(vm, (0, 0), (0, 100))
@@ -234,40 +239,130 @@ def test_full_run():
     print("ok   full run: preview, click, fillet, dimension, clean up")
 
 
+def watch_fan(vm, e1, e2, extra=(), label='previews'):
+    """Run the command over the corner e1/e2 and hand back what the fan
+    looked like at the moment the pick prompt was reached: {'arcs': by
+    radius, 'labels': in the order they were drawn}.
+
+    The two are kept apart rather than sharing one dict -- a dict of
+    float radii with a 'labels' string key beside them cannot be sorted,
+    so the one thing a failing assertion needs to print is the one thing
+    that would raise instead."""
+    seen = {'arcs': {}, 'labels': []}
+
+    def look(vm_):
+        seen['arcs'] = {round(d[40], 6): d
+                        for _e, d in alive(vm_, 'ARC', PREVIEW_LAYER)}
+        seen['labels'] = [d for _e, d in alive(vm_, 'TEXT', PREVIEW_LAYER)]
+        return None                      # Enter = re-ask, then the click
+
+    run(vm, [[e1, [50.0, 0.0, 0.0]],
+             [e2, [0.0, 50.0, 0.0]],
+             look] + list(extra), label)
+    return seen
+
+
 def test_previews_drawn_and_capped():
     vm = newvm()
     e1 = line(vm, (0, 0), (100, 0))
     e2 = line(vm, (0, 0), (0, 100))
-    seen = {}
+    seen = watch_fan(vm, e1, e2, extra=[clicker(6.0), 'No'])
 
-    def look(vm_):
-        for e, d in alive(vm_, 'ARC', PREVIEW_LAYER):
-            seen[round(d[40], 6)] = d
-        seen['labels'] = alive(vm_, 'TEXT', PREVIEW_LAYER)
-        return None                      # Enter = re-ask, then Cancel
-
-    run(vm, [[e1, [50.0, 0.0, 0.0]],
-             [e2, [0.0, 50.0, 0.0]],
-             look,
-             clicker(6.0),
-             'No'], 'previews')
-
-    assert sorted(k for k in seen if k != 'labels') == \
-        [6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0], sorted(seen)
-    assert seen[12.0][6] == 'DASHED', "a preview is dashed, not solid"
-    assert seen[12.0][62] == 3
-    assert [t[1][1] for t in seen['labels']] == \
-        ['R6', 'R12', 'R18', 'R24', 'R30', 'R36', 'R42', 'R48'], \
-        [t[1][1] for t in seen['labels']]
+    assert sorted(seen['arcs']) == \
+        [3.0, 6.0, 9.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0], \
+        sorted(seen['arcs'])
+    assert [t[1] for t in seen['labels']] == \
+        ['R3', 'R6', 'R9', 'R12', 'R18', 'R24', 'R30', 'R36', 'R42', 'R48'], \
+        [t[1] for t in seen['labels']]
     # every other label goes on the other leg, or consecutive ones would
     # sit on top of each other
-    ys = [t[1][11][1] for t in seen['labels']]
+    ys = [t[11][1] for t in seen['labels']]
     assert ys[0] < 1.0 and ys[1] > 1.0, ys
-    assert '8 corners that fit, dashed: R6 to R48' in said(vm), said(vm)
+    assert '10 corners that fit, light to dark: R3 to R48' in said(vm), said(vm)
+    assert 'Dashed: R3 and R9' in said(vm), said(vm)
     assert '8 larger radii also fit' in said(vm), said(vm)
     assert 'nothing there' in said(vm), \
         "Enter at the pick re-asks -- a near miss must not cost the fan"
-    print("ok   previews: dashed, labelled, alternating, and capped out loud")
+    print("ok   previews: the whole fan, labelled, alternating, capped out loud")
+
+
+def test_the_odd_sizes_are_dashed():
+    """The 6" series is solid and the two extras are dashed -- which is
+    the fan saying which sizes are the usual step."""
+    vm = newvm()
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    seen = watch_fan(vm, e1, e2, extra=[clicker(6.0), 'No'], label='dashes')
+
+    arcs = seen['arcs']
+    for r in (3.0, 9.0):
+        assert arcs[r][6] == 'DASHED', (r, arcs[r][6])
+        assert abs(arcs[r].get(48, 0) - 0.25) < 1e-9, \
+            "and dashed at a scale that puts real gaps in a short arc"
+    for r in (6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0):
+        assert arcs[r][6] == 'Continuous', (r, arcs[r][6])
+        assert 48 not in arcs[r], \
+            "a solid arc carries no linetype scale to argue with"
+    print("ok   the 3 and the 9 come out dashed, the 6s solid")
+
+
+def test_shades_and_transparency():
+    """Light green at the small end, dark at the big one, every arc part
+    transparent, and each label in ITS OWN arc's shade."""
+    vm = newvm()
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    seen = watch_fan(vm, e1, e2, extra=[clicker(6.0), 'No'], label='shades')
+
+    arcs = seen['arcs']
+    rads = sorted(arcs)
+    cols = [arcs[r].get(420) for r in rads]
+    assert cols[0] == (190 << 16) + (255 << 8) + 190, cols[0]
+    assert cols[-1] == (110 << 8), cols[-1]
+    greens = [(c >> 8) & 0xFF for c in cols]
+    assert greens == sorted(greens, reverse=True), greens
+    assert len(set(cols)) == len(cols), "no two previews share a shade"
+
+    # 40 per cent transparent: 0x02000000 flags the word and the low byte
+    # is the ALPHA, so the per cent has to be turned round
+    for r in rads:
+        assert arcs[r].get(440) == 0x02000000 + 153, (r, arcs[r].get(440))
+        assert arcs[r][62] == 3, \
+            "and the ACI fallback stays on, for a display without 420"
+
+    # a label is drawn in its own arc's colour -- that is what ties the
+    # two together once ten of them are on screen at once
+    for i, r in enumerate(rads):
+        assert seen['labels'][i].get(420) == arcs[r].get(420), (r, i)
+        assert seen['labels'][i].get(440) == arcs[r].get(440), (r, i)
+    print("ok   shades run light to dark, transparent, labels matching")
+
+
+def test_labels_never_overlap():
+    """Each label climbs a rung further off its leg than the one before
+    it on that side, so no two can land on each other."""
+    vm = newvm()
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    seen = watch_fan(vm, e1, e2, extra=[clicker(6.0), 'No'], label='ladder')
+
+    labels = seen['labels']
+    h = labels[0][40]
+    assert abs(h - 4.0) < 1e-9, "and it is the smaller text height now"
+    # "R48" at height h is about 3 * 0.7 * h wide, centre-justified
+    def wide(t):
+        return 0.7 * h * len(t[1])
+    boxes = [(t[11][0], t[11][1], wide(t)) for t in labels]
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            apart = (abs(a[0] - b[0]) >= 0.5 * (a[2] + b[2])
+                     or abs(a[1] - b[1]) >= h)
+            assert apart, (labels[i][1], a, b)
+    # the ladder is real: consecutive labels on ONE leg step away from it
+    off = [abs(t[11][1]) for t in labels[0::2]]        # the x-axis leg
+    assert off == sorted(off), off
+    assert min(b - a for a, b in zip(off, off[1:])) >= h, off
+    print("ok   the label ladder: ten labels, no two touching")
 
 
 def test_repeat_at_the_same_radius():
@@ -340,11 +435,20 @@ def test_no_corner_and_no_room():
     assert 'make no corner' in said(vm), said(vm)
     assert not cmds(vm, '_.FILLET')
 
+    # 4" legs would once have been too short; the 3" extra means the
+    # floor is R3 now, and a corner is only a dead end under THAT
     vm = newvm()
     a = line(vm, (0, 0), (4, 0))
     b = line(vm, (0, 0), (0, 4))
-    run(vm, [[a, [2.0, 0.0, 0.0]], [b, [0.0, 2.0, 0.0]]], 'no room')
-    assert 'less than the smallest preview (R6)' in said(vm), said(vm)
+    run(vm, [[a, [2.0, 0.0, 0.0]], [b, [0.0, 2.0, 0.0]],
+             clicker(3.0), 'No'], 'small but not too small')
+    assert len(cmds(vm, '_.FILLET')) == 1, "R3 fits a 4-inch leg"
+
+    vm = newvm()
+    a = line(vm, (0, 0), (2, 0))
+    b = line(vm, (0, 0), (0, 2))
+    run(vm, [[a, [1.0, 0.0, 0.0]], [b, [0.0, 1.0, 0.0]]], 'no room')
+    assert 'less than the smallest preview (R3)' in said(vm), said(vm)
     assert not alive(vm, layer=PREVIEW_LAYER)
     print("ok   parallel lines and a corner too small to round")
 
@@ -389,7 +493,9 @@ def test_version_banner():
 
 TESTS = [test_corner_geometry, test_short_leg_caps_the_radius,
          test_candidates_and_arc, test_full_run,
-         test_previews_drawn_and_capped, test_repeat_at_the_same_radius,
+         test_previews_drawn_and_capped, test_the_odd_sizes_are_dashed,
+         test_shades_and_transparency, test_labels_never_overlap,
+         test_repeat_at_the_same_radius,
          test_cancel_leaves_the_drawing_alone, test_bad_picks_reask,
          test_no_corner_and_no_room, test_first_prompt_can_be_cancelled,
          test_settings_go_back, test_version_banner]

@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 59 files, 174 commands:
+;;; 61 files, 178 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABMOVE
@@ -23,22 +23,23 @@
 ;;;   DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND
 ;;;   DIMCONTENDVER  DIMSCAN  DRONE  DRONEVER  FITABHD  FITABHDCOVER
 ;;;   FITABHDVER  FLOORDIM  G2MCONV  G2MCONVVER  G2MRECONV  HEMISTEP
-;;;   HEMISTEPVER  LAZASCII  LAZBUTTON  LAZFORM  LAZFORMCOVER  LAZFORMVER
-;;;   LAZICON  LAZPANEL  LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER
-;;;   LAZSTEP  LAZSTEPVER  LAZTXT  LHD  LHDVER  LINCHECK
-;;;   LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER
-;;;   LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN
-;;;   LITESPACHECKSCAN  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  PADDLE
-;;;   PADDLEVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL
-;;;   POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER
-;;;   SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV  SPA
-;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM
-;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB
-;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
-;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
-;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER
-;;;   TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER
-;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
+;;;   HEMISTEPVER  HONEFILLET  HONEFILLETVER  LAZASCII  LAZBUTTON  LAZFORM
+;;;   LAZFORMCOVER  LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LAZPIN
+;;;   LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT  LHD
+;;;   LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER
+;;;   LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER
+;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER  NORMIESTEP
+;;;   NORMIESTEPVER  OASIS  OASISVER  PADDLE  PADDLEVER  PERPPTS
+;;;   PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO
+;;;   POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER  SMARTFILLET  SMARTFILLETVER
+;;;   SOCONV  SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE
+;;;   SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG
+;;;   STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP
+;;;   TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP
+;;;   TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL
+;;;   TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV
+;;;   VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP
+;;;   XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -35326,6 +35327,901 @@
 
 (princ (strcat "\nPOINTRENAMER " *pointrenamer-version*
                " loaded.  Type POINTRENAMER to run."))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> LOBF.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; LOBF.lsp  --  the line of best fit through a set of survey points
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  LOBF     fit a construction line through highlighted points
+;;;            LOBFVER  print the loaded version
+;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  Highlight points that are all MEANT to be on one straight line -- a
+;;;  wall shot at eight stations, a row of deck anchors -- and LOBF draws
+;;;  the construction line (an XLINE) that best answers them.
+;;;
+;;;  THREE FITS, NOT ONE, because "best" is a choice and the choice is
+;;;  about WHERE THE ERROR GOES.  All three are drawn at once, each in
+;;;  its own colour and numbered on screen, and you keep the one you
+;;;  want:
+;;;
+;;;    1  EVERY POINT.  Least squares on the perpendicular distances:
+;;;       the line with the least total error, every point pulling on
+;;;       it.  The textbook line of best fit, and the honest answer
+;;;       when the points really are all equally good.
+;;;
+;;;    2  ONE SET ASIDE.  The same fit with a single point left out --
+;;;       every point is tried as the one to drop and the drop that
+;;;       leaves the REST tightest wins.  The error stops being shared:
+;;;       it piles onto one point, which is exactly what you want to
+;;;       see when one shot is bad.  The point it gave up on is ringed
+;;;       and named, so it can be re-measured instead of quietly
+;;;       averaged into the wall.
+;;;
+;;;    3  TIGHTEST BAND.  The least-MAX fit: the narrowest band that
+;;;       still holds every point, centred.  Nobody is further off than
+;;;       they have to be, and the number to quote is the half-band.
+;;;       (The narrowest band through a point set is always flush with
+;;;       an edge of its convex hull, so only those edges are tried.)
+;;;
+;;;  WHICH ONE ENTER TAKES.  Fit 2 is the default when the point it set
+;;;  aside is DRASTICALLY worse than the rest -- lobf:*drastic* times
+;;;  the worst of the points it kept, and at least lobf:*drastic-floor*
+;;;  off in its own right, so a survey where everything is within a
+;;;  sixteenth does not get one of its points called an outlier.  When
+;;;  no point stands out that way there is no outlier to isolate and
+;;;  fit 1, the balanced one, is the default instead.  The command line
+;;;  says which rule fired and by what margin, every run.
+;;;
+;;;  WHAT IT DRAWS.  While you are choosing: three XLINEs on
+;;;  LOBF-PREVIEW, each labelled with its number on a stalk so the
+;;;  label cannot be read against the wrong line -- three fits through
+;;;  one row of points sit nearly on top of each other, and colour
+;;;  alone is not enough to tell them apart.  Fit 2's set-aside point
+;;;  is ringed.  When you pick, the losers go: what is left is the
+;;;  XLINE you kept, moved onto LOBF and drawn ByLayer, plus that ring
+;;;  on LOBF-IGNORED if the fit you kept is one that ignores a point.
+;;;
+;;;  TWO POINTS make exactly one line, so the picker is skipped and the
+;;;  line is simply drawn.  Fewer than two, or every point on the same
+;;;  spot, and there is nothing to fit -- it says so rather than
+;;;  drawing a line along the X axis and letting you find out later.
+;;; ======================================================================
+
+;;; -------------------- version -----------------------------------------
+;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
+;;;  one dot).  Bump it with every change and regenerate releases/.
+
+(setq *lobf-version* "v1.0")
+
+;;; ======================================================================
+;;;  TUNABLES -- every value LOBF reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq lobf:*drastic* 8.0) -- because every
+;;;  knob is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
+
+;; -- where the points are ----------------------------------------------
+
+;; Where the survey points live, and what a point block calls its
+;; number -- ABHD's *PF-POINT-LAYER* / *PF-POINT-BLOCK* / *PF-PT-TAG*,
+;; the same three ABPCHECK reads.  An ab_pt block counts as a point
+;; wherever it sits, so the layer only matters for bare POINT entities
+;; and for blocks of some other name.
+(setq lobf:*pt-layer* "POINTS")   ; layer holding the survey points
+(setq lobf:*pt-block* "ab_pt")    ; block name whose INSERTs mark points
+(setq lobf:*pt-tag*   "number")   ; the attribute carrying the number
+
+;; What the highlight is allowed to hand the command.  Only points are
+;; wanted -- LOBF fits a line THROUGH points and has nothing to say
+;; about lines already drawn -- so a window dragged over the whole
+;; sheet picks up the points and leaves the geometry behind rather
+;; than making the user pick each one.  A type dropped from here is
+;; never seen at all.
+(setq lobf:*filter* '((0 . "POINT,INSERT")))
+
+;; Two points closer together than this are one shot, not two: a
+;; double-shot must not get two votes in the fit.
+(setq lobf:*exact-eps* 1.0e-6)    ; drawing units
+
+;; -- when one point counts as an outlier -------------------------------
+
+;; THE RULE THAT PICKS THE DEFAULT.  Fit 2 sets one point aside; it is
+;; offered as the default only when that point is drastically worse
+;; than the ones the fit kept -- this many times the worst of them.
+;; Lower it and LOBF reaches for the outlier fit more readily; raise it
+;; and it wants a more obvious bad shot before it will single one out.
+(setq lobf:*drastic*       4.0)   ; multiples of the worst held point
+
+;; ...and at least this far off in its own right.  Without a floor, a
+;; survey where every point is within a sixty-fourth would still have a
+;; "worst" one four times the rest, and calling that an outlier is
+;; reading noise.  Raise it to make LOBF slower to blame a point.
+(setq lobf:*drastic-floor* 0.5)   ; drawing units
+
+;; Which fit Enter takes when NO point stands out that way -- there is
+;; then no outlier to isolate, so the balanced fit is the answer.  Set
+;; it to "3" to have Enter take the tightest band instead.
+(setq lobf:*default-fit*   "1")   ; "1", "2" or "3"
+
+;; When fit 1's worst point is further off than this fraction of the
+;; run's own length, the points are not really lying along one line and
+;; LOBF says so before you pick.  Raise it to quieten the warning.
+(setq lobf:*blob-ratio*    0.2)   ; worst error / length of the run
+
+;; -- what it draws -----------------------------------------------------
+
+;; The three layers LOBF writes on, created on first use.  PREVIEW
+;; holds the three candidates and their labels and is emptied when you
+;; pick; the line you keep moves to LOBF, and the ring round a point a
+;; kept fit ignores stays on IGNORED so it can be frozen or erased on
+;; its own.  Nothing is ever cleared wholesale: everything LOBF draws
+;; carries xdata under the APPID below and only stamped objects are
+;; erased again.
+(setq lobf:*layer*         "LOBF")           ; the construction line kept
+(setq lobf:*color*         4)                ; ACI (cyan)
+(setq lobf:*preview-layer* "LOBF-PREVIEW")   ; the three candidates
+(setq lobf:*preview-color* 8)                ; ACI (grey) -- each XLINE
+                                             ; carries its own colour
+(setq lobf:*ign-layer*     "LOBF-IGNORED")   ; ring round a set-aside point
+(setq lobf:*ign-color*     1)                ; ACI (red)
+(setq lobf:*appid*         "LOBF")           ; renaming this orphans
+                                             ; earlier runs
+
+;; The colour each candidate is previewed in, fit 1 first.  These are
+;; what the on-screen numbers mean, so the printed table names them.
+(setq lobf:*fit-colors*    '(3 2 6))         ; ACI: green, yellow, magenta
+
+;; Label sizing, all as fractions of the run the points cover.  DIV
+;; sets the text height (a bigger number is smaller text), GAP is how
+;; far past the last point the labels stand, STALK is how far the
+;; number sits off its own line -- multiplied by the fit's number, so
+;; the three stack instead of overprinting -- and RING is the radius of
+;; the circle round a set-aside point, in text heights.
+(setq lobf:*label-div*     40.0)
+(setq lobf:*label-gap*     0.08)
+(setq lobf:*label-stalk*   1.6)   ; text heights, times the fit number
+(setq lobf:*ring-scale*    1.2)   ; text heights
+
+;; -- how numbers are printed -------------------------------------------
+
+;; Distances on the command line go through (rtos d mode prec): mode 4
+;; is architectural (feet-inches), so 1.875 reads 0'-1 7/8"; prec is
+;; how many ways the inch is split, as a power of two.  5 = thirty-
+;; seconds, because the errors this tool reports are small ones and
+;; sixteenths round too many of them to the same string to compare.
+(setq lobf:*dist-mode*     4)     ; rtos mode
+(setq lobf:*dist-prec*     5)     ; 2^5 = thirty-seconds of an inch
+
+;; Degrees of bearing printed after each fit, so two fits that read the
+;; same to the thirty-second can still be told apart.
+(setq lobf:*ang-prec*      2)     ; decimal places
+
+;; Anything smaller than this is zero: the guard on a degenerate fit
+;; (every point on one spot), on a zero-length direction, and on the
+;; cross products the hull walk turns on.
+(setq lobf:*tiny*          1.0e-10)
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  What follows is STATE, not settings: what one run
+;;;  has to put back on the way out.
+;;; ======================================================================
+
+;;; -------------------- generic helpers ----------------------------------
+;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
+
+;;; -------------------- points ------------------------------------------
+;;;  A point record is (x y name): the name is what the report calls it,
+;;;  so a finding reads "Pt. 17" whether 17 came off the block or off
+;;;  the reading order.
+
+(defun lobf:pt (p nm) (list (car p) (cadr p) nm))
+(defun lobf:pt-name (q) (if (caddr q) (caddr q) "?"))
+
+;; Every point in the selection: POINT entities and "ab_pt" blocks
+;; wherever they sit, other blocks only on the points layer.  Returns
+;; the deduped list; LOBF's own preview objects are never read back.
+(defun lobf:harvest (ss / i en ed typ lay nm pts npt)
+  (setq pts nil npt 0 i 0)
+  (while (< i (sslength ss))
+    (setq en (ssname ss i)
+          ed (entget en)
+          i  (1+ i))
+    (if ed
+      (progn
+        (setq typ (cdr (assoc 0 ed))
+              lay (strcase (cdr (assoc 8 ed))))
+        (if (not (or (= lay (strcase lobf:*preview-layer*))
+                     (= lay (strcase lobf:*ign-layer*))
+                     (= lay (strcase lobf:*layer*))
+                     (assoc -3 (entget en (list lobf:*appid*)))))
+          (cond
+            ;; ab_pt blocks are survey points wherever they sit
+            ((and (= typ "INSERT")
+                  (= (strcase (cdr (assoc 2 ed)))
+                     (strcase lobf:*pt-block*)))
+             (setq npt (1+ npt)
+                   nm  (cal:block-number en lobf:*pt-tag*)
+                   pts (cons (lobf:pt (cdr (assoc 10 ed))
+                                      (if (and nm (/= nm "")) nm (itoa npt)))
+                             pts)))
+            ;; a plain POINT counts on any layer - the selection is
+            ;; explicit, so there is no guessing involved
+            ((= typ "POINT")
+             (setq npt (1+ npt)
+                   pts (cons (lobf:pt (cdr (assoc 10 ed)) (itoa npt)) pts)))
+            ;; other blocks only count as points on the points layer
+            ((= typ "INSERT")
+             (if (= lay (strcase lobf:*pt-layer*))
+               (setq npt (1+ npt)
+                     nm  (cal:block-number en lobf:*pt-tag*)
+                     pts (cons (lobf:pt (cdr (assoc 10 ed))
+                                        (if (and nm (/= nm "")) nm (itoa npt)))
+                               pts)))))))))
+  (cal:dedupe (reverse pts) lobf:*exact-eps*))
+
+;;; -------------------- the three fits ----------------------------------
+;;;  A LINE is (origin direction): a point on it and a unit vector along
+;;;  it.  Every fit below returns one, or nil when the points it was
+;;;  given have no direction in them at all.
+
+;; Perpendicular distance from P to the line, signed: positive on the
+;; left of the direction, negative on the right.  Which side a point
+;; falls on is what makes a band a band.
+(defun lobf:sresid (p org dir)
+  (cal:dot (cal:v- p org) (cal:perp dir)))
+
+(defun lobf:resid (p org dir) (abs (lobf:sresid p org dir)))
+
+;; FIT 1 -- least squares on the PERPENDICULAR distances (total least
+;; squares), which is the line of best fit proper: it does not care
+;; which axis you happened to call x, so a wall running north-south
+;; fits as well as one running east-west.  The line goes through the
+;; centroid along the principal axis of the scatter, and that axis is
+;; the half-angle of (2*Sxy, Sxx-Syy).
+(defun lobf:tls (pts / n cx cy sxx syy sxy p dx dy th)
+  (setq n (length pts))
+  (if (< n 2)
+    nil
+    (progn
+      (setq cx 0.0 cy 0.0)
+      (foreach p pts (setq cx (+ cx (car p)) cy (+ cy (cadr p))))
+      (setq cx  (/ cx n)
+            cy  (/ cy n)
+            sxx 0.0
+            syy 0.0
+            sxy 0.0)
+      (foreach p pts
+        (setq dx  (- (car p) cx)
+              dy  (- (cadr p) cy)
+              sxx (+ sxx (* dx dx))
+              syy (+ syy (* dy dy))
+              sxy (+ sxy (* dx dy))))
+      ;; every point on one spot: there is no direction to return, and
+      ;; returning the X axis would be an answer the points never gave
+      (if (< (+ sxx syy) lobf:*tiny*)
+        nil
+        (progn
+          (setq th (* 0.5 (atan (* 2.0 sxy) (- sxx syy))))
+          (list (list cx cy) (list (cos th) (sin th))))))))
+
+;; PTS with the K'th (0-based) taken out.
+(defun lobf:without (pts k / i out p)
+  (setq i 0 out nil)
+  (foreach p pts
+    (if (/= i k) (setq out (cons p out)))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; The worst and the mean perpendicular distance of PTS from a line.
+(defun lobf:spread (pts org dir / worst total d p n)
+  (setq worst 0.0 total 0.0 n (length pts))
+  (foreach p pts
+    (setq d     (lobf:resid p org dir)
+          total (+ total d))
+    (if (> d worst) (setq worst d)))
+  (list worst (if (> n 0) (/ total n) 0.0)))
+
+;; FIT 2 -- the best fit that sets ONE point aside.  Every point is
+;; tried as the one to leave out and the drop that leaves the REST
+;; tightest wins, worst-held first and the mean as the tie-break: the
+;; claim this fit makes is "the others sit on the line", so the
+;; measure of a good drop is how tight the others end up, not how far
+;; away the dropped one was.  Returns (origin dir index-dropped), or
+;; nil when there are too few points for dropping one to mean
+;; anything.
+(defun lobf:drop1 (pts / n k sub f sp best bworst bmean)
+  (setq n (length pts) k 0 best nil bworst nil bmean nil)
+  (if (< n 3)
+    nil
+    (progn
+      (while (< k n)
+        (setq sub (lobf:without pts k)
+              f   (lobf:tls sub))
+        (if f
+          (progn
+            (setq sp (lobf:spread sub (car f) (cadr f)))
+            (if (or (null best)
+                    (< (car sp) (- bworst lobf:*tiny*))
+                    (and (< (car sp) (+ bworst lobf:*tiny*))
+                         (< (cadr sp) bmean)))
+              (setq best   (list (car f) (cadr f) k)
+                    bworst (car sp)
+                    bmean  (cadr sp)))))
+        (setq k (1+ k)))
+      best)))
+
+;; Convex hull, counterclockwise, by gift wrapping.  Points lying ON an
+;; edge are dropped -- the tie goes to the farther one -- so a run that
+;; really is a straight line comes back as just its two ends, which is
+;; the case this tool sees most.  Gift wrapping is O(n*h) and h is
+;; small for a near-straight cloud, so no sort is needed.
+(defun lobf:hull (pts / start cur nxt out cr p guard)
+  (setq start (car pts))
+  (foreach p pts
+    (if (or (< (car p) (car start))
+            (and (= (car p) (car start)) (< (cadr p) (cadr start))))
+      (setq start p)))
+  (setq cur start out nil guard (1+ (length pts)))
+  (while (> guard 0)
+    (setq out   (cons cur out)
+          guard (1- guard)
+          nxt   nil)
+    (foreach p pts
+      (cond
+        ((< (cal:dist p cur) lobf:*exact-eps*) nil)     ; itself
+        ((null nxt) (setq nxt p))
+        (T
+         (setq cr (cal:cross (cal:v- nxt cur) (cal:v- p cur)))
+         (if (or (> cr lobf:*tiny*)
+                 (and (< (abs cr) lobf:*tiny*)
+                      (> (cal:dist cur p) (cal:dist cur nxt))))
+           (setq nxt p)))))
+    (if (or (null nxt) (< (cal:dist nxt start) lobf:*exact-eps*))
+      (setq guard 0)
+      (setq cur nxt)))
+  (reverse out))
+
+;; FIT 3 -- the least-MAX (Chebyshev) fit: the narrowest band that
+;; still holds every point, with the line down its middle.  The
+;; narrowest such band is always flush with an edge of the convex hull,
+;; so only the hull's own edges are tried and the best of them wins.
+(defun lobf:minimax (pts / hull n i a b dir best bw lo hi s p)
+  (setq hull (lobf:hull pts) n (length hull) i 0 best nil bw nil)
+  (if (< n 2)
+    nil
+    (progn
+      (while (< i n)
+        (setq a   (nth i hull)
+              b   (nth (rem (1+ i) n) hull)
+              dir (cal:unit (cal:v- b a))
+              i   (1+ i))
+        (if dir
+          (progn
+            (setq lo nil hi nil)
+            (foreach p pts
+              (setq s (lobf:sresid p a dir))
+              (if (or (null lo) (< s lo)) (setq lo s))
+              (if (or (null hi) (> s hi)) (setq hi s)))
+            (if (or (null bw) (< (- hi lo) (- bw lobf:*tiny*)))
+              (setq bw   (- hi lo)
+                    ;; the line sits halfway between the two rails, so
+                    ;; the worst point on each side is equally off
+                    best (list (cal:v+ a (cal:v* (cal:perp dir)
+                                                   (* 0.5 (+ lo hi))))
+                               dir))))))
+      best)))
+
+;;; -------------------- candidates --------------------------------------
+;;;  A CANDIDATE is what the picker, the table and the drawing all read:
+;;;
+;;;    (aim origin dir ignored worst mean nheld off)
+;;;
+;;;  aim      the words the table prints for it
+;;;  origin   a point on the line, dir a unit vector along it
+;;;  ignored  the point record this fit set aside, or nil
+;;;  worst    the furthest of the points it HELD is off it
+;;;  mean     their average distance off it
+;;;  nheld    how many points that is
+;;;  off      how far the ignored point is off it, nil when none
+
+(defun lobf:cand-aim (c)  (nth 0 c))
+(defun lobf:cand-org (c)  (nth 1 c))
+(defun lobf:cand-dir (c)  (nth 2 c))
+(defun lobf:cand-ign (c)  (nth 3 c))
+(defun lobf:cand-worst (c) (nth 4 c))
+(defun lobf:cand-mean (c) (nth 5 c))
+(defun lobf:cand-nheld (c) (nth 6 c))
+(defun lobf:cand-off (c)  (nth 7 c))
+
+;; Wrap a bare (origin dir) up as a candidate, measured over HELD and
+;; with IGN (a point record, or nil) named as the one it let go.
+(defun lobf:cand (aim line held ign / sp)
+  (if (null line)
+    nil
+    (progn
+      (setq sp (lobf:spread held (car line) (cadr line)))
+      (list aim (car line) (cadr line) ign (car sp) (cadr sp)
+            (length held)
+            (if ign (lobf:resid ign (car line) (cadr line)) nil)))))
+
+;; The three, in the order they are numbered on screen.  Any that
+;; cannot be built is nil and is left out by the caller, so a
+;; three-point run that degenerates still offers what it has.
+(defun lobf:candidates (pts / one two three d ign held)
+  (setq one   (lobf:cand "every point" (lobf:tls pts) pts nil)
+        d     (lobf:drop1 pts)
+        three (lobf:cand "tightest band" (lobf:minimax pts) pts nil))
+  (if d
+    (setq ign  (nth (caddr d) pts)
+          held (lobf:without pts (caddr d))
+          two  (lobf:cand (strcat "Pt. " (lobf:pt-name ign) " set aside")
+                          (list (car d) (cadr d)) held ign)))
+  (list one two three))
+
+;; The colour candidate N is previewed in.  lobf:*fit-colors* is a
+;; knob, so a list shorter than the number of fits is possible; white
+;; is better there than the nil that would make an unusable DXF group.
+(defun lobf:fit-color (n / c)
+  (setq c (nth (1- n) lobf:*fit-colors*))
+  (if c c 7))
+
+;;; -------------------- which one Enter takes ---------------------------
+
+;; Is the point fit 2 set aside a real outlier, or just the least good
+;; of a set that is all about equally good?  Both halves of the rule
+;; have to hold: drastically worse than the points the fit KEPT, and
+;; far enough off in its own right to be worth blaming.  Returns the
+;; ratio when it is, nil when it is not - the caller prints the number
+;; either way, so the rule is never a verdict without its evidence.
+(defun lobf:ratio (c / w)
+  (if (and c (lobf:cand-off c))
+    (progn
+      (setq w (lobf:cand-worst c))
+      ;; the held points are exactly on the line: the ratio is infinite
+      ;; and there is no number to print, which lobf:outlier-p reads as
+      ;; "drastic" and the report reads as "say it without one"
+      (if (< w lobf:*tiny*) nil (/ (lobf:cand-off c) w)))))
+
+;; T when fit 2 is the one to offer.
+(defun lobf:outlier-p (c / r)
+  (and c
+       (lobf:cand-off c)
+       (>= (lobf:cand-off c) lobf:*drastic-floor*)
+       (progn
+         (setq r (lobf:ratio c))
+         (or (null r) (>= r lobf:*drastic*)))))
+
+;;; -------------------- printing ----------------------------------------
+
+;; The fit Enter takes when no point stands out.  Clamped, because
+;; lobf:*default-fit* is a knob and the answer is used as an index.
+(defun lobf:fallback-fit ()
+  (if (member lobf:*default-fit* '("1" "2" "3")) lobf:*default-fit* "1"))
+
+(defun lobf:dstr (d) (rtos d lobf:*dist-mode* lobf:*dist-prec*))
+
+;; The bearing of a line, in degrees, folded into [0, 180): a line has
+;; no arrowhead, so 183 degrees and 3 degrees are the same line and
+;; must print as the same number.
+(defun lobf:bearing (dir / a)
+  (setq a (/ (* 180.0 (atan (cadr dir) (car dir))) pi))
+  (while (< a 0.0) (setq a (+ a 180.0)))
+  (while (>= a 180.0) (setq a (- a 180.0)))
+  (strcat (rtos a 2 lobf:*ang-prec*) " deg"))
+
+;; The word for an ACI colour, so the table names the colour actually
+;; drawn instead of saying "green" whatever lobf:*fit-colors* holds.
+(defun lobf:color-name (aci / q)
+  (setq q (assoc aci '((1 . "red") (2 . "yellow") (3 . "green")
+                       (4 . "cyan") (5 . "blue") (6 . "magenta")
+                       (7 . "white") (8 . "grey"))))
+  (if q (cdr q) (strcat "colour " (itoa aci))))
+
+;; One row of the comparison table.
+(defun lobf:row (n c col)
+  (princ (strcat "\n   " (itoa n) "  "
+                 (cal:pad (lobf:cand-aim c) 22)
+                 (cal:pad (lobf:dstr (lobf:cand-worst c)) 14)
+                 (cal:pad (lobf:dstr (lobf:cand-mean c)) 14)
+                 (cal:pad (itoa (lobf:cand-nheld c)) 8)
+                 (cal:pad (lobf:bearing (lobf:cand-dir c)) 11)
+                 (lobf:color-name col))))
+
+;;; -------------------- drawing -----------------------------------------
+
+;; Everything LOBF creates carries a small piece of extended data naming
+;; this command, so a later run never reads its own preview back as a
+;; point and only stamped objects are ever erased again.
+(defun lobf:tag-mine (en / ed)
+  (if en
+    (progn
+      (regapp lobf:*appid*)
+      (setq ed (entget en))
+      (entmod (append ed (list (list -3 (list lobf:*appid*
+                                              (cons 1000 lobf:*appid*))))))))
+  en)
+
+;; An infinite construction line: DXF 10 is a point on it, DXF 11 the
+;; unit direction.
+(defun lobf:xline (org dir lay col)
+  (lobf:tag-mine
+    (entmakex (list '(0 . "XLINE") '(100 . "AcDbEntity")
+                    (cons 8 lay) (cons 62 col) '(100 . "AcDbXline")
+                    (cons 10 (list (car org) (cadr org) 0.0))
+                    (cons 11 (list (car dir) (cadr dir) 0.0))))))
+
+(defun lobf:line (a b lay col)
+  (lobf:tag-mine
+    (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
+                    (cons 8 lay) (cons 62 col) '(100 . "AcDbLine")
+                    (cons 10 (list (car a) (cadr a) 0.0))
+                    (cons 11 (list (car b) (cadr b) 0.0))))))
+
+(defun lobf:label (pt hgt str lay col)
+  (lobf:tag-mine
+    (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                    (cons 8 lay) (cons 62 col) '(100 . "AcDbText")
+                    (cons 10 (list (car pt) (cadr pt) 0.0))
+                    (cons 40 hgt) (cons 1 str)))))
+
+(defun lobf:ring (pt r lay col)
+  (lobf:tag-mine
+    (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                    (cons 8 lay) (cons 62 col) '(100 . "AcDbCircle")
+                    (cons 10 (list (car pt) (cadr pt) 0.0))
+                    (cons 40 r)))))
+
+;; How far along DIR the points reach, as (lowest highest), measured
+;; from ORG.  The labels stand past the high end of that run.
+(defun lobf:extent (pts org dir / lo hi s p)
+  (foreach p pts
+    (setq s (cal:dot (cal:v- p org) dir))
+    (if (or (null lo) (< s lo)) (setq lo s))
+    (if (or (null hi) (> s hi)) (setq hi s)))
+  (list (if lo lo 0.0) (if hi hi 0.0)))
+
+;; How long the run of points is, measured along the line: the size
+;; everything the labels do is scaled from.
+(defun lobf:runlen (pts org dir / ex)
+  (setq ex (lobf:extent pts org dir))
+  (- (cadr ex) (car ex)))
+
+;; Draw one candidate: the XLINE, its number on a stalk out to the side
+;; so the label cannot be read against the wrong line, and a ring round
+;; the point it set aside.  Returns (xline . furniture), the furniture
+;; being everything that goes when a single fit is kept.
+(defun lobf:draw (n c pts hgt col / org dir ex base tip xl fur)
+  (setq org (lobf:cand-org c)
+        dir (lobf:cand-dir c)
+        ex  (lobf:extent pts org dir)
+        xl  (lobf:xline org dir lobf:*preview-layer* col)
+        fur nil
+        ;; out past the last point, then off the line by n stalks, so
+        ;; the three numbers stack instead of overprinting
+        base (cal:v+ org
+                      (cal:v* dir (+ (cadr ex)
+                                      (* lobf:*label-gap*
+                                         (max (- (cadr ex) (car ex))
+                                              1.0)))))
+        tip  (cal:v+ base (cal:v* (cal:perp dir)
+                                    (* n lobf:*label-stalk* hgt))))
+  (setq fur (cons (lobf:line base tip lobf:*preview-layer* col) fur))
+  (setq fur (cons (lobf:label (cal:v+ tip (cal:v* (cal:perp dir)
+                                                    (* 0.3 hgt)))
+                              hgt (itoa n) lobf:*preview-layer* col)
+                  fur))
+  (if (lobf:cand-ign c)
+    (progn
+      (cal:ensure-layer lobf:*ign-layer* lobf:*ign-color*)
+      (setq fur (cons (lobf:ring (lobf:cand-ign c)
+                                 (* lobf:*ring-scale* hgt)
+                                 lobf:*ign-layer* col)
+                      fur))))
+  (cons xl (reverse fur)))
+
+(defun lobf:erase (en)
+  (if (and en (entget en)) (entdel en))
+  nil)
+
+;; A kept object takes its layer's colour.  The preview colours mean
+;; "this one belongs to candidate 2"; once there is one candidate left
+;; they mean nothing, and a ring left standing in fit 2's yellow on a
+;; red layer says the layer colour is not to be trusted.
+(defun lobf:bylayer (en / ed)
+  (if (and en (setq ed (entget en)) (assoc 62 ed))
+    (entmod (subst '(62 . 256) (assoc 62 ed) ed)))
+  en)
+
+;; Move a kept line off the preview layer onto the output one.
+(defun lobf:relayer (en lay / ed)
+  (if (and en (setq ed (entget en)))
+    (entmod (subst (cons 8 lay) (assoc 8 ed) ed)))
+  en)
+
+;;; -------------------- asking ------------------------------------------
+
+;; The fit picker, the section-3 multi-fit set: click the line you want
+;; or type its number, All keeps the three as previewed, None keeps
+;; nothing, and Redo is this prompt's way back -- it drops the trio and
+;; asks for the points again.  DFLT is what Enter takes and is worked
+;; out per run, not fixed: fit 2 when it found a real outlier, the
+;; balanced fit when it did not.
+(defun lobf:askfit (dflt draws / pick sel picked i d)
+  (princ "\n\n  Click the line you want to keep, or type its number.")
+  (princ "\n  Redo asks for the points again; None leaves the drawing as it was.")
+  (initget "1 2 3 All None Redo")
+  (setq pick (getkword (strcat "\n  Keep which fit - click one, or"
+                               " [1/2/3/All/None/Redo] <" dflt ">: ")))
+  (if (null pick)
+    ;; no keyword typed: give them a click, and fall back to the
+    ;; default this run worked out
+    (progn
+      (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
+                                dflt "): ")))
+      (if sel
+        (progn
+          (setq picked (car sel) i 1)
+          (foreach d draws
+            (if (and d (or (eq picked (car d)) (member picked (cdr d))))
+              (setq pick (itoa i)))
+            (setq i (1+ i)))
+          (if (null pick)
+            (progn
+              (princ (strcat "\n  (that is not one of them - keeping "
+                             dflt ")"))
+              (setq pick dflt))))
+        (setq pick dflt))))
+  pick)
+
+;;; -------------------- the run -----------------------------------------
+
+;; The comparison table, the outlier verdict under it, and the warning
+;; when the points are not really a line at all.  Returns the number
+;; Enter should take.
+(defun lobf:report (cands pts / c k n one two dflt r run)
+  (setq n 0)
+  (foreach k cands (if k (setq n (1+ n))))
+  (princ (strcat "\n\n  " (itoa (length pts))
+                 " point(s) fitted.  " (itoa n)
+                 " candidate line(s) are drawn on layer "
+                 lobf:*preview-layer* ":"))
+  (princ (strcat "\n\n   #  fit                   worst off     avg off"
+                 "       held    bearing    colour"))
+  (princ (strcat "\n   -  --------------------  ------------  ------------"
+                 "  ------  ---------  ------"))
+  (setq c 1)
+  (foreach k cands
+    (if k (lobf:row c k (lobf:fit-color c)))
+    (setq c (1+ c)))
+  (princ (strcat "\n\n  \"worst off\" and \"avg off\" are perpendicular"
+                 " distances, measured only over"
+                 "\n  the points each fit HELD - fit 2 holds one fewer,"
+                 " which is the whole point of it."))
+  (setq one (car cands) two (cadr cands))
+  ;; the outlier rule, stated with the numbers that decided it
+  (if two
+    (progn
+      (setq r    (lobf:ratio two)
+            dflt (if (lobf:outlier-p two) "2" (lobf:fallback-fit)))
+      (princ (strcat "\n\n  Fit 2 sets Pt. " (lobf:pt-name (lobf:cand-ign two))
+                     " aside: it is " (lobf:dstr (lobf:cand-off two))
+                     " off that line, against "
+                     (lobf:dstr (lobf:cand-worst two))
+                     " for the worst of the "
+                     (itoa (lobf:cand-nheld two)) " it held"
+                     (if r (strcat " - " (rtos r 2 1) " times") "")
+                     "."))
+      (if (= dflt "2")
+        (princ (strcat "\n  That is the outlier this tool looks for, so"
+                       " fit 2 is what Enter takes."))
+        (princ (strcat "\n  That is not drastic enough to blame one point"
+                       " (it takes " (rtos lobf:*drastic* 2 1) " times and "
+                       (lobf:dstr lobf:*drastic-floor*)
+                       "), so Enter takes fit " dflt " and every point"
+                       " keeps its vote."))))
+    (setq dflt (lobf:fallback-fit)))
+  ;; the points may simply not be a line, and a line drawn through a
+  ;; blob is a wrong answer that looks like a right one
+  (if one
+    (progn
+      (setq run (lobf:runlen pts (lobf:cand-org one) (lobf:cand-dir one)))
+      (if (and (> run lobf:*tiny*)
+               (> (/ (lobf:cand-worst one) run) lobf:*blob-ratio*))
+        (princ (strcat "\n\n  CAUTION: the worst point is "
+                       (rtos (* 100.0 (/ (lobf:cand-worst one) run)) 2 0)
+                       "% of the run's own length off the line."
+                       "\n  These points may not be one straight line at"
+                       " all - check the selection before you keep"
+                       " anything.")))))
+  dflt)
+
+;; Everything after the points are in hand: draw, compare, choose.
+;; Returns 'REDO when the picker asked for a fresh selection.
+(defun lobf:run (pts / cands hgt run draws n c e dflt pick keep i res)
+  (setq cands (lobf:candidates pts))
+  (if (null (car cands))
+    (progn
+      (princ (strcat "\n" (itoa (length pts))
+                     " point(s), but they are all too close together to"
+                     " give a direction - there is no line in them."))
+      nil)
+    (progn
+      (cal:ensure-layer lobf:*preview-layer* lobf:*preview-color*)
+      ;; sized to the run the points cover, so the labels read at any
+      ;; scale the sheet is drawn at
+      (setq run (lobf:runlen pts (lobf:cand-org (car cands))
+                             (lobf:cand-dir (car cands)))
+            hgt (/ (max run 1.0) lobf:*label-div*)
+            n   1
+            draws nil)
+      (foreach c cands
+        (setq draws (cons (if c (lobf:draw n c pts hgt (lobf:fit-color n))
+                              nil)
+                          draws)
+              n     (1+ n)))
+      (setq draws (reverse draws)
+            dflt  (lobf:report cands pts))
+      ;; a fit that could not be built is not on offer, and Enter must
+      ;; not take one either
+      (if (null (nth (1- (atoi dflt)) cands)) (setq dflt "1"))
+      (setq pick (lobf:askfit dflt draws))
+      (cond
+        ((= pick "Redo")
+         (foreach c draws
+           (if c
+             (progn (lobf:erase (car c))
+                    (foreach e (cdr c) (lobf:erase e)))))
+         (princ "\n  The three are off the screen - highlight the points again.")
+         (setq res 'REDO))
+        ((= pick "None")
+         (foreach c draws
+           (if c
+             (progn (lobf:erase (car c))
+                    (foreach e (cdr c) (lobf:erase e)))))
+         (princ "\n  All three erased - nothing was added to the drawing.")
+         (setq res nil))
+        ((= pick "All")
+         (princ (strcat "\n  Keeping all of them on layer "
+                        lobf:*preview-layer* ", in their preview colours"
+                        " - with any set-aside point still ringed on "
+                        lobf:*ign-layer* "."))
+         (princ "\n  (the numbers and their stalks are kept too - erase them when done)")
+         (setq res nil))
+        (T
+         (setq i 1)
+         (foreach c draws
+           (if c
+             (if (= i (atoi pick))
+               (setq keep c)
+               (progn (lobf:erase (car c))
+                      (foreach e (cdr c) (lobf:erase e)))))
+           (setq i (1+ i)))
+         (if (null keep)
+           (princ (strcat "\n  Fit " pick " could not be built from these"
+                          " points - nothing kept."))
+           (progn
+             ;; the stalk and the number were there to tell three lines
+             ;; apart; one line does not need them.  The ring does not
+             ;; go: it names the point this line gave up on, which is
+             ;; the finding, not the furniture -- but it stops carrying
+             ;; a candidate's colour, because there is no candidate to
+             ;; tell it apart from any more.
+             (foreach e (cdr keep)
+               (if (and e (entget e))
+                 (if (= "CIRCLE" (cdr (assoc 0 (entget e))))
+                   (lobf:bylayer e)
+                   (lobf:erase e))))
+             (cal:ensure-layer lobf:*layer* lobf:*color*)
+             (lobf:bylayer (lobf:relayer (car keep) lobf:*layer*))
+             (setq c (nth (1- (atoi pick)) cands))
+             (princ (strcat "\n  Keeping fit " pick " - " (lobf:cand-aim c)
+                            " - on layer " lobf:*layer* ", bearing "
+                            (lobf:bearing (lobf:cand-dir c)) "."))
+             (if (lobf:cand-ign c)
+               (princ (strcat "\n  Pt. " (lobf:pt-name (lobf:cand-ign c))
+                              " is NOT on this line - it is "
+                              (lobf:dstr (lobf:cand-off c))
+                              " off it, and is ringed on layer "
+                              lobf:*ign-layer* ".")))))
+         (setq res nil)))
+      res)))
+
+;;; -------------------- the commands ------------------------------------
+
+(defun c:LOBF ( / *error* undo-open ss pts again line)
+  (defun *error* (msg)
+    ;; user settings come back FIRST so nothing below can skip them
+    (cal:sysrestore)
+    ;; command-s, never plain command: 2015+ engines reject (command)
+    ;; inside *error* unless the error mode was pushed beforehand
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLOBF error: " msg)))
+    (princ))
+  (cal:syssave '("CMDECHO"))
+  (setvar "CMDECHO" 0)
+  ;; a pickfirst selection if there is one - probed BEFORE the undo
+  ;; group opens, because that command clears the set (the convention
+  ;; ABPCHECK and abhd already carry)
+  (setq ss (ssget "_I" lobf:*filter*))
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+  (princ "\n\nLOBF - the construction line that best fits a row of points.")
+  (setq again T)
+  (while again
+    (setq again nil)
+    (if (null ss)
+      (progn
+        (princ "\nHighlight the points to fit (Enter = every point in the drawing): ")
+        (setq ss (ssget lobf:*filter*))))
+    (if (null ss) (setq ss (ssget "_X" lobf:*filter*)))
+    (if (null ss)
+      (princ "\nNothing to fit - no points in the drawing.")
+      (progn
+        (setq pts (lobf:harvest ss))
+        (cond
+          ((< (length pts) 2)
+           (princ (strcat "\n" (itoa (length pts)) " point(s) found - it"
+                          " takes two to make a line.  Looked for POINT"
+                          " entities, \"" lobf:*pt-block*
+                          "\" blocks anywhere, and blocks on layer "
+                          lobf:*pt-layer* ".")))
+          ;; two points are one line and no choice at all; drawing the
+          ;; picker over three identical candidates would be theatre
+          ((= (length pts) 2)
+           (setq line (lobf:tls pts))
+           (if (null line)
+             (princ (strcat "\nThe two points are too close together to"
+                            " give a direction - there is no line in"
+                            " them."))
+             (progn
+               (cal:ensure-layer lobf:*layer* lobf:*color*)
+               (lobf:xline (car line) (cadr line) lobf:*layer* 256)
+               (princ (strcat "\nTwo points make exactly one line, so there"
+                              " is nothing to choose between."
+                              "\nDrawn on layer " lobf:*layer* ", bearing "
+                              (lobf:bearing (cadr line)) ".")))))
+          (T
+           (if (eq 'REDO (lobf:run pts))
+             (setq ss nil again T))))))
+    ;; Redo is the only way round this loop again, and it is a keyword
+    ;; the user has to type every time - so the run ends when they stop
+    ;; asking for another one, and nothing here can spin on its own
+    )
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
+  (cal:sysrestore)
+  (princ))
+
+(defun c:LOBFVER ()
+  (princ (strcat "\nLOBF " *lobf-version* " loaded."))
+  (princ))
+
+(princ (strcat "\nLOBF " *lobf-version*
+               " loaded.  Type LOBF to run."))
 (princ)
 
 
@@ -73859,16 +74755,19 @@
 ;;;  FILLET wants the radius BEFORE it shows anything, so the answer is
 ;;;  guessed, looked at, undone, and guessed again.  This turns that
 ;;;  round.  Pick the two lines and every radius that actually fits the
-;;;  corner is drawn dashed, all at once, in 6-inch steps; click the one
-;;;  that looks right and that is the corner you get.
+;;;  corner is drawn at once, in 6-inch steps; click the one that looks
+;;;  right and that is the corner you get.
 ;;;
 ;;;    1. Select the two lines that make the corner.  Click each one on
 ;;;       the side you want KEPT -- exactly how FILLET reads a pick:
 ;;;       what lies beyond the corner is trimmed away.
 ;;;    2. Every radius from 6 up, in 6s, that leaves both legs something
-;;;       to stand on is drawn as a dashed arc labelled R6, R12, R18 ...
-;;;       (at most sf:*maxshown* of them; when more fit, the routine
-;;;       says how many it left out rather than silently stopping).
+;;;       to stand on is drawn as an arc labelled R6, R12, R18 ... plus
+;;;       the two odd sizes in sf:*extras* (3 and 9), which come up but
+;;;       are not the usual step and so are drawn DASHED where the 6s
+;;;       are solid.  (At most sf:*maxshown* previews; when more fit,
+;;;       the routine says how many it left out rather than silently
+;;;       stopping.)
 ;;;    3. Click the arc you want.  The previews go, the corner is
 ;;;       filleted for real at that radius, and the arc gets its radius
 ;;;       dimension -- the number the shop needs, not just the shape.
@@ -73876,6 +74775,18 @@
 ;;;       two lines per corner until Done.  As soon as one repeat is
 ;;;       cut, the single dimension becomes "R12 Typ.", which is how the
 ;;;       radius would be lettered by hand.
+;;;
+;;;  Telling one preview from the next is the whole job of the drawing,
+;;;  so three things do it at once: the fan runs light green to dark
+;;;  green with the radius, every arc is part transparent so the ones
+;;;  underneath still read, and each label is drawn in ITS OWN arc's
+;;;  shade.  The labels climb a rung further off the leg with each
+;;;  preview, because consecutive tangent points sit one step apart
+;;;  along a leg and that is not room for two labels side by side.
+;;;
+;;;  HONEFILLET is the spinoff for the sizes BETWEEN these: same corner,
+;;;  same picks, but it asks for two neighbouring previews and redraws
+;;;  the range between them in half-inch steps.
 ;;;
 ;;;  The whole run is one undo group: a single U puts every corner back
 ;;;  and takes the dimension away.
@@ -73888,14 +74799,20 @@
 ;;;  sizes or names, e.g. in a startup file):
 ;;;    sf:*first*      smallest radius previewed          (6.0)
 ;;;    sf:*step*       step between previews              (6.0)
-;;;    sf:*maxshown*   most previews drawn at once        (8)
+;;;    sf:*extras*     odd radii offered too, drawn dashed (3 and 9)
+;;;    sf:*maxshown*   most previews drawn at once        (10)
 ;;;    sf:*fit*        fraction of a leg a fillet may eat (0.98)
 ;;;    sf:*layer*      layer the previews are drawn on
-;;;    sf:*color*      their colour
-;;;    sf:*ltype*      their linetype, created if missing ("DASHED")
+;;;    sf:*color*      their fallback colour index
+;;;    sf:*shade-lo*   RGB of the SMALLEST preview        (light green)
+;;;    sf:*shade-hi*   RGB of the LARGEST                 (dark green)
+;;;    sf:*trans*      how transparent a preview is, per cent
+;;;    sf:*ltype*      the extras' linetype, created if missing
 ;;;    sf:*ltscale*    per-arc linetype scale, nil = the drawing's
 ;;;    sf:*label*      T to letter each preview R6, R12 ...
 ;;;    sf:*txthgt*     height of those labels
+;;;    sf:*rung*       how far each label climbs past the one before,
+;;;                    in text heights
 ;;;    sf:*dimlayer*   layer the radius dimension goes on ("DIMENSION")
 ;;;    sf:*smalldim*   radii under this are dimensioned in ...
 ;;;    sf:*smallstyle* ... this dim style, when the drawing has it
@@ -73913,15 +74830,21 @@
 ;;;      keep the end you clicked toward.
 ;;;    * A radius only makes the list when its tangent point lands on
 ;;;      both legs (times sf:*fit*, so a fillet never eats a leg whole).
-;;;      A corner too short for even R6 is reported, not filleted.
+;;;      A corner too short for even R3 -- the smallest on offer --
+;;;      is reported, not filleted.
 ;;;    * The preview arcs are real entities on their own layer, erased
 ;;;      on the way out -- on a clean finish, on Esc, and on an error.
 ;;;      The empty layer is left behind; deleting it is a PURGE away.
+;;;    * The shades are true colours (DXF 420) and the transparency is
+;;;      DXF 440, both per entity.  A viewport with transparency display
+;;;      switched off (TRANSPARENCYDISPLAY 0) draws them solid, which
+;;;      costs the fan nothing but the see-through -- the shades and the
+;;;      labels still tell the arcs apart.
 ;;;    * OSMODE, CMDECHO, CLAYER, FILLETRAD, TRIMMODE and the current
 ;;;      dimension style are all put back the way they were.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.1")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.2")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -73931,16 +74854,36 @@
 (setq sf:*step*       6.0)   ; between the ones after it -- 6" of radius
                              ; is the smallest difference that reads on
                              ; a pool plan
-(setq sf:*maxshown*   8)     ; how many previews may be on screen at
+(setq sf:*extras*    '(3.0 9.0)) ; radii offered BESIDES that series.
+                             ; A 3 or a 9 turns up, just not often
+                             ; enough to be the step; they are drawn
+                             ; dashed so the fan still reads as "6s,
+                             ; and these two".  nil = the series alone
+(setq sf:*maxshown*   10)    ; how many previews may be on screen at
                              ; once; nil = every radius that fits, which
-                             ; on a long wall is a great many
+                             ; on a long wall is a great many.  10 is
+                             ; the 8 sixes that used to show plus the
+                             ; two extras, so nothing was lost to them
 (setq sf:*fit*        0.98)  ; how much of the shorter leg a fillet may
                              ; use up: 1.0 would put the tangent point
                              ; exactly on the far end and leave a
                              ; zero-length line behind
 (setq sf:*layer*      "SMART FILLET PREVIEW")
-(setq sf:*color*      3)     ; green, so a preview reads as a preview
-                             ; whatever the layer was set to by hand
+(setq sf:*color*      3)     ; the layer's colour, and the fallback
+                             ; index on every preview: green, so a
+                             ; preview reads as a preview even where a
+                             ; true colour cannot be shown
+(setq sf:*shade-lo*  '(190 255 190)) ; the SMALLEST preview's green ...
+(setq sf:*shade-hi*  '(0 110 0))     ; ... and the largest's.  The fan
+                             ; is graded between the two, so which arc
+                             ; a label belongs to is a matter of shade
+                             ; rather than of tracing it by eye.  Both
+                             ; stay green on black; a light-background
+                             ; drawing wants the pair swapped round
+(setq sf:*trans*      40)    ; per cent transparency on every preview,
+                             ; so an arc crossing another still reads.
+                             ; 0 or nil = solid; over 90 is a preview
+                             ; nobody can see
 (setq sf:*ltype*      "DASHED")
 (setq sf:*ltscale*    0.25)  ; the stock DASHED pattern is 18 units
                              ; long, so a 6" fillet arc (9 units of it)
@@ -73949,7 +74892,12 @@
                              ; even the smallest preview.  nil = leave
                              ; the arcs at the drawing's own LTSCALE
 (setq sf:*label*      t)
-(setq sf:*txthgt*     6.0)
+(setq sf:*txthgt*     4.0)   ; small enough that two labels a 6" step
+                             ; apart clear each other side to side
+(setq sf:*rung*       1.4)   ; and each one climbs this many text
+                             ; heights further off its leg than the
+                             ; label before it on that side, so they
+                             ; cannot collide however tight the steps
 (setq sf:*dimlayer*   "DIMENSION")
 (setq sf:*smalldim*   24.0)             ; POOL's small-dimension rule,
 (setq sf:*smallstyle* "STANDARD INCHES"); kept so a fillet callout
@@ -73973,14 +74921,69 @@
 
 ;;; -------------------- small local helpers -------------------------
 
-;; A number without AutoLISP's trailing zeros: 12, not 12.000000.
+;; A number without AutoLISP's trailing zeros: 12, not 12.000000, and
+;; 13.5 rather than 13.50 -- a half inch is a size HONEFILLET letters a
+;; lot of, and a callout reading R13.50 is one nobody writes by hand.
 (defun sf:num (x)
   (cond ((null x) "?")
         ((= x (fix x)) (rtos x 2 0))
+        ((= (* 2.0 x) (fix (* 2.0 x))) (rtos x 2 1))
         (t (rtos x 2 2))))
 
 ;; "R12", the way a radius is lettered
 (defun sf:rlabel (r) (strcat "R" (sf:num r)))
+
+;; "R3", "R3 and R9", "R3, R9 and R15" -- a list of radii read out the
+;; way a sentence needs them.
+(defun sf:rlist (rads / n i r out)
+  (setq n (length rads) i 0 out "")
+  (foreach r rads
+    (setq out (strcat out
+                      (cond ((= i 0) "")
+                            ((= i (1- n)) " and ")
+                            (t ", "))
+                      (sf:rlabel r))
+          i   (1+ i)))
+  out)
+
+;; of RADS, the ones drawn dashed -- what the report names
+(defun sf:shown-extras (rads / r out)
+  (foreach r rads (if (sf:extrap r) (setq out (cons r out))))
+  (reverse out))
+
+;; An (r g b) triple as the 24-bit integer DXF group 420 wants.
+(defun sf:truecol (rgb)
+  (+ (* 65536 (fix (car rgb))) (* 256 (fix (cadr rgb))) (fix (caddr rgb))))
+
+;; a + f*(b - a), rounded to a whole colour channel
+(defun sf:mix (a b f) (fix (+ 0.5 a (* f (- b a)))))
+
+;; Preview I of N as an (r g b) triple, graded from sf:*shade-lo* to
+;; sf:*shade-hi*.  A lone preview takes the light end: there is nothing
+;; for it to be darker THAN.
+(defun sf:shade (i n / f lo hi)
+  (setq lo sf:*shade-lo*
+        hi sf:*shade-hi*
+        f  (if (> n 1) (/ (float i) (float (1- n))) 0.0))
+  (list (sf:mix (float (car   lo)) (float (car   hi)) f)
+        (sf:mix (float (cadr  lo)) (float (cadr  hi)) f)
+        (sf:mix (float (caddr lo)) (float (caddr hi)) f)))
+
+;; The DXF 440 value for sf:*trans*: 0x02000000 flags the word as a
+;; transparency and the low byte is the ALPHA, so 255 is opaque and the
+;; per cent has to be turned round.  nil when the previews are solid --
+;; an alpha of 255 is not the same as no 440 at all, since the group
+;; overrides the layer's own transparency where one is set.
+(defun sf:transval ( / a)
+  (if (and sf:*trans* (> sf:*trans* 0))
+    (progn
+      (setq a (fix (+ 0.5 (* 255.0 (- 1.0 (/ (float sf:*trans*) 100.0))))))
+      (+ 33554432 (max 0 (min 255 a))))))
+
+;; T for a radius that is not on the 6" series -- one of sf:*extras*.
+;; Those are drawn dashed, so the fan says which sizes are the usual
+;; step and which are the ones that only come up sometimes.
+(defun sf:extrap (r) (if (member r sf:*extras*) t))
 
 ;; Make sure the preview linetype exists, with dashes sized for a
 ;; drawing in inches so they read at pool scale (pf:ensure-dashed,
@@ -74076,23 +75079,42 @@
         (cal:v+ x (cal:v* u1 tl))
         (cal:v+ x (cal:v* u2 tl))))
 
-;; every radius that fits, from sf:*first* up in sf:*step*s, capped at
-;; sf:*maxshown*
-(defun sf:candidates (rmax / r out)
+;; EVERY radius this corner takes, ascending: sf:*first* up in
+;; sf:*step*s, with sf:*extras* merged in wherever they land.  vl-sort
+;; drops a duplicate, so an extra that is already on the series (a
+;; re-tuned sf:*first*) is not offered twice.
+(defun sf:fitting (rmax / r out)
   (setq r sf:*first*)
-  (while (and (<= r rmax)
-              (or (null sf:*maxshown*) (< (length out) sf:*maxshown*)))
+  (while (<= r rmax)
     (setq out (cons r out)
           r   (+ r sf:*step*)))
+  (foreach r sf:*extras*
+    (if (and (> r 0.0) (<= r rmax)) (setq out (cons r out))))
+  (if out (vl-sort out '<)))
+
+;; the ones actually drawn: the first sf:*maxshown* of them
+(defun sf:candidates (rmax / all r out n)
+  (setq all (sf:fitting rmax)
+        n   0)
+  (foreach r all
+    (if (or (null sf:*maxshown*) (< n sf:*maxshown*))
+      (setq out (cons r out)
+            n   (1+ n))))
   (reverse out))
 
 ;; how many would have fitted if nothing capped the list -- what the
-;; cap hid has to be said out loud, or 8 previews read as "that is all
+;; cap hid has to be said out loud, or 10 previews read as "that is all
 ;; this corner takes"
-(defun sf:howmany (rmax / r n)
-  (setq r sf:*first* n 0)
-  (while (<= r rmax) (setq n (1+ n) r (+ r sf:*step*)))
-  n)
+(defun sf:howmany (rmax) (length (sf:fitting rmax)))
+
+;; The smallest radius anything would offer, extras included.  A corner
+;; under it is the one the routine has nothing to draw for, and since
+;; sf:*extras* holds a 3 that is no longer the same number as
+;; sf:*first*.
+(defun sf:smallest ( / m r)
+  (setq m sf:*first*)
+  (foreach r sf:*extras* (if (and (> r 0.0) (< r m)) (setq m r)))
+  m)
 
 ;;; -------------------- previews ------------------------------------
 
@@ -74119,62 +75141,94 @@
   (setq sf:*preview* nil
         sf:*picks*   nil))
 
-;; one dashed preview arc, drawn the short way round between its two
-;; tangent points (a fillet arc is always less than a half circle)
-(defun sf:draw-arc (c r p1 p2 / a1 a2 dxf)
+;; The colour groups every preview entity carries: its own shade as a
+;; true colour, and the transparency if there is one.  Kept in one
+;; place so an arc and its label cannot end up different colours.
+(defun sf:colgroups (col / out tr)
+  (setq tr (sf:transval))
+  (if col (setq out (list (cons 420 (sf:truecol col)))))
+  (if tr (setq out (append out (list (cons 440 tr)))))
+  out)
+
+;; One preview arc in COL, drawn the short way round between its two
+;; tangent points (a fillet arc is always less than a half circle).
+;; DASH draws it in sf:*ltype* rather than solid -- what marks out a
+;; radius that is not on the 6" series.
+(defun sf:draw-arc (c r p1 p2 col dash / a1 a2 dxf)
   (setq a1 (angle c p1)
         a2 (angle c p2))
   (if (> (cal:angnorm (- a2 a1)) pi)
     (setq a1 (angle c p2)
           a2 (angle c p1)))
-  (setq dxf (list '(0 . "ARC") '(100 . "AcDbEntity")
-                  (cons 8 sf:*layer*) (cons 62 sf:*color*)
-                  (cons 6 (sf:ensure-ltype))
-                  '(100 . "AcDbCircle")
-                  (list 10 (car c) (cadr c) 0.0)
-                  (cons 40 r)
-                  '(100 . "AcDbArc")
-                  (cons 50 a1) (cons 51 a2)))
-  (if sf:*ltscale* (setq dxf (append dxf (list (cons 48 sf:*ltscale*)))))
+  ;; the colour, the linetype and its scale are AcDbEntity properties,
+  ;; so they go in the entity section -- ahead of the first subclass
+  ;; marker, where DXF puts them -- rather than trailing the arc's own
+  ;; geometry.  (append ignores a nil, which is what the two (if ...)s
+  ;; hand it when there is nothing to add.)
+  (setq dxf (append
+              (list '(0 . "ARC") '(100 . "AcDbEntity")
+                    (cons 8 sf:*layer*) (cons 62 sf:*color*)
+                    (cons 6 (if dash (sf:ensure-ltype) "Continuous")))
+              (if (and dash sf:*ltscale*) (list (cons 48 sf:*ltscale*)))
+              (sf:colgroups col)
+              (list '(100 . "AcDbCircle")
+                    (list 10 (car c) (cadr c) 0.0)
+                    (cons 40 r)
+                    '(100 . "AcDbArc")
+                    (cons 50 a1) (cons 51 a2))))
   (if (entmake dxf) (entlast)))
 
-;; the radius, lettered beside a preview.  Middle-centre justified, so
-;; the text sits on the point it is given whatever it says.
-(defun sf:draw-label (p str / h)
-  (setq h (if sf:*txthgt* sf:*txthgt* 6.0))
-  (if (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                     (cons 8 sf:*layer*) (cons 62 sf:*color*)
-                     '(100 . "AcDbText")
-                     (list 10 (car p) (cadr p) 0.0)
-                     (cons 40 h) (cons 1 str)
-                     '(72 . 1)                       ; centred across
-                     (list 11 (car p) (cadr p) 0.0)
-                     '(100 . "AcDbText")
-                     '(73 . 2)))                     ; and down
-    (entlast)))
+;; the radius, lettered beside a preview in that preview's own shade.
+;; Middle-centre justified, so the text sits on the point it is given
+;; whatever it says.
+(defun sf:draw-label (p str col / h dxf)
+  (setq h   (if sf:*txthgt* sf:*txthgt* 6.0)
+        dxf (append
+              (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                    (cons 8 sf:*layer*) (cons 62 sf:*color*))
+              (sf:colgroups col)              ; entity section, as above
+              (list '(100 . "AcDbText")
+                    (list 10 (car p) (cadr p) 0.0)
+                    (cons 40 h) (cons 1 str)
+                    '(72 . 1)                        ; centred across
+                    (list 11 (car p) (cadr p) 0.0)
+                    '(100 . "AcDbText")
+                    '(73 . 2))))                     ; and down
+  (if (entmake dxf) (entlast)))
 
-;; Draw the whole fan of previews.  Labels alternate between the two
-;; legs: consecutive tangent points sit one step apart along one leg,
-;; which is not room enough for two labels side by side.
-(defun sf:preview (geo rads / i r a c t1 t2 anchor)
-  (setq i 0)
+;; Where preview I's label goes: straight out from its tangent point,
+;; away from the arc -- so it never lands on the line it belongs to --
+;; and one rung further than the label before it on that same leg.
+;; Labels alternate legs, so the rung climbs every OTHER preview; the
+;; two together are what stops R30 landing on R36.
+(defun sf:labelpt (anchor c i / h)
+  (setq h (if sf:*txthgt* sf:*txthgt* 6.0))
+  (cal:v+ anchor
+         (cal:v* (cal:unit (cal:v- anchor c))
+                (* h (+ 0.9 (* (if sf:*rung* sf:*rung* 0.0)
+                               (float (/ i 2)))))))) ; integer divide:
+                                                     ; the rung number
+
+;; Draw the whole fan of previews, light shade to dark.  Labels
+;; alternate between the two legs: consecutive tangent points sit one
+;; step apart along one leg, which is not room enough for two labels
+;; side by side.
+(defun sf:preview (geo rads / i n r a c t1 t2 anchor col)
+  (setq i 0
+        n (length rads))
   (cal:ensure-layer sf:*layer* sf:*color*)
   (foreach r rads
-    (setq a  (sf:arcpts geo r)
-          c  (car   a)
-          t1 (cadr  a)
-          t2 (caddr a))
-    (sf:mark (sf:draw-arc c r t1 t2) r)
+    (setq a   (sf:arcpts geo r)
+          c   (car   a)
+          t1  (cadr  a)
+          t2  (caddr a)
+          col (sf:shade i n))
+    (sf:mark (sf:draw-arc c r t1 t2 col (sf:extrap r)) r)
     (if sf:*label*
       (progn
         (setq anchor (if (= 0 (rem i 2)) t1 t2))
-        ;; pushed straight off the arc, away from its centre, so the
-        ;; label never lands on the line it belongs to
-        (sf:mark (sf:draw-label
-                   (cal:v+ anchor
-                          (cal:v* (cal:unit (cal:v- anchor c))
-                                 (* 0.9 (if sf:*txthgt* sf:*txthgt* 6.0))))
-                   (sf:rlabel r))
+        (sf:mark (sf:draw-label (sf:labelpt anchor c i)
+                                (sf:rlabel r) col)
                  nil)))
     (setq i (1+ i))))
 
@@ -74218,11 +75272,11 @@
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel)
-       (princ (strcat "\n  (nothing there -- click one of the dashed"
+       (princ (strcat "\n  (nothing there -- click one of the green"
                       " corners, or type Cancel)")))
       ((setq r (sf:radof (car sel))) (setq ans r))
       (t (princ (strcat "\n  (that is not one of the previews -- click a"
-                        " dashed corner)")))))
+                        " green corner)")))))
   (if (eq ans 'SF-NONE) nil ans))
 
 ;;; -------------------- cutting and dimensioning --------------------
@@ -74344,7 +75398,8 @@
 ;;; -------------------- the command ---------------------------------
 
 (defun c:SMARTFILLET ( / *error* olderr odim undo-open
-                         one two geo rmax rads extra r arc dim1 made)
+                         one two geo rmax rads extra shown-extras
+                         r arc dim1 made)
 
   ;; -- restore drawing state on error / Esc.  The previews go first:
   ;;    they are entities like any other, and a run cut short partway
@@ -74392,10 +75447,10 @@
                     " parallel, or they run straight through one"
                     " another.  Nothing to round.")))
 
-    ((< (setq rmax (sf:rmax geo)) sf:*first*)
+    ((< (setq rmax (sf:rmax geo)) (sf:smallest))
      (princ (strcat "\nThe shorter leg of that corner only allows "
                     (sf:rlabel rmax) " -- less than the smallest"
-                    " preview (" (sf:rlabel sf:*first*) ").  Nothing"
+                    " preview (" (sf:rlabel (sf:smallest)) ").  Nothing"
                     " drawn; lower sf:*first* to work at that size.")))
 
     (t
@@ -74413,11 +75468,19 @@
      (sf:preview geo rads)
      (princ (strcat "\n" (itoa (length rads)) " corner"
                     (if (= 1 (length rads)) "" "s")
-                    " that fit, dashed: " (sf:rlabel (car rads))
+                    " that fit, light to dark: " (sf:rlabel (car rads))
                     (if (cdr rads)
                       (strcat " to " (sf:rlabel (last rads)))
                       "")
                     "."))
+     ;; which arcs are dashed is a fact about the SIZES, not about the
+     ;; drawing, so it is said rather than left to be inferred from the
+     ;; one preview that looks different
+     (setq shown-extras (sf:shown-extras rads))
+     (if shown-extras
+       (princ (strcat "\nDashed: " (sf:rlist shown-extras)
+                      " -- the in-between sizes, less common than a "
+                      (sf:num sf:*step*) "\" step.")))
      ;; a cap that says nothing reads as "that is all this corner
      ;; takes", which is a different fact
      (if (> extra 0)
@@ -74479,6 +75542,940 @@
 (princ (strcat "\nSMARTFILLET " *smartfillet-version*
                " loaded -- type SMARTFILLET, pick two lines, and click"
                " the rounded corner you want."))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> HONEFILLET.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; HONEFILLET.lsp  --  the sizes BETWEEN the ones SMARTFILLET offers:
+;;;                     bracket two of them and hone at half inches
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  HONEFILLET     preview the radii that fit a corner, pick
+;;;                           two neighbours, redraw between them at half
+;;;                           inches, cut the one clicked and dimension it
+;;;            HONEFILLETVER  print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  SMARTFILLET draws the corner at every 6-inch radius that fits and
+;;;  cuts the one clicked.  Most of the time one of those IS the answer.
+;;;  Sometimes it is not -- the corner wants something between two of
+;;;  them, and the 6-inch step is the wrong ruler for that job.
+;;;
+;;;  HONEFILLET is that second look.  It is SMARTFILLET as far as the
+;;;  fan, and then instead of cutting the one clicked it asks for TWO,
+;;;  either side of the size wanted, and redraws just that range in half
+;;;  inches.  Click one of those and it is cut and dimensioned exactly as
+;;;  SMARTFILLET would have cut a round one.
+;;;
+;;;    1. Select the two lines that make the corner.  Click each one on
+;;;       the side you want KEPT -- exactly how FILLET reads a pick:
+;;;       what lies beyond the corner is trimmed away.
+;;;    2. The coarse fan is drawn: 6 up in 6s, plus the 3 and the 9 in
+;;;       hn:*extras*, every radius that leaves both legs something to
+;;;       stand on.  This is the menu to bracket from, not the menu to
+;;;       cut from -- nothing here is cut.
+;;;    3. Click the two the answer sits BETWEEN.  Neighbours: the range
+;;;       has to be short enough to draw at half inches, and a pair too
+;;;       far apart is said so and re-asked rather than truncated.
+;;;    4. The coarse fan goes and that range comes back in half-inch
+;;;       steps, both ends included -- so settling back on the round
+;;;       number is still one click.  The whole inches are solid and the
+;;;       half inches dashed, which is the fan saying which of them is
+;;;       a size somebody will not have to think twice about.
+;;;    5. Click the one you want.  The previews go, the corner is
+;;;       filleted for real at that radius, and the arc gets its radius
+;;;       dimension -- R13.5 lettered as R13.5, not rounded to suit the
+;;;       tool that drew it.
+;;;    6. It then offers the SAME radius for the rest of the corners:
+;;;       two lines per corner until Done.  As soon as one repeat is
+;;;       cut, the single dimension becomes "R13.5 Typ.", which is how
+;;;       the radius would be lettered by hand.
+;;;
+;;;  Telling one preview from the next is the whole job of both fans,
+;;;  and it matters more here than it does in SMARTFILLET -- half an
+;;;  inch of radius is a hair's difference on screen.  So three things
+;;;  do it at once: the fan runs light green to dark green with the
+;;;  radius, every arc is part transparent so the ones underneath still
+;;;  read, and each label is drawn in ITS OWN arc's shade.  The labels
+;;;  climb a rung further off the leg with each preview, because
+;;;  consecutive tangent points sit half an inch apart along a leg and
+;;;  that is nothing like room for two labels side by side.
+;;;
+;;;  The whole run is one undo group: a single U puts every corner back
+;;;  and takes the dimension away.
+;;;
+;;;  Usage
+;;;    Command: HONEFILLET
+;;;    Command: HONEFILLETVER   prints the version
+;;;
+;;;  Tunables (setq them after loading if a drawing needs different
+;;;  sizes or names, e.g. in a startup file):
+;;;    hn:*first*      smallest radius in the coarse fan   (6.0)
+;;;    hn:*step*       step between those                  (6.0)
+;;;    hn:*extras*     odd radii offered too, drawn dashed (3 and 9)
+;;;    hn:*maxshown*   most coarse previews at once        (10)
+;;;    hn:*fine*       the honing step                     (0.5)
+;;;    hn:*maxfine*    most honed previews at once, which is also what
+;;;                    "neighbouring" is measured against  (14)
+;;;    hn:*fit*        fraction of a leg a fillet may eat  (0.98)
+;;;    hn:*layer*      layer the previews are drawn on
+;;;    hn:*color*      their fallback colour index
+;;;    hn:*shade-lo*   RGB of the SMALLEST preview        (light green)
+;;;    hn:*shade-hi*   RGB of the LARGEST                 (dark green)
+;;;    hn:*trans*      how transparent a preview is, per cent
+;;;    hn:*ltype*      the dashed previews' linetype, created if missing
+;;;    hn:*ltscale*    per-arc linetype scale, nil = the drawing's
+;;;    hn:*label*      T to letter each preview R6, R13.5 ...
+;;;    hn:*txthgt*     height of those labels
+;;;    hn:*rung*       how far each label climbs past the one before,
+;;;                    in text heights
+;;;    hn:*dimlayer*   layer the radius dimension goes on ("DIMENSION")
+;;;    hn:*smalldim*   radii under this are dimensioned in ...
+;;;    hn:*smallstyle* ... this dim style, when the drawing has it
+;;;    hn:*dimoff*     how far past the arc the dimension text sits,
+;;;                    nil = one radius, and never less than 12
+;;;    hn:*dimrepeat*  T to dimension every repeat corner too
+;;;    hn:*typ*        T to re-letter the one dimension "<> Typ." once
+;;;                    a repeat has been cut at the same radius
+;;;
+;;;  Notes
+;;;    * Two straight LINEs only.  A polyline corner is not filleted --
+;;;      the routine says so and asks again; explode it first.
+;;;    * Which side of each line survives comes from where it was
+;;;      clicked, as in FILLET.  Click near the corner and both legs
+;;;      keep the end you clicked toward.
+;;;    * A radius only makes the list when its tangent point lands on
+;;;      both legs (times hn:*fit*, so a fillet never eats a leg whole).
+;;;      A corner too short for even R3 is reported, not filleted.
+;;;    * The two picks may come in either order, and a corner honed
+;;;      between R12 and R18 can still be cut at R12 or at R18 -- both
+;;;      ends are drawn, so the second look never takes the first
+;;;      look's answer away.
+;;;    * The preview arcs are real entities on their own layer, erased
+;;;      on the way out -- on a clean finish, on Esc, and on an error.
+;;;      The empty layer is left behind; deleting it is a PURGE away.
+;;;    * The shades are true colours (DXF 420) and the transparency is
+;;;      DXF 440, both per entity.  A viewport with transparency display
+;;;      switched off (TRANSPARENCYDISPLAY 0) draws them solid, which
+;;;      costs the fan nothing but the see-through -- the shades and the
+;;;      labels still tell the arcs apart.
+;;;    * OSMODE, CMDECHO, CLAYER, FILLETRAD, TRIMMODE and the current
+;;;      dimension style are all put back the way they were.
+;;; ======================================================================
+
+(setq *honefillet-version* "v1.0")  ; announced on load; release_lisp.py
+                                     ; reads this banner and stamps the
+                                     ; dated twin in releases/ from it
+
+;;; -------------------- tunables ------------------------------------
+
+(setq hn:*first*      6.0)   ; the smallest radius in the COARSE fan --
+(setq hn:*step*       6.0)   ; the one that is only there to bracket
+                             ; from -- and the step between the ones
+                             ; after it.  SMARTFILLET's fan, because
+                             ; bracketing from a different set of sizes
+                             ; than the one just looked at is a trap
+(setq hn:*extras*    '(3.0 9.0)) ; radii offered BESIDES that series.
+                             ; A 3 or a 9 turns up, just not often
+                             ; enough to be the step; they are drawn
+                             ; dashed so the fan still reads as "6s,
+                             ; and these two".  nil = the series alone
+(setq hn:*maxshown*   10)    ; how many COARSE previews may be on screen
+                             ; at once; nil = every radius that fits,
+                             ; which on a long wall is a great many
+(setq hn:*fine*       0.5)   ; the honing step: what the range between
+                             ; the two bracketed sizes is redrawn at.
+                             ; Half an inch is where a radius stops
+                             ; being a size somebody could have meant
+                             ; and starts being a number
+(setq hn:*maxfine*    14)    ; most honed previews at once, and so also
+                             ; what "neighbouring" MEANS here: a full
+                             ; 6" bracket comes to 13 half-inch steps,
+                             ; so 14 admits any two neighbours and
+                             ; turns away a pair with a whole size
+                             ; between them.  Raising it widens what
+                             ; may be bracketed; it does not make the
+                             ; result any more readable
+(setq hn:*fit*        0.98)  ; how much of the shorter leg a fillet may
+                             ; use up: 1.0 would put the tangent point
+                             ; exactly on the far end and leave a
+                             ; zero-length line behind
+(setq hn:*layer*      "HONE FILLET PREVIEW")
+(setq hn:*color*      3)     ; the layer's colour, and the fallback
+                             ; index on every preview: green, so a
+                             ; preview reads as a preview even where a
+                             ; true colour cannot be shown
+(setq hn:*shade-lo*  '(190 255 190)) ; the SMALLEST preview's green ...
+(setq hn:*shade-hi*  '(0 110 0))     ; ... and the largest's.  The fan
+                             ; is graded between the two, so which arc
+                             ; a label belongs to is a matter of shade
+                             ; rather than of tracing it by eye.  Both
+                             ; stay green on black; a light-background
+                             ; drawing wants the pair swapped round
+(setq hn:*trans*      40)    ; per cent transparency on every preview,
+                             ; so an arc crossing another still reads.
+                             ; 0 or nil = solid; over 90 is a preview
+                             ; nobody can see
+(setq hn:*ltype*      "DASHED")
+(setq hn:*ltscale*    0.25)  ; the stock DASHED pattern is 18 units
+                             ; long, so a 6" fillet arc (9 units of it)
+                             ; would come out as one unbroken dash; a
+                             ; quarter-scale pattern puts real gaps in
+                             ; even the smallest preview.  nil = leave
+                             ; the arcs at the drawing's own LTSCALE
+(setq hn:*label*      t)
+(setq hn:*txthgt*     3.0)   ; smaller than SMARTFILLET's: R13.5 is two
+                             ; characters longer than R12 and the honed
+                             ; fan sets them half an inch apart
+(setq hn:*rung*       1.4)   ; and each one climbs this many text
+                             ; heights further off its leg than the
+                             ; label before it on that side, which is
+                             ; what carries the honed fan -- side to
+                             ; side there is no room at all at half an
+                             ; inch a step
+(setq hn:*dimlayer*   "DIMENSION")
+(setq hn:*smalldim*   24.0)             ; POOL's small-dimension rule,
+(setq hn:*smallstyle* "STANDARD INCHES"); kept so a fillet callout
+                                        ; matches the dims beside it
+(setq hn:*dimoff*     nil)   ; nil = one radius past the arc
+(setq hn:*dimrepeat*  nil)   ; one callout plus "Typ." is how the sheet
+                             ; reads; set T to dimension every corner
+(setq hn:*typ*        t)
+(setq hn:*minang*     0.02)  ; how far off straight (radians) two legs
+                             ; must be before there is a corner at all
+
+(setq hn:*preview*    nil)   ; every entity drawn as a preview
+(setq hn:*picks*      nil)   ; (preview-arc . radius), what a click means
+(setq hn:*smallwarned* nil)  ; the missing-style note is said once
+
+;;; -------------------- shared helpers ------------------------------
+;;; The generic CALOFIN-LIB helpers this tool leans on.  Here they are
+;;; copies under this file's own prefix, so it loads alone with
+;;; APPLOAD; in the shared/ twin they are gone and every call site
+;;; reads cal: instead.  Bodies identical to the library's.
+
+;;; -------------------- small local helpers -------------------------
+
+;; A number without AutoLISP's trailing zeros: 12, not 12.000000, and
+;; 13.5 rather than 13.50 -- the half inch is the size this whole tool
+;; exists to letter, and a callout reading R13.50 is one nobody writes
+;; by hand.
+(defun hn:num (x)
+  (cond ((null x) "?")
+        ((= x (fix x)) (rtos x 2 0))
+        ((= (* 2.0 x) (fix (* 2.0 x))) (rtos x 2 1))
+        (t (rtos x 2 2))))
+
+;; "R12", the way a radius is lettered
+(defun hn:rlabel (r) (strcat "R" (hn:num r)))
+
+;; "R3", "R3 and R9", "R3, R9 and R15" -- a list of radii read out the
+;; way a sentence needs them.
+(defun hn:rlist (rads / n i r out)
+  (setq n (length rads) i 0 out "")
+  (foreach r rads
+    (setq out (strcat out
+                      (cond ((= i 0) "")
+                            ((= i (1- n)) " and ")
+                            (t ", "))
+                      (hn:rlabel r))
+          i   (1+ i)))
+  out)
+
+;; of RADS, the ones drawn dashed -- what the report names
+(defun hn:shown-extras (rads / r out)
+  (foreach r rads (if (hn:extrap r) (setq out (cons r out))))
+  (reverse out))
+
+;; An (r g b) triple as the 24-bit integer DXF group 420 wants.
+(defun hn:truecol (rgb)
+  (+ (* 65536 (fix (car rgb))) (* 256 (fix (cadr rgb))) (fix (caddr rgb))))
+
+;; a + f*(b - a), rounded to a whole colour channel
+(defun hn:mix (a b f) (fix (+ 0.5 a (* f (- b a)))))
+
+;; Preview I of N as an (r g b) triple, graded from hn:*shade-lo* to
+;; hn:*shade-hi*.  A lone preview takes the light end: there is nothing
+;; for it to be darker THAN.
+(defun hn:shade (i n / f lo hi)
+  (setq lo hn:*shade-lo*
+        hi hn:*shade-hi*
+        f  (if (> n 1) (/ (float i) (float (1- n))) 0.0))
+  (list (hn:mix (float (car   lo)) (float (car   hi)) f)
+        (hn:mix (float (cadr  lo)) (float (cadr  hi)) f)
+        (hn:mix (float (caddr lo)) (float (caddr hi)) f)))
+
+;; The DXF 440 value for hn:*trans*: 0x02000000 flags the word as a
+;; transparency and the low byte is the ALPHA, so 255 is opaque and the
+;; per cent has to be turned round.  nil when the previews are solid --
+;; an alpha of 255 is not the same as no 440 at all, since the group
+;; overrides the layer's own transparency where one is set.
+(defun hn:transval ( / a)
+  (if (and hn:*trans* (> hn:*trans* 0))
+    (progn
+      (setq a (fix (+ 0.5 (* 255.0 (- 1.0 (/ (float hn:*trans*) 100.0))))))
+      (+ 33554432 (max 0 (min 255 a))))))
+
+;; T for a radius that is not on the 6" series -- one of hn:*extras*.
+;; Those are drawn dashed, so the coarse fan says which sizes are the
+;; usual step and which are the ones that only come up sometimes.
+(defun hn:extrap (r) (if (member r hn:*extras*) t))
+
+;; T for a radius that is not a whole inch.  The honed fan's own
+;; dashed-or-solid rule: an R13 is a size, an R13.5 is a decision, and
+;; the fan should say which is which without being read.
+(defun hn:halfp (r) (if (= r (fix r)) nil t))
+
+;; which rule applies -- FINE is the honed fan, nil the coarse one
+(defun hn:dashp (r fine) (if fine (hn:halfp r) (hn:extrap r)))
+
+;; Make sure the preview linetype exists, with dashes sized for a
+;; drawing in inches so they read at pool scale (pf:ensure-dashed,
+;; abhd.lsp:1566).  A drawing that already has one by that name keeps
+;; its own.
+(defun hn:ensure-ltype ()
+  (if (and hn:*ltype* (not (tblsearch "LTYPE" hn:*ltype*)))
+    (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLinetypeTableRecord")
+                   (cons 2 hn:*ltype*) '(70 . 0)
+                   '(3 . "Dashed __ __ __ __ __")
+                   '(72 . 65) '(73 . 2) '(40 . 18.0)
+                   '(49 . 12.0) '(74 . 0)
+                   '(49 . -6.0) '(74 . 0))))
+  (if (tblsearch "LTYPE" hn:*ltype*) hn:*ltype* "CONTINUOUS"))
+
+;; the two endpoints of a LINE, in WCS (the entity's own OCS may be
+;; tilted, so go through the entity coordinate system)
+(defun hn:ends (en / ed)
+  (setq ed (entget en))
+  (list (cal:2d (trans (cdr (assoc 10 ed)) en 0))
+        (cal:2d (trans (cdr (assoc 11 ed)) en 0))))
+
+;;; -------------------- the corner ----------------------------------
+
+;; One leg of the corner: which way the line runs from the crossing
+;; point X on the side that was CLICKED -- the side FILLET keeps -- and
+;; how far it reaches that way.  Returns (unit-direction reach), or nil
+;; when the line has no length.  The pick decides the direction and the
+;; far endpoint decides the reach, so a line whose crossing point lies
+;; off its own end (the case FILLET handles by extending it) is
+;; measured the same way as one the corner sits inside.
+(defun hn:leg (en x pk / ends a b d s u av)
+  (setq ends (hn:ends en)
+        a    (car  ends)
+        b    (cadr ends)
+        d    (cal:unit (cal:v- b a)))
+  (if d
+    (progn
+      (setq s (cal:dot d (cal:v- pk x)))
+      ;; clicked on the corner itself, where neither side is nearer:
+      ;; take the end with more line behind it, the only one a fillet
+      ;; could stand on
+      (if (< (abs s) 1e-6)
+        (setq s (if (>= (cal:dist a x) (cal:dist b x))
+                  (cal:dot d (cal:v- a x))
+                  (cal:dot d (cal:v- b x)))))
+      (setq u  (if (< s 0.0) (cal:v* d -1.0) d)
+            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
+      (if (> av 1e-9) (list u av)))))
+
+;; Everything about the corner two picked lines make, worked out once:
+;;   (X u1 reach1 u2 reach2 half-angle)
+;; X is where the two lines cross (extended if they have to be, as
+;; FILLET extends them), each u runs from X along the side that was
+;; clicked, and half-angle is half the turn between them -- the one
+;; number the whole fillet is built from.  nil when there is no corner:
+;; parallel lines, the same line twice, or two legs so nearly straight
+;; through that no arc could join them.
+(defun hn:corner (e1 pk1 e2 pk2 / a b x l1 l2 th)
+  (setq a (hn:ends e1)
+        b (hn:ends e2)
+        x (inters (car a) (cadr a) (car b) (cadr b) nil))
+  (if x
+    (progn
+      (setq x  (cal:2d x)
+            l1 (hn:leg e1 x pk1)
+            l2 (hn:leg e2 x pk2))
+      (if (and l1 l2)
+        (progn
+          (setq th (abs (cal:signed-dang (angle '(0.0 0.0) (car l1))
+                                        (angle '(0.0 0.0) (car l2)))))
+          (if (and (> th hn:*minang*) (< th (- pi hn:*minang*)))
+            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0))))))))
+
+;; how far back from the corner a fillet of radius R starts
+(defun hn:tanlen (half r) (/ r (cal:tan half)))
+
+;; The biggest radius this corner can take: the tangent point has to
+;; land on both legs, and hn:*fit* keeps it clear of the far end so a
+;; fillet never eats a leg whole.
+(defun hn:rmax (geo)
+  (* hn:*fit* (min (caddr geo) (nth 4 geo)) (cal:tan (nth 5 geo))))
+
+;; centre and the two tangent points of the fillet arc of radius R
+(defun hn:arcpts (geo r / x u1 u2 half tl)
+  (setq x    (car geo)
+        u1   (cadr geo)
+        u2   (cadddr geo)
+        half (nth 5 geo)
+        tl   (hn:tanlen half r))
+  (list (cal:v+ x (cal:v* (cal:unit (cal:v+ u1 u2)) (/ r (sin half))))
+        (cal:v+ x (cal:v* u1 tl))
+        (cal:v+ x (cal:v* u2 tl))))
+
+;; EVERY radius this corner takes, ascending: hn:*first* up in
+;; hn:*step*s, with hn:*extras* merged in wherever they land.  vl-sort
+;; drops a duplicate, so an extra that is already on the series (a
+;; re-tuned hn:*first*) is not offered twice.
+(defun hn:fitting (rmax / r out)
+  (setq r hn:*first*)
+  (while (<= r rmax)
+    (setq out (cons r out)
+          r   (+ r hn:*step*)))
+  (foreach r hn:*extras*
+    (if (and (> r 0.0) (<= r rmax)) (setq out (cons r out))))
+  (if out (vl-sort out '<)))
+
+;; the ones actually drawn: the first hn:*maxshown* of them
+(defun hn:candidates (rmax / all r out n)
+  (setq all (hn:fitting rmax)
+        n   0)
+  (foreach r all
+    (if (or (null hn:*maxshown*) (< n hn:*maxshown*))
+      (setq out (cons r out)
+            n   (1+ n))))
+  (reverse out))
+
+;; how many would have fitted if nothing capped the list -- what the
+;; cap hid has to be said out loud, or 10 previews read as "that is all
+;; this corner takes"
+(defun hn:howmany (rmax) (length (hn:fitting rmax)))
+
+;; The smallest radius anything would offer, extras included.  A corner
+;; under it is the one the routine has nothing to draw for, and since
+;; hn:*extras* holds a 3 that is no longer the same number as
+;; hn:*first*.
+(defun hn:smallest ( / m r)
+  (setq m hn:*first*)
+  (foreach r hn:*extras* (if (and (> r 0.0) (< r m)) (setq m r)))
+  m)
+
+;;; -------------------- the honed range -----------------------------
+
+;; How many half-inch previews the range LO..HI comes to, BOTH ENDS
+;; INCLUDED -- 12 to 18 is thirteen of them, not twelve.  The epsilon is
+;; the difference between 12 steps and 11.99999999 of them: (hi - lo)
+;; and hn:*fine* are both worked out in floating point, and a range that
+;; came up one short would drop the radius the whole thing was honing
+;; towards.
+(defun hn:howfine (lo hi)
+  (1+ (fix (+ 1e-6 (/ (- hi lo) hn:*fine*)))))
+
+;; That range as a list, ascending, both ends included.  Counting up in
+;; whole steps from LO rather than adding hn:*fine* to a running total
+;; keeps the last one exactly HI: an accumulated 0.5 twelve times over
+;; is not the same number as 12 halves.
+(defun hn:finesteps (lo hi / n i out)
+  (setq n (hn:howfine lo hi)
+        i 0)
+  (while (< i n)
+    (setq out (cons (+ lo (* (float i) hn:*fine*)) out)
+          i   (1+ i)))
+  (reverse out))
+
+;;; -------------------- previews ------------------------------------
+
+;; Remember what was drawn: everything goes on the erase list, and an
+;; arc also goes on the list a click is looked up in.
+(defun hn:mark (en r)
+  (if en
+    (progn
+      (setq hn:*preview* (cons en hn:*preview*))
+      (if r (setq hn:*picks* (cons (cons en r) hn:*picks*)))))
+  en)
+
+;; the radius a preview arc stands for, nil for anything else in the
+;; drawing
+(defun hn:radof (en / p)
+  (setq p (assoc en hn:*picks*))
+  (if p (cdr p)))
+
+;; Take every preview back out of the drawing.  Called on the way out
+;; of the command however it ends -- a preview left behind would be
+;; read as drawn work by every other tool in the toolset.
+(defun hn:clear ( / e)
+  (foreach e hn:*preview* (if (and e (entget e)) (entdel e)))
+  (setq hn:*preview* nil
+        hn:*picks*   nil))
+
+;; The colour groups every preview entity carries: its own shade as a
+;; true colour, and the transparency if there is one.  Kept in one
+;; place so an arc and its label cannot end up different colours.
+(defun hn:colgroups (col / out tr)
+  (setq tr (hn:transval))
+  (if col (setq out (list (cons 420 (hn:truecol col)))))
+  (if tr (setq out (append out (list (cons 440 tr)))))
+  out)
+
+;; One preview arc in COL, drawn the short way round between its two
+;; tangent points (a fillet arc is always less than a half circle).
+;; DASH draws it in hn:*ltype* rather than solid -- what marks out a
+;; radius that is not on the 6" series.
+(defun hn:draw-arc (c r p1 p2 col dash / a1 a2 dxf)
+  (setq a1 (angle c p1)
+        a2 (angle c p2))
+  (if (> (cal:angnorm (- a2 a1)) pi)
+    (setq a1 (angle c p2)
+          a2 (angle c p1)))
+  ;; the colour, the linetype and its scale are AcDbEntity properties,
+  ;; so they go in the entity section -- ahead of the first subclass
+  ;; marker, where DXF puts them -- rather than trailing the arc's own
+  ;; geometry.  (append ignores a nil, which is what the two (if ...)s
+  ;; hand it when there is nothing to add.)
+  (setq dxf (append
+              (list '(0 . "ARC") '(100 . "AcDbEntity")
+                    (cons 8 hn:*layer*) (cons 62 hn:*color*)
+                    (cons 6 (if dash (hn:ensure-ltype) "Continuous")))
+              (if (and dash hn:*ltscale*) (list (cons 48 hn:*ltscale*)))
+              (hn:colgroups col)
+              (list '(100 . "AcDbCircle")
+                    (list 10 (car c) (cadr c) 0.0)
+                    (cons 40 r)
+                    '(100 . "AcDbArc")
+                    (cons 50 a1) (cons 51 a2))))
+  (if (entmake dxf) (entlast)))
+
+;; the radius, lettered beside a preview in that preview's own shade.
+;; Middle-centre justified, so the text sits on the point it is given
+;; whatever it says.
+(defun hn:draw-label (p str col / h dxf)
+  (setq h   (if hn:*txthgt* hn:*txthgt* 6.0)
+        dxf (append
+              (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                    (cons 8 hn:*layer*) (cons 62 hn:*color*))
+              (hn:colgroups col)              ; entity section, as above
+              (list '(100 . "AcDbText")
+                    (list 10 (car p) (cadr p) 0.0)
+                    (cons 40 h) (cons 1 str)
+                    '(72 . 1)                        ; centred across
+                    (list 11 (car p) (cadr p) 0.0)
+                    '(100 . "AcDbText")
+                    '(73 . 2))))                     ; and down
+  (if (entmake dxf) (entlast)))
+
+;; Where preview I's label goes: straight out from its tangent point,
+;; away from the arc -- so it never lands on the line it belongs to --
+;; and one rung further than the label before it on that same leg.
+;; Labels alternate legs, so the rung climbs every OTHER preview; the
+;; two together are what stops R13 landing on R13.5.
+(defun hn:labelpt (anchor c i / h)
+  (setq h (if hn:*txthgt* hn:*txthgt* 6.0))
+  (cal:v+ anchor
+         (cal:v* (cal:unit (cal:v- anchor c))
+                (* h (+ 0.9 (* (if hn:*rung* hn:*rung* 0.0)
+                               (float (/ i 2)))))))) ; integer divide:
+                                                     ; the rung number
+
+;; Draw the whole fan of previews, light shade to dark.  FINE says
+;; which fan this is, and so which sizes come out dashed.  Labels
+;; alternate between the two legs: consecutive tangent points sit one
+;; step apart along one leg -- half an inch once the fan is honed --
+;; which is not room enough for two labels side by side.
+(defun hn:preview (geo rads fine / i n r a c t1 t2 anchor col)
+  (setq i 0
+        n (length rads))
+  (cal:ensure-layer hn:*layer* hn:*color*)
+  (foreach r rads
+    (setq a   (hn:arcpts geo r)
+          c   (car   a)
+          t1  (cadr  a)
+          t2  (caddr a)
+          col (hn:shade i n))
+    (hn:mark (hn:draw-arc c r t1 t2 col (hn:dashp r fine)) r)
+    (if hn:*label*
+      (progn
+        (setq anchor (if (= 0 (rem i 2)) t1 t2))
+        (hn:mark (hn:draw-label (hn:labelpt anchor c i)
+                                (hn:rlabel r) col)
+                 nil)))
+    (setq i (1+ i))))
+
+;;; -------------------- asking --------------------------------------
+
+;; One entsel that insists on a LINE.  KW is the single keyword the
+;; prompt offers as its way out, and it is also what Enter does -- the
+;; bracket text is the keyword itself, so a click on it sends exactly
+;; what is tested for, and the <default> says what an empty answer
+;; means.  OTHER is the line already picked for this corner, which
+;; cannot be picked twice.  Returns (ename pick-point-in-WCS), or nil
+;; when the way out is taken.  Nothing has been drawn at this point, so
+;; a click that lands on empty paper costing the loop is a fair trade
+;; for Enter meaning what it says.
+(defun hn:askline (msg kw other / sel ans typ)
+  (while (not ans)
+    (initget kw)
+    (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (cond
+      ((= (type sel) 'STR) (setq ans 'HN-NONE))
+      ((null sel) (setq ans 'HN-NONE))
+      ((and other (eq (car sel) other))
+       (princ "\n  (that is the line you just picked -- click the OTHER leg)"))
+      ((not (= "LINE" (setq typ (cdr (assoc 0 (entget (car sel)))))))
+       (princ (strcat "\n  (that is a " typ " -- HONEFILLET rounds the"
+                      " corner between two straight LINEs; explode a"
+                      " polyline first)")))
+      (t (setq ans (list (car sel) (cal:2d (trans (cadr sel) 1 0)))))))
+  (if (eq ans 'HN-NONE) nil ans))
+
+;; Which preview was clicked, as its radius.  MSG is the question --
+;; this prompt is put three times in a run and means something different
+;; each time.  nil when the user gives up on the corner.  It has no
+;; <default>, so Enter re-asks (STANDARDS.md section 1 rule 5): the arcs
+;; are thin, half an inch apart once the fan is honed, and the near-miss
+;; that would throw a whole fan of them away is exactly the click this
+;; prompt invites.  Cancel is in the bracket, so there is a mouse-only
+;; way out that does not depend on hitting anything.
+(defun hn:pickpreview (msg / sel ans r)
+  (while (not ans)
+    (initget "Cancel")
+    (setq sel (entsel (strcat "\n" msg " [Cancel]: ")))
+    (cond
+      ((= (type sel) 'STR) (setq ans 'HN-NONE))
+      ((null sel)
+       (princ (strcat "\n  (nothing there -- click one of the green"
+                      " corners, or type Cancel)")))
+      ((setq r (hn:radof (car sel))) (setq ans r))
+      (t (princ (strcat "\n  (that is not one of the previews -- click a"
+                        " green corner)")))))
+  (if (eq ans 'HN-NONE) nil ans))
+
+;; The two previews the honed fan is drawn between, as (lo hi).  Both
+;; come off the coarse fan already on screen, in either order, and the
+;; pair has to pass two tests before it is one: two DIFFERENT sizes,
+;; because there is no range inside a single radius, and close enough
+;; together that hn:*maxfine* previews cover the ground between them.
+;; A pair that fails either is said so and asked again rather than
+;; quietly honed at a coarser step or truncated halfway -- both of which
+;; would answer a question nobody asked.  nil when the user gives up.
+(defun hn:bracket ( / a b lo hi n ans)
+  (while (not ans)
+    (setq a (hn:pickpreview
+              "Click one of the two corners to hone between"))
+    (setq b (if a (hn:pickpreview "Click the one next to it")))
+    (cond
+      ((or (null a) (null b)) (setq ans 'HN-NONE))
+      ((equal a b 1e-9)
+       (princ (strcat "\n  (that is " (hn:rlabel a) " twice -- click the"
+                      " corner on the OTHER side of the size you want)")))
+      ((> (setq lo (min a b)
+                hi (max a b)
+                n  (hn:howfine lo hi))
+          hn:*maxfine*)
+       (princ (strcat "\n  (" (hn:rlabel lo) " to " (hn:rlabel hi) " is "
+                      (itoa n) " steps of " (hn:num hn:*fine*) "\", more"
+                      " than the " (itoa hn:*maxfine*) " that can be"
+                      " read at once -- pick two that sit next to each"
+                      " other)")))
+      (t (setq ans (list lo hi)))))
+  (if (eq ans 'HN-NONE) nil ans))
+
+;;; -------------------- cutting and dimensioning --------------------
+
+;; Cut the corner for real.  The two picks go to FILLET exactly as the
+;; user made them, so the side each line keeps is the side clicked.
+;; Returns the arc FILLET made, or nil when it refused.
+(defun hn:dofillet (e1 pk1 e2 pk2 r / pre new ed)
+  (setq pre (entlast))
+  (setvar "FILLETRAD" r)
+  (command "_.FILLET" (list e1 (trans pk1 0 1)) (list e2 (trans pk2 0 1)))
+  (setq new (entlast))
+  (if (and new (not (eq new pre))
+           (setq ed (entget new))
+           (= "ARC" (cdr (assoc 0 ed))))
+    new))
+
+;; Switch to the small-dimension style for a measurement under
+;; hn:*smalldim*, POOL's rule (pool:dimsbegin, POOL.LSP:370), so a
+;; fillet callout matches the dims beside it.  Returns the style to go
+;; back to, nil when nothing moved.
+(defun hn:dimsbegin (d / od)
+  (if (< d hn:*smalldim*)
+    (if (tblsearch "DIMSTYLE" hn:*smallstyle*)
+      (progn
+        (setq od (getvar "DIMSTYLE"))
+        (if (= (strcase od) (strcase hn:*smallstyle*))
+          (setq od nil)                    ; already current
+          (command "_.-DIMSTYLE" "_Restore" hn:*smallstyle*))
+        od)
+      (progn
+        (if (not hn:*smallwarned*)
+          (progn
+            (princ (strcat "\n(no \"" hn:*smallstyle* "\" dim style in"
+                           " this drawing -- the radius is dimensioned"
+                           " in the current style)"))
+            (setq hn:*smallwarned* t)))
+        nil))))
+
+(defun hn:dimsend (od)
+  (if (and od (tblsearch "DIMSTYLE" od))
+    (command "_.-DIMSTYLE" "_Restore" od)))
+
+;; DIMSTYLE is read-only to setvar, so it goes back through a command,
+;; and command-s so the same call is legal from inside *error*.
+(defun hn:restyle (odim)
+  (if (and odim (tblsearch "DIMSTYLE" odim)
+           (not (equal odim (getvar "DIMSTYLE"))))
+    (vl-catch-all-apply 'command-s
+                        (list "_.-DIMSTYLE" "_Restore" odim))))
+
+;; Put the radius dimension on the arc just cut: leader out from the
+;; arc along the line from its centre through the corner, which is the
+;; one direction that is clear of both legs.  The centre comes from the
+;; geometry the arc was cut to rather than back out of the arc -- they
+;; are the same point, and the one we already hold cannot be read out
+;; of a tilted OCS wrong.  Returns the dimension.
+(defun hn:dimarc (arc r geo / c x out on loc od pre new)
+  (setq c   (car (hn:arcpts geo r))
+        x   (car geo)
+        out (cal:unit (cal:v- x c)))
+  (if out
+    (progn
+      (setq on  (cal:v+ c (cal:v* out r))
+            loc (cal:v+ c (cal:v* out (+ r (if hn:*dimoff*
+                                           hn:*dimoff*
+                                           (max r 12.0)))))
+            pre (entlast))
+      (setvar "CLAYER" (cal:ensure-layer hn:*dimlayer* 2))
+      (setq od (hn:dimsbegin r))
+      (command "_.DIMRADIUS" (list arc (trans on 0 1))
+               "_non" (trans loc 0 1))
+      (hn:dimsend od)
+      (setq new (entlast))
+      (if (and new (not (eq new pre))) new))))
+
+;; Re-letter a radius callout as typical.  The radius is called out
+;; once and the repeats read "Typ.", the way a drafter letters it -- and
+;; whether there WERE repeats is not known until the loop has run, so
+;; the note is added afterwards rather than guessed at.  "<>" is
+;; AutoCAD's stand-in for the measurement, so the dimension goes on
+;; measuring itself.
+(defun hn:typit (dim / ed)
+  (if (and dim (setq ed (entget dim)))
+    (progn
+      (setq ed (if (assoc 1 ed)
+                 (subst (cons 1 "<> Typ.") (assoc 1 ed) ed)
+                 (append ed (list (cons 1 "<> Typ.")))))
+      (entmod ed)
+      (entupd dim))))
+
+;; The rest of the corners, at the radius already settled on: two lines
+;; each until Done.  Returns how many were cut.
+(defun hn:repeat (r / n go a b geo arc)
+  (setq n 0 go t)
+  (while go
+    (setq a (hn:askline "Select the first line of the next corner"
+                        "Done" nil))
+    (setq b (if a (hn:askline "Select the second line of that corner"
+                              "Done" (car a))))
+    (if (or (null a) (null b))
+      (setq go nil)
+      (progn
+        (setq geo (hn:corner (car a) (cadr a) (car b) (cadr b)))
+        (cond
+          ((null geo)
+           (princ (strcat "\n  (those two never meet at an angle --"
+                          " left alone)")))
+          ((< (hn:rmax geo) r)
+           (princ (strcat "\n  (too short a corner for "
+                          (hn:rlabel r) " -- left alone)")))
+          ((setq arc (hn:dofillet (car a) (cadr a) (car b) (cadr b) r))
+           (setq n (1+ n))
+           (if hn:*dimrepeat* (hn:dimarc arc r geo)))
+          (t (princ (strcat "\n  (AutoCAD would not fillet that corner"
+                            " -- left alone)")))))))
+  n)
+
+;;; -------------------- the command ---------------------------------
+
+(defun c:HONEFILLET ( / *error* olderr odim undo-open
+                         one two geo rmax rads extra shown-extras
+                         span fines r arc dim1 made)
+
+  ;; -- restore drawing state on error / Esc.  The previews go first:
+  ;;    they are entities like any other, and a run cut short partway
+  ;;    would otherwise leave a fan of dashed arcs in the drawing for
+  ;;    the next tool to read as work.  Then the user's settings, then
+  ;;    the undo group -- left open, the next U would swallow the
+  ;;    user's own work
+  (setq olderr *error*)
+  (defun *error* (m)
+    (hn:clear)
+    (cal:sysrestore)
+    (hn:restyle odim)
+    (if undo-open
+      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq *error* olderr)
+    (if (and m (not (wcmatch (strcase m)
+                             "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nHONEFILLET error: " m)))
+    (princ))
+
+  (vl-load-com)
+  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
+  (setq odim (getvar "DIMSTYLE")
+        made 0)
+  (setvar "CMDECHO" 0)
+  (setvar "OSMODE"  0)
+  (setvar "TRIMMODE" 1)                    ; a fillet that leaves the
+                                           ; old corner standing is not
+                                           ; what anyone means by one
+
+  ;; -- 1. the corner: two lines, each clicked on the side to keep
+  (setq one (hn:askline "Select the first line of the corner" "Cancel" nil))
+  (if one
+    (setq two (hn:askline "Select the second line of the corner"
+                          "Cancel" (car one))))
+  (setq geo (if (and one two)
+              (hn:corner (car one) (cadr one) (car two) (cadr two))))
+
+  (cond
+    ((not (and one two))
+     (princ "\nHONEFILLET cancelled -- nothing drawn."))
+
+    ((null geo)
+     (princ (strcat "\nThose two lines make no corner -- they are"
+                    " parallel, or they run straight through one"
+                    " another.  Nothing to round.")))
+
+    ((< (setq rmax (hn:rmax geo)) (hn:smallest))
+     (princ (strcat "\nThe shorter leg of that corner only allows "
+                    (hn:rlabel rmax) " -- less than the smallest"
+                    " preview (" (hn:rlabel (hn:smallest)) ").  Nothing"
+                    " drawn; lower hn:*first* to work at that size.")))
+
+    ;; honing needs two sizes to hone BETWEEN, and a corner short enough
+    ;; to take only one has none.  Caught here rather than at the
+    ;; bracket, where the only honest answer would be to ask for a
+    ;; second corner that is not on the screen and cannot be
+    ((null (cdr (setq rads (hn:candidates rmax))))
+     (princ (strcat "\nOnly " (hn:rlabel (car rads)) " fits that corner"
+                    " -- there is no second size to hone between."
+                    "  SMARTFILLET cuts it.")))
+
+    (t
+     ;; -- 2. one undo group over the previews and everything they lead
+     ;;       to, so a single U undoes the lot
+     ;; only when undo is recording - _Begin in a drawing with UNDO
+     ;; off (bit 1 of UNDOCTL clear) errors out of the command
+     (if (= 1 (logand 1 (getvar "UNDOCTL")))
+       (progn
+         (command "_.UNDO" "_Begin")
+         (setq undo-open t)))
+     ;; rads is already the candidate list -- the cond arm above tested
+     ;; it for a second size and left it set
+     (setq extra (- (hn:howmany rmax) (length rads)))
+     (hn:preview geo rads nil)
+     (princ (strcat "\n" (itoa (length rads)) " corner"
+                    (if (= 1 (length rads)) "" "s")
+                    " that fit, light to dark: " (hn:rlabel (car rads))
+                    (if (cdr rads)
+                      (strcat " to " (hn:rlabel (last rads)))
+                      "")
+                    " -- the sizes to hone BETWEEN, not the ones to"
+                    " cut."))
+     ;; which arcs are dashed is a fact about the SIZES, not about the
+     ;; drawing, so it is said rather than left to be inferred from the
+     ;; one preview that looks different
+     (setq shown-extras (hn:shown-extras rads))
+     (if shown-extras
+       (princ (strcat "\nDashed: " (hn:rlist shown-extras)
+                      " -- the in-between sizes, less common than a "
+                      (hn:num hn:*step*) "\" step.")))
+     ;; a cap that says nothing reads as "that is all this corner
+     ;; takes", which is a different fact
+     (if (> extra 0)
+       (princ (strcat "\n" (itoa extra) " larger radi"
+                      (if (= 1 extra) "us" "i") " also fit"
+                      (if (= 1 extra) "s" "") " and "
+                      (if (= 1 extra) "is" "are") " not shown"
+                      " -- raise hn:*maxshown* to see "
+                      (if (= 1 extra) "it" "them") ".")))
+
+     ;; -- 3. the two the answer sits between, and that range redrawn at
+     ;;       half inches.  Only now is there a fan to cut from: the
+     ;;       coarse one was the ruler, this one is the choice
+     (setq span (hn:bracket))
+     (hn:clear)
+     (if span
+       (progn
+         (setq fines (hn:finesteps (car span) (cadr span)))
+         (hn:preview geo fines t)
+         (princ (strcat "\n" (itoa (length fines)) " corner"
+                        (if (= 1 (length fines)) "" "s") " between "
+                        (hn:rlabel (car span)) " and "
+                        (hn:rlabel (cadr span)) ", "
+                        (hn:num hn:*fine*) "\" apart"
+                        " -- the whole inches solid, the rest dashed."))))
+
+     ;; -- 4. the one that gets cut
+     (setq r (if span (hn:pickpreview "Click the rounded corner you want")))
+     (hn:clear)
+     (cond
+       ((null r)
+        (princ "\nNothing picked -- the corner is as it was."))
+       ((null (setq arc (hn:dofillet (car one) (cadr one)
+                                     (car two) (cadr two) r)))
+        (princ (strcat "\nAutoCAD would not fillet that corner at "
+                       (hn:rlabel r) " -- the lines are as they were.")))
+       (t
+        (setq made 1
+              dim1 (hn:dimarc arc r geo))
+        (princ (strcat "\n" (hn:rlabel r) " corner cut and dimensioned"
+                       (if dim1 (strcat " on layer " hn:*dimlayer*) "")
+                       "."))
+
+        ;; -- 5. the same radius, for the rest of the corners
+        (if (cal:askyn (strcat "Fillet other corners at "
+                              (hn:rlabel r) "?")
+                      "Yes" nil)
+          (setq made (+ made (hn:repeat r))))
+        (if (and hn:*typ* dim1 (> made 1)) (hn:typit dim1))
+
+        (princ (strcat "\n" (itoa made) " corner"
+                       (if (= 1 made) "" "s") " filleted at "
+                       (hn:rlabel r)
+                       (if (and hn:*typ* (> made 1) dim1)
+                         " -- the one dimension now reads Typ."
+                         "")
+                       "."))))
+
+     (command "_.UNDO" "_End")
+     (setq undo-open nil)))
+
+  ;; every path out drops the snapshot, the quiet ones included: a run
+  ;; that found nothing to do and kept its snapshot would hand it to the
+  ;; NEXT run, which would then put the user's settings back to what
+  ;; they were two commands ago
+  (hn:restyle odim)
+  (cal:sysrestore)
+  (setq *error* olderr)
+  (princ))
+
+(defun c:HONEFILLETVER ()
+  (princ (strcat "\nHONEFILLET " *honefillet-version*))
+  (princ))
+
+(princ (strcat "\nHONEFILLET " *honefillet-version*
+               " loaded -- type HONEFILLET, pick two lines, bracket two"
+               " of the corners offered, and click one of the half-inch"
+               " sizes between them."))
 (princ)
 
 
@@ -90170,7 +92167,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.14")
+(setq *lazpanel-version* "v3.16")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -90314,6 +92311,7 @@
     ("G2MCONV"          "G2M plan onto shop layers")
     ("G2MRECONV"        "G2M conversion, undone")
     ("HEMISTEP"         "Hemi step")
+    ("HONEFILLET"       "Corner radius, honed")
     ("LAZFORM"          "Pool from a filled-in chart")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
@@ -90327,6 +92325,7 @@
     ("LITECOVERSCAN"    "Cover scan, no dims")
     ("LITELINFINSCAN"   "Liner scan, no dims")
     ("LITESPACHECKSCAN" "Spa scan, no dims")
+    ("LOBF"             "Line of best fit")
     ("NORMIESTEP"       "Normie step")
     ("OASIS"            "Freeform pool")
     ("LINGUTTER"        "Gut to perimeter, then pads")
@@ -90487,6 +92486,7 @@
       "CABHD"
       "LHD"
       "SMARTFILLET"
+      "HONEFILLET"
       "WCALST"
       "ABCDEF"
       "ALTABCDEF"
@@ -90508,6 +92508,7 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
+      "LOBF"
       )
     )
      ("Layout"
@@ -90538,6 +92539,7 @@
       "HEMISTEP"
       "NORMIESTEP"
       "SMARTFILLET"
+      "HONEFILLET"
       "STOCKCOVER"
       "WCALST"
       "CUSTBLOCK"
@@ -90549,6 +92551,7 @@
       "ALTABCDEF"
       "XYPLOT"
       "CONSTELLATION"
+      "LOBF"
       "ABFIND"
       "ABMOVE"
       "ABPCREATE"
@@ -92102,29 +94105,30 @@
   "ABPCREATE" "ABFINDVER" "ALTABCDEF" "ALTABCDEFVER" "ABHD" "ABHDCOVER"
   "ADAB" "TUTORIALABHD" "TUTORIALADAB" "ABHDVER" "ABCURCHECK" "ABCURCHECKSCAN"
   "ABCURCHECKRESCUE" "ABCURCHECKVER" "ABPCHECK" "ABPCHECKRESCUE" "ABPCHECKVER" "CABHDVER"
-  "CABHD" "POINTRENAMER" "POINTRENAMERVER" "AUTOBEAD" "AUTOBEADVER" "TUTORIALAUTOBEAD"
-  "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "AUTODIMVER" "BPCALLOUT"
-  "BPCALLOUTVER" "CCPRECHECK" "CCPRECHECKVER" "CDCALLOUT" "CDCALLOUTVER" "CDCREATE"
-  "CDCREATEVER" "CHECK" "DIMARCCHECK" "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP"
-  "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP"
-  "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN"
-  "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK"
-  "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK"
-  "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DIMCONTENDVER" "DDFIX" "DDSET"
-  "DDCAL" "DDINFO" "DDALT" "DDFIXVER" "DDGPS" "DDELEV"
-  "DDTEST" "DDGPSVER" "FITABHDVER" "FITABHD" "FITABHDCOVER" "LHD"
-  "LHDVER" "LINCHECK" "LINCHECKVER" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK"
-  "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER"
-  "PADDLE" "TUTORIALPADDLE" "PADDLEVER" "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER"
-  "PERPPTSVER" "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS"
-  "SMARTFILLET" "SMARTFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK"
-  "SPACHECKRESCUE" "TUTORIALSPACHECK" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER"
-  "DRONE" "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV"
-  "SORECONV" "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV"
-  "G2MRECONV" "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV"
-  "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER"
-  "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER"
-  "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "CABHD" "POINTRENAMER" "POINTRENAMERVER" "LOBF" "LOBFVER" "AUTOBEAD"
+  "AUTOBEADVER" "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV"
+  "AUTODIMVER" "BPCALLOUT" "BPCALLOUTVER" "CCPRECHECK" "CCPRECHECKVER" "CDCALLOUT"
+  "CDCALLOUTVER" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK" "CHECKVER"
+  "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER"
+  "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE"
+  "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER"
+  "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK"
+  "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DIMCONTENDVER"
+  "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT" "DDFIXVER"
+  "DDGPS" "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER" "FITABHD"
+  "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK" "LINCHECKVER" "LINFINCHECKVER"
+  "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN"
+  "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER" "LINGUTTER"
+  "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER" "CPERPPTS"
+  "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER"
+  "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK"
+  "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER"
+  "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER"
+  "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER"
+  "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER"
+  "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER"
+  "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
+  "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

@@ -101,7 +101,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.14")
+(setq *lazpanel-version* "v3.16")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -245,6 +245,7 @@
     ("G2MCONV"          "G2M plan onto shop layers")
     ("G2MRECONV"        "G2M conversion, undone")
     ("HEMISTEP"         "Hemi step")
+    ("HONEFILLET"       "Corner radius, honed")
     ("LAZFORM"          "Pool from a filled-in chart")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
@@ -258,6 +259,7 @@
     ("LITECOVERSCAN"    "Cover scan, no dims")
     ("LITELINFINSCAN"   "Liner scan, no dims")
     ("LITESPACHECKSCAN" "Spa scan, no dims")
+    ("LOBF"             "Line of best fit")
     ("NORMIESTEP"       "Normie step")
     ("OASIS"            "Freeform pool")
     ("LINGUTTER"        "Gut to perimeter, then pads")
@@ -418,6 +420,7 @@
       "CABHD"
       "LHD"
       "SMARTFILLET"
+      "HONEFILLET"
       "WCALST"
       "ABCDEF"
       "ALTABCDEF"
@@ -439,6 +442,7 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
+      "LOBF"
       )
     )
      ("Layout"
@@ -469,6 +473,7 @@
       "HEMISTEP"
       "NORMIESTEP"
       "SMARTFILLET"
+      "HONEFILLET"
       "STOCKCOVER"
       "WCALST"
       "CUSTBLOCK"
@@ -480,6 +485,7 @@
       "ALTABCDEF"
       "XYPLOT"
       "CONSTELLATION"
+      "LOBF"
       "ABFIND"
       "ABMOVE"
       "ABPCREATE"
