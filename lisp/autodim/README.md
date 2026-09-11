@@ -3,9 +3,10 @@
 Dimensions a highlighted plan in one pass -- perimeter sides and arc
 radii, the stairs, two floor-dim chains it asks about, and the two
 overall dims -- picking the right dimension style for each measurement
-and never doubling up on a dim that is already there. Highlight a
-flight of steps drawn in side view instead and AUTODIM recognises it
-and dimensions the depth of every step.
+and never doubling up on a dim that is already there. Turn the floor
+dims down and it offers pads instead, handing the plan straight to
+`PADDLE`. Highlight a flight of steps drawn in side view instead and
+AUTODIM recognises it and dimensions the depth of every step.
 
 ## What it does
 
@@ -34,7 +35,11 @@ and dimensions the depth of every step.
    it crosses. A start or end point off the geometry is pulled back to
    the last object before it, so every dim runs object to object.
    `Back` here re-opens the stairs (erasing what they drew); Back at
-   the second floor line re-opens the first.
+   the second floor line re-opens the first. Answer **No** and the
+   next question is `Would you like pads? [Yes/No] <Yes>` -- Yes there
+   hands the plan to `PADDLE` (below), and `Back` re-opens the floor
+   dims question. The two are alternatives: a run that took its floor
+   dims is never asked about pads.
 5. **Overall dims**, no input needed: the plan's full width about 2 ft
    above the topmost dimension, its full height about 2 ft left of the
    left-most one.
@@ -69,6 +74,29 @@ side, at any distance. A perimeter dim of a rectangular side spans the
 same two corners but is an **aligned** one, so it still gets its own dim
 as well.
 
+**Pads instead of floor dims.** Step 4's two answers are alternatives,
+not a pair: No to floor dims is followed by `Would you like pads?` and
+Yes to them is not, because the run that is dimensioning the floor is
+not the run that wants the pads laid out. Yes to pads hands `PADDLE`
+the plan you highlighted in step 1, as a pickfirst selection rather
+than letting it hunt for one: `PADDLE` auto-detects the largest closed
+loop in the *whole* drawing, and a title block border is a bigger loop
+than the pool. `PADDLE` keeps the lines, arcs and polylines out of what
+it is handed, which is what a perimeter is made of, so a plan drawn
+without any of those is the one case where it falls back on asking for
+a selection itself. `PICKFIRST` is switched on for the handover and put back
+after -- with it at 0, `sssetfirst` still highlights while `PADDLE`'s
+`(ssget "_I")` reads nothing, and the handover would go quietly
+missing.
+
+The pads go in **last**, once the dims are placed and this command's
+layer, dimension style, `CMDECHO` and undo group are back: `PADDLE` is
+a command in its own right, it starts from your settings rather than
+this run's, and it opens an undo mark of its own -- so one `U` backs
+the pads out and the next one the dims. `PADDLE` lives in its own file,
+so it may not be loaded at all; then the dims have still been placed
+and AUTODIM says so instead of dying on an undefined function.
+
 ## Install & run
 
 1. In AutoCAD run `APPLOAD`, browse to `AutoDim.lsp`, and load it (add
@@ -78,7 +106,7 @@ as well.
 
 | Command | What it does |
 | --- | --- |
-| `AUTODIM` | The whole five-step pass (or the side-view flow when the selection is a flight of steps) |
+| `AUTODIM` | The whole five-step pass -- with `PADDLE`'s pads offered in place of the floor dims when you turn those down (or the side-view flow when the selection is a flight of steps) |
 | `STAIRDIM` | Just the stairs part again, for another selection |
 | `FLOORDIM` | One extra floor-dims chain, breaking at everything in model space |
 | `AUTODIMSIDEPOV` | Dimension steps drawn in side view: every riser gets a vertical dim beside its step, plus the overall height, on layer `DIMENSION` in `STANDARD INCHES` -- for a flight AUTODIM's test does not recognise, or to put the dims on the high side |
@@ -201,6 +229,10 @@ The numbers that are *not* settings -- the `1e-8` zero-length guards, the
   back wall, not a step -- which is also what stops a rectangular plan
   reading as a two-step flight. Anything failing the side-view test is
   dimensioned as a plan.
+* The pads are `PADDLE`'s, not this tool's: AUTODIM asks, hands the
+  plan over and stands back. Which features get a pad, what block goes
+  in and what layer it lands on are `PADDLE`'s own settings, and it
+  reports what it placed itself.
 * One foot is computed through `INSUNITS` (inches assumed when
   unitless), so the under-12" rule follows the drawing's units.
 * With undo recording switched off (`UNDOCTL` bit 1 clear) no undo group
@@ -227,6 +259,13 @@ closes no group, a run that dies partway puts the style, layer and
 `CMDECHO` back, a frozen/locked/switched-off layer is repaired, a
 measuring line that cannot be drawn says so once, and an empty highlight
 changes nothing.
+
+The pad branch is in there too: the question is put after No to floor
+dims and never after Yes, `Back` at it re-opens the floor dims
+question, and the handover gives `PADDLE` the step-1 plan as its
+pickfirst set -- after `CMDECHO` is back and the undo group is closed,
+with `PICKFIRST` switched on for it and put back after. A session
+without `PADDLE` loaded says so and still finishes.
 
 `CALOFIN_LISP_ROOT=shared python3 tests/test_autodim.py` runs the same
 suite against the grouped build.

@@ -72,6 +72,12 @@ def rescan(vm):
     vm.loads('(ad:dimscan)')
 
 
+def undo_cmds(vm):
+    """The UNDO group commands the run issued, in order."""
+    return [c[1] for c in vm.commands
+            if c and isinstance(c[0], str) and 'UNDO' in c[0].upper()]
+
+
 #: A 10ft x 6ft plan whose dims already reach a foot clear of it on the
 #: top and the left.  ad:ssbox is cal:bbox-ss in the grouped build, so
 #: both names are stubbed and the test reads the same on either tier.
@@ -435,17 +441,18 @@ assert plan_flow([None]) == ['perimeter', 'stairs', 'Floor dims 1 of 2',
                              'Floor dims 2 of 2', 'overall']
 print('   Enter: takes the <Yes> default')
 
-assert plan_flow(['No']) == ['perimeter', 'stairs', 'overall']
+# No is followed by the pad question (below), so it takes two answers
+assert plan_flow(['No', 'No']) == ['perimeter', 'stairs', 'overall']
 print('   No: straight on to the overall dims, no lines asked for')
 
 # Back at the question re-opens the stairs, erasing what they drew
-assert plan_flow(['Back', 'No']) == ['perimeter', 'stairs', 'rolled back',
-                                     'stairs', 'overall']
+assert plan_flow(['Back', 'No', 'No']) == ['perimeter', 'stairs',
+                                           'rolled back', 'stairs', 'overall']
 print('   Back: the stairs re-open, and what they drew is rolled back')
 
 # Back at the FIRST floor line goes to the question, not past it - and
 # nothing is rolled back, because that line had not drawn anything yet
-assert plan_flow(['Yes', 'No'], backon='Floor dims 1 of 2') == [
+assert plan_flow(['Yes', 'No', 'No'], backon='Floor dims 1 of 2') == [
     'perimeter', 'stairs', 'Floor dims 1 of 2', 'overall']
 print('   Back at the first line: back to the question, nothing rolled back')
 
@@ -454,6 +461,110 @@ assert plan_flow(['Yes'], backon='Floor dims 2 of 2') == [
     'perimeter', 'stairs', 'Floor dims 1 of 2', 'Floor dims 2 of 2',
     'rolled back', 'Floor dims 1 of 2', 'Floor dims 2 of 2', 'overall']
 print('   Back at the second line: the first re-opens, its chain rolled back')
+
+
+print('== No to floor dims asks about pads, Yes to them does not ==')
+#: Step 4's two answers are alternatives: the run that turned the floor
+#: dims down is asked about pads instead, and the run that took them is
+#: never asked.  ad:runplan hands the answer back rather than acting on
+#: it - the pads go in after the command has put its own state back.
+
+
+def plan_pads(answers, backon=''):
+    """The pad answer ad:runplan hands out, for the flow above."""
+    vm = fresh()
+    vm.loads(FLOW)
+    vm.loads('(setq backon "%s")' % backon)
+    vm.script = list(answers)
+    out = vm.loads('(ad:runplan nil)')
+    assert not vm.script, 'answers left over: %r' % vm.script
+    return out[1]
+
+
+assert plan_pads(['No', 'Yes']) == 't'
+print('   No, then Yes to pads: the answer travels out of the flow')
+
+assert plan_pads(['No', 'No']) is None
+print('   No to both: no floor dims and no pads')
+
+# Yes to floor dims spends the script exactly - a pad question here
+# would have run it dry, which is an error, not a quiet extra prompt
+assert plan_pads(['Yes']) is None
+print('   Yes to floor dims: the pad question is never put')
+
+# Back at the pad question re-opens the one that sent it, and the
+# stairs are NOT re-run on the way
+assert plan_flow(['No', 'Back', 'Yes']) == ['perimeter', 'stairs',
+                                            'Floor dims 1 of 2',
+                                            'Floor dims 2 of 2', 'overall']
+print('   Back at the pad question: the floor dims question re-opens')
+
+
+print('== the pads themselves: PADDLE gets the plan, and gets it last ==')
+#: PADDLE is a command in its own right: it starts from the drafter's
+#: settings rather than this run's, and it reads the plan off the
+#: pickfirst set instead of hunting the whole drawing for the largest
+#: closed loop - a title block border is a bigger one than the pool.
+PADSTUB = """
+  (setq padruns 0 padsaw nil padecho nil padpick nil)
+  (defun c:PADDLE ()
+    (setq padruns (1+ padruns)
+          padsaw  (ssget "_I")
+          padecho (getvar "CMDECHO")
+          padpick (getvar "PICKFIRST"))
+    (princ))"""
+
+
+def autodim_pads(answers, segs=PLAN, pickfirst=1, paddle=True):
+    """A whole AUTODIM run with every dimensioning step stubbed out, so
+    what is left is the handover."""
+    vm = fresh()
+    ents = draw(vm, segs)
+    vm.loads(TRACE)
+    if paddle:
+        vm.loads(PADSTUB)
+    vm.sysvars['PICKFIRST'] = pickfirst
+    vm.run('c:AUTODIM', [None, ents] + list(answers))
+    return vm, ents
+
+
+vm, ents = autodim_pads(['No', 'Yes'])
+assert vm.globals['padruns'] == 1, vm.globals['padruns']
+assert sorted(vm.globals['padsaw'][1:], key=str) == sorted(ents, key=str)
+print('   PADDLE ran once, handed the step-1 plan as its pickfirst set')
+
+# CMDECHO back at the drafter's 1 and the undo group closed before
+# PADDLE started: it opens an undo mark of its own, so one U backs out
+# the pads and the next one the dims
+assert vm.globals['padecho'] == 1, vm.globals['padecho']
+assert undo_cmds(vm) == ['_Begin', '_End'], undo_cmds(vm)
+print("   after this command's state went back, and its undo group closed")
+
+vm, _ = autodim_pads(['No', 'No'])
+assert vm.globals['padruns'] == 0
+print('   No to pads: PADDLE is not run')
+
+vm, _ = autodim_pads(['Yes'])
+assert vm.globals['padruns'] == 0
+print('   Yes to floor dims: PADDLE is not run either')
+
+vm, _ = autodim_pads([], segs=FLIGHT)
+assert vm.globals['padruns'] == 0
+print('   a side view of steps: no pad question, no pads')
+
+# PICKFIRST at 0 would let sssetfirst highlight while PADDLE's
+# (ssget "_I") read nothing - so it is switched on, and put back
+vm, ents = autodim_pads(['No', 'Yes'], pickfirst=0)
+assert vm.globals['padpick'] == 1, vm.globals['padpick']
+assert sorted(vm.globals['padsaw'][1:], key=str) == sorted(ents, key=str)
+assert vm.sysvars['PICKFIRST'] == 0, vm.sysvars['PICKFIRST']
+print('   PICKFIRST switched on for the handover and put back after')
+
+# PADDLE is its own file and may not be loaded at all
+vm, _ = autodim_pads(['No', 'Yes'], paddle=False)
+assert any('PADDLE is not loaded' in s for s in vm.printed), vm.printed[-3:]
+assert any('AUTODIM finished' in s for s in vm.printed), vm.printed[-3:]
+print('   PADDLE not in the session: says so, and the run still finished')
 
 
 print('== a floor dims chain runs object to object ==')
@@ -986,11 +1097,6 @@ print('== with undo recording switched off ==')
 #: _Begin in a drawing whose UNDOCTL has bit 1 clear errors out of the
 #: command, so the group is only opened when it is recording -- and, the
 #: half that was missing, only CLOSED when it was opened.
-def undo_cmds(vm):
-    return [c[1] for c in vm.commands
-            if c and isinstance(c[0], str) and 'UNDO' in c[0].upper()]
-
-
 for cmd, script in (('c:AUTODIM', [None, 'ENTS']),
                     ('c:AUTODIMSIDEPOV', [None, 'ENTS'])):
     vm = fresh()
