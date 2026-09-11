@@ -79,6 +79,74 @@ folded, and no file that accepts the keyword and then only tests for
 `"Back"`. The other half of the same test walks each threaded chain
 backwards through the interpreter, at both tiers.
 
+## v3.11 -- 2026-09-11
+
+Three changes to the AB perimeter fitters, all of them about the same
+thing: what the drafter should have to decide, and what the drawing
+already knows.
+
+**A point numbered with an `m` is not a survey point.** ABFIND writes
+`17m` when it copies Pt.17 to a position it worked out from two tape
+readings off a pair of good points -- the original was a bad shot, and
+the copy is where that point SHOULD be, not where anybody stood. ABHD,
+ADAB, CABHD and FITABHD were all fitting it like any other shot, so a
+perimeter bent to meet a deduction and the hit report then claimed it
+held a point nobody measured. It is dropped as the selection is read
+now, before the point list exists, which is what makes it true of
+everything downstream at once: not ordered into the loop, not fitted,
+not held, not counted against the miss allowance, and never ringed or
+listed as one the line missed. The original it came from is still in.
+Each command says how many it left out, so a survey that comes up
+short is explained rather than mysterious. In CABHD this is NOT the
+cutoff and NOT the omit list: both of those keep a point and decide
+about it, and a moved point is not in the survey to be decided about.
+LHD is deliberately not in this list -- it fits laser scans, where an
+`m` in a label is as likely to be metres as a moved point.
+
+**ABHD's recommended answers now describe an AB survey.** The miss
+share Enter offers goes from 15% to **20%**: a fifth of the points an
+inch off is what a built shell actually measures like, and at 15% the
+fitter ran out of allowance early in the loop and paid for the rest of
+it in short arcs. The curve cap gains a third state, **`Auto`**, which
+is what a fresh session now starts on: one curve per `*PF-ARC-DIV*`
+(3) survey points, rounded to the nearest whole curve. A pool edge
+reads as long overarching arcs with three or so points under each, not
+one curve per shot. `Auto` cannot be a number at the prompt -- the cap
+is asked at step 3 and the points are not selected until step 7 -- so
+it is a RULE that becomes a number once the survey is in hand, and
+every reader of the cap goes through `pf:cap-for` so it becomes one in
+exactly one place. `None` still lifts the cap entirely. CABHD carries
+both, because it promises the same fit as ABHD, rule for rule; LHD
+keeps its own 15% and gains no recommendation, because a laser scan is
+a finer instrument than a tape and a rod, and a cap of a third of a
+scan's points is not a cap.
+
+**SIMPABHD: the same fit, with nothing to decide first.** ABHD's first
+three questions are the ones that stop a run before it starts -- how
+far off may the line sit, what share may be off, how many curves --
+and none of them can honestly be answered from the command line,
+because the answer IS the shape they produce. That is why ABHD draws
+three and lets you point at one. SIMPABHD takes it the rest of the
+way: it asks NONE of the three and draws FIVE. Two are ABHD's own ends
+of the trade (the least error there is, and the fewest curves that
+still hold an inch), so whatever a typed answer could have produced
+sits between them; the three in the middle are ready-made answers -- a
+share, a distance and a curve cap TOGETHER, which is how they actually
+behave -- printed beside each outline: 10% off by an inch with a third
+as many curves as points, all but the 3 worst points held with half as
+many, and 20% off by half an inch with a third as many.
+
+It is not a copy of ABHD. Both commands walk one `pf:fit-session`,
+lifted out of `c:ABHD` unchanged, so the same straight walls, sharp
+corners and held points are declared, the same selection is read, the
+same table is printed, the same pick keeps one, the same points are
+ringed and the same pool bottom is offered. SIMPABHD enters that chain
+at step 4 and its steps print as 1 to 4; `Back` at the first of them
+re-opens it rather than falling out of the run. `pf:compare` grew one
+argument and serves both tables. What a second copy would have had to
+keep in step is not the fitter but every promise the run makes around
+it, and those are the ones that rot quietly.
+
 ## v3.10 -- 2026-09-11
 
 v3.9 made a failure write itself out as a DXF. This is the pass that

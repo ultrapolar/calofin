@@ -64,8 +64,8 @@ Everything `LAZPANEL` does, on plumbing that does not blink:
   fills up with the handful Pinned is already carrying. A row with
   nothing in it is not drawn.
 - **Every page of the panel's tab strip**, job pages included:
-  `Pool`, `Cover`, `Spa`, `Rest` and the four categories, with their
-  columns. The palette used to offer the four categories alone, which
+  `Pool`, `Cover`, `Spa`, `Rest` and the categories, with their
+  columns. The palette used to offer the categories alone, which
   are the pages answering "what is this tool" rather than "what am I
   doing this hour". It reopens on the page you left it on.
 

@@ -31,7 +31,7 @@ RELEASES_DIR = os.path.join(REPO_DIR, "releases")
 # ---- tuning constants, mirrored from abhd.lsp ------------------------
 
 ON_EPS = 0.25                      # *PF-ON-EPS*
-MISS_PCT = 0.15                    # *PF-MISS-PCT*
+MISS_PCT = 0.20                    # *PF-MISS-PCT*
 TOL_MAX = 2.0                      # *PF-TOL-MAX*
 SNAP_EPS = 0.02                    # *PF-SNAP-EPS*
 FIT_EPS = 0.01                     # *PF-FIT-EPS*

@@ -22,17 +22,23 @@
 ;;;
 ;;; Four JOB pages -- Pool, Cover, Spa, Rest -- hold what you
 ;;; reach for while doing that job, in columns that follow the work:
-;;; read somebody's export in, lay the shape out, tie the points, build
-;;; the steps, dimension and check.  Converters lead on Pool and Spa
-;;; because that is where they fall in the work -- XFTCONV, SOCONV,
-;;; VSCONV and G2MCONV all answer "here is a drawing somebody else
-;;; exported", which happens before anything is drawn.  Two of the
-;;; first three were reachable only from Rest until now, so a drafter
-;;; doing a pool job never saw them, and XFTCONV was filed under Shape,
-;;; which it never was.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
-;;; the same four names the VB.NET palette in ui/calofin_net uses --
-;;; hold the whole roster filed by what each tool IS.  A tool that
-;;; serves two jobs is on both, so there are more buttons than commands.
+;;; lay the shape out, tie the points, build the steps, convert what
+;;; somebody sent you, then dimension and check.  A CONVERTERS column
+;;; sits SECOND TO LAST on Pool and on Cover: past the drawing work,
+;;; in front of the dims-and-check column that ends every job.  XFTCONV,
+;;; SOCONV, VSCONV and G2MCONV all answer "here is a drawing somebody
+;;; else exported", which is how a job sometimes starts and not how
+;;; most of them do, so they no longer hold the left edge in front of
+;;; the tools that are reached for every time.  Spa is two columns
+;;; wide, where second to last IS the first column, so it keeps the
+;;; layout it had.  Cover gains the column: XFTCONV and XFTRECONV were
+;;; on that page all along, filed under Shape, which a converter never
+;;; was.  Five CATEGORY pages -- Layout, Points, Dimensions,
+;;; Converters, Checking, the same five names the VB.NET palette in
+;;; ui/calofin_net uses -- hold the whole roster filed by what each
+;;; tool IS; Converters is the newest, and holds the eight that used to
+;;; sit under Points.  A tool that serves two jobs is on both, so there
+;;; are more buttons than commands.
 ;;; Clicking a button closes the panel and runs the command exactly as
 ;;; if its name had been typed -- the panel adds nothing in front of a
 ;;; tool and nothing behind it.  (The Cover page names the cover twins,
@@ -101,7 +107,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.17")
+(setq *lazpanel-version* "v3.19")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -169,12 +175,17 @@
 ;;  The first four pages are JOBS -- what the drafter is actually doing
 ;;  this hour: a pool, a cover, a spa, and everything those three do not
 ;;  reach.  They run in the order the work runs: lay the shape out, tie
-;;  the points, build the steps, then dimension and check.  A command
+;;  the points, build the steps, convert what somebody sent you, then
+;;  dimension and check.  A command
 ;;  that serves two jobs appears on both; AUTODIM and DIMCHECK are on
-;;  all three, because every job ends the same way.  The last four are
-;;  the CATEGORIES the panel has always had -- the whole roster filed by
-;;  what each tool is rather than when you reach for it -- so a tool you
-;;  cannot place in a job is still one tab away.
+;;  all three, because every job ends the same way.  The last five are
+;;  the CATEGORIES -- the whole roster filed by what each tool is
+;;  rather than when you reach for it -- so a tool you cannot place in
+;;  a job is still one tab away.  Converters is the newest of them and
+;;  holds the eight that used to be filed under Points: reading
+;;  somebody else's export is not a way of making points, it is its own
+;;  kind of work, and the job pages have said so with a column of that
+;;  name for a while.
 ;;
 ;;  Every command therefore appears at least twice: once on a job page
 ;;  and once on a category page.  Keys are only required to be unique
@@ -272,6 +283,7 @@
     ("POOLCOVER"        "Pool layout, no bottom")
     ("POOLDEMO"         "Worked pool example")
     ("POOLSIDE"         "Pool side view")
+    ("SIMPABHD"         "Survey perimeter, no settings")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SOCONV"           "SO survey onto our layers")
     ("SORECONV"         "SO conversion, undone")
@@ -297,12 +309,13 @@
 ;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
 ;;  one entry per COLUMN, laid out side by side across the page.  The
 ;;  job pages break their tools into the columns the work falls into:
-;;  lay the shape out, tie the points, build the steps, dimension and
-;;  check.  That is the grouping the drafter already carries; the
-;;  columns just stop it being a single list of twenty-four.
+;;  lay the shape out, tie the points, build the steps, convert what
+;;  somebody sent you, dimension and check.  That is the grouping the
+;;  drafter already carries; the columns just stop it being a single
+;;  list of twenty-four.
 ;;
 ;;  A column heading of "" means the page is one plain column -- what
-;;  the four category pages are.
+;;  the five category pages are.
 ;;
 ;;  WHY A MULTI-COLUMN PAGE SHOWS THE NAME ALONE.  A button reading
 ;;  "CDCALLOUT  -  Point-to-point cross dims" is about 39 cells wide;
@@ -315,16 +328,6 @@
 ;;  tool is, and the job pages are the place to go when you know.
 (setq lzp:*groups*
   '(("Pool"
-     ("Converters"
-      "XFTCONV"
-      "SOCONV"
-      "VSCONV"
-      "G2MCONV"
-      "XFTRECONV"
-      "SORECONV"
-      "VSRECONV"
-      "G2MRECONV"
-      )
      ("Shape"
       "POOL"
       "POOLSIDE"
@@ -332,6 +335,7 @@
       "LAZTXT"
       "OASIS"
       "ABHD"
+      "SIMPABHD"
       "ADAB"
       "FITABHD"
       )
@@ -352,6 +356,16 @@
       "PERPPTS"
       "CPERPPTS"
       )
+     ("Converters"
+      "XFTCONV"
+      "SOCONV"
+      "VSCONV"
+      "G2MCONV"
+      "XFTRECONV"
+      "SORECONV"
+      "VSRECONV"
+      "G2MRECONV"
+      )
      ("Dims & check"
       "AUTODIM"
       "LINFINCHECK"
@@ -370,8 +384,6 @@
       "FITABHDCOVER"
       "STOCKCOVER"
       "CUSTBLOCK"
-      "XFTCONV"
-      "XFTRECONV"
       )
      ("Points"
       "ABFIND"
@@ -380,6 +392,10 @@
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
+      )
+     ("Converters"
+      "XFTCONV"
+      "XFTRECONV"
       )
      ("Pads, dims & check"
       "LINGUTTER"
@@ -466,6 +482,7 @@
       "FITABHDCOVER"
       "ABHD"
       "ABHDCOVER"
+      "SIMPABHD"
       "ADAB"
       "CABHD"
       "LHD"
@@ -497,14 +514,6 @@
       "POINTRENAMER"
       "PERPPTS"
       "CPERPPTS"
-      "XFTCONV"
-      "XFTRECONV"
-      "SOCONV"
-      "SORECONV"
-      "VSCONV"
-      "VSRECONV"
-      "G2MCONV"
-      "G2MRECONV"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -520,6 +529,18 @@
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
+      )
+    )
+     ("Converters"
+     (""
+      "XFTCONV"
+      "SOCONV"
+      "VSCONV"
+      "G2MCONV"
+      "XFTRECONV"
+      "SORECONV"
+      "VSRECONV"
+      "G2MRECONV"
       )
     )
      ("Checking"
@@ -549,15 +570,16 @@
 
 ;; How the tab strip is laid out: one DCL row per entry, in this order.
 ;; Find and the jobs sit on one line and the categories on the next,
-;; which is both what they mean and what keeps the strip narrow -- nine
-;; tabs on a single row run about 104 character cells, and DCL will not
+;; which is both what they mean and what keeps the strip narrow -- ten
+;; tabs on a single row run about 120 character cells, and DCL will not
 ;; scroll a dialog that is wider than the screen.  This is presentation
 ;; only; the pages themselves are still lzp:*groups*, plus the one
 ;; search page below.  The test asserts the two tables name the same
 ;; pages, so neither can drift.
 (setq lzp:*rows*
   '(("Find, or by job" "Find" "Pool" "Cover" "Spa" "Rest")
-    ("Or by category"  "Layout" "Points" "Dimensions" "Checking")))
+    ("Or by category"  "Layout" "Points" "Dimensions" "Converters"
+                       "Checking")))
 
 ;; The name of the search page.  It is a PAGE but not a GROUP: it has no
 ;; column layout and no roster of its own, it searches the whole one, so
