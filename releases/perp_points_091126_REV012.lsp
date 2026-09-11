@@ -653,6 +653,7 @@
   (setq ent nil)
   (while (null ent)
     (setq sel (entsel "\nSelect a line or polyline: "))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))

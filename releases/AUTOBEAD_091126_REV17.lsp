@@ -608,6 +608,7 @@
   ;; still lands on the interactive selection, never a re-probe
   (setq ss (ssget "_I" (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+  (if lzd:watch (lzd:watch ss))
   ;; staged: Back (or Undo) at any later prompt re-opens the stage before
   (setq stage (if ss 2 1) done nil)
   (while (not done)
@@ -617,6 +618,7 @@
                        *autobead-filter* "): "))
        (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+       (if lzd:watch (lzd:watch ss))
        (if (null ss)
          (progn
            (prompt (strcat "\nNothing selected on a " *autobead-filter*

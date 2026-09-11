@@ -433,6 +433,7 @@
   (setq crv nil)
   (while (null crv)
     (setq sel (entsel "\nSelect a curve (polyline, arc, spline...): "))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))

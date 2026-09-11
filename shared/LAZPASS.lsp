@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.9, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.10, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -1192,11 +1192,20 @@
 ;; first: it is the geometry that was already on the sheet, and reading
 ;; the report that is what you want to see before what the tool made of
 ;; it.
-(defun lzd:gather ( / out e)
+;; CAPPED, and capped over the WHOLE list rather than over each half.
+;; lzd:drawn stops at lzd:*max-ents* on its own, but the watched input
+;; had no limit at all: a tool that selects a hundred dimensions and
+;; then draws is two hundred entities in a file somebody has to mail,
+;; and one that selects a thousand is a report nobody can open.  The
+;; count is in the report, and it says when it truncated.
+(defun lzd:gather ( / out e n)
+  (setq n 0)
   (foreach e (reverse lzd:*watch*)
-    (if (and (entget e) (not (member e out))) (setq out (cons e out))))
+    (if (and (< n lzd:*max-ents*) (entget e) (not (member e out)))
+      (setq out (cons e out) n (1+ n))))
   (foreach e (lzd:drawn)
-    (if (not (member e out)) (setq out (cons e out))))
+    (if (and (< n lzd:*max-ents*) (not (member e out)))
+      (setq out (cons e out) n (1+ n))))
   (reverse out))
 
 ;;; -------------------- flattening to R12 -------------------------------
@@ -13819,6 +13828,7 @@
 (defun spa:readblock ( / sel ed bn att v got)
   (cal:osup)
   (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
+  (if lzd:watch (lzd:watch sel))
   (cal:osdown)
   (if sel
       (progn
@@ -27444,6 +27454,7 @@
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
                                     " Enter for " *PF-DEFAULT-FIT*
                                     "): ")))
+          (if lzd:watch (lzd:watch sel))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -28841,7 +28852,9 @@
             ;; cover mode must not outlive the run that asked for it,
             ;; or the next ABHD would skip its bottom without a word
             (setq abhd:*nobottom* nil)
+            (if lzd:report (lzd:report "ABHD" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "ABHD" pf:*version*))
 
   ;; sweep leftovers from a run that was interrupted before it could
   ;; tidy up after itself
@@ -28856,6 +28869,7 @@
   ;; here, before the undo group opens: the typed prompts between here
   ;; and step 7 leave a pickfirst set alone, a command call would not
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (if lzd:watch (lzd:watch pf-pick))
 
   ;; one undo group around the whole fit - a U after ABHD takes back
   ;; the perimeter, the bottom and the markers in one step (the stale
@@ -29036,7 +29050,8 @@
       (princ "\n\n  Step 7 of 7 - select the survey points (POINTS layer or ab_pt")
       (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn
@@ -29388,7 +29403,9 @@
             (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* pf-old-err)
+            (if lzd:report (lzd:report "ADAB" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "ADAB" pf:*version*))
   ;; sweep leftovers from a run interrupted before it could tidy up
   (setq stale (pf:purge-mine *PF-WALL-LAYER*))
   (if (> stale 0)
@@ -29398,6 +29415,7 @@
   ;; a pickfirst selection if there is one, otherwise ask for it -
   ;; probed before the undo group opens, which would clear the set
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch pf-pick))
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -29414,7 +29432,8 @@
       (princ "\n  lines/arcs.  The survey points sitting on it are found by")
       (princ "\n  themselves; select them too only if they live somewhere unusual.")
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (princ "\nNothing usable selected (survey points and the perimeter geometry).")
     (progn
@@ -29814,7 +29833,9 @@
               (princ (strcat "\nTUTORIALABHD stopped -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
+            (if lzd:report (lzd:report "TUTORIALABHD" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "TUTORIALABHD" pf:*version*))
   (princ (strcat "\n\nTUTORIALABHD - how the ABHD pool fitter works ("
                  pf:*version* ")."))
   ;; one bracket, exactly the keyword list (STANDARDS section 1 rule
@@ -31017,11 +31038,13 @@
 (defun acc:select ( / ss)
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\n\nSelect the closed perimeter - one polyline, or the same")
       (princ "\nshape exploded into lines and arcs.")
-      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))))
+      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nABCURCHECK: nothing selected.") nil)
     ss))
@@ -31876,6 +31899,7 @@
   ;; group opens, because that command clears the set (the convention
   ;; FITABHD and abhd already carry)
   (setq ss (ssget "_I" abp:*filter*))
+  (if lzd:watch (lzd:watch ss))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -31886,7 +31910,8 @@
   (if (null ss)
     (progn
       (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")
-      (setq ss (ssget abp:*filter*))))
+      (setq ss (ssget abp:*filter*))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X" abp:*filter*)))
   (if (null ss)
     (princ "\nNothing to check - no points or lines in the drawing.")
@@ -34456,6 +34481,7 @@
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
                                     dflt "): ")))
+          (if lzd:watch (lzd:watch sel))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -34924,7 +34950,9 @@
             (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* cab-old-err)
+            (if lzd:report (lzd:report "CABHD" *cabhd-version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "CABHD" *cabhd-version*))
 
   ;; sweep leftovers from a run that was interrupted before it could
   ;; tidy up after itself
@@ -34937,6 +34965,7 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq cab-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (if lzd:watch (lzd:watch cab-pick))
 
   ;; one undo group around the whole fit - a U after CABHD takes back
   ;; the edge, the markers and the previews in one step (the stale
@@ -35131,7 +35160,8 @@
         (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
         (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
         (princ "\n  Select objects: ")
-        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
+        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+        (if lzd:watch (lzd:watch ss))))
     (if (null ss)
       (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
       (progn
@@ -36232,6 +36262,7 @@
                         (cdr (assoc 8 (entget cand))) ") [Back]: ")
                 (strcat "\nSelect the perimeter (a polyline, circle,"
                         " line or arc) [Back]: "))))
+    (if lzd:watch (lzd:watch v))
     (cond
       ((member v '("Back" "Undo")) (setq done T res 'CAL-BACK))
       ;; entsel answers nil for Enter AND for a click that hit nothing.
@@ -36279,6 +36310,7 @@
   ;; before the undo group's command clears it - step 1 takes it once,
   ;; so coming Back re-asks interactively
   (setq pick1 (ssget "_I" ptr:*filter*))
+  (if lzd:watch (lzd:watch pick1))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -36296,7 +36328,8 @@
          (setq ss pick1 pick1 nil)
          (progn
            (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
-           (setq ss (ssget ptr:*filter*))))
+           (setq ss (ssget ptr:*filter*))
+           (if lzd:watch (lzd:watch ss))))
        ;; "whole drawing" is the tab you are looking at, the same scope
        ;; the clash check sweeps and the same one COVERCHECK and XFTCONV
        ;; use for this prompt: renumbering points in a layout you cannot
@@ -37137,6 +37170,7 @@
     (progn
       (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
                                 dflt "): ")))
+      (if lzd:watch (lzd:watch sel))
       (if sel
         (progn
           (setq picked (car sel) i 1)
@@ -37326,6 +37360,7 @@
   ;; group opens, because that command clears the set (the convention
   ;; ABPCHECK and abhd already carry)
   (setq ss (ssget "_I" lobf:*filter*))
+  (if lzd:watch (lzd:watch ss))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -37339,7 +37374,8 @@
     (if (null ss)
       (progn
         (princ "\nHighlight the points to fit (Enter = every point in the drawing): ")
-        (setq ss (ssget lobf:*filter*))))
+        (setq ss (ssget lobf:*filter*))
+        (if lzd:watch (lzd:watch ss))))
     (if (null ss) (setq ss (ssget "_X" lobf:*filter*)))
     (if (null ss)
       (princ "\nNothing to fit - no points in the drawing.")
@@ -38001,6 +38037,7 @@
   ;; still lands on the interactive selection, never a re-probe
   (setq ss (ssget "_I" (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+  (if lzd:watch (lzd:watch ss))
   ;; staged: Back (or Undo) at any later prompt re-opens the stage before
   (setq stage (if ss 2 1) done nil)
   (while (not done)
@@ -38010,6 +38047,7 @@
                        *autobead-filter* "): "))
        (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+       (if lzd:watch (lzd:watch ss))
        (if (null ss)
          (progn
            (prompt (strcat "\nNothing selected on a " *autobead-filter*
@@ -40001,6 +40039,7 @@
   (if lzd:begin (lzd:begin "AUTODIM" *autodim-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq plan (ssget "_I" (ad:geomfilter)))
+  (if lzd:watch (lzd:watch plan))
   (if (null plan)
     (progn
       (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
@@ -40010,7 +40049,8 @@
                       "\nHighlight a flight of steps drawn in side view"
                       " instead and it is recognised as one: the depth of"
                       " every step gets dimensioned rather than a plan."))
-      (setq plan (ssget (ad:geomfilter)))))
+      (setq plan (ssget (ad:geomfilter)))
+      (if lzd:watch (lzd:watch plan))))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
@@ -40061,6 +40101,7 @@
   ;; a pickfirst selection if there is one, grabbed before the undo
   ;; group's command clears it - nil makes ad:dimstairs ask
   (setq ss0 (ssget "_I" (ad:stairfilter)))
+  (if lzd:watch (lzd:watch ss0))
   (setvar "CMDECHO" 0)
   (ad:begin)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -40144,6 +40185,7 @@
   (if lzd:begin (lzd:begin "AUTODIMSIDEPOV" *autodim-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" (ad:stairfilter)))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side"
@@ -40151,7 +40193,8 @@
                       " step, plus the overall height."
                       "\nHighlight the side view of the steps, then press"
                       " Enter."))
-      (setq ss (ssget (ad:stairfilter)))))
+      (setq ss (ssget (ad:stairfilter)))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (prompt "\nNothing highlighted - AUTODIMSIDEPOV cancelled.")
     (progn
@@ -41936,10 +41979,12 @@
   ;; -- 1. the highlighted lines: a pickfirst selection if there is
   ;;       one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nHighlight the lines to cross-dimension: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
 
   (if (null ss)
     (princ "\nNothing highlighted -- nothing to dimension.")
@@ -42499,10 +42544,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to CHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - CHECK cancelled."))
@@ -43423,11 +43470,13 @@
   ;; ---- 1. selection ---------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nSelect the two walls forming the corner ")
       (princ "(a corner diagonal or fillet arc may be included):")
-      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
 
@@ -45490,11 +45539,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the base curve (arc, circle"
                      " or polyline), or the curve plus its axis line:"))
-      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -47343,11 +47394,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the two lines of a corner,"
                      " or a U-shaped step perimeter:"))
-      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -52894,6 +52947,7 @@
          (setq replp T)
          (setq pk (entsel (strcat "\nPick the '" *cchk-repl-block*
                                   "' block <it is not placed>: ")))
+         (if lzd:watch (lzd:watch pk))
          (cond
            ((and pk
                  (= "INSERT" (cdr (assoc 0 (entget (car pk)))))
@@ -53006,10 +53060,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to COVERCHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - COVERCHECK cancelled."))
@@ -53396,11 +53452,13 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the drawing to " name
                       " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -55711,10 +55769,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to DIMCHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - DIMCHECK cancelled."))
@@ -56112,10 +56172,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -56683,6 +56745,7 @@
     (setq en nil ss nil pl nil kept nil)
     (while (null en)
       (setq tref (entsel "\nSelect the dimension to continue: "))
+      (if lzd:watch (lzd:watch tref))
       (cond
         ((null tref)                                 ; Enter / miss -> quit
            ;; a quoted symbol, not :none - a colon symbol evaluates to
@@ -56707,6 +56770,7 @@
         ;; -- 2. highlight the drawing to dimension -----------------
         (princ "\nHighlight the drawing to dimension (window/crossing): ")
         (setq ss (ssget))
+        (if lzd:watch (lzd:watch ss))
 
         (if (null ss)
           (princ "\nNothing highlighted -- nothing to do.")
@@ -56965,6 +57029,7 @@
   ;; selection - skip straight to the height question; Back from there
   ;; re-opens an interactive pick.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (setq stage (if ss 2 1) done nil)
   (while (not done)
     (cond
@@ -56973,6 +57038,7 @@
       ((= stage 1)
        (princ "\nSelect the spa / obstacle to correct (one or more objects), then Enter.")
        (setq ss (ssget))
+       (if lzd:watch (lzd:watch ss))
        (if (null ss)
          (progn (princ "\nNothing selected.") (setq done T))
          (setq stage 2)))
@@ -57037,7 +57103,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDSET : set / change the drone height H for this drawing
 ;; ---------------------------------------------------------------------------
-(defun c:DDSET ( / h cur-h)
+(defun c:DDSET ( / *error* h cur-h)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDSET error: " msg)))
+    (if lzd:report (lzd:report "DDSET" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDSET" *dronedistortion-version*))
   (setq cur-h (dd-get "H"))
   (setq h (getreal (strcat "\nDrone height ABOVE THE DECK, in FEET"
                            (if cur-h (strcat " <" (dd-num cur-h) ">") "")
@@ -57058,7 +57135,18 @@
 ;;          (independent cross-check on the logged altitude)
 ;;          H = Lapp * z / (Lapp - Ltrue)
 ;; ---------------------------------------------------------------------------
-(defun c:DDCAL ( / lapp ltrue z h stage done)
+(defun c:DDCAL ( / *error* lapp ltrue z h stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDCAL error: " msg)))
+    (if lzd:report (lzd:report "DDCAL" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDCAL" *dronedistortion-version*))
   (princ "\nCalibrate drone height from a feature of known true size.")
   ;; staged: Back (or Undo) at the later prompts re-opens the previous one
   (setq stage 1 done nil)
@@ -57097,7 +57185,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDINFO : report current settings
 ;; ---------------------------------------------------------------------------
-(defun c:DDINFO ( / h)
+(defun c:DDINFO ( / *error* h)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDINFO error: " msg)))
+    (if lzd:report (lzd:report "DDINFO" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDINFO" *dronedistortion-version*))
   (setq h (dd-get "H"))
   (princ "\n--- Drone Distortion settings (this drawing) ---")
   (if h
@@ -57181,7 +57280,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDALT : read RelativeAltitude from a drone image and (optionally) set H
 ;; ---------------------------------------------------------------------------
-(defun c:DDALT ( / file m ft off h ans stage done)
+(defun c:DDALT ( / *error* file m ft off h ans stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDALT error: " msg)))
+    (if lzd:report (lzd:report "DDALT" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDALT" *dronedistortion-version*))
   ;; staged: Back (or Undo) at a later prompt re-opens the previous
   ;; one, all the way back to the file dialog
   (setq stage 1 done nil)
@@ -58395,7 +58505,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDELEV : ground elevation at a typed latitude / longitude
 ;; ---------------------------------------------------------------------------
-(defun c:DDELEV ( / lat lon g stage done)
+(defun c:DDELEV ( / *error* lat lon g stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDELEV error: " msg)))
+    (if lzd:report (lzd:report "DDELEV" *droneheightgps-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDELEV" *droneheightgps-version*))
   ;; staged: Back (or Undo) at the longitude re-asks the latitude
   (setq stage 1 done nil)
   (while (not done)
@@ -58432,7 +58553,18 @@
 ;;  Walks every step DDGPS uses and reports what your machine actually allows.
 ;;  Run this once on a file that fails and send the report.
 ;; ---------------------------------------------------------------------------
-(defun c:DDTEST ( / file out fsz r pr cu tmp lst n m)
+(defun c:DDTEST ( / *error* file out fsz r pr cu tmp lst n m)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDTEST error: " msg)))
+    (if lzd:report (lzd:report "DDTEST" *droneheightgps-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDTEST" *droneheightgps-version*))
   (setq file (getfiled "Pick the photo that will not read" "" "png;jpg;jpeg;tif;tiff" 16))
   (cond
     ((null file) (princ "\nNo file selected."))
@@ -63297,6 +63429,7 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq fit-pick (ssget "_I" '((0 . "POINT,INSERT"))))
+  (if lzd:watch (lzd:watch fit-pick))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -63320,7 +63453,8 @@
       (princ (strcat "\n\n  Step 7 of 7 - select the survey points (POINTS layer or"
                      "\n  " fit:*point-block* " blocks)."))
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT"))))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (princ (strcat "\nNothing usable selected (POINT entities on layer "
@@ -65434,6 +65568,7 @@
       (if (null pick)
         (progn
           (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+          (if lzd:watch (lzd:watch sel))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -65818,7 +65953,9 @@
             (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* lh-old-err)
+            (if lzd:report (lzd:report "LHD" *lh-version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "LHD" *lh-version*))
 
   ;; sweep leftovers from a run that was interrupted before it could
   ;; tidy up after itself
@@ -65831,6 +65968,7 @@
   ;; a pickfirst selection if there is one - kept for step 6, probed
   ;; before the undo group opens, which would clear the set
   (setq lh-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
+  (if lzd:watch (lzd:watch lh-pick))
 
   ;; one undo group around the whole fit - a U after LHD takes back
   ;; the outline, the labels and the markers in one step (the stale
@@ -66014,7 +66152,8 @@
         (princ (strcat "\n  \"" *LH-POINT-BLOCK* "\" blocks, elevation text) and, if you have one, a rough"))
         (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
         (princ "\n  Select objects: ")
-        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))))
+        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
+        (if lzd:watch (lzd:watch ss))))
     (if (null ss)
       (princ "\nNothing usable selected (points, and optionally a sketch on the POOL layer).")
       (progn
@@ -69602,10 +69741,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to LINFINCHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - LINFINCHECK cancelled."))
@@ -70566,11 +70707,13 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the drawing to " name
                       " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -72159,10 +72302,12 @@
   ;; loop -- being handed the loop beats guessing at it beside a title
   ;; block border.
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
       (progn
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
-        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))))
+        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+        (if lzd:watch (lzd:watch ss))))
   (setq perims (paddle--perimeters ss))
 
   (if (not perims)
@@ -73196,10 +73341,12 @@
 ;; it, and nothing outside the highlight is read, kept or erased.
 (defun lg:highlight ( / ss)
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nHighlight the area to gut: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   ss)
 
 ;; the highlighted set as a list of enames
@@ -74114,6 +74261,7 @@
   (setq ent nil)
   (while (null ent)
     (setq sel (entsel "\nSelect a line or polyline: "))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))
@@ -74902,6 +75050,7 @@
   (setq crv nil)
   (while (null crv)
     (setq sel (entsel "\nSelect a curve (polyline, arc, spline...): "))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))
@@ -76514,6 +76663,7 @@
   (while (not ans)
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel) (setq ans 'SF-NONE))
@@ -76536,6 +76686,7 @@
   (while (not ans)
     (initget "Cancel")
     (setq sel (entsel "\nClick the rounded corner you want [Cancel]: "))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel)
@@ -77391,6 +77542,7 @@
   (while (not ans)
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel) (setq ans 'HN-NONE))
@@ -77415,6 +77567,7 @@
   (while (not ans)
     (initget "Cancel")
     (setq sel (entsel (strcat "\n" msg " [Cancel]: ")))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel)
@@ -79579,12 +79732,14 @@
   (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to " name " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to scan.")
@@ -79625,12 +79780,14 @@
   (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to SPACHECK (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to check.")
@@ -80306,7 +80463,18 @@
 ;;;  STOCKCOVER-CFG
 ;;; -------------------------------------------------------------------
 
-(defun c:STOCKCOVER-CFG (/ cur f new)
+(defun c:STOCKCOVER-CFG ( / *error* cur f new)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nSTOCKCOVER-CFG error: " msg)))
+    (if lzd:report (lzd:report "STOCKCOVER-CFG" *stockcover-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "STOCKCOVER-CFG" *stockcover-version*))
   (setq cur (stock:folder))
   (stock:say (strcat "stock folder is now: " cur))
   ;; getfiled on any DWG inside the folder is the portable folder picker
@@ -80380,10 +80548,12 @@
       ;; a highlight made before the command was typed (pickfirst) is
       ;; the perimeter - only ask when there is none
       (setq ss-old (ssget "_I"))
+      (if lzd:watch (lzd:watch ss-old))
       (if (null ss-old)
         (progn
           (princ "\nHighlight the perimeter to be replaced: ")
-          (setq ss-old (ssget))))
+          (setq ss-old (ssget))
+          (if lzd:watch (lzd:watch ss-old))))
       (if (null ss-old)
         (stock:say "nothing highlighted - nothing to replace.")
         (progn
@@ -80744,10 +80914,12 @@
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
   (setq ss-text (ssget "_I" '((0 . "TEXT"))))
+  (if lzd:watch (lzd:watch ss-text))
   (if (null ss-text)
     (progn
       (prompt "\nSelect text to update <Enter = all text in drawing>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
+      (if lzd:watch (lzd:watch ss-text))
       (if (null ss-text)
         (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
 
@@ -81045,10 +81217,12 @@
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
   (setq ss-text (ssget "_I" '((0 . "TEXT"))))
+  (if lzd:watch (lzd:watch ss-text))
   (if (null ss-text)
     (progn
       (prompt "\nSelect text to update <Enter = all text in drawing>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
+      (if lzd:watch (lzd:watch ss-text))
       (if (null ss-text)
         (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
 
@@ -81834,10 +82008,12 @@
   ;; IS the whole drawing, which is why Enter means that; highlight
   ;; first when two surveys share one drawing.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the survey import to convert <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -81913,10 +82089,12 @@
   ;; carrying a record move either way, so Enter is as safe here as it
   ;; is there.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -82484,6 +82662,7 @@
           (prompt (strcat "\nSelect the VS import <Enter = every VS layer"
                           " in the drawing>: "))
           (setq ss (ssget filter))
+          (if lzd:watch (lzd:watch ss))
           (if (null ss) (setq ss (ssget "_X" filter)))))
 
       ;; The destinations have to exist, and be usable, before anything
@@ -82626,10 +82805,12 @@
   ;; drawing lives too -- so the record is what says which objects came
   ;; from an export, and nothing else is touched whatever is selected.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -83381,10 +83562,12 @@
 ;; highlight first when two plans share one sheet.
 (defun g2m:scope (msg / ss)
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\n" msg " <Enter = whole drawing>: "))
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss) (setq ss (ssget "_X")))))
   ss)
 
@@ -84232,6 +84415,7 @@
   ;; the first pass through stage 1 takes them; a too-small band or Back
   ;; re-asks interactively.
   (setq wc-pick (ssget "_I" '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch wc-pick))
   (setq stage 1)
   (while (< stage 6)
     (cond
@@ -84242,7 +84426,8 @@
          (setq ss wc-pick wc-pick nil)
          (progn
            (princ "\nSelect the band of lines (two long sides + rungs): ")
-           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))))
+           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+           (if lzd:watch (lzd:watch ss))))
        (if (not ss) (progn (princ "\nNothing selected.") (exit)))
        (setq segs (wc:build-segs ss))
        (if (< (length segs) wc:*min-segs*)
@@ -84257,6 +84442,7 @@
       ((= stage 2)
        (initget "Back Undo")
        (setq pick (entsel "\nClick the long side to STRAIGHTEN [Back]: "))
+       (if lzd:watch (lzd:watch pick))
        (cond
          ((= (type pick) 'STR) (setq stage 1))
          ((not pick)
@@ -84470,6 +84656,7 @@
   ;; equal steps up and down stay equal)
   (princ "\nWindow the STAIR section(s) if any (Enter = none): ")
   (setq ssstairs (ssget))
+  (if lzd:watch (lzd:watch ssstairs))
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a
@@ -85972,10 +86159,12 @@
   ;; so there is nothing left to step back to.  a selection made before
   ;; the command was typed (pickfirst) skips even that prompt.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (not ss)
     (progn
       (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -86261,10 +86450,12 @@
 
   ;; ---- selection, the same three ways XFTCONV takes it ------------
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (not ss)
     (progn
       (princ "\nSelect the converted survey (Enter = everything in this space): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -86372,7 +86563,18 @@
 ;;;  make sure the pieces exist as soon as the file loads
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV-SETUP ()
+(defun c:XFTCONV-SETUP ( / *error*)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nXFTCONV-SETUP error: " msg)))
+    (if lzd:report (lzd:report "XFTCONV-SETUP" *xft-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "XFTCONV-SETUP" *xft-version*))
   (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
   (xft:ensure-block)
   (princ (strcat "\nLayer \"" *xft-block-layer* "\" and block \"" *xft-block* "\" are ready."))
@@ -95305,7 +95507,18 @@
                     (itoa (length lzp:*pins*)) " tools pinned."))))
   (princ))
 
-(defun c:LAZBUTTON ( / tb)
+(defun c:LAZBUTTON ( / *error* tb)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZBUTTON error: " msg)))
+    (if lzd:report (lzd:report "LAZBUTTON" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZBUTTON" *lazpanel-version*))
   (setq tb (vl-catch-all-apply 'lzp:button-init nil))
   (cond
     ((vl-catch-all-error-p tb)
@@ -95318,7 +95531,18 @@
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))
 
-(defun c:LAZICON ( / paths tb btn r w)
+(defun c:LAZICON ( / *error* paths tb btn r w)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZICON error: " msg)))
+    (if lzd:report (lzd:report "LAZICON" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZICON" *lazpanel-version*))
   ;; The icon path is best effort and fails silently on purpose: a
   ;; missing picture must never stop the panel working.  Silence is the
   ;; right default and a poor answer to "why is my button blank", so
@@ -95471,7 +95695,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.9 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.10 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

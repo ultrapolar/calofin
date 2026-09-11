@@ -162,6 +162,7 @@
   ;; selection - skip straight to the height question; Back from there
   ;; re-opens an interactive pick.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (setq stage (if ss 2 1) done nil)
   (while (not done)
     (cond
@@ -170,6 +171,7 @@
       ((= stage 1)
        (princ "\nSelect the spa / obstacle to correct (one or more objects), then Enter.")
        (setq ss (ssget))
+       (if lzd:watch (lzd:watch ss))
        (if (null ss)
          (progn (princ "\nNothing selected.") (setq done T))
          (setq stage 2)))
@@ -234,7 +236,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDSET : set / change the drone height H for this drawing
 ;; ---------------------------------------------------------------------------
-(defun c:DDSET ( / h cur-h)
+(defun c:DDSET ( / *error* h cur-h)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDSET error: " msg)))
+    (if lzd:report (lzd:report "DDSET" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDSET" *dronedistortion-version*))
   (setq cur-h (dd-get "H"))
   (setq h (getreal (strcat "\nDrone height ABOVE THE DECK, in FEET"
                            (if cur-h (strcat " <" (dd-num cur-h) ">") "")
@@ -255,7 +268,18 @@
 ;;          (independent cross-check on the logged altitude)
 ;;          H = Lapp * z / (Lapp - Ltrue)
 ;; ---------------------------------------------------------------------------
-(defun c:DDCAL ( / lapp ltrue z h stage done)
+(defun c:DDCAL ( / *error* lapp ltrue z h stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDCAL error: " msg)))
+    (if lzd:report (lzd:report "DDCAL" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDCAL" *dronedistortion-version*))
   (princ "\nCalibrate drone height from a feature of known true size.")
   ;; staged: Back (or Undo) at the later prompts re-opens the previous one
   (setq stage 1 done nil)
@@ -294,7 +318,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDINFO : report current settings
 ;; ---------------------------------------------------------------------------
-(defun c:DDINFO ( / h)
+(defun c:DDINFO ( / *error* h)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDINFO error: " msg)))
+    (if lzd:report (lzd:report "DDINFO" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDINFO" *dronedistortion-version*))
   (setq h (dd-get "H"))
   (princ "\n--- Drone Distortion settings (this drawing) ---")
   (if h
@@ -378,7 +413,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDALT : read RelativeAltitude from a drone image and (optionally) set H
 ;; ---------------------------------------------------------------------------
-(defun c:DDALT ( / file m ft off h ans stage done)
+(defun c:DDALT ( / *error* file m ft off h ans stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDALT error: " msg)))
+    (if lzd:report (lzd:report "DDALT" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDALT" *dronedistortion-version*))
   ;; staged: Back (or Undo) at a later prompt re-opens the previous
   ;; one, all the way back to the file dialog
   (setq stage 1 done nil)

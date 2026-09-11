@@ -1131,7 +1131,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDELEV : ground elevation at a typed latitude / longitude
 ;; ---------------------------------------------------------------------------
-(defun c:DDELEV ( / lat lon g stage done)
+(defun c:DDELEV ( / *error* lat lon g stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDELEV error: " msg)))
+    (if lzd:report (lzd:report "DDELEV" *droneheightgps-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDELEV" *droneheightgps-version*))
   ;; staged: Back (or Undo) at the longitude re-asks the latitude
   (setq stage 1 done nil)
   (while (not done)
@@ -1168,7 +1179,18 @@
 ;;  Walks every step DDGPS uses and reports what your machine actually allows.
 ;;  Run this once on a file that fails and send the report.
 ;; ---------------------------------------------------------------------------
-(defun c:DDTEST ( / file out fsz r pr cu tmp lst n m)
+(defun c:DDTEST ( / *error* file out fsz r pr cu tmp lst n m)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDTEST error: " msg)))
+    (if lzd:report (lzd:report "DDTEST" *droneheightgps-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDTEST" *droneheightgps-version*))
   (setq file (getfiled "Pick the photo that will not read" "" "png;jpg;jpeg;tif;tiff" 16))
   (cond
     ((null file) (princ "\nNo file selected."))

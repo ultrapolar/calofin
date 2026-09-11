@@ -827,11 +827,13 @@
   ;; ---- 1. selection ---------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nSelect the two walls forming the corner ")
       (princ "(a corner diagonal or fillet arc may be included):")
-      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
 

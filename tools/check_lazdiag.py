@@ -125,7 +125,17 @@ def version_global(src):
 # ----------------------------------------------------------------- finding
 
 DEFUN_ANY = re.compile(r"\(defun\s+([^\s()]+)\s*\(", re.I)
+
+#: A handler comes in two spellings and BOTH have to be found.  The
+#: defun form is what STANDARDS section 5 shows and what most of the
+#: tree uses; the lambda form is what abhd, CABHD and lhd use, because
+#: they save the previous handler and put it back rather than relying on
+#: the local declaration to drop theirs.  Scanning only for the defun
+#: form missed three of the largest tools in the tree -- ABHD,
+#: ABHDCOVER, ADAB, TUTORIALABHD, CABHD and LHD reported nothing at all
+#: while every other command reported everything.
 DEFUN_ERR = re.compile(r"\(defun\s+\*error\*\s*\(\s*([\w-]+)")
+LAMBDA_ERR = re.compile(r"\*error\*\s*(?:;[^\n]*\n\s*)*\(lambda\s*\(\s*([\w-]+)")
 
 #: the name a handler already prints, as in (princ (strcat "\nPOOL error: "
 #: msg)).  Handlers that build the name from a local instead -- ABFIND's
@@ -177,10 +187,12 @@ def tool_name(body, owner, path):
     return pathlib.Path(path).stem.upper()
 
 
-def enclosing_call(body, i):
+def enclosing_call(body, i, mask=None):
     """Index of the "(" opening the innermost form still open at I --
-    the (strcat ...) the message is being built in."""
-    mask = code_mask(body)
+    the (strcat ...) a message is being built in, or the (setq ...) a
+    lambda handler is being assigned by."""
+    if mask is None:
+        mask = code_mask(body)
     depth, j = 0, i
     while j > 0:
         j -= 1
@@ -193,6 +205,20 @@ def enclosing_call(body, i):
                 return j
             depth -= 1
     return 0
+
+
+class _Hit:
+    """The two handler spellings, reduced to what the walk below needs:
+    where the handler's form opens, and what it calls its message."""
+
+    def __init__(self, start, param, lam=False):
+        self._start, self._param, self.lam = start, param, lam
+
+    def start(self):
+        return self._start
+
+    def group(self, n):
+        return self._param
 
 
 def handlers(src, mask, path):
@@ -209,7 +235,17 @@ def handlers(src, mask, path):
         if hi > 0:
             spans.append((m.start(), hi, m.group(1)))
     out = []
+    found = []
     for em in DEFUN_ERR.finditer(src):
+        found.append((em.start(), em.group(1), False))
+    for em in DEFUN_ERR.finditer(src):
+        pass
+    for em in LAMBDA_ERR.finditer(src):
+        # the form to walk is the (lambda ...), which starts after the
+        # *error* the assignment names
+        found.append((src.index("(lambda", em.start()), em.group(1), True))
+    for start, param, lam in sorted(found):
+        em = _Hit(start, param, lam)
         if not mask[em.start()]:
             continue
         err_lo = em.start()
@@ -223,11 +259,25 @@ def handlers(src, mask, path):
             continue
         lo, hi, owner = min(owners, key=lambda s: s[1] - s[0])
         body = src[err_lo:err_hi]
+        # Where lzd:begin goes.  Straight after a defun handler -- but a
+        # LAMBDA handler is a value inside a (setq ...), so landing there
+        # would make the begin call another setq argument and leave the
+        # form with an odd number of them: (setq a nil *error* (lambda
+        # ...) (if lzd:begin ...)) assigns the guard to nothing and dies
+        # at load.  Out to the end of that setq instead, which is still
+        # the top of the run.
+        begin_at = err_hi
+        if em.lam:
+            outer = enclosing_call(src, err_lo, mask)
+            end = form_end(src, mask, outer)
+            if end > 0:
+                begin_at = end
         out.append({
             "name": tool_name(body, owner, path),
             "param": em.group(1),            # msg / m
             "cmd_lo": lo, "cmd_hi": hi,
             "err_lo": err_lo, "err_hi": err_hi,
+            "begin_at": begin_at,
             "body": body,
         })
     return out
@@ -284,6 +334,128 @@ def ask_helpers(src, mask):
     return out
 
 
+# ------------------------------------------------- commands with no handler
+# Wiring only reaches handlers that EXIST.  A command written without
+# one is therefore not "unwired" -- it is invisible, and its failures
+# stay exactly as silent as they were before any of this was built.  So
+# the roster is checked too: a command that can leave something behind
+# has to be able to reach a handler, its own or one in a helper it calls.
+#
+# What counts as leaving something behind is computed from the body, not
+# from the name.  A *VER reporter prints its banner and stops, and
+# demanding a handler off it would be noise -- but the moment one grows
+# a (command ...) or a prompt it stops being a reporter, and this
+# notices without anybody remembering to take it off a list.
+
+RISKY = re.compile(
+    r"\((?:command|command-s|setvar|entmake|entmakex|entmod|entdel|entupd"
+    r"|getpoint|getdist|getkword|getstring|getint|getreal|getangle"
+    r"|getcorner|entsel|nentsel|ssget|getfiled)\b"
+    r"|\((?:vla|vlax)-")
+
+
+def code_only(src, mask, lo, hi):
+    """SRC[lo:hi] with every string and comment blanked out.
+
+    Both scans below read this and not the raw text.  A prose comment
+    naming a helper would otherwise count as a call to it, and -- the
+    one that actually bit -- ABFINDVER prints the line "(commands:
+    ABFIND, ABMOVE, ABPCREATE)", whose "(commands:" matched the risky
+    "(command" and had a version reporter demanding an error handler."""
+    return "".join(src[i] if mask[i] else " " for i in range(lo, hi))
+
+
+def _defuns(src, mask):
+    out = []
+    for m in DEFUN_ANY.finditer(src):
+        if not mask[m.start()]:
+            continue
+        hi = form_end(src, mask, m.start())
+        if hi > 0:
+            out.append((m.group(1), m.start(), hi))
+    return out
+
+
+def unprotected(src, mask, path):
+    """Commands in this file that do something and can reach no handler.
+
+    Reachability is within the file and transitive, because the wrapper
+    shape is everywhere here: c:ABPCREATE is (abf:run 'CREATE) and
+    abf:run is where the handler lives, so ABPCREATE is covered and
+    saying otherwise would be a false alarm nobody could act on."""
+    ds = _defuns(src, mask)
+    names = {n for n, _, _ in ds}
+    owners = {h["cmd_lo"] for h in handlers(src, mask, path)}
+    handled = {n for n, lo, _ in ds if lo in owners}
+    calls, risky = {}, {}
+    for n, lo, hi in ds:
+        body = code_only(src, mask, lo, hi)
+        calls[n] = {c for c in names
+                    if re.search(r"[(\s']" + re.escape(c) + r"[\s)]", body)} - {n}
+        risky[n] = bool(RISKY.search(body))
+
+    def walk(n, want, seen):
+        if n in seen:
+            return False
+        seen.add(n)
+        if want(n):
+            return True
+        return any(walk(c, want, seen) for c in calls.get(n, ()))
+
+    out = []
+    for n, lo, hi in ds:
+        if not n.lower().startswith("c:"):
+            continue
+        if walk(n, lambda x: x in handled, set()):
+            continue
+        if walk(n, lambda x: risky.get(x, False), set()):
+            out.append(n[2:])
+    return out
+
+
+# ---------------------------------------------------- the input geometry
+# A report carries what a run DREW, off the entlast lzd:begin marked.
+# What it was handed is the other half, and nothing recorded it: a tool
+# that fails while walking a selection produced a report with the
+# selection missing, which is the one thing the failure was about.
+#
+# So the selection calls record themselves, the same way the ask helpers
+# record their prompts.  Not every selection call, though:
+#
+#   (ssget "_X" ...)  is the whole drawing, not an input.  A checking
+#                     tool that scans 4000 entities would fill the
+#                     report with the drawing and bury the failure in
+#                     it, and the cap would then pick an arbitrary 400
+#                     of them.  Skipped on purpose.
+#   (ssget "_I" ...)  is what the drafter had already selected when they
+#                     typed the command.  That IS the input.
+#   (ssget) / (ssget "_:L" ...) and the rest are what they selected when
+#                     asked.  Also the input.
+#   (entsel ...)      one pick; lzd:watch takes the (ename point) list
+#                     and keeps the ename.
+
+SELECT_GET = re.compile(
+    r"\(setq\s+([\w:-]+)\s+\(\s*(ssget|entsel|nentsel)\b([^\n]*)")
+
+#: the modes that mean "the whole database", not "what the user gave me"
+WHOLE_DB = re.compile(r'^\s*"_?[XA]"')
+
+
+def select_sites(src, mask):
+    out = []
+    for m in SELECT_GET.finditer(src):
+        if not mask[m.start()]:
+            continue
+        if m.group(2) == "ssget" and WHOLE_DB.match(m.group(3)):
+            continue
+        end = form_end(src, mask, m.start())
+        if end < 0:
+            continue
+        out.append({"var": m.group(1), "at": end, "set_lo": m.start(),
+                    "fn": m.group(2)})
+    return out
+
+
 def report_slot(src, mask, c):
     """Where the report call goes inside the handler: in front of its
     trailing (princ), which is the handler's return value and has to
@@ -308,7 +480,7 @@ def wire(path, src, do_fix):
     for c in cmds:
         has_report = "lzd:report" in c["body"]
         # lzd:begin sits in the command body, after the handler form
-        has_begin = "lzd:begin" in src[c["err_hi"]:c["cmd_hi"]]
+        has_begin = "lzd:begin" in src[c["begin_at"]:c["cmd_hi"]]
         if has_report and has_begin:
             continue
         missing.append(c["name"])
@@ -320,10 +492,22 @@ def wire(path, src, do_fix):
             edits.append((at, '(if lzd:report (lzd:report "%s" %s %s))\n%s'
                           % (c["name"], ver, c["param"], pad)))
         if not has_begin:
-            at = c["err_hi"]
+            at = c["begin_at"]
             pad = indent_of(src, c["err_lo"])
             edits.append((at, '\n%s(if lzd:begin (lzd:begin "%s" %s))'
                           % (pad, c["name"], ver)))
+    for w in select_sites(src, mask):
+        # already wired if the watch call is the next thing after the
+        # selection -- which is exactly where this puts it, so a second
+        # --fix run is a no-op rather than a second copy
+        if "(if lzd:watch" in src[w["at"]:w["at"] + 200]:
+            continue
+        missing.append("%s <- %s" % (w["var"], w["fn"]))
+        if do_fix:
+            pad = indent_of(src, w["set_lo"])
+            edits.append((w["at"], "\n%s(if lzd:watch (lzd:watch %s))"
+                          % (pad, w["var"])))
+
     for a in ask_helpers(src, mask):
         if "lzd:ask" in src[a["lo"]:a["hi"]]:
             continue
@@ -359,30 +543,46 @@ def main(argv):
     do_fix = "--fix" in argv
     bad = 0
     fixed = 0
+    naked = []
     for p in lisp_files():
         src = p.read_text()
         missing, new = wire(p, src, do_fix)
-        if not missing:
-            continue
-        rel = p.relative_to(REPO)
         if do_fix and new != src:
             p.write_text(new)
             fixed += len(missing)
-            print("wired  %s: %s" % (rel, ", ".join(missing)))
-        else:
+            print("wired  %s: %s" % (p.relative_to(REPO), ", ".join(missing)))
+            src = new
+        elif missing:
             bad += len(missing)
             print("%s: %s does not report failures to LAZDIAG"
-                  % (rel, ", ".join(missing)))
+                  % (p.relative_to(REPO), ", ".join(missing)))
+        for cmd in unprotected(src, code_mask(src), p):
+            naked.append((cmd, p.relative_to(REPO)))
+
+    for cmd, rel in naked:
+        print("%s: %s has no *error* handler to report from" % (rel, cmd))
+    if naked:
+        # deliberately NOT something --fix writes.  What belongs in a
+        # handler is the one editorial thing here: which sysvars this
+        # command changed, whether it has an undo group open, what it
+        # drew that has to be swept.  Guessing that wrong is worse than
+        # not writing it -- a handler that restores the wrong thing is a
+        # bug the drafter meets in the NEXT command they run.
+        print("\nWrite one, on the STANDARDS section 5 skeleton, and put "
+              "the two LAZDIAG lines in it;")
+        print("--fix will not guess what a handler has to put back.")
+
     if do_fix:
         print("check_lazdiag: wired %d command(s) - now mirror, regenerate "
               "and test:" % fixed)
         print("    python3 tools/mirror_shared.py")
         print("    python3 tools/release_lisp.py")
         print("    python3 tools/build_shared_bundle.py")
-        return 0
-    if bad:
-        print("check_lazdiag: %d command(s) unwired - repair with "
-              "--fix" % bad)
+        return 1 if naked else 0
+    if bad or naked:
+        if bad:
+            print("check_lazdiag: %d command(s) unwired - repair with "
+                  "--fix" % bad)
         return 1
     print("check_lazdiag: every command reports its failures")
     return 0

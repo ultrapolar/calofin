@@ -641,6 +641,7 @@
     (progn
       (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
                                 dflt "): ")))
+      (if lzd:watch (lzd:watch sel))
       (if sel
         (progn
           (setq picked (car sel) i 1)
@@ -830,6 +831,7 @@
   ;; group opens, because that command clears the set (the convention
   ;; ABPCHECK and abhd already carry)
   (setq ss (ssget "_I" lobf:*filter*))
+  (if lzd:watch (lzd:watch ss))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -843,7 +845,8 @@
     (if (null ss)
       (progn
         (princ "\nHighlight the points to fit (Enter = every point in the drawing): ")
-        (setq ss (ssget lobf:*filter*))))
+        (setq ss (ssget lobf:*filter*))
+        (if lzd:watch (lzd:watch ss))))
     (if (null ss) (setq ss (ssget "_X" lobf:*filter*)))
     (if (null ss)
       (princ "\nNothing to fit - no points in the drawing.")

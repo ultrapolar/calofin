@@ -440,10 +440,12 @@
   ;; IS the whole drawing, which is why Enter means that; highlight
   ;; first when two surveys share one drawing.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the survey import to convert <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -519,10 +521,12 @@
   ;; carrying a record move either way, so Enter is as safe here as it
   ;; is there.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 

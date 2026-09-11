@@ -1164,11 +1164,13 @@
 (defun acc:select ( / ss)
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\n\nSelect the closed perimeter - one polyline, or the same")
       (princ "\nshape exploded into lines and arcs.")
-      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))))
+      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nABCURCHECK: nothing selected.") nil)
     ss))

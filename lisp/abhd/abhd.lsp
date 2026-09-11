@@ -2509,6 +2509,7 @@
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
                                     " Enter for " *PF-DEFAULT-FIT*
                                     "): ")))
+          (if lzd:watch (lzd:watch sel))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -3911,7 +3912,9 @@
             ;; cover mode must not outlive the run that asked for it,
             ;; or the next ABHD would skip its bottom without a word
             (setq abhd:*nobottom* nil)
+            (if lzd:report (lzd:report "ABHD" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "ABHD" pf:*version*))
 
   ;; sweep leftovers from a run that was interrupted before it could
   ;; tidy up after itself
@@ -3926,6 +3929,7 @@
   ;; here, before the undo group opens: the typed prompts between here
   ;; and step 7 leave a pickfirst set alone, a command call would not
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (if lzd:watch (lzd:watch pf-pick))
 
   ;; one undo group around the whole fit - a U after ABHD takes back
   ;; the perimeter, the bottom and the markers in one step (the stale
@@ -4106,7 +4110,8 @@
       (princ "\n\n  Step 7 of 7 - select the survey points (POINTS layer or ab_pt")
       (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn
@@ -4458,7 +4463,9 @@
             (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* pf-old-err)
+            (if lzd:report (lzd:report "ADAB" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "ADAB" pf:*version*))
   ;; sweep leftovers from a run interrupted before it could tidy up
   (setq stale (pf:purge-mine *PF-WALL-LAYER*))
   (if (> stale 0)
@@ -4468,6 +4475,7 @@
   ;; a pickfirst selection if there is one, otherwise ask for it -
   ;; probed before the undo group opens, which would clear the set
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch pf-pick))
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -4484,7 +4492,8 @@
       (princ "\n  lines/arcs.  The survey points sitting on it are found by")
       (princ "\n  themselves; select them too only if they live somewhere unusual.")
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (princ "\nNothing usable selected (survey points and the perimeter geometry).")
     (progn
@@ -4884,7 +4893,9 @@
               (princ (strcat "\nTUTORIALABHD stopped -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
+            (if lzd:report (lzd:report "TUTORIALABHD" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "TUTORIALABHD" pf:*version*))
   (princ (strcat "\n\nTUTORIALABHD - how the ABHD pool fitter works ("
                  pf:*version* ")."))
   ;; one bracket, exactly the keyword list (STANDARDS section 1 rule

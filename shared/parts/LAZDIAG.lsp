@@ -338,11 +338,20 @@
 ;; first: it is the geometry that was already on the sheet, and reading
 ;; the report that is what you want to see before what the tool made of
 ;; it.
-(defun lzd:gather ( / out e)
+;; CAPPED, and capped over the WHOLE list rather than over each half.
+;; lzd:drawn stops at lzd:*max-ents* on its own, but the watched input
+;; had no limit at all: a tool that selects a hundred dimensions and
+;; then draws is two hundred entities in a file somebody has to mail,
+;; and one that selects a thousand is a report nobody can open.  The
+;; count is in the report, and it says when it truncated.
+(defun lzd:gather ( / out e n)
+  (setq n 0)
   (foreach e (reverse lzd:*watch*)
-    (if (and (entget e) (not (member e out))) (setq out (cons e out))))
+    (if (and (< n lzd:*max-ents*) (entget e) (not (member e out)))
+      (setq out (cons e out) n (1+ n))))
   (foreach e (lzd:drawn)
-    (if (not (member e out)) (setq out (cons e out))))
+    (if (and (< n lzd:*max-ents*) (not (member e out)))
+      (setq out (cons e out) n (1+ n))))
   (reverse out))
 
 ;;; -------------------- flattening to R12 -------------------------------
