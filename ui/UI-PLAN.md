@@ -87,11 +87,11 @@ and the whole page end to end through its own `action_tile` strings.
   until there is something in it, so a first-run panel is no taller
   than before; both rows pack through one `lzp:packrow`, so neither can
   be the one that forgets the width budget.
-- **Consider dropping the four category pages.** They exist so a tool
+- **Consider dropping the category pages.** They exist so a tool
   you cannot place in a job is one tab away -- which is exactly what
-  Find now does, better, in one page instead of four. 8 pages become 5,
-  148 buttons become about 90, and the tab strip fits one row. Against
-  it: the four category names are the ones the VB palette groups by, so
+  Find now does, better, in one page instead of five. 10 pages become
+  5, 186 buttons become 105, and the tab strip fits one row. Against
+  it: the category names are the ones the VB palette groups by, so
   they would have to survive as data even if they stop being pages.
   **Worth doing only after phase 1 has been used in anger** -- if Find
   turns out to be where people live, the case makes itself.
@@ -224,7 +224,7 @@ registered everywhere it has to be" -- grew a palette section. It reads
 `CommandCatalog.Groups` out of the VB source and `calofin:*commands*`
 out of the glue, and holds three things against `LAZPANEL`'s roster:
 
-- the same commands, in the same four groups (the palette's groups
+- the same commands, in the same groups (the palette's groups
   **are** the panel's category pages),
 - the same caption words for each one,
 - and a probe-list name for every palette button, since without one the
@@ -264,11 +264,11 @@ blurb is reported, and falls back to its caption.
 Two things came with it:
 
 - **The palette gained the job pages.** `Pages` carries the whole tab
-  strip -- `Pool`, `Cover`, `Spa`, `Rest` and the four categories, with
+  strip -- `Pool`, `Cover`, `Spa`, `Rest` and the categories, with
   their columns -- because once the table is generated there is no cost
-  to carrying all of it. The palette has only ever had the four
-  category groups; the panel's job pages are the ones a drafter
-  actually navigates by.
+  to carrying all of it. The palette has only ever had the category
+  groups; the panel's job pages are the ones a drafter actually
+  navigates by.
 - **The VB is checked as code.** `tools/check_vb.py` -- blocks, quotes,
   parens, and every member and constructor arity of the assembly's own
   types. It is what makes the generated/hand-written seam safe: rename
