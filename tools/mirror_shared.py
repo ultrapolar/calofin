@@ -293,6 +293,32 @@ TOOLS = {
         # ...but the Back sentinel travels with the ask helpers
         'symbols': {'SF-BACK': 'CAL-BACK'},
     },
+    # HONEFILLET is SMARTFILLET's spinoff and carries the same library
+    # copies under hn:, so the same swap map applies word for word.  The
+    # corner geometry it shares with SMARTFILLET is NOT in here and is
+    # not going to be: two standalone files each have to load alone, so
+    # each carries its own, and the library holds generic helpers rather
+    # than one tool's fillet math.
+    'HONEFILLET': {
+        'src': 'lisp/honefillet/HONEFILLET.lsp',
+        'swap': {
+            'hn:askkw': 'cal:askkw', 'hn:askyn': 'cal:askyn',
+            'hn:syssave': 'cal:syssave',
+            'hn:sysrestore': 'cal:sysrestore',
+            'hn:ensure-layer': 'cal:ensure-layer',
+            'hn:2d': 'cal:2d', 'hn:dist': 'cal:dist',
+            'hn:v-': 'cal:v-', 'hn:v+': 'cal:v+', 'hn:v*': 'cal:v*',
+            'hn:dot': 'cal:dot', 'hn:vlen': 'cal:vlen',
+            'hn:unit': 'cal:unit', 'hn:angnorm': 'cal:angnorm',
+            'hn:signed-dang': 'cal:signed-dang', 'hn:tan': 'cal:tan',
+        },
+        'drop_globals': ['hn:*sysold*'],
+        # hn:askkw already takes the SHOWN bracket third, like the
+        # library's, and hn:syssave already takes its sysvar list
+        'askkw_hidden': False,
+        # ...but the Back sentinel travels with the ask helpers
+        'symbols': {'HN-BACK': 'CAL-BACK'},
+    },
     # ABCURCHECK was written against the library from the start
     # (STANDARDS section 6): its ask pair, sysvar pair and vector set
     # already carry the library's shapes, so the twin is a rename and

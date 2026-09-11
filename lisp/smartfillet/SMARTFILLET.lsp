@@ -12,16 +12,19 @@
 ;;;  FILLET wants the radius BEFORE it shows anything, so the answer is
 ;;;  guessed, looked at, undone, and guessed again.  This turns that
 ;;;  round.  Pick the two lines and every radius that actually fits the
-;;;  corner is drawn dashed, all at once, in 6-inch steps; click the one
-;;;  that looks right and that is the corner you get.
+;;;  corner is drawn at once, in 6-inch steps; click the one that looks
+;;;  right and that is the corner you get.
 ;;;
 ;;;    1. Select the two lines that make the corner.  Click each one on
 ;;;       the side you want KEPT -- exactly how FILLET reads a pick:
 ;;;       what lies beyond the corner is trimmed away.
 ;;;    2. Every radius from 6 up, in 6s, that leaves both legs something
-;;;       to stand on is drawn as a dashed arc labelled R6, R12, R18 ...
-;;;       (at most sf:*maxshown* of them; when more fit, the routine
-;;;       says how many it left out rather than silently stopping).
+;;;       to stand on is drawn as an arc labelled R6, R12, R18 ... plus
+;;;       the two odd sizes in sf:*extras* (3 and 9), which come up but
+;;;       are not the usual step and so are drawn DASHED where the 6s
+;;;       are solid.  (At most sf:*maxshown* previews; when more fit,
+;;;       the routine says how many it left out rather than silently
+;;;       stopping.)
 ;;;    3. Click the arc you want.  The previews go, the corner is
 ;;;       filleted for real at that radius, and the arc gets its radius
 ;;;       dimension -- the number the shop needs, not just the shape.
@@ -29,6 +32,18 @@
 ;;;       two lines per corner until Done.  As soon as one repeat is
 ;;;       cut, the single dimension becomes "R12 Typ.", which is how the
 ;;;       radius would be lettered by hand.
+;;;
+;;;  Telling one preview from the next is the whole job of the drawing,
+;;;  so three things do it at once: the fan runs light green to dark
+;;;  green with the radius, every arc is part transparent so the ones
+;;;  underneath still read, and each label is drawn in ITS OWN arc's
+;;;  shade.  The labels climb a rung further off the leg with each
+;;;  preview, because consecutive tangent points sit one step apart
+;;;  along a leg and that is not room for two labels side by side.
+;;;
+;;;  HONEFILLET is the spinoff for the sizes BETWEEN these: same corner,
+;;;  same picks, but it asks for two neighbouring previews and redraws
+;;;  the range between them in half-inch steps.
 ;;;
 ;;;  The whole run is one undo group: a single U puts every corner back
 ;;;  and takes the dimension away.
@@ -41,14 +56,20 @@
 ;;;  sizes or names, e.g. in a startup file):
 ;;;    sf:*first*      smallest radius previewed          (6.0)
 ;;;    sf:*step*       step between previews              (6.0)
-;;;    sf:*maxshown*   most previews drawn at once        (8)
+;;;    sf:*extras*     odd radii offered too, drawn dashed (3 and 9)
+;;;    sf:*maxshown*   most previews drawn at once        (10)
 ;;;    sf:*fit*        fraction of a leg a fillet may eat (0.98)
 ;;;    sf:*layer*      layer the previews are drawn on
-;;;    sf:*color*      their colour
-;;;    sf:*ltype*      their linetype, created if missing ("DASHED")
+;;;    sf:*color*      their fallback colour index
+;;;    sf:*shade-lo*   RGB of the SMALLEST preview        (light green)
+;;;    sf:*shade-hi*   RGB of the LARGEST                 (dark green)
+;;;    sf:*trans*      how transparent a preview is, per cent
+;;;    sf:*ltype*      the extras' linetype, created if missing
 ;;;    sf:*ltscale*    per-arc linetype scale, nil = the drawing's
 ;;;    sf:*label*      T to letter each preview R6, R12 ...
 ;;;    sf:*txthgt*     height of those labels
+;;;    sf:*rung*       how far each label climbs past the one before,
+;;;                    in text heights
 ;;;    sf:*dimlayer*   layer the radius dimension goes on ("DIMENSION")
 ;;;    sf:*smalldim*   radii under this are dimensioned in ...
 ;;;    sf:*smallstyle* ... this dim style, when the drawing has it
@@ -66,15 +87,21 @@
 ;;;      keep the end you clicked toward.
 ;;;    * A radius only makes the list when its tangent point lands on
 ;;;      both legs (times sf:*fit*, so a fillet never eats a leg whole).
-;;;      A corner too short for even R6 is reported, not filleted.
+;;;      A corner too short for even R3 -- the smallest on offer --
+;;;      is reported, not filleted.
 ;;;    * The preview arcs are real entities on their own layer, erased
 ;;;      on the way out -- on a clean finish, on Esc, and on an error.
 ;;;      The empty layer is left behind; deleting it is a PURGE away.
+;;;    * The shades are true colours (DXF 420) and the transparency is
+;;;      DXF 440, both per entity.  A viewport with transparency display
+;;;      switched off (TRANSPARENCYDISPLAY 0) draws them solid, which
+;;;      costs the fan nothing but the see-through -- the shades and the
+;;;      labels still tell the arcs apart.
 ;;;    * OSMODE, CMDECHO, CLAYER, FILLETRAD, TRIMMODE and the current
 ;;;      dimension style are all put back the way they were.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.1")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.2")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -84,16 +111,36 @@
 (setq sf:*step*       6.0)   ; between the ones after it -- 6" of radius
                              ; is the smallest difference that reads on
                              ; a pool plan
-(setq sf:*maxshown*   8)     ; how many previews may be on screen at
+(setq sf:*extras*    '(3.0 9.0)) ; radii offered BESIDES that series.
+                             ; A 3 or a 9 turns up, just not often
+                             ; enough to be the step; they are drawn
+                             ; dashed so the fan still reads as "6s,
+                             ; and these two".  nil = the series alone
+(setq sf:*maxshown*   10)    ; how many previews may be on screen at
                              ; once; nil = every radius that fits, which
-                             ; on a long wall is a great many
+                             ; on a long wall is a great many.  10 is
+                             ; the 8 sixes that used to show plus the
+                             ; two extras, so nothing was lost to them
 (setq sf:*fit*        0.98)  ; how much of the shorter leg a fillet may
                              ; use up: 1.0 would put the tangent point
                              ; exactly on the far end and leave a
                              ; zero-length line behind
 (setq sf:*layer*      "SMART FILLET PREVIEW")
-(setq sf:*color*      3)     ; green, so a preview reads as a preview
-                             ; whatever the layer was set to by hand
+(setq sf:*color*      3)     ; the layer's colour, and the fallback
+                             ; index on every preview: green, so a
+                             ; preview reads as a preview even where a
+                             ; true colour cannot be shown
+(setq sf:*shade-lo*  '(190 255 190)) ; the SMALLEST preview's green ...
+(setq sf:*shade-hi*  '(0 110 0))     ; ... and the largest's.  The fan
+                             ; is graded between the two, so which arc
+                             ; a label belongs to is a matter of shade
+                             ; rather than of tracing it by eye.  Both
+                             ; stay green on black; a light-background
+                             ; drawing wants the pair swapped round
+(setq sf:*trans*      40)    ; per cent transparency on every preview,
+                             ; so an arc crossing another still reads.
+                             ; 0 or nil = solid; over 90 is a preview
+                             ; nobody can see
 (setq sf:*ltype*      "DASHED")
 (setq sf:*ltscale*    0.25)  ; the stock DASHED pattern is 18 units
                              ; long, so a 6" fillet arc (9 units of it)
@@ -102,7 +149,12 @@
                              ; even the smallest preview.  nil = leave
                              ; the arcs at the drawing's own LTSCALE
 (setq sf:*label*      t)
-(setq sf:*txthgt*     6.0)
+(setq sf:*txthgt*     4.0)   ; small enough that two labels a 6" step
+                             ; apart clear each other side to side
+(setq sf:*rung*       1.4)   ; and each one climbs this many text
+                             ; heights further off its leg than the
+                             ; label before it on that side, so they
+                             ; cannot collide however tight the steps
 (setq sf:*dimlayer*   "DIMENSION")
 (setq sf:*smalldim*   24.0)             ; POOL's small-dimension rule,
 (setq sf:*smallstyle* "STANDARD INCHES"); kept so a fillet callout
@@ -222,14 +274,69 @@
 
 ;;; -------------------- small local helpers -------------------------
 
-;; A number without AutoLISP's trailing zeros: 12, not 12.000000.
+;; A number without AutoLISP's trailing zeros: 12, not 12.000000, and
+;; 13.5 rather than 13.50 -- a half inch is a size HONEFILLET letters a
+;; lot of, and a callout reading R13.50 is one nobody writes by hand.
 (defun sf:num (x)
   (cond ((null x) "?")
         ((= x (fix x)) (rtos x 2 0))
+        ((= (* 2.0 x) (fix (* 2.0 x))) (rtos x 2 1))
         (t (rtos x 2 2))))
 
 ;; "R12", the way a radius is lettered
 (defun sf:rlabel (r) (strcat "R" (sf:num r)))
+
+;; "R3", "R3 and R9", "R3, R9 and R15" -- a list of radii read out the
+;; way a sentence needs them.
+(defun sf:rlist (rads / n i r out)
+  (setq n (length rads) i 0 out "")
+  (foreach r rads
+    (setq out (strcat out
+                      (cond ((= i 0) "")
+                            ((= i (1- n)) " and ")
+                            (t ", "))
+                      (sf:rlabel r))
+          i   (1+ i)))
+  out)
+
+;; of RADS, the ones drawn dashed -- what the report names
+(defun sf:shown-extras (rads / r out)
+  (foreach r rads (if (sf:extrap r) (setq out (cons r out))))
+  (reverse out))
+
+;; An (r g b) triple as the 24-bit integer DXF group 420 wants.
+(defun sf:truecol (rgb)
+  (+ (* 65536 (fix (car rgb))) (* 256 (fix (cadr rgb))) (fix (caddr rgb))))
+
+;; a + f*(b - a), rounded to a whole colour channel
+(defun sf:mix (a b f) (fix (+ 0.5 a (* f (- b a)))))
+
+;; Preview I of N as an (r g b) triple, graded from sf:*shade-lo* to
+;; sf:*shade-hi*.  A lone preview takes the light end: there is nothing
+;; for it to be darker THAN.
+(defun sf:shade (i n / f lo hi)
+  (setq lo sf:*shade-lo*
+        hi sf:*shade-hi*
+        f  (if (> n 1) (/ (float i) (float (1- n))) 0.0))
+  (list (sf:mix (float (car   lo)) (float (car   hi)) f)
+        (sf:mix (float (cadr  lo)) (float (cadr  hi)) f)
+        (sf:mix (float (caddr lo)) (float (caddr hi)) f)))
+
+;; The DXF 440 value for sf:*trans*: 0x02000000 flags the word as a
+;; transparency and the low byte is the ALPHA, so 255 is opaque and the
+;; per cent has to be turned round.  nil when the previews are solid --
+;; an alpha of 255 is not the same as no 440 at all, since the group
+;; overrides the layer's own transparency where one is set.
+(defun sf:transval ( / a)
+  (if (and sf:*trans* (> sf:*trans* 0))
+    (progn
+      (setq a (fix (+ 0.5 (* 255.0 (- 1.0 (/ (float sf:*trans*) 100.0))))))
+      (+ 33554432 (max 0 (min 255 a))))))
+
+;; T for a radius that is not on the 6" series -- one of sf:*extras*.
+;; Those are drawn dashed, so the fan says which sizes are the usual
+;; step and which are the ones that only come up sometimes.
+(defun sf:extrap (r) (if (member r sf:*extras*) t))
 
 ;; Make sure the preview linetype exists, with dashes sized for a
 ;; drawing in inches so they read at pool scale (pf:ensure-dashed,
@@ -325,23 +432,42 @@
         (sf:v+ x (sf:v* u1 tl))
         (sf:v+ x (sf:v* u2 tl))))
 
-;; every radius that fits, from sf:*first* up in sf:*step*s, capped at
-;; sf:*maxshown*
-(defun sf:candidates (rmax / r out)
+;; EVERY radius this corner takes, ascending: sf:*first* up in
+;; sf:*step*s, with sf:*extras* merged in wherever they land.  vl-sort
+;; drops a duplicate, so an extra that is already on the series (a
+;; re-tuned sf:*first*) is not offered twice.
+(defun sf:fitting (rmax / r out)
   (setq r sf:*first*)
-  (while (and (<= r rmax)
-              (or (null sf:*maxshown*) (< (length out) sf:*maxshown*)))
+  (while (<= r rmax)
     (setq out (cons r out)
           r   (+ r sf:*step*)))
+  (foreach r sf:*extras*
+    (if (and (> r 0.0) (<= r rmax)) (setq out (cons r out))))
+  (if out (vl-sort out '<)))
+
+;; the ones actually drawn: the first sf:*maxshown* of them
+(defun sf:candidates (rmax / all r out n)
+  (setq all (sf:fitting rmax)
+        n   0)
+  (foreach r all
+    (if (or (null sf:*maxshown*) (< n sf:*maxshown*))
+      (setq out (cons r out)
+            n   (1+ n))))
   (reverse out))
 
 ;; how many would have fitted if nothing capped the list -- what the
-;; cap hid has to be said out loud, or 8 previews read as "that is all
+;; cap hid has to be said out loud, or 10 previews read as "that is all
 ;; this corner takes"
-(defun sf:howmany (rmax / r n)
-  (setq r sf:*first* n 0)
-  (while (<= r rmax) (setq n (1+ n) r (+ r sf:*step*)))
-  n)
+(defun sf:howmany (rmax) (length (sf:fitting rmax)))
+
+;; The smallest radius anything would offer, extras included.  A corner
+;; under it is the one the routine has nothing to draw for, and since
+;; sf:*extras* holds a 3 that is no longer the same number as
+;; sf:*first*.
+(defun sf:smallest ( / m r)
+  (setq m sf:*first*)
+  (foreach r sf:*extras* (if (and (> r 0.0) (< r m)) (setq m r)))
+  m)
 
 ;;; -------------------- previews ------------------------------------
 
@@ -368,62 +494,94 @@
   (setq sf:*preview* nil
         sf:*picks*   nil))
 
-;; one dashed preview arc, drawn the short way round between its two
-;; tangent points (a fillet arc is always less than a half circle)
-(defun sf:draw-arc (c r p1 p2 / a1 a2 dxf)
+;; The colour groups every preview entity carries: its own shade as a
+;; true colour, and the transparency if there is one.  Kept in one
+;; place so an arc and its label cannot end up different colours.
+(defun sf:colgroups (col / out tr)
+  (setq tr (sf:transval))
+  (if col (setq out (list (cons 420 (sf:truecol col)))))
+  (if tr (setq out (append out (list (cons 440 tr)))))
+  out)
+
+;; One preview arc in COL, drawn the short way round between its two
+;; tangent points (a fillet arc is always less than a half circle).
+;; DASH draws it in sf:*ltype* rather than solid -- what marks out a
+;; radius that is not on the 6" series.
+(defun sf:draw-arc (c r p1 p2 col dash / a1 a2 dxf)
   (setq a1 (angle c p1)
         a2 (angle c p2))
   (if (> (sf:angnorm (- a2 a1)) pi)
     (setq a1 (angle c p2)
           a2 (angle c p1)))
-  (setq dxf (list '(0 . "ARC") '(100 . "AcDbEntity")
-                  (cons 8 sf:*layer*) (cons 62 sf:*color*)
-                  (cons 6 (sf:ensure-ltype))
-                  '(100 . "AcDbCircle")
-                  (list 10 (car c) (cadr c) 0.0)
-                  (cons 40 r)
-                  '(100 . "AcDbArc")
-                  (cons 50 a1) (cons 51 a2)))
-  (if sf:*ltscale* (setq dxf (append dxf (list (cons 48 sf:*ltscale*)))))
+  ;; the colour, the linetype and its scale are AcDbEntity properties,
+  ;; so they go in the entity section -- ahead of the first subclass
+  ;; marker, where DXF puts them -- rather than trailing the arc's own
+  ;; geometry.  (append ignores a nil, which is what the two (if ...)s
+  ;; hand it when there is nothing to add.)
+  (setq dxf (append
+              (list '(0 . "ARC") '(100 . "AcDbEntity")
+                    (cons 8 sf:*layer*) (cons 62 sf:*color*)
+                    (cons 6 (if dash (sf:ensure-ltype) "Continuous")))
+              (if (and dash sf:*ltscale*) (list (cons 48 sf:*ltscale*)))
+              (sf:colgroups col)
+              (list '(100 . "AcDbCircle")
+                    (list 10 (car c) (cadr c) 0.0)
+                    (cons 40 r)
+                    '(100 . "AcDbArc")
+                    (cons 50 a1) (cons 51 a2))))
   (if (entmake dxf) (entlast)))
 
-;; the radius, lettered beside a preview.  Middle-centre justified, so
-;; the text sits on the point it is given whatever it says.
-(defun sf:draw-label (p str / h)
-  (setq h (if sf:*txthgt* sf:*txthgt* 6.0))
-  (if (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                     (cons 8 sf:*layer*) (cons 62 sf:*color*)
-                     '(100 . "AcDbText")
-                     (list 10 (car p) (cadr p) 0.0)
-                     (cons 40 h) (cons 1 str)
-                     '(72 . 1)                       ; centred across
-                     (list 11 (car p) (cadr p) 0.0)
-                     '(100 . "AcDbText")
-                     '(73 . 2)))                     ; and down
-    (entlast)))
+;; the radius, lettered beside a preview in that preview's own shade.
+;; Middle-centre justified, so the text sits on the point it is given
+;; whatever it says.
+(defun sf:draw-label (p str col / h dxf)
+  (setq h   (if sf:*txthgt* sf:*txthgt* 6.0)
+        dxf (append
+              (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                    (cons 8 sf:*layer*) (cons 62 sf:*color*))
+              (sf:colgroups col)              ; entity section, as above
+              (list '(100 . "AcDbText")
+                    (list 10 (car p) (cadr p) 0.0)
+                    (cons 40 h) (cons 1 str)
+                    '(72 . 1)                        ; centred across
+                    (list 11 (car p) (cadr p) 0.0)
+                    '(100 . "AcDbText")
+                    '(73 . 2))))                     ; and down
+  (if (entmake dxf) (entlast)))
 
-;; Draw the whole fan of previews.  Labels alternate between the two
-;; legs: consecutive tangent points sit one step apart along one leg,
-;; which is not room enough for two labels side by side.
-(defun sf:preview (geo rads / i r a c t1 t2 anchor)
-  (setq i 0)
+;; Where preview I's label goes: straight out from its tangent point,
+;; away from the arc -- so it never lands on the line it belongs to --
+;; and one rung further than the label before it on that same leg.
+;; Labels alternate legs, so the rung climbs every OTHER preview; the
+;; two together are what stops R30 landing on R36.
+(defun sf:labelpt (anchor c i / h)
+  (setq h (if sf:*txthgt* sf:*txthgt* 6.0))
+  (sf:v+ anchor
+         (sf:v* (sf:unit (sf:v- anchor c))
+                (* h (+ 0.9 (* (if sf:*rung* sf:*rung* 0.0)
+                               (float (/ i 2)))))))) ; integer divide:
+                                                     ; the rung number
+
+;; Draw the whole fan of previews, light shade to dark.  Labels
+;; alternate between the two legs: consecutive tangent points sit one
+;; step apart along one leg, which is not room enough for two labels
+;; side by side.
+(defun sf:preview (geo rads / i n r a c t1 t2 anchor col)
+  (setq i 0
+        n (length rads))
   (sf:ensure-layer sf:*layer* sf:*color*)
   (foreach r rads
-    (setq a  (sf:arcpts geo r)
-          c  (car   a)
-          t1 (cadr  a)
-          t2 (caddr a))
-    (sf:mark (sf:draw-arc c r t1 t2) r)
+    (setq a   (sf:arcpts geo r)
+          c   (car   a)
+          t1  (cadr  a)
+          t2  (caddr a)
+          col (sf:shade i n))
+    (sf:mark (sf:draw-arc c r t1 t2 col (sf:extrap r)) r)
     (if sf:*label*
       (progn
         (setq anchor (if (= 0 (rem i 2)) t1 t2))
-        ;; pushed straight off the arc, away from its centre, so the
-        ;; label never lands on the line it belongs to
-        (sf:mark (sf:draw-label
-                   (sf:v+ anchor
-                          (sf:v* (sf:unit (sf:v- anchor c))
-                                 (* 0.9 (if sf:*txthgt* sf:*txthgt* 6.0))))
-                   (sf:rlabel r))
+        (sf:mark (sf:draw-label (sf:labelpt anchor c i)
+                                (sf:rlabel r) col)
                  nil)))
     (setq i (1+ i))))
 
@@ -467,11 +625,11 @@
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel)
-       (princ (strcat "\n  (nothing there -- click one of the dashed"
+       (princ (strcat "\n  (nothing there -- click one of the green"
                       " corners, or type Cancel)")))
       ((setq r (sf:radof (car sel))) (setq ans r))
       (t (princ (strcat "\n  (that is not one of the previews -- click a"
-                        " dashed corner)")))))
+                        " green corner)")))))
   (if (eq ans 'SF-NONE) nil ans))
 
 ;;; -------------------- cutting and dimensioning --------------------
@@ -593,7 +751,8 @@
 ;;; -------------------- the command ---------------------------------
 
 (defun c:SMARTFILLET ( / *error* olderr odim undo-open
-                         one two geo rmax rads extra r arc dim1 made)
+                         one two geo rmax rads extra shown-extras
+                         r arc dim1 made)
 
   ;; -- restore drawing state on error / Esc.  The previews go first:
   ;;    they are entities like any other, and a run cut short partway
@@ -641,10 +800,10 @@
                     " parallel, or they run straight through one"
                     " another.  Nothing to round.")))
 
-    ((< (setq rmax (sf:rmax geo)) sf:*first*)
+    ((< (setq rmax (sf:rmax geo)) (sf:smallest))
      (princ (strcat "\nThe shorter leg of that corner only allows "
                     (sf:rlabel rmax) " -- less than the smallest"
-                    " preview (" (sf:rlabel sf:*first*) ").  Nothing"
+                    " preview (" (sf:rlabel (sf:smallest)) ").  Nothing"
                     " drawn; lower sf:*first* to work at that size.")))
 
     (t
@@ -662,11 +821,19 @@
      (sf:preview geo rads)
      (princ (strcat "\n" (itoa (length rads)) " corner"
                     (if (= 1 (length rads)) "" "s")
-                    " that fit, dashed: " (sf:rlabel (car rads))
+                    " that fit, light to dark: " (sf:rlabel (car rads))
                     (if (cdr rads)
                       (strcat " to " (sf:rlabel (last rads)))
                       "")
                     "."))
+     ;; which arcs are dashed is a fact about the SIZES, not about the
+     ;; drawing, so it is said rather than left to be inferred from the
+     ;; one preview that looks different
+     (setq shown-extras (sf:shown-extras rads))
+     (if shown-extras
+       (princ (strcat "\nDashed: " (sf:rlist shown-extras)
+                      " -- the in-between sizes, less common than a "
+                      (sf:num sf:*step*) "\" step.")))
      ;; a cap that says nothing reads as "that is all this corner
      ;; takes", which is a different fact
      (if (> extra 0)
