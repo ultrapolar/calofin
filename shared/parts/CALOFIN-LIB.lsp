@@ -739,6 +739,9 @@
 (setq cal:*imgcol-dim* 'auto)
 (setq cal:*imgcol-val* 30)
 (setq cal:*imgcol-hi* 'auto)
+;; a letter whose box is still owed -- drawn in this and struck twice,
+;; which is what a stroke font has instead of a bold weight
+(setq cal:*imgcol-miss* 1)
 
 ;; one character's polylines, or nil
 (defun cal:imgglyph (ch / p)

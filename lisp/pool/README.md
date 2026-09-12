@@ -1017,8 +1017,21 @@ prompt as if the box had been left empty.
 
 The measurement letters key themselves: the sequence letters under
 their own symbols (`h`, `g`, `f`, `e`, `m`, `l`, `k`, `s`, `s1`, …)
-and the depth prompts by their letter prefix (`c`, `d`, `c2`). The
-keyword questions have named keys:
+and the depth prompts by their letter prefix (`c`, `d`, `c2`).
+
+Two names are worth knowing because one run can reach both. `tt` is a
+**perimeter** T — the Grecian's top side, the Roman's side length —
+while `ttc` is the oval hopper's own `T - straight side length
+(check)`. A Roman asks them both, and the store is consume-once, so
+under one key the second question could only ever go unanswered; a
+form with the side length sends it to both.
+
+**A depth (`c`, `d`, `c2`) is taken from the form only when it is a
+number.** Those go through `pool:askh`, whose callers all range check
+what they get and none of which can do anything with a nil, so an `NA`
+there is consumed and then prompted for anyway.
+
+The keyword questions have named keys:
 
 | Key | Question |
 | --- | --- |
@@ -1049,6 +1062,25 @@ questions, `corners` for `all four corners`, `outercorners` and
 corners A, B, C and D`, `the end-tip corners LT, LB, RT and RB`), and
 `deepcorners` / `shalcorners` for a mutt's one-square-end families
 (`the DEEP end corners A and D`, `the SHALLOW end corners B and C`).
+
+### The pool-bottom gate, and the two flags that answer it
+
+`Add pool bottom (hopper) detail?` is the one question a form cannot
+answer through `pool:*form*`, and deliberately: five shape paths reach
+that single gate and the store is consume-once, so an entry would be
+eaten by whichever path got there first. It is answered by **run
+flags** instead, which answer wherever the run happens to land:
+
+| Flag | Set by | The gate answers |
+| --- | --- | --- |
+| `pool:*nobottom*` | `POOLCOVER`, `LAZFORMCOVER` | No — a cover sheet records the perimeter and nothing below it |
+| `pool:*hasbottom*` | `LAZFORM` | Yes — the sheet carries the hopper chain and the depths, so there is one |
+| neither | a typed `POOL` | asked, defaulting to Yes |
+
+`pool:*nobottom*` wins if both are somehow set: "draw no bottom" is
+the safer of the two to be wrong about. **Both are cleared on either
+exit of `c:POOL`**, the error path included, so neither can leak into
+the next pool.
 
 ### Object snaps stay live while you measure
 

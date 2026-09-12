@@ -187,6 +187,11 @@ is read when the command runs, not when the file loads.
   decide -- which is exactly why fit 2 is offered rather than applied.
 * **One line per run.** LOBF does not split a selection into two walls
   and fit each; highlight one run at a time.
+* **It only ever draws a straight line.** Points that trace a curve get
+  the straight line that best answers them, which is a true answer to
+  the wrong question. [ABLOBF](../ablobf/README.md) is the same idea as
+  a POLYLINE: arcs and lines threaded through the points, open, between
+  two ends you pick.
 * The grouped twin is generated -- run
   `python3 tools/mirror_shared.py LOBF` after editing this file, never
   hand-edit `shared/parts/LOBF.lsp`.

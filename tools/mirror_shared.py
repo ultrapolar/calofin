@@ -351,6 +351,34 @@ TOOLS = {
         # acc:run tests for it by name
         'symbols': {'ACC-BACK': 'CAL-BACK'},
     },
+    # ABLOBF is LHD's OPEN half forked onto ABHD's survey classifier, so
+    # it takes the same helpers from the library that LHD does -- the
+    # vector set, the angle pair, ceil/nthcdr/sublist, dedupe, pad,
+    # ensure-layer and the point-block reader.  What stays local is the
+    # fitting itself, the open walk, and the two things that are ABLOBF
+    # and not LHD: the survey-number reader and the end picker.
+    'ABLOBF': {
+        'src': 'lisp/ablobf/ABLOBF.lsp',
+        'swap': {
+            'abl:2d': 'cal:2d', 'abl:dist': 'cal:dist',
+            'abl:sub': 'cal:v-', 'abl:add': 'cal:v+', 'abl:scl': 'cal:v*',
+            'abl:dot': 'cal:dot', 'abl:mid': 'cal:mid',
+            'abl:perp': 'cal:perp', 'abl:tan': 'cal:tan',
+            'abl:ceil': 'cal:ceil', 'abl:nthcdr': 'cal:nthcdr',
+            'abl:sublist': 'cal:sublist', 'abl:norm-ang': 'cal:angnorm',
+            'abl:signed-dang': 'cal:signed-dang',
+            'abl:dedupe': 'cal:dedupe',
+            'abl:block-number': 'cal:block-number',
+            'abl:ensure-layer': 'cal:ensure-layer', 'abl:pad': 'cal:pad',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:block-number en)':
+                ['(cal:block-number en *ABL-PT-TAG*)'],
+            '(cal:dedupe pts)':
+                ['(cal:dedupe pts *ABL-EXACT-EPS*)'],
+        },
+    },
     # LOBF was written against the library from the start (STANDARDS
     # section 6): its vector set, the sysvar pair, ensure-layer, pad,
     # dedupe and the point-block reader are all CALOFIN-LIB bodies under
@@ -632,7 +660,7 @@ TOOLS = {
                          'lzf:*font-h*', 'lzf:*font-adv*',
                          'lzf:*col-line*', 'lzf:*col-back*',
                          'lzf:*col-dim*', 'lzf:*col-val*',
-                         'lzf:*col-hi*'],
+                         'lzf:*col-hi*', 'lzf:*col-miss*'],
         'symbols': {
             # the prose names it too, and prose that names a helper the
             # twin does not define is the drift this file exists to stop
@@ -646,6 +674,7 @@ TOOLS = {
             'lzf:*col-dim*': 'cal:*imgcol-dim*',
             'lzf:*col-val*': 'cal:*imgcol-val*',
             'lzf:*col-hi*': 'cal:*imgcol-hi*',
+            'lzf:*col-miss*': 'cal:*imgcol-miss*',
         },
         # the section header survives the drop -- top_span stops at a
         # ;;; block -- so the prose under it would be left explaining a

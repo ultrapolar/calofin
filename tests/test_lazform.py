@@ -1160,34 +1160,42 @@ assert call1(sv, 'lzf:leadletter',
              'overall across - bottom side, out of square') is None
 print("   a box is named by its letter, its label's letter, or its key")
 
-# every chart states itself, and names its own routine
+# every chart counts what it is asking for, and the count is the whole
+# page: the live boxes AND the dropdowns that are live with them
 sv.loads('(setq t:*ck* (mapcar (quote car) lzf:*charts*))')
 CHARTKEYS = [str(x) for x in sv.globals['t:*ck*']]
+
+
+def askcount(v):
+    v.loads('(setq t:*n* (lzf:askcount))')
+    return int(v.globals['t:*n*'])
+
+
 for ck in CHARTKEYS:
     sv.loads('(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)')
     sv.loads('(setq lzf:*chart* (lzf:chart "%s") lzf:*insq* nil lzf:*btype* 0)' % ck)
-    sv.loads('(setq t:*oa* (lzf:oasis-p lzf:*chart*))')
-    who = 'OASIS' if sv.globals['t:*oa*'] else 'POOL'
-    n = len(livekeys(sv))
-    assert n > 0, "%s: no live box at all" % ck
+    n = askcount(sv)
+    assert n >= len(livekeys(sv)), \
+        "%s: the ask count is under its own live boxes" % ck
+    assert n > 0, "%s: nothing live at all" % ck
     line = state(sv)
-    assert who in line, "%s: the state line names the wrong routine: %r" % (ck, line)
     assert str(n) in line, "%s: %r does not carry the count %d" % (ck, line, n)
-print("   %d charts, each naming its own routine and its own box count"
+print("   %d charts, each counting its own boxes AND its own dropdowns"
       % len(CHARTKEYS))
 
-# the four states of the line, on one chart
+# the states of the line, on one chart
 sv.loads('(setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)')
 sv.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*insq* T lzf:*btype* 0)')
 LIVE = livekeys(sv)
+ASKS = askcount(sv)
 empty = state(sv)
 assert empty.startswith('Nothing filled yet'), empty
-assert str(len(LIVE)) in empty
+assert str(ASKS) in empty
 
 sv.loads('(lzf:put "tp" "240")')
 part = state(sv)
-assert part.startswith('1 of %d boxes filled' % len(LIVE)), part
-assert 'base point' in part, part
+assert part.startswith('1 of %d boxes done' % ASKS), part
+assert 'Insert needs' in part, part
 
 # NA and a feet-inches spelling are answers, not complaints
 FTIN = '2\'6"'                            # a real architectural spelling
@@ -1213,14 +1221,33 @@ assert ' and ' == many[many.index('and 1 more') - 1:many.index('and 1 more') + 4
 assert many.count(' and ') == 1, "the overflow count reads as a second list: %r" % many
 print("   empty / partial / unreadable / overflow all read as one sentence")
 
-# every box filled leaves only the base point
+# a full sheet says Insert draws it, and says what POOL is left with
 sv.loads('(setq lzf:*vals* nil)')
+# the depths are a chain of their own -- D deeper than C, C2 between
+# them -- and POOL loops at the command line on anything else, so the
+# sheet has to be filled the way POOL would accept it
+DEPTH = {'c': '40', 'd': '80', 'c2': '60'}
 for k in LIVE:
-    sv.loads('(lzf:put "%s" "10")' % k)
+    sv.loads('(lzf:put "%s" "%s")' % (k, DEPTH.get(k, '10')))
+sv.loads('(foreach d (lzf:corners lzf:*chart*) (lzf:cput (car d) 1))')
+sv.loads('(foreach d (lzf:picks lzf:*chart*) (lzf:pput (car d) 1))')
 full = state(sv)
-assert full == ('All %d boxes filled - POOL will ask only for the base point.'
-                % len(LIVE)), full
-print("   a full sheet says so, and says what is still picked in the drawing")
+assert full == 'Ready - Insert draws it - POOL asks only for the base point.', \
+    full
+print("   a full sheet says Insert draws it, and what is left to pick")
+
+# an oasis page says the truth about ITS routine: the outline comes off
+# the sheet, the floor is asked for after it exists
+ov = fresh()
+ov.loads('(setq lzf:*chart* (lzf:chart "OACenter") lzf:*insq* nil'
+         ' lzf:*btype* 0 lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)')
+ov.loads('(foreach d (lzf:picks lzf:*chart*) (lzf:pput (car d) 1))')
+for k in livekeys(ov):
+    ov.loads('(lzf:put "%s" "40")' % k)
+oasline = state(ov)
+assert oasline == 'Ready - Insert draws it - OASIS asks for the base point, ' \
+                  'then the floor.', oasline
+print("   and an oasis page says its floor is still asked for")
 
 
 print("== the state line cannot disagree with what is SENT ==")
@@ -1394,12 +1421,18 @@ def snapshot(vm):
 
 
 # The same out-of-square rectangle with a wedge bottom, once through
-# the chart and once through the prompts.  The chart answers the two
-# overalls, H and F and the depths; the corners, the cross dims and
-# M/L/K are typed in both runs, so what is being compared is the route
-# the answers took, not the answers.
+# the chart and once through the prompts.  THE CHART ANSWERS ALL OF IT
+# now -- that is the whole contract: a sheet with nothing owed on it
+# draws, and the only thing POOL is left to ask for is the point the
+# pool is placed at.  So the form run's script is that point and
+# nothing else, while the prompt run answers the same pool a question
+# at a time.
 TYPED = [('tp', '240'), ('bo', '240'), ('le', '120'), ('ri', '120'),
          ('h', '30'), ('f', '180'), ('c', '40'), ('d', '60'),
+         ('m', '30'), ('l', '60'), ('k', '30'),
+         # the cross dims and the mode that says how many POOL asks for
+         ('cmode', '3'),                       # "Ends" -- four of them
+         ('x0', '260'), ('x1', '260'), ('x2', '260'), ('x3', '260'),
          # the corners through the GUI: every dropdown to Cut (index 3)
          # with 24 in its size box -- what the prompt run types as
          # "Cut", 24 and six Enter-defaults
@@ -1409,7 +1442,7 @@ TYPED = [('tp', '240'), ('bo', '240'), ('le', '120'), ('ri', '120'),
          ('cornerd', '3'), ('cornerd-sz', '24')]
 CORNERS = ["Cut", 24.0, None, None, None, None, None, None]
 CROSS = ["Ends", 260.0, 260.0, 260.0, 260.0]
-REST = [None, 60.0, None]                      # M takes its suggestion, L, K
+REST = [30.0, 60.0, 30.0]                      # M, L, K
 
 vm = stubbed(with_pool=True)
 vm.loads('(setq stub:*type* \'(%s))'
@@ -1421,19 +1454,18 @@ vm.loads('(setq stub:*type* \'(%s))'
 try:
     # no chart prompt any more -- the tab strip picks the chart
     # no corner answers in this script: the dropdowns supplied them
-    vm.run('c:LAZFORM',
-           [(0.0, 0.0, 0.0)] + CROSS + ["Yes"] + REST)
+    vm.run('c:LAZFORM', [(0.0, 0.0, 0.0)])
 except LispError as e:
     raise AssertionError("form run: %s" % e) from None
 a = snapshot(vm)
 assert a, "the form run drew nothing"
 assert not vm.globals.get('pool:*form*'), "pool:*form* survived the run"
+assert not vm.globals.get('pool:*hasbottom*'), \
+    "the pool-bottom flag survived the run"
 asked = [pr for pr, _ in vm.prompts]
-for gone in ('\nPool shape', '\nBottom type', '\nCorner '):
-    assert not any(pr.startswith(gone) for pr in asked), \
-        "%r was asked even though the chart answered it" % gone
-assert not any(pr.startswith('\nH -') or pr.startswith('\nC -')
-               for pr in asked), "a charted dimension was asked anyway"
+assert len(asked) == 1 and 'base point' in asked[0], (
+    "a finished sheet still had to answer %d question(s) at the command "
+    "line: %r" % (len(asked), asked))
 
 vm2 = stubbed(with_pool=True)
 try:
@@ -1465,7 +1497,7 @@ vmx.loads('(setq stub:*type* \'(%s))'
                                           ('x0', '260'), ('x1', '260'),
                                           ('x2', '260'), ('x3', '260')]))
 try:
-    vmx.run('c:LAZFORM', [(0.0, 0.0, 0.0), "Yes"] + REST)
+    vmx.run('c:LAZFORM', [(0.0, 0.0, 0.0)])
 except LispError as e:
     raise AssertionError("cross-dim form run: %s" % e) from None
 x = snapshot(vmx)
@@ -1476,12 +1508,12 @@ xasked = [pr for pr, _ in vmx.prompts]
 for gone in ('\nRadius/Cut corners', '\nCross A-C', '\nCross B-D'):
     assert not any(pr.startswith(gone) for pr in xasked), \
         "%r was asked even though the chart answered it: %r" % (gone, xasked)
-assert len(xasked) == 5, (
-    "POOL asked %d questions, not the insertion point, the bottom gate and "
-    "M/L/K: %r" % (len(xasked), [q.strip() for q in xasked]))
+assert len(xasked) == 1, (
+    "POOL asked %d questions, not just the insertion point: %r"
+    % (len(xasked), [q.strip() for q in xasked]))
 print("   %d entities, identical again; the mode and all four tapes came"
       % len(x))
-print("   off the chart, leaving 5 questions")
+print("   off the chart, leaving only the insertion point")
 
 # --------------------------------------------------------------------
 # The Sport chain, end to end.
@@ -1500,7 +1532,7 @@ vs.loads('(setq stub:*type* \'(%s))'
          % ' '.join('("%s" "%s")' % (k, v)
                     for k, v in SPORT + [('insq', '1'), ('btype', '1')]))
 try:
-    vs.run('c:LAZFORM', [(0.0, 0.0, 0.0), "Yes"])
+    vs.run('c:LAZFORM', [(0.0, 0.0, 0.0)])
 except LispError as e:
     raise AssertionError("sport form run: %s" % e) from None
 sa = snapshot(vs)
@@ -1510,9 +1542,9 @@ for lead in ('\nE2 -', '\nF2 -', '\nG -', '\nF1 -', '\nE1 -', '\nM -',
              '\nL -', '\nK -', '\nC -', '\nD -', '\nBottom type'):
     assert not any(pr.startswith(lead) for pr in sasked), \
         "%s was asked even though the chart answered it: %r" % (lead, sasked)
-assert len(sasked) == 2, (
-    "POOL asked %d questions, not just the insertion point and the bottom "
-    "gate: %r" % (len(sasked), [q.strip() for q in sasked]))
+assert len(sasked) == 1, (
+    "POOL asked %d questions, not just the insertion point: %r"
+    % (len(sasked), [q.strip() for q in sasked]))
 vs2 = stubbed(with_pool=True)
 try:
     vs2.run('c:POOL',
@@ -1569,10 +1601,12 @@ def spec_of(bt):
 
 #: btmspec describes the H/G/F/E chain, but POOL routes on the bottom
 #: type BEFORE it gets there: pool:hopoval and pool:hopgrec run on
-#: "Normal" alone, and they are the only callers that ask W, R3, L1 and
-#: X.  So every bottom but Normal greys these on top of whatever the
-#: chain says -- see lzf:btskip.
-HOPPER_ONLY = {"w", "r3", "l1", "x"}
+#: "Normal" alone, and they are the only callers that ask W, R3, L1, X
+#: and the straight-side check TTC.  So every bottom but Normal greys
+#: these on top of whatever the chain says -- see lzf:btskip.  TTC and
+#: not TT: the check is the hopper's, while T itself is a perimeter
+#: letter the Grecian and the Roman ask whatever the bottom is.
+HOPPER_ONLY = {"w", "r3", "l1", "x", "ttc"}
 
 for bt in BOTTOMS:
     got = skip_of(bt)
@@ -1781,18 +1815,23 @@ GREC = [('b', '360'), ('a', '200'), ('tt', '240'), ('ss', '60'),
 
 
 def grecrun(extra, prompts):
+    # LAZFORMCOVER, not LAZFORM: this sheet records the perimeter and
+    # no floor, and the cover twin is what says so -- it closes the
+    # pool-bottom gate, which is also what greys the hopper boxes the
+    # sheet is not filling in.  The prompt runs below answer the same
+    # gate "No" at the end.
     v = stubbed(with_pool=True)
     v.loads('(setq stub:*rcs* \'(4 1))'
             '(setq stub:*type* \'(("tab_Grecian" "") %s))'
             % ' '.join('("%s" "%s")' % (k, val) for k, val in GREC + extra))
     try:
-        v.run('c:LAZFORM', prompts)
+        v.run('c:LAZFORMCOVER', prompts)
     except LispError as e:
         raise AssertionError("grecian form run: %s" % e) from None
     return v
 
 
-gi = grecrun([('insq', '1')], [(0.0, 0.0, 0.0), "No"])
+gi = grecrun([('insq', '1')], [(0.0, 0.0, 0.0)])
 ga = snapshot(gi)
 assert ga, "the in-square grecian form run drew nothing"
 giasked = [pr for pr, _ in gi.prompts]
@@ -1815,16 +1854,16 @@ print("   in square: %d entities, two rows answering POOL's two questions"
 
 go = grecrun([('insq', '0'), ('gcross', '1'),      # Simple
               ('x0', '300'), ('x1', '300')],
-             [(0.0, 0.0, 0.0), "No"])
+             [(0.0, 0.0, 0.0)])
 gc = snapshot(go)
 goasked = [pr for pr, _ in go.prompts]
 for lead in ('\nAnything to record about the corners', '\nHow should Corner',
              '\nGrecian cross-dim detail', '\nCross dim '):
     assert not any(pr.startswith(lead) for pr in goasked), \
         "%s was asked even though the sheet answered it: %r" % (lead, goasked)
-assert len(goasked) == 2, (
-    "POOL asked %d questions, not just the insertion point and the bottom "
-    "gate: %r" % (len(goasked), [q.strip() for q in goasked]))
+assert len(goasked) == 1, (
+    "POOL asked %d questions, not just the insertion point: %r"
+    % (len(goasked), [q.strip() for q in goasked]))
 go2 = stubbed(with_pool=True)
 go2.run('c:POOL',
         ["Outofsquare", "Grecian", (0.0, 0.0, 0.0), "Overall",
@@ -1860,7 +1899,9 @@ vl.loads('(setq stub:*rcs* \'(4 1))'
                      ('mirror', '2'),          # "No", third in the list
                      ('insq', '1'), ('btype', '2')]))
 try:
-    vl.run('c:LAZFORM', [(0.0, 0.0, 0.0), "No"])
+    # the cover twin: this sheet has the perimeter on it and no floor,
+    # and the prompt run below answers the same gate "No"
+    vl.run('c:LAZFORMCOVER', [(0.0, 0.0, 0.0)])
 except LispError as e:
     raise AssertionError("L form run: %s" % e) from None
 la = snapshot(vl)
@@ -1871,9 +1912,9 @@ for lead in ('\nMirror the pool', '\nBottom type',
              '\nHow should the inner corner'):
     assert not any(pr.startswith(lead) for pr in lasked), \
         "%s was asked even though the sheet answered it: %r" % (lead, lasked)
-assert len(lasked) == 2, (
-    "POOL asked %d questions, not just the insertion point and the bottom "
-    "gate: %r" % (len(lasked), [q.strip() for q in lasked]))
+assert len(lasked) == 1, (
+    "POOL asked %d questions, not just the insertion point: %r"
+    % (len(lasked), [q.strip() for q in lasked]))
 vl2 = stubbed(with_pool=True)
 vl2.run('c:POOL',
         ["Insquare", "L", (0.0, 0.0, 0.0),
@@ -2346,6 +2387,274 @@ assert bare == fed, "W and R3 changed the drawing after all -- re-check lzf:btsk
 assert not [p for p in fed_p if "W -" in p or "R3" in p], fed_p
 print("   an Oval on a Wedge draws the same %d entities with them and without"
       % len(bare))
+
+
+# --------------------------------------------------------------------
+# INSERT DRAWS, OR MARKS.  The whole of the contract, in one place.
+# --------------------------------------------------------------------
+# It used to hand over whatever had been typed and leave POOL to ask
+# for the rest a question at a time -- the interview the form exists to
+# replace.  Now a press on an unfinished sheet does not close the page:
+# it marks every letter with nothing usable against it, and the same
+# press draws once they are answered.
+print("== Insert draws the sheet, or marks what is missing ==")
+
+
+def stateline(v):
+    """The state line as the page would show it -- `state` is taken by
+    the DCL-size probe further up, and this block is about the words."""
+    v.loads('(setq t:*st* (lzf:statetext))')
+    return str(v.globals['t:*st*'])
+
+
+def marksheet(fill, insq='T', bt='0', chart='Rectangle'):
+    """A page loaded up to the point of pressing Insert."""
+    v = stubbed(with_pool=True)
+    v.loads('(setq lzf:*chart* (lzf:chart "%s") lzf:*insq* %s lzf:*btype* %s'
+            ' lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil'
+            ' lzf:*marked* nil lzf:*cover* nil lzf:*pos* nil)'
+            % (chart, insq, bt))
+    for k, val in fill:
+        v.loads('(lzf:put "%s" "%s")' % (k, val))
+    return v
+
+
+def press(v):
+    v.loads('(setq stub:*done* nil) (lzf:insert)'
+            '(setq t:*done* stub:*done*) (setq t:*mk* lzf:*marked*)')
+    return v.globals['t:*done*'], bool(v.globals['t:*mk*'])
+
+
+# an empty rectangle sheet: the press marks, and the page stays open
+mv = marksheet([])
+done, marked = press(mv)
+assert done is None, "Insert closed a page with nothing on it"
+assert marked, "Insert closed nothing and marked nothing either"
+line = stateline(mv)
+assert line.startswith('Marked on the chart:'), line
+# every live box is in the marked set, and no greyed one is
+mv.loads('(setq t:*owed* (lzf:togo)) (setq t:*lk* (lzf:livekeys lzf:*chart*))')
+OWED = [str(x) for x in (mv.globals['t:*owed*'] or [])]
+assert OWED == livekeys(mv), \
+    "the marked set is not the live boxes: %r against %r" % (OWED, livekeys(mv))
+mv.loads('(setq t:*d* (lzf:dead lzf:*chart* T "Normal"))')
+assert not (set(OWED) & set(str(x) for x in (mv.globals['t:*d*'] or []))), \
+    "a greyed box was marked as owed"
+print("   an empty sheet: the press marks every live box and does not close")
+
+# fill it in and the same button draws -- and the marking empties as the
+# boxes are answered, one at a time
+for k in livekeys(mv):
+    mv.loads('(lzf:put "%s" "10")' % k)
+mv.loads('(foreach d (lzf:corners lzf:*chart*) (lzf:cput (car d) 1))')
+mv.loads('(foreach d (lzf:picks lzf:*chart*) (lzf:pput (car d) 1))')
+assert stateline(mv).startswith('Ready - Insert draws it'), stateline(mv)
+done, marked = press(mv)
+assert done == 1, "Insert would not draw a finished sheet (done_dialog %r)" % done
+print("   a finished one: the same press closes the page with status 1")
+
+# THE DROPDOWNS COUNT.  Every box filled and a corner row still on
+# (ask) is POOL asking at the command line, so the sheet is not
+# finished and Insert does not pretend it is.
+dv = marksheet([])
+for k in livekeys(dv):
+    dv.loads('(lzf:put "%s" "10")' % k)
+dv.loads('(foreach d (lzf:picks lzf:*chart*) (lzf:pput (car d) 1))')
+dv.loads('(setq t:*co* (lzf:cornerowed)) (setq t:*ow* (lzf:owed))')
+assert [str(x) for x in (dv.globals['t:*co*'] or [])] == ['cornera'], \
+    dv.globals['t:*co*']
+done, marked = press(dv)
+assert done is None, "Insert drew a sheet whose corner row was never answered"
+named = stateline(dv)
+assert 'Corner A' in named, \
+    "the line does not name the dropdown it is waiting for: %r" % named
+dv.loads('(lzf:cput "cornera" 1)')             # Square, no size box
+assert stateline(dv).startswith('Ready'), stateline(dv)
+print("   a corner row left on (ask) holds it too, and is named by its row")
+
+# A BOX THAT CANNOT BE READ is marked with the empty ones, and holds
+# Insert whether or not the button was greyed first -- the chart draws
+# the string, so a typo looks exactly like an answer until its letter
+# goes red.
+uv = marksheet([])
+for k in livekeys(uv):
+    uv.loads('(lzf:put "%s" "10")' % k)
+uv.loads('(foreach d (lzf:corners lzf:*chart*) (lzf:cput (car d) 1))')
+uv.loads('(foreach d (lzf:picks lzf:*chart*) (lzf:pput (car d) 1))')
+assert stateline(uv).startswith('Ready'), stateline(uv)
+uv.loads('(lzf:put "g" "twelvish")')
+uv.loads('(setq t:*ow* (lzf:owed))')
+assert not (uv.globals['t:*ow*'] or []), \
+    "a typo was counted as a gap; it is an error in what IS typed"
+done, marked = press(uv)
+assert done is None, "Insert handed over a sheet with an unreadable box"
+_reset()
+uv.loads('(lzf:redraw) (setq t:*m* lzf:*owed*)')
+assert 'g' in [str(x) for x in (uv.globals['t:*m*'] or [])], \
+    "the unreadable box was not marked on the chart"
+print("   a typo is marked on the chart too, and never reaches POOL")
+
+# NA IS NOT AN ANSWER IN A DEPTH BOX.  pool:askh takes a form answer
+# only when it is a number, so an NA there is consumed and asked for
+# anyway -- which is exactly the question Insert is here to stop.
+nv = marksheet([], bt='5')                     # SHallow: C, D and C2 all live
+for k in livekeys(nv):
+    nv.loads('(lzf:put "%s" "10")' % k)
+nv.loads('(lzf:put "c" "40") (lzf:put "d" "80") (lzf:put "c2" "60")')
+nv.loads('(foreach d (lzf:corners lzf:*chart*) (lzf:cput (car d) 1))')
+nv.loads('(foreach d (lzf:picks lzf:*chart*) (lzf:pput (car d) 1))')
+assert stateline(nv).startswith('Ready'), stateline(nv)
+nv.loads('(lzf:put "d" "NA")')
+nv.loads('(setq t:*t* (lzf:togo))')
+assert 'd' in [str(x) for x in (nv.globals['t:*t*'] or [])], \
+    "NA in a depth box was taken as an answer"
+assert 'D' in stateline(nv), stateline(nv)
+# ...while NA in any other box still is one
+nv.loads('(lzf:put "d" "80") (lzf:put "e" "NA")')
+assert stateline(nv).startswith('Ready'), stateline(nv)
+print("   NA answers any box but a depth; there it is still owed")
+
+# and the pair POOL would loop on rather than accept
+nv.loads('(lzf:put "d" "30")')                 # shallower than C
+assert stateline(nv) == \
+    'D must be deeper than C - POOL will not take it otherwise.', stateline(nv)
+nv.loads('(lzf:put "d" "80") (lzf:put "c2" "90")')
+assert 'C2 has to land between' in stateline(nv), stateline(nv)
+nv.loads('(lzf:put "c2" "60")')
+assert stateline(nv).startswith('Ready'), stateline(nv)
+print("   D deeper than C and C2 between them, said here not at the prompt")
+
+
+print("== the marked letters are drawn BOLD, in the missing colour ==")
+# A stroke font has no weight, so bold is the glyph struck twice a pixel
+# apart -- which is why the vector count for a marked letter is exactly
+# double, and why it is drawn in the missing colour rather than the
+# dialog foreground.
+MISS = int(vm.globals[lib('lzf:*col-miss*', 'cal:*imgcol-miss*')])
+bvm = stubbed(with_pool=True)
+bvm.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*insq* T'
+          ' lzf:*btype* 0 lzf:*vals* nil lzf:*marked* nil)')
+_reset()
+bvm.loads('(lzf:redraw)')
+plain = len([v for v in DRAW['vec'] if v[4] == MISS])
+assert plain == 0, "letters are marked before Insert has ever been pressed"
+_reset()
+bvm.loads('(setq lzf:*marked* T) (lzf:redraw)')
+allmiss = len([v for v in DRAW['vec'] if v[4] == MISS])
+assert allmiss > 0, "nothing was drawn in the missing colour after marking"
+# one box answered: its letter comes out of the marked set, so the
+# missing-colour stroke count FALLS
+_reset()
+bvm.loads('(lzf:put "tp" "240") (lzf:redraw)')
+fewer = len([v for v in DRAW['vec'] if v[4] == MISS])
+assert fewer < allmiss, (
+    "answering a box did not take its letter out of bold (%d strokes vs %d)"
+    % (fewer, allmiss))
+# and the double strike: B on its own, marked, is twice B unmarked
+_reset()
+bvm.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*vals* nil'
+          ' lzf:*marked* nil) (lzf:redraw)')
+one = len(DRAW['vec'])
+_reset()
+bvm.loads('(setq lzf:*marked* T) (lzf:redraw)')
+two = len(DRAW['vec'])
+bvm.loads('(setq t:*owed* (lzf:togo))')
+nowed = len(bvm.globals['t:*owed*'] or [])
+assert two > one, "marking drew no extra strokes at all"
+print("   %d strokes plain, %d marked -- %d letters struck twice, in colour %d"
+      % (one, two, nowed, MISS))
+
+
+print("== a cover sheet greys everything behind the pool-bottom gate ==")
+# LAZFORMCOVER answers that gate No, so the bottom type, the hopper
+# chain and the depths are questions POOL will never reach -- and a
+# sheet that waits to be filled in must not wait for them.
+cv = fresh(with_pool=True)
+cv.loads('(setq lzf:*chart* (lzf:chart "Rectangle") lzf:*insq* T'
+         ' lzf:*btype* 2 lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil'
+         ' lzf:*cover* nil)')
+openlive = livekeys(cv)
+cv.loads('(setq lzf:*cover* T)')
+coverlive = livekeys(cv)
+cv.loads('(setq lzf:*cover* nil)')
+assert set(coverlive) < set(openlive), \
+    "cover mode left the same boxes live: %r" % coverlive
+for gone in ('h', 'g', 'f', 'e', 'm', 'l', 'k', 'c', 'd'):
+    assert gone not in coverlive, \
+        "%s is behind the gate and a cover sheet still asks for it" % gone
+for stays in ('tp', 'le'):
+    assert stays in coverlive, \
+        "%s is the perimeter, which a cover sheet is all about" % stays
+print("   %d live boxes become %d: the perimeter stays, the floor goes"
+      % (len(openlive), len(coverlive)))
+
+
+print("== the Roman asks each end once, or twice, and never half ==")
+# In square POOL takes the two ends as identical and asks one end's
+# letters; out of square it asks whether they are, and the sheet -- which
+# PRINTS both ends -- answers that itself.
+rm = fresh(with_pool=True)
+rm.loads('(setq lzf:*chart* (lzf:chart "ROman") lzf:*btype* 0'
+         ' lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)')
+rm.loads('(setq lzf:*insq* T) (setq t:*i* (lzf:livekeys lzf:*chart*))'
+         '(setq lzf:*insq* nil) (setq t:*o* (lzf:livekeys lzf:*chart*))')
+RI = [str(x) for x in rm.globals['t:*i*']]
+RO = [str(x) for x in rm.globals['t:*o*']]
+for half in ('sr', 's1r', 'vr', 'r2'):
+    assert half not in RI, \
+        "%s is the right end, which an in-square Roman never asks for" % half
+    assert half in RO, "%s must be live out of square" % half
+# and the answer to the question itself travels out of square only
+rm.loads('(foreach k (lzf:keys (lzf:chart "ROman")) (lzf:put k "60"))')
+rm.loads('(setq t:*fi* (lzf:form "ROman" T "Normal"))'
+         '(setq t:*fo* (lzf:form "ROman" nil "Normal"))')
+FI = dict(pair(p2) for p2 in rm.globals['t:*fi*'])
+FO = dict(pair(p2) for p2 in rm.globals['t:*fo*'])
+assert 'perfect' not in FI, \
+    "in square POOL does not ask the question, so nothing may answer it"
+assert str(FO.get('perfect')) == 'No', \
+    "out of square the sheet prints both ends and must say so: %r" % FO
+# ONE TAPE, TWO QUESTIONS: T is the perimeter letter and the hopper's
+# own check, and the box answers both
+assert 'tt' in FI and 'ttc' in FI, \
+    "the straight side must reach both questions it answers: %r" % sorted(FI)
+assert abs(float(FI['tt']) - float(FI['ttc'])) < 1e-9, \
+    "the two T questions were answered with different numbers"
+# ...and on a bottom that never asks the check, it is not sent
+rm.loads('(setq t:*fw* (lzf:form "ROman" T "Wedge"))')
+FW = dict(pair(p2) for p2 in rm.globals['t:*fw*'])
+assert 'tt' in FW and 'ttc' not in FW, \
+    "the hopper check went out on a bottom whose hopper never asks it: %r" \
+    % sorted(FW)
+print("   right-hand boxes dead in square, live out of it; T answers both")
+
+
+print("== a round pool: R3 is on the sheet now, and POOL takes it ==")
+# The round chart hands its bottom to the oval's routine, which asks R3
+# between G and W.  The sheet did not carry it, so that one question was
+# left at the command line on every round pool the form drew.
+rd = fresh()
+rd.loads('(setq test:*rk* (lzf:keys (lzf:chart "ROUnd")))')
+RK = [str(x) for x in rd.globals['test:*rk*']]
+assert 'r3' in RK, "the round sheet still has no R3 box"
+assert 'ttc' in RK and 'tt' not in RK, \
+    "the round sheet's T is the hopper's check: %r" % RK
+rp = VM()
+rp.load(POOL)
+ROUNDN = """\'((shape . "ROUnd") (insq . "Insquare") (btype . "Normal")
+               (b . 360.0) (h . 40.0) (g . 90.0) (r3 . 40.0) (w . 50.0)
+               (f . 140.0) (e . 90.0) (m . 90.0) (l . 180.0) (k . 90.0)
+               (ttc . 180.0))"""
+rp.eval(parse_all("(setq pool:*form* %s)" % ROUNDN)[0])
+rp.eval(parse_all("(setq pool:*hasbottom* T)")[0])
+rp.run('c:POOL', [(0.0, 0.0, 0.0)])
+assert [e for e in rp.entities if e not in rp.deleted], \
+    "a round pool on a Normal bottom drew nothing"
+rleft = [p.strip() for p, _ in rp.prompts]
+assert len(rleft) == 1 and 'Insertion base point' in rleft[0], (
+    "a full round sheet still had %d question(s) left: %r" % (len(rleft), rleft))
+print("   R3 and the T check both reach POOL; only the base point is asked")
+
 
 
 print("ALL LAZFORM TESTS PASSED")
