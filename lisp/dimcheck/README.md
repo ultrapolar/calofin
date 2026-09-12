@@ -99,7 +99,7 @@ colour the knob holds, so a changed colour is described correctly)
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `*dchk-grey-color*` | `8` | Everything not under review, faded |
+| `*dchk-grey-color*` | `'auto` | Everything not under review, faded. `'auto` fades it the way round the drawing needs -- darker than the work on a dark background, lighter on a light one. A number is used exactly as given |
 | `*dchk-flag-color*` | `1` | Dimensions you answered "No" to, and the report's attention lines |
 | `*dchk-arc-color*` | `6` | Arcs whose endpoints were moved |
 | `*dchk-olap-color*` | `4` | Merged or flagged overlapping lines |

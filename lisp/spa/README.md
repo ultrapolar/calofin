@@ -688,7 +688,7 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*rep-w*` | `46.0` | how wide the ruled box comes out |
 | `spa:*map-gap*` | `3.0` | th multiples: table -> the mini-model |
 | `spa:*map-size*` | `24.0` | th multiples: the mini-model's fit box |
-| `spa:*pv-col*` | `8` | guide outline (dark gray) |
+| `spa:*pv-col*` | `'auto` | guide outline -- `'auto` picks the grey for the background, a number is used exactly as given |
 | `spa:*pvx-col*` | `7` | measuring tie (white) |
 | `spa:*hi-col*` | `1` | the element being asked for (red) The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in spa:octpreview / spa:roundpreview rather than reading th... |
 | `spa:*pv-w*` | `240.0` | nominal guide width |

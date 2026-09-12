@@ -1741,4 +1741,83 @@ out = ''.join(str(p) for p in vm.printed)
 assert str(ver) in out and str(len(PANEL)) in out, out
 print("   reports %s and the %d-tool roster" % (ver, len(PANEL)))
 
+print("== CALHELP: the captions, at the command line ==")
+# The captions were readable in one place only -- the panel, on
+# whichever page the tool happened to be filed on.  That is the same
+# complaint the Find page answers INSIDE the dialog, and outside it
+# nothing answered it at all.
+vm = fresh()
+vm.run('c:CALHELP', ['survey'])
+out = ''.join(str(p) for p in vm.printed)
+hits = [n for n in PANEL if callib.read(LSP).count('"%s"' % n)
+        and n in out]
+assert 'ABHD' in out, out
+assert callib.read(LSP).find('survey') > 0
+print("   a word in a CAPTION finds the tool whose name never says it")
+
+vm = fresh()
+vm.run('c:CALHELP', ['oasis'])
+out = ''.join(str(p) for p in vm.printed)
+assert 'OASIS' in out, out
+assert vm.globals.get('lzp:*captions*'), 'captions gone'
+cap = [c for c in vm.globals['lzp:*captions*'] if str(c[0]) == 'OASIS']
+assert cap and str(cap[0][1]) in out, (cap, out)
+print("   ...and prints that tool's caption, not a second copy of it")
+
+vm = fresh()
+vm.run('c:CALHELP', [''])
+out = ''.join(str(p) for p in vm.printed)
+assert out.count('\n  ') >= len(set(PANEL)), (out.count('\n  '), len(PANEL))
+print("   Enter lists every tool on the panel")
+
+vm = fresh()
+vm.run('c:CALHELP', ['zznotathing'])
+out = ''.join(str(p) for p in vm.printed)
+assert 'Nothing here matches' in out, out
+print("   and a word nothing matches says so instead of listing nothing")
+
+print("== CALSET: the settings, and the one that is shared ==")
+# CALSET writes the theme to the AutoCAD profile for the Lisp side AND
+# to LAZPANEL's registry key for the VB palette, which is the same
+# bargain the pinned row already strikes.
+vm = fresh()
+vm.run('c:CALSET', ['Theme', 'Dark'])
+out = ''.join(str(p) for p in vm.printed)
+assert vm.env.get('CalofinTheme', '').upper() == 'DARK', vm.env
+assert 'CalofinTheme is now' in out, out
+print("   Theme -> Dark lands in the profile, where every tool reads it")
+
+vm = fresh()
+vm.run('c:CALSET', ['Quit'])
+out = ''.join(str(p) for p in vm.printed)
+assert 'CalofinTheme' in out and 'CalofinErrorDir' in out, out
+assert 'Nothing changed' in out, out
+print("   Quit shows the table and changes nothing")
+
+vm = fresh()
+vm.run('c:CALSET', ['Errordir', 'C:\\reports'])
+assert vm.env.get('CalofinErrorDir') == 'C:\\reports', vm.env
+print("   a folder setting is taken as typed -- LAZDIAG reads this one")
+
+vm = fresh()
+vm.env['CalofinErrorDir'] = 'C:\\old'
+vm.run('c:CALSET', ['Errordir', '.'])
+assert vm.env.get('CalofinErrorDir') == '', vm.env
+print("   ...and . clears it, back to LAZDIAG's own candidate walk")
+
+# A settings command that writes a key nothing reads is worse than no
+# settings command at all, so each one it offers is checked against
+# the file that reads it rather than against this file's own idea.
+vm = fresh()
+vm.run('c:CALSET', ['Stockdir', 'F:\\Tech'])
+stock = VM()
+stock.load(os.path.join(HERE, '..', 'lisp', 'stockcover', 'STOCKCOVER.lsp'))
+skey = str(stock.globals['*stock-env-folder*'])
+assert vm.env.get(skey) == 'F:\\Tech', (skey, vm.env)
+print("   the stock folder lands under %s, the key STOCKCOVER reads" % skey)
+
+DIAG = os.path.join(HERE, '..', 'lisp', 'lazdiag', 'LAZDIAG.lsp')
+assert '(getenv "CalofinErrorDir")' in callib.read(DIAG), DIAG
+print("   ...and CalofinErrorDir is the one LAZDIAG walks to first")
+
 print("ALL LAZPANEL TESTS PASSED")

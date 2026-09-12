@@ -24,10 +24,53 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.6")
+(setq cal:*version* "v1.7")
 
-(defun c:CALVER ()
+
+;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
+;;  their own version and CALVER used to report one of them -- this
+;;  file's -- so the question a support call actually asks ("what are
+;;  you running?") was seventy-two commands' worth of typing, and a
+;;  LAZDIAG report names only the tool that failed.
+;;
+;;  There is no table of versions here and there is not going to be:
+;;  every tool sets its own banner global as it loads, so the SESSION
+;;  is the table.  atoms-family reads it, which means a drafter who
+;;  has APPLOADed a newer single file over the bundle sees the newer
+;;  number against that one tool -- exactly the mix a support call is
+;;  usually trying to untangle, and exactly what a generated list
+;;  would have hidden.
+
+;; The version globals this session carries, as (label . value) pairs,
+;; sorted by label.  Two banner spellings exist -- *tool-version* and
+;; the POOL/SPA ns:*version* -- and both end up as the tool's name.
+(defun cal:vlabel (n / s)
+  (setq s n)
+  ;; vl-string-search counts from 0, so the index IS the length of the
+  ;; part in front of the colon
+  (if (wcmatch s "*:*") (setq s (substr s 1 (vl-string-search ":" s))))
+  (setq s (vl-string-trim "*" s))
+  (if (wcmatch (strcase s) "*-VERSION")
+    (setq s (substr s 1 (- (strlen s) 8))))
+  (strcase s))
+
+(defun cal:versions ( / out n v)
+  (foreach n (atoms-family 1)
+    (if (and (wcmatch n "*VERSION*")
+             (= (type (setq v (eval (read n)))) 'STR))
+      (setq out (cons (cons (cal:vlabel n) v) out))))
+  (vl-sort out '(lambda (a b) (< (car a) (car b)))))
+
+(defun c:CALVER ( / all v)
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
+  (setq all (cal:versions))
+  (cond
+    ((null all) (princ))
+    (t
+     (princ (strcat "\n" (itoa (length all))
+                    " calofin file(s) loaded in this session:"))
+     (foreach v all
+       (princ (strcat "\n  " (cal:pad (car v) 22) " " (cdr v))))))
   (princ))
 
 ;;; -------------------- ask layer ---------------------------------------
@@ -230,6 +273,123 @@
   (if p (setvar "OSMODE" (cdr p))))
 
 (defun cal:osdown () (setvar "OSMODE" 0))
+
+;;; -------------------- settings, the theme and the ink -----------------
+;;;
+;;;  Three things a tool cannot learn by reading itself: what the shop
+;;;  has changed, which way AutoCAD's interface reads, and which way the
+;;;  drawing it is about to draw into reads.  All three are answered
+;;;  here, once, so that a colour is CHOSEN in one table instead of
+;;;  being assumed in fourteen tunables blocks.
+
+;; A setting the drafter may have moved out of the source: the profile
+;; value KEY holds, or DFLT when it holds nothing.  The literal in the
+;; file stays the default, so a tree with no profile entries behaves
+;; exactly as it reads -- what the profile buys is SURVIVAL, which the
+;; source does not have: releases/ and LAZPASS.lsp are generated, so a
+;; number edited into either is gone at the next regeneration.  (From
+;; STOCKCOVER's stock:getenv and LAZDIAG's CalofinErrorDir, which had
+;; this idea one folder at a time.)
+(defun cal:setting (key dflt / v)
+  (setq v (getenv key))
+  (if (and v (/= v "")) v dflt))
+
+;; What CalofinTheme has been set to: 'dark, 'light, or nil for "work
+;; it out".  One override for both probes below, because a drafter who
+;; disagrees with what was measured should have to say so once rather
+;; than once per tool.  CALSET writes it.
+(defun cal:themeset ( / v)
+  (setq v (strcase (cal:setting "CalofinTheme" "AUTO")))
+  (cond ((= v "DARK") 'dark)
+        ((= v "LIGHT") 'light)))
+
+;; Which way AutoCAD's INTERFACE reads: 'dark, 'light, or nil when the
+;; release will not say (COLORTHEME arrived with 2015).  The DCL tiles
+;; and the toolbar icon follow this one and not the drawing: a dialog's
+;; -15 and -16 are whatever the interface is, so anything drawn beside
+;; them has to be asking the same question or it comes out half themed.
+(defun cal:ui ( / v)
+  (cond ((cal:themeset))
+        ((null (setq v (getvar "COLORTHEME"))) nil)
+        ((= v 0) 'dark)
+        (t 'light)))
+
+;; Which way the DRAWING reads: 'dark, 'light, or nil when the
+;; background cannot be measured.  A different question from cal:ui --
+;; the interface theme and the model background are set in different
+;; dialogs, and a light-themed AutoCAD over the stock near-black model
+;; space is an ordinary way to work.
+;;
+;; The measurement is COM, so it is wrapped: a session that cannot
+;; reach ActiveX answers nil rather than dying inside a colour lookup.
+;; Nothing is cached.  Caching it would be one global more than this
+;; buys: the review tools resolve the grey ONCE per pass into a local
+;; of the command, which is where the volume is, and the rest of the
+;; tree asks for a colour two or three times in a run.  A cache would
+;; also have to be a session global, and COVERCHECK, DIMCHECK and
+;; LINFINCHECK each say in their own tunables block that they keep no
+;; state between runs -- a claim worth more than three property gets.
+(defun cal:bg ( / c lum)
+  (cond
+    ((cal:themeset))
+    (t
+     (setq c (vl-catch-all-apply
+               '(lambda ()
+                  (vl-load-com)
+                  (vla-get-GraphicsWinModelBackgrndColor
+                    (vla-get-Display
+                      (vla-get-Preferences (vlax-get-acad-object)))))
+               nil))
+     (if (or (vl-catch-all-error-p c) (not (numberp c)))
+       nil
+       (progn
+         ;; an OLE colour is packed low byte first: R, then G, then B
+         (setq c   (fix c)
+               lum (+ (* 0.30 (rem c 256))
+                      (* 0.59 (rem (/ c 256) 256))
+                      (* 0.11 (rem (/ c 65536) 256))))
+         (if (< lum 128.0) 'dark 'light))))))
+
+;;  THE INK TABLE.  A colour knob set to 'auto asks for the ACI that
+;;  suits the background it will be seen against; a knob set to a
+;;  NUMBER is used exactly as given, so a shop that has picked its own
+;;  colours keeps them and every existing test still measures what it
+;;  measured before.
+;;
+;;    role     what it is                    dark  light  unmeasured
+;;    fade     the review tools' grey-out     251    254        8
+;;    guide    preview and guide geometry     253      8        8
+;;    dim      a chart tile's dimensions      253      8        8
+;;    hi       a chart tile's active box        4      5        5
+;;
+;;  fade and guide are drawn into the DRAWING and read cal:bg; dim and
+;;  hi are drawn inside a dialog and read cal:ui.
+;;
+;;  Two rules decided the numbers.  FADE has to recede, which on a dark
+;;  background means darker than the work and on a light one means
+;;  lighter: 8 does the first and the opposite of the second, which is
+;;  why a review sheet opened on a white background used to come up
+;;  with its greyed-out half as the most prominent thing on screen.
+;;  GUIDE has to be read while it is answered but not compete with the
+;;  pool, which is 8 on white and nearly the background itself on the
+;;  stock dark grey.  The unmeasured column is deliberately what the
+;;  tree did before this table existed: a session that cannot tell is
+;;  not a session that changes behaviour.
+(defun cal:ink (knob role / th)
+  (if (not (eq knob 'auto))
+    knob
+    (progn
+      (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
+      (cond
+        ((eq role 'fade)
+         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+        ((eq role 'guide)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'dim)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'hi)
+         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+        (t 7)))))
 
 ;;; -------------------- layers ------------------------------------------
 
@@ -567,12 +727,17 @@
 
 ;; The tile palette.  -16 and -15 are the dialog's own foreground and
 ;; background, so the chart follows the user's AutoCAD theme rather
-;; than fighting it; the other three are real colour numbers.
+;; than fighting it -- and the two that are drawn BESIDE them say
+;; 'auto, which asks cal:ink the same question (a dark grey dimension
+;; arrow and a dark blue focus box are the two things on this tile that
+;; a dark dialog swallows, and -16 adapting while they do not is what
+;; half-themed looks like).  Orange is the one that reads either way,
+;; so it is the one still written as a number.
 (setq cal:*imgcol-line* -16)
 (setq cal:*imgcol-back* -15)
-(setq cal:*imgcol-dim* 8)
+(setq cal:*imgcol-dim* 'auto)
 (setq cal:*imgcol-val* 30)
-(setq cal:*imgcol-hi* 5)
+(setq cal:*imgcol-hi* 'auto)
 
 ;; one character's polylines, or nil
 (defun cal:imgglyph (ch / p)
@@ -775,8 +940,14 @@
   (if val val fall))
 
 ;;; ----------------------------------------------------------------------
-(princ (strcat "\nCALOFIN-LIB " cal:*version*
-               " loaded.  Shared helpers under the cal: prefix."))
+;; Quiet inside the whole build, on the same rule every member
+;; follows -- the build says once that it loaded, and CALVER says what
+;; it loaded.  cal:*build-loading* is this file's own flag rather than
+;; the members' *calofin-quiet*, because it is already set for exactly
+;; this file and means exactly this.
+(if (not cal:*build-loading*)
+  (princ (strcat "\nCALOFIN-LIB " cal:*version*
+                 " loaded.  Shared helpers under the cal: prefix.")))
 ;; On its own this file defines helpers and exactly one command
 ;; (CALVER) -- no tools at all.  LAZPASS.lsp and CALOFIN-LOADER.lsp
 ;; both set the flag below before loading it, so this only ever fires

@@ -1392,7 +1392,7 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*rep-wf*` | `54.0` | table width, feet-inches |
 | `pool:*map-gap*` | `3.0` | th multiples: table -> mini-model |
 | `pool:*map-size*` | `24.0` | th multiples: the mini-model's box |
-| `pool:*pv-col*` | `8` | guide outline (dark gray) |
+| `pool:*pv-col*` | `'auto` | guide outline -- `'auto` picks the grey for the background, a number is used exactly as given |
 | `pool:*pvx-col*` | `7` | cross-dim / measuring line (white) |
 | `pool:*hi-col*` | `1` | the element being asked for (red) |
 | `pool:*pv-margin*` | `30.0` | smallest margin round the guide's zoom |

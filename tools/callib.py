@@ -116,9 +116,14 @@ NOT_A_TOOL = "standards_checker"
 #: toolbar, LAZICON reports where the button's picture came from and
 #: LAZPIN edits the pinned row: machinery, not drafting tools.  LAZASCII
 #: is LAZFORM's font probe -- it draws nothing and answers nothing.
+#: CALHELP reads the panel's own captions out at the command line and
+#: CALSET shows the settings calofin keeps in the AutoCAD profile:
+#: both are the panel's machinery wearing a command name, and a button
+#: that told you what buttons do would be a joke at the drafter's
+#: expense.
 NAMED_SATELLITES = frozenset({
     "DCE", "STOCKLIST", "LAZPANEL", "LAZBUTTON", "LAZICON", "LAZPIN",
-    "LAZASCII",
+    "LAZASCII", "CALHELP", "CALSET",
 })
 
 

@@ -71,6 +71,8 @@ TOOLS = {
     'SPA': {
         'src': 'lisp/spa/SPA.LSP',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'spa:ink': 'cal:ink',
             'spa:v+': 'cal:v+', 'spa:v-': 'cal:v-', 'spa:v*': 'cal:v*',
             'spa:dot': 'cal:dot', 'spa:perp': 'cal:perp',
             'spa:mid': 'cal:mid', 'spa:trim': 'cal:trim',
@@ -187,6 +189,8 @@ TOOLS = {
     'CONSTELLATION': {
         'src': 'lisp/constellation/CONSTELLATION.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'cst:ink': 'cal:ink',
             'cst:askkw': 'cal:askkw', 'cst:askyn': 'cal:askyn',
             'cst:askdist': 'cal:askdist',
             'cst:back-word-p': 'cal:back-word-p',
@@ -359,6 +363,8 @@ TOOLS = {
     'LOBF': {
         'src': 'lisp/lobf/LOBF.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lobf:ink': 'cal:ink',
             'lobf:2d': 'cal:2d', 'lobf:dist': 'cal:dist',
             'lobf:v-': 'cal:v-', 'lobf:v+': 'cal:v+', 'lobf:v*': 'cal:v*',
             'lobf:dot': 'cal:dot', 'lobf:perp': 'cal:perp',
@@ -488,6 +494,8 @@ TOOLS = {
     'POOL': {
         'src': 'lisp/pool/POOL.LSP',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'pool:ink': 'cal:ink',
             'pool:v+': 'cal:v+', 'pool:v-': 'cal:v-', 'pool:v*': 'cal:v*',
             'pool:dot': 'cal:dot', 'pool:perp': 'cal:perp',
             'pool:mid': 'cal:mid', 'pool:npos': 'cal:angnorm',
@@ -526,6 +534,8 @@ TOOLS = {
     'POOLSIDE': {
         'src': 'lisp/poolside/POOLSIDE.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'psd:ink': 'cal:ink',
             'psd:2d': 'cal:2d', 'psd:v+': 'cal:v+', 'psd:v*': 'cal:v*',
             'psd:mid': 'cal:mid',
             'psd:askkw': 'cal:askkw', 'psd:askyn': 'cal:askyn',
@@ -595,6 +605,8 @@ TOOLS = {
         # written; lzX:px, lzX:py and lzX:pline are NOT here, because
         # LAZSPA and LAZSTEP clip to a band where LAZFORM draws whole.
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lzf:ink': 'cal:ink',
             'lzf:glyph': 'cal:imgglyph',
             'lzf:text': 'cal:imgtext',
             'lzf:textw': 'cal:imgtextw',
@@ -662,7 +674,9 @@ TOOLS = {
 
     'LAZPANEL': {
         'src': 'lisp/lazpanel/LAZPANEL.lsp',
-        'swap': {},
+        'swap': {
+            # the interface-theme probe: the library's is this body
+            'lzp:ui': 'cal:ui',},
         'drop_globals': [],
     },
     # The spa chart and the step form are LAZFORM's shape applied to
@@ -682,6 +696,8 @@ TOOLS = {
         # written; lzX:px, lzX:py and lzX:pline are NOT here, because
         # LAZSPA and LAZSTEP clip to a band where LAZFORM draws whole.
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lzs:ink': 'cal:ink',
             'lzs:glyph': 'cal:imgglyph',
             'lzs:text': 'cal:imgtext',
             'lzs:textw': 'cal:imgtextw',
@@ -739,6 +755,8 @@ TOOLS = {
         # written; lzX:px, lzX:py and lzX:pline are NOT here, because
         # LAZSPA and LAZSTEP clip to a band where LAZFORM draws whole.
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lzt:ink': 'cal:ink',
             'lzt:glyph': 'cal:imgglyph',
             'lzt:text': 'cal:imgtext',
             'lzt:textw': 'cal:imgtextw',
@@ -811,6 +829,8 @@ TOOLS = {
     'covercheck': {
         'src': 'lisp/covercheck/covercheck.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'cchk:ink': 'cal:ink',
             'cchk:ensure-layer': 'cal:ensure-layer',
             'cchk:bbox': 'cal:bbox-ent',
             'cchk:pad2': 'cal:zeropad2',
@@ -861,6 +881,8 @@ TOOLS = {
     'dimcheck': {
         'src': 'lisp/dimcheck/dimcheck.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'dchk:ink': 'cal:ink',
             'dchk:ensure-layer': 'cal:ensure-layer',
             'dchk:bbox': 'cal:bbox-ent',
             'dchk:pad2': 'cal:zeropad2',
@@ -896,6 +918,8 @@ TOOLS = {
     'linfincheck': {
         'src': 'lisp/linfincheck/linfincheck.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lfc:ink': 'cal:ink',
             'lfc:ensure-layer': 'cal:ensure-layer',
             'lfc:bbox': 'cal:bbox-ent',
             'lfc:pad2': 'cal:zeropad2',
@@ -1018,6 +1042,8 @@ TOOLS = {
     'OASIS': {
         'src': 'lisp/oasis/OASIS.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'oasis:ink': 'cal:ink',
             'oasis:v+': 'cal:v+', 'oasis:v*': 'cal:v*',
             'oasis:pad': 'cal:pad',
             'oasis:osup': 'cal:osup', 'oasis:osdown': 'cal:osdown',
@@ -1054,6 +1080,8 @@ TOOLS = {
     'ABFIND': {
         'src': 'lisp/abfind/ABFIND.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'abf:ink': 'cal:ink',
             'abf:askkw': 'cal:askkw', 'abf:askyn': 'cal:askyn',
             'abf:back-word-p': 'cal:back-word-p',
             'abf:ensure-layer': 'cal:ensure-layer',

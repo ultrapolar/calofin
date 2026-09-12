@@ -104,7 +104,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.6")
+(setq *lazstep-version* "v1.7")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -855,6 +855,14 @@
 (setq lzt:*y0* 0)               ; the band being drawn, in per-mille
 (setq lzt:*y1* 1000)
 
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
 
 (defun lzt:px (v) (fix (/ (* v lzt:*dx*) 1000.0)))
 (defun lzt:py (v)
@@ -971,7 +979,7 @@
       (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   cal:*imgcol-hi*))
+                   (cal:ink cal:*imgcol-hi* 'hi)))
   (cal:imgtext txt lx ly sc
             (if (= (lzt:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
 
@@ -1006,7 +1014,7 @@
     (foreach d (lzt:c-dims c)
       (if (not (member (cadr d) wk))
           (lzt:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d)
-                     cal:*imgcol-dim*)))
+                     (cal:ink cal:*imgcol-dim* 'dim))))
     (foreach d (lzt:c-dims c)
       (if (and (not (member (cadr d) wk))
                (lzt:inband (lzt:anchor d)))
@@ -1536,6 +1544,14 @@
                  (itoa lzt:*max-steps*) " steps."))
   (princ))
 
-(princ (strcat "\nLAZSTEP " *lazstep-version*
-               " loaded.  Type LAZSTEP to fill a step drawing in."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZSTEP " *lazstep-version*
+                 " loaded.  Type LAZSTEP to fill a step drawing in.")))
 (princ)

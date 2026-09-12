@@ -242,7 +242,7 @@ holds this table and the block together.
 | `cst:*outline-layer*` | `"CONSTELLATION"` | The ring through `A B C` … |
 | `cst:*dim-layer*` | `"DIMENSION"` | The aligned dims, as `AUTODIM` and `WCALST` use it |
 | `cst:*point-layer*` | `"POINTS"` | The survey points, as `ABCDEF` and `XYPLOT` use it |
-| `cst:*space-color*` | `8` | ACI colour the space layer is **created** with — grey, a frame rather than a result. A layer the drawing already has keeps its own colour and is only switched on, thawed and unlocked if it needs to be |
+| `cst:*space-color*` | `'auto` | ACI colour the space layer is **created** with — grey, a frame rather than a result. A layer the drawing already has keeps its own colour and is only switched on, thawed and unlocked if it needs to be |
 | `cst:*guide-color*` | `4` | The same for the guide layer — cyan, so the legend reads as a legend |
 | `cst:*outline-color*` | `3` | The same for the outline layer |
 | `cst:*dim-color*` | `2` | The same for the dimension layer |

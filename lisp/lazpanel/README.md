@@ -426,12 +426,39 @@ second file to ship, no support-path entry to add, and no DLL to
 `NETLOAD` -- unlike the VB.NET palette in `ui/`, which needs its
 assembly loaded on every machine.
 
+## The two commands that are not the panel
+
+`CALHELP` and `CALSET` live in this file because this is where their
+answers already were: the captions are here, and so were the only
+settings calofin keeps in the AutoCAD profile. Neither carries a
+panel button -- both are named in `NAMED_SATELLITES` in
+`tools/callib.py`, and a button that told you what buttons do would be
+a joke at the drafter's expense.
+
+| Command | Answers |
+| --- | --- |
+| `CALHELP` | what a command IS, at the command line. Type any part of a name **or of its caption** -- the same search the Find page runs, so `survey` finds `ABHD` -- and it prints the matches with their captions; Enter lists every tool. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
+| `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
+
+## The icon follows the theme
+
+A `.bmp` has no alpha channel, so the square around the orange hexagon
+is PAINTED, and it was painted `54 54 54` -- dark-theme panel grey --
+for everybody. On the light theme that is a dark tile in a light
+toolbar, and it had been since the button shipped. `lzp:ui` reads
+`COLORTHEME` (and `CalofinTheme`, which beats it), and the two BMPs
+are regenerated on every load anyway, so the ground is picked rather
+than assumed. A theme nothing can report keeps the dark grey that was
+always there. `LAZICON` reports which one it used and where the answer
+came from.
+
 ## Install & run
 
 APPLOAD `LAZPANEL.lsp` on its own, or load `shared/LAZPASS.lsp`, which
 carries it along with every tool it lists. The button toolbar appears
 on load; type `LAZPANEL` to open the panel directly, or `LAZBUTTON` to
-re-summon the button, or `LAZPIN` to choose the pinned tools.
+re-summon the button, `LAZPIN` to choose the pinned tools, `CALHELP`
+to ask what a command does, or `CALSET` to see the settings.
 
 ## Tunables
 

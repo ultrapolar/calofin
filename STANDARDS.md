@@ -416,6 +416,51 @@ change and regenerate `releases/`:
                                    ; dated twin in releases/ from it
 ```
 
+**Load banner** -- the last thing in the file, and QUIET inside the
+whole build. A tool says which build it is on when it is APPLOADed
+alone; sixty-three tools saying it in every drawing a Startup Suite
+opens was 83 lines and 6,681 characters before the drafter had done
+anything. `LAZPASS.lsp` and `CALOFIN-LOADER.lsp` set `*calofin-quiet*`
+while they load their members and clear it after, so:
+
+```lisp
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTOOLNAME " *toolname-version*
+                 " loaded.  Type TOOLNAME to run.")))
+(princ)
+```
+
+Several lines go in one `(progn ...)` under one guard, not one guard
+each. The flag is deliberately NOT a `cal:` symbol: a `lisp/` file may
+neither call nor set one (`tools/check_standards.py`), and the
+standalone files are where the banners live. `tools/check_lisp.py`
+requires both halves -- the banner, and the guard around it. `CALVER`
+reads the whole roster back whenever it is asked for, off the version
+globals themselves.
+
+**Colour.** A colour a tool draws in is an ACI number, and a number is
+only right against one background. A knob whose colour has to work
+against whatever the drafter's screen is doing says `'auto` and is
+resolved through `cal:ink` (`tool:ink` in the standalone copy, swapped
+by the mirror) at the point of use:
+
+```lisp
+(setq tool:*guidecolor* 'auto)   ; 'auto picks it for the background;
+                                 ; a number is used exactly as given
+...
+(tool:ensure-layer tool:*guidelayer* (tool:ink tool:*guidecolor* 'guide))
+```
+
+The roles are `fade` (recede behind the work), `guide` (readable but
+secondary), `dim` and `hi` (a chart tile's dimensions and its active
+box). `fade` and `guide` measure the DRAWING's background; `dim` and
+`hi` follow AutoCAD's INTERFACE theme, because they are drawn beside a
+dialog's own `-15` and `-16`. A knob left as a number is used exactly
+as given -- that is what keeps a shop's own palette, and every test
+that sets one, working. Resolve once into a local before a loop: the
+measurement is a COM round trip and the review tools touch every
+entity in the drawing.
+
 **Namespace.** Every helper and global carries the file's unique
 prefix, colon-separated: `tool:helper-name`, globals with earmuffs
 `tool:*name*`. One prefix per file, no prefix reused across files.

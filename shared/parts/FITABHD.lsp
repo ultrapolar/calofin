@@ -124,7 +124,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.7")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.8")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -4951,7 +4951,15 @@
   (princ))
 
 ;; ----------------------------------------------------------------------
-(princ (strcat "\nFITABHD " *fitabhd-version*
-               " loaded.  Type FITABHD to run (FITABHDVER for the"
-               " version)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nFITABHD " *fitabhd-version*
+                 " loaded.  Type FITABHD to run (FITABHDVER for the"
+                 " version).")))
 (princ)

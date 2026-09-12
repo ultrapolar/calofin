@@ -6,6 +6,56 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## Unreleased
+
+**Which way the screen reads.** Every colour a tool draws in is an ACI
+number, and a number is only right against one background. ACI `8` was
+serving two OPPOSITE intents across thirteen tools: the review tools
+(`COVERCHECK`, `DIMCHECK`, `LINFINCHECK`) used it to make everything
+not under review recede -- which it does on the stock near-black model
+space and the exact opposite of on a white one -- while `POOL`, `SPA`,
+`OASIS`, `POOLSIDE`, `LOBF`, `ABFIND` and `CONSTELLATION` used the same
+number for guide geometry that has to be READ while it is answered,
+which works on white and very nearly disappears on the stock dark
+grey. Nothing in the tree had ever asked which background it was
+drawing onto: 84 colour knobs, zero reads of `COLORTHEME` or the model
+background.
+
+Those knobs say `'auto` now and resolve per role -- `fade`, `guide`,
+`dim`, `hi` -- against the measured background (the drawing's, for ink
+that lands in it; AutoCAD's interface theme for the chart tiles, which
+are drawn beside a dialog's own `-15` and `-16` and were following it
+halfway). **A knob left as a number is used exactly as given**, and a
+session that cannot measure gets the numbers the tree always used, so
+nothing changes for anyone the feature cannot help. `CALSET` writes a
+`CalofinTheme` override for a screen the measurement reads wrong, into
+the profile for the Lisp side and beside the pins for the VB palette.
+
+Three more surfaces were half-themed and are not: the chart tiles'
+dimension arrows and focus box (`-16` adapted, `8` and `5` did not),
+the toolbar button's icon (a `.bmp` has no alpha, so the square around
+the hexagon is painted -- and it was painted dark-theme grey for
+everybody, in every light toolbar, from the day it shipped), and the
+palette's entry boxes (`SystemColors` ink over hard-coded white).
+
+**The load says one line.** A Startup Suite entry runs in every
+drawing opened, and every tool announcing itself was 83 lines and
+6,681 characters of scrollback before the drafter had done anything.
+`LAZPASS.lsp` and `CALOFIN-LOADER.lsp` set `*calofin-quiet*` while
+they load their members; a file APPLOADed alone still greets you.
+`tools/check_lisp.py` requires the guard, so this cannot come back.
+
+**Three commands that answer what the build knows.** `CALVER` reports
+every calofin file loaded and its version -- no table, because each
+tool sets its own banner global and the session IS the table, which is
+why a newer single file loaded over the build shows its own number.
+`CALHELP` prints what a command is, searching names AND captions the
+way the panel's Find page does; until now the captions were readable
+in one place only, the panel, on whichever page the tool was filed on.
+`CALSET` shows the settings calofin keeps in the AutoCAD profile --
+the one place a setting survives a rebuild, since `releases/` and
+`LAZPASS.lsp` are generated.
+
 ## v3.12 -- 2026-09-11
 
 **A dialog that does not fit does not open.** DCL does not scroll in

@@ -483,9 +483,8 @@ Public Class ChartSheet
                 .Width = 52, .TextAlignment = TextAlignment.Center,
                 .Tag = box,
                 .ToolTip = box.Letter & " - " & box.Label,
-                .Background = New SolidColorBrush(
-                    Color.FromArgb(235, 255, 255, 255)),
-                .Foreground = Brushes.Black}
+                .Background = PaletteTheme.FieldBackground(),
+                .Foreground = PaletteTheme.FieldForeground()}
             Bind(editor, box)
             ' through a method, not inline: VB does not allow
             ' RaiseEvent inside a lambda expression

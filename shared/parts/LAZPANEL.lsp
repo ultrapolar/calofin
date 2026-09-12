@@ -7,6 +7,8 @@
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
+;;;            CALHELP        what a command does, at the command line
+;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -107,7 +109,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.20")
+(setq *lazpanel-version* "v3.21")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1343,12 +1345,17 @@
 ;; The complete .bmp as a byte list: 24bpp, bottom-up rows (a positive
 ;; height means the FIRST row in the file is the BOTTOM row of the
 ;; image, hence the reverse).  "X" pixels are orange -- stored B,G,R,
-;; so 0 165 255 -- and the rest panel grey.  Both sizes give a row
-;; width that is a multiple of 4 (48 and 96), so there is no row
-;; padding to get wrong.
+;; so 0 165 255 -- and the rest is PANEL GREY, which is two different
+;; greys: a .bmp has no alpha channel, so the square around the
+;; hexagon is painted, and painting it 54 54 54 on the light theme is
+;; a dark tile in a light toolbar.  It was, for every drafter not on
+;; the dark theme, from the day the button shipped.  The theme is read
+;; rather than assumed, and an unreadable one keeps the dark grey that
+;; was always here.  Both sizes give a row width that is a multiple of
+;; 4 (48 and 96), so there is no row padding to get wrong.
 (defun lzp:bmp-bytes (size grid / fg bg rowbytes out row s i)
   (setq fg '(0 165 255)
-        bg '(54 54 54)
+        bg (if (eq (cal:ui) 'light) '(240 240 240) '(54 54 54))
         rowbytes (* 3 size))
   (setq out (append
               (list 66 77)                      ; "BM"
@@ -2116,6 +2123,17 @@
   (princ (strcat "\n  TEMPPREFIX : "
                  (if (= (type (getvar "TEMPPREFIX")) 'STR)
                      (getvar "TEMPPREFIX") "(not a string)")))
+  ;; which grey went behind the hexagon, and why.  A .bmp has no
+  ;; transparency, so this square is painted and the wrong one shows.
+  (princ (strcat "\n  theme      : "
+                 (cond ((eq (cal:ui) 'light) "light - icon ground 240 240 240")
+                       ((eq (cal:ui) 'dark)  "dark - icon ground 54 54 54")
+                       (t "cannot tell - icon ground 54 54 54, as it always was"))
+                 (if (and (getenv "CalofinTheme")
+                          (/= (getenv "CalofinTheme") ""))
+                     (strcat "  (CalofinTheme says "
+                             (getenv "CalofinTheme") ")")
+                     "  (COLORTHEME; CALSET overrides it)")))
   (setq paths (lzp:write-bmps))
   (cond
     (paths
@@ -2173,6 +2191,127 @@
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
   (princ))
 
+;;; -------------------- the two front-desk commands ---------------------
+;;  CALHELP and CALSET are machinery rather than drafting tools, which
+;;  is why they are here and not files of their own: this is where the
+;;  captions live, and where calofin's profile settings were already
+;;  being read and written (lzp:*poskey*, lzp:*pinkey*).  Both are in
+;;  NAMED_SATELLITES in tools/callib.py, so neither asks for a panel
+;;  button it has no use for.
+
+;; What a command IS, at the command line.  The captions have been
+;; here all along and the only way to read one was to open the panel
+;; and find the page the tool was filed on -- which is the same
+;; complaint the Find page answered inside the dialog, unanswered
+;; outside it.  Enter lists the lot.
+(defun c:CALHELP ( / *error* s hits n)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALHELP error: " msg)))
+    (if lzd:report (lzd:report "CALHELP" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALHELP" *lazpanel-version*))
+  (setq s (getstring T "\nCommand, or any part of one <Enter = all>: "))
+  (if lzd:ask (lzd:ask "Command, or any part of one" s))
+  (setq hits (if (= s "") (lzp:commands) (lzp:matches s)))
+  (cond
+    ((null hits)
+     (princ (strcat "\nNothing here matches \"" s "\".  CALHELP on its"
+                    " own lists every tool.")))
+    (t
+     (princ (strcat "\n" (itoa (length hits)) " tool"
+                    (if (= (length hits) 1) "" "s")
+                    (if (= s "") "" (strcat " matching \"" s "\""))
+                    " -- a name in brackets is not loaded in this"
+                    " session:"))
+     (foreach n hits
+       (princ (strcat "\n  " (if (lzp:has n) (strcat n) (strcat "(" n ")"))
+                      "  " (lzp:caption n))))))
+  (princ))
+
+;; The settings calofin keeps in the AutoCAD PROFILE, which is the one
+;; place a setting survives a rebuild: releases/ and LAZPASS.lsp are
+;; generated, so a number edited into either is gone at the next
+;; regeneration.  Each row is (key default what-it-does).
+(setq lzp:*settings*
+  '(("CalofinTheme"
+     "auto"
+     "dark / light / auto.  Which way the ink is picked: auto measures the drawing's background and AutoCAD's theme, and the other two say so outright when a measurement comes out wrong")
+    ("CalofinErrorDir"
+     ""
+     "the folder LAZDIAG writes its error report to.  Empty = the candidate walk, which starts at Downloads")
+    ("StockCover_Folder"
+     ""
+     "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
+
+(defun lzp:setshow ( / r v)
+  (princ "\ncalofin settings, as this session reads them:")
+  (foreach r lzp:*settings*
+    (setq v (getenv (car r)))
+    (princ (strcat "\n  " (car r)
+                   "\n      now: " (if (and v (/= v "")) v
+                                       (strcat "(unset -- " (cadr r) ")"))
+                   "\n      " (caddr r))))
+  (princ))
+
+(defun c:CALSET ( / *error* pick key v)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALSET error: " msg)))
+    (if lzd:report (lzd:report "CALSET" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALSET" *lazpanel-version*))
+  (lzp:setshow)
+  (initget "Theme Errordir Stockdir Quit")
+  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Quit] <Quit>: "))
+  (if lzd:ask (lzd:ask "Change which?" pick))
+  (setq key (cond ((= pick "Theme") "CalofinTheme")
+                  ((= pick "Errordir") "CalofinErrorDir")
+                  ((= pick "Stockdir") "StockCover_Folder")))
+  (cond
+    ((null key) (princ "\nNothing changed."))
+    ((= key "CalofinTheme")
+     ;; Undo is accepted everywhere Back is, unlisted (STANDARDS 1)
+     (initget "Dark Light Auto Back Undo")
+     (setq v (getkword "\nTheme [Dark/Light/Auto/Back] <Auto>: "))
+     (if lzd:ask (lzd:ask "Theme" v))
+     (cond
+       ((member v '("Back" "Undo")) (c:CALSET))
+       (t (setenv "CalofinTheme" (if v (strcase v) "Auto"))
+          ;; ...and beside the pins, where the VB palette reads it
+          ;; (ui/calofin_net/PaletteTheme.vb).  The profile is what the
+          ;; Lisp side reads and the registry is what the palette can
+          ;; reach, and a drafter who has said which way their screen
+          ;; reads has said it to both surfaces -- the same bargain the
+          ;; pinned row already strikes.
+          (vl-catch-all-apply
+            'vl-registry-write
+            (list lzp:*pinkey* "Theme"
+                  (if (= (strcase (getenv "CalofinTheme")) "AUTO") ""
+                      (strcase (getenv "CalofinTheme")))))
+          (princ (strcat "\nCalofinTheme is now "
+                         (getenv "CalofinTheme")
+                         ".  Every tool reads it on the next colour it"
+                         " picks; the toolbar icon takes it at the next"
+                         " LAZBUTTON or LAZICON, and the VB palette at"
+                         " its next chart.")))))
+    (t
+     (setq v (getstring T (strcat "\n" key
+                                  " (a folder, Back to leave it, "
+                                  "or . to clear it): ")))
+     (if lzd:ask (lzd:ask key v))
+     (cond
+       ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
+       ((= v "") (princ "\nUnchanged."))
+       ((= v ".")
+        (setenv key "")
+        (princ (strcat "\n" key " cleared.")))
+       (t (setenv key v)
+          (princ (strcat "\n" key " is now " v "."))))))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:commands))) " tools on the panel across "
@@ -2201,8 +2340,18 @@
   '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 
-(princ (strcat "\nLAZPANEL " *lazpanel-version*
-               " loaded.  LAZPANEL opens the panel;"
-               " LAZBUTTON puts its button on screen;"
-               " LAZPIN edits the pinned row."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZPANEL " *lazpanel-version*
+                 " loaded.  LAZPANEL opens the panel;"
+                 " LAZBUTTON puts its button on screen;"
+                 " LAZPIN edits the pinned row;"
+                 " CALHELP says what a command does;"
+                 " CALSET shows the settings.")))
 (princ)

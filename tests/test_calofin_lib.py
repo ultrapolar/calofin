@@ -92,6 +92,35 @@ check("osup brings the user's snaps back from the snapshot",
       vm.sysvars['OSMODE'] == 4133)
 vm.loads('(cal:sysrestore)')
 
+print("CALVER -- what is loaded, not just which library")
+# It printed one version out of the seventy-two this tree reports, and
+# the question a support call actually asks is "what are you running?".
+# There is no table: every tool sets its own banner global as it loads,
+# so the session IS the table and atoms-family reads it.
+vm = fresh()
+vm.loads('(setq *pool-version* "v9.9")'
+         '(setq spa:*version* "091126 REV19")'
+         '(setq *cchk-version* "v1.15")')
+vm.printed.clear()
+vm.loads('(c:CALVER)')
+out = "".join(str(x) for x in vm.printed)
+check("it still names the library first", out.startswith("\nCALOFIN-LIB "))
+check("and then every version global in the session",
+      all(t in out for t in ("POOL", "v9.9", "SPA", "091126 REV19",
+                             "CCHK", "v1.15")), out)
+check("both banner spellings come out as the tool's name",
+      "\n  POOL" in out and "\n  SPA" in out, out)
+check("the count is the number of rows",
+      ("%d calofin file(s)" % (out.count("\n  "))) in out, out)
+
+vm = fresh()
+vm.loads('(setq pool:*notaversion* "v1.0")')
+vm.printed.clear()
+vm.loads('(c:CALVER)')
+out = "".join(str(x) for x in vm.printed)
+check("a global that is not a version banner is not listed",
+      "NOTAVERSION" not in out.upper(), out)
+
 if FAILS:
     print("\n%d FAILED: %s" % (len(FAILS), ", ".join(FAILS)))
     sys.exit(1)

@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091026 REV25")
+(setq pool:*version* "091226 REV26")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -335,7 +335,10 @@
 ;;;  asked for turns red.  The nominal point rings below are what the
 ;;;  guide starts at before any measurement is in -- proportions, not
 ;;;  sizes, since the first answer rescales them.
-(setq pool:*pv-col*  8)         ; guide outline (dark gray)
+(setq pool:*pv-col*  'auto)     ; guide outline: 'auto picks the
+                                ; grey for the background (8 is
+                                ; nearly the stock dark one), a
+                                ; number is used exactly as given
 (setq pool:*pvx-col* 7)         ; cross-dim / measuring line (white)
 (setq pool:*hi-col*  1)         ; the element being asked for (red)
 (setq pool:*pv-margin* 30.0)    ; smallest margin round the guide's zoom
@@ -1284,7 +1287,7 @@
 (defun pool:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      pool:*pv-col*))
+      (cal:ink pool:*pv-col* 'guide)))
 
 ;; Guide entities for a list of corner-label keys, e.g. '(lA lB), so a
 ;; prompt can light up the letters it names as well as the line.
@@ -1297,7 +1300,7 @@
 
 (defun pool:pvline (p1 p2)
   (pool:line p1 p2 pool:*lay-notes*)
-  (pool:setcol (entlast) pool:*pv-col*))
+  (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))
 
 ;; Guide measuring line -- the cross dims and other ties, drawn WHITE
 ;; and DOTTED so they stand out from the gray pool outline.
@@ -1421,13 +1424,13 @@
     ((= ty "LINED") (pool:pvadd (pool:pvlined (cadr pr) (caddr pr))))
     ((= ty "TEXT")
      (pool:text (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     ((= ty "ARC")
      (pool:arc3p (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     ((= ty "ELL")
      (pool:pvell (cadr pr) (caddr pr) (cadddr pr))
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))))
 
 ;; The two primitives of one field-sheet tie -- the dotted measuring
 ;; line and its letter beside the midpoint.
@@ -4121,7 +4124,7 @@
       ((= (car cc) "Radius")
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                    pool:*lay-notes*)
-       (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))))
+       (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))))
     (setq i (1+ i)))
   pv)
 
@@ -5236,7 +5239,7 @@
     ((and pvflag pool:*pvcoll*) (pool:pvcput (list "ARC" p mm q)))
     (pvflag
      (pool:arc3p p mm q pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     (t (pool:arc3p p mm q lay))))
 
 ;;; ---------------- oval pool bottom (True Oval sheet) -----------------
@@ -8113,8 +8116,16 @@
                  (if tutorial:*version* tutorial:*version* "not loaded")))
   (princ))
 
-(princ (strcat "\nPOOL " pool:*version*
-               " loaded.  POOL to lay out a pool, POOLVER for the version"
-               (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
-               "."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOL " pool:*version*
+                 " loaded.  POOL to lay out a pool, POOLVER for the version"
+                 (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
+                 ".")))
 (princ)

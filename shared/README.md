@@ -39,7 +39,7 @@ file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-LAZPASS: calofin v3.6 loaded - 183 commands in one session.
+LAZPASS: calofin v3.6 loaded - 185 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:
@@ -48,11 +48,38 @@ Rebuild it after changing anything in `parts/`:
 python3 tools/build_shared_bundle.py
 ```
 
+### The load says one line
+
+Every member announces itself when it is APPLOADed alone, which is
+right; all of them announcing themselves here was **83 lines and
+6,681 characters** in every drawing a Startup Suite opened, before the
+drafter had done anything. `LAZPASS.lsp` sets `*calofin-quiet*` while
+it loads its members and clears it after, so the whole build says:
+
+```
+LAZPASS: calofin v3.12 loaded - 185 commands in one session.
+```
+
+A single tool APPLOADed over the top of the build still greets you,
+because the flag is clear again by then -- and `CALVER` will tell you
+it is there, which is the point of the next section.
+
+### CALVER: what is loaded, at which version
+
+`CALVER` names every calofin file this session is carrying and the
+version each is at. There is no table of them and there is not going
+to be: each tool sets its own banner global as it loads, so the
+SESSION is the table, and `atoms-family` reads it. That is why a
+single newer file loaded over the build shows its own newer number
+against that one tool -- which is the mix a support call is usually
+trying to untangle, and exactly what a generated list would have
+hidden.
+
 ### Do not APPLOAD parts/CALOFIN-LIB.lsp on its own
 
 It is the helper library: it defines the `cal:` helpers and exactly one
 command (`CALVER`). Loaded alone it looks like it worked -- it prints
-`CALOFIN-LIB v1.5 loaded` -- but not one tool comes with it, so `POOL`,
+`CALOFIN-LIB v1.7 loaded` -- but not one tool comes with it, so `POOL`,
 `SPA` and the rest are all still undefined. It now says so when that
 happens.
 

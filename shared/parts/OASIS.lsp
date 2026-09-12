@@ -229,7 +229,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.6")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.7")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -264,7 +264,11 @@
 (setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
-(setq oasis:*guidecolor* 8)
+(setq oasis:*guidecolor* 'auto)        ; 'auto picks it for the background:
+                                       ; 8 on a light one, a lighter grey on
+                                       ; a dark one, where 8 is very nearly
+                                       ; the background itself.  A number is
+                                       ; used exactly as given
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
 ;; Two styles, because the two drawings are read differently: the pool
@@ -3306,7 +3310,8 @@
          (command "_.UNDO" "_Begin")
          (setq undo-open T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
-     (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
+     (cal:ensure-layer oasis:*guidelayer*
+                        (cal:ink oasis:*guidecolor* 'guide))
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
 
      ;; -- which shape, where it goes, and then the eight measurements,
@@ -3482,6 +3487,14 @@
   (princ (strcat "\nOASIS " *oasis-version*))
   (princ))
 
-(princ (strcat "\nOASIS " *oasis-version*
-               " loaded.  Type OASIS to draw a continuous-tangent pool."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nOASIS " *oasis-version*
+                 " loaded.  Type OASIS to draw a continuous-tangent pool.")))
 (princ)

@@ -87,7 +87,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.17")
+(setq *lazform-version* "v2.18")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1091,6 +1091,14 @@
 (setq lzf:*dx* 0)               ; the tile's extent this time round
 (setq lzf:*dy* 0)
 
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
 
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
@@ -1210,7 +1218,7 @@
       (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   cal:*imgcol-hi*))
+                   (cal:ink cal:*imgcol-hi* 'hi)))
   (cal:imgtext txt lx ly sc
             (if (= (lzf:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
 
@@ -1229,7 +1237,7 @@
     (lzf:pline (cal:imgflatten poly) cal:*imgcol-line*))
   (foreach d (lzf:dims c)
     (lzf:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d) (nth 6 d)
-               cal:*imgcol-dim*))
+               (cal:ink cal:*imgcol-dim* 'dim)))
   (foreach d (lzf:dims c) (lzf:label d))
   (end_image)
   (princ))
@@ -2611,6 +2619,14 @@
                  (itoa n) " of them OASIS."))
   (princ))
 
-(princ (strcat "\nLAZFORM " *lazform-version*
-               " loaded.  Type LAZFORM to fill a chart in and draw it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZFORM " *lazform-version*
+                 " loaded.  Type LAZFORM to fill a chart in and draw it.")))
 (princ)

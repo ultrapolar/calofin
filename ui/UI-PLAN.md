@@ -602,6 +602,50 @@ vectors. Its map is now held to `assets/bottoms/fieldmap.json` by
 `tests/test_pool_form.py` in the meantime, since the JSON was pinned to
 POOL and the VB that actually ships was pinned to nothing.
 
+### Phase 5j -- the half-themed surfaces *(done 2026-09-12)*
+
+Not visuals in the sense phase 0 ruled out ("DCL's look is fixed and
+nobody is going to change it") -- that is true of the dialog's chrome
+and not of what is drawn INSIDE it. Three surfaces were following the
+host halfway, which is worse than not following it at all, because the
+half that adapts makes the half that does not look like the bug it is:
+
+- **The chart tiles.** `lzX:*col-line*` and `lzX:*col-back*` were
+  already `-16` and `-15`, the dialog's own foreground and background.
+  Beside them `lzX:*col-dim*` was a hard `8` and `lzX:*col-hi*` a hard
+  `5` -- a dark grey and a dark blue, the two things a dark dialog
+  swallows. Both say `'auto` now and resolve through `cal:ink`'s
+  `dim` / `hi` roles, which read `COLORTHEME` because that is what
+  `-15` and `-16` are already following. Orange `30` stayed a number:
+  it is the one that reads either way round.
+- **The toolbar icon.** A `.bmp` has no alpha, so the square around
+  the hexagon is painted, and it was painted `54 54 54` for everybody
+  -- a dark tile in every light-themed toolbar since the button
+  shipped. `LAZICON` names the ground it used now.
+- **The palette's entry boxes.** `ChartFormView` took its ink from
+  `SystemColors.ControlTextBrushKey` and then painted the boxes
+  `ARGB(235,255,255,255)` with `Brushes.Black`; `PoolFormView` the
+  same. `PaletteTheme.vb` answers the question once -- the shared
+  `Theme` value `CALSET` writes beside the pins, then `COLORTHEME`,
+  then the Windows control colour -- and both views take their brushes
+  from it.
+
+**What this environment still cannot prove** is the third one: nothing
+VB compiles here. `tools/check_vb.py` reads `PaletteTheme.vb` as code
+and `tests/test_theme.py` pins the Lisp half at both tiers, but
+whether `AcadApp.GetSystemVariable("COLORTHEME")` comes back as the
+Int16 this assumes is a question for the first real build -- it is
+wrapped, and a throw there falls through to the Windows colour, so the
+failure mode is the old behaviour rather than a dead palette.
+
+**And the override is deliberately in two places.** The Lisp side
+reads `CalofinTheme` from the AutoCAD profile (`getenv`), which is
+where `CalofinErrorDir` and the stock folder already live; the palette
+reads `Theme` from `HKEY_CURRENT_USER\Software\Calofin\LazPanel`,
+which is where it already reads the pins. `CALSET` writes both in one
+go, for the same reason `PaletteMemory` shares the pin key: a drafter
+says which way their screen reads once, not once per surface.
+
 ## After the plan: what nothing was checking
 
 The five phases added roughly 1,240 `action_tile` callbacks across 37

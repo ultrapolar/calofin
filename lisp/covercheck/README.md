@@ -180,7 +180,7 @@ The tables below are the block, read off it:
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `*cchk-grey-color*` | `8` | ACI: everything not under review, faded (grey) |
+| `*cchk-grey-color*` | `'auto` | ACI: everything not under review, faded (grey). `'auto` fades it the way round the drawing needs -- darker than the work on a dark background, lighter on a light one. A number is used exactly as given |
 | `*cchk-flag-color*` | `1` | ACI: what you answered "No" to (red) |
 | `*cchk-arc-color*` | `6` | ACI: arcs whose endpoints were moved (magenta) |
 | `*cchk-olap-color*` | `4` | ACI: merged or flagged overlapping lines (cyan) |

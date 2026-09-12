@@ -28,7 +28,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.6")
+(setq *tutperp-version* "v0.7")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -368,6 +368,14 @@
               "Tutorial finished.  Type PERPPTS to try it for real."))
   (princ))
 
-(princ (strcat "\ntutorial_perp_points.lsp " *tutperp-version*
-               " loaded.  Type TUTORIALPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ntutorial_perp_points.lsp " *tutperp-version*
+                 " loaded.  Type TUTORIALPERPPTS to run.")))
 (princ)

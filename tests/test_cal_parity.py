@@ -109,6 +109,33 @@ INPUTS = {
     "cal:imgtextw": ['"AB" 1.0', '"" 1.0'],
     "cal:imgglyph": ['"A"', '"0"', '" "'],
     "cal:formanswer": ['"12"', '""', "nil"],
+    # The ink table.  Its other input is the THEME, which travels in
+    # the profile rather than in an argument, so each case sets it in
+    # the first slot: a progn that writes CalofinTheme and then hands
+    # over the knob.  Both halves of the pair evaluate their own copy
+    # of that, so each sees the same profile -- and eleven tools carry
+    # a copy of this body, which is exactly the kind of duplication
+    # this file exists to hold together.  The last case leaves the
+    # override cleared for whatever runs next.
+    "cal:ink": [
+        '(progn (setenv "CalofinTheme" "dark") \'auto) \'fade',
+        '(progn (setenv "CalofinTheme" "dark") \'auto) \'guide',
+        '(progn (setenv "CalofinTheme" "dark") \'auto) \'dim',
+        '(progn (setenv "CalofinTheme" "dark") \'auto) \'hi',
+        '(progn (setenv "CalofinTheme" "dark") \'auto) \'nosuchrole',
+        '(progn (setenv "CalofinTheme" "light") \'auto) \'fade',
+        '(progn (setenv "CalofinTheme" "light") \'auto) \'guide',
+        '(progn (setenv "CalofinTheme" "light") \'auto) \'dim',
+        '(progn (setenv "CalofinTheme" "light") \'auto) \'hi',
+        # a number is that number, whatever the theme says
+        '(progn (setenv "CalofinTheme" "dark") 8) \'fade',
+        '(progn (setenv "CalofinTheme" "light") 5) \'hi',
+        # and with nothing measurable and no override, today's numbers
+        '(progn (setenv "CalofinTheme" "") \'auto) \'fade',
+        '(progn (setenv "CalofinTheme" "") \'auto) \'guide',
+        '(progn (setenv "CalofinTheme" "") \'auto) \'dim',
+        '(progn (setenv "CalofinTheme" "") \'auto) \'hi',
+    ],
 }
 
 #: Swaps this file does not call, and why.  Every one needs something a
@@ -117,6 +144,7 @@ INPUTS = {
 #: context exists (test_calofin_lib.py, and the tool's own suite at both
 #: tiers, which is what `make parity` is).
 SKIP = {
+    "cal:ui": "takes no arguments, so the theme it reads cannot be set\n              up from one; tests/test_theme.py drives both copies\n              through every theme instead",
     "cal:askkw": "asks; driven by every form suite at both tiers",
     "cal:askyn": "asks",
     "cal:askstr": "asks",

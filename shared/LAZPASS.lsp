@@ -8,39 +8,39 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 63 files, 183 commands:
+;;; 63 files, 185 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABMOVE
 ;;;   ABPCHECK  ABPCHECKRESCUE  ABPCHECKVER  ABPCREATE  ADAB  ALTABCDEF
 ;;;   ALTABCDEFVER  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV  AUTODIMVER
-;;;   BPCALLOUT  BPCALLOUTVER  CABHD  CABHDVER  CALVER  CCPRECHECK
-;;;   CCPRECHECKVER  CDCALLOUT  CDCALLOUTVER  CDCREATE  CDCREATEVER  CHECK
-;;;   CHECKVER  CONSTELLATION  CONSTELLATIONVER  CORNERSTP  CORNERSTPVER  COVERCHECK
-;;;   COVERCHECKRESCUE  COVERCHECKVER  COVERCHECKVERSION  COVERSCAN  CPERPPTS  CPERPPTSVER
-;;;   CUSTBLOCK  CUSTBLOCKVER  DCE  DDALT  DDCAL  DDELEV
-;;;   DDFIX  DDFIXVER  DDGPS  DDGPSVER  DDINFO  DDSET
-;;;   DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND
-;;;   DIMCONTENDVER  DIMSCAN  DRONE  DRONEVER  FITABHD  FITABHDCOVER
-;;;   FITABHDVER  FLOORDIM  G2MCONV  G2MCONVVER  G2MRECONV  HEMISTEP
-;;;   HEMISTEPVER  HONEFILLET  HONEFILLETVER  LAZASCII  LAZBUTTON  LAZDIAG
-;;;   LAZDIAGVER  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON  LAZPANEL
-;;;   LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER
-;;;   LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK
-;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER
-;;;   LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF
-;;;   LOBFVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  PADDLE
-;;;   PADDLEVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL
-;;;   POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER
-;;;   SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV
-;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE
-;;;   SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER
-;;;   STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK
-;;;   TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK
-;;;   TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA
-;;;   TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER
-;;;   VSRECONV  WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER
-;;;   XFTRECONV  XYPLOT  XYPLOTVER
+;;;   BPCALLOUT  BPCALLOUTVER  CABHD  CABHDVER  CALHELP  CALSET
+;;;   CALVER  CCPRECHECK  CCPRECHECKVER  CDCALLOUT  CDCALLOUTVER  CDCREATE
+;;;   CDCREATEVER  CHECK  CHECKVER  CONSTELLATION  CONSTELLATIONVER  CORNERSTP
+;;;   CORNERSTPVER  COVERCHECK  COVERCHECKRESCUE  COVERCHECKVER  COVERCHECKVERSION  COVERSCAN
+;;;   CPERPPTS  CPERPPTSVER  CUSTBLOCK  CUSTBLOCKVER  DCE  DDALT
+;;;   DDCAL  DDELEV  DDFIX  DDFIXVER  DDGPS  DDGPSVER
+;;;   DDINFO  DDSET  DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE
+;;;   DIMCHECKVER  DIMCONTEND  DIMCONTENDVER  DIMSCAN  DRONE  DRONEVER
+;;;   FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM  G2MCONV  G2MCONVVER
+;;;   G2MRECONV  HEMISTEP  HEMISTEPVER  HONEFILLET  HONEFILLETVER  LAZASCII
+;;;   LAZBUTTON  LAZDIAG  LAZDIAGVER  LAZFORM  LAZFORMCOVER  LAZFORMVER
+;;;   LAZICON  LAZPANEL  LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER
+;;;   LAZSTEP  LAZSTEPVER  LAZTXT  LHD  LHDVER  LINCHECK
+;;;   LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER
+;;;   LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN
+;;;   LITESPACHECKSCAN  LOBF  LOBFVER  NORMIESTEP  NORMIESTEPVER  OASIS
+;;;   OASISVER  PADDLE  PADDLEVER  PERPPTS  PERPPTSVER  POINTRENAMER
+;;;   POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE
+;;;   POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV
+;;;   SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN
+;;;   SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER
+;;;   STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
+;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
+;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
+;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE
+;;;   VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV
+;;;   XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -52,6 +52,16 @@
 
 ;; tells CALOFIN-LIB.lsp it is arriving as part of the whole build
 (setq cal:*build-loading* T)
+
+;; ...and tells all sixty-three members to load QUIETLY.  Each
+;; one announces itself when it is APPLOADed alone, which is
+;; right; all of them announcing themselves here was 83 lines
+;; and 6,681 characters of scrollback in every drawing opened,
+;; before the drafter had done anything.  CALVER reads the whole
+;; roster back whenever it is asked for.  Not a cal: symbol: a
+;; lisp/ file may not call or set one (check_standards), and the
+;; standalone files are where the banners live.
+(setq *calofin-quiet* T)
 
 
 ;;; ======================================================================
@@ -84,10 +94,53 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.6")
+(setq cal:*version* "v1.7")
 
-(defun c:CALVER ()
+
+;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
+;;  their own version and CALVER used to report one of them -- this
+;;  file's -- so the question a support call actually asks ("what are
+;;  you running?") was seventy-two commands' worth of typing, and a
+;;  LAZDIAG report names only the tool that failed.
+;;
+;;  There is no table of versions here and there is not going to be:
+;;  every tool sets its own banner global as it loads, so the SESSION
+;;  is the table.  atoms-family reads it, which means a drafter who
+;;  has APPLOADed a newer single file over the bundle sees the newer
+;;  number against that one tool -- exactly the mix a support call is
+;;  usually trying to untangle, and exactly what a generated list
+;;  would have hidden.
+
+;; The version globals this session carries, as (label . value) pairs,
+;; sorted by label.  Two banner spellings exist -- *tool-version* and
+;; the POOL/SPA ns:*version* -- and both end up as the tool's name.
+(defun cal:vlabel (n / s)
+  (setq s n)
+  ;; vl-string-search counts from 0, so the index IS the length of the
+  ;; part in front of the colon
+  (if (wcmatch s "*:*") (setq s (substr s 1 (vl-string-search ":" s))))
+  (setq s (vl-string-trim "*" s))
+  (if (wcmatch (strcase s) "*-VERSION")
+    (setq s (substr s 1 (- (strlen s) 8))))
+  (strcase s))
+
+(defun cal:versions ( / out n v)
+  (foreach n (atoms-family 1)
+    (if (and (wcmatch n "*VERSION*")
+             (= (type (setq v (eval (read n)))) 'STR))
+      (setq out (cons (cons (cal:vlabel n) v) out))))
+  (vl-sort out '(lambda (a b) (< (car a) (car b)))))
+
+(defun c:CALVER ( / all v)
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
+  (setq all (cal:versions))
+  (cond
+    ((null all) (princ))
+    (t
+     (princ (strcat "\n" (itoa (length all))
+                    " calofin file(s) loaded in this session:"))
+     (foreach v all
+       (princ (strcat "\n  " (cal:pad (car v) 22) " " (cdr v))))))
   (princ))
 
 ;;; -------------------- ask layer ---------------------------------------
@@ -290,6 +343,123 @@
   (if p (setvar "OSMODE" (cdr p))))
 
 (defun cal:osdown () (setvar "OSMODE" 0))
+
+;;; -------------------- settings, the theme and the ink -----------------
+;;;
+;;;  Three things a tool cannot learn by reading itself: what the shop
+;;;  has changed, which way AutoCAD's interface reads, and which way the
+;;;  drawing it is about to draw into reads.  All three are answered
+;;;  here, once, so that a colour is CHOSEN in one table instead of
+;;;  being assumed in fourteen tunables blocks.
+
+;; A setting the drafter may have moved out of the source: the profile
+;; value KEY holds, or DFLT when it holds nothing.  The literal in the
+;; file stays the default, so a tree with no profile entries behaves
+;; exactly as it reads -- what the profile buys is SURVIVAL, which the
+;; source does not have: releases/ and LAZPASS.lsp are generated, so a
+;; number edited into either is gone at the next regeneration.  (From
+;; STOCKCOVER's stock:getenv and LAZDIAG's CalofinErrorDir, which had
+;; this idea one folder at a time.)
+(defun cal:setting (key dflt / v)
+  (setq v (getenv key))
+  (if (and v (/= v "")) v dflt))
+
+;; What CalofinTheme has been set to: 'dark, 'light, or nil for "work
+;; it out".  One override for both probes below, because a drafter who
+;; disagrees with what was measured should have to say so once rather
+;; than once per tool.  CALSET writes it.
+(defun cal:themeset ( / v)
+  (setq v (strcase (cal:setting "CalofinTheme" "AUTO")))
+  (cond ((= v "DARK") 'dark)
+        ((= v "LIGHT") 'light)))
+
+;; Which way AutoCAD's INTERFACE reads: 'dark, 'light, or nil when the
+;; release will not say (COLORTHEME arrived with 2015).  The DCL tiles
+;; and the toolbar icon follow this one and not the drawing: a dialog's
+;; -15 and -16 are whatever the interface is, so anything drawn beside
+;; them has to be asking the same question or it comes out half themed.
+(defun cal:ui ( / v)
+  (cond ((cal:themeset))
+        ((null (setq v (getvar "COLORTHEME"))) nil)
+        ((= v 0) 'dark)
+        (t 'light)))
+
+;; Which way the DRAWING reads: 'dark, 'light, or nil when the
+;; background cannot be measured.  A different question from cal:ui --
+;; the interface theme and the model background are set in different
+;; dialogs, and a light-themed AutoCAD over the stock near-black model
+;; space is an ordinary way to work.
+;;
+;; The measurement is COM, so it is wrapped: a session that cannot
+;; reach ActiveX answers nil rather than dying inside a colour lookup.
+;; Nothing is cached.  Caching it would be one global more than this
+;; buys: the review tools resolve the grey ONCE per pass into a local
+;; of the command, which is where the volume is, and the rest of the
+;; tree asks for a colour two or three times in a run.  A cache would
+;; also have to be a session global, and COVERCHECK, DIMCHECK and
+;; LINFINCHECK each say in their own tunables block that they keep no
+;; state between runs -- a claim worth more than three property gets.
+(defun cal:bg ( / c lum)
+  (cond
+    ((cal:themeset))
+    (t
+     (setq c (vl-catch-all-apply
+               '(lambda ()
+                  (vl-load-com)
+                  (vla-get-GraphicsWinModelBackgrndColor
+                    (vla-get-Display
+                      (vla-get-Preferences (vlax-get-acad-object)))))
+               nil))
+     (if (or (vl-catch-all-error-p c) (not (numberp c)))
+       nil
+       (progn
+         ;; an OLE colour is packed low byte first: R, then G, then B
+         (setq c   (fix c)
+               lum (+ (* 0.30 (rem c 256))
+                      (* 0.59 (rem (/ c 256) 256))
+                      (* 0.11 (rem (/ c 65536) 256))))
+         (if (< lum 128.0) 'dark 'light))))))
+
+;;  THE INK TABLE.  A colour knob set to 'auto asks for the ACI that
+;;  suits the background it will be seen against; a knob set to a
+;;  NUMBER is used exactly as given, so a shop that has picked its own
+;;  colours keeps them and every existing test still measures what it
+;;  measured before.
+;;
+;;    role     what it is                    dark  light  unmeasured
+;;    fade     the review tools' grey-out     251    254        8
+;;    guide    preview and guide geometry     253      8        8
+;;    dim      a chart tile's dimensions      253      8        8
+;;    hi       a chart tile's active box        4      5        5
+;;
+;;  fade and guide are drawn into the DRAWING and read cal:bg; dim and
+;;  hi are drawn inside a dialog and read cal:ui.
+;;
+;;  Two rules decided the numbers.  FADE has to recede, which on a dark
+;;  background means darker than the work and on a light one means
+;;  lighter: 8 does the first and the opposite of the second, which is
+;;  why a review sheet opened on a white background used to come up
+;;  with its greyed-out half as the most prominent thing on screen.
+;;  GUIDE has to be read while it is answered but not compete with the
+;;  pool, which is 8 on white and nearly the background itself on the
+;;  stock dark grey.  The unmeasured column is deliberately what the
+;;  tree did before this table existed: a session that cannot tell is
+;;  not a session that changes behaviour.
+(defun cal:ink (knob role / th)
+  (if (not (eq knob 'auto))
+    knob
+    (progn
+      (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
+      (cond
+        ((eq role 'fade)
+         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+        ((eq role 'guide)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'dim)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'hi)
+         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+        (t 7)))))
 
 ;;; -------------------- layers ------------------------------------------
 
@@ -627,12 +797,17 @@
 
 ;; The tile palette.  -16 and -15 are the dialog's own foreground and
 ;; background, so the chart follows the user's AutoCAD theme rather
-;; than fighting it; the other three are real colour numbers.
+;; than fighting it -- and the two that are drawn BESIDE them say
+;; 'auto, which asks cal:ink the same question (a dark grey dimension
+;; arrow and a dark blue focus box are the two things on this tile that
+;; a dark dialog swallows, and -16 adapting while they do not is what
+;; half-themed looks like).  Orange is the one that reads either way,
+;; so it is the one still written as a number.
 (setq cal:*imgcol-line* -16)
 (setq cal:*imgcol-back* -15)
-(setq cal:*imgcol-dim* 8)
+(setq cal:*imgcol-dim* 'auto)
 (setq cal:*imgcol-val* 30)
-(setq cal:*imgcol-hi* 5)
+(setq cal:*imgcol-hi* 'auto)
 
 ;; one character's polylines, or nil
 (defun cal:imgglyph (ch / p)
@@ -835,8 +1010,14 @@
   (if val val fall))
 
 ;;; ----------------------------------------------------------------------
-(princ (strcat "\nCALOFIN-LIB " cal:*version*
-               " loaded.  Shared helpers under the cal: prefix."))
+;; Quiet inside the whole build, on the same rule every member
+;; follows -- the build says once that it loaded, and CALVER says what
+;; it loaded.  cal:*build-loading* is this file's own flag rather than
+;; the members' *calofin-quiet*, because it is already set for exactly
+;; this file and means exactly this.
+(if (not cal:*build-loading*)
+  (princ (strcat "\nCALOFIN-LIB " cal:*version*
+                 " loaded.  Shared helpers under the cal: prefix.")))
 ;; On its own this file defines helpers and exactly one command
 ;; (CALVER) -- no tools at all.  LAZPASS.lsp and CALOFIN-LOADER.lsp
 ;; both set the flag below before loading it, so this only ever fires
@@ -958,7 +1139,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.1")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -1941,10 +2122,18 @@
   (princ (strcat "\nLAZDIAG " *lazdiag-version*))
   (princ))
 
-(princ (strcat "\nLAZDIAG " *lazdiag-version*
-               " loaded -- a failed calofin command now writes a DXF"
-               " error report to your Downloads folder; type LAZDIAG to"
-               " prove that works before you ever need it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZDIAG " *lazdiag-version*
+                 " loaded -- a failed calofin command now writes a DXF"
+                 " error report to your Downloads folder; type LAZDIAG to"
+                 " prove that works before you ever need it.")))
 (princ)
 
 
@@ -2081,7 +2270,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091026 REV25")
+(setq pool:*version* "091226 REV26")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -2289,7 +2478,10 @@
 ;;;  asked for turns red.  The nominal point rings below are what the
 ;;;  guide starts at before any measurement is in -- proportions, not
 ;;;  sizes, since the first answer rescales them.
-(setq pool:*pv-col*  8)         ; guide outline (dark gray)
+(setq pool:*pv-col*  'auto)     ; guide outline: 'auto picks the
+                                ; grey for the background (8 is
+                                ; nearly the stock dark one), a
+                                ; number is used exactly as given
 (setq pool:*pvx-col* 7)         ; cross-dim / measuring line (white)
 (setq pool:*hi-col*  1)         ; the element being asked for (red)
 (setq pool:*pv-margin* 30.0)    ; smallest margin round the guide's zoom
@@ -3238,7 +3430,7 @@
 (defun pool:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      pool:*pv-col*))
+      (cal:ink pool:*pv-col* 'guide)))
 
 ;; Guide entities for a list of corner-label keys, e.g. '(lA lB), so a
 ;; prompt can light up the letters it names as well as the line.
@@ -3251,7 +3443,7 @@
 
 (defun pool:pvline (p1 p2)
   (pool:line p1 p2 pool:*lay-notes*)
-  (pool:setcol (entlast) pool:*pv-col*))
+  (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))
 
 ;; Guide measuring line -- the cross dims and other ties, drawn WHITE
 ;; and DOTTED so they stand out from the gray pool outline.
@@ -3375,13 +3567,13 @@
     ((= ty "LINED") (pool:pvadd (pool:pvlined (cadr pr) (caddr pr))))
     ((= ty "TEXT")
      (pool:text (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     ((= ty "ARC")
      (pool:arc3p (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     ((= ty "ELL")
      (pool:pvell (cadr pr) (caddr pr) (cadddr pr))
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))))
 
 ;; The two primitives of one field-sheet tie -- the dotted measuring
 ;; line and its letter beside the midpoint.
@@ -6075,7 +6267,7 @@
       ((= (car cc) "Radius")
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                    pool:*lay-notes*)
-       (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))))
+       (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))))
     (setq i (1+ i)))
   pv)
 
@@ -7190,7 +7382,7 @@
     ((and pvflag pool:*pvcoll*) (pool:pvcput (list "ARC" p mm q)))
     (pvflag
      (pool:arc3p p mm q pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     (t (pool:arc3p p mm q lay))))
 
 ;;; ---------------- oval pool bottom (True Oval sheet) -----------------
@@ -10067,10 +10259,18 @@
                  (if tutorial:*version* tutorial:*version* "not loaded")))
   (princ))
 
-(princ (strcat "\nPOOL " pool:*version*
-               " loaded.  POOL to lay out a pool, POOLVER for the version"
-               (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
-               "."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOL " pool:*version*
+                 " loaded.  POOL to lay out a pool, POOLVER for the version"
+                 (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
+                 ".")))
 (princ)
 
 
@@ -10111,7 +10311,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "090126 REV07")
+(setq pooldemo:*version* "091226 REV08")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -10492,8 +10692,16 @@
   (princ (strcat "\nPOOLDEMO " pooldemo:*version*))
   (princ))
 
-(princ (strcat "\nPOOLDEMO " pooldemo:*version*
-               " loaded.  Type POOLDEMO to draw the install-check sheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOLDEMO " pooldemo:*version*
+                 " loaded.  Type POOLDEMO to draw the install-check sheet.")))
 (princ)
 
 
@@ -10530,7 +10738,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "090126 REV07")
+(setq tutorial:*version* "091226 REV08")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -10913,8 +11121,16 @@
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
-(princ (strcat "\nTUTORIALPOOL " tutorial:*version*
-               " loaded.  Type TUTORIALPOOL for a guided walkthrough of POOL.LSP."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTUTORIALPOOL " tutorial:*version*
+                 " loaded.  Type TUTORIALPOOL for a guided walkthrough of POOL.LSP.")))
 (princ)
 
 
@@ -10982,14 +11198,16 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.3")
+(setq *poolside-version* "v1.4")
 
 ;;; -------------------- adjustable constants ---------------------------
 
 (setq psd:*base*       (list 0.0 0.0))  ; insertion base for this run
 (setq psd:*pvents*     nil)             ; live guide entities
 (setq psd:*valnotes*   nil)             ; validation problems, for the notes
-(setq psd:*pv-col*     8)               ; guide outline color (dark gray)
+(setq psd:*pv-col*     'auto)           ; guide outline color: 'auto picks
+                                        ; it for the background (grey either
+                                        ; way round), a number is used as given
 (setq psd:*pvx-col*    7)               ; guide measuring-tie color (white)
 (setq psd:*hi-col*     1)               ; highlight color (red)
 
@@ -11056,7 +11274,7 @@
 (defun psd:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      psd:*pv-col*))
+      (cal:ink psd:*pv-col* 'guide)))
 
 ;;; -------------------- guide preview ----------------------------------
 ;;; Everything the guide draws is tracked here, so the *error* handler
@@ -11074,7 +11292,7 @@
 ;; over the outline).
 (defun psd:pvline (p1 p2)
   (psd:line p1 p2 "POOL-NOTES")
-  (psd:setcol (entlast) psd:*pv-col*))
+  (psd:setcol (entlast) (cal:ink psd:*pv-col* 'guide)))
 
 (defun psd:pvtieline (p1 p2)
   (psd:line p1 p2 "POOL-NOTES")
@@ -11615,8 +11833,16 @@
   (princ (strcat "\nPOOLSIDE " *poolside-version*))
   (princ))
 
-(princ (strcat "\nPOOLSIDE " *poolside-version*
-               " loaded.  Type POOLSIDE to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOLSIDE " *poolside-version*
+                 " loaded.  Type POOLSIDE to run.")))
 (princ)
 
 
@@ -11850,7 +12076,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091126 REV19")
+(setq spa:*version* "091226 REV20")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -12064,7 +12290,10 @@
 ;;;  A grey nominal spa is drawn as soon as the shape is picked and the
 ;;;  element being measured turns red.  The nominal sizes below are what
 ;;;  the guide is drawn at before any measurement is in.
-(setq spa:*pv-col*  8)          ; guide outline (dark gray)
+(setq spa:*pv-col*  'auto)      ; guide outline: 'auto picks the
+                                ; grey for the background (8 is
+                                ; nearly the stock dark one), a
+                                ; number is used exactly as given
 (setq spa:*pvx-col* 7)          ; measuring tie (white)
 (setq spa:*hi-col*  1)          ; the element being asked for (red)
 ;;  The RECTANGLE guide's nominal box.  The octagon and round guides
@@ -12954,7 +13183,7 @@
 (defun spa:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      spa:*pv-col*))
+      (cal:ink spa:*pv-col* 'guide)))
 
 ;; Guide entities for a list of corner-label keys, e.g. '(lA lB).
 (defun spa:lbl (pv keys / out k)
@@ -12971,7 +13200,7 @@
 
 (defun spa:pvline (p1 p2)
   (spa:line p1 p2 spa:*lay-notes* nil)
-  (spa:setcol (entlast) spa:*pv-col*))
+  (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
 
 ;; Guide measuring line, drawn WHITE and DOTTED so it stands out from
 ;; the gray outline.
@@ -12985,7 +13214,7 @@
   (setq e (spa:pvadd (spa:pvlined p q)))
   (spa:text (cal:v+ (cal:mid p q) (list (* 0.5 th) (* 0.5 th)))
             (* 1.2 th) lbl spa:*lay-notes*)
-  (setq et (spa:pvadd (spa:setcol (entlast) spa:*pv-col*)))
+  (setq et (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))))
   (cons lbl (list e et)))
 
 ;; Remove an item (by equality) from a list.
@@ -14354,7 +14583,7 @@
       ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                   spa:*lay-notes* nil)
-       (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))))
+       (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))))
     (setq i (1+ i)))
   pv)
 
@@ -14470,7 +14699,7 @@
     (spa:text (cal:v+ (car pr)
                       (cal:v* (spa:unit (cal:v- (car pr) cen)) spa:*pv-lbl*))
               spa:*pv-th* (cadr pr) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) spa:*pv-col*)
+    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
           all (cons ent all)
           pv (cons (cons (spa:lblkey (cadr pr)) (list ent)) pv)))
   (setq spa:*pvents* all)
@@ -14868,7 +15097,7 @@
   (foreach p npts
     (spa:text (spa:lbloff p cen npts spa:*pv-olbl*) spa:*pv-th*
               (nth k spa:*octnames*) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) spa:*pv-col*)
+    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
           all (cons ent all)
           pv (cons (cons (spa:lblkey (nth k spa:*octnames*)) (list ent)) pv)
           k (1+ k)))
@@ -15133,7 +15362,7 @@
 (defun spa:roundpreview ( / cen pv)
   (setq cen (list 120.0 120.0))
   (spa:body-round cen 240.0 240.0 spa:*lay-notes* nil)
-  (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))
+  (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
   (setq pv (list
     (spa:pvtie (list 0.0 285.0) (list 240.0 285.0) "B" spa:*pv-tie*)
     (spa:pvtie (list -50.0 0.0) (list -50.0 240.0) "A" spa:*pv-tie*)))
@@ -15478,10 +15707,18 @@
                  (if tut:*version* tut:*version* "not loaded")))
   (princ))
 
-(princ (strcat "\nSPA " spa:*version*
-               " loaded.  SPA to draw, SPAVER for the version"
-               (if tut:*version* ", TUTORIALSPA to learn it" "")
-               "."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPA " spa:*version*
+                 " loaded.  SPA to draw, SPAVER for the version"
+                 (if tut:*version* ", TUTORIALSPA to learn it" "")
+                 ".")))
 (princ)
 
 
@@ -15518,7 +15755,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "091126 REV12")
+(setq tut:*version* "091226 REV13")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -16005,8 +16242,16 @@
         (if *pop-error-mode* (*pop-error-mode*))
         (princ))))
 
-(princ (strcat "\nTUTORIALSPA " tut:*version*
-               " loaded.  Type TUTORIALSPA to walk through SPA."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTUTORIALSPA " tut:*version*
+                 " loaded.  Type TUTORIALSPA to walk through SPA.")))
 (princ)
 
 
@@ -16245,7 +16490,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.6")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.7")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -16280,7 +16525,11 @@
 (setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
-(setq oasis:*guidecolor* 8)
+(setq oasis:*guidecolor* 'auto)        ; 'auto picks it for the background:
+                                       ; 8 on a light one, a lighter grey on
+                                       ; a dark one, where 8 is very nearly
+                                       ; the background itself.  A number is
+                                       ; used exactly as given
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
 ;; Two styles, because the two drawings are read differently: the pool
@@ -19322,7 +19571,8 @@
          (command "_.UNDO" "_Begin")
          (setq undo-open T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
-     (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
+     (cal:ensure-layer oasis:*guidelayer*
+                        (cal:ink oasis:*guidecolor* 'guide))
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
 
      ;; -- which shape, where it goes, and then the eight measurements,
@@ -19498,8 +19748,16 @@
   (princ (strcat "\nOASIS " *oasis-version*))
   (princ))
 
-(princ (strcat "\nOASIS " *oasis-version*
-               " loaded.  Type OASIS to draw a continuous-tangent pool."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nOASIS " *oasis-version*
+                 " loaded.  Type OASIS to draw a continuous-tangent pool.")))
 (princ)
 
 
@@ -19599,7 +19857,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.7")
+(setq *abcdef-version* "v5.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -21472,8 +21730,16 @@
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
 
-(princ (strcat "\nABCDEF.lsp rev " *abcdef-version*
-               " loaded.  Type ABCDEF to plot points from a spreadsheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABCDEF.lsp rev " *abcdef-version*
+                 " loaded.  Type ABCDEF to plot points from a spreadsheet.")))
 (princ)
 
 
@@ -21828,7 +22094,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.13")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.14")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -21897,10 +22163,12 @@
                                     ; of the tag height - how long the
                                     ; strip a click on a tag can land
                                     ; on is taken to be
-(setq abf:*locus-color*  8)         ; colour of the guide line each
+(setq abf:*locus-color*  'auto)     ; colour of the guide line each
                                     ; group of suggestions sits on:
                                     ; grey, so it reads as a guide and
-                                    ; not as drawn work
+                                    ; not as drawn work.  'auto picks
+                                    ; the grey for the background; a
+                                    ; number is used exactly as given
 (setq abf:*locus-ltype*  "DASHED")  ; and its linetype - created at
                                     ; pool scale when the drawing has
                                     ; no linetype by that name
@@ -23357,7 +23625,7 @@
       (abf:ensure-dashed)
       (entmake (list '(0 . "ARC") '(100 . "AcDbEntity")
                      (cons 8 abf:*sug-layer*)
-                     (cons 62 abf:*locus-color*)
+                     (cons 62 (cal:ink abf:*locus-color* 'guide))
                      (cons 6 abf:*locus-ltype*)
                      '(100 . "AcDbCircle")
                      (list 10 (car ctr) (cadr ctr) 0.0)
@@ -24469,13 +24737,21 @@
                  "  (commands: ABFIND, ABMOVE, ABPCREATE)"))
   (princ))
 
-(princ (strcat "\nABFIND " *abfind-version*
-               " loaded.  Commands: ABFIND (dim Pt.## from the "
-               abf:*a-name* " and " abf:*b-name*
-               " stakes), ABMOVE (the same, and move it to where a"
-               " misread tape would put it), ABPCREATE (plot a point"
-               " that is not there yet from the two readings it was"
-               " taped at)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABFIND " *abfind-version*
+                 " loaded.  Commands: ABFIND (dim Pt.## from the "
+                 abf:*a-name* " and " abf:*b-name*
+                 " stakes), ABMOVE (the same, and move it to where a"
+                 " misread tape would put it), ABPCREATE (plot a point"
+                 " that is not there yet from the two readings it was"
+                 " taped at).")))
 (princ)
 
 
@@ -24528,7 +24804,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.8")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -25644,8 +25920,16 @@
   (princ (strcat "\nALTABCDEF " *altabcdef-version*))
   (princ))
 
-(princ (strcat "\nALTABCDEF " *altabcdef-version*
-               " loaded.  Type ALTABCDEF to plot points from a spreadsheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nALTABCDEF " *altabcdef-version*
+                 " loaded.  Type ALTABCDEF to plot points from a spreadsheet.")))
 (princ)
 
 
@@ -26321,7 +26605,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "091126 REV17") ; announced on load.  The
+(setq pf:*version*      "091226 REV18") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -30983,12 +31267,21 @@
   (princ (strcat "\nABHD " pf:*version*))
   (princ))
 
-(princ (strcat "\nABHD " pf:*version*
-               " loaded.  ABHD fits the pool perimeter through its"
-               " points;"))
-(princ "\nSIMPABHD does the same with nothing to decide first;")
-(princ "\nADAB draws the pool bottom over an existing perimeter;")
-(princ "\nTUTORIALABHD (or TUTORIALADAB) walks new users through everything.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nABHD " pf:*version*
+                   " loaded.  ABHD fits the pool perimeter through its"
+                   " points;"))
+    (princ "\nSIMPABHD does the same with nothing to decide first;")
+    (princ "\nADAB draws the pool bottom over an existing perimeter;")
+    (princ "\nTUTORIALABHD (or TUTORIALADAB) walks new users through everything.")))
 (princ)
 
 
@@ -31097,7 +31390,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.7")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -32305,8 +32598,16 @@
   (princ (strcat "\nABCURCHECK " *abcurcheck-version* " loaded."))
   (princ))
 
-(princ (strcat "\nABCURCHECK " *abcurcheck-version*
-               " loaded.  Type ABCURCHECK to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABCURCHECK " *abcurcheck-version*
+                 " loaded.  Type ABCURCHECK to run.")))
 (princ)
 
 
@@ -32382,7 +32683,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.6")
+(setq *abpcheck-version* "v1.7")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -33128,8 +33429,16 @@
   (princ (strcat "\nABPCHECK " *abpcheck-version* " loaded."))
   (princ))
 
-(princ (strcat "\nABPCHECK " *abpcheck-version*
-               " loaded.  Type ABPCHECK to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABPCHECK " *abpcheck-version*
+                 " loaded.  Type ABPCHECK to run.")))
 (princ)
 
 
@@ -33350,7 +33659,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.2")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.3")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -36758,11 +37067,20 @@
   (princ))
 
 ;; ----------------------------------------------------------------------
-(princ (strcat "\nCABHD " *cabhd-version*
-               " loaded.  Type CABHD to fit a pool perimeter through"
-               " the surveyed"))
-(princ "\npoints, up to the point number where the pool edge stops.")
-(princ "\nCABHDVER prints the version.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nCABHD " *cabhd-version*
+                   " loaded.  Type CABHD to fit a pool perimeter through"
+                   " the surveyed"))
+    (princ "\npoints, up to the point number where the pool edge stops.")
+    (princ "\nCABHDVER prints the version.")))
 (princ)
 
 
@@ -36833,7 +37151,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.4")
+(setq *pointrenamer-version* "v1.5")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob the tool has, all of them here.
@@ -37740,8 +38058,16 @@
   (princ (strcat "\nPOINTRENAMER " *pointrenamer-version*))
   (princ))
 
-(princ (strcat "\nPOINTRENAMER " *pointrenamer-version*
-               " loaded.  Type POINTRENAMER to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOINTRENAMER " *pointrenamer-version*
+                 " loaded.  Type POINTRENAMER to run.")))
 (princ)
 
 
@@ -37817,7 +38143,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.0")
+(setq *lobf-version* "v1.1")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -37893,8 +38219,11 @@
 (setq lobf:*layer*         "LOBF")           ; the construction line kept
 (setq lobf:*color*         4)                ; ACI (cyan)
 (setq lobf:*preview-layer* "LOBF-PREVIEW")   ; the three candidates
-(setq lobf:*preview-color* 8)                ; ACI (grey) -- each XLINE
-                                             ; carries its own colour
+(setq lobf:*preview-color* 'auto)            ; ACI (grey) -- each XLINE
+                                             ; carries its own colour.
+                                             ; 'auto picks the grey for
+                                             ; the background; a number
+                                             ; is used exactly as given
 (setq lobf:*ign-layer*     "LOBF-IGNORED")   ; ring round a set-aside point
 (setq lobf:*ign-color*     1)                ; ACI (red)
 (setq lobf:*appid*         "LOBF")           ; renaming this orphans
@@ -38481,7 +38810,8 @@
                      " give a direction - there is no line in them."))
       nil)
     (progn
-      (cal:ensure-layer lobf:*preview-layer* lobf:*preview-color*)
+      (cal:ensure-layer lobf:*preview-layer*
+                         (cal:ink lobf:*preview-color* 'guide))
       ;; sized to the run the points cover, so the labels read at any
       ;; scale the sheet is drawn at
       (setq run (lobf:runlen pts (lobf:cand-org (car cands))
@@ -38641,8 +38971,16 @@
   (princ (strcat "\nLOBF " *lobf-version* " loaded."))
   (princ))
 
-(princ (strcat "\nLOBF " *lobf-version*
-               " loaded.  Type LOBF to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLOBF " *lobf-version*
+                 " loaded.  Type LOBF to run.")))
 (princ)
 
 
@@ -38708,7 +39046,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.7"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.8"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -39610,10 +39948,18 @@
 
 ;; ---------------------------------------------------------------------------
 
-(princ (strcat "\nAUTOBEAD " *autobead-version* " loaded."
-                "\n  AUTOBEAD          - bead selected pool lines"
-                "\n  TUTORIALAUTOBEAD  - how it works"
-                "\n  AUTOBEADVER       - version check"))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nAUTOBEAD " *autobead-version* " loaded."
+                  "\n  AUTOBEAD          - bead selected pool lines"
+                  "\n  TUTORIALAUTOBEAD  - how it works"
+                  "\n  AUTOBEADVER       - version check")))
 (princ)
 
 
@@ -39797,7 +40143,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.9")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -41455,7 +41801,15 @@
   (princ (strcat "\nAUTODIM " *autodim-version*))
   (princ))
 
-(princ (strcat "\nAutoDim.lsp " *autodim-version* " loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nAutoDim.lsp " *autodim-version* " loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view).")))
 (princ)
 
 
@@ -41510,7 +41864,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *bpcallout-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.10")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -41780,9 +42134,17 @@
   (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
   (princ))
 
-(princ (strcat "\nBPCALLOUT " *bpcallout-version*
-               " loaded. Command: BPCALLOUT (ring bad points and write"
-               " the callout)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nBPCALLOUT " *bpcallout-version*
+                 " loaded. Command: BPCALLOUT (ring bad points and write"
+                 " the callout).")))
 (princ)
 
 
@@ -41822,7 +42184,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *ccprecheck-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *ccprecheck-version* "v1.5")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -42448,8 +42810,16 @@
   (princ (strcat "\nCCPRECHECK " *ccprecheck-version*))
   (princ))
 
-(princ (strcat "\nCCPRECHECK " *ccprecheck-version*
-               " loaded. Type CCPRECHECK to run the tech flow chart checklist."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCCPRECHECK " *ccprecheck-version*
+                 " loaded. Type CCPRECHECK to run the tech flow chart checklist.")))
 (princ)
 
 
@@ -42552,7 +42922,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcallout-version* "v1.10")  ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.11")  ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -43102,10 +43472,18 @@
   (princ (strcat "\nCDCALLOUT " *cdcallout-version*))
   (princ))
 
-(princ (strcat "\nCDCALLOUT " *cdcallout-version*
-               " loaded. Command: CDCALLOUT (cross-dimension from"
-               " Pt.## to Pt.## by number, style \"" cdo:*style*
-               "\", layer \"" cdo:*layer* "\")."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCDCALLOUT " *cdcallout-version*
+                 " loaded. Command: CDCALLOUT (cross-dimension from"
+                 " Pt.## to Pt.## by number, style \"" cdo:*style*
+                 "\", layer \"" cdo:*layer* "\").")))
 (princ)
 
 
@@ -43187,7 +43565,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcreate-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.5")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -43585,9 +43963,17 @@
   (princ (strcat "\nCDCREATE " *cdcreate-version*))
   (princ))
 
-(princ (strcat "\nCDCREATE " *cdcreate-version*
-               " loaded -- dimension highlighted lines as cross dims"
-               " (style \"" cdc:*style* "\", layer \"" cdc:*layer* "\")."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCDCREATE " *cdcreate-version*
+                 " loaded -- dimension highlighted lines as cross dims"
+                 " (style \"" cdc:*style* "\", layer \"" cdc:*layer* "\").")))
 (princ)
 
 
@@ -43637,7 +44023,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.8")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -44095,8 +44481,16 @@
   (princ (strcat "\nCHECK " *checkdrawing-version*))
   (princ))
 
-(princ (strcat "\ncheck_drawing.lsp " *checkdrawing-version*
-               " loaded - type CHECK to audit dimension & arc attachment."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ncheck_drawing.lsp " *checkdrawing-version*
+                 " loaded - type CHECK to audit dimension & arc attachment.")))
 (princ)
 
 
@@ -44353,7 +44747,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.5") ; printed on load and at command start so a
+(setq *cs-version* "v4.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -46080,9 +46474,17 @@
   (princ (strcat "\nCORNERSTP " *cs-version*))
   (princ))
 
-(princ (strcat "\nCORNERSTP.lsp " *cs-version*
-               " loaded - CORNERSTP to draw corner steps,"
-               " TUTORIALCORNERSTP to learn it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCORNERSTP.lsp " *cs-version*
+                 " loaded - CORNERSTP to draw corner steps,"
+                 " TUTORIALCORNERSTP to learn it.")))
 (princ)
 
 
@@ -46323,7 +46725,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.16") ; printed on load and at command start so a
+(setq *hs-version* "v3.17") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -47891,9 +48293,17 @@
   (princ (strcat "\nHEMISTEP " *hs-version*))
   (princ))
 
-(princ (strcat "\nHEMISTEP.lsp " *hs-version*
-               " loaded - HEMISTEP to draw hemisphere steps,"
-               " TUTORIALHEMISTEP to learn it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nHEMISTEP.lsp " *hs-version*
+                 " loaded - HEMISTEP to draw hemisphere steps,"
+                 " TUTORIALHEMISTEP to learn it.")))
 (princ)
 
 
@@ -48143,7 +48553,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.9") ; printed on load and at command start so a
+(setq *ns-version* "v3.10") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -49902,9 +50312,17 @@
   (princ (strcat "\nNORMIESTEP " *ns-version*))
   (princ))
 
-(princ (strcat "\nNORMIESTEP.lsp " *ns-version*
-               " loaded - NORMIESTEP to draw plain steps,"
-               " TUTORIALNORMIESTEP to learn it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nNORMIESTEP.lsp " *ns-version*
+                 " loaded - NORMIESTEP to draw plain steps,"
+                 " TUTORIALNORMIESTEP to learn it.")))
 (princ)
 
 
@@ -50018,7 +50436,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.6")
+(setq *lazstep-version* "v1.7")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -50769,6 +51187,14 @@
 (setq lzt:*y0* 0)               ; the band being drawn, in per-mille
 (setq lzt:*y1* 1000)
 
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
 
 (defun lzt:px (v) (fix (/ (* v lzt:*dx*) 1000.0)))
 (defun lzt:py (v)
@@ -50885,7 +51311,7 @@
       (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   cal:*imgcol-hi*))
+                   (cal:ink cal:*imgcol-hi* 'hi)))
   (cal:imgtext txt lx ly sc
             (if (= (lzt:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
 
@@ -50920,7 +51346,7 @@
     (foreach d (lzt:c-dims c)
       (if (not (member (cadr d) wk))
           (lzt:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d)
-                     cal:*imgcol-dim*)))
+                     (cal:ink cal:*imgcol-dim* 'dim))))
     (foreach d (lzt:c-dims c)
       (if (and (not (member (cadr d) wk))
                (lzt:inband (lzt:anchor d)))
@@ -51450,8 +51876,16 @@
                  (itoa lzt:*max-steps*) " steps."))
   (princ))
 
-(princ (strcat "\nLAZSTEP " *lazstep-version*
-               " loaded.  Type LAZSTEP to fill a step drawing in."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZSTEP " *lazstep-version*
+                 " loaded.  Type LAZSTEP to fill a step drawing in.")))
 (princ)
 
 
@@ -51690,7 +52124,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.14")
+(setq *cchk-version* "v1.15")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -51847,7 +52281,13 @@
 
 ;; -- colours -----------------------------------------------------------
 
-(setq *cchk-grey-color*    8)       ; ACI: everything not under review, faded (grey)
+(setq *cchk-grey-color*    'auto)  ; ACI: everything not under review, faded.
+                                   ; 'auto fades it the way round the drawing
+                                   ; needs -- darker than the work on a dark
+                                   ; background, lighter on a light one, since
+                                   ; 8 recedes on the first and is one of the
+                                   ; most prominent things on screen on the
+                                   ; second.  A number is used exactly as given
 (setq *cchk-flag-color*    1)       ; ACI: what you answered "No" to (red)
 (setq *cchk-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
 (setq *cchk-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
@@ -52192,7 +52632,7 @@
 (defun cchk:unstage (ent keep)
   ;; send a reviewed entity back into the grey background
   (if (and (entget ent) (not (member ent keep)))
-    (cchk:set-color ent *cchk-grey-color*)))
+    (cchk:set-color ent (cal:ink *cchk-grey-color* 'fade))))
 
 (defun cchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -54485,7 +54925,7 @@
 
 ;; --- command -------------------------------------------------------
 
-(defun c:COVERCHECK ( / *error* oldecho vc vs undo-open ss i e et
+(defun c:COVERCHECK ( / *error* oldecho vc vs undo-open ss i e et grey
                       cands dims arcs plns segs blks olaps e1 e2 pr
                       saved keep res n total lines
                       anchors anchheld
@@ -54629,6 +55069,10 @@
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; COVERCHECKRESCUE can recover them even after a crash
+        ;; the fade, resolved once for the whole run: the knob may
+        ;; be 'auto, and measuring the background per entity would
+        ;; be a COM round trip per entity
+        (setq grey (cal:ink *cchk-grey-color* 'fade))
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
@@ -54637,7 +55081,7 @@
             (progn
               (setq saved (cons (cons e (cchk:ent-color e)) saved))
               (cchk:stash-color e (cchk:ent-color e))
-              (cchk:set-color e *cchk-grey-color*))))
+              (cchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -54664,13 +55108,13 @@
                                  (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
-             (cchk:set-color e *cchk-grey-color*)
+             (cchk:set-color e grey)
              (setq skiprest T)
              (princ (strcat "\n  Skipping the remaining "
                             (itoa (- total n)) " dimension(s).")))
             ((eq (cadr res) 'back)
              ;; undo what the previous item recorded, then redo it
-             (cchk:set-color e *cchk-grey-color*)
+             (cchk:set-color e grey)
              (if (> n 0)
                (progn
                  (setq n  (1- n)
@@ -54696,14 +55140,14 @@
                                                       carried))))
                      (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
-                 (cchk:set-color e1 *cchk-grey-color*)
+                 (cchk:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
              (setq n (1- n)))                            ; loop's 1+ re-enters it
             (t
              (if (cadr res)
                (progn (setq ndok (1+ ndok))
-                      (cchk:set-color e *cchk-grey-color*))
+                      (cchk:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (cchk:dim-style e))
@@ -54746,7 +55190,7 @@
           (setq nasnap (+ nasnap (cadddr res)))
           (if (cadr res)
             (progn (setq naok (1+ naok))
-                   (cchk:set-color e *cchk-grey-color*))
+                   (cchk:set-color e grey))
             (progn (setq namoved (1+ namoved))
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
@@ -55426,9 +55870,18 @@
 ;; the version reporter TOOLNAMEVER, and muscle memory keeps the old one
 (defun c:COVERCHECKVERSION () (c:COVERCHECKVER))
 
-(princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
-(princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
-(princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVER prints this file's version.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
+    (princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
+    (princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVER prints this file's version.")))
 (princ)
 
 
@@ -55517,7 +55970,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.3")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.4")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -55813,10 +56266,18 @@
   (princ (strcat "\nCUSTBLOCK " *custblock-version*))
   (princ))
 
-(princ (strcat "\nCUSTBLOCK " *custblock-version*
-               " loaded -- type CUSTBLOCK to draw a block from its"
-               " length, width and height (layer \"" cbk:*layer*
-               "\", dims \"" cbk:*style* "\")."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCUSTBLOCK " *custblock-version*
+                 " loaded -- type CUSTBLOCK to draw a block from its"
+                 " length, width and height (layer \"" cbk:*layer*
+                 "\", dims \"" cbk:*style* "\").")))
 (princ)
 
 
@@ -55944,7 +56405,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.17")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.18")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -56028,7 +56489,13 @@
 
 ;; -- colours -----------------------------------------------------------
 
-(setq *dchk-grey-color*   8)       ; ACI: everything not under review, faded (grey)
+(setq *dchk-grey-color*   'auto)  ; ACI: everything not under review, faded.
+                                  ; 'auto fades it the way round the drawing
+                                  ; needs -- darker than the work on a dark
+                                  ; background, lighter on a light one, since
+                                  ; 8 recedes on the first and is one of the
+                                  ; most prominent things on screen on the
+                                  ; second.  A number is used exactly as given
 (setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
 (setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
 (setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
@@ -56376,7 +56843,7 @@
 (defun dchk:unstage (ent keep)
   ;; send a reviewed entity back into the grey background
   (if (and (entget ent) (not (member ent keep)))
-    (dchk:set-color ent *dchk-grey-color*)))
+    (dchk:set-color ent (cal:ink *dchk-grey-color* 'fade))))
 
 (defun dchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -57197,7 +57664,7 @@
          (princ "\n  Left as drawn.")
          (list label "left as drawn" 'left))))))
 
-(defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et
+(defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et grey
                       cands dims arcs lns plns segs olaps rest e1 e2 pr
                       anchors anchheld saved keep res n total lines ans
                       ndok ndflag ndmoved ndanch naok namoved nasnap
@@ -57338,6 +57805,10 @@
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; DIMCHECKRESCUE can recover them even after a crash
+        ;; the fade, resolved once for the whole run: the knob may
+        ;; be 'auto, and measuring the background per entity would
+        ;; be a COM round trip per entity
+        (setq grey (cal:ink *dchk-grey-color* 'fade))
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
@@ -57346,7 +57817,7 @@
             (progn
               (setq saved (cons (cons e (dchk:ent-color e)) saved))
               (dchk:stash-color e (dchk:ent-color e))
-              (dchk:set-color e *dchk-grey-color*))))
+              (dchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -57373,13 +57844,13 @@
                                  (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
-             (dchk:set-color e *dchk-grey-color*)
+             (dchk:set-color e grey)
              (setq skiprest T)
              (princ (strcat "\n  Skipping the remaining "
                             (itoa (- total n)) " dimension(s).")))
             ((eq (cadr res) 'back)
              ;; undo what the previous item recorded, then redo it
-             (dchk:set-color e *dchk-grey-color*)
+             (dchk:set-color e grey)
              (if (> n 0)
                (progn
                  (setq n  (1- n)
@@ -57405,14 +57876,14 @@
                                                       carried))))
                      (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
-                 (dchk:set-color e1 *dchk-grey-color*)
+                 (dchk:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
              (setq n (1- n)))                            ; loop's 1+ re-enters it
             (t
              (if (cadr res)
                (progn (setq ndok (1+ ndok))
-                      (dchk:set-color e *dchk-grey-color*))
+                      (dchk:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (dchk:dim-style e))
@@ -57455,7 +57926,7 @@
           (setq nasnap (+ nasnap (cadddr res)))
           (if (cadr res)
             (progn (setq naok (1+ naok))
-                   (dchk:set-color e *dchk-grey-color*))
+                   (dchk:set-color e grey))
             (progn (setq namoved (1+ namoved))
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
@@ -58085,11 +58556,20 @@
 
 (defun c:TUTORIALDIMSCAN () (c:TUTORIALDIMCHECK))
 
-(princ (strcat "\ndimcheck.lsp " *dchk-version*
-               " loaded - DIMCHECK reviews dimensions, arcs & overlapping"))
-(princ "\n  lines one at a time; DIMSCAN reports it read-only; DIMCHECKRESCUE undoes")
-(princ "\n  DIMCHECK's marks. For steps, wall height, the liner pattern and the")
-(princ "\n  title block border too, load linfincheck.lsp and run LINFINCHECK.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\ndimcheck.lsp " *dchk-version*
+                   " loaded - DIMCHECK reviews dimensions, arcs & overlapping"))
+    (princ "\n  lines one at a time; DIMSCAN reports it read-only; DIMCHECKRESCUE undoes")
+    (princ "\n  DIMCHECK's marks. For steps, wall height, the liner pattern and the")
+    (princ "\n  title block border too, load linfincheck.lsp and run LINFINCHECK.")))
 (princ)
 
 
@@ -58133,7 +58613,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.6")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -58319,8 +58799,16 @@
   (princ (strcat "\nDIMCONTEND " *dimcontinue-version*))
   (princ))
 
-(princ (strcat "\nDIMCONTEND / DCE " *dimcontinue-version*
-               " loaded -- continue a dimension to the end of the drawing."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nDIMCONTEND / DCE " *dimcontinue-version*
+                 " loaded -- continue a dimension to the end of the drawing.")))
 (princ)
 
 
@@ -58393,7 +58881,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *dronedistortion-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.3")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -58821,9 +59309,18 @@
   (princ (strcat "\nDDFIX " *dronedistortion-version*))
   (princ))
 
-(princ (strcat "\nDrone Distortion tool " *dronedistortion-version*
-               " loaded  (DDALT accepts PNG / JPG / TIF and fails loud)."))
-(princ "\n  Commands: DDFIX  DDSET  DDALT  DDCAL  DDINFO")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nDrone Distortion tool " *dronedistortion-version*
+                   " loaded  (DDALT accepts PNG / JPG / TIF and fails loud)."))
+    (princ "\n  Commands: DDFIX  DDSET  DDALT  DDCAL  DDINFO")))
 (princ)
 
 
@@ -58969,7 +59466,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *droneheightgps-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *droneheightgps-version* "v1.2")   ; announced on load; release_lisp.py
                                             ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -60110,9 +60607,18 @@
   (princ (strcat "\nDDGPS " *droneheightgps-version*))
   (princ))
 
-(princ (strcat "\nDrone Height from GPS " *droneheightgps-version*
-               " loaded  (pick a photo, click a point, place the height report)."))
-(princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nDrone Height from GPS " *droneheightgps-version*
+                   " loaded  (pick a photo, click a point, place the height report)."))
+    (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")))
 (princ)
 
 
@@ -60246,7 +60752,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.7")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.8")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -65073,9 +65579,17 @@
   (princ))
 
 ;; ----------------------------------------------------------------------
-(princ (strcat "\nFITABHD " *fitabhd-version*
-               " loaded.  Type FITABHD to run (FITABHDVER for the"
-               " version)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nFITABHD " *fitabhd-version*
+                 " loaded.  Type FITABHD to run (FITABHDVER for the"
+                 " version).")))
 (princ)
 
 
@@ -65140,7 +65654,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.2")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.3")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -68025,9 +68539,17 @@
   (princ (strcat "\nLHD " *lh-version*))
   (princ))
 
-(princ (strcat "\nLHD " *lh-version*
-               " loaded.  LHD fits a top-down outline (closed or open)"
-               " through laser-scanned points."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLHD " *lh-version*
+                 " loaded.  LHD fits a top-down outline (closed or open)"
+                 " through laser-scanned points.")))
 (princ)
 
 
@@ -68061,7 +68583,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.5")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -68490,8 +69012,16 @@
   (princ (strcat "\nLINCHECK " *lincheck-version*))
   (princ))
 
-(princ (strcat "\nLINCHECK " *lincheck-version*
-               " loaded. Type LINCHECK to run the liner checklist."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLINCHECK " *lincheck-version*
+                 " loaded. Type LINCHECK to run the liner checklist.")))
 (princ)
 
 
@@ -68779,7 +69309,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.13")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.14")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -68936,7 +69466,13 @@
 
 ;; -- colours -----------------------------------------------------------
 
-(setq *lfc-grey-color*    8)       ; ACI: everything not under review, faded (grey)
+(setq *lfc-grey-color*    'auto)  ; ACI: everything not under review, faded.
+                                  ; 'auto fades it the way round the drawing
+                                  ; needs -- darker than the work on a dark
+                                  ; background, lighter on a light one, since
+                                  ; 8 recedes on the first and is one of the
+                                  ; most prominent things on screen on the
+                                  ; second.  A number is used exactly as given
 (setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
 (setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
 (setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
@@ -69283,7 +69819,7 @@
 (defun lfc:unstage (ent keep)
   ;; send a reviewed entity back into the grey background
   (if (and (entget ent) (not (member ent keep)))
-    (lfc:set-color ent *lfc-grey-color*)))
+    (lfc:set-color ent (cal:ink *lfc-grey-color* 'fade))))
 
 (defun lfc:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -71206,7 +71742,7 @@
 
 ;; --- command -------------------------------------------------------
 
-(defun c:LINFINCHECK ( / *error* oldecho vc vs undo-open ss i e et
+(defun c:LINFINCHECK ( / *error* oldecho vc vs undo-open ss i e et grey
                       cands dims arcs lns plns segs blks olaps rest e1 e2 pr
                       saved keep res n total lines ans
                       anchors anchheld
@@ -71360,6 +71896,10 @@
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; LINFINCHECKRESCUE can recover them even after a crash
+        ;; the fade, resolved once for the whole run: the knob may
+        ;; be 'auto, and measuring the background per entity would
+        ;; be a COM round trip per entity
+        (setq grey (cal:ink *lfc-grey-color* 'fade))
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
@@ -71368,7 +71908,7 @@
             (progn
               (setq saved (cons (cons e (lfc:ent-color e)) saved))
               (lfc:stash-color e (lfc:ent-color e))
-              (lfc:set-color e *lfc-grey-color*))))
+              (lfc:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -71395,13 +71935,13 @@
                                  (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
-             (lfc:set-color e *lfc-grey-color*)
+             (lfc:set-color e grey)
              (setq skiprest T)
              (princ (strcat "\n  Skipping the remaining "
                             (itoa (- total n)) " dimension(s).")))
             ((eq (cadr res) 'back)
              ;; undo what the previous item recorded, then redo it
-             (lfc:set-color e *lfc-grey-color*)
+             (lfc:set-color e grey)
              (if (> n 0)
                (progn
                  (setq n  (1- n)
@@ -71427,14 +71967,14 @@
                                                       carried))))
                      (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
-                 (lfc:set-color e1 *lfc-grey-color*)
+                 (lfc:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
              (setq n (1- n)))                            ; loop's 1+ re-enters it
             (t
              (if (cadr res)
                (progn (setq ndok (1+ ndok))
-                      (lfc:set-color e *lfc-grey-color*))
+                      (lfc:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (lfc:dim-style e))
@@ -71477,7 +72017,7 @@
           (setq nasnap (+ nasnap (cadddr res)))
           (if (cadr res)
             (progn (setq naok (1+ naok))
-                   (lfc:set-color e *lfc-grey-color*))
+                   (lfc:set-color e grey))
             (progn (setq namoved (1+ namoved))
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
@@ -72991,11 +73531,20 @@
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))
 
-(princ (strcat "\nlinfincheck.lsp " *lfc-version*
-               " loaded - LINFINCHECK reviews the whole title block one item at a"))
-(princ "\n  time (dims, arcs, overlaps, steps, wall height, liner, border); LINFINSCAN reports")
-(princ "\n  it read-only; LINFINCHECKRESCUE undoes LINFINCHECK's marks. For just dims, arcs")
-(princ "\n  and overlaps, load dimcheck.lsp instead and run DIMCHECK.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nlinfincheck.lsp " *lfc-version*
+                   " loaded - LINFINCHECK reviews the whole title block one item at a"))
+    (princ "\n  time (dims, arcs, overlaps, steps, wall height, liner, border); LINFINSCAN reports")
+    (princ "\n  it read-only; LINFINCHECKRESCUE undoes LINFINCHECK's marks. For just dims, arcs")
+    (princ "\n  and overlaps, load dimcheck.lsp instead and run DIMCHECK.")))
 (princ)
 
 
@@ -73020,7 +73569,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.6")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -73167,8 +73716,16 @@
   (princ (strcat "\nLINTXTCHK " *lintxtchk-version*))
   (princ))
 
-(princ (strcat "\nLINTXTCHK " *lintxtchk-version*
-               " loaded.  Type LINTXTCHK to place the liner checklist."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLINTXTCHK " *lintxtchk-version*
+                 " loaded.  Type LINTXTCHK to place the liner checklist.")))
 (princ)
 
 
@@ -73253,7 +73810,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.12")
+(setq *paddle-version* "v1.13")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -74009,8 +74566,16 @@
   (princ (strcat "\nPADDLE " *paddle-version*))
   (princ))
 
-(princ (strcat "\nPADDLE " *paddle-version*
-               " loaded. Commands: PADDLE (place pads), TUTORIALPADDLE (guided demo)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPADDLE " *paddle-version*
+                 " loaded. Commands: PADDLE (place pads), TUTORIALPADDLE (guided demo).")))
 (princ)
 
 
@@ -74156,7 +74721,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.3")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.4")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -75155,11 +75720,19 @@
   (princ (strcat "\nLINGUTTER " *lingutter-version*))
   (princ))
 
-(princ (strcat "\nLINGUTTER " *lingutter-version*
-               " loaded -- highlight an area: its perimeter goes onto \""
-               lg:*poollayer* "\", the rest of it is erased, PADDLE runs."
-               "\nLINGUTTERSCAN reports what it would do and changes"
-               " nothing."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLINGUTTER " *lingutter-version*
+                 " loaded -- highlight an area: its perimeter goes onto \""
+                 lg:*poollayer* "\", the rest of it is erased, PADDLE runs."
+                 "\nLINGUTTERSCAN reports what it would do and changes"
+                 " nothing.")))
 (princ)
 
 
@@ -75286,7 +75859,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.12")
+(setq *perp-version* "v0.13")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -76149,8 +76722,16 @@
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
   (princ))
 
-(princ (strcat "\nperp_points.lsp " *perp-version*
-               " loaded.  Type PERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nperp_points.lsp " *perp-version*
+                 " loaded.  Type PERPPTS to run.")))
 (princ)
 
 
@@ -76273,7 +76854,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.11")
+(setq *cperp-version* "v0.12")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -76886,8 +77467,16 @@
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
   (princ))
 
-(princ (strcat "\ncperp_points.lsp " *cperp-version*
-               " loaded.  Type CPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ncperp_points.lsp " *cperp-version*
+                 " loaded.  Type CPERPPTS to run.")))
 (princ)
 
 
@@ -76925,7 +77514,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.6")
+(setq *tutperp-version* "v0.7")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -77265,8 +77854,16 @@
               "Tutorial finished.  Type PERPPTS to try it for real."))
   (princ))
 
-(princ (strcat "\ntutorial_perp_points.lsp " *tutperp-version*
-               " loaded.  Type TUTORIALPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ntutorial_perp_points.lsp " *tutperp-version*
+                 " loaded.  Type TUTORIALPERPPTS to run.")))
 (princ)
 
 
@@ -77303,7 +77900,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.6")
+(setq *tutcperp-version* "v0.7")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -77656,8 +78253,16 @@
               "Tutorial finished.  Type CPERPPTS to try it for real."))
   (princ))
 
-(princ (strcat "\ntutorial_cperp_points.lsp " *tutcperp-version*
-               " loaded.  Type TUTORIALCPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ntutorial_cperp_points.lsp " *tutcperp-version*
+                 " loaded.  Type TUTORIALCPERPPTS to run.")))
 (princ)
 
 
@@ -77771,7 +78376,7 @@
 ;;;      dimension style are all put back the way they were.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.2")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.3")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -78470,9 +79075,17 @@
   (princ (strcat "\nSMARTFILLET " *smartfillet-version*))
   (princ))
 
-(princ (strcat "\nSMARTFILLET " *smartfillet-version*
-               " loaded -- type SMARTFILLET, pick two lines, and click"
-               " the rounded corner you want."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSMARTFILLET " *smartfillet-version*
+                 " loaded -- type SMARTFILLET, pick two lines, and click"
+                 " the rounded corner you want.")))
 (princ)
 
 
@@ -78601,7 +79214,7 @@
 ;;;      dimension style are all put back the way they were.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.1")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -79407,10 +80020,18 @@
   (princ (strcat "\nHONEFILLET " *honefillet-version*))
   (princ))
 
-(princ (strcat "\nHONEFILLET " *honefillet-version*
-               " loaded -- type HONEFILLET, pick two lines, bracket two"
-               " of the corners offered, and click one of the half-inch"
-               " sizes between them."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nHONEFILLET " *honefillet-version*
+                 " loaded -- type HONEFILLET, pick two lines, bracket two"
+                 " of the corners offered, and click one of the half-inch"
+                 " sizes between them.")))
 (princ)
 
 
@@ -79533,7 +80154,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.14")
+(setq *spacheck-version* "v1.15")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -81723,8 +82344,16 @@
   (setvar "CMDECHO" oldecho)
   (princ))
 
-(princ (strcat "\nSPACHECK " *spacheck-version*
-               " loaded.  Type SPACHECK to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPACHECK " *spacheck-version*
+                 " loaded.  Type SPACHECK to run.")))
 (princ)
 
 
@@ -81817,7 +82446,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacovcreate-version* "v1.0")
+(setq *spacovcreate-version* "v1.1")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value SPACOVCREATE reads that somebody might want
@@ -83168,9 +83797,17 @@
   (princ (strcat "\nSPACOVCREATE " *spacovcreate-version*))
   (princ))
 
-(princ (strcat "\nSPACOVCREATE " *spacovcreate-version*
-               " loaded.  SPACOVCREATE to build a spa cover from the spa"
-               " already on the sheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPACOVCREATE " *spacovcreate-version*
+                 " loaded.  SPACOVCREATE to build a spa cover from the spa"
+                 " already on the sheet.")))
 (princ)
 
 
@@ -83231,7 +83868,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.7") ; printed on load and at command
+(setq *stockcover-version* "v1.8") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -83658,10 +84295,18 @@
   (princ (strcat "\nSTOCKCOVER " *stockcover-version*))
   (princ))
 
-(princ (strcat "\nSTOCKCOVER " *stockcover-version*
-               " loaded.  STOCKCOVER to place a stock cover,"
-               " STOCKLIST to see what is available,"
-               " STOCKCOVER-CFG to set the folder."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSTOCKCOVER " *stockcover-version*
+                 " loaded.  STOCKCOVER to place a stock cover,"
+                 " STOCKLIST to see what is available,"
+                 " STOCKCOVER-CFG to set the folder.")))
 (princ)
 
 
@@ -83719,7 +84364,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.5")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -83983,7 +84628,15 @@
   (princ (strcat "\nDRONE " *drone-version*))
   (princ))
 
-(princ (strcat "\nDRONE " *drone-version* " loaded.  Type DRONE to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nDRONE " *drone-version* " loaded.  Type DRONE to run.")))
 (princ)
 
 
@@ -84034,7 +84687,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.6")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -84538,9 +85191,17 @@
   (princ (strcat "\nTYDRN " *tydrn-version*))
   (princ))
 
-(princ (strcat "\nTYDRN " *tydrn-version*
-               " loaded.  Type TYDRN to run, or TYLERDRONESUITE"
-               " for the whole trace."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTYDRN " *tydrn-version*
+                 " loaded.  Type TYDRN to run, or TYLERDRONESUITE"
+                 " for the whole trace.")))
 (princ)
 
 
@@ -84629,7 +85290,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.3")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -85126,8 +85787,16 @@
   (princ (strcat "\nSOCONV " *soconv-version*))
   (princ))
 
-(princ (strcat "\nSOCONV " *soconv-version*
-               " loaded.  Type SOCONV to run, SORECONV to undo one."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSOCONV " *soconv-version*
+                 " loaded.  Type SOCONV to run, SORECONV to undo one.")))
 (princ)
 
 
@@ -85219,7 +85888,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.3")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -85860,8 +86529,16 @@
   (princ (strcat "\nVSCONV " *vsconv-version*))
   (princ))
 
-(princ (strcat "\nVSCONV " *vsconv-version*
-               " loaded.  Type VSCONV to run, VSRECONV to undo one."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nVSCONV " *vsconv-version*
+                 " loaded.  Type VSCONV to run, VSRECONV to undo one.")))
 (princ)
 
 
@@ -86005,7 +86682,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.1")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -86776,8 +87453,16 @@
   (princ (strcat "\nG2MCONV " *g2mconv-version*))
   (princ))
 
-(princ (strcat "\nG2MCONV " *g2mconv-version*
-               " loaded.  Type G2MCONV to run, G2MRECONV to undo."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nG2MCONV " *g2mconv-version*
+                 " loaded.  Type G2MCONV to run, G2MRECONV to undo.")))
 (princ)
 
 
@@ -86819,7 +87504,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.9")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -88175,8 +88860,16 @@
   (princ (strcat "\nWCALST " *wcalst-version*))
   (princ))
 
-(princ (strcat "\nWCALST " *wcalst-version*
-               " loaded -- select the band, pick the side to straighten."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nWCALST " *wcalst-version*
+                 " loaded -- select the band, pick the side to straighten.")))
 (princ)
 
 
@@ -88252,7 +88945,7 @@
 
 
 
-(setq *xft-version* "v1.14") ; printed on load and at command start so a
+(setq *xft-version* "v1.15") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -89542,9 +90235,17 @@
   (princ (strcat "\nXFTCONV " *xft-version*))
   (princ))
 
-(princ (strcat "\nXFTCONV.lsp " *xft-version*
-               " loaded.  Type XFTCONV to scale a survey import and swap"
-               " its points, XFTRECONV to put one back."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nXFTCONV.lsp " *xft-version*
+                 " loaded.  Type XFTCONV to scale a survey import and swap"
+                 " its points, XFTRECONV to put one back.")))
 (princ)
 
 
@@ -89612,7 +90313,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.6")
+(setq *xyplot-version* "v1.7")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -90531,8 +91232,16 @@
   (princ (strcat "\nXYPLOT " *xyplot-version* " (XYPLOT.lsp)"))
   (princ))
 
-(princ (strcat "\nXYPLOT.lsp " *xyplot-version*
-               " loaded.  Type XYPLOT to graph an X/Y sheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nXYPLOT.lsp " *xyplot-version*
+                 " loaded.  Type XYPLOT to graph an X/Y sheet.")))
 (princ)
 
 
@@ -90634,7 +91343,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.4")
+(setq *constellation-version* "v1.5")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -90672,7 +91381,8 @@
 ;; 6 magenta, 7 white, 8 grey.  Grey for the frame and cyan for the
 ;; legend, so neither competes with the result; the result itself lands
 ;; in the point and dimension colours the rest of the toolkit uses.
-(setq cst:*space-color*   8)
+(setq cst:*space-color*   'auto)  ; 'auto picks the grey for the
+                                  ; background; a number as given
 (setq cst:*guide-color*   4)
 (setq cst:*outline-color* 3)
 (setq cst:*dim-color*     2)
@@ -91821,7 +92531,8 @@
 
 (defun cst:preview (n w h base / pts i p r th lab)
   (cst:unpreview)
-  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
+  (cal:ensure-layer cst:*space-layer*
+                    (cal:ink cst:*space-color* 'guide))
   (cal:ensure-layer cst:*guide-layer* cst:*guide-color*)
   (setq r   (cst:dotr w h)
         th  (cst:texth w h)
@@ -92194,7 +92905,8 @@
 ;; they are not part of the drawing to be swept and a redraw must not
 ;; keep re-announcing them.
 (defun cst:draw (pts n w h base chart arcs outline / mark th i p)
-  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
+  (cal:ensure-layer cst:*space-layer*
+                    (cal:ink cst:*space-color* 'guide))
   (cal:ensure-layer cst:*point-layer* cst:*point-color*)
   (cal:ensure-layer cst:*dim-layer* cst:*dim-color*)
   (if outline (cal:ensure-layer cst:*outline-layer* cst:*outline-color*))
@@ -92494,9 +93206,17 @@
                  " (CONSTELLATION.lsp)"))
   (princ))
 
-(princ (strcat "\nCONSTELLATION.lsp " *constellation-version*
-               " loaded.  Type CONSTELLATION to place points from"
-               " their cross dims."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCONSTELLATION.lsp " *constellation-version*
+                 " loaded.  Type CONSTELLATION to place points from"
+                 " their cross dims.")))
 (princ)
 
 
@@ -92589,7 +93309,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.5")
+(setq *lazspa-version* "v1.6")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -93018,6 +93738,14 @@
 (setq lzs:*y0* 0)               ; the band being drawn, in per-mille --
 (setq lzs:*y1* 1000)            ; the whole chart when nothing is cut
 
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
 
 ;; per-mille -> pixels
 (defun lzs:px (v) (fix (/ (* v lzs:*dx*) 1000.0)))
@@ -93144,7 +93872,7 @@
       (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   cal:*imgcol-hi*))
+                   (cal:ink cal:*imgcol-hi* 'hi)))
   (cal:imgtext txt lx ly sc
             (if (= (lzs:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
 
@@ -93190,7 +93918,7 @@
     (foreach d (lzs:dims c)
       (if (not (member (cadr d) wk))
           (lzs:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d)
-                     cal:*imgcol-dim*)))
+                     (cal:ink cal:*imgcol-dim* 'dim))))
     (foreach m (lzs:marks c)
       (if (lzs:inband (caddr m)) (lzs:mark m)))
     (foreach d (lzs:dims c)
@@ -93975,8 +94703,16 @@
                  (itoa (length lzs:*charts*)) " chart(s)."))
   (princ))
 
-(princ (strcat "\nLAZSPA " *lazspa-version*
-               " loaded.  Type LAZSPA to fill a chart in and draw it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZSPA " *lazspa-version*
+                 " loaded.  Type LAZSPA to fill a chart in and draw it.")))
 (princ)
 
 
@@ -94073,7 +94809,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.17")
+(setq *lazform-version* "v2.18")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -95077,6 +95813,14 @@
 (setq lzf:*dx* 0)               ; the tile's extent this time round
 (setq lzf:*dy* 0)
 
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
 
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
@@ -95196,7 +95940,7 @@
       (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   cal:*imgcol-hi*))
+                   (cal:ink cal:*imgcol-hi* 'hi)))
   (cal:imgtext txt lx ly sc
             (if (= (lzf:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
 
@@ -95215,7 +95959,7 @@
     (lzf:pline (cal:imgflatten poly) cal:*imgcol-line*))
   (foreach d (lzf:dims c)
     (lzf:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d) (nth 6 d)
-               cal:*imgcol-dim*))
+               (cal:ink cal:*imgcol-dim* 'dim)))
   (foreach d (lzf:dims c) (lzf:label d))
   (end_image)
   (princ))
@@ -96597,8 +97341,16 @@
                  (itoa n) " of them OASIS."))
   (princ))
 
-(princ (strcat "\nLAZFORM " *lazform-version*
-               " loaded.  Type LAZFORM to fill a chart in and draw it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZFORM " *lazform-version*
+                 " loaded.  Type LAZFORM to fill a chart in and draw it.")))
 (princ)
 
 
@@ -96615,6 +97367,8 @@
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
+;;;            CALHELP        what a command does, at the command line
+;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -96715,7 +97469,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.20")
+(setq *lazpanel-version* "v3.21")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -97951,12 +98705,17 @@
 ;; The complete .bmp as a byte list: 24bpp, bottom-up rows (a positive
 ;; height means the FIRST row in the file is the BOTTOM row of the
 ;; image, hence the reverse).  "X" pixels are orange -- stored B,G,R,
-;; so 0 165 255 -- and the rest panel grey.  Both sizes give a row
-;; width that is a multiple of 4 (48 and 96), so there is no row
-;; padding to get wrong.
+;; so 0 165 255 -- and the rest is PANEL GREY, which is two different
+;; greys: a .bmp has no alpha channel, so the square around the
+;; hexagon is painted, and painting it 54 54 54 on the light theme is
+;; a dark tile in a light toolbar.  It was, for every drafter not on
+;; the dark theme, from the day the button shipped.  The theme is read
+;; rather than assumed, and an unreadable one keeps the dark grey that
+;; was always here.  Both sizes give a row width that is a multiple of
+;; 4 (48 and 96), so there is no row padding to get wrong.
 (defun lzp:bmp-bytes (size grid / fg bg rowbytes out row s i)
   (setq fg '(0 165 255)
-        bg '(54 54 54)
+        bg (if (eq (cal:ui) 'light) '(240 240 240) '(54 54 54))
         rowbytes (* 3 size))
   (setq out (append
               (list 66 77)                      ; "BM"
@@ -98724,6 +99483,17 @@
   (princ (strcat "\n  TEMPPREFIX : "
                  (if (= (type (getvar "TEMPPREFIX")) 'STR)
                      (getvar "TEMPPREFIX") "(not a string)")))
+  ;; which grey went behind the hexagon, and why.  A .bmp has no
+  ;; transparency, so this square is painted and the wrong one shows.
+  (princ (strcat "\n  theme      : "
+                 (cond ((eq (cal:ui) 'light) "light - icon ground 240 240 240")
+                       ((eq (cal:ui) 'dark)  "dark - icon ground 54 54 54")
+                       (t "cannot tell - icon ground 54 54 54, as it always was"))
+                 (if (and (getenv "CalofinTheme")
+                          (/= (getenv "CalofinTheme") ""))
+                     (strcat "  (CalofinTheme says "
+                             (getenv "CalofinTheme") ")")
+                     "  (COLORTHEME; CALSET overrides it)")))
   (setq paths (lzp:write-bmps))
   (cond
     (paths
@@ -98781,6 +99551,127 @@
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
   (princ))
 
+;;; -------------------- the two front-desk commands ---------------------
+;;  CALHELP and CALSET are machinery rather than drafting tools, which
+;;  is why they are here and not files of their own: this is where the
+;;  captions live, and where calofin's profile settings were already
+;;  being read and written (lzp:*poskey*, lzp:*pinkey*).  Both are in
+;;  NAMED_SATELLITES in tools/callib.py, so neither asks for a panel
+;;  button it has no use for.
+
+;; What a command IS, at the command line.  The captions have been
+;; here all along and the only way to read one was to open the panel
+;; and find the page the tool was filed on -- which is the same
+;; complaint the Find page answered inside the dialog, unanswered
+;; outside it.  Enter lists the lot.
+(defun c:CALHELP ( / *error* s hits n)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALHELP error: " msg)))
+    (if lzd:report (lzd:report "CALHELP" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALHELP" *lazpanel-version*))
+  (setq s (getstring T "\nCommand, or any part of one <Enter = all>: "))
+  (if lzd:ask (lzd:ask "Command, or any part of one" s))
+  (setq hits (if (= s "") (lzp:commands) (lzp:matches s)))
+  (cond
+    ((null hits)
+     (princ (strcat "\nNothing here matches \"" s "\".  CALHELP on its"
+                    " own lists every tool.")))
+    (t
+     (princ (strcat "\n" (itoa (length hits)) " tool"
+                    (if (= (length hits) 1) "" "s")
+                    (if (= s "") "" (strcat " matching \"" s "\""))
+                    " -- a name in brackets is not loaded in this"
+                    " session:"))
+     (foreach n hits
+       (princ (strcat "\n  " (if (lzp:has n) (strcat n) (strcat "(" n ")"))
+                      "  " (lzp:caption n))))))
+  (princ))
+
+;; The settings calofin keeps in the AutoCAD PROFILE, which is the one
+;; place a setting survives a rebuild: releases/ and LAZPASS.lsp are
+;; generated, so a number edited into either is gone at the next
+;; regeneration.  Each row is (key default what-it-does).
+(setq lzp:*settings*
+  '(("CalofinTheme"
+     "auto"
+     "dark / light / auto.  Which way the ink is picked: auto measures the drawing's background and AutoCAD's theme, and the other two say so outright when a measurement comes out wrong")
+    ("CalofinErrorDir"
+     ""
+     "the folder LAZDIAG writes its error report to.  Empty = the candidate walk, which starts at Downloads")
+    ("StockCover_Folder"
+     ""
+     "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
+
+(defun lzp:setshow ( / r v)
+  (princ "\ncalofin settings, as this session reads them:")
+  (foreach r lzp:*settings*
+    (setq v (getenv (car r)))
+    (princ (strcat "\n  " (car r)
+                   "\n      now: " (if (and v (/= v "")) v
+                                       (strcat "(unset -- " (cadr r) ")"))
+                   "\n      " (caddr r))))
+  (princ))
+
+(defun c:CALSET ( / *error* pick key v)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALSET error: " msg)))
+    (if lzd:report (lzd:report "CALSET" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALSET" *lazpanel-version*))
+  (lzp:setshow)
+  (initget "Theme Errordir Stockdir Quit")
+  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Quit] <Quit>: "))
+  (if lzd:ask (lzd:ask "Change which?" pick))
+  (setq key (cond ((= pick "Theme") "CalofinTheme")
+                  ((= pick "Errordir") "CalofinErrorDir")
+                  ((= pick "Stockdir") "StockCover_Folder")))
+  (cond
+    ((null key) (princ "\nNothing changed."))
+    ((= key "CalofinTheme")
+     ;; Undo is accepted everywhere Back is, unlisted (STANDARDS 1)
+     (initget "Dark Light Auto Back Undo")
+     (setq v (getkword "\nTheme [Dark/Light/Auto/Back] <Auto>: "))
+     (if lzd:ask (lzd:ask "Theme" v))
+     (cond
+       ((member v '("Back" "Undo")) (c:CALSET))
+       (t (setenv "CalofinTheme" (if v (strcase v) "Auto"))
+          ;; ...and beside the pins, where the VB palette reads it
+          ;; (ui/calofin_net/PaletteTheme.vb).  The profile is what the
+          ;; Lisp side reads and the registry is what the palette can
+          ;; reach, and a drafter who has said which way their screen
+          ;; reads has said it to both surfaces -- the same bargain the
+          ;; pinned row already strikes.
+          (vl-catch-all-apply
+            'vl-registry-write
+            (list lzp:*pinkey* "Theme"
+                  (if (= (strcase (getenv "CalofinTheme")) "AUTO") ""
+                      (strcase (getenv "CalofinTheme")))))
+          (princ (strcat "\nCalofinTheme is now "
+                         (getenv "CalofinTheme")
+                         ".  Every tool reads it on the next colour it"
+                         " picks; the toolbar icon takes it at the next"
+                         " LAZBUTTON or LAZICON, and the VB palette at"
+                         " its next chart.")))))
+    (t
+     (setq v (getstring T (strcat "\n" key
+                                  " (a folder, Back to leave it, "
+                                  "or . to clear it): ")))
+     (if lzd:ask (lzd:ask key v))
+     (cond
+       ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
+       ((= v "") (princ "\nUnchanged."))
+       ((= v ".")
+        (setenv key "")
+        (princ (strcat "\n" key " cleared.")))
+       (t (setenv key v)
+          (princ (strcat "\n" key " is now " v "."))))))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:commands))) " tools on the panel across "
@@ -98809,10 +99700,20 @@
   '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 
-(princ (strcat "\nLAZPANEL " *lazpanel-version*
-               " loaded.  LAZPANEL opens the panel;"
-               " LAZBUTTON puts its button on screen;"
-               " LAZPIN edits the pinned row."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZPANEL " *lazpanel-version*
+                 " loaded.  LAZPANEL opens the panel;"
+                 " LAZBUTTON puts its button on screen;"
+                 " LAZPIN edits the pinned row;"
+                 " CALHELP says what a command does;"
+                 " CALSET shows the settings.")))
 (princ)
 
 
@@ -98849,7 +99750,7 @@
   "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT"
   "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII"
   "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN"
-  "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
@@ -98881,12 +99782,13 @@
   cal:datestr cal:dedupe cal:dimstyrestore cal:dimstysave cal:dist
   cal:dot cal:dotn cal:ensure-layer cal:error-cancel-p cal:formanswer
   cal:imgflatten cal:imgpline cal:imgtext cal:imgtexth cal:imgtextw
-  cal:kvpack cal:kvunpack cal:layer-usable-p cal:mid cal:midn
-  cal:mtext cal:nthcdr cal:osdown cal:osup cal:pad
-  cal:perp cal:plural cal:proj-param cal:pt-line-dist cal:signed-dang
-  cal:sublist cal:sysrestore cal:syssave cal:tan cal:text
-  cal:trim cal:undobegin cal:undoend cal:unit cal:unitn
-  cal:v* cal:v+ cal:v- cal:vlen cal:zeropad2
+  cal:ink cal:kvpack cal:kvunpack cal:layer-usable-p cal:mid
+  cal:midn cal:mtext cal:nthcdr cal:osdown cal:osup
+  cal:pad cal:perp cal:plural cal:proj-param cal:pt-line-dist
+  cal:signed-dang cal:sublist cal:sysrestore cal:syssave cal:tan
+  cal:text cal:trim cal:ui cal:undobegin cal:undoend
+  cal:unit cal:unitn cal:v* cal:v+ cal:v-
+  cal:vlen cal:zeropad2
 ))
 (setq lazpass:*nohelper* nil)
 (foreach n lazpass:*helpers*
@@ -98898,8 +99800,10 @@
     (foreach n (reverse lazpass:*nohelper*)
       (princ (strcat " " (vl-symbol-name n))))))
 
-;; the flag the header set for the library: cleared, so a later
-;; APPLOAD of CALOFIN-LIB.lsp on its own in this drawing still says
-;; what it is
+;; the flags the header set: cleared, so a later APPLOAD of
+;; CALOFIN-LIB.lsp on its own in this drawing still says what it
+;; is, and a single tool loaded over the top of the build still
+;; announces the version it arrived at
 (setq cal:*build-loading* nil)
+(setq *calofin-quiet* nil)
 (princ)

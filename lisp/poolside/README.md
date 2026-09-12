@@ -100,7 +100,7 @@ puts your setting back.
 
 | Global | Default | What it does |
 | --- | --- | --- |
-| `psd:*pv-col*` / `psd:*pvx-col*` / `psd:*hi-col*` | `8` / `7` / `1` | guide outline, guide tie, and the highlight on the tie being asked |
+| `psd:*pv-col*` / `psd:*pvx-col*` / `psd:*hi-col*` | `'auto` / `7` / `1` | guide outline, guide tie, and the highlight on the tie being asked |
 
 The nominal guide is drawn at `0.09 * B` for `C` and `0.20 * B` for `D`
 (about 3'6" and 8' on a 40' pool) with the run proportions of

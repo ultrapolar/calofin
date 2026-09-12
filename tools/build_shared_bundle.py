@@ -106,6 +106,16 @@ def build():
         ";; tells CALOFIN-LIB.lsp it is arriving as part of the whole build",
         "(setq cal:*build-loading* T)",
         "",
+        ";; ...and tells all sixty-three members to load QUIETLY.  Each",
+        ";; one announces itself when it is APPLOADed alone, which is",
+        ";; right; all of them announcing themselves here was 83 lines",
+        ";; and 6,681 characters of scrollback in every drawing opened,",
+        ";; before the drafter had done anything.  CALVER reads the whole",
+        ";; roster back whenever it is asked for.  Not a cal: symbol: a",
+        ";; lisp/ file may not call or set one (check_standards), and the",
+        ";; standalone files are where the banners live.",
+        "(setq *calofin-quiet* T)",
+        "",
     ]
 
     for n in names:
@@ -162,10 +172,12 @@ def build():
         "    (foreach n (reverse lazpass:*nohelper*)",
         '      (princ (strcat " " (vl-symbol-name n))))))',
         "",
-        ";; the flag the header set for the library: cleared, so a later",
-        ";; APPLOAD of CALOFIN-LIB.lsp on its own in this drawing still says",
-        ";; what it is",
+        ";; the flags the header set: cleared, so a later APPLOAD of",
+        ";; CALOFIN-LIB.lsp on its own in this drawing still says what it",
+        ";; is, and a single tool loaded over the top of the build still",
+        ";; announces the version it arrived at",
         "(setq cal:*build-loading* nil)",
+        "(setq *calofin-quiet* nil)",
         "(princ)",
         "",
     ]
