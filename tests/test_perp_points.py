@@ -70,8 +70,18 @@ KEYWORDS = {"T", "Yes", "No", "Undo", "STR", "RETRY"}
 # Version banners: deliberate globals set once at load time and read by
 # the load message; tools/release_lisp.py stamps the dated releases/
 # twins from them.  Not leaks.
+#
+# *calofin-quiet* is the same shape from the other side: the load
+# message READS it and never sets it.  LAZPASS.lsp and
+# CALOFIN-LOADER.lsp set it while they load their members, so the
+# whole build says one line instead of sixty-three; APPLOADed alone it
+# is unbound, which is nil, and the banner prints.  This check reads
+# from the command's defun to the end of the file, so it sees that
+# banner -- which is exactly why the version globals are listed here
+# too.
 VERSION_GLOBALS = {"*perp-version*", "*cperp-version*",
-                   "*tutperp-version*", "*tutcperp-version*"}
+                   "*tutperp-version*", "*tutcperp-version*",
+                   "*calofin-quiet*"}
 
 
 def strip_comments(src):

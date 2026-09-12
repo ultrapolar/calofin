@@ -19,7 +19,8 @@
 ;;; tutorials' pause polarity, ...) stay in their own tools -- see
 ;;; STANDARDS.md section 6.
 ;;;
-;;; Command:  CALVER   print the loaded library version
+;;; Command:  CALVER   this library's version, and every calofin file
+;;;                   loaded in this session with the version it is at
 ;;; ======================================================================
 
 (vl-load-com)
