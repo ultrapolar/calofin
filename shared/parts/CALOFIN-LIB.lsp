@@ -567,12 +567,15 @@
 
 ;; The tile palette.  -16 and -15 are the dialog's own foreground and
 ;; background, so the chart follows the user's AutoCAD theme rather
-;; than fighting it; the other three are real colour numbers.
+;; than fighting it; the other four are real colour numbers.
 (setq cal:*imgcol-line* -16)
 (setq cal:*imgcol-back* -15)
 (setq cal:*imgcol-dim* 8)
 (setq cal:*imgcol-val* 30)
 (setq cal:*imgcol-hi* 5)
+;; a letter whose box is still owed -- drawn in this and struck twice,
+;; which is what a stroke font has instead of a bold weight
+(setq cal:*imgcol-miss* 1)
 
 ;; one character's polylines, or nil
 (defun cal:imgglyph (ch / p)

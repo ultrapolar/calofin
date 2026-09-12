@@ -620,7 +620,7 @@ TOOLS = {
                          'lzf:*font-h*', 'lzf:*font-adv*',
                          'lzf:*col-line*', 'lzf:*col-back*',
                          'lzf:*col-dim*', 'lzf:*col-val*',
-                         'lzf:*col-hi*'],
+                         'lzf:*col-hi*', 'lzf:*col-miss*'],
         'symbols': {
             # the prose names it too, and prose that names a helper the
             # twin does not define is the drift this file exists to stop
@@ -634,6 +634,7 @@ TOOLS = {
             'lzf:*col-dim*': 'cal:*imgcol-dim*',
             'lzf:*col-val*': 'cal:*imgcol-val*',
             'lzf:*col-hi*': 'cal:*imgcol-hi*',
+            'lzf:*col-miss*': 'cal:*imgcol-miss*',
         },
         # the section header survives the drop -- top_span stops at a
         # ;;; block -- so the prose under it would be left explaining a

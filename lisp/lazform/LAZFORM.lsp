@@ -14,8 +14,20 @@
 ;;; against a letter and the letter is REPLACED by what you typed --
 ;;; which is what the letter was standing in for all along.  Every box
 ;;; is labelled with its own letter, so the list and the picture read
-;;; as one thing.  Fill in what you know, leave the rest blank, press
-;;; Insert: the routine runs and asks only for the gaps.
+;;; as one thing.
+;;;
+;;; INSERT DRAWS THE POOL.  It used to hand over whatever had been
+;;; typed and leave POOL to ask for the rest a question at a time,
+;;; which is the interview a form is supposed to replace: a sheet you
+;;; filled in and then answered again.  So the sheet carries the whole
+;;; run or it does not go.  Press Insert on an unfinished one and the
+;;; page does not close: every letter with nothing usable against it is
+;;; struck TWICE, a pixel apart, in red -- what a stroke font has
+;;; instead of a bold weight -- the line under the form names them, and
+;;; the marks come off one at a time as the boxes are answered.  Press
+;;; it again and it draws, and the only thing left to do is pick the
+;;; point.  (A box that cannot be READ is a different thing: that is an
+;;; error in what is typed, and it greys the button outright.)
 ;;;
 ;;; TWO ROUTINES ARE FED FROM HERE.  The eight POOL sheets -- Rectangle,
 ;;; True Oval, Roman, both Grecians, True L Left, Round and Octagon --
@@ -29,13 +41,12 @@
 ;;; THE FORM SAYS WHAT IT IS ABOUT TO DO.  lzf:answer turns anything it
 ;;; cannot read into "not answered", so a typo used to be dropped in
 ;;; silence while the chart went on showing it -- the chart draws the
-;;; STRING -- and POOL asked for that dimension again with no reason
-;;; given.  A state line under the form now names any box in that
-;;; position and Insert stays greyed until it is fixed; when none is,
-;;; the same line is the hand-off, saying how much of the sheet is
-;;; filled and which letters POOL will still ask for.  It reports what
-;;; lzf:form is about to send rather than second-guessing it, so the
-;;; line and the alist cannot say different things.
+;;; STRING.  The state line under the form names any box in that
+;;; position, and any box or dropdown still empty, by the name the
+;;; sheet prints against it; when nothing is left it says so, and says
+;;; what -- if anything -- the routine will still ask.  It reports
+;;; lzf:livekeys and lzf:form rather than second-guessing them, so the
+;;; line, the bold letters and the alist cannot say different things.
 ;;;
 ;;; ZERO INSTALL, like LAZPANEL: the dialog is plain DCL written to the
 ;;; temp folder at run time, and the chart is drawn with vector_image,
@@ -84,7 +95,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.17")
+(setq *lazform-version* "v2.18")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -306,9 +317,9 @@
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
     ;; the Normal bottom re-asks the side as a CHECK, under a key of
-    ;; its own (pool:hopoval), so it is a second box and not the T on
-    ;; the drawing
-    ("tt" "T - straight side length (check)")
+    ;; its own (pool:hopoval asks ttc), so it is a second box and not
+    ;; the T on the drawing
+    ("ttc" "T - straight side length (check)")
     ("e2" "E2 - left end shallow flat")
     ("f2" "F2 - left slope")
     ("f1" "F1 - right slope")
@@ -510,9 +521,15 @@
    (("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
-    ;; the round pool hands its bottom to the oval's routine, which
-    ;; re-asks the straight side as a check even on a circle
-    ("tt" "T - straight side length (check)")
+    ;; A ROUND POOL'S HOPPER IS THE OVAL'S, and the oval's routine asks
+    ;; R3 between G and W.  The sheet did not carry it, so that one
+    ;; question was left at the command line on every round pool drawn
+    ;; from this form -- the gap the box count could not show, because
+    ;; a box that is not there is not counted.
+    ("r3" "R3 - hopper end radius")
+    ;; and the same routine re-asks the straight side as a check even
+    ;; on a circle, under its own key
+    ("ttc" "T - straight side length (check)")
     ("e2" "E2 - left end shallow flat")
     ("f2" "F2 - left slope")
     ("f1" "F1 - right slope")
@@ -1120,6 +1137,11 @@
 (setq lzf:*pos* nil)            ; where the dialog was last standing
 (setq lzf:*go* nil)             ; the chart a tab click asked for
 (setq lzf:*ranchart* nil)       ; the chart Insert was finally pressed on
+(setq lzf:*cover* nil)          ; this run is LAZFORMCOVER's, so the
+                                ; pool-bottom gate is already answered No
+(setq lzf:*marked* nil)         ; Insert has been pressed on an
+                                ; unfinished sheet, so the gaps are
+                                ; marked on the chart from here on
 
 (defun lzf:get (key / p)
   (if (setq p (assoc key lzf:*vals*)) (cdr p) ""))
@@ -1137,12 +1159,15 @@
 
 (setq lzf:*dx* 0)               ; the tile's extent this time round
 (setq lzf:*dy* 0)
+(setq lzf:*owed* nil)           ; the boxes THIS repaint draws in bold,
+                                ; taken once at the top of lzf:redraw
 
 (setq lzf:*col-line* -16)       ; dialog foreground: the outline
 (setq lzf:*col-back* -15)       ; dialog background: the clear
 (setq lzf:*col-dim* 8)          ; grey: the dimension arrows
 (setq lzf:*col-val* 30)         ; orange: a value that has been typed
 (setq lzf:*col-hi* 5)           ; blue: the box round the active one
+(setq lzf:*col-miss* 1)         ; red: a letter the sheet still owes
 
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
@@ -1269,7 +1294,8 @@
 ;; to run into its neighbours -- H, G, F and E sit shoulder to shoulder
 ;; along the middle of the chart and every one of them can carry a
 ;; five-character feet-and-inches number.
-(defun lzf:label (d / letter key x1 y1 x2 y2 side txt sc w h lx ly span mx my)
+(defun lzf:label (d / letter key x1 y1 x2 y2 side txt sc w h lx ly span
+                    mx my bold)
   (setq letter (car d) key (cadr d)
         x1 (lzf:px (nth 2 d)) y1 (lzf:py (nth 3 d))
         x2 (lzf:px (nth 4 d)) y2 (lzf:py (nth 5 d))
@@ -1318,8 +1344,27 @@
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
                    lzf:*col-hi*))
+  ;; THE LETTER IS BOLD WHILE THE BOX IS OWED.  A box this page will be
+  ;; asked about and has no usable answer in gets its letter struck
+  ;; TWICE, a pixel apart, in the missing colour -- which is as close
+  ;; to a bold weight as a stroke font gets, and it is the picture the
+  ;; drafter is reading rather than a line of text under it.  The
+  ;; second strike is a second call rather than a wider pen because
+  ;; there is no pen: vector_image draws one-pixel segments and takes
+  ;; no weight, and lzf:text is one of the helpers the grouped build
+  ;; swaps for the library's, so it may not grow an argument either.
+  ;;
+  ;; A greyed box is never bold: lzf:owedp is measured against
+  ;; lzf:livekeys, so a letter this bottom type or this square state
+  ;; has taken away goes on being drawn plainly -- which is now the
+  ;; difference on the picture between "still to answer" and "not
+  ;; asked here".
+  (setq bold (lzf:owedp key))
   (lzf:text txt lx ly sc
-            (if (= (lzf:get key) "") lzf:*col-line* lzf:*col-val*)))
+            (cond (bold lzf:*col-miss*)
+                  ((= (lzf:get key) "") lzf:*col-line*)
+                  (t lzf:*col-val*)))
+  (if bold (lzf:text txt (1+ lx) ly sc lzf:*col-miss*)))
 
 ;; The whole picture, start to end.  Every vector goes between one
 ;; start_image and one end_image so the tile is painted once: the
@@ -1329,7 +1374,18 @@
 (defun lzf:redraw ( / c poly d)
   (setq c lzf:*chart*
         lzf:*dx* (dimx_tile "chart")
-        lzf:*dy* (dimy_tile "chart"))
+        lzf:*dy* (dimy_tile "chart")
+        ;; what this repaint marks in bold, worked out once -- the
+        ;; letters are drawn off it, so every letter agrees with every
+        ;; other and with the state line drawn beside them.  Nothing
+        ;; is marked until Insert has been pressed on an unfinished
+        ;; sheet; after that the set shrinks as the boxes are filled.
+        ;; A box that cannot be READ is marked with the empty ones: it
+        ;; is the one the chart lies about hardest, because the chart
+        ;; draws the string, so a typo looks exactly like an answer
+        ;; until its letter goes red
+        lzf:*owed* (if lzf:*marked*
+                       (append (lzf:togo) (lzf:unreadable))))
   (start_image "chart")
   (fill_image 0 0 lzf:*dx* lzf:*dy* lzf:*col-back*)
   (foreach poly (lzf:outline c)
@@ -1631,9 +1687,9 @@
   (setq out (cons (strcat "  : text { key = \"hint\"; width = 62; "
                           "label = \"Read the letters off the chart and type "
                           "the numbers in the column beside it.  Type NA where "
-                          "nothing was measured; leave a box empty and "
-                          (if (lzf:oasis-p c) "OASIS" "POOL")
-                          " will ask.\"; }")
+                          "nothing was measured; a letter stays BOLD and red "
+                          "until its box is answered, and Insert waits for "
+                          "the last one.\"; }")
                   out))
   ;; What a box will TAKE.  No inch mark in the sentence on purpose:
   ;; a bare " would end the DCL string it sits in, and this file writes
@@ -2206,12 +2262,16 @@
 ;;;  reach.  Un-greyed they were counted live, called filled by the
 ;;;  state line and sent by lzf:poolform -- and read by nothing: an
 ;;;  Oval on a Wedge bottom draws the same 105 entities with them and
-;;;  without.  T is deliberately NOT in this list: it is the hopper's
-;;;  straight-side check on the oval family, but the Grecian's
-;;;  perimeter block and the Roman's letters mode both ask their own T,
-;;;  so greying it here would hide a box POOL really does ask for.
+;;;  without.  TTC is in the list for the same reason and T is not:
+;;;  ttc is the hopper's own straight-side CHECK, asked inside
+;;;  pool:hopoval beside W and R3 and nowhere else, while T is a
+;;;  perimeter letter the Grecian's block and the Roman's letters mode
+;;;  ask whatever the bottom is.  One key each is what separates them
+;;;  -- they were both "tt" until POOL gave the check its own name,
+;;;  and a Roman asks BOTH on one run, so one key could only ever
+;;;  answer the first.
 (defun lzf:btskip (bt / sp out)
-  (setq out (if (= bt "Normal") nil (list "w" "r3" "l1" "x")))
+  (setq out (if (= bt "Normal") nil (list "w" "r3" "l1" "x" "ttc")))
   (cond
     ((= bt "Sport") (append (list "h" "f" "e" "c2") out))
     ((not pool:btmspec) out)          ; no POOL: only the dispatch is known
@@ -2229,8 +2289,40 @@
 ;; answer is restricted to keys the page really carries, so a rule may
 ;; name a key no chart has and the two callers can both trust the list
 ;; -- mode_tile on a tile that is not there would error.
-;; A POOL page's dead keys: the bottom type, the in-square toggle and
-;; the mode dropdown, put together.
+
+;; EVERYTHING BEHIND THE POOL-BOTTOM GATE.  pool:askbottom stands in
+;; front of the bottom type, the whole hopper chain, the depths and the
+;; hopper's own checks; answer it No and none of them is ever asked.
+;; A cover sheet answers it No by definition -- that is the whole of
+;; cover mode -- so on LAZFORMCOVER every one of these is a box POOL
+;; will not reach, and offering them would be asking the drafter to
+;; fill in a chain nothing reads.
+(setq lzf:*bottomkeys*
+  (append '("btype" "h" "g" "f" "e" "w" "r3" "l1" "x" "m" "l" "k"
+            "c" "d" "c2" "ttc")
+          lzf:*sportchain*))
+
+;; PERFECT ENDS.  In square, POOL does not ask whether a Roman's two
+;; ends are identical -- it takes them as identical and asks one end's
+;; letters only, using the left-hand answer for both.  So the sheet's
+;; right-hand halves are dead there, exactly as a Normal hopper's C is:
+;; POOL will never ask, so a number typed into one would be read by
+;; nothing.  Out of square the sheet prints both ends and answers the
+;; question itself -- see lzf:poolform.
+(setq lzf:*perfectdead* '(("ROman" "sr" "s1r" "vr" "r2")))
+
+;; ONE MEASUREMENT, TWO QUESTIONS.  A Roman's straight side is asked
+;; twice on one run: rm:letters asks it as the perimeter letter T, and
+;; then the oval hopper asks it again as its own check, ttc.  There is
+;; one tape and one box on the sheet, so the box answers both --
+;; (sent-key . box-key), read after the boxes in lzf:poolform.
+(setq lzf:*echo* '(("ROman" ("ttc" . "tt"))))
+
+(defun lzf:echo (c) (cdr (assoc (car c) lzf:*echo*)))
+
+;; A POOL page's dead keys: the bottom type, the in-square toggle, the
+;; mode dropdown, the cover flag and the perfect-ends rule above, put
+;; together.
 (defun lzf:pooldead (c insq btype / out bt n i k)
   ;; the L family: POOL asks no bottom type there at all, so the popup
   ;; is dead and the page is judged against the bottom those flows
@@ -2241,6 +2333,13 @@
   ;; the Sport chain is asked by a Sport bottom and by nothing else
   (if (/= bt "Sport")
       (setq out (append out lzf:*sportchain*)))
+  ;; a cover sheet never gets past the gate, so nothing behind it is
+  ;; asked -- and nothing behind it is offered
+  (if lzf:*cover*
+      (setq out (append out lzf:*bottomkeys*)))
+  ;; in square, both of a Roman's ends are the left-hand one
+  (if insq
+      (setq out (append out (cdr (assoc (car c) lzf:*perfectdead*)))))
   ;; in square there are no cross dims to measure, no mode to measure
   ;; them from, and no second overall
   (if insq
@@ -2288,19 +2387,48 @@
     (mode_tile k (if (member k dead) 1 0))))
 
 ;;; -------------------- what the page still owes -------------------------
-;;;  THE FAILURE THIS CLOSES.  lzf:answer turns anything it cannot read
-;;;  into SKIP, the key is then never sent, and POOL asks for it again
-;;;  at the command line -- while the chart goes on showing what was
-;;;  typed, because the chart draws the STRING.  So a box that will be
-;;;  silently dropped looks exactly like a box that was answered, and
-;;;  the drafter finds out after the form has closed, if at all.
+;;;  INSERT DRAWS THE POOL.  It used to hand over whatever was typed
+;;;  and let POOL ask for the rest at the command line, which is the
+;;;  one thing a form is supposed to remove: a sheet filled in on
+;;;  screen and then re-answered a question at a time is the interview
+;;;  it was meant to replace.  So the page now carries the whole
+;;;  answer or it does not go: every box the run will reach, every
+;;;  dropdown the run will ask, filled in here.
 ;;;
-;;;  The state line under the form says both halves of that out loud:
-;;;  which boxes cannot be read (and Insert stays greyed until they
-;;;  can), and, when they all can, how many are filled and what the
-;;;  routine will still have to ask for.  Nothing here changes what is
-;;;  SENT -- lzf:form is still the only thing that decides that -- it
-;;;  reports what lzf:form is about to do.
+;;;  WHAT IS STILL OWED IS MARKED, not merely counted.  Press Insert on
+;;;  an unfinished sheet and every box with nothing usable in it has
+;;;  its letter drawn BOLD on the chart, in the missing colour; the
+;;;  page stays open, the state line names what is left, and each mark
+;;;  comes off the moment its box is answered -- so the picture is a
+;;;  checklist that empties as it is worked through, and the same
+;;;  button draws once it has.
+;;;
+;;;  THREE THINGS COUNT AS STILL OWED (lzf:owed), and every one of them
+;;;  is a question POOL would otherwise ask at the command line:
+;;;
+;;;    an empty live box        nothing typed at all
+;;;    NA where only a number   the depths: pool:askh takes a form
+;;;    will do                  answer only when it is a NUMBER, so an
+;;;                             NA there is consumed and asked for
+;;;                             anyway (lzf:*numonly*)
+;;;    a dropdown on "(ask)"    a cross-dim mode or a corner row left
+;;;                             unanswered IS POOL asking
+;;;
+;;;  TWO THINGS GREY THE BUTTON OUTRIGHT, because they are errors in
+;;;  what has been typed rather than gaps in what has not:
+;;;
+;;;    an unreadable box        neither NA nor a distance -- the typo
+;;;                             lzf:answer would drop in silence
+;;;                             (lzf:unreadable)
+;;;    an impossible depth      D no deeper than C, or C2 outside the
+;;;    pair                     two: pool:askdeep and pool:askc2 loop
+;;;                             on these rather than accept them
+;;;                             (lzf:depthbad)
+;;;
+;;;  A GREYED BOX IS NEVER OWED.  lzf:dead is still the one authority
+;;;  on what this page asks; everything here is measured against
+;;;  lzf:livekeys, so a box the state has taken away is neither marked,
+;;;  nor counted, nor waited for.
 
 ;; "Corner A (bottom left)" -> "Corner A".  A label with no bracket is
 ;; its own short name already.
@@ -2330,7 +2458,13 @@
     (if (and (not out) (= (car d) key))
       (setq out (lzf:leadletter (cadr d)))))
   (foreach d (lzf:corners c)
-    (if (and (not out) (= (strcat (car d) "-sz") key))
+    (if (and (not out) (member key (list (car d) (strcat (car d) "-sz"))))
+      (setq out (lzf:unbracket (cadr d)))))
+  ;; a dropdown is owed exactly as a box is, so it has to have a name
+  ;; on the page too -- its own label, cut at the bracket like a
+  ;; corner row's
+  (foreach d (lzf:picks c)
+    (if (and (not out) (= (car d) key))
       (setq out (lzf:unbracket (cadr d)))))
   (if out out (strcase key)))
 
@@ -2358,12 +2492,100 @@
       (setq out (cons k out))))
   (reverse out))
 
-;; The live boxes still empty -- exactly what the routine will ask for.
-(defun lzf:togo ( / c out k)
+;; THE DEPTHS TAKE A NUMBER AND NOTHING ELSE.  C, D and C2 are asked
+;; through pool:askh, which reads the store only when what it finds
+;; there is a number: every caller range checks the answer and none of
+;; them can do anything with nil, so an NA is consumed and then asked
+;; for at the command line anyway.  NA is a real answer in any other
+;; box on the sheet; in these three it is a question waiting to happen,
+;; and the sheet says so rather than letting Insert promise a draw it
+;; cannot make.
+(setq lzf:*numonly* '("c" "d" "c2"))
+
+;; The live boxes with no usable answer in them: empty, or NA where
+;; only a number will do.  A box holding a TYPO is not here -- it is in
+;; lzf:unreadable, which is a different thing to say and says it
+;; louder -- so the two lists and what lzf:form sends still partition
+;; the live boxes three ways with nothing in two of them.
+(defun lzf:togo ( / c out k v a)
   (setq c lzf:*chart*)
   (foreach k (lzf:livekeys c)
-    (if (= (lzf:trim (lzf:get k)) "") (setq out (cons k out))))
+    (setq v (lzf:trim (lzf:get k))
+          a (lzf:answer v))
+    (if (or (= v "")
+            (and (member k lzf:*numonly*)
+                 (not (eq a 'SKIP))
+                 (not (numberp a))))
+        (setq out (cons k out))))
   (reverse out))
+
+;; The mode dropdowns still on "(ask)" that this page will be asked
+;; about.  A dead one is not owed: in square there is no cross-dim
+;; mode to pick, and lzf:dead is what says so.
+(defun lzf:pickowed ( / c dead out d)
+  (setq c lzf:*chart*
+        dead (lzf:dead c lzf:*insq* (nth lzf:*btype* lzf:*btypes*)))
+  (foreach d (lzf:picks c)
+    (if (and (not (member (car d) dead))
+             (= (lzf:pickval c (car d)) ""))
+        (setq out (cons (car d) out))))
+  (reverse out))
+
+;; The corner rows still on "(ask)".  A row answers whichever POOL
+;; questions this square state puts to it, and a row that answers none
+;; of them in this state -- no targets -- is not owed.
+(defun lzf:cornerowed ( / c out d)
+  (setq c lzf:*chart*)
+  (foreach d (lzf:corners c)
+    (if (and (if lzf:*insq* (caddr d) (cadddr d))
+             (zerop (lzf:cget (car d))))
+        (setq out (cons (car d) out))))
+  (reverse out))
+
+;; Everything the page still owes, in the order it is read: the boxes
+;; first, then the dropdowns.  One list, because the state line, the
+;; bold marking on the chart and Insert all have to agree about it --
+;; a letter marked bold while Insert is live, or the other way round,
+;; would be the form contradicting itself on screen.
+(defun lzf:owed ()
+  (append (lzf:togo) (lzf:cornerowed) (lzf:pickowed)))
+
+;; Is this key one of the boxes the chart should mark?  The chart draws
+;; letters, so only the box half of lzf:owed can ever be marked -- a
+;; dropdown has no letter on the picture and is named in the line
+;; instead.  Read off the snapshot lzf:redraw takes rather than worked
+;; out per letter: every dimension on the sheet would otherwise walk
+;; the whole page's greying rules again, twenty-odd times a repaint,
+;; and a repaint happens every time a caret leaves a box.
+;;
+;; The snapshot is empty until Insert has been pressed on an unfinished
+;; sheet.  Marking is not a state the page opens in: a fresh chart
+;; struck red all over would be shouting before it had been asked
+;; anything, and these letters are the sheet's own labels the rest of
+;; the time.  Once it is on it stays on for the rest of the run, tabs
+;; included -- somebody who has asked what this sheet still owes is
+;; asking about the next one too, and the set is worked out per page
+;; either way.
+(defun lzf:owedp (key) (if (member key lzf:*owed*) t nil))
+
+;; D MUST BEAT C, AND C2 MUST LAND BETWEEN THEM.  pool:askdeep and
+;; pool:askc2 do not accept a depth that fails this -- they print the
+;; reason and ask again -- so a sheet that sends one gets the question
+;; back at the command line, which is the thing Insert exists to
+;; prevent.  Said here, while the numbers can still be corrected, and
+;; only when both ends of a comparison are actually readable.
+(defun lzf:depth (key / v)
+  (if (and (member key (lzf:livekeys lzf:*chart*))
+           (numberp (setq v (lzf:answer (lzf:trim (lzf:get key))))))
+      v))
+
+(defun lzf:depthbad ( / cv dv c2v)
+  (setq cv (lzf:depth "c") dv (lzf:depth "d") c2v (lzf:depth "c2"))
+  (cond
+    ((and cv dv (<= dv cv))
+     "D must be deeper than C - POOL will not take it otherwise.")
+    ((and cv c2v dv (or (< c2v cv) (> c2v dv)))
+     "C2 has to land between C and D - POOL will not take it otherwise.")))
 
 ;; "B", "B and C2", "B, H and F", "B, H, F and 2 more".  A status line
 ;; is read at a glance or not at all, so it names three and counts the
@@ -2394,15 +2616,63 @@
 (defun lzf:plural (n one many)
   (strcat (itoa n) " " (if (= n 1) one many)))
 
+;; How many answers this page is asking for: the live boxes, plus the
+;; dropdowns that are live with them.  The denominator of the state
+;; line, and what lzf:owed counts down to nothing.
+(defun lzf:askcount ( / c dead n d)
+  (setq c lzf:*chart*
+        dead (lzf:dead c lzf:*insq* (nth lzf:*btype* lzf:*btypes*))
+        n (length (lzf:livekeys c)))
+  (foreach d (lzf:picks c)
+    (if (not (member (car d) dead)) (setq n (1+ n))))
+  (foreach d (lzf:corners c)
+    (if (if lzf:*insq* (caddr d) (cadddr d)) (setq n (1+ n))))
+  n)
+
+;; THE ONE THING A FINISHED POOL SHEET CAN STILL LEAVE AT THE COMMAND
+;; LINE.  Two of the Grecian cross-dim modes tape 14 and 18 diagonals,
+;; far more than any sheet has boxes for, so the dropdown answers the
+;; gate here and the numbers are typed there.  It is on the page
+;; already (lzf:*grechint*); the hand-off line says it too, because a
+;; line that promises "Insert draws it" and then asks fourteen
+;; questions is the promise this whole section exists to keep.
+(defun lzf:modeasks ( / c m v)
+  (setq c lzf:*chart*)
+  (if (and (not lzf:*insq*)
+           (setq m (lzf:crossmode c))
+           (/= (setq v (lzf:pickval c m)) "")
+           (not (assoc v lzf:*crosslive*)))
+      v))
+
+;; What Insert will still not have answered when the sheet is full.
+;; An OASIS pool is asked about its floor AFTER the outline exists --
+;; there is no gate in front of that question for a form to close --
+;; so an oasis page says so rather than claiming a draw it cannot
+;; make; a POOL page has nothing left but the point it is placed at.
+;;
+;; One case is not listed here because it is not a state of the page:
+;; a hopper chain that RESOLVES G to zero on a Normal bottom makes POOL
+;; announce a slope bottom and ask for C and D, which a Normal bottom
+;; greys.  That is a discovery POOL makes while fitting the chain to
+;; the overalls, and reading it off the page would mean redoing
+;; pool:chainfix here -- see the README.
+(defun lzf:restasks ( / m)
+  (cond
+    ((lzf:oasis-p lzf:*chart*)
+     " - OASIS asks for the base point, then the floor.")
+    ((setq m (lzf:modeasks))
+     (strcat " - POOL asks for the base point and the " m " diagonals."))
+    (t " - POOL asks only for the base point.")))
+
 ;; The line itself.  An unreadable box is the urgent half and takes the
-;; line to itself; when there is none, the line is the hand-off: how
-;; much of the sheet is filled, and what is left for the command line.
-(defun lzf:statetext ( / c who bad togo n)
+;; line to itself; then a depth pair POOL would refuse; then what the
+;; sheet still owes, by the names it prints; and when it owes nothing,
+;; the line says Insert will draw.
+(defun lzf:statetext ( / c bad owed n)
   (setq c    lzf:*chart*
-        who  (if (lzf:oasis-p c) "OASIS" "POOL")
         bad  (lzf:unreadable)
-        togo (lzf:togo)
-        n    (length (lzf:livekeys c)))
+        owed (lzf:owed)
+        n    (lzf:askcount))
   (cond
     ((cdr bad)
      (strcat (lzf:taglist c bad)
@@ -2410,19 +2680,24 @@
     (bad
      (strcat (lzf:taglist c bad)
              " is not a measurement - type a number, or NA, or clear it."))
+    ((lzf:depthbad))
     ((zerop n)
-     (strcat "Nothing on this page is live - " who " will ask for all of it."))
-    ((not togo)
-     (strcat "All " (lzf:plural n "box" "boxes") " filled - " who
-             " will ask only for the base point."))
-    ((= (length togo) n)
-     (strcat "Nothing filled yet - " who " will ask for all "
-             (lzf:plural n "box" "boxes") ", plus the base point."))
+     "Nothing on this page is live - there is nothing here to draw with.")
+    ((not owed)
+     (strcat "Ready - Insert draws it" (lzf:restasks)))
+    ;; once Insert has marked them the chart is carrying the names, so
+    ;; the line points at it rather than repeating a list the picture
+    ;; is already showing -- except for the dropdowns, which have no
+    ;; letter to mark and are named here or nowhere
+    (lzf:*marked*
+     (strcat "Marked on the chart: " (lzf:taglist c owed) "."))
+    ((= (length owed) n)
+     (strcat "Nothing filled yet - Insert needs all "
+             (lzf:plural n "box" "boxes") "."))
     (t
-     (strcat (itoa (- n (length togo))) " of "
-             (lzf:plural n "box" "boxes") " filled - "
-             who " will ask for " (lzf:taglist c togo)
-             ", plus the base point."))))
+     (strcat (itoa (- n (length owed))) " of "
+             (lzf:plural n "box" "boxes") " done - Insert needs "
+             (lzf:taglist c owed) "."))))
 
 ;; Fill the EMPTY live boxes from the stored sheet, and repaint.  Only
 ;; the empty ones: a recall must never overwrite a number just typed,
@@ -2437,14 +2712,41 @@
   (lzf:restate)
   n)
 
-;; Put the state on the page, and hold Insert back while any box holds
-;; something that cannot be read.  Greying it IS the feature: pressing
-;; Insert with an unreadable box in front of you drops that box without
-;; a word, which is the whole complaint.
-(defun lzf:restate ( / bad)
-  (setq bad (lzf:unreadable))
+;; Put the state on the page, and hold Insert back while something
+;; TYPED is wrong: a box that cannot be read, or a depth pair POOL
+;; would refuse.  Greying it IS the feature there, and for the reason
+;; it always was -- pressing Insert with an unreadable box in front of
+;; you used to drop it without a word.
+;;
+;; A box merely not filled in yet is a different thing and the button
+;; stays live for it: that press is how the drafter asks what is left,
+;; and lzf:insert answers by marking it.
+(defun lzf:restate ()
   (set_tile "state" (lzf:statetext))
-  (mode_tile "accept" (if bad 1 0))
+  (mode_tile "accept" (if (or (lzf:unreadable) (lzf:depthbad)) 1 0))
+  (princ))
+
+;; INSERT.  On a sheet that can be drawn from, it closes the page and
+;; POOL draws it.  On one that cannot, it does not hand the gaps to
+;; the command line -- it marks them: every letter with nothing usable
+;; against it goes bold and red on the chart, the line under the form
+;; names them, and the page stays open.  Press it again once they are
+;; answered and it draws.
+;;
+;; done_dialog is what closes a DCL page and it reports where the page
+;; was standing, which is why the close is here rather than in the
+;; caller: the answer has to be caught as the dialog goes.
+(defun lzf:insert ()
+  (if (or (lzf:owed) (lzf:unreadable) (lzf:depthbad))
+      (progn
+        ;; the last two grey the button, so this branch is normally
+        ;; reached only for the gaps -- it names them anyway, because a
+        ;; guard that depends on a tile really being un-clickable is a
+        ;; guard that hands POOL a dropped box the day it is not
+        (setq lzf:*marked* t)
+        (lzf:redraw)
+        (lzf:restate))
+      (setq lzf:*pos* (done_dialog 1)))
   (princ))
 
 (defun lzf:form (shape insq btype)
@@ -2505,6 +2807,33 @@
   ;; treatments would be read by nothing if it were left on No
   (if (and cp (member (car lzf:*chart*) lzf:*crecharts*))
       (setq out (cons (cons 'crec "Yes") out)))
+  ;; ONE MEASUREMENT ANSWERING TWO QUESTIONS -- a Roman's straight side
+  ;; is asked as the perimeter letter T and again as the hopper's own
+  ;; check.  Same box, both keys; a dead key is still dropped, so on
+  ;; any bottom but a Normal the check is not sent because it is not
+  ;; asked (lzf:btskip)
+  (foreach d (lzf:echo lzf:*chart*)
+    (setq a (lzf:answer (lzf:get (cdr d))))
+    (if (and (not (eq a 'SKIP))
+             (not (member (cdr d) dead))
+             ;; lzf:pooldead and not lzf:dead: the key being ECHOED is
+             ;; by definition not a key this page carries a box for, and
+             ;; lzf:dead keeps only the page's own keys, so it would
+             ;; never name it.  The unfiltered rule is what says whether
+             ;; the question is asked on this bottom at all
+             (not (member (car d)
+                          (lzf:pooldead lzf:*chart* insq btype))))
+        (setq out (cons (cons (read (car d)) a) out))))
+  ;; PERFECT ENDS, out of square.  POOL asks whether a Roman's two ends
+  ;; are identical, and answers the whole right-hand half of the sheet
+  ;; with the left-hand one if they are.  This sheet PRINTS both halves
+  ;; and asks for both, so it answers that question itself -- left on
+  ;; the prompt, the right-hand boxes it has just made the drafter fill
+  ;; in would be read by nothing.  In square POOL does not ask at all:
+  ;; it takes the ends as perfect, which is why lzf:*perfectdead* greys
+  ;; the right-hand boxes there.
+  (if (and (not insq) (assoc (car lzf:*chart*) lzf:*perfectdead*))
+      (setq out (cons (cons 'perfect "No") out)))
   ;; the gates last, so a chart cannot be talked out of the path its
   ;; own letters live on
   (foreach k (lzf:gates lzf:*chart*)
@@ -2556,6 +2885,9 @@
         lzf:*pos* nil                   ; the profile decides where this
                                         ; run opens, not the last page
         lzf:*ranchart* nil              ; no page has been accepted yet
+        lzf:*marked* nil                ; and nothing is marked until
+                                        ; Insert has been pressed on an
+                                        ; unfinished one
         go chartkey)
   (cond
     ((not (lzf:chart go))
@@ -2657,7 +2989,7 @@
           (action_tile "recall"
             (strcat "(lzf:recall \"" (car c) "\")"))
           (if (not (lzf:recall-read (car c))) (mode_tile "recall" 1))
-          (action_tile "accept" "(setq lzf:*pos* (done_dialog 1))")
+          (action_tile "accept" "(lzf:insert)")
           (action_tile "cancel" "(setq lzf:*pos* (done_dialog 0))")
           (lzf:redraw)
           (lzf:btgrey c)
@@ -2748,6 +3080,13 @@
 ;; oasis is asked about its floor after the outline exists, so there
 ;; is no gate in front of the question to close.
 (defun lzf:run (cover / form c)
+  ;; the page has to KNOW it is a cover sheet while it is being filled
+  ;; in, not only when it is handed over: everything behind the
+  ;; pool-bottom gate is a box POOL will never reach on this run, so
+  ;; the sheet greys it rather than waiting for it to be filled in.
+  ;; Set before the form opens and cleared after it closes, so a
+  ;; cancelled cover run leaves the next LAZFORM as it found it.
+  (setq lzf:*cover* (if cover t nil))
   (cond
     ;; the chart fills POOL's answers in, so POOL has to be here to
     ;; receive them -- say so plainly rather than opening a form whose
@@ -2761,11 +3100,19 @@
      (princ "\nLAZFORM: cancelled, nothing drawn."))
     ((not (lzf:oasis-p (setq c (lzf:chart lzf:*ranchart*))))
      (princ (strcat "\nLAZFORM: " (itoa (length form))
-                    " answers to POOL; it will ask for whatever is left."))
+                    " answers to POOL; it draws from the sheet."))
      (if cover
        (progn
          (setq pool:*nobottom* t)
-         (princ "\n         Cover sheet - no pool bottom will be asked for.")))
+         (princ "\n         Cover sheet - no pool bottom will be asked for."))
+       ;; THE ONE QUESTION A FULL SHEET COULD NOT ANSWER.  The
+       ;; pool-bottom gate is a run flag and not a store key -- five
+       ;; shape paths reach it and the store is consume-once -- so a
+       ;; sheet carrying the hopper chain and the depths still stopped
+       ;; to be asked whether there was a bottom at all, on every run.
+       ;; It carries them, so there is: the flag says so, and c:POOL
+       ;; clears it on both its exits either way.
+       (setq pool:*hasbottom* t))
      (pool:run-with-answers form))
     ;; an oasis sheet, and OASIS is the one that has to be here for it
     ((not oasis:run-with-answers)
@@ -2776,6 +3123,7 @@
      (princ (strcat "\nLAZFORM: " (itoa (length form))
                     " answers to OASIS; it will ask for whatever is left."))
      (oasis:run-with-answers form)))
+  (setq lzf:*cover* nil)
   (princ))
 
 (defun c:LAZFORM () (lzf:run nil))
