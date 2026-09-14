@@ -8,6 +8,19 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**A created point says so on the sheet.** `ABPCREATE` plots a point the
+survey never placed, and until now the drawing could not tell one from
+a point the field sheet put there.  It gets the note a moved point
+gets, on the same layer -- `Created Pt.23 - A 16'-8", B 15'-0"` -- and
+where the two readings could not cross and one had to be changed to
+make them, the note carries that too: `Created Pt.23 - A 25'-0" held,
+B from 20'-10" to 27'-10"`, which is the half somebody will want to
+check back against the sheet.  Where it goes is not asked: ABMOVE asks
+about its own because that one sits at the spot the point came off,
+away from the point and beside a ring, and because ABMOVE settles one
+point and ends -- a created point's note has one place to be, and
+ABPCREATE is a loop.
+
 **A miss too small to print is a crossing.** `ABPCREATE` decides
 whether two readings meet by arithmetic, and the arithmetic finds gaps
 the drawing cannot print: a pair that missed touching by a

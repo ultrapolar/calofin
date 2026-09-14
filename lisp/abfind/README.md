@@ -436,8 +436,40 @@ point. A drawing with nothing but the two stakes has no pattern, and
 that one falls back to `abf:*point-block*` on `abf:*point-layer*` from
 this file's own defaults, and says so.
 
-Then the two ties are drawn, the same as `ABFIND` draws them, and it
-asks for the next pair. `ABPCREATE` **loops** the way `ABFIND` does;
+### The note
+
+Then the two ties are drawn, and a **note** is written beside the point
+on `abf:*ring-layer*` — the same layer, height and hand as the one a
+moved point gets, and for the same reason: a point that was **plotted**
+rather than surveyed is not the same thing as one the field sheet
+placed, and a sheet that does not say so reads as though the field
+measured it.
+
+```
+Created Pt.23 - A 16'-8", B 15'-0"
+```
+
+Where the two readings could **not** cross and one of them had to be
+changed to make them, the note says which tape was held and what the
+other went from and to — the half of it somebody will want to check
+back against the sheet:
+
+```
+Created Pt.23 - A 25'-0" held, B from 20'-10" to 27'-10"
+```
+
+Where the note goes is **not** asked. `ABMOVE` asks where to put its
+own because that one belongs at the spot the point came *off* — away
+from the point itself, next to a ring, in whatever was already drawn
+there — and because `ABMOVE` settles one point and ends, so the
+question is put once. A created point's note has one place to be,
+beside the point, and `ABPCREATE` is a **loop**: a question per point
+is a question per point. It is ordinary `TEXT` and moves like any
+other.
+
+`Back` takes the note away with the rest of the round.
+
+Then it asks for the next pair. `ABPCREATE` **loops** the way `ABFIND` does;
 `Back` at the A reading takes the last point away again, ties and all.
 
 ### Which side of the A–B line
@@ -873,6 +905,12 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV115.lsp`; run it after any change and bump
 the banner.
 
+* **v1.17** — a created point is **noted** on `abf:*ring-layer*`, the
+  way a moved one is, and where a reading had to be changed to make the
+  two cross the note says which tape was held and what the other went
+  from and to. Placed beside the point rather than asked about: the
+  question `ABMOVE` puts belongs to a command that settles one point,
+  not to a loop.
 * **v1.16** — the creation flow audited. A pair that misses touching
   by less than the drawing can print is a **crossing** now
   (`abf:*touch*`, with `abf:closest` solving the touch point), instead
