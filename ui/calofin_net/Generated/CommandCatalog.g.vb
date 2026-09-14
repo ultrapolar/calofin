@@ -103,6 +103,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("DIMCHECK", "Dimension review", "Guided, one-at-a-time dimension review"),
         New Entry("DIMCONTEND", "Continue dim chains", "Chains a seed dimension out to every feature point"),
         New Entry("DIMSCAN", "Dimension scan", "Scan drawing for dimensions"),
+        New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text, and repeat"),
         New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
         New Entry("FITABHD", "Typed template fit", "Fits a typed pool template through surveyed points"),
         New Entry("FITABHDCOVER", "Typed template fit, no bottom", "FITABHD for a cover sheet - skips the bottom question"),
@@ -131,6 +132,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("NORMIESTEP", "Normie step", "Normie step layout"),
         New Entry("OASIS", "Freeform pool", "Continuous-tangent pool drawn live from envelope and radii"),
         New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
+        New Entry("PERPMARK", "Measured wall offsets", "Click a spot on the wall, type what it measured: circle, perpendicular, dimension"),
         New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
         New Entry("POINTRENAMER", "Renumber points in order", "Hands the survey point numbers back out in perimeter order"),
         New Entry("POOL", "Pool layout", "Full pool layout tool"),
@@ -209,6 +211,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("POINTRENAMER", "Renumber points in order", "Hands the survey point numbers back out in perimeter order"),
             New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
             New Entry("CPERPPTS", "Curved perp points", "PERPPTS for a curved run"),
+            New Entry("PERPMARK", "Measured wall offsets", "Click a spot on the wall, type what it measured: circle, perpendicular, dimension"),
             New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
             New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"),
             New Entry("TYLERDRONESUITE", "Drone suite: tidy, pad, CDIM", "The whole drone trace in one - TYDRN, then PADDLE, then CDIM")
@@ -221,7 +224,8 @@ Public NotInheritable Class CommandCatalog
             New Entry("DIMCONTEND", "Continue dim chains", "Chains a seed dimension out to every feature point"),
             New Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"),
             New Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"),
-            New Entry("BPCALLOUT", "Bad point callout", "Rings clicked bad points and writes the callout")
+            New Entry("BPCALLOUT", "Bad point callout", "Rings clicked bad points and writes the callout"),
+            New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text, and repeat")
         }},
         {"Converters", {
             New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
@@ -265,7 +269,7 @@ Public NotInheritable Class CommandCatalog
         New Page("Pool", {
             New Column("Shape", {"POOL", "POOLSIDE", "LAZFORM", "LAZTXT", "OASIS", "ABHD", "SIMPABHD", "ADAB", "FITABHD"}),
             New Column("Points", {"ABFIND", "ABMOVE", "ABPCREATE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
-            New Column("Steps", {"LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "AUTOBEAD", "PERPPTS", "CPERPPTS"}),
+            New Column("Steps", {"LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "AUTOBEAD", "PERPPTS", "CPERPPTS", "PERPMARK"}),
             New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
             New Column("Dims & check", {"AUTODIM", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "DIMCHECK", "DIMSCAN"})
         }),
@@ -280,16 +284,16 @@ Public NotInheritable Class CommandCatalog
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "SPACOVCREATE", "CUSTBLOCK", "AUTODIM", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Rest", {
-            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF"})
+            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP"})
         }),
         New Page("Layout", {
             New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "ABLOBF", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
         }),
         New Page("Points", {
-            New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "DRONE", "TYDRN", "TYLERDRONESUITE"})
+            New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "PERPMARK", "DRONE", "TYDRN", "TYLERDRONESUITE"})
         }),
         New Page("Dimensions", {
-            New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT"})
+            New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT", "DIMSTAMP"})
         }),
         New Page("Converters", {
             New Column("", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"})
