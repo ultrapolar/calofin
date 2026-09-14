@@ -2262,6 +2262,43 @@ def test_the_field_side_is_read_off_one_line_only():
     print("ok  the field side is read off the chosen line's own points")
 
 
+def test_back_at_the_first_reading_re_asks_the_ab_line():
+    """The two features met here: ABPCREATE opens on the AB line when
+    the sheet carries more than one, so the line - not "already at the
+    first point" - is what stands in front of the first reading.  It
+    holds whichever way the run got there, and once every created round
+    has been taken back the line is askable again."""
+    def sheet():
+        vm = newvm()
+        for x, nm in ((0.0, 'A'), (240.0, 'B'), (1200.0, 'A'),
+                      (1440.0, 'B')):
+            ab_pt(vm, x, 0.0, nm)
+        ab_pt(vm, 120.0, 100.0, 1)
+        ab_pt(vm, 1320.0, 150.0, 1)
+        return vm
+
+    vm = sheet()
+    run(vm, 'c:ABPCREATE', ['L1', 'Back', 'L2', 200.0, 180.0, '9', None],
+        'back to the line')
+    assert any('Back to the AB line' in m for m in vm.printed), \
+        vm.printed[-6:]
+    assert len([q for q, _ in vm.prompts if 'Which AB line' in q]) == 2
+    got = live(vm, 'INSERT')[-1][1][10]
+    assert near(math.hypot(got[0] - 1200.0, got[1]), 200.0), got
+
+    # and after a round, Back undoes the round first and only then the
+    # line question comes back
+    vm = sheet()
+    run(vm, 'c:ABPCREATE',
+        ['L1', 200.0, 180.0, '9', 'Back', 'Back', 'L1', 200.0, 180.0,
+         '9', None], 'round first, then the line')
+    assert any('Stepping back one point' in m for m in vm.printed)
+    assert any('Back to the AB line' in m for m in vm.printed)
+    assert len([q for q, _ in vm.prompts if 'Which AB line' in q]) == 2
+    assert len(live(vm, 'INSERT')) == 7, live(vm, 'INSERT')
+    print("ok  Back at the first reading re-asks the AB line, not nothing")
+
+
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
 
 if __name__ == '__main__':

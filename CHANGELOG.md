@@ -8,6 +8,24 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**A miss too small to print is a crossing.** `ABPCREATE` decides
+whether two readings meet by arithmetic, and the arithmetic finds gaps
+the drawing cannot print: a pair that missed touching by a
+ten-thousandth of an inch was answered `the two arcs fall 0" short of
+each other` and a table of readings to replace a pair that does meet.
+Worse, `abf:circint` takes a square root that has gone a hair negative
+there, so the crossing came back `nil` and the line after it would have
+taken `(car nil)`. `abf:*touch*` (1/32", half the 1/16" the readings
+print to) is the band, and `abf:closest` solves the touch point on the
+line through the stakes for any pair inside it. Three more from the
+same audit: a label fan with no room inside its own arc hangs outside
+it instead of scattering round the circle; `Pt`, `#` and a line of
+spaces no longer offer to create a point with no number to be looked up
+by; and `abf:click-side` tests a distance rather than a cross product,
+so "on the A-B line" means the same thing at any stake spacing. Where
+v1.13 put the AB-line question in front of the first reading, `Back`
+there re-asks it rather than saying there is nothing behind it.
+
 **Which way the screen reads.** Every colour a tool draws in is an ACI
 number, and a number is only right against one background. ACI `8` was
 serving two OPPOSITE intents across thirteen tools: the review tools

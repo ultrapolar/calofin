@@ -2892,6 +2892,15 @@
               (cond
                 ((eq ans 'ABF-BACK)
                  (cond
+                   ;; on a sheet carrying more than one AB line, the
+                   ;; line question stands in front of the first
+                   ;; reading - whether ABPCREATE opened on it or a
+                   ;; point number sent us through it.  Re-arming pend
+                   ;; keeps it meaning what it says: the line is not
+                   ;; settled
+                   ((and (cdr lines) (or fromfind (null hist)))
+                    (setq pend T stage 11)
+                    (princ "\n  Back to the AB line."))
                    ;; the point number is the question in front of this
                    ;; one when that is what sent us here
                    (fromfind

@@ -646,8 +646,12 @@ The shared Back convention (see the root README) applies:
   suggestions still on screen;
 * in `ABPCREATE`, `Back` at **the A reading** undoes the whole of the
   last round the same way `ABFIND`'s point number does — the point it
-  created, its number and its ties — or, when it is `ABFIND` or
-  `ABMOVE` that sent you there, re-asks the point number instead;
+  created, its number and its ties. With no round left to undo it
+  re-asks **which AB line** on a sheet that carries more than one, and
+  that is also what it re-asks straight away when `ABFIND` or `ABMOVE`
+  sent you there through the line question; on a single-line sheet it
+  re-asks the point number in that case, and says
+  `Already at the first point.` in the other;
 * `Back` at **the B reading** re-asks the A reading;
 * `Back` at **which candidate** re-asks the B reading;
 * `Back` at **the number for the new point** re-asks which candidate —
@@ -656,8 +660,9 @@ The shared Back convention (see the root README) applies:
 
 `ABMOVE`'s first question has nothing to go back to, and once its point
 is settled — moved or created — the run is over; to undo that, `U`.
-`ABPCREATE`'s first question is the A reading of its first round, and
-that one says `Already at the first point.`
+`ABPCREATE`'s first question is the A reading of its first round — or,
+on a sheet with more than one AB line, the line itself, which is the
+one that says `Already at the first question.`
 
 The whole run is **one undo group**: a single `U` takes it all away.
 The dimension style, current layer, `OSMODE` and `CMDECHO` in force
@@ -821,6 +826,19 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
 the banner.
 
+* **v1.15** — the creation flow audited. A pair that misses touching
+  by less than the drawing can print is a **crossing** now
+  (`abf:*touch*`, with `abf:closest` solving the touch point), instead
+  of being answered `the two arcs fall 0" short of each other` and a
+  table of readings to replace a pair that meets — and `abf:circint`'s
+  square root has gone a hair negative there, so that answer was one
+  line away from `(car nil)`. A label fan with no room inside its own
+  arc hangs outside it rather than scattering round the circle. `Pt`,
+  `#` and a line of spaces no longer offer to create a point with no
+  number. `abf:click-side` tests a distance rather than a cross
+  product, so "on the A–B line" means the same thing at any stake
+  spacing. And `Back` at the first reading re-asks **which AB line**
+  where v1.13 put that question in front of it.
 * **v1.13** — **more than one AB line on the sheet**. Two surveys
   merged onto one drawing carry two points named `A`, two named `B`,
   and two of every `Pt.##` after them; the stakes are paired into
