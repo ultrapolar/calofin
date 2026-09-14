@@ -2296,6 +2296,16 @@ def test_back_at_the_first_reading_re_asks_the_ab_line():
     assert any('Back to the AB line' in m for m in vm.printed)
     assert len([q for q, _ in vm.prompts if 'Which AB line' in q]) == 2
     assert len(live(vm, 'INSERT')) == 7, live(vm, 'INSERT')
+
+    # and the whole chain walks: ABFIND's number offers to create, the
+    # line is asked, the reading is asked - and Back retraces all three
+    vm = sheet()
+    run(vm, 'c:ABFIND', ['9', 'Yes', 'L1', 'Back', 'Back', None],
+        'the chain both ways')
+    said = ' '.join(vm.printed)
+    assert 'Back to the AB line' in said and 'Back to the point number' \
+        in said, [m for m in vm.printed if 'Back to' in m]
+    assert len(live(vm, 'INSERT')) == 6, live(vm, 'INSERT')
     print("ok  Back at the first reading re-asks the AB line, not nothing")
 
 
