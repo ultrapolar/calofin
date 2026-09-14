@@ -8,6 +8,45 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**The text box was thirty times too small, so CLEARDIM did nothing.**
+v2.1.  A drawing came back with two `CROSS DIMENSIONS` diagonals
+printing on top of each other in the middle of a rectangle, and
+`CLEARDIM` had reported the sheet "6 already clear - left alone".
+
+The measurement was wrong, three times over, and the first one was
+fatal:
+
+* **A text style with a fixed height beats DIMTXT.**  A dimension style
+  is entitled to leave DIMTXT at its 0.18 DXF default and keep the real
+  height on the text style it points at through DIMTXSTY (group 340) --
+  and every style in that drawing did.  Reading DIMTXT alone made a
+  6-unit text measure 0.18.  Every box was a speck, nothing could
+  overlap anything, and the whole sheet was "clear".  The fixed height
+  is used exactly as it stands, DIMSCALE included: that drawing keeps
+  STANDARD at DIMSCALE 1.5 pointing at an 8-unit style, and the MTEXT
+  in the dimension's own block is 8.0 high, not 12.
+* **Markup is not letters.**  150 of the 152 MTEXTs in it carry
+  formatting, and counting `\A1;2{\H1.000000x;\S3/4;}"` as 26 glyphs
+  instead of about 4 does not err on the safe side -- it fills a sheet
+  with obstacles that are not there and leaves every dimension with
+  nowhere clear to go.  `%%d` codes, `\A;` `\H;` `\f;` `{}` markup,
+  the `\L` `\O` `\K` toggles and a stacked `\S1/2;` (as wide as its
+  longer half) are all read for what they DRAW now.  An MTEXT split
+  across group 3 chunks is measured whole rather than by its tail.
+* **A measurement is spelled the way its STYLE says**, off DIMLUNIT
+  (277) and DIMDEC (271), not the drawing's LUNITS and LUPREC.  That
+  drawing reads 1/8" off its styles and 1/16" off its header, and
+  `33'-3"` is half the width of `33'-2 15/16"`.  The text style's own
+  width factor is read too.
+
+Against that drawing's model space the answer is now four dimensions
+left alone and the two diagonals slid apart, which is the whole of what
+was wanted.  Every string the tool works out for those six dimensions
+matches the MTEXT in the dimension's own block character for character
+-- which is the check that says the units reading is right and not just
+different.  `tests/test_cleardim.py` is at 66, the last of them that
+drawing's own geometry, groups and all.
+
 **Every dimension has a track now, not just the straight ones.**
 `CLEARDIM` v2.0. v1.0 moved linear and aligned text and counted the
 other four families in the report as "on a track that is not a straight
@@ -72,7 +111,7 @@ tagging only the first chord would have had every angular dimension
 fleeing the other thirty-one. What a text RIDES is its own list now,
 separate from what the dimension merely draws.
 
-`tests/test_cleardim.py` is at 56 and runs at both tiers.
+`tests/test_cleardim.py` is at 66 and runs at both tiers.
 
 **Dimension text that is hard to read, slid until it is not.**
 `CLEARDIM` is new. A dimension's text has one track -- the dimension

@@ -106,17 +106,43 @@
 ;;; CLEARDIMSCAN is the same analysis with the entmod left out: it says
 ;;; what CLEARDIM would do and changes nothing.
 ;;;
-;;; How the text box is measured.  A DIMENSION's letters live in its
-;;; anonymous block, which is regenerated whenever anything about the
-;;; dimension changes, so the box is computed from the dimension itself
-;;; instead: group 11 is the middle of the text, the height is the
-;;; style's DIMTXT times DIMSCALE (with the dimension's own xdata
-;;; overrides applied over the top), and the width is the glyph count at
-;;; cd:*charwidth* of that height.  That last one is an ESTIMATE -- a
-;;; stroke font's glyphs are not all one width -- so it is a knob, and
-;;; raising it makes every box wider and the tool more cautious.  On an
-;;; arc the box TURNS as it slides, because text set along a dimension
-;;; arc turns with it unless the style holds it upright.
+;;; HOW THE TEXT BOX IS MEASURED, which is the part that decides
+;;; whether this tool does anything at all.  A DIMENSION's letters live
+;;; in its anonymous block, which is regenerated whenever anything about
+;;; the dimension changes, so the box is computed from the dimension
+;;; itself instead.  Group 11 is the middle of the text.  The rest:
+;;;
+;;;   HEIGHT.  A text style with a FIXED height wins outright -- the
+;;;   dimension style points at one through DIMTXSTY (group 340), and
+;;;   where that style's height is non-zero it is the height, with
+;;;   DIMTXT ignored and DIMSCALE not applied.  Only a variable-height
+;;;   style leaves DIMTXT times DIMSCALE in charge (the dimension's own
+;;;   xdata overrides laid over both).  This is where v2.0 was wrong and
+;;;   the whole tool with it: a dimension style is entitled to leave
+;;;   DIMTXT at its 0.18 DXF default and keep the real height on its
+;;;   text style, every style in the drawing that found this did, and a
+;;;   6-unit text measuring 0.18 made every box a speck.  Nothing
+;;;   overlapped anything; a sheet with two cross dims printing on top
+;;;   of each other in the middle came back "6 already clear".
+;;;
+;;;   WIDTH.  The glyph count at cd:*charwidth* of the height, times the
+;;;   text style's own width factor.  The count is what the text DRAWS,
+;;;   not what it is spelled with: "%%d" is one glyph of three
+;;;   characters, MTEXT markup ("\A1;", "{Arial|b1|i0|c0|p34;...}",
+;;;   "\H0.85x;") is none at all, and a stacked "\S1/2;" is as wide as
+;;;   its longer half.  Counting markup as letters is not erring on the
+;;;   safe side -- it fills a sheet with obstacles that are not there.
+;;;   cd:*charwidth* itself is the one ESTIMATE left, because a stroke
+;;;   font's glyphs are not all one width; raise it and every box gets
+;;;   wider and the tool more cautious.
+;;;
+;;;   WHAT IT SAYS.  A measurement is spelled with the dimension
+;;;   STYLE's own DIMLUNIT and DIMDEC, not the drawing's LUNITS and
+;;;   LUPREC.  The difference is half the width: 33'-3" against
+;;;   33'-2 15/16".
+;;;
+;;; On an arc the box TURNS as it slides, because text set along a
+;;; dimension arc turns with it unless the style holds it upright.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *cleardim-version* below and stamps a dated, REV-numbered twin of
@@ -124,7 +150,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v2.0")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v2.1")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -384,27 +410,85 @@
 
 ;;; -------------------- text as a rectangle ----------------------------
 
-;; The glyph count of S: the printable characters it would draw.  A
-;; "%%d", "%%c", "%%p" or "%%%" is one glyph written as three
-;; characters, so counting characters alone would make every box with
-;; a degree sign in it two glyphs too wide.
-(defun cd:glyphs (s / i n c n2 out)
+;; The index of the ";" that ends an MTEXT code starting at FROM, or
+;; one past the end of the string when the code never closes.
+(defun cd:find-semi (s from / n i hit)
+  (setq n (strlen s) i from hit nil)
+  (while (and (<= i n) (not hit))
+    (if (= (substr s i 1) ";") (setq hit i) (setq i (1+ i))))
+  (if hit hit (1+ n)))
+
+;; The MTEXT codes that carry an argument up to a semicolon, none of
+;; which draws anything.  \P (the hard break), \~ (a hard space) and the
+;; \L \O \K toggles take no argument and are NOT in here -- scanning one
+;; of them for a semicolon would swallow the rest of the line.  \S is
+;; not here either: its argument is the fraction, and the fraction is
+;; drawn.
+(defun cd:arg-code-p (c)
+  (member c '("A" "C" "c" "f" "F" "H" "Q" "T" "W" "p")))
+
+;; How wide a stacked fraction draws: the longer of its two halves.  A
+;; stack is two half-height lines one above the other, so "1/2" is one
+;; glyph wide and not three.
+(defun cd:stack-width (body / i n c a b seen)
+  (setq n (strlen body) i 1 a 0 b 0 seen nil)
+  (while (<= i n)
+    (setq c (substr body i 1))
+    (if (and (not seen) (member c '("/" "^" "#")))
+      (setq seen T)
+      (if seen (setq b (1+ b)) (setq a (1+ a))))
+    (setq i (1+ i)))
+  (if seen (max a b) a))
+
+;; The glyph count of S: the printable characters it would draw.
+;;
+;; Two families of code get in the way of counting characters, and both
+;; are the ordinary content of a shop drawing rather than exotica:
+;;
+;;   * "%%d", "%%c", "%%p" and "%%%" are one glyph written as three
+;;     characters, and "%%o" / "%%u" are toggles that draw nothing;
+;;   * MTEXT formatting -- "\A1;", "{\fArial|b1|i0|c0|p34;...}",
+;;     "\H0.85x;", "\S1/2;" -- is markup, and counting it as letters is
+;;     what made "\A1;2{\H1.000000x;\S3/4;}" measure twenty-six glyphs
+;;     wide instead of about four.  A hundred and fifty of the hundred
+;;     and fifty-two MTEXTs in the drawing this was written against
+;;     carry some, so over-measuring here does not err on the safe side
+;;     -- it fills the sheet with obstacles that are not there and
+;;     leaves every dimension with nowhere clear to go.
+(defun cd:glyphs (s / i n c nx n2 j out)
   (setq n (strlen s) i 1 out 0)
   (while (<= i n)
     (setq c (substr s i 1))
-    (if (and (= c "%") (<= (+ i 2) n) (= (substr s (1+ i) 1) "%"))
-      (progn
-        (setq n2 (strcase (substr s (+ i 2) 1)))
-        (cond
-          ;; %%o and %%u are overscore/underscore toggles: three
-          ;; characters, no glyph at all
-          ((member n2 '("O" "U")) (setq i (+ i 3)))
-          ;; the rest of the codes draw one glyph for their three
-          ((member n2 '("D" "C" "P" "%")) (setq out (1+ out) i (+ i 3)))
-          ;; "%%" in front of anything else is two ordinary per-cent
-          ;; signs, which is what the first of them is counted as here
-          (T (setq out (1+ out) i (1+ i)))))
-      (progn (setq out (1+ out) i (1+ i)))))
+    (cond
+      ;; MTEXT grouping braces draw nothing
+      ((member c '("{" "}")) (setq i (1+ i)))
+      ((= c "\\")
+       (setq nx (substr s (1+ i) 1))
+       (cond
+         ((= nx "") (setq out (1+ out) i (1+ i)))     ; a trailing backslash
+         ;; an escaped literal: one glyph out of two characters
+         ((member nx '("\\" "{" "}")) (setq out (1+ out) i (+ i 2)))
+         ;; the stacked fraction, whose argument IS drawn
+         ((= nx "S")
+          (setq j   (cd:find-semi s (+ i 2))
+                out (+ out (cd:stack-width (substr s (+ i 2) (- j i 2))))
+                i   (1+ j)))
+         ;; a code with an argument: none of it is drawn
+         ((cd:arg-code-p nx) (setq i (1+ (cd:find-semi s (+ i 2)))))
+         ((= nx "~") (setq out (1+ out) i (+ i 2)))   ; a hard space
+         (T (setq i (+ i 2)))))                       ; \L \O \K and kin
+      ((and (= c "%") (<= (+ i 2) n) (= (substr s (1+ i) 1) "%"))
+       (setq n2 (strcase (substr s (+ i 2) 1)))
+       (cond
+         ;; %%o and %%u are overscore/underscore toggles: three
+         ;; characters, no glyph at all
+         ((member n2 '("O" "U")) (setq i (+ i 3)))
+         ;; the rest of the codes draw one glyph for their three
+         ((member n2 '("D" "C" "P" "%")) (setq out (1+ out) i (+ i 3)))
+         ;; "%%" in front of anything else is two ordinary per-cent
+         ;; signs, which is what the first of them is counted as here
+         (T (setq out (1+ out) i (1+ i)))))
+      (T (setq out (1+ out) i (1+ i)))))
   out)
 
 ;; S split on MTEXT's "\P" hard line break, as a list of strings.  A
@@ -417,15 +501,16 @@
           s   (substr s (+ i 3))))
   (reverse (cons s out)))
 
-;; (W H) for the string S set at height HGT -- the widest of its lines
-;; by cd:*charwidth*, and a height that grows by half a line for each
-;; line after the first, the way stacked dimension text does.
-(defun cd:text-size (s hgt / ls n w l)
+;; (W H) for the string S set at height HGT with width factor WF -- the
+;; widest of its lines by cd:*charwidth*, and a height that grows by
+;; half a line for each line after the first, the way stacked dimension
+;; text does.
+(defun cd:text-size (s hgt wf / ls n w l)
   (setq ls (cd:lines s)
         n  (length ls)
         w  0.0)
   (foreach l ls
-    (setq w (max w (* (cd:glyphs l) hgt cd:*charwidth*))))
+    (setq w (max w (* (cd:glyphs l) hgt cd:*charwidth* wf))))
   (list w (* hgt (- (* 1.5 n) 0.5))))
 
 ;; The box for a string whose rectangle is W by H, anchored at ANCHOR
@@ -492,6 +577,26 @@
 ;; dimension's own overrides laid over both.  A DIMSCALE of 0 is
 ;; annotative -- scaled by the viewport, which is not a thing this file
 ;; can measure -- so the drawing's current DIMSCALE stands in.
+;; The record of the text STYLE a dimension is written in.  The
+;; dimension style keeps it as DIMTXSTY, group 340, which is a POINTER
+;; and not a name -- AutoLISP hands it back as an ename, and a raw
+;; handle string is looked up rather than assumed to be one.  nil when
+;; the style keeps none, which is what makes every caller fall back on
+;; DIMTXT.
+(defun cd:txtstyle (sty / v r)
+  (setq v (cd:dxf 340 sty))
+  (if (= (type v) 'STR) (setq v (handent v)))
+  (if (= (type v) 'ENAME)
+    (progn
+      (setq r (vl-catch-all-apply 'entget (list v)))
+      (if (vl-catch-all-error-p r) nil r))))
+
+;; How much wider than tall this dimension's glyphs are set -- the text
+;; style's own width factor, on top of cd:*charwidth*.
+(defun cd:txt-wfactor (sty / f)
+  (setq f (cd:num 41 (cd:txtstyle sty) 1.0))
+  (if (> f 0.0) f 1.0))
+
 ;; The DIMSCALE everything the dimension draws is sized by: the style's,
 ;; the dimension's own override of it where it has one, and -- for the
 ;; annotative 0, which is scaled by a viewport this file cannot measure
@@ -503,18 +608,34 @@
   (if (<= scl 0.0) (setq scl 1.0))
   scl)
 
-(defun cd:txt-height (ed sty / txt o)
-  (setq txt (cd:num 140 sty cd:*dimtxt-default*))
+;; The height the dimension's text is actually drawn at.
+;;
+;; A TEXT STYLE WITH A FIXED HEIGHT WINS OUTRIGHT, and is used exactly
+;; as it stands -- DIMTXT is ignored and DIMSCALE does not touch it.
+;; That is not a guess: the drawing this rule was written for keeps
+;; STANDARD at DIMSCALE 1.5 pointing at an 8-unit style, and the MTEXT
+;; in the dimension's own block is 8.0 high, not 12.
+;;
+;; It matters more than any other number here.  A dimension style that
+;; leaves DIMTXT at its 0.18 DXF default -- which a style is entitled
+;; to do, and every style in that drawing did -- and carries its real
+;; height on the text style instead used to come out THIRTY TIMES too
+;; small.  Every text box was a speck, nothing overlapped anything, and
+;; a sheet with two cross dims printing on top of each other in the
+;; middle was reported "6 already clear - left alone".
+(defun cd:txt-height (ed sty / txt o fixed)
+  (setq txt   (cd:num 140 sty cd:*dimtxt-default*)
+        fixed (cd:num 40 (cd:txtstyle sty) 0.0))
   (if (setq o (cd:override ed 140)) (setq txt o))
-  (* txt (cd:dimscale ed sty)))
+  (if (> fixed 0.0) fixed (* txt (cd:dimscale ed sty))))
 
 ;; What the dimension actually says.  Group 1 is the override: empty
 ;; means "the measurement", and "<>" inside an override stands for the
 ;; measurement too.  A single space is AutoCAD's "draw no text at all",
 ;; and it comes back as "".
-(defun cd:dim-text (ed / ov meas i)
+(defun cd:dim-text (ed sty / ov meas i)
   (setq ov   (cd:dxf 1 ed)
-        meas (cd:dim-meas ed))
+        meas (cd:dim-meas ed sty))
   (cond
     ((null ov) meas)
     ((= ov "") meas)
@@ -527,19 +648,37 @@
 ;; stored; a linear or aligned dimension is recomputed from its own
 ;; definition points instead, so a dimension somebody stretched still
 ;; measures its own geometry.
-(defun cd:dim-meas (ed / dtype p13 p14 ang v meas)
+;; How a length is spelled on this dimension: the STYLE's own DIMLUNIT
+;; (277) and DIMDEC (271) where it has them, the drawing's LUNITS and
+;; LUPREC where it does not.  The difference is not cosmetic -- the
+;; drawing this was written against reads 1/8" off its styles and 1/16"
+;; off its header, and "33'-3"" is half the width of "33'-2 15/16"".
+;; DIMLUNIT 6 is Windows desktop, which rtos has no mode for; decimal
+;; stands in.
+(defun cd:lu-mode (sty / m)
+  (setq m (cd:num 277 sty (cond ((getvar "LUNITS")) (2))))
+  (if (and (>= m 1) (<= m 5)) m 2))
+
+(defun cd:lu-prec (sty) (cd:num 271 sty (cond ((getvar "LUPREC")) (4))))
+
+(defun cd:dim-meas (ed sty / dtype p13 p14 ang v meas)
   (setq dtype (logand 7 (cd:num 70 ed 0))
         meas  (cd:dxf 42 ed)
         p13   (cd:dxf 13 ed)
         p14   (cd:dxf 14 ed))
   (cond
-    ((and (= dtype 1) p13 p14) (rtos (distance (cd:2d p13) (cd:2d p14))))
+    ((and (= dtype 1) p13 p14)
+     (rtos (distance (cd:2d p13) (cd:2d p14))
+           (cd:lu-mode sty) (cd:lu-prec sty)))
     ((and (= dtype 0) p13 p14)
      (setq ang (cd:num 50 ed 0.0)
            v   (cd:v- p14 p13))
-     (rtos (abs (cd:dot v (list (cos ang) (sin ang))))))
-    ((and (member dtype '(2 5)) meas (>= meas 0.0)) (angtos meas))
-    ((and meas (>= meas 0.0)) (rtos meas))
+     (rtos (abs (cd:dot v (list (cos ang) (sin ang))))
+           (cd:lu-mode sty) (cd:lu-prec sty)))
+    ((and (member dtype '(2 5)) meas (>= meas 0.0))
+     (angtos meas (cd:num 275 sty 0) (cd:num 179 sty 4)))
+    ((and meas (>= meas 0.0))
+     (rtos meas (cd:lu-mode sty) (cd:lu-prec sty)))
     (T "")))
 
 ;; T when NAME is a layer this run must not write to.
@@ -592,6 +731,17 @@
   (setq out (cd:chain (reverse pts) nil))
   out)
 
+;; A TEXT entity's width factor: its own group 41, or -- when it does
+;; not carry one, which is what AutoCAD writes when the entity agrees
+;; with its style -- the style's.  Unlike a dimension's, a TEXT names
+;; its style (group 7) rather than pointing at it.
+(defun cd:ent-wfactor (ed / f)
+  (setq f (cd:num 41 ed 0.0))
+  (if (<= f 0.0)
+    (setq f (cd:num 41 (tblsearch "STYLE" (cond ((cd:dxf 7 ed)) ("STANDARD")))
+                    1.0)))
+  (if (> f 0.0) f 1.0))
+
 ;; The polygons a TEXT entity covers: one box, justified the way its
 ;; 72/73 codes say and anchored where they say to anchor it.  Group 11
 ;; is the alignment point and only means anything when one of the two
@@ -601,7 +751,7 @@
   (if (or (null s) (= s "")) nil
     (progn
       (setq hgt (cd:num 40 ed 1.0)
-            wh  (cd:text-size s hgt)
+            wh  (cd:text-size s hgt (cd:ent-wfactor ed))
             w   (car wh)
             h   (cadr wh)
             ang (cd:num 50 ed 0.0)
@@ -636,15 +786,26 @@
                         (T 0.0)))              ; baseline and bottom
          (if anchor (list (cd:just-box anchor ang w h dx dy))))))))
 
+;; An MTEXT's whole string.  Anything over 250 characters is split
+;; across repeated group 3 chunks with the remainder in group 1, so
+;; reading group 1 alone measures the LAST stretch of a paragraph and
+;; none of the rest of it.
+(defun cd:mtext-string (ed / out g)
+  (setq out "")
+  (foreach g ed
+    (if (and (= (car g) 3) (= (type (cdr g)) 'STR))
+      (setq out (strcat out (cdr g)))))
+  (strcat out (cond ((cd:dxf 1 ed)) (""))))
+
 ;; The polygons an MTEXT entity covers: one box, placed by its
 ;; attachment point (group 71, 1 = top-left counting across then down).
 (defun cd:mtext-poly (ed / s hgt wh w h ang ap col row anchor dx dy xdir)
-  (setq s (cd:dxf 1 ed))
+  (setq s (cd:mtext-string ed))
   (if (or (null s) (= s "")) nil
     (progn
       (setq hgt  (cd:num 40 ed 1.0)
-            wh   (cd:text-size s hgt)
-            w    (car wh)
+            wh   (cd:text-size s hgt 1.0)   ; MTEXT's group 41 is its
+            w    (car wh)                   ; wrap width, not a factor
             h    (cadr wh)
             xdir (cd:dxf 11 ed)
             ang  (if (and xdir (cd:unit (cd:2d xdir)))
@@ -990,8 +1151,8 @@
       (setq dtype (logand 7 (cd:num 70 ed 0))
             sty   (tblsearch "DIMSTYLE" (cond ((cd:dxf 3 ed)) ("STANDARD")))
             hgt   (cd:txt-height ed sty)
-            s     (cd:dim-text ed)
-            wh    (cd:text-size s hgt)
+            s     (cd:dim-text ed sty)
+            wh    (cd:text-size s hgt (cd:txt-wfactor sty))
             w     (car wh)
             h     (cadr wh)
             p10   (cd:dxf 10 ed)

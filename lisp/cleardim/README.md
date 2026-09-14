@@ -43,12 +43,31 @@ keeps it; the ones that are on something go around it.
    used as it stands, without asking.
 
 2. **Every dimension in the sweep is measured.** The text box comes off
-   the dimension itself: group 11 is the middle of the text, the height
-   is the style's `DIMTXT` times `DIMSCALE` with the dimension's own
-   overrides laid over the top, and the width is the glyph count at
-   `cd:*charwidth*` of that height. On an arc the box **turns** as it
-   slides, because text set along a dimension arc turns with it unless
-   the style holds it upright (`DIMTIH`).
+   the dimension itself -- its letters live in an anonymous block that
+   AutoCAD rebuilds whenever anything about the dimension changes, so
+   there is nothing stable to read there. Group 11 is the middle of the
+   text; the rest is worked out:
+
+   - **Height.** A text style with a **fixed** height wins outright. The
+     dimension style points at one through `DIMTXSTY` (group 340), and
+     where that style's height is non-zero it *is* the height --
+     `DIMTXT` ignored, `DIMSCALE` not applied. Only a variable-height
+     style leaves `DIMTXT` x `DIMSCALE` in charge, with the dimension's
+     own xdata overrides laid over both.
+   - **Width.** The glyph count at `cd:*charwidth*` of that height,
+     times the text style's own width factor. The count is what the
+     text **draws**, not what it is spelled with: `%%d` is one glyph of
+     three characters, MTEXT markup (`\A1;`,
+     `{\fArial|b1|i0|c0|p34;...}`, `\H0.85x;`) is none at all, and a
+     stacked `\S1/2;` is as wide as its longer half.
+   - **What it says.** A measurement is spelled with the dimension
+     style's own `DIMLUNIT` and `DIMDEC`, not the drawing's `LUNITS`
+     and `LUPREC`. That is half the width between `33'-3"` and
+     `33'-2 15/16"`.
+
+   On an arc the box **turns** as it slides, because text set along a
+   dimension arc turns with it unless the style holds it upright
+   (`DIMTIH`).
 
    Then its track, which each family answers for itself:
 
@@ -204,13 +223,14 @@ Every knob is read when the command runs, not when the file loads, so a
   dimension line, a gap above); no other family does, because inventing
   a point on an arc or a leader is putting the text somewhere rather
   than finding where it is.
-- **The width of a text box is an estimate.** A stroke font's glyphs
-  are not all one width, and the text style's own width factor is
-  reached through a handle this file does not follow. `cd:*charwidth*`
-  is the escape hatch, and over-estimating is the safe direction: a box
-  too wide leaves more room, a box too narrow leaves a text crowded.
-  A formatted `MTEXT` obstacle is over-measured for the same reason --
-  its `{\f...;}` codes are counted as glyphs.
+- **`cd:*charwidth*` is the one estimate left.** A stroke font's
+  glyphs are not all one width, so a per-glyph average is as close as
+  this gets without measuring the font. It is the escape hatch: raise it
+  and every box gets wider and the tool more cautious.
+- **A per-dimension override of `DIMTXSTY` is not read.** The dimension
+  style's is. An xdata `DSTYLE` block overriding the *text style* of one
+  dimension (rather than its height, which **is** read) falls back to
+  the style's.
 - **A polyline's bulged edge is read as its chord.** The real arc bows
   away from the chord, so a text the chord clears can still be caught
   by the bulge. This is the one place the file is optimistic.
@@ -240,6 +260,15 @@ Every knob is read when the command runs, not when the file loads, so a
 python3 tests/test_cleardim.py
 CALOFIN_LISP_ROOT=shared python3 tests/test_cleardim.py
 ```
+
+On top of those there is one **regression from a real drawing**: the
+rectangle whose two `CROSS DIMENSIONS` diagonals printed on top of each
+other in the middle, with every group, style and number as its DXF has
+them. `CLEARDIM` v2.0 reported it "6 already clear - left alone",
+because neither style carried a `DIMTXT` and both texts measured 0.18
+units instead of 6.0. The test asserts the heights off the styles, that
+exactly the two diagonals move, and that they end up more than 40 units
+apart.
 
 Runtime tests: the real file is loaded into `tests/lispvm.py` and both
 commands are driven from a script against drawings built by `entmake`,

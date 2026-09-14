@@ -67,6 +67,30 @@ def newvm(txt=TXT, scale=1.0, exe=EXE, tih=0):
     return vm
 
 
+def textstyle(vm, name, height=0.0, wfactor=1.0):
+    """A STYLE record.  HEIGHT is its FIXED height: non-zero means every
+    text set in it is drawn that tall whatever DIMTXT says."""
+    rec = Ent()
+    vm.recdata[rec] = [Dot(0, 'STYLE'), Dot(2, name),
+                       Dot(40, height), Dot(41, wfactor)]
+    vm.tables.setdefault('STYLE', set()).add(name)
+    vm.tablerecs.setdefault('STYLE', {})[name.upper()] = rec
+    return rec
+
+
+def dimstyle(vm, name, groups):
+    """A DIMSTYLE record with exactly the groups given -- which is how a
+    real one comes: DXF leaves out every dimvar sitting at its default,
+    so a style that keeps its text height on its text style carries no
+    DIMTXT at all."""
+    rec = Ent()
+    vm.recdata[rec] = ([Dot(0, 'DIMSTYLE'), Dot(2, name)]
+                       + [Dot(c, v) for c, v in groups])
+    vm.tables.setdefault('DIMSTYLE', set()).add(name)
+    vm.tablerecs.setdefault('DIMSTYLE', {})[name.upper()] = rec
+    return rec
+
+
 def dim(vm, p13, p14, p10, p11=None, text='', layer='0', flags=0, ang=0.0):
     """A DIMENSION straight into the database.  FLAGS is group 70, so 0
     is rotated/linear and 1 aligned; P11 left out is the dimension whose
@@ -240,10 +264,10 @@ def test_glyph_count_reads_control_codes():
 
 def test_text_size_splits_hard_line_breaks():
     vm = newvm()
-    one = vm.loads('(cd:text-size "ABCD" 4.0)')
+    one = vm.loads('(cd:text-size "ABCD" 4.0 1.0)')
     assert abs(one[0] - 4 * 4.0 * CW) < 1e-9, one
     assert abs(one[1] - 4.0) < 1e-9, one
-    two = vm.loads('(cd:text-size "ABCD\\\\PEF" 4.0)')
+    two = vm.loads('(cd:text-size "ABCD\\\\PEF" 4.0 1.0)')
     # the widest line decides the width, and a second line is another
     # line and a half of height
     assert abs(two[0] - 4 * 4.0 * CW) < 1e-9, two
@@ -340,12 +364,12 @@ def test_all_of_an_arc_is_ridden_not_just_its_first_chord():
 def test_text_override_expands_the_measurement_marker():
     vm = newvm()
     dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='TYP <> LONG')
-    ed = vm.loads('(entget (entlast))')
-    s = vm.loads('(cd:dim-text (entget (entlast)))')
+    vm.loads('(setq ED (entget (entlast))'
+             '      STY (tblsearch "DIMSTYLE" "STANDARD"))')
+    s = vm.loads('(cd:dim-text ED STY)')
     assert '<>' not in s, s
     assert s.startswith('TYP ') and s.endswith(' LONG'), s
-    assert vm.loads('(cd:dim-meas (entget (entlast)))') in s, s
-    assert ed is not None
+    assert vm.loads('(cd:dim-meas ED STY)') in s, s
     print("ok  text         -> <> in an override becomes the measurement")
 
 
@@ -627,6 +651,141 @@ def test_fit_text_is_measured_between_its_two_ends():
     print("ok  ink          -> Fit text is measured between its own ends")
 
 
+def test_a_fixed_height_text_style_beats_dimtxt():
+    """The bug that made CLEARDIM do nothing on a real sheet.
+
+    A dimension style is entitled to leave DIMTXT at its 0.18 DXF
+    default and keep the real height on the text style it points at
+    through DIMTXSTY (group 340) -- and every style in the drawing this
+    was found on did exactly that.  Read DIMTXT alone and a 6-unit text
+    measures 0.18: every box a speck, nothing overlapping anything, and
+    a sheet with two dimensions printing on top of each other reported
+    entirely clear."""
+    vm = VM()
+    vm.load(LSP)
+    romanc = textstyle(vm, 'ROMANC', height=6.0)
+    dimstyle(vm, 'STANDARD', [(41, 3.99), (44, 2.0), (147, 2.0), (340, romanc)])
+    dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='ABC')
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert abs(field(vm, 'h') - 6.0) < 1e-9, \
+        "the text style's fixed height is the height: %r" % (field(vm, 'h'),)
+    assert abs(field(vm, 'w') - 3 * 6.0 * CW) < 1e-9, field(vm, 'w')
+    print("ok  height       -> a fixed-height text style beats DIMTXT")
+
+
+def test_a_fixed_height_is_not_scaled_by_dimscale():
+    """DIMSCALE scales the dimension variables; a text style's fixed
+    height is not one of them.  The drawing this was checked against
+    keeps STANDARD at DIMSCALE 1.5 pointing at an 8-unit style, and the
+    MTEXT inside the dimension's own block is 8.0 high, not 12."""
+    vm = VM()
+    vm.load(LSP)
+    title = textstyle(vm, 'TITLE', height=8.0)
+    dimstyle(vm, 'STANDARD', [(40, 1.5), (44, 2.25), (147, 2.25), (340, title)])
+    dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='ABC')
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert abs(field(vm, 'h') - 8.0) < 1e-9, \
+        "DIMSCALE must not touch a fixed height: %r" % (field(vm, 'h'),)
+    print("ok  height       -> DIMSCALE does not scale a fixed height")
+
+
+def test_dimtxt_still_applies_when_the_style_has_no_fixed_height():
+    vm = VM()
+    vm.load(LSP)
+    variable = textstyle(vm, 'ROMANS', height=0.0)
+    dimstyle(vm, 'STANDARD', [(40, 2.0), (140, 3.0), (340, variable)])
+    dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='ABC')
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert abs(field(vm, 'h') - 6.0) < 1e-9, field(vm, 'h')
+    print("ok  height       -> a variable-height style leaves DIMTXT in "
+          "charge")
+
+
+def test_a_style_width_factor_widens_the_box():
+    vm = VM()
+    vm.load(LSP)
+    wide = textstyle(vm, 'WIDE', height=6.0, wfactor=2.0)
+    dimstyle(vm, 'STANDARD', [(340, wide)])
+    dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='ABC')
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert abs(field(vm, 'w') - 3 * 6.0 * CW * 2.0) < 1e-9, field(vm, 'w')
+    print("ok  width        -> the text style's width factor is read")
+
+
+def test_the_measurement_is_spelled_the_way_the_style_says():
+    """DIMLUNIT (277) and DIMDEC (271) belong to the dimension style,
+    and the drawing this came from reads 1/8" off its styles and 1/16"
+    off its header.  The difference is not cosmetic: 33'-3" is half the
+    width of 33'-2 15/16"."""
+    vm = VM()
+    vm.load(LSP)
+    vm.sysvars['LUNITS'] = 2          # the drawing says decimal...
+    vm.sysvars['LUPREC'] = 4
+    textstyle(vm, 'ROMANC', height=6.0)
+    # ... and the style says architectural, to the eighth
+    dimstyle(vm, 'CROSS DIMENSIONS', [(271, 3), (277, 4)])
+    dim(vm, (0, 0), (398.9452192042975, 0), (0, 20), (200, 26))
+    vm.loads('(setq ED (entget (entlast))'
+             '      STY (tblsearch "DIMSTYLE" "CROSS DIMENSIONS"))')
+    # the same string the dimension's own block carries in the drawing
+    assert vm.loads('(cd:dim-text ED STY)') == '33\'-3"', \
+        vm.loads('(cd:dim-text ED STY)')
+    print("ok  text         -> the style's own DIMLUNIT and DIMDEC spell it")
+
+
+def test_mtext_formatting_codes_are_not_letters():
+    """150 of the 152 MTEXTs in the failing drawing carry formatting.
+    Counted as letters, markup fills the sheet with obstacles that are
+    not there -- which is the opposite of erring on the safe side."""
+    vm = newvm()
+    cases = [
+        (r'\A1;2{\H1.000000x;\S3/4;}"', 3),    # 2 3/4"  -- was 26
+        (r'{\fArial|b1|i0|c0|p34;Rod Pockets}', 11),          # was 34
+        (r'\A1;R8"', 3),                                      # was 7
+        (r'\A1;33\'-2{\H1x;\S1/2;}"', 6),                     # was 24
+    ]
+    for raw, want in cases:
+        esc = raw.replace('\\', '\\\\').replace('"', '\\"')
+        got = vm.loads('(cd:glyphs "%s")' % esc)
+        assert got == want, '%r -> %d, wanted %d' % (raw, got, want)
+    print("ok  glyphs       -> MTEXT markup is not counted as letters")
+
+
+def test_a_stacked_fraction_is_one_glyph_wide():
+    """A stack is two half-height lines one above the other, so "1/2" is
+    one glyph wide and not three; "15/16" is two."""
+    vm = newvm()
+    assert vm.loads(r'(cd:glyphs "\\S1/2;")') == 1
+    assert vm.loads(r'(cd:glyphs "\\S15/16;")') == 2
+    assert vm.loads(r'(cd:glyphs "\\S1^2;")') == 1
+    print("ok  glyphs       -> a stacked fraction is as wide as its "
+          "longer half")
+
+
+def test_a_toggle_code_does_not_swallow_the_line():
+    r"""\L, \O and \K take no argument, and \P is a hard break.  Scanning
+    one of them for a semicolon would eat everything after it."""
+    vm = newvm()
+    assert vm.loads(r'(cd:glyphs "\\LUNDER\\l DONE")') == len('UNDER DONE')
+    assert vm.loads(r'(cd:glyphs "A\\~B")') == 3
+    print("ok  glyphs       -> a toggle takes no argument and eats nothing")
+
+
+def test_an_mtext_split_across_chunks_is_measured_whole():
+    """Anything over 250 characters is split across repeated group 3
+    chunks with the remainder in group 1.  Reading group 1 alone
+    measures the tail of a paragraph and none of the rest."""
+    vm = newvm()
+    vm.loads('(entmakex (list (cons 0 "MTEXT") (cons 8 "0")'
+             ' (list 10 0.0 0.0 0.0) (cons 40 4.0) (cons 71 1)'
+             ' (cons 3 "AAAA") (cons 3 "BBBB") (cons 1 "CC")))')
+    poly = vm.loads('(cd:mtext-poly (entget (entlast)))')[0]
+    xs = [p[0] for p in poly]
+    assert abs((max(xs) - min(xs)) - 10 * 4.0 * CW) < 1e-9, \
+        "the two group 3 chunks were not measured: %r" % (max(xs) - min(xs),)
+    print("ok  mtext        -> group 3's chunks and group 1 are one string")
+
+
 def test_an_angular_track_is_an_arc_about_the_vertex():
     vm = newvm()
     angdim(vm)
@@ -873,6 +1032,76 @@ def test_a_non_linear_dimension_with_no_text_point_is_skipped():
     print("ok  skip         -> no text point on an arc is not guessed at")
 
 
+def test_the_crossing_cross_dims_that_this_tool_failed_on():
+    """The regression this whole text-measurement pass exists for.
+
+    Model space of the drawing it came from is one rectangle with six
+    dimensions on it: the four sides, and the two diagonals in the
+    CROSS DIMENSIONS style whose text printed on top of itself in the
+    middle.  Every number below is that drawing's, groups and all.
+
+    CLEARDIM v2.0 answered "6 already clear - left alone".  Neither
+    cross dimension's style carries a DIMTXT, so both texts measured
+    0.18 units instead of 6.0 and nothing could overlap anything."""
+    BL, BR = (993.0041743967485, 428.3052061602902), \
+             (1350.004174396749, 428.3052061602902)
+    TR, TL = (1350.287140679612, 605.8049806110844), \
+             (992.7885390213107, 604.8050744361189)
+    vm = VM()
+    vm.load(LSP)
+    vm.sysvars['LUNITS'] = 4
+    vm.sysvars['LUPREC'] = 4
+    # both styles keep their height on the text style, not on DIMTXT
+    title = textstyle(vm, 'TITLE', height=8.0)
+    romanc = textstyle(vm, 'ROMANC', height=6.0)
+    dimstyle(vm, 'STANDARD', [(40, 1.5), (41, 3.0), (42, 4.5), (44, 2.25),
+                              (147, 2.25), (271, 3), (277, 4), (340, title)])
+    dimstyle(vm, 'CROSS DIMENSIONS', [(41, 3.9925), (42, 4.0), (44, 2.0),
+                                      (73, 0), (74, 0), (147, 2.0),
+                                      (271, 3), (277, 4), (340, romanc)])
+    for a, b in ((BL, BR), (BR, TR), (TR, TL), (TL, BL)):
+        line(vm, a, b)
+    ents = {}
+    for h, sty, p10, p11_, p13, p14, meas in (
+            ('5B32', 'STANDARD', (1350.2315903, 625.6660140),
+             (1171.4822895, 625.1660609), TL, TR, 357.5),
+            ('5B33', 'STANDARD', (972.9274427, 604.7808095),
+             (973.0352604, 516.5308753), BL, TL, 176.5),
+            ('5B37', 'CROSS DIMENSIONS', (1348.5198089, 609.3623796),
+             (1169.8783257, 520.6124924), BL, TR, 398.9452192),
+            ('5B38', 'CROSS DIMENSIONS', (994.5481389, 608.3663042),
+             (1173.1559565, 520.1163700), BR, TL, 398.4409788),
+            ('5B3A', 'STANDARD', (1350.0041743, 417.5246032),
+             (1171.5041743, 417.5246032), BL, BR, 357.0),
+            ('5B3B', 'STANDARD', (1367.3305662, 605.7778103),
+             (1367.1890831, 517.0279231), BR, TR, 177.5)):
+        ents[h] = anydim(vm, {10: p10, 11: p11_, 13: p13, 14: p14, 42: meas},
+                         33, layer='DIMENSION')
+        vm.entdata[ents[h]] = ([Dot(3, sty), Dot(5, h)]
+                               + [g for g in vm.entdata[ents[h]]
+                                  if not (isinstance(g, Dot) and g.a == 3)])
+
+    # the heights and the strings the dimensions' own blocks carry
+    vm.loads('(setq SS (ssget "_X") RECS (cd:records SS))')
+    heights = [round(vm.loads('(cd:r-h (nth %d RECS))' % i), 4)
+               for i in range(6)]
+    assert heights == [8.0, 8.0, 6.0, 6.0, 8.0, 8.0], heights
+
+    before = {h: p11(vm, e) for h, e in ents.items()}
+    run(vm, 'c:CLEARDIM', [None, None], 'the failing drawing')
+    moved = sorted(h for h, e in ents.items() if p11(vm, e) != before[h])
+    assert moved == ['5B37', '5B38'], \
+        "the two cross dims are the ones that had to move, and only them: %r" \
+        % (moved,)
+    assert '4 already clear' in said(vm), said(vm)
+    # and they came apart: their boxes no longer touch
+    a, b = p11(vm, ents['5B37']), p11(vm, ents['5B38'])
+    assert math.dist(a, b) > 40.0, \
+        "they are still on top of each other: %r %r" % (a, b)
+    print("ok  regression   -> the crossing cross dims come apart, and "
+          "the four sides stay")
+
+
 def test_an_unreadable_track_is_skipped_and_still_blocks():
     """A dimension whose track cannot be read off it is left exactly as
     drawn -- a track guessed wrong does not move text along the
@@ -1114,6 +1343,15 @@ if __name__ == '__main__':
     test_a_circle_is_flattened_into_ink()
     test_a_drawing_text_is_ink()
     test_fit_text_is_measured_between_its_two_ends()
+    test_a_fixed_height_text_style_beats_dimtxt()
+    test_a_fixed_height_is_not_scaled_by_dimscale()
+    test_dimtxt_still_applies_when_the_style_has_no_fixed_height()
+    test_a_style_width_factor_widens_the_box()
+    test_the_measurement_is_spelled_the_way_the_style_says()
+    test_mtext_formatting_codes_are_not_letters()
+    test_a_stacked_fraction_is_one_glyph_wide()
+    test_a_toggle_code_does_not_swallow_the_line()
+    test_an_mtext_split_across_chunks_is_measured_whole()
     test_an_angular_track_is_an_arc_about_the_vertex()
     test_a_two_line_angular_finds_its_vertex_by_intersection()
     test_angular_text_slides_round_the_arc_at_its_own_radius()
@@ -1129,6 +1367,7 @@ if __name__ == '__main__':
     test_a_diameter_has_no_floor_under_it()
     test_an_ordinate_with_no_leader_is_skipped()
     test_a_non_linear_dimension_with_no_text_point_is_skipped()
+    test_the_crossing_cross_dims_that_this_tool_failed_on()
     test_an_unreadable_track_is_skipped_and_still_blocks()
     test_two_parallel_lines_have_no_vertex()
     test_a_vertex_that_does_not_match_the_measured_angle_is_refused()
