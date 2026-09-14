@@ -66,6 +66,7 @@ LITECOVERSCAN     Cover rules only - skips the dimension audit
 LITELINFINSCAN    Liner rules only - skips the dimension audit
 LITESPACHECKSCAN  Spa rules only - skips the dimension audit
 LOBF              Fits a construction line through points that should be on one line
+MOHAMADDLE        PADDLE's perimeter pads with a size pick first - 24in or 36in
 NORMIESTEP        Normie step layout
 OASIS             Continuous-tangent pool drawn live from envelope and radii
 PADDLE            Paddle perimeter pads
