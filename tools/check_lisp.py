@@ -245,6 +245,132 @@ def _form_at(src, i):
     return (i, len(src))
 
 
+#: The flag an open sets to remember that THIS run opened the group, in
+#: both spellings the tree uses:
+#:     (progn (command "_.UNDO" "_Begin") (setq FLAG T))
+#:     (setq FLAG (tool:undobegin))
+#: Read off the file rather than matched against a list of names, so a
+#: tool that calls its flag something new is understood without editing
+#: this checker.
+OPEN_FLAG = re.compile(r'"_Begin"\)\s*\(setq\s+([^\s()]+)'
+                       r'|\(setq\s+([^\s()]+)\s+\(\S*undobegin\)')
+#: an undo close, in both spellings
+UNDO_CLOSE = re.compile(r'"_End"|\S*undoend\)')
+#: the forms that can carry a guard
+COND_HEADS = ("if", "when", "and", "or", "cond")
+
+
+def _span(text, i):
+    """(start, end) of the form whose '(' is AT I."""
+    depth, j, instr = 0, i, False
+    while j < len(text):
+        ch = text[j]
+        if instr:
+            if ch == "\\":
+                j += 2
+                continue
+            if ch == '"':
+                instr = False
+        elif ch == '"':
+            instr = True
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i, j + 1
+        j += 1
+    return i, len(text)
+
+
+def _ancestors(text, pos):
+    """Start offsets of the forms containing POS, outermost first."""
+    stack, instr, i = [], False, 0
+    while i < len(text) and i <= pos:
+        ch = text[i]
+        if instr:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == '"':
+                instr = False
+        elif ch == '"':
+            instr = True
+        elif ch == "(":
+            stack.append(i)
+        elif ch == ")" and stack:
+            stack.pop()
+        i += 1
+    return stack
+
+
+def _elements(text, a, b):
+    """Spans of the direct elements of the form at [A, B): a nested form
+    is one span, an atom is one span, a string literal is one span."""
+    out, i = [], a + 1
+    while i < b - 1:
+        ch = text[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch == "(":
+            s, e = _span(text, i)
+            out.append((s, e))
+            i = e
+            continue
+        if ch == '"':
+            j = i + 1
+            while j < b:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == '"':
+                    j += 1
+                    break
+                j += 1
+            out.append((i, j))
+            i = j
+            continue
+        j = i
+        while j < b - 1 and not text[j].isspace() and text[j] not in '()"':
+            j += 1
+        out.append((i, j))
+        i = j if j > i else i + 1
+    return out
+
+
+def _guard_test(text, start, pos):
+    """The test of the conditional opening at START that governs POS, or
+    None when that form is not a conditional.  A cond's test is the one
+    belonging to the ARM pos falls in -- the only arm that says anything
+    about it."""
+    m = re.match(r"\(\s*([^\s()]+)", text[start:])
+    if not m or m.group(1).lower() not in COND_HEADS:
+        return None
+    a, b = _span(text, start)
+    kids = _elements(text, a, b)
+    if m.group(1).lower() == "cond":
+        for s, e in kids[1:]:
+            if s <= pos < e:
+                arm = _elements(text, s, e)
+                return text[arm[0][0]:arm[0][1]] if arm else None
+        return None
+    return text[kids[1][0]:kids[1][1]] if len(kids) > 1 else None
+
+
+def _asks_who_opened(text, pos, flags):
+    """T when a conditional somewhere above POS asks whether this run
+    opened the group -- by the flag it set, or by re-reading UNDOCTL."""
+    for start in reversed(_ancestors(text, pos)):
+        test = _guard_test(text, start, pos)
+        if test is None:
+            continue
+        low = test.lower()
+        if "undoctl" in low or any(f in low for f in flags):
+            return True
+    return False
+
+
 #: Every prompt shape that can carry a bracket.
 GETTERS = ("getkword", "getint", "getreal", "getdist", "getstring",
            "getpoint", "getangle", "getcorner", "entsel", "nentsel")
@@ -465,6 +591,38 @@ def house_rules(path, src, problems):
                 "line %d: (command \"_.UNDO\" \"_Begin\") with no UNDOCTL "
                 "guard - it errors out of the command when undo is off"
                 % (src[:a + form.find('"_Begin"')].count("\n") + 1))
+
+    # 3c. ...and every CLOSE asks the same question the open did.  Rule 3
+    #     makes the _Begin conditional on UNDOCTL; an _End that is not
+    #     conditional on the flag that open set is an error of its own in
+    #     a drawing with recording off -- and it lands at the END of the
+    #     run, after everything has been drawn, with whatever the command
+    #     still had to put back sitting behind it.  Seven commands closed
+    #     unconditionally: SMARTFILLET, HONEFILLET, XYPLOT, CHECK,
+    #     XFTRECONV, SPACHECK and STOCKCOVER.  tests/test_undo_off.py
+    #     asks the same question of the whole roster, but only as far as
+    #     bare Enters reach, and none of the seven gets near its close on
+    #     Enters alone.
+    #     A close left bare inside a HELPER is the tree's other spelling
+    #     of the guard (cal:undoend, cst:undoend, psd:undoend): the
+    #     callers carry it, and this rule checks them where they are.
+    flags = {(m.group(1) or m.group(2)).lower()
+             for m in OPEN_FLAG.finditer(body)}
+    for a, b in top_level_forms(body):
+        form = body[a:b]
+        owner = re.match(r"\(defun\s+([^\s()]+)", form)
+        if owner and owner.group(1).lower().endswith("undoend"):
+            continue                      # the pair itself; its callers carry it
+        for m in UNDO_CLOSE.finditer(form):
+            if _asks_who_opened(form, m.start(), flags):
+                continue
+            problems.append(
+                "line %d: closes an undo group without asking whether this "
+                "run opened one (STANDARDS 5: guard the _End with the flag "
+                "the _Begin set, as the handler does -- with undo recording "
+                "off there is no group, and the _End errors out of the "
+                "command after everything has been drawn)"
+                % (src[:a + m.start()].count("\n") + 1))
 
     # 5. An undo group is closed where it is opened.  A top-level defun
     #    that opens one ("_Begin", or a tool:undobegin call) closes it on

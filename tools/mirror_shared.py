@@ -222,10 +222,12 @@ TOOLS = {
     },
     # Written against the library from the start (STANDARDS section 4's
     # "a NEW tool starts there"), so the swap map is the whole of its
-    # helper layer: the vector set, the two angle helpers, ensure-layer
-    # and the ask trio.  What stays local is what the library has no
-    # answer for -- the segment walk over the perimeter, the mark record
-    # and pm:askpt, the point prompt none of the tools before it needed.
+    # helper layer: the vector set, the two angle helpers, ensure-layer,
+    # the ask trio and block-number.  What stays local is what the
+    # library has no answer for -- the segment walk over the perimeter,
+    # the mark record, the survey-point classifier (BPCALLOUT's and
+    # ABFIND's, which are not in the library either) and pm:askpoint,
+    # the pick-or-type prompt none of the tools before it needed.
     'PERPMARK': {
         'src': 'lisp/perpmark/PERPMARK.lsp',
         'swap': {
@@ -234,6 +236,7 @@ TOOLS = {
             'pm:vlen': 'cal:vlen', 'pm:unit': 'cal:unit',
             'pm:angnorm': 'cal:angnorm', 'pm:tan': 'cal:tan',
             'pm:ensure-layer': 'cal:ensure-layer',
+            'pm:block-number': 'cal:block-number',
             'pm:askkw': 'cal:askkw', 'pm:askyn': 'cal:askyn',
             'pm:askdist': 'cal:askdist',
             'pm:syssave': 'cal:syssave',
@@ -247,6 +250,9 @@ TOOLS = {
         # pm:sysvars stays behind to supply it
         'expand': {
             '(cal:syssave)': ['(cal:syssave (pm:sysvars))'],
+            # cal:block-number takes the attribute tag as an argument
+            # where pm:block-number read the knob itself
+            '(cal:block-number en)': ['(cal:block-number en pm:*pt-tag*)'],
         },
         # pm:askkw already takes the SHOWN bracket third, like the
         # library's -- so no bracket translation is needed here

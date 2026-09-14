@@ -132,7 +132,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("NORMIESTEP", "Normie step", "Normie step layout"),
         New Entry("OASIS", "Freeform pool", "Continuous-tangent pool drawn live from envelope and radii"),
         New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
-        New Entry("PERPMARK", "Measured wall offsets", "Click a spot on the wall, type what it measured: circle, perpendicular, dimension"),
+        New Entry("PERPMARK", "Measured wall offsets", "Name a survey point, type what it measured: circle, perpendicular, dimension"),
         New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
         New Entry("POINTRENAMER", "Renumber points in order", "Hands the survey point numbers back out in perimeter order"),
         New Entry("POOL", "Pool layout", "Full pool layout tool"),
@@ -211,7 +211,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("POINTRENAMER", "Renumber points in order", "Hands the survey point numbers back out in perimeter order"),
             New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
             New Entry("CPERPPTS", "Curved perp points", "PERPPTS for a curved run"),
-            New Entry("PERPMARK", "Measured wall offsets", "Click a spot on the wall, type what it measured: circle, perpendicular, dimension"),
+            New Entry("PERPMARK", "Measured wall offsets", "Name a survey point, type what it measured: circle, perpendicular, dimension"),
             New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
             New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"),
             New Entry("TYLERDRONESUITE", "Drone suite: tidy, pad, CDIM", "The whole drone trace in one - TYDRN, then PADDLE, then CDIM")
