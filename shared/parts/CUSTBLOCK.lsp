@@ -79,7 +79,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.3")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.4")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -109,6 +109,7 @@
       (if back (initget 6 "Back Undo") (initget 6))
       (setq v (getdist (strcat "\n" msg (if back " [Back]" "")
                                " <" (rtos last) ">: ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
             ((null v) last)
             (t v)))))
@@ -124,6 +125,7 @@
   ;; section 1 -- the wording itself is section 3's Placement question
   (setq v (getpoint (strcat "\nInsertion base point"
                             (if back " [Back]" "") " <0,0>: ")))
+  (if lzd:ask (lzd:ask "cbk:askbase" v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
@@ -236,7 +238,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCUSTBLOCK error: " m)))
+    (if lzd:report (lzd:report "CUSTBLOCK" *custblock-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "CUSTBLOCK" *custblock-version*))
 
   (setq go T)
   (while go
@@ -371,8 +375,16 @@
   (princ (strcat "\nCUSTBLOCK " *custblock-version*))
   (princ))
 
-(princ (strcat "\nCUSTBLOCK " *custblock-version*
-               " loaded -- type CUSTBLOCK to draw a block from its"
-               " length, width and height (layer \"" cbk:*layer*
-               "\", dims \"" cbk:*style* "\")."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCUSTBLOCK " *custblock-version*
+                 " loaded -- type CUSTBLOCK to draw a block from its"
+                 " length, width and height (layer \"" cbk:*layer*
+                 "\", dims \"" cbk:*style* "\").")))
 (princ)

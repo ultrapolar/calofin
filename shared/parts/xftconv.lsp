@@ -66,7 +66,7 @@
 
 
 
-(setq *xft-version* "v1.14") ; printed on load and at command start so a
+(setq *xft-version* "v1.16") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -907,8 +907,10 @@
     ;; error mode would stay pushed for the rest of the session
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if lzd:report (lzd:report "XFTCONV" *xft-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "XFTCONV" *xft-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -928,10 +930,12 @@
   ;; so there is nothing left to step back to.  a selection made before
   ;; the command was typed (pickfirst) skips even that prompt.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (not ss)
     (progn
       (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -1201,8 +1205,10 @@
     (xft:restore)
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if lzd:report (lzd:report "XFTRECONV" *xft-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "XFTRECONV" *xft-version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
 
@@ -1215,10 +1221,12 @@
 
   ;; ---- selection, the same three ways XFTCONV takes it ------------
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (not ss)
     (progn
       (princ "\nSelect the converted survey (Enter = everything in this space): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -1303,8 +1311,15 @@
                         (rtos scale 2 4) " about the conversion's own base ..."))
          (command "_.SCALE" keep "" (trans base 0 1) (/ 1.0 scale))))
 
-     (command "_.UNDO" "_End")
-     (setq undone nil)
+     ;; closed only if one was opened, as the handler and XFTCONV's own
+     ;; close both are: with undo recording off (UNDOCTL bit 1 clear)
+     ;; there is none, and an _End on nothing is an error of its own --
+     ;; here, with every block already converted back and the sysvar
+     ;; restore below it
+     (if undone
+       (progn
+         (command "_.UNDO" "_End")
+         (setq undone nil)))
      (xft:restore)
 
      ;; ---- report -------------------------------------------------
@@ -1326,7 +1341,18 @@
 ;;;  make sure the pieces exist as soon as the file loads
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV-SETUP ()
+(defun c:XFTCONV-SETUP ( / *error*)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nXFTCONV-SETUP error: " msg)))
+    (if lzd:report (lzd:report "XFTCONV-SETUP" *xft-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "XFTCONV-SETUP" *xft-version*))
   (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
   (xft:ensure-block)
   (princ (strcat "\nLayer \"" *xft-block-layer* "\" and block \"" *xft-block* "\" are ready."))
@@ -1337,7 +1363,15 @@
   (princ (strcat "\nXFTCONV " *xft-version*))
   (princ))
 
-(princ (strcat "\nXFTCONV.lsp " *xft-version*
-               " loaded.  Type XFTCONV to scale a survey import and swap"
-               " its points, XFTRECONV to put one back."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nXFTCONV.lsp " *xft-version*
+                 " loaded.  Type XFTCONV to scale a survey import and swap"
+                 " its points, XFTRECONV to put one back.")))
 (princ)

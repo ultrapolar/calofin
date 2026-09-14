@@ -24,7 +24,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.5")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -147,6 +147,7 @@
                                 (vl-string-translate " " "/" kwlist)
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
+    (if lzd:ask (lzd:ask prompt ans))
     (if (and (null ans) dflt) (setq ans dflt))
   )
   (if (member ans '("Back" "Undo"))
@@ -363,7 +364,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nLINCHECK error: " msg)))
+    (if lzd:report (lzd:report "LINCHECK" *lincheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINCHECK" *lincheck-version*))
 
   (setq *lin:log* nil fib nil vin nil)
   (princ "\n--- Liner Tech Drawing Checklist ---")
@@ -450,6 +453,14 @@
   (princ (strcat "\nLINCHECK " *lincheck-version*))
   (princ))
 
-(princ (strcat "\nLINCHECK " *lincheck-version*
-               " loaded. Type LINCHECK to run the liner checklist."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLINCHECK " *lincheck-version*
+                 " loaded. Type LINCHECK to run the liner checklist.")))
 (princ)

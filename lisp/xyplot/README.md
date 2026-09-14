@@ -96,6 +96,13 @@ and any row that was skipped, with which coordinate it was missing.
 
 ## What happens next
 
+The whole plot is one undo group, closed before any `ABHD` handoff so
+that ABHD's own group is its own `U`. Closed only if one was *opened*,
+though: with undo recording off (`UNDOCTL` bit 1 clear) there is none,
+and an `_End` on nothing is an error of its own — it landed after every
+graph had been plotted and the report written, which is exactly where an
+error costs the most and says the least.
+
 The run ends by offering to fit the pool perimeter straight away: answer
 `Yes` and **graph 1's** points are pre-selected and `ABHD` starts on them.
 (Loaded on its own rather than as part of the calofin build, `XYPLOT.lsp`
@@ -108,7 +115,8 @@ actual LISP in the repo's AutoLISP VM (`tests/lispvm.py`) — the whole
 command, prompts to report — and checks the coordinate arithmetic, the
 chain building (including points sharing a value, which is where a
 `vl-sort` would have silently dropped one), the two graphs' separation, the
-layer split between them, and the ABHD handoff:
+layer split between them, the ABHD handoff, and the undo bracket with
+recording both on and off:
 
 ```
 python3 tests/test_xyplot.py

@@ -229,7 +229,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.14")
+(setq *cchk-version* "v1.15")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -386,7 +386,13 @@
 
 ;; -- colours -----------------------------------------------------------
 
-(setq *cchk-grey-color*    8)       ; ACI: everything not under review, faded (grey)
+(setq *cchk-grey-color*    'auto)  ; ACI: everything not under review, faded.
+                                   ; 'auto fades it the way round the drawing
+                                   ; needs -- darker than the work on a dark
+                                   ; background, lighter on a light one, since
+                                   ; 8 recedes on the first and is one of the
+                                   ; most prominent things on screen on the
+                                   ; second.  A number is used exactly as given
 (setq *cchk-flag-color*    1)       ; ACI: what you answered "No" to (red)
 (setq *cchk-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
 (setq *cchk-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
@@ -584,7 +590,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCOVERCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "COVERCHECKRESCUE" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "COVERCHECKRESCUE" *cchk-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -729,7 +737,7 @@
 (defun cchk:unstage (ent keep)
   ;; send a reviewed entity back into the grey background
   (if (and (entget ent) (not (member ent keep)))
-    (cchk:set-color ent *cchk-grey-color*)))
+    (cchk:set-color ent (cal:ink *cchk-grey-color* 'fade))))
 
 (defun cchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -2947,6 +2955,7 @@
          (setq replp T)
          (setq pk (entsel (strcat "\nPick the '" *cchk-repl-block*
                                   "' block <it is not placed>: ")))
+         (if lzd:watch (lzd:watch pk))
          (cond
            ((and pk
                  (= "INSERT" (cdr (assoc 0 (entget (car pk)))))
@@ -3021,7 +3030,7 @@
 
 ;; --- command -------------------------------------------------------
 
-(defun c:COVERCHECK ( / *error* oldecho vc vs undo-open ss i e et
+(defun c:COVERCHECK ( / *error* oldecho vc vs undo-open ss i e et grey
                       cands dims arcs plns segs blks olaps e1 e2 pr
                       saved keep res n total lines
                       anchors anchheld
@@ -3053,14 +3062,18 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCOVERCHECK error: " msg)))
+    (if lzd:report (lzd:report "COVERCHECK" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "COVERCHECK" *cchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to COVERCHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - COVERCHECK cancelled."))
@@ -3161,6 +3174,10 @@
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; COVERCHECKRESCUE can recover them even after a crash
+        ;; the fade, resolved once for the whole run: the knob may
+        ;; be 'auto, and measuring the background per entity would
+        ;; be a COM round trip per entity
+        (setq grey (cal:ink *cchk-grey-color* 'fade))
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
@@ -3169,7 +3186,7 @@
             (progn
               (setq saved (cons (cons e (cchk:ent-color e)) saved))
               (cchk:stash-color e (cchk:ent-color e))
-              (cchk:set-color e *cchk-grey-color*))))
+              (cchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -3196,13 +3213,13 @@
                                  (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
-             (cchk:set-color e *cchk-grey-color*)
+             (cchk:set-color e grey)
              (setq skiprest T)
              (princ (strcat "\n  Skipping the remaining "
                             (itoa (- total n)) " dimension(s).")))
             ((eq (cadr res) 'back)
              ;; undo what the previous item recorded, then redo it
-             (cchk:set-color e *cchk-grey-color*)
+             (cchk:set-color e grey)
              (if (> n 0)
                (progn
                  (setq n  (1- n)
@@ -3228,14 +3245,14 @@
                                                       carried))))
                      (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
-                 (cchk:set-color e1 *cchk-grey-color*)
+                 (cchk:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
              (setq n (1- n)))                            ; loop's 1+ re-enters it
             (t
              (if (cadr res)
                (progn (setq ndok (1+ ndok))
-                      (cchk:set-color e *cchk-grey-color*))
+                      (cchk:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (cchk:dim-style e))
@@ -3278,7 +3295,7 @@
           (setq nasnap (+ nasnap (cadddr res)))
           (if (cadr res)
             (progn (setq naok (1+ naok))
-                   (cchk:set-color e *cchk-grey-color*))
+                   (cchk:set-color e grey))
             (progn (setq namoved (1+ namoved))
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
@@ -3441,15 +3458,19 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "COVERCHECK" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "COVERCHECK" *cchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the drawing to " name
                       " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -3875,7 +3896,9 @@
     (if fil0 (setvar "FILEDIA" fil0))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALCOVERCHECK" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCOVERCHECK" *cchk-version*))
 
   (cchk:tut-checklist)
 
@@ -3917,7 +3940,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECKCLEAN error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALCOVERCHECKCLEAN" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCOVERCHECKCLEAN" *cchk-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -3950,7 +3975,16 @@
 ;; the version reporter TOOLNAMEVER, and muscle memory keeps the old one
 (defun c:COVERCHECKVERSION () (c:COVERCHECKVER))
 
-(princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
-(princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
-(princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVER prints this file's version.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
+    (princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
+    (princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVER prints this file's version.")))
 (princ)

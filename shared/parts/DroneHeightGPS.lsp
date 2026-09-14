@@ -136,7 +136,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *droneheightgps-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *droneheightgps-version* "v1.2")   ; announced on load; release_lisp.py
                                             ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -854,7 +854,9 @@
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
+    (if lzd:report (lzd:report "DDGPS" *droneheightgps-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "DDGPS" *droneheightgps-version*))
 
   ;; 1) pick the photo - start in the last-used folder, else the H: drive
   (setq def (getenv "DDGPS_LastDir"))
@@ -1133,7 +1135,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDELEV : ground elevation at a typed latitude / longitude
 ;; ---------------------------------------------------------------------------
-(defun c:DDELEV ( / lat lon g stage done)
+(defun c:DDELEV ( / *error* lat lon g stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDELEV error: " msg)))
+    (if lzd:report (lzd:report "DDELEV" *droneheightgps-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDELEV" *droneheightgps-version*))
   ;; staged: Back (or Undo) at the longitude re-asks the latitude
   (setq stage 1 done nil)
   (while (not done)
@@ -1170,7 +1183,18 @@
 ;;  Walks every step DDGPS uses and reports what your machine actually allows.
 ;;  Run this once on a file that fails and send the report.
 ;; ---------------------------------------------------------------------------
-(defun c:DDTEST ( / file out fsz r pr cu tmp lst n m)
+(defun c:DDTEST ( / *error* file out fsz r pr cu tmp lst n m)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDTEST error: " msg)))
+    (if lzd:report (lzd:report "DDTEST" *droneheightgps-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDTEST" *droneheightgps-version*))
   (setq file (getfiled "Pick the photo that will not read" "" "png;jpg;jpeg;tif;tiff" 16))
   (cond
     ((null file) (princ "\nNo file selected."))
@@ -1253,7 +1277,16 @@
   (princ (strcat "\nDDGPS " *droneheightgps-version*))
   (princ))
 
-(princ (strcat "\nDrone Height from GPS " *droneheightgps-version*
-               " loaded  (pick a photo, click a point, place the height report)."))
-(princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nDrone Height from GPS " *droneheightgps-version*
+                   " loaded  (pick a photo, click a point, place the height report)."))
+    (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")))
 (princ)

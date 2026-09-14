@@ -538,9 +538,20 @@ for c in charts:
 
 print("== the drawing lands inside the tile, in declared colours ==")
 COLS = {}
-for name in ('line', 'back', 'dim', 'val', 'hi'):
-    COLS[name] = int(vm.globals[lib('lzs:*col-%s*' % name,
-                                   'cal:*imgcol-%s*' % name)])
+# What the tile is actually painted in, not what the knob holds: since
+# the tile palette learned to follow the dialog theme, *col-dim* and
+# *col-hi* say 'auto and the ACI is picked at the point of use.  Ask
+# for it the same way lzs:redraw does -- through the ink table, whose
+# answers tests/test_theme.py pins role by role.
+for name, role in (('line', None), ('back', None), ('dim', 'dim'),
+                   ('val', None), ('hi', 'hi')):
+    knob = lib('lzs:*col-%s*' % name, 'cal:*imgcol-%s*' % name)
+    if role is None:
+        COLS[name] = int(vm.globals[knob])
+    else:
+        vm.loads("(setq test:*c* (%s %s '%s))"
+                 % (lib('lzs:ink', 'cal:ink'), knob, role))
+        COLS[name] = int(vm.globals['test:*c*'])
 for c in charts:
     name = str(c[0])
     _reset()
@@ -561,6 +572,7 @@ for c in charts:
             "%s: fill off the tile: %r" % (name, f)
     print("   %-10s %3d vectors, %2d fills, all inside %dx%d and in colour"
           % (name, len(DRAW['vec']), len(DRAW['fill']), DX, DY))
+
 
 
 print("== a typed value replaces its letter on the chart ==")

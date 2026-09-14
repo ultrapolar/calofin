@@ -45,7 +45,7 @@ BLURBS = ROOT / "ui" / "calofin_net" / "blurbs.txt"
 OUT = ROOT / "ui" / "calofin_net" / "Generated" / "CommandCatalog.g.vb"
 
 #: What the palette's Commands tab shows as its groups.  They ARE the
-#: panel's four category pages -- lzp:*groups* files every tool into
+#: panel's category pages -- lzp:*groups* files every tool into
 #: exactly one of them -- so the palette's grouping is not a second
 #: opinion about where a tool belongs.
 GROUPS = CATEGORIES
@@ -121,7 +121,7 @@ def build(src=None, blurb=None):
     add("''' Every routine the palette offers, in the panel's own words.")
     add("'''")
     add("''' <para>Four views of one roster: <see cref=\"All\"/> is every")
-    add("''' command once, <see cref=\"Groups\"/> is the four category")
+    add("''' command once, <see cref=\"Groups\"/> is the category")
     add("''' pages the Commands tab lists, <see cref=\"Pages\"/> is the")
     add("''' whole tab strip including the job pages, and")
     add("''' <see cref=\"CaptionOf\"/> resolves one name.</para>")
@@ -147,7 +147,7 @@ def build(src=None, blurb=None):
     add("")
     add("    ''' <summary>One column of a page: a heading and the commands")
     add("    ''' under it.  A heading of \"\" means the page is one plain")
-    add("    ''' column, which is what the four category pages are.</summary>")
+    add("    ''' column, which is what the category pages are.</summary>")
     add("    Public Structure Column")
     add("        Public ReadOnly Heading As String")
     add("        Public ReadOnly Commands As String()")
@@ -183,8 +183,8 @@ def build(src=None, blurb=None):
     add("    }")
     add("")
 
-    # ---- Groups: the four category pages.
-    add("    ''' <summary>The four category pages, which are the palette's")
+    # ---- Groups: the category pages.
+    add("    ''' <summary>The category pages, which are the palette's")
     add("    ''' groups: lzp:*groups* files every tool into exactly one, so")
     add("    ''' this is not a second opinion about where a tool")
     add("    ''' belongs.</summary>")
@@ -205,7 +205,7 @@ def build(src=None, blurb=None):
     #      the reason a drafter can find a tool by the job rather than
     #      by what it is.
     add("    ''' <summary>Every page of the panel's tab strip, in its order:")
-    add("    ''' the job pages first, then the four categories.  A job page")
+    add("    ''' the job pages first, then the categories.  A job page")
     add("    ''' carries a tool under the work it belongs to; a category")
     add("    ''' page answers what a tool IS.</summary>")
     add("    Public Shared ReadOnly Pages As Page() = {")

@@ -243,7 +243,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.5") ; printed on load and at command start so a
+(setq *cs-version* "v4.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -776,7 +776,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCORNERSTP: " msg)))
+    (if lzd:report (lzd:report "CORNERSTP" *cs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CORNERSTP" *cs-version*))
 
   ;; remove the most recently drawn step and roll the state back
   (defun cs-popstep ( / rec e)
@@ -833,11 +835,13 @@
   ;; ---- 1. selection ---------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nSelect the two walls forming the corner ")
       (princ "(a corner diagonal or fillet arc may be included):")
-      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
 
@@ -1816,7 +1820,9 @@
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
+    (if lzd:report (lzd:report "TUTORIALCORNERSTP" *cs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCORNERSTP" *cs-version*))
 
   (princ (strcat "\n================ CORNERSTP TUTORIAL " *cs-version*
                  " ================"))
@@ -1976,7 +1982,15 @@
   (princ (strcat "\nCORNERSTP " *cs-version*))
   (princ))
 
-(princ (strcat "\nCORNERSTP.lsp " *cs-version*
-               " loaded - CORNERSTP to draw corner steps,"
-               " TUTORIALCORNERSTP to learn it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCORNERSTP.lsp " *cs-version*
+                 " loaded - CORNERSTP to draw corner steps,"
+                 " TUTORIALCORNERSTP to learn it.")))
 (princ)

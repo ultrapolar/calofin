@@ -82,7 +82,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.3")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -443,7 +443,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nVSCONV error: " msg)))
+    (if lzd:report (lzd:report "VSCONV" *vsconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "VSCONV" *vsconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -480,6 +482,7 @@
           (prompt (strcat "\nSelect the VS import <Enter = every VS layer"
                           " in the drawing>: "))
           (setq ss (ssget filter))
+          (if lzd:watch (lzd:watch ss))
           (if (null ss) (setq ss (ssget "_X" filter)))))
 
       ;; The destinations have to exist, and be usable, before anything
@@ -605,7 +608,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nVSRECONV error: " msg)))
+    (if lzd:report (lzd:report "VSRECONV" *vsconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "VSRECONV" *vsconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -620,10 +625,12 @@
   ;; drawing lives too -- so the record is what says which objects came
   ;; from an export, and nothing else is touched whatever is selected.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -716,6 +723,14 @@
   (princ (strcat "\nVSCONV " *vsconv-version*))
   (princ))
 
-(princ (strcat "\nVSCONV " *vsconv-version*
-               " loaded.  Type VSCONV to run, VSRECONV to undo one."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nVSCONV " *vsconv-version*
+                 " loaded.  Type VSCONV to run, VSRECONV to undo one.")))
 (princ)

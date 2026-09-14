@@ -136,7 +136,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.3")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.4")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -832,10 +832,12 @@
 ;; it, and nothing outside the highlight is read, kept or erased.
 (defun lg:highlight ( / ss)
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nHighlight the area to gut: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   ss)
 
 ;; the highlighted set as a list of enames
@@ -1047,7 +1049,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTER error: " m)))
+    (if lzd:report (lzd:report "LINGUTTER" *lingutter-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "LINGUTTER" *lingutter-version*))
 
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (princ (strcat "\nLINGUTTER " *lingutter-version*))
@@ -1114,7 +1118,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTERSCAN error: " m)))
+    (if lzd:report (lzd:report "LINGUTTERSCAN" *lingutter-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "LINGUTTERSCAN" *lingutter-version*))
   (princ (strcat "\nLINGUTTERSCAN " *lingutter-version*
                  " - reading only, nothing in the drawing is changed."))
   (setq ss (lg:highlight))
@@ -1129,9 +1135,17 @@
   (princ (strcat "\nLINGUTTER " *lingutter-version*))
   (princ))
 
-(princ (strcat "\nLINGUTTER " *lingutter-version*
-               " loaded -- highlight an area: its perimeter goes onto \""
-               lg:*poollayer* "\", the rest of it is erased, PADDLE runs."
-               "\nLINGUTTERSCAN reports what it would do and changes"
-               " nothing."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLINGUTTER " *lingutter-version*
+                 " loaded -- highlight an area: its perimeter goes onto \""
+                 lg:*poollayer* "\", the rest of it is erased, PADDLE runs."
+                 "\nLINGUTTERSCAN reports what it would do and changes"
+                 " nothing.")))
 (princ)

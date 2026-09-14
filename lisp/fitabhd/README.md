@@ -383,7 +383,8 @@ the FITABHD perimeter and run `ADAB` over it.
 
 All at the top of `FITABHD.lsp`: layers (`fit:*pool-layer*`,
 `fit:*point-layer*`, `fit:*out-layer*`, `fit:*miss-layer*`), the point
-block and tag (`fit:*point-block*`, `fit:*pt-tag*`), the tolerance
+block and tag (`fit:*point-block*`, `fit:*pt-tag*`), the letter that
+marks a *moved* point (`fit:*moved-mark*`, `"M"`), the tolerance
 ceiling (`fit:*tol-max*`, 2"), the snapping increments
 (`fit:*nice-dims*`, feet / half feet / inches / half inches), the
 corner-zone sizing (`fit:*corner-zone*`, `fit:*zone-pad*`,
@@ -478,6 +479,14 @@ mirror agree on the ones that shape the fit.
 * An oasis's hopper is square to its **envelope**, not to a wall --
   there is no wall. All four bounds are offered as ends, so the point
   you pick at the deep end chooses which way the hopper lies.
+* Points numbered with an **`m`** are not survey points and are left
+  out of the fit entirely -- ABFIND writes `17m` when it copies Pt.17
+  to a position it *deduced* from two tape readings, so nobody stood
+  there. The whole idea here is that the POINTS place the template, so
+  a deduced position is the one thing that must not get a vote. The
+  original it came from is still in, and the count left out is
+  reported (which is what explains a type that suddenly lacks its
+  minimum).
 * At least 6 survey points are needed (3 for Round, 12 for an Oasis);
   corner radii can
   only be measured if the corner arcs were actually shot -- a corner

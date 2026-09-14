@@ -231,7 +231,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.16") ; printed on load and at command start so a
+(setq *hs-version* "v3.17") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -857,7 +857,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHEMISTEP: " msg)))
+    (if lzd:report (lzd:report "HEMISTEP" *hs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "HEMISTEP" *hs-version*))
 
   ;; remove the most recently drawn step and roll the state back
   (defun hs-popstep ( / e)
@@ -908,11 +910,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the base curve (arc, circle"
                      " or polyline), or the curve plus its axis line:"))
-      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -1643,7 +1647,9 @@
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
+    (if lzd:report (lzd:report "TUTORIALHEMISTEP" *hs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALHEMISTEP" *hs-version*))
 
   (princ (strcat "\n================ HEMISTEP TUTORIAL " *hs-version*
                  " ================"))
@@ -1793,7 +1799,15 @@
   (princ (strcat "\nHEMISTEP " *hs-version*))
   (princ))
 
-(princ (strcat "\nHEMISTEP.lsp " *hs-version*
-               " loaded - HEMISTEP to draw hemisphere steps,"
-               " TUTORIALHEMISTEP to learn it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nHEMISTEP.lsp " *hs-version*
+                 " loaded - HEMISTEP to draw hemisphere steps,"
+                 " TUTORIALHEMISTEP to learn it.")))
 (princ)

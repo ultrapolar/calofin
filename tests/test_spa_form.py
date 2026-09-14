@@ -373,8 +373,8 @@ GT_PROMPTS = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
               "No", "90", "90", "90", "90",
               "Yes",                    # auto-hinge -- asked before the draw
               "No",                     # no spillaway
-              None,                     # the block, offered again -- skip
-              "4-2",                    # the taper, typed
+              "4-2",                    # the taper, typed (the block was
+                                        # offered once, up front)
               "No"]                     # no second outline
 GT_FORM = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
                (w . 84.0) (l . 72.0)

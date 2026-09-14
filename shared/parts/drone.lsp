@@ -48,7 +48,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.5")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -180,7 +180,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDRONE error: " msg)))
+    (if lzd:report (lzd:report "DRONE" *drone-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DRONE" *drone-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -198,10 +200,12 @@
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
   (setq ss-text (ssget "_I" '((0 . "TEXT"))))
+  (if lzd:watch (lzd:watch ss-text))
   (if (null ss-text)
     (progn
       (prompt "\nSelect text to update <Enter = all text in drawing>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
+      (if lzd:watch (lzd:watch ss-text))
       (if (null ss-text)
         (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
 
@@ -308,5 +312,13 @@
   (princ (strcat "\nDRONE " *drone-version*))
   (princ))
 
-(princ (strcat "\nDRONE " *drone-version* " loaded.  Type DRONE to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nDRONE " *drone-version* " loaded.  Type DRONE to run.")))
 (princ)

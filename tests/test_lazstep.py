@@ -604,9 +604,20 @@ print("   every labelled line under %d cells; the side column under %d"
 
 print("== the drawing lands inside the tile, in declared colours ==")
 COLS = {}
-for name in ('line', 'back', 'dim', 'val', 'hi'):
-    COLS[name] = int(vm.globals[lib('lzt:*col-%s*' % name,
-                                   'cal:*imgcol-%s*' % name)])
+# What the tile is actually painted in, not what the knob holds: since
+# the tile palette learned to follow the dialog theme, *col-dim* and
+# *col-hi* say 'auto and the ACI is picked at the point of use.  Ask
+# for it the same way lzt:redraw does -- through the ink table, whose
+# answers tests/test_theme.py pins role by role.
+for name, role in (('line', None), ('back', None), ('dim', 'dim'),
+                   ('val', None), ('hi', 'hi')):
+    knob = lib('lzt:*col-%s*' % name, 'cal:*imgcol-%s*' % name)
+    if role is None:
+        COLS[name] = int(vm.globals[knob])
+    else:
+        vm.loads("(setq test:*c* (%s %s '%s))"
+                 % (lib('lzt:ink', 'cal:ink'), knob, role))
+        COLS[name] = int(vm.globals['test:*c*'])
 for ty in TYPES:
     for n in (1, 3, 8):
         _reset()

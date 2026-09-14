@@ -56,7 +56,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.7"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.8"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -371,7 +371,9 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; autobead-flush drain and the UNDO close above; harmless no-op
@@ -596,13 +598,16 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
+    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
   (autobead-ensure-layer *autobead-layer*)
   ;; a pickfirst selection skips straight to the direction question;
   ;; the probe sits OUTSIDE the stage loop so Back at that question
   ;; still lands on the interactive selection, never a re-probe
   (setq ss (ssget "_I" (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+  (if lzd:watch (lzd:watch ss))
   ;; staged: Back (or Undo) at any later prompt re-opens the stage before
   (setq stage (if ss 2 1) done nil)
   (while (not done)
@@ -612,6 +617,7 @@
                        *autobead-filter* "): "))
        (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+       (if lzd:watch (lzd:watch ss))
        (if (null ss)
          (progn
            (prompt (strcat "\nNothing selected on a " *autobead-filter*
@@ -952,8 +958,16 @@
 
 ;; ---------------------------------------------------------------------------
 
-(princ (strcat "\nAUTOBEAD " *autobead-version* " loaded."
-                "\n  AUTOBEAD          - bead selected pool lines"
-                "\n  TUTORIALAUTOBEAD  - how it works"
-                "\n  AUTOBEADVER       - version check"))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nAUTOBEAD " *autobead-version* " loaded."
+                  "\n  AUTOBEAD          - bead selected pool lines"
+                  "\n  TUTORIALAUTOBEAD  - how it works"
+                  "\n  AUTOBEADVER       - version check")))
 (princ)

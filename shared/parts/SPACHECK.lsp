@@ -113,7 +113,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.14")
+(setq *spacheck-version* "v1.16")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1818,15 +1818,19 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "SPACHECK" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to " name " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to scan.")
@@ -1862,15 +1866,19 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSPACHECK error: " msg)))
+    (if lzd:report (lzd:report "SPACHECK" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to SPACHECK (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to check.")
@@ -1912,8 +1920,16 @@
                   ((= ans "Skip") (setq k tot))))))))
       (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
-      (command "_.UNDO" "_End")
-      (setq undo-open nil)
+      ;; closed only if one was opened -- the guard the handler above
+      ;; already makes.  With undo recording off (UNDOCTL bit 1 clear)
+      ;; there is no group of this run's, and an _End on nothing is an
+      ;; error of its own: it would land here, with the report written
+      ;; and every flagged item recoloured, and the CMDECHO and sysvar
+      ;; putbacks below it never reached
+      (if undo-open
+        (progn
+          (command "_.UNDO" "_End")
+          (setq undo-open nil)))
       (setvar "CMDECHO" oldecho)
       (cal:sysrestore)
       (princ (strcat "\n--- SPACHECK complete ---"
@@ -1935,7 +1951,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSPACHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "SPACHECKRESCUE" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPACHECKRESCUE" *spacheck-version*))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   (setq ss (ssget "_X") i 0 n 0)
@@ -2279,7 +2297,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALSPACHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALSPACHECK" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALSPACHECK" *spacheck-version*))
   (setq oldecho (getvar "CMDECHO") oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
   (setq ans (cal:askkw "Show me" "Checks Demo Both" "Checks/Demo/Both" "Both" nil))
@@ -2291,6 +2311,14 @@
   (setvar "CMDECHO" oldecho)
   (princ))
 
-(princ (strcat "\nSPACHECK " *spacheck-version*
-               " loaded.  Type SPACHECK to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPACHECK " *spacheck-version*
+                 " loaded.  Type SPACHECK to run.")))
 (princ)

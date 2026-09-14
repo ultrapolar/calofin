@@ -79,7 +79,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.3")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -400,7 +400,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSOCONV error: " msg)))
+    (if lzd:report (lzd:report "SOCONV" *soconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SOCONV" *soconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil)
@@ -413,10 +415,12 @@
   ;; IS the whole drawing, which is why Enter means that; highlight
   ;; first when two surveys share one drawing.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the survey import to convert <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -476,7 +480,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSORECONV error: " msg)))
+    (if lzd:report (lzd:report "SORECONV" *soconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SORECONV" *soconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -490,10 +496,12 @@
   ;; carrying a record move either way, so Enter is as safe here as it
   ;; is there.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -568,6 +576,14 @@
   (princ (strcat "\nSOCONV " *soconv-version*))
   (princ))
 
-(princ (strcat "\nSOCONV " *soconv-version*
-               " loaded.  Type SOCONV to run, SORECONV to undo one."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSOCONV " *soconv-version*
+                 " loaded.  Type SOCONV to run, SORECONV to undo one.")))
 (princ)

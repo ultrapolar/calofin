@@ -224,7 +224,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091026 REV18")
+(setq spa:*version* "091226 REV20")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -438,7 +438,10 @@
 ;;;  A grey nominal spa is drawn as soon as the shape is picked and the
 ;;;  element being measured turns red.  The nominal sizes below are what
 ;;;  the guide is drawn at before any measurement is in.
-(setq spa:*pv-col*  8)          ; guide outline (dark gray)
+(setq spa:*pv-col*  'auto)      ; guide outline: 'auto picks the
+                                ; grey for the background (8 is
+                                ; nearly the stock dark one), a
+                                ; number is used exactly as given
 (setq spa:*pvx-col* 7)          ; measuring tie (white)
 (setq spa:*hi-col*  1)          ; the element being asked for (red)
 ;;  The RECTANGLE guide's nominal box.  The octagon and round guides
@@ -454,6 +457,8 @@
 (setq spa:*pv-olbl* 20.0)       ; ...and an octagon one, which sits tighter
 (setq spa:*pv-cap* 50.0)        ; biggest treatment the guide will draw,
                                 ; so one huge corner cannot swallow it
+(setq spa:*pv-zoom* 0.35)       ; margin round the real spa when the view
+                                ; leaves the guide for it (of its long side)
 
 ;; ---- the foam sheet
 ;;;
@@ -556,6 +561,7 @@
 (setq spa:*advice*    nil)           ; hardware recommendations
 (setq spa:*grade*     nil)           ; from the Spa Cover Details block
 (setq spa:*taper*     nil)
+(setq spa:*blockasked* nil)          ; ...which is offered ONCE a run
 ;;; -------------------- small vector helpers --------------------------
 
 (defun spa:unit (p / d)
@@ -1173,6 +1179,7 @@
                             (t " (or NA if not measured)"))
                       (if back " [Back]" "")
                       ": ")))
+    (if lzd:ask (lzd:ask msg v))
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
@@ -1230,6 +1237,7 @@
                                    (back " [Back]")
                                    (t ""))
                              ": ")))
+    (if lzd:ask (lzd:ask msg v))
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
@@ -1323,7 +1331,7 @@
 (defun spa:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      spa:*pv-col*))
+      (cal:ink spa:*pv-col* 'guide)))
 
 ;; Guide entities for a list of corner-label keys, e.g. '(lA lB).
 (defun spa:lbl (pv keys / out k)
@@ -1340,7 +1348,7 @@
 
 (defun spa:pvline (p1 p2)
   (spa:line p1 p2 spa:*lay-notes* nil)
-  (spa:setcol (entlast) spa:*pv-col*))
+  (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
 
 ;; Guide measuring line, drawn WHITE and DOTTED so it stands out from
 ;; the gray outline.
@@ -1354,7 +1362,7 @@
   (setq e (spa:pvadd (spa:pvlined p q)))
   (spa:text (cal:v+ (cal:mid p q) (list (* 0.5 th) (* 0.5 th)))
             (* 1.2 th) lbl spa:*lay-notes*)
-  (setq et (spa:pvadd (spa:setcol (entlast) spa:*pv-col*)))
+  (setq et (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))))
   (cons lbl (list e et)))
 
 ;; Remove an item (by equality) from a list.
@@ -1374,6 +1382,23 @@
   (foreach e spa:*pvents*
     (if (and e (entget e)) (entdel e)))
   (setq spa:*pvents* nil))
+
+;; The guide comes down and the real outline goes up in its place.
+;;
+;; The two are not the same size: the guide is drawn at a nominal
+;; 240 x 200 whatever the spa measures, so the window the flow zoomed
+;; to for it is the wrong one for the real thing -- a 7-foot spa lands
+;; as a speck in its corner, which reads as nothing at all.  The view
+;; moves with the handover, so the screen is never without a spa on it.
+;; across / up are the real overalls; every flow draws from (0,0) to
+;; (across, up) before the base point is added.
+(defun spa:pvhandover (across up / m)
+  (spa:pvkill)
+  ;; a floor on the margin so a degenerate size still leaves a window
+  (setq m (max 1.0 (* spa:*pv-zoom* (max across up))))
+  (command "_.ZOOM" "_Window"
+           (spa:wp (list (- 0.0 m) (- 0.0 m)))
+           (spa:wp (list (+ across m) (+ up m)))))
 
 ;;; -------------------- report table -----------------------------------
 
@@ -2198,9 +2223,14 @@
 
 ;; Try to read GRADE and TAPER off a Spa Cover Details block.  Sets the
 ;; globals; either may be left nil.  Returns T when something was read.
+;; The offer is recorded whether or not it read anything: skipping it,
+;; or picking a block with no tags on it, is an answer, and asking again
+;; later is the same question a second time.
 (defun spa:readblock ( / sel ed bn att v got)
+  (setq spa:*blockasked* t)
   (cal:osup)
   (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
+  (if lzd:watch (lzd:watch sel))
   (cal:osdown)
   (if sel
       (progn
@@ -2229,14 +2259,20 @@
   ;; reached without going through c:SPA's own consume -- same rules,
   ;; same code, and a no-op when the store was already drained
   (spa:formdetails)
-  (if (and (null spa:*grade*) (null spa:*taper*))
-      (spa:readblock))                  ; not offered earlier -- offer now
+  ;; The pick is offered once a run, up front in c:SPA -- where the
+  ;; drafter's own drawing is still on the screen to click, which by
+  ;; here it need not be.  Skipping it there settled the question: the
+  ;; taper is typed below instead.  A caller that reached this point
+  ;; without going through c:SPA's own read is still offered it.
+  (if (and (null spa:*blockasked*) (null spa:*grade*) (null spa:*taper*))
+      (spa:readblock))
   (if (null spa:*grade*) (setq spa:*grade* "STANDARD"))
   (if (spa:thermop) (setq spa:*taper* spa:*thermotaper*))
   ;; getstring cannot take keywords, so Back is typed like a value here
   ;; -- B, BACK, U or UNDO alone, any case -- as the prompt says
   (while (null spa:*taper*)
     (setq v (getstring "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8) [type B to go Back]: "))
+    (if lzd:ask (lzd:ask "spa:askdetails" v))
     (if (spa:backstr v)
         (setq spa:*taper* 'CAL-BACK)
         (progn
@@ -2695,7 +2731,7 @@
       ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                   spa:*lay-notes* nil)
-       (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))))
+       (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))))
     (setq i (1+ i)))
   pv)
 
@@ -2811,7 +2847,7 @@
     (spa:text (cal:v+ (car pr)
                       (cal:v* (spa:unit (cal:v- (car pr) cen)) spa:*pv-lbl*))
               spa:*pv-th* (cadr pr) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) spa:*pv-col*)
+    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
           all (cons ent all)
           pv (cons (cons (spa:lblkey (cadr pr)) (list ent)) pv)))
   (setq spa:*pvents* all)
@@ -2920,7 +2956,6 @@
           nil)))
 
   (spa:stages (list 'rc:sides 'rc:corners))
-  (spa:pvkill)
 
   ;; -------------------------------------------------- hinges, asked now
   ;; The hinge questions come BEFORE anything is drawn because their
@@ -2928,6 +2963,12 @@
   ;; can dodge is dodged by turning the cover instead, and there is no
   ;; turning it once it is on the screen.  The hinges themselves are
   ;; drawn at the end, on whichever outline they belong to.
+  ;;
+  ;; The guide stays up across them, treatments and all.  It is the
+  ;; only spa on the screen until the real one is drawn below, and
+  ;; these questions name its corners and its walls -- taking it away
+  ;; as the corners were answered left the drafter looking at an empty
+  ;; screen for the rest of the questions.
   (spa:hingeask)
 
   ;; -------------------------------------------------- orientation
@@ -2963,6 +3004,8 @@
         mode1 spa:*mode*)
 
   ;; ------------------------------------------- draw the first outline
+  ;; the guide has done its work: it comes off as this goes on
+  (spa:pvhandover w l)
   (spa:drawrect quad corners)
 
   ;; ------------------------------------------- and, if wanted, the other
@@ -3202,7 +3245,7 @@
   (foreach p npts
     (spa:text (spa:lbloff p cen npts spa:*pv-olbl*) spa:*pv-th*
               (nth k spa:*octnames*) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) spa:*pv-col*)
+    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
           all (cons ent all)
           pv (cons (cons (spa:lblkey (nth k spa:*octnames*)) (list ent)) pv)
           k (1+ k)))
@@ -3252,7 +3295,6 @@
         s2raw (spa:sq ans 's2)
         ovres (spa:octov aov bov sraw traw s1raw vraw s2raw)
         s (car ovres) tv (cadr ovres) s1 (caddr ovres) v (cadddr ovres))
-  (spa:pvkill)
 
   ;; the sheet letters must close POSITIVE against the overalls; one
   ;; that does not fit is adjusted and the report says so
@@ -3274,7 +3316,9 @@
         (spa:valnote "V LONGER THAN A - ADJUSTED")))
 
   ;; -------------------------------------------------- hinges, asked now
-  ;; before anything is drawn, so a spillaway can still turn the spa
+  ;; before anything is drawn, so a spillaway can still turn the spa --
+  ;; and with the guide still up, because it is the only spa on the
+  ;; screen until the real one is drawn below
   (spa:hingeask)
 
   ;; -------------------------------------------------- orientation
@@ -3304,6 +3348,7 @@
 
   ;; ------------------------------------------- draw the first outline
   ;; one closed polyline, not eight loose lines
+  (spa:pvhandover bov aov)
   (spa:perpoly (mapcar '(lambda (p) (cons p 0.0)) pts))
 
   ;; ------------------------------------------- and, if wanted, the other
@@ -3465,7 +3510,7 @@
 (defun spa:roundpreview ( / cen pv)
   (setq cen (list 120.0 120.0))
   (spa:body-round cen 240.0 240.0 spa:*lay-notes* nil)
-  (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))
+  (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
   (setq pv (list
     (spa:pvtie (list 0.0 285.0) (list 240.0 285.0) "B" spa:*pv-tie*)
     (spa:pvtie (list -50.0 0.0) (list -50.0 240.0) "A" spa:*pv-tie*)))
@@ -3506,10 +3551,11 @@
               bov (spa:sq ans 'b)
               aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov)))
       (setq aov bov))
-  (spa:pvkill)
 
   ;; hinges are asked before anything is drawn, so a spillaway can still
-  ;; turn the spa (a round one turns too: the spillway travels with it)
+  ;; turn the spa (a round one turns too: the spillway travels with it),
+  ;; and the guide stays up across them -- it is the only spa on the
+  ;; screen until the real one is drawn below
   (spa:hingeask)
 
   ;; an out-of-round spa lies with its long overall west to east, unless
@@ -3531,6 +3577,7 @@
         th (max spa:*th-min* (/ (max bov aov) spa:*th-div*))
         spa:*dashlt* (spa:ltload "DASHED")
         mode1 spa:*mode*)
+  (spa:pvhandover bov aov)
   (spa:perround cen bov aov)
   (if (> (abs (- aov bov)) 1.0e-6)
       (princ "\nThe two overalls differ, so the spa is drawn as an ellipse.")
@@ -3682,7 +3729,9 @@
     (spa:pvkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "SPA" spa:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPA" spa:*version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -3698,7 +3747,8 @@
         spa:*hingerows* nil
         spa:*advice* nil
         spa:*grade* nil
-        spa:*taper* nil)
+        spa:*taper* nil
+        spa:*blockasked* nil)
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
@@ -3711,9 +3761,13 @@
   ;; The Spa Cover Details block is read UP FRONT because its grade can
   ;; settle the next question outright: a Thermo-Light cover's water's
   ;; edge and cover size are the same thing, so there is nothing to ask
-  ;; and nothing to add later.  Skipping here just defers the block to
-  ;; the hinge pass.
+  ;; and nothing to add later.  It is also the ONE place it is asked
+  ;; for: here the drafter's own drawing is still on the screen to
+  ;; click, which after the guide goes up it is not.  Skipping is an
+  ;; answer -- the taper is typed in the hinge pass instead, and a
+  ;; Thermo-Light grade is simply never read.
   (princ "\nThe Spa Cover Details block sets the grade and taper.")
+  (princ "\n(asked once -- skip it and any taper the hinges need is typed later)")
   (spa:readblock)
   ;; the form's grade/taper land HERE, before the Thermo-Light branch,
   ;; so a form grade of THERMOLIGHT behaves exactly like the block's
@@ -3801,8 +3855,16 @@
                  (if tut:*version* tut:*version* "not loaded")))
   (princ))
 
-(princ (strcat "\nSPA " spa:*version*
-               " loaded.  SPA to draw, SPAVER for the version"
-               (if tut:*version* ", TUTORIALSPA to learn it" "")
-               "."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPA " spa:*version*
+                 " loaded.  SPA to draw, SPAVER for the version"
+                 (if tut:*version* ", TUTORIALSPA to learn it" "")
+                 ".")))
 (princ)

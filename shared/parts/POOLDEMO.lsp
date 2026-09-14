@@ -31,7 +31,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "090126 REV07")
+(setq pooldemo:*version* "091226 REV08")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -343,7 +343,9 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
+    (if lzd:report (lzd:report "POOLDEMO" pooldemo:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
   (if (not (member 'pool:hopcalc (atoms-family 0)))
       (princ "\nPOOL.LSP is not loaded -- APPLOAD it first, then run POOLDEMO.")
@@ -361,7 +363,9 @@
     (cal:sysrestore)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "POOLDEMO" pooldemo:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
@@ -408,6 +412,14 @@
   (princ (strcat "\nPOOLDEMO " pooldemo:*version*))
   (princ))
 
-(princ (strcat "\nPOOLDEMO " pooldemo:*version*
-               " loaded.  Type POOLDEMO to draw the install-check sheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOLDEMO " pooldemo:*version*
+                 " loaded.  Type POOLDEMO to draw the install-check sheet.")))
 (princ)

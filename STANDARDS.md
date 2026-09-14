@@ -416,6 +416,51 @@ change and regenerate `releases/`:
                                    ; dated twin in releases/ from it
 ```
 
+**Load banner** -- the last thing in the file, and QUIET inside the
+whole build. A tool says which build it is on when it is APPLOADed
+alone; sixty-three tools saying it in every drawing a Startup Suite
+opens was 83 lines and 6,681 characters before the drafter had done
+anything. `LAZPASS.lsp` and `CALOFIN-LOADER.lsp` set `*calofin-quiet*`
+while they load their members and clear it after, so:
+
+```lisp
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTOOLNAME " *toolname-version*
+                 " loaded.  Type TOOLNAME to run.")))
+(princ)
+```
+
+Several lines go in one `(progn ...)` under one guard, not one guard
+each. The flag is deliberately NOT a `cal:` symbol: a `lisp/` file may
+neither call nor set one (`tools/check_standards.py`), and the
+standalone files are where the banners live. `tools/check_lisp.py`
+requires both halves -- the banner, and the guard around it. `CALVER`
+reads the whole roster back whenever it is asked for, off the version
+globals themselves.
+
+**Colour.** A colour a tool draws in is an ACI number, and a number is
+only right against one background. A knob whose colour has to work
+against whatever the drafter's screen is doing says `'auto` and is
+resolved through `cal:ink` (`tool:ink` in the standalone copy, swapped
+by the mirror) at the point of use:
+
+```lisp
+(setq tool:*guidecolor* 'auto)   ; 'auto picks it for the background;
+                                 ; a number is used exactly as given
+...
+(tool:ensure-layer tool:*guidelayer* (tool:ink tool:*guidecolor* 'guide))
+```
+
+The roles are `fade` (recede behind the work), `guide` (readable but
+secondary), `dim` and `hi` (a chart tile's dimensions and its active
+box). `fade` and `guide` measure the DRAWING's background; `dim` and
+`hi` follow AutoCAD's INTERFACE theme, because they are drawn beside a
+dialog's own `-15` and `-16`. A knob left as a number is used exactly
+as given -- that is what keeps a shop's own palette, and every test
+that sets one, working. Resolve once into a local before a loop: the
+measurement is a COM round trip and the review tools touch every
+entity in the drawing.
+
 **Namespace.** Every helper and global carries the file's unique
 prefix, colon-separated: `tool:helper-name`, globals with earmuffs
 `tool:*name*`. One prefix per file, no prefix reused across files.
@@ -503,17 +548,86 @@ save/restore, one undo group, `(princ)` exit:
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTOOLNAME error: " msg)))
+    (if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TOOLNAME" *toolname-version*))
   (tool:syssave)
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; opened only when undo is recording: _Begin in a drawing whose
+  ;; UNDOCTL has bit 1 clear errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   ;; ... the tool ...
-  (command "_.UNDO" "_End")
-  (setq undo-open nil)
+  ;; and closed only if one was opened -- the same question the handler
+  ;; asks.  An _End on no group is an error of its own, and it lands
+  ;; HERE, after everything has been drawn, with the restore below it
+  ;; never reached
+  (if undo-open
+    (progn
+      (command "_.UNDO" "_End")
+      (setq undo-open nil)))
   (tool:sysrestore)
   (princ))
 ```
+
+Both halves of that bracket are conditional, and on the same fact.
+`check_lisp.py` rule 3 fails an unguarded `_Begin` and rule 3c an
+unguarded `_End`; this skeleton showed both flat until 2026-09-14, and
+seven commands had copied it -- `SMARTFILLET`, `HONEFILLET`, `XYPLOT`,
+`CHECK`, `XFTRECONV`, `SPACHECK` and `STOCKCOVER`. The `_End` is the
+worse half to get wrong: the `_Begin` fails at the top of a run that has
+done nothing yet, while the `_End` fails at the bottom of one that has
+drawn everything, and it takes the sysvar restore behind it down too --
+so the drafter is left with snap off and a borrowed layer current.
+
+**EVERY COMMAND REPORTS ITS FAILURES.  This is not optional, and the
+lines are not yours to write.**  A tool is not finished when it draws
+and it is not finished when it prints an error -- it is finished when a
+failure in it produces a file somebody can diagnose from.  That is the
+whole of the rule, and it applies to the tool written next year exactly
+as it applies to the seventy in the tree today.
+
+Four call sites, all of them maintained by
+`tools/check_lazdiag.py --fix`, and `make check` runs the same check so
+a command that is missing any of them cannot ship:
+
+| Where | The line | What it buys the report |
+| --- | --- | --- |
+| top of the command | `(if lzd:begin (lzd:begin "TOOL" *tool-version*))` | which tool, which version, and where the drawing stood before it ran |
+| in the `*error*` handler | `(if lzd:report (lzd:report "TOOL" *tool-version* msg))` | the report itself: the DXF, and the words telling the drafter to send it |
+| after a selection | `(if lzd:watch (lzd:watch ss))` | the geometry the run was HANDED, not just what it drew |
+| in an ask helper | `(if lzd:ask (lzd:ask msg v))` | the transcript -- which question it died on |
+
+The one thing `--fix` will NOT write is the `*error*` handler itself,
+because what belongs in one is the editorial part: which sysvars this
+command changed, whether an undo group is open, what it drew that has
+to be swept.  A handler that puts back the wrong thing is a bug the
+drafter meets in the NEXT command they run.  So **write the handler**,
+on the skeleton above, and let `--fix` do the rest.  A command with no
+handler at all fails the check by name -- including one that only
+prompts and saves a setting, because a failure there is still a failure
+somebody has to be told about.
+
+What the lines do: `lzd:begin` marks where the drawing stood and starts
+a transcript; `lzd:report`, after the settings are back and the undo
+group is closed, writes the whole failure out as a DXF in the user's
+Downloads folder for them to send in -- the geometry, the clicks, the
+prompts, the sysvars, the error -- and tells them so.  A plain cancel
+writes nothing.  The `(if ...)` guard is what lets a standalone file
+still load alone: an unbound symbol evaluates to nil, so with no
+LAZDIAG loaded every one of these lines is a no-op and the file behaves
+exactly as it did before.
+
+Two placement rules inside the handler.  Never call `lzd:report` before
+the sysvar restore -- the user's settings come back first, always --
+and never make it the handler's last form, because the trailing
+`(princ)` is the handler's return value.  Both spellings of a handler
+are recognised, the `(defun *error* ...)` of the skeleton and the
+`(setq *error* (lambda (msg) ...))` that `abhd`, `CABHD` and `lhd` use
+to save and restore the previous one; prefer the skeleton in new code.
+
 
 The canonical cancel test is exactly
 `(wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")` -- ten

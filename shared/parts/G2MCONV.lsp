@@ -134,7 +134,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.1")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -648,10 +648,12 @@
 ;; highlight first when two plans share one sheet.
 (defun g2m:scope (msg / ss)
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\n" msg " <Enter = whole drawing>: "))
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss) (setq ss (ssget "_X")))))
   ss)
 
@@ -675,7 +677,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nG2MCONV error: " msg)))
+    (if lzd:report (lzd:report "G2MCONV" *g2mconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "G2MCONV" *g2mconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -799,7 +803,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nG2MRECONV error: " msg)))
+    (if lzd:report (lzd:report "G2MRECONV" *g2mconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "G2MRECONV" *g2mconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -899,6 +905,14 @@
   (princ (strcat "\nG2MCONV " *g2mconv-version*))
   (princ))
 
-(princ (strcat "\nG2MCONV " *g2mconv-version*
-               " loaded.  Type G2MCONV to run, G2MRECONV to undo."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nG2MCONV " *g2mconv-version*
+                 " loaded.  Type G2MCONV to run, G2MRECONV to undo.")))
 (princ)

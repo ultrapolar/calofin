@@ -27,7 +27,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.6")
+(setq *tutcperp-version* "v0.9")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -119,7 +119,9 @@
     (tutc:finish)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
+    (if lzd:report (lzd:report "TUTORIALCPERPPTS" *tutcperp-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCPERPPTS" *tutcperp-version*))
 
   ;; one demo round: sample n points along crv by arc length, offset
   ;; each along the left travel normal by (nth i lens), draw guides,
@@ -202,6 +204,12 @@
                   "  * right after the selection you are asked whether the"
                   "    overall width has changed: Grew, Shrank, New, or"
                   "    Unchanged (the default, and Enter)"
+                  "  * EVERY curve gets that question, not just the selected"
+                  "    one: each round draws the next course out, and the"
+                  "    curve it drew is asked about the moment it appears -"
+                  "    a curve built from typed offsets is only as wide as"
+                  "    they add up to, and the next round is spaced along"
+                  "    it and reads its tangents"
                   "  * the width meant is the distance straight ACROSS, end"
                   "    to end - never the length of the CURVE, which on"
                   "    anything bowed runs further than the width it spans"
@@ -209,10 +217,39 @@
                   "    EACH end: the CURVE in the drawing is resized to"
                   "    match, so the base points and their dimensions still"
                   "    land on it.  One U puts the width back"
+                  "  * a corrected round has its new points moved with the"
+                  "    curve, so its dimensions read the corrected drawing"
+                  "    rather than the lengths typed into it"
                   "  * shrinking away the whole width is rejected, and a"
                   "    resize the drawing will not take - a locked, frozen"
-                  "    or switched-off layer - stops the command rather"
-                  "    than measuring off geometry that is not there"
+                  "    or switched-off layer - stops the command at the"
+                  "    selection, where nothing is drawn yet; at a round it"
+                  "    leaves the curve at the width it drew and says so"
+                  ""
+                  "The boundary (optional)"
+                  "  * after the direction click you may select a curve"
+                  "    already in the drawing - a property line, a house"
+                  "    wall, a deck edge - that the offsets may not cross;"
+                  "    Enter takes None and nothing is capped"
+                  "  * the cap is measured PER POINT: a ray from each base"
+                  "    point along its own normal, and the nearest crossing"
+                  "    ahead of it is that point's maximum.  A boundary at"
+                  "    an angle to the run is nearer at one end than the"
+                  "    other, which one number could never say"
+                  "  * the length prompt names the distance to it, M (Max)"
+                  "    takes it exactly, and a longer length is brought back"
+                  "    to it and said so - the number TYPED is still what"
+                  "    Enter repeats at the next point"
+                  "  * where the ray never reaches the boundary that point"
+                  "    has no maximum, so a boundary covering part of a run"
+                  "    caps only the part it covers"
+                  "  * it holds the measured POINTS inside the boundary:"
+                  "    where the boundary bends away between two of them the"
+                  "    arc joining them can still bow past it, and the"
+                  "    answer is a point there.  The width correction is not"
+                  "    re-capped either - it is your measurement - but a"
+                  "    correction that carries points past the boundary says"
+                  "    how many"
                   ""
                   "Direction click"
                   "  * the curve end nearest your click becomes START; a red"
@@ -357,7 +394,10 @@
       (setq crv (tutc:round crv lens))
       (tutc:say '(""
                   "STAGE 7 - repeating."
-                  "Answering Yes to the repeat prompt runs the next round"
+                  "After each curve CPERPPTS asks whether ITS overall width"
+                  "has changed - the same Grew/Shrank/New/Unchanged question"
+                  "the selected curve got, applied the same way - and then"
+                  "whether to repeat.  Answering Yes runs the next round"
                   "FROM THE NEWEST CURVE: fresh arc-length points along the"
                   "curve just built, offset perpendicular to ITS tangents -"
                   "here a uniform round of 12s.  Each round follows the"
@@ -378,6 +418,14 @@
               "Tutorial finished.  Type CPERPPTS to try it for real."))
   (princ))
 
-(princ (strcat "\ntutorial_cperp_points.lsp " *tutcperp-version*
-               " loaded.  Type TUTORIALCPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ntutorial_cperp_points.lsp " *tutcperp-version*
+                 " loaded.  Type TUTORIALCPERPPTS to run.")))
 (princ)

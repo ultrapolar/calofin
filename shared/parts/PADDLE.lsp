@@ -75,7 +75,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.12")
+(setq *paddle-version* "v1.13")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -613,7 +613,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
+    (if lzd:report (lzd:report "PADDLE" *paddle-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "PADDLE" *paddle-version*))
 
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
@@ -633,10 +635,12 @@
   ;; loop -- being handed the loop beats guessing at it beside a title
   ;; block border.
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
       (progn
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
-        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))))
+        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+        (if lzd:watch (lzd:watch ss))))
   (setq perims (paddle--perimeters ss))
 
   (if (not perims)
@@ -720,7 +724,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPADDLE error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALPADDLE" *paddle-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALPADDLE" *paddle-version*))
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
   (vla-StartUndoMark doc)
@@ -825,6 +831,14 @@
   (princ (strcat "\nPADDLE " *paddle-version*))
   (princ))
 
-(princ (strcat "\nPADDLE " *paddle-version*
-               " loaded. Commands: PADDLE (place pads), TUTORIALPADDLE (guided demo)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPADDLE " *paddle-version*
+                 " loaded. Commands: PADDLE (place pads), TUTORIALPADDLE (guided demo).")))
 (princ)

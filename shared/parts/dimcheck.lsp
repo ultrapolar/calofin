@@ -118,7 +118,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.17")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.18")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -202,7 +202,13 @@
 
 ;; -- colours -----------------------------------------------------------
 
-(setq *dchk-grey-color*   8)       ; ACI: everything not under review, faded (grey)
+(setq *dchk-grey-color*   'auto)  ; ACI: everything not under review, faded.
+                                  ; 'auto fades it the way round the drawing
+                                  ; needs -- darker than the work on a dark
+                                  ; background, lighter on a light one, since
+                                  ; 8 recedes on the first and is one of the
+                                  ; most prominent things on screen on the
+                                  ; second.  A number is used exactly as given
 (setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
 (setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
 (setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
@@ -405,7 +411,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "DIMCHECKRESCUE" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DIMCHECKRESCUE" *dchk-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -548,7 +556,7 @@
 (defun dchk:unstage (ent keep)
   ;; send a reviewed entity back into the grey background
   (if (and (entget ent) (not (member ent keep)))
-    (dchk:set-color ent *dchk-grey-color*)))
+    (dchk:set-color ent (cal:ink *dchk-grey-color* 'fade))))
 
 (defun dchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -1369,7 +1377,7 @@
          (princ "\n  Left as drawn.")
          (list label "left as drawn" 'left))))))
 
-(defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et
+(defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et grey
                       cands dims arcs lns plns segs olaps rest e1 e2 pr
                       anchors anchheld saved keep res n total lines ans
                       ndok ndflag ndmoved ndanch naok namoved nasnap
@@ -1398,14 +1406,18 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMCHECK error: " msg)))
+    (if lzd:report (lzd:report "DIMCHECK" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DIMCHECK" *dchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to DIMCHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - DIMCHECK cancelled."))
@@ -1506,6 +1518,10 @@
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; DIMCHECKRESCUE can recover them even after a crash
+        ;; the fade, resolved once for the whole run: the knob may
+        ;; be 'auto, and measuring the background per entity would
+        ;; be a COM round trip per entity
+        (setq grey (cal:ink *dchk-grey-color* 'fade))
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
@@ -1514,7 +1530,7 @@
             (progn
               (setq saved (cons (cons e (dchk:ent-color e)) saved))
               (dchk:stash-color e (dchk:ent-color e))
-              (dchk:set-color e *dchk-grey-color*))))
+              (dchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -1541,13 +1557,13 @@
                                  (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
-             (dchk:set-color e *dchk-grey-color*)
+             (dchk:set-color e grey)
              (setq skiprest T)
              (princ (strcat "\n  Skipping the remaining "
                             (itoa (- total n)) " dimension(s).")))
             ((eq (cadr res) 'back)
              ;; undo what the previous item recorded, then redo it
-             (dchk:set-color e *dchk-grey-color*)
+             (dchk:set-color e grey)
              (if (> n 0)
                (progn
                  (setq n  (1- n)
@@ -1573,14 +1589,14 @@
                                                       carried))))
                      (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
-                 (dchk:set-color e1 *dchk-grey-color*)
+                 (dchk:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
              (setq n (1- n)))                            ; loop's 1+ re-enters it
             (t
              (if (cadr res)
                (progn (setq ndok (1+ ndok))
-                      (dchk:set-color e *dchk-grey-color*))
+                      (dchk:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (dchk:dim-style e))
@@ -1623,7 +1639,7 @@
           (setq nasnap (+ nasnap (cadddr res)))
           (if (cadr res)
             (progn (setq naok (1+ naok))
-                   (dchk:set-color e *dchk-grey-color*))
+                   (dchk:set-color e grey))
             (progn (setq namoved (1+ namoved))
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
@@ -1797,14 +1813,18 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMSCAN error: " msg)))
+    (if lzd:report (lzd:report "DIMSCAN" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DIMSCAN" *dchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -2169,7 +2189,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALDIMCHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALDIMCHECK" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALDIMCHECK" *dchk-version*))
 
   (princ (strcat "\n=================================================="
                  "\n  DIMCHECK tutorial   [" *dchk-version* "]"
@@ -2247,9 +2269,18 @@
 
 (defun c:TUTORIALDIMSCAN () (c:TUTORIALDIMCHECK))
 
-(princ (strcat "\ndimcheck.lsp " *dchk-version*
-               " loaded - DIMCHECK reviews dimensions, arcs & overlapping"))
-(princ "\n  lines one at a time; DIMSCAN reports it read-only; DIMCHECKRESCUE undoes")
-(princ "\n  DIMCHECK's marks. For steps, wall height, the liner pattern and the")
-(princ "\n  title block border too, load linfincheck.lsp and run LINFINCHECK.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\ndimcheck.lsp " *dchk-version*
+                   " loaded - DIMCHECK reviews dimensions, arcs & overlapping"))
+    (princ "\n  lines one at a time; DIMSCAN reports it read-only; DIMCHECKRESCUE undoes")
+    (princ "\n  DIMCHECK's marks. For steps, wall height, the liner pattern and the")
+    (princ "\n  title block border too, load linfincheck.lsp and run LINFINCHECK.")))
 (princ)

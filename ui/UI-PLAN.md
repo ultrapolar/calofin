@@ -87,11 +87,11 @@ and the whole page end to end through its own `action_tile` strings.
   until there is something in it, so a first-run panel is no taller
   than before; both rows pack through one `lzp:packrow`, so neither can
   be the one that forgets the width budget.
-- **Consider dropping the four category pages.** They exist so a tool
+- **Consider dropping the category pages.** They exist so a tool
   you cannot place in a job is one tab away -- which is exactly what
-  Find now does, better, in one page instead of four. 8 pages become 5,
-  148 buttons become about 90, and the tab strip fits one row. Against
-  it: the four category names are the ones the VB palette groups by, so
+  Find now does, better, in one page instead of five. 10 pages become
+  5, 186 buttons become 105, and the tab strip fits one row. Against
+  it: the category names are the ones the VB palette groups by, so
   they would have to survive as data even if they stop being pages.
   **Worth doing only after phase 1 has been used in anger** -- if Find
   turns out to be where people live, the case makes itself.
@@ -224,7 +224,7 @@ registered everywhere it has to be" -- grew a palette section. It reads
 `CommandCatalog.Groups` out of the VB source and `calofin:*commands*`
 out of the glue, and holds three things against `LAZPANEL`'s roster:
 
-- the same commands, in the same four groups (the palette's groups
+- the same commands, in the same groups (the palette's groups
   **are** the panel's category pages),
 - the same caption words for each one,
 - and a probe-list name for every palette button, since without one the
@@ -264,11 +264,11 @@ blurb is reported, and falls back to its caption.
 Two things came with it:
 
 - **The palette gained the job pages.** `Pages` carries the whole tab
-  strip -- `Pool`, `Cover`, `Spa`, `Rest` and the four categories, with
+  strip -- `Pool`, `Cover`, `Spa`, `Rest` and the categories, with
   their columns -- because once the table is generated there is no cost
-  to carrying all of it. The palette has only ever had the four
-  category groups; the panel's job pages are the ones a drafter
-  actually navigates by.
+  to carrying all of it. The palette has only ever had the category
+  groups; the panel's job pages are the ones a drafter actually
+  navigates by.
 - **The VB is checked as code.** `tools/check_vb.py` -- blocks, quotes,
   parens, and every member and constructor arity of the assembly's own
   types. It is what makes the generated/hand-written seam safe: rename
@@ -601,6 +601,50 @@ with a field map, and the two types merge the day it is drawn from
 vectors. Its map is now held to `assets/bottoms/fieldmap.json` by
 `tests/test_pool_form.py` in the meantime, since the JSON was pinned to
 POOL and the VB that actually ships was pinned to nothing.
+
+### Phase 5j -- the half-themed surfaces *(done 2026-09-12)*
+
+Not visuals in the sense phase 0 ruled out ("DCL's look is fixed and
+nobody is going to change it") -- that is true of the dialog's chrome
+and not of what is drawn INSIDE it. Three surfaces were following the
+host halfway, which is worse than not following it at all, because the
+half that adapts makes the half that does not look like the bug it is:
+
+- **The chart tiles.** `lzX:*col-line*` and `lzX:*col-back*` were
+  already `-16` and `-15`, the dialog's own foreground and background.
+  Beside them `lzX:*col-dim*` was a hard `8` and `lzX:*col-hi*` a hard
+  `5` -- a dark grey and a dark blue, the two things a dark dialog
+  swallows. Both say `'auto` now and resolve through `cal:ink`'s
+  `dim` / `hi` roles, which read `COLORTHEME` because that is what
+  `-15` and `-16` are already following. Orange `30` stayed a number:
+  it is the one that reads either way round.
+- **The toolbar icon.** A `.bmp` has no alpha, so the square around
+  the hexagon is painted, and it was painted `54 54 54` for everybody
+  -- a dark tile in every light-themed toolbar since the button
+  shipped. `LAZICON` names the ground it used now.
+- **The palette's entry boxes.** `ChartFormView` took its ink from
+  `SystemColors.ControlTextBrushKey` and then painted the boxes
+  `ARGB(235,255,255,255)` with `Brushes.Black`; `PoolFormView` the
+  same. `PaletteTheme.vb` answers the question once -- the shared
+  `Theme` value `CALSET` writes beside the pins, then `COLORTHEME`,
+  then the Windows control colour -- and both views take their brushes
+  from it.
+
+**What this environment still cannot prove** is the third one: nothing
+VB compiles here. `tools/check_vb.py` reads `PaletteTheme.vb` as code
+and `tests/test_theme.py` pins the Lisp half at both tiers, but
+whether `AcadApp.GetSystemVariable("COLORTHEME")` comes back as the
+Int16 this assumes is a question for the first real build -- it is
+wrapped, and a throw there falls through to the Windows colour, so the
+failure mode is the old behaviour rather than a dead palette.
+
+**And the override is deliberately in two places.** The Lisp side
+reads `CalofinTheme` from the AutoCAD profile (`getenv`), which is
+where `CalofinErrorDir` and the stock folder already live; the palette
+reads `Theme` from `HKEY_CURRENT_USER\Software\Calofin\LazPanel`,
+which is where it already reads the pins. `CALSET` writes both in one
+go, for the same reason `PaletteMemory` shares the pin key: a drafter
+says which way their screen reads once, not once per surface.
 
 ## After the plan: what nothing was checking
 

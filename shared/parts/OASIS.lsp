@@ -229,7 +229,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.6")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.7")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -264,7 +264,11 @@
 (setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
-(setq oasis:*guidecolor* 8)
+(setq oasis:*guidecolor* 'auto)        ; 'auto picks it for the background:
+                                       ; 8 on a light one, a lighter grey on
+                                       ; a dark one, where 8 is very nearly
+                                       ; the background itself.  A number is
+                                       ; used exactly as given
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
 ;; Two styles, because the two drawings are read differently: the pool
@@ -820,6 +824,7 @@
       (setq v (getkword (strcat "\n" msg " [" shown
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((member v '("Back" "Undo")) 'OASIS-BACK)
             ((null v) (if dflt dflt (oasis:askkw msg kws shown dflt back)))
             (t v)))))
@@ -857,6 +862,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -1986,6 +1992,7 @@
   (if back (initget "Back Undo"))
   (setq v (getpoint (strcat "\nInsertion base point <0,0>"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "oasis:askbase" v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
@@ -2096,6 +2103,7 @@
     (t
      (initget 7 "Line Back Undo")
      (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
+     (if lzd:ask (lzd:ask msg v))
      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
            ((= (type v) 'STR) "LINE")
            (t v)))))
@@ -2112,6 +2120,7 @@
     (progn
       (initget 0 "Back Undo")
       (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
             ((null v) 0.0)
             (t v)))))
@@ -2181,6 +2190,7 @@
     (progn
       (initget 0 "Tie Back Undo")
       (setq v (getdist (strcat "\n" msg " [Tie/Back] <0>: ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
             ((= (type v) 'STR) "TIE")
             ((null v) 0.0)
@@ -2797,6 +2807,7 @@
     (initget 7 "Back Undo")
     (setq v (getint (strcat "\n" msg " -- tangency change 1-" (itoa n)
                             " [Back]: ")))
+    (if lzd:ask (lzd:ask msg v))
     (cond ((and (= (type v) 'STR) (member v '("Back" "Undo")))
            (setq v 'OASIS-BACK))
           ((and (= (type v) 'INT) (<= v n)))
@@ -2810,6 +2821,7 @@
 (defun oasis:asknear (msg arcs base / v)
   (initget 1 "Back Undo")
   (setq v (getpoint (strcat "\n" msg " [Back]: ")))
+  (if lzd:ask (lzd:ask msg v))
   (if (and (= (type v) 'STR) (member v '("Back" "Undo")))
       'OASIS-BACK
       (oasis:ringnear arcs (list (- (car v) (car base))
@@ -3085,6 +3097,7 @@
                 (strcat "\nHopper offset in from the wall [Back] <"
                         (rtos (cond (oasis:*hopoff-last*) (oasis:*hopoff*)))
                         ">: ")))
+    (if lzd:ask (lzd:ask "oasis:askhopoff" off))
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
        (setq bot 'OASIS-BACK))
@@ -3264,7 +3277,9 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nOASIS error: " msg)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "OASIS" *oasis-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "OASIS" *oasis-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain and the UNDO close above; harmless no-op guard on
@@ -3295,7 +3310,8 @@
          (command "_.UNDO" "_Begin")
          (setq undo-open T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
-     (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
+     (cal:ensure-layer oasis:*guidelayer*
+                        (cal:ink oasis:*guidecolor* 'guide))
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
 
      ;; -- which shape, where it goes, and then the eight measurements,
@@ -3471,6 +3487,14 @@
   (princ (strcat "\nOASIS " *oasis-version*))
   (princ))
 
-(princ (strcat "\nOASIS " *oasis-version*
-               " loaded.  Type OASIS to draw a continuous-tangent pool."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nOASIS " *oasis-version*
+                 " loaded.  Type OASIS to draw a continuous-tangent pool.")))
 (princ)

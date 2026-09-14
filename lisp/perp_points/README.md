@@ -19,7 +19,8 @@ each.
    the developed length. Half of any difference is added to (or taken
    off) each end by scaling the object about the midpoint of its two
    ends, so the drawing is resized to match before anything is
-   measured off it.
+   measured off it. Step 7 asks the same of every line the command
+   draws.
 3. Click a point to set the direction: the end nearest the click
    becomes START (fixing the order lengths are entered in) and the
    side the click lands on is the offset side.
@@ -34,12 +35,18 @@ each.
    round's default. Arc segments are bulges on the same LWPOLYLINE --
    never a spline, never a curve-fit heavy polyline -- and each arc
    passes exactly through the two points it joins.
-7. `Repeat on the new polyline? [Yes/No] <No>` -- a new point count,
+7. `Has that width changed? [Grew/Shrank/New/Unchanged] <Unchanged>`
+   again, this time about the polyline just drawn -- it is the next
+   course out and it was re-measured too, and a line built from typed
+   offsets is only as wide as they add up to. Corrected the same way,
+   half the difference at each end, before anything is measured off
+   it.
+8. `Repeat on the new polyline? [Yes/No] <No>` -- a new point count,
    spaced along the new polyline (by true arc length once arcs have
    been drawn), offset again. The offset direction -- and every
    dimension -- stays perpendicular to the ORIGINAL line, so all
    offsets accumulate in one consistent direction.
-8. `Dimension style - STANDARD INCHES or SIDE STANDARD?
+9. `Dimension style - STANDARD INCHES or SIDE STANDARD?
    [STandard/SIde] <STandard>` -- every dimension is then drawn at
    once, on the `DIMENSIONS` layer.
 
@@ -49,6 +56,14 @@ and SPLINE, open only. Differences from PERPPTS:
 
 * Offsets are taken perpendicular to the curve's TANGENT under each
   base point, so a different length works at every point.
+* The width question is asked of every curve the command draws, as it
+  is in PERPPTS: right after the arc polyline appears and before the
+  repeat question (there is no join question in between here).
+* **A boundary can cap the offsets.** After the direction click,
+  `Select a boundary the offsets may not cross [None] <None>` takes any
+  curve already in the drawing -- a property line, a house wall, a deck
+  edge -- and makes it the maximum for every offset in every round.
+  Enter takes `None` and nothing is capped.
 * The joined result is always an arc polyline (no
   Straight/Arcs/Mixed question), each arc matched to the curve's
   tangent at its start -- a smooth LWPOLYLINE through every offset
@@ -72,6 +87,32 @@ and SPLINE, open only. Differences from PERPPTS:
 | `TUTORIALPERPPTS` | `tutorial_perp_points.lsp` | `[Checks/Demo/Both] <Both>`: the rules up front, a narrated worked example, or both; ends with `Keep the demo drawing? [Keep/Erase] <Keep>` |
 | `TUTORIALCPERPPTS` | `tutorial_cperp_points.lsp` | The same, for CPERPPTS |
 
+### The boundary (CPERPPTS)
+
+The cap is measured **per point**, not once for the run: a ray is cast
+from each base point along that point's own offset normal, and the
+nearest crossing ahead of it is that point's maximum. A boundary at an
+angle to the curve is therefore nearer at one end than the other, which
+one number could never say.
+
+| At the length prompt | What happens |
+| --- | --- |
+| a cap exists | the prompt names it -- `Length for point 3 of 5, boundary at 18.375 <12> [Back/Max]` |
+| `M` (Max) | takes the boundary exactly; offered only where there is one ahead |
+| a longer length | is brought back to the boundary and said so; the number **typed** is still what Enter repeats at the next point, since the tape has not changed -- only how far this one point may reach |
+| no crossing ahead | that point has no maximum and the prompt is the one it always was -- a boundary covering part of a run caps only the part it covers |
+
+Two things the cap is not:
+
+* It holds the measured **points** inside the boundary. The arcs
+  between them are fitted to the curve's tangents, so where a boundary
+  bends away between two points the arc joining them can still bow past
+  it -- the answer is a point there, not a different arc.
+* It is not re-applied by the width correction, which scales the whole
+  curve about the midpoint of its ends. That is the drafter's own
+  measurement and is not second-guessed, but a correction that carries
+  points past the boundary reports how many.
+
 ## Assumptions
 
 * Dimensions go on the `DIMENSIONS` layer (created if missing) in the
@@ -82,16 +123,28 @@ and SPLINE, open only. Differences from PERPPTS:
   and linetype scale of the object they were offset from.
 * CPERPPTS needs an OPEN curve -- a closed loop has no two ends to
   span a width between.
+* A boundary is only read, never moved or changed, and the ray cast at
+  it lives and dies inside the probe -- nothing is left in the drawing.
+  The curve being offset from cannot be its own boundary.
 * There are no tunable globals; the 2"-style constants of other tools
   have no counterpart here because every length is typed per point.
 
 ## Notes & limitations
 
 * The whole run is one UNDO group -- a single `U` reverses everything,
-  the width resize included. Esc or an error restores every system
+  the width resizes included. Esc or an error restores every system
   variable changed (`OSMODE`, `CMDECHO`, `PDMODE`, `CLAYER`, the `CE*`
   creation defaults and the current dimension style), erases the
   temporary guides and closes the group.
+* A resize the drawing will not take -- a locked, frozen or
+  switched-off layer -- stops the command at the selection, where
+  nothing has been drawn yet. At a round it does not: the line is left
+  at the width it drew and that width is printed, because rounds of
+  typed lengths sit behind it and no dimension has been written. Either
+  way nothing is measured off a width the drawing does not have.
+* A round that corrects its width has its new points moved with the
+  line, so its dimensions read the corrected drawing rather than the
+  lengths typed into it.
 * Zero and negative lengths are rejected, as is a direction click that
   lands on the line/curve itself (where "which side" would be
   ambiguous). A point count over 100 asks

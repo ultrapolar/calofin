@@ -102,20 +102,29 @@
   (progn
     (princ (strcat "\n[calofin] build folder: " cal:*dir*))
     (setq cal:*build-loading* T)   ; the library arrives as part of a build
-    ;; The library first -- every tool below calls into it.  POOL and SPA
+    (setq *calofin-quiet* T)       ; and every member loads quietly: one
+                                   ; banner per file is 83 lines in every
+                                   ; drawing opened.  CALVER reads the
+                                   ; whole roster back when it is asked
+    ;; The library first -- every tool below calls into it -- then
+    ;; LAZDIAG, which every tool below calls when it FAILS: the calls are
+    ;; guarded and resolve at run time, so this is not a load-order
+    ;; requirement, but a diagnostic that loads after the things it
+    ;; diagnoses reads like an afterthought and eventually becomes one.
+    ;; POOL and SPA
     ;; precede their demo/tutorial satellites; LINGUTTER follows PADDLE,
     ;; which it hands its stripped drawing to; LAZFORM comes after POOL,
     ;; whose answers it fills in, and the LAZPANEL launcher loads last of
     ;; all, after everything its buttons name.
     (foreach m '(
-                 "CALOFIN-LIB.lsp" "POOL.lsp" "POOLDEMO.lsp"
+                 "CALOFIN-LIB.lsp" "LAZDIAG.lsp" "POOL.lsp" "POOLDEMO.lsp"
                  "TUTORIALPOOL.lsp" "POOLSIDE.lsp"
                  "SPA.lsp" "TUTORIALSPA.lsp"
                  "OASIS.lsp" "abcdef.lsp" "ABFIND.lsp"
                  "ALTABCDEF.lsp" "abhd.lsp" "ABCURCHECK.lsp" "ABPCHECK.lsp"
-                 "CABHD.lsp" "POINTRENAMER.lsp" "LOBF.lsp"
+                 "CABHD.lsp" "POINTRENAMER.lsp" "LOBF.lsp" "ABLOBF.lsp"
                  "AUTOBEAD.lsp"
-                 "AutoDim.lsp" "BPCALLOUT.lsp" "ccprecheck.lsp"
+                 "AutoDim.lsp" "BPCALLOUT.lsp" "DIMSTAMP.lsp" "ccprecheck.lsp"
                  "CDCALLOUT.lsp" "CDCREATE.lsp" "check_drawing.lsp"
                  "CORNERSTP.lsp" "HEMISTEP.lsp" "NORMIESTEP.lsp"
                  "LAZSTEP.lsp"
@@ -127,7 +136,9 @@
                  "LINGUTTER.lsp"
                  "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
+                 "PERPMARK.lsp"
                  "SMARTFILLET.lsp" "HONEFILLET.lsp" "SPACHECK.lsp"
+                 "SPACOVCREATE.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "tydrn.lsp"
                  "SOCONV.lsp" "VSCONV.lsp" "G2MCONV.lsp" "wcalst.lsp"
                  "xftconv.lsp" "XYPLOT.lsp" "CONSTELLATION.lsp"
@@ -141,6 +152,10 @@
     (if cal:*held-back*
       (princ (strcat "\n[calofin] " (itoa (length cal:*held-back*))
                      " file(s) held back - see cal:*held-back*.")))
-    (princ "\n[calofin] Type CALVER for the library version.")))
+    ;; the members loaded quietly; put the flag back so a single tool
+    ;; APPLOADed over the top of this build still announces itself
+    (setq *calofin-quiet* nil)
+    (princ "\n[calofin] Type CALVER for what is loaded, CALHELP for what")
+    (princ "\n[calofin] a command does, CALSET for the settings.")))
 
 (princ)

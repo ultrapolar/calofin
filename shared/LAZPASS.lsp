@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.8, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.12, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -8,38 +8,40 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 61 files, 178 commands:
+;;; 66 files, 191 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
-;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABMOVE
-;;;   ABPCHECK  ABPCHECKRESCUE  ABPCHECKVER  ABPCREATE  ADAB  ALTABCDEF
-;;;   ALTABCDEFVER  AUTOBEAD  AUTOBEADVER  AUTODIM  AUTODIMSIDEPOV  AUTODIMVER
-;;;   BPCALLOUT  BPCALLOUTVER  CABHD  CABHDVER  CALVER  CCPRECHECK
-;;;   CCPRECHECKVER  CDCALLOUT  CDCALLOUTVER  CDCREATE  CDCREATEVER  CHECK
-;;;   CHECKVER  CONSTELLATION  CONSTELLATIONVER  CORNERSTP  CORNERSTPVER  COVERCHECK
-;;;   COVERCHECKRESCUE  COVERCHECKVER  COVERCHECKVERSION  COVERSCAN  CPERPPTS  CPERPPTSVER
-;;;   CUSTBLOCK  CUSTBLOCKVER  DCE  DDALT  DDCAL  DDELEV
-;;;   DDFIX  DDFIXVER  DDGPS  DDGPSVER  DDINFO  DDSET
-;;;   DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND
-;;;   DIMCONTENDVER  DIMSCAN  DRONE  DRONEVER  FITABHD  FITABHDCOVER
+;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
+;;;   ABLOBFVER  ABMOVE  ABPCHECK  ABPCHECKRESCUE  ABPCHECKVER  ABPCREATE
+;;;   ADAB  ALTABCDEF  ALTABCDEFVER  AUTOBEAD  AUTOBEADVER  AUTODIM
+;;;   AUTODIMSIDEPOV  AUTODIMVER  BPCALLOUT  BPCALLOUTVER  CABHD  CABHDVER
+;;;   CALHELP  CALSET  CALVER  CCPRECHECK  CCPRECHECKVER  CDCALLOUT
+;;;   CDCALLOUTVER  CDCREATE  CDCREATEVER  CHECK  CHECKVER  CONSTELLATION
+;;;   CONSTELLATIONVER  CORNERSTP  CORNERSTPVER  COVERCHECK  COVERCHECKRESCUE  COVERCHECKVER
+;;;   COVERCHECKVERSION  COVERSCAN  CPERPPTS  CPERPPTSVER  CUSTBLOCK  CUSTBLOCKVER
+;;;   DCE  DDALT  DDCAL  DDELEV  DDFIX  DDFIXVER
+;;;   DDGPS  DDGPSVER  DDINFO  DDSET  DDTEST  DIMARCCHECK
+;;;   DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND  DIMCONTENDVER  DIMSCAN
+;;;   DIMSTAMP  DIMSTAMPVER  DRONE  DRONEVER  FITABHD  FITABHDCOVER
 ;;;   FITABHDVER  FLOORDIM  G2MCONV  G2MCONVVER  G2MRECONV  HEMISTEP
-;;;   HEMISTEPVER  HONEFILLET  HONEFILLETVER  LAZASCII  LAZBUTTON  LAZFORM
-;;;   LAZFORMCOVER  LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LAZPIN
-;;;   LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT  LHD
-;;;   LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER
-;;;   LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER
-;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER  NORMIESTEP
-;;;   NORMIESTEPVER  OASIS  OASISVER  PADDLE  PADDLEVER  PERPPTS
-;;;   PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO
-;;;   POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER  SMARTFILLET  SMARTFILLETVER
-;;;   SOCONV  SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE
-;;;   SPACHECKSCAN  SPACHECKVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG
-;;;   STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP
-;;;   TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP
-;;;   TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL
-;;;   TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV
-;;;   VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP
-;;;   XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
+;;;   HEMISTEPVER  HONEFILLET  HONEFILLETVER  LAZASCII  LAZBUTTON  LAZDIAG
+;;;   LAZDIAGVER  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON  LAZPANEL
+;;;   LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER
+;;;   LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK
+;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER
+;;;   LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF
+;;;   LOBFVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  PADDLE
+;;;   PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER
+;;;   POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE
+;;;   POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV
+;;;   SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN
+;;;   SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER
+;;;   STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
+;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
+;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
+;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE
+;;;   VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV
+;;;   XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -51,6 +53,16 @@
 
 ;; tells CALOFIN-LIB.lsp it is arriving as part of the whole build
 (setq cal:*build-loading* T)
+
+;; ...and tells all sixty-three members to load QUIETLY.  Each
+;; one announces itself when it is APPLOADed alone, which is
+;; right; all of them announcing themselves here was 83 lines
+;; and 6,681 characters of scrollback in every drawing opened,
+;; before the drafter had done anything.  CALVER reads the whole
+;; roster back whenever it is asked for.  Not a cal: symbol: a
+;; lisp/ file may not call or set one (check_standards), and the
+;; standalone files are where the banners live.
+(setq *calofin-quiet* T)
 
 
 ;;; ======================================================================
@@ -78,15 +90,59 @@
 ;;; tutorials' pause polarity, ...) stay in their own tools -- see
 ;;; STANDARDS.md section 6.
 ;;;
-;;; Command:  CALVER   print the loaded library version
+;;; Command:  CALVER   this library's version, and every calofin file
+;;;                   loaded in this session with the version it is at
 ;;; ======================================================================
 
 (vl-load-com)
 
-(setq cal:*version* "v1.6")
+(setq cal:*version* "v1.7")
 
-(defun c:CALVER ()
+
+;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
+;;  their own version and CALVER used to report one of them -- this
+;;  file's -- so the question a support call actually asks ("what are
+;;  you running?") was seventy-two commands' worth of typing, and a
+;;  LAZDIAG report names only the tool that failed.
+;;
+;;  There is no table of versions here and there is not going to be:
+;;  every tool sets its own banner global as it loads, so the SESSION
+;;  is the table.  atoms-family reads it, which means a drafter who
+;;  has APPLOADed a newer single file over the bundle sees the newer
+;;  number against that one tool -- exactly the mix a support call is
+;;  usually trying to untangle, and exactly what a generated list
+;;  would have hidden.
+
+;; The version globals this session carries, as (label . value) pairs,
+;; sorted by label.  Two banner spellings exist -- *tool-version* and
+;; the POOL/SPA ns:*version* -- and both end up as the tool's name.
+(defun cal:vlabel (n / s)
+  (setq s n)
+  ;; vl-string-search counts from 0, so the index IS the length of the
+  ;; part in front of the colon
+  (if (wcmatch s "*:*") (setq s (substr s 1 (vl-string-search ":" s))))
+  (setq s (vl-string-trim "*" s))
+  (if (wcmatch (strcase s) "*-VERSION")
+    (setq s (substr s 1 (- (strlen s) 8))))
+  (strcase s))
+
+(defun cal:versions ( / out n v)
+  (foreach n (atoms-family 1)
+    (if (and (wcmatch n "*VERSION*")
+             (= (type (setq v (eval (read n)))) 'STR))
+      (setq out (cons (cons (cal:vlabel n) v) out))))
+  (vl-sort out '(lambda (a b) (< (car a) (car b)))))
+
+(defun c:CALVER ( / all v)
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
+  (setq all (cal:versions))
+  (cond
+    ((null all) (princ))
+    (t
+     (princ (strcat "\n" (itoa (length all))
+                    " calofin file(s) loaded in this session:"))
+     (foreach v all
+       (princ (strcat "\n  " (cal:pad (car v) 22) " " (cdr v))))))
   (princ))
 
 ;;; -------------------- ask layer ---------------------------------------
@@ -101,6 +157,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) (if dflt dflt (cal:askkw msg kws shown dflt back)))
         (t v)))
@@ -139,6 +196,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -172,6 +230,7 @@
 (defun cal:ask-yn (msg dflt / ans)
   (initget "Yes No")
   (setq ans (getkword (strcat msg " [Yes/No] <" dflt ">: ")))
+  (if lzd:ask (lzd:ask msg ans))
   (if (null ans) (setq ans dflt))
   (= ans "Yes"))
 
@@ -184,6 +243,7 @@
   ;; 1): a click sends the bracket text, and "Skip rest" was a click
   ;; the initget list could not accept
   (setq ans (getkword (strcat msg " [Yes/No/Back/Skip] <Yes>: ")))
+  (if lzd:ask (lzd:ask msg ans))
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)
@@ -203,6 +263,7 @@
   (setq v (getstring T (strcat "\n" msg
                                (if dflt (strcat " <" dflt ">") "")
                                (if back " (B = back)" "") ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((and back (cal:back-word-p v)) 'CAL-BACK)
         ((= v "") (if dflt dflt v))
         (t v)))
@@ -284,6 +345,123 @@
   (if p (setvar "OSMODE" (cdr p))))
 
 (defun cal:osdown () (setvar "OSMODE" 0))
+
+;;; -------------------- settings, the theme and the ink -----------------
+;;;
+;;;  Three things a tool cannot learn by reading itself: what the shop
+;;;  has changed, which way AutoCAD's interface reads, and which way the
+;;;  drawing it is about to draw into reads.  All three are answered
+;;;  here, once, so that a colour is CHOSEN in one table instead of
+;;;  being assumed in fourteen tunables blocks.
+
+;; A setting the drafter may have moved out of the source: the profile
+;; value KEY holds, or DFLT when it holds nothing.  The literal in the
+;; file stays the default, so a tree with no profile entries behaves
+;; exactly as it reads -- what the profile buys is SURVIVAL, which the
+;; source does not have: releases/ and LAZPASS.lsp are generated, so a
+;; number edited into either is gone at the next regeneration.  (From
+;; STOCKCOVER's stock:getenv and LAZDIAG's CalofinErrorDir, which had
+;; this idea one folder at a time.)
+(defun cal:setting (key dflt / v)
+  (setq v (getenv key))
+  (if (and v (/= v "")) v dflt))
+
+;; What CalofinTheme has been set to: 'dark, 'light, or nil for "work
+;; it out".  One override for both probes below, because a drafter who
+;; disagrees with what was measured should have to say so once rather
+;; than once per tool.  CALSET writes it.
+(defun cal:themeset ( / v)
+  (setq v (strcase (cal:setting "CalofinTheme" "AUTO")))
+  (cond ((= v "DARK") 'dark)
+        ((= v "LIGHT") 'light)))
+
+;; Which way AutoCAD's INTERFACE reads: 'dark, 'light, or nil when the
+;; release will not say (COLORTHEME arrived with 2015).  The DCL tiles
+;; and the toolbar icon follow this one and not the drawing: a dialog's
+;; -15 and -16 are whatever the interface is, so anything drawn beside
+;; them has to be asking the same question or it comes out half themed.
+(defun cal:ui ( / v)
+  (cond ((cal:themeset))
+        ((null (setq v (getvar "COLORTHEME"))) nil)
+        ((= v 0) 'dark)
+        (t 'light)))
+
+;; Which way the DRAWING reads: 'dark, 'light, or nil when the
+;; background cannot be measured.  A different question from cal:ui --
+;; the interface theme and the model background are set in different
+;; dialogs, and a light-themed AutoCAD over the stock near-black model
+;; space is an ordinary way to work.
+;;
+;; The measurement is COM, so it is wrapped: a session that cannot
+;; reach ActiveX answers nil rather than dying inside a colour lookup.
+;; Nothing is cached.  Caching it would be one global more than this
+;; buys: the review tools resolve the grey ONCE per pass into a local
+;; of the command, which is where the volume is, and the rest of the
+;; tree asks for a colour two or three times in a run.  A cache would
+;; also have to be a session global, and COVERCHECK, DIMCHECK and
+;; LINFINCHECK each say in their own tunables block that they keep no
+;; state between runs -- a claim worth more than three property gets.
+(defun cal:bg ( / c lum)
+  (cond
+    ((cal:themeset))
+    (t
+     (setq c (vl-catch-all-apply
+               '(lambda ()
+                  (vl-load-com)
+                  (vla-get-GraphicsWinModelBackgrndColor
+                    (vla-get-Display
+                      (vla-get-Preferences (vlax-get-acad-object)))))
+               nil))
+     (if (or (vl-catch-all-error-p c) (not (numberp c)))
+       nil
+       (progn
+         ;; an OLE colour is packed low byte first: R, then G, then B
+         (setq c   (fix c)
+               lum (+ (* 0.30 (rem c 256))
+                      (* 0.59 (rem (/ c 256) 256))
+                      (* 0.11 (rem (/ c 65536) 256))))
+         (if (< lum 128.0) 'dark 'light))))))
+
+;;  THE INK TABLE.  A colour knob set to 'auto asks for the ACI that
+;;  suits the background it will be seen against; a knob set to a
+;;  NUMBER is used exactly as given, so a shop that has picked its own
+;;  colours keeps them and every existing test still measures what it
+;;  measured before.
+;;
+;;    role     what it is                    dark  light  unmeasured
+;;    fade     the review tools' grey-out     251    254        8
+;;    guide    preview and guide geometry     253      8        8
+;;    dim      a chart tile's dimensions      253      8        8
+;;    hi       a chart tile's active box        4      5        5
+;;
+;;  fade and guide are drawn into the DRAWING and read cal:bg; dim and
+;;  hi are drawn inside a dialog and read cal:ui.
+;;
+;;  Two rules decided the numbers.  FADE has to recede, which on a dark
+;;  background means darker than the work and on a light one means
+;;  lighter: 8 does the first and the opposite of the second, which is
+;;  why a review sheet opened on a white background used to come up
+;;  with its greyed-out half as the most prominent thing on screen.
+;;  GUIDE has to be read while it is answered but not compete with the
+;;  pool, which is 8 on white and nearly the background itself on the
+;;  stock dark grey.  The unmeasured column is deliberately what the
+;;  tree did before this table existed: a session that cannot tell is
+;;  not a session that changes behaviour.
+(defun cal:ink (knob role / th)
+  (if (not (eq knob 'auto))
+    knob
+    (progn
+      (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
+      (cond
+        ((eq role 'fade)
+         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+        ((eq role 'guide)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'dim)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'hi)
+         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+        (t 7)))))
 
 ;;; -------------------- layers ------------------------------------------
 
@@ -621,12 +799,20 @@
 
 ;; The tile palette.  -16 and -15 are the dialog's own foreground and
 ;; background, so the chart follows the user's AutoCAD theme rather
-;; than fighting it; the other three are real colour numbers.
+;; than fighting it -- and the two that are drawn BESIDE them say
+;; 'auto, which asks cal:ink the same question (a dark grey dimension
+;; arrow and a dark blue focus box are the two things on this tile that
+;; a dark dialog swallows, and -16 adapting while they do not is what
+;; half-themed looks like).  Orange is the one that reads either way,
+;; so it is the one still written as a number.
 (setq cal:*imgcol-line* -16)
 (setq cal:*imgcol-back* -15)
-(setq cal:*imgcol-dim* 8)
+(setq cal:*imgcol-dim* 'auto)
 (setq cal:*imgcol-val* 30)
-(setq cal:*imgcol-hi* 5)
+(setq cal:*imgcol-hi* 'auto)
+;; a letter whose box is still owed -- drawn in this and struck twice,
+;; which is what a stroke font has instead of a bold weight
+(setq cal:*imgcol-miss* 1)
 
 ;; one character's polylines, or nil
 (defun cal:imgglyph (ch / p)
@@ -829,8 +1015,14 @@
   (if val val fall))
 
 ;;; ----------------------------------------------------------------------
-(princ (strcat "\nCALOFIN-LIB " cal:*version*
-               " loaded.  Shared helpers under the cal: prefix."))
+;; Quiet inside the whole build, on the same rule every member
+;; follows -- the build says once that it loaded, and CALVER says what
+;; it loaded.  cal:*build-loading* is this file's own flag rather than
+;; the members' *calofin-quiet*, because it is already set for exactly
+;; this file and means exactly this.
+(if (not cal:*build-loading*)
+  (princ (strcat "\nCALOFIN-LIB " cal:*version*
+                 " loaded.  Shared helpers under the cal: prefix.")))
 ;; On its own this file defines helpers and exactly one command
 ;; (CALVER) -- no tools at all.  LAZPASS.lsp and CALOFIN-LOADER.lsp
 ;; both set the flag below before loading it, so this only ever fires
@@ -840,6 +1032,1113 @@
   (progn
     (princ "\n[calofin] That is the helper library ONLY - it defines no tools.")
     (princ "\n[calofin] APPLOAD LAZPASS.lsp for the whole build instead.")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> LAZDIAG.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; LAZDIAG.lsp  --  when a calofin command fails, say so and write the
+;;;                  whole failure out as a DXF to send in
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  LAZDIAG     write the last failure's report again -- and,
+;;;                        when nothing has failed, prove the whole path
+;;;                        works by writing a test report to the same
+;;;                        folder a real one would go to
+;;;            LAZDIAGVER  print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  This file is not a drafting tool.  It is the thing every other tool
+;;;  calls when it falls over, and what it does is turn a failure into a
+;;;  file somebody can diagnose from.
+;;;
+;;;  WHAT A FAILURE USED TO LOOK LIKE.  A tool's *error* handler put the
+;;;  user's settings back, closed the undo group and printed one line:
+;;;
+;;;      POOL error: bad argument type: numberp: nil
+;;;
+;;;  That line is true and nearly useless.  It does not say which of
+;;;  POOL's forty prompts had been answered, what was typed into them,
+;;;  which geometry was on screen, or what the drawing looked like when
+;;;  it happened.  The drafter reads it, shrugs, and tries again; if it
+;;;  fails the same way twice they send a message saying "POOL is
+;;;  broken", and the whole diagnosis starts from nothing.
+;;;
+;;;  WHAT IT LOOKS LIKE NOW.  The same failure prints
+;;;
+;;;      POOL error: bad argument type: numberp: nil
+;;;
+;;;      [calofin] POOL v2.7 has failed -- this is a bug, not something
+;;;      [calofin] you did wrong.  An error report has been written to
+;;;      [calofin]     C:\Users\dm\Downloads\POOL-v2.7-error-2026-09-11-1432.dxf
+;;;      [calofin] Send that file in for diagnosis.  It holds a copy of
+;;;      [calofin] the geometry, every prompt and answer of the run, and
+;;;      [calofin] what AutoCAD was doing when it stopped.  Your drawing
+;;;      [calofin] has not been touched.
+;;;
+;;;  and the file it names holds, as DXF entities anyone can open:
+;;;
+;;;    * a COPY of the geometry -- everything the run drew, plus whatever
+;;;      it had registered as its input (lzd:watch) and every point that
+;;;      was picked, each labelled with the prompt it came from;
+;;;    * the transcript, prompt by prompt, from the start of the run;
+;;;    * the tool, its version, and whether it came from a standalone
+;;;      file or from LAZPASS;
+;;;    * the error text, the last step the tool got to, AutoCAD's own
+;;;      ERRNO / CMDNAMES / LASTPROMPT, and the sysvars that matter.
+;;;
+;;;  WHY A SEPARATE FILE AND NOT THE USER'S DRAWING.  The first design
+;;;  put the report into the open drawing and asked the user to click
+;;;  somewhere clear of their work to land it.  That is worse in every
+;;;  direction: it asks somebody who has just been told their command
+;;;  crashed to make a careful decision, it writes into the file they
+;;;  care about at the exact moment they trust it least, "somewhere
+;;;  clear" is a guess that lands on top of a viewport as often as not,
+;;;  and what they then have to send is the whole job drawing.  A DXF in
+;;;  the Downloads folder asks nothing, touches nothing, and is the one
+;;;  thing that is safe to hand over -- it holds the failure and no more
+;;;  of the drawing than the failure needed.
+;;;
+;;;  The click-into-the-drawing path still exists -- lzd:paste, reached
+;;;  by typing LAZDIAG after a report that could not be written -- and it
+;;;  is a LAST RESORT, for the machine where no candidate folder would
+;;;  open.  Nothing reaches it automatically.
+;;;
+;;;  NOTHING HERE MAY THROW.  This code runs from inside *error*, which
+;;;  is the one place in AutoLISP where an error has nowhere to go: a
+;;;  second failure inside a handler leaves the undo group open, the
+;;;  sysvars wrong and no message at all.  So lzd:report is a guard
+;;;  around lzd:report-1: the work is done under vl-catch-all-apply, a
+;;;  re-entry while the reporter is already running is refused rather
+;;;  than nested, and every path -- including the one where the report
+;;;  itself fails -- still prints a line telling the user what happened.
+;;;  The rule for anything added below: if it can fail, it fails INSIDE
+;;;  that catch, and the user still gets told.
+;;;
+;;;  WHAT IT CANNOT DO.  AutoLISP hands *error* a message and nothing
+;;;  else: there is no stack, no file, and no line number, and no amount
+;;;  of cleverness here invents one.  What stands in for a line number is
+;;;  the breadcrumb -- lzd:step, which the ask helpers set for themselves
+;;;  so a form-driven tool leaves a trail without being asked -- plus the
+;;;  transcript and LASTPROMPT.  Together they say which prompt the run
+;;;  died at, which is the question a line number would have answered.
+;;;  The report says so in as many words rather than implying it knows
+;;;  more than it does.
+;;;
+;;;  R12 DXF, ON PURPOSE.  The file is written by hand, group code by
+;;;  group code, as AC1009 -- the oldest DXF there is.  Three reasons:
+;;;  the writing happens inside an error handler, where (command) is
+;;;  refused and DXFOUT is not reachable; AC1009 needs no handles, no
+;;;  classes and no objects section, so there is no bookkeeping to get
+;;;  wrong at the worst possible moment; and every AutoCAD since has read
+;;;  it.  Modern entities are flattened down to R12 primitives on the way
+;;;  out (lzd:flatten) -- an LWPOLYLINE becomes a POLYLINE with its
+;;;  bulges intact, an MTEXT becomes TEXT -- and anything with no R12
+;;;  spelling is written as its bounding box with a label naming the type,
+;;;  so a reader can see something was there rather than silently not.
+;;; ======================================================================
+
+(setq *lazdiag-version* "v1.1")  ; announced on load; release_lisp.py
+                                 ; stamps releases/ from this line
+
+;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
+;; spelling, and the folder walk uses vl-mkdir.  At the top of the file,
+;; not inside a command: this one has to be ready before the FIRST
+;; failure, and a command body that has already died is not going to run
+;; it.  (The grouped build gets it from CALOFIN-LIB too; loading the VL
+;; extensions twice is a no-op, and a standalone file has to load alone.)
+(vl-load-com)
+
+;;; -------------------- tunables ----------------------------------------
+
+;; How many entities a report will copy.  A run that drew ten thousand
+;; things before falling over is a real failure mode, and a DXF of all
+;; of them is one nobody can mail.  The report says when it truncated.
+(setq lzd:*max-ents* 400)
+
+;; How many transcript lines are kept.  A tutorial loop can princ for
+;; ever; the last 200 lines are the ones that led to the failure.
+(setq lzd:*max-log* 200)
+
+;; Where reports go, tried in order.  The first that accepts the file
+;; wins.  "" means "ask the drawing" -- see lzd:candidates.
+(setq lzd:*subdir* "Downloads")
+
+;;; -------------------- the run context ---------------------------------
+;;; Set by lzd:begin at the top of a command and dropped by lzd:end at
+;;; the bottom.  Globals rather than locals because *error* runs after
+;;; the command's own locals have gone.
+
+;; One setq each, declared at top level, because check_scope reads this
+;; block to decide which lzd:* names a defun is allowed to assign.
+(setq lzd:*tool* nil)      ; the command that is running, as typed
+(setq lzd:*ver* nil)       ; its version banner, or nil
+(setq lzd:*started* nil)   ; when the run began, as a human date
+(setq lzd:*mark* nil)      ; entlast at the start: what this run drew is
+                           ; everything after it
+(setq lzd:*log* nil)       ; the transcript, newest first
+(setq lzd:*step* nil)      ; the last breadcrumb
+(setq lzd:*watch* nil)     ; enames the tool registered as its input
+(setq lzd:*pts* nil)       ; (label . point) for every point picked
+(setq lzd:*inside* nil)    ; the reporter is running -- refuse re-entry
+(setq lzd:*last* nil)      ; the last report, for LAZDIAG to write again
+(setq lzd:*lastfile* nil)  ; where it went, nil if it could not be written
+
+;;; -------------------- small helpers -----------------------------------
+
+;; A DXF real.  rtos mode 2 is DECIMAL whatever LUNITS says -- the
+;; default mode would write 25'-6" into a group 10 on an architectural
+;; drawing, which is not a number and would not load.
+(defun lzd:num (v)
+  (if (numberp v) (rtos (float v) 2 8) "0.0"))
+
+;; Group codes are conventionally right-justified in three columns.  No
+;; reader needs it; an editor showing the file to a human does.
+(defun lzd:pad3 (n / s)
+  (setq s (itoa n))
+  (while (< (strlen s) 3) (setq s (strcat " " s)))
+  s)
+
+;; "2026-09-11-143207" -- the stamp in a report's file name.  CDATE
+;; decoded arithmetically, never through rtos: DIMZIN trims rtos output
+;; and would drop the seconds, and two reports a minute apart would then
+;; fight over one name.
+(defun lzd:stamp ( / d dd tt)
+  (setq d  (getvar "CDATE")
+        dd (fix d)
+        tt (- d dd))
+  (strcat (itoa (fix (/ dd 10000))) "-"
+          (cal:zeropad2 (rem (fix (/ dd 100)) 100)) "-"
+          (cal:zeropad2 (rem dd 100)) "-"
+          (cal:zeropad2 (fix (+ (* tt 100) 1e-6))) 
+          (cal:zeropad2 (rem (fix (+ (* tt 10000) 1e-4)) 100))
+          (cal:zeropad2 (rem (fix (+ (* tt 1000000) 1e-2)) 100))))
+
+;; Anything at all, as something safe to put in a one-line DXF string.
+;; Newlines and tabs would end the value early and shift every group
+;; code after it by one line, which is a file that will not load.
+(defun lzd:str (v / s out i c n)
+  (setq s (cond ((null v) "nil")
+                ((= (type v) 'STR) v)
+                ((= (type v) 'INT) (itoa v))
+                ((= (type v) 'REAL) (lzd:num v))
+                ((= (type v) 'SYM) (vl-princ-to-string v))
+                ((and (listp v) (numberp (car v)))
+                 (strcat "(" (lzd:num (car v)) " " (lzd:num (cadr v)) ")"))
+                (t (vl-princ-to-string v))))
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (setq out (strcat out (if (or (< (ascii c) 32) (> (ascii c) 126))
+                              " " c))
+          i (1+ i)))
+  (if (> (strlen out) 240) (substr out 1 240) out))
+
+;; T when MSG is a plain cancel rather than a real failure.  Esc is not
+;; a bug and must never write a report -- a drafter who backs out of
+;; POOL twenty times a day would otherwise find twenty DXFs in
+;; Downloads.  STANDARDS section 5's canonical test.
+(defun lzd:cancel-p (msg)
+  (and msg (= (type msg) 'STR)
+       (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+
+;;; -------------------- the transcript ----------------------------------
+;;; What the tool and the user said to each other, in order.  Everything
+;;; here is cheap and silent: a tool that calls these on every prompt
+;;; must not pay for it on the runs that do not fail.
+
+;; Start a run.  TOOL is the command name as the user typed it, VER the
+;; tool's own version global (or nil).  Called at the top of every
+;; command, and at the top of every helper that carries an *error*
+;; handler of its own.
+;;
+;; A DIFFERENT tool's context is dropped; the SAME tool's is kept and
+;; added to.  Both halves of that matter:
+;;
+;;   dropped, because a run that ended cleanly leaves its transcript
+;;   behind, and handing POOL's prompts to ABCDEF's failure would
+;;   produce a report that is wrong and looks right -- the one outcome
+;;   worse than no report at all.  lzd:mine-p makes the same judgement
+;;   at report time, so this is belt and braces.
+;;
+;;   kept, because a tool is often two defuns with a handler each --
+;;   c:COVERCHECK sets a drawing up and cchk:scan walks it, and both
+;;   begin.  Resetting on the second would throw away the first phase's
+;;   prompts AND move lzd:*mark* past the geometry phase one drew, so
+;;   the report would be missing exactly the half that explains the
+;;   other.  Each entry prints its own "--- started" line, so a
+;;   transcript that does span two runs of one tool says so rather than
+;;   running them together.
+(defun lzd:begin (tool ver)
+  (if (not (lzd:mine-p tool))
+    (setq lzd:*tool*    (lzd:str tool)
+          lzd:*started* (cal:datestr)
+          lzd:*mark*    (entlast)
+          lzd:*log*     nil
+          lzd:*step*    nil
+          lzd:*watch*   nil
+          lzd:*pts*     nil))
+  (setq lzd:*ver* ver)
+  (lzd:say (strcat "--- " (lzd:str tool) " started"
+                   (if ver (strcat " " (lzd:str ver)) "")))
+  tool)
+
+;; There is deliberately no lazy "open a context on the first prompt"
+;; here.  One mechanism opens a context -- lzd:begin, at the top of a
+;; command -- and that is what makes the transcript trustworthy: it is
+;; the one moment that is definitely inside the run that is about to
+;; fail.  A prompt recorded with no context still lands in lzd:*log*,
+;; where the cap keeps it from growing, and lzd:mine-p throws it away at
+;; report time rather than attributing it to the wrong tool.
+
+;; A clean finish.  Drops the context so the NEXT failure does not
+;; report this run's prompts -- a stale transcript is worse than none,
+;; because it is wrong and looks right.
+;; Through lzd:mine-p, so "is this my context" is decided in ONE place
+;; and case-insensitively -- a tool that ended a context it did not own
+;; would throw away the prompts of the run still going on around it.
+(defun lzd:end (tool)
+  (if (or (null tool) (null lzd:*tool*) (lzd:mine-p tool))
+    (lzd:disown))
+  nil)
+
+;; One line of transcript.  The list is NEWEST first, so capping it is
+;; taking the first lzd:*max-log* of it and no reversing at all: a
+;; tutorial loop that princ'd for an hour must lose its opening, not the
+;; prompts that led to the failure a moment ago.
+(defun lzd:say (line)
+  (setq lzd:*log* (cons (lzd:str line) lzd:*log*))
+  (if (> (length lzd:*log*) lzd:*max-log*)
+    (setq lzd:*log* (lzd:firstn lzd:*log* lzd:*max-log*)))
+  nil)
+
+(defun lzd:firstn (lst n / out)
+  (while (and lst (> n 0))
+    (setq out (cons (car lst) out) lst (cdr lst) n (1- n)))
+  (reverse out))
+
+;; A prompt and what came back.  This is the call the ask helpers make,
+;; and it is the whole reason a report can say which question the run
+;; died on.
+(defun lzd:ask (prompt answer)
+  (lzd:step prompt)
+  (lzd:say (strcat "  ? " (lzd:str prompt)
+                   "   -> " (lzd:str answer)))
+  answer)
+
+;; The breadcrumb that stands in for a line number.  The last one set is
+;; the last place in the tool the run is known to have reached.
+(defun lzd:step (label)
+  (setq lzd:*step* (lzd:str label))
+  nil)
+
+;; Register geometry the tool did not draw but is working ON -- the
+;; selection it was handed, the entity it was asked to measure.  Takes an
+;; ename, a selection set, or a list of either.
+(defun lzd:watch (x / i e)
+  (cond
+    ((null x) nil)
+    ((= (type x) 'ENAME) (setq lzd:*watch* (cons x lzd:*watch*)))
+    ((= (type x) 'PICKSET)
+     (setq i 0)
+     (while (< i (sslength x))
+       (setq lzd:*watch* (cons (ssname x i) lzd:*watch*) i (1+ i))))
+    ((listp x) (foreach e x (lzd:watch e))))
+  nil)
+
+;; A point the user picked, with the prompt it answered.  These are
+;; drawn into the report as labelled points: for half the tools here the
+;; picks ARE the geometry that caused the failure.
+(defun lzd:pt (label p)
+  (if (and p (listp p) (numberp (car p)))
+    (setq lzd:*pts* (cons (cons (lzd:str label) p) lzd:*pts*)))
+  p)
+
+;;; -------------------- gathering the geometry --------------------------
+
+;; Everything drawn since lzd:begin.  entlast was snapshotted then, so
+;; the run's own output is whatever comes after it -- and a nil mark
+;; means the drawing was empty, in which case everything is the run's.
+;; Entities the run drew and then erased come back nil from entget and
+;; are dropped rather than crashing the walk.
+(defun lzd:drawn ( / e out n)
+  (setq e (if lzd:*mark* (entnext lzd:*mark*) (entnext))
+        n 0)
+  (while (and e (< n lzd:*max-ents*))
+    (if (entget e) (setq out (cons e out) n (1+ n)))
+    (setq e (entnext e)))
+  (reverse out))
+
+;; The run's input and its output together, each entity once.  Input
+;; first: it is the geometry that was already on the sheet, and reading
+;; the report that is what you want to see before what the tool made of
+;; it.
+;; CAPPED, and capped over the WHOLE list rather than over each half.
+;; lzd:drawn stops at lzd:*max-ents* on its own, but the watched input
+;; had no limit at all: a tool that selects a hundred dimensions and
+;; then draws is two hundred entities in a file somebody has to mail,
+;; and one that selects a thousand is a report nobody can open.  The
+;; count is in the report, and it says when it truncated.
+(defun lzd:gather ( / out e n)
+  (setq n 0)
+  (foreach e (reverse lzd:*watch*)
+    (if (and (< n lzd:*max-ents*) (entget e) (not (member e out)))
+      (setq out (cons e out) n (1+ n))))
+  (foreach e (lzd:drawn)
+    (if (and (< n lzd:*max-ents*) (not (member e out)))
+      (setq out (cons e out) n (1+ n))))
+  (reverse out))
+
+;;; -------------------- flattening to R12 -------------------------------
+;;; Every entity becomes zero or more primitives, each a list whose car
+;;; names it:
+;;;    ("LINE"   lay p1 p2)
+;;;    ("CIRCLE" lay centre radius)
+;;;    ("ARC"    lay centre radius from-deg to-deg)
+;;;    ("POINT"  lay p)
+;;;    ("TEXT"   lay p height string rotation-deg)
+;;;    ("PLINE"  lay closed-flag ((x y bulge) ...))
+;;; Two reasons for the intermediate form rather than writing straight
+;;; out: the report's text block has to be placed clear of the geometry,
+;;; which means knowing its extent BEFORE anything is written, and a
+;;; list of primitives is something a test can read back and assert on
+;;; without parsing a DXF.
+
+(defun lzd:dxf (code ed) (cdr (assoc code ed)))
+
+(defun lzd:lay (ed / v) (if (setq v (lzd:dxf 8 ed)) v "0"))
+
+(defun lzd:deg (r) (if (numberp r) (/ (* r 180.0) pi) 0.0))
+
+;; MTEXT's formatting codes are noise in a report.  The braces and the
+;; \f \H \A runs go; \P is the line break MTEXT uses, and becomes a
+;; space so the whole string stays one DXF line.
+(defun lzd:demtext (s / out i n c)
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (cond
+      ((= c "\\")
+       (cond
+         ((= (strcase (substr s (1+ i) 1)) "P")
+          (setq out (strcat out " ") i (+ i 2)))
+         (t ;; a formatting run: skip to its ; terminator, or one char
+            (setq i (1+ i))
+            (if (wcmatch (strcase (substr s i 1)) "C,F,H,W,Q,T,A,L,O,K")
+              (progn
+                (while (and (<= i n) (/= (substr s i 1) ";"))
+                  (setq i (1+ i)))
+                (setq i (1+ i)))
+              (setq i (1+ i))))))
+      ((or (= c "{") (= c "}")) (setq i (1+ i)))
+      (t (setq out (strcat out c) i (1+ i)))))
+  out)
+
+;; An LWPOLYLINE's vertices, as (x y bulge).  entget repeats group 10,
+;; and the 42 that FOLLOWS a 10 belongs to it -- a vertex with no bulge
+;; has no 42 at all, so the pairing has to be positional and cannot be
+;; an assoc.
+(defun lzd:lwverts (ed / out p code val pair)
+  (foreach pair ed
+    (setq code (car pair) val (cdr pair))
+    (cond
+      ((= code 10) (if p (setq out (cons p out)))
+                   (setq p (list (car val) (cadr val) 0.0)))
+      ((and (= code 42) p) (setq p (list (car p) (cadr p) val)))))
+  (if p (setq out (cons p out)))
+  (reverse out))
+
+;; An old-style POLYLINE's vertices, walked off its VERTEX children.
+(defun lzd:plverts (e / v ed out p)
+  (setq v (entnext e))
+  (while (and v (setq ed (entget v)) (= (lzd:dxf 0 ed) "VERTEX"))
+    (setq p (lzd:dxf 10 ed))
+    (if p (setq out (cons (list (car p) (cadr p)
+                                (if (lzd:dxf 42 ed) (lzd:dxf 42 ed) 0.0))
+                          out)))
+    (setq v (entnext v)))
+  (reverse out))
+
+;; The bounding box of an entity, through ActiveX, or nil.  Wrapped
+;; because this is the one call here that reaches outside AutoLISP, and
+;; it is reached from inside an error handler: a failure has to come
+;; back as nil and let the caller fall through to its label-only form.
+(defun lzd:bbox (e / r mn mx obj)
+  ;; the '() is REQUIRED, even for a lambda that takes nothing:
+  ;; vl-catch-all-apply with one argument is an error of its own, and
+  ;; one it cannot catch -- it is the call to vl-catch-all-apply that is
+  ;; malformed.  Written without it, every entity with no R12 spelling
+  ;; took the whole report down instead of being labelled.
+  (setq r (vl-catch-all-apply
+            '(lambda ()
+               (setq obj (vlax-ename->vla-object e))
+               (vla-getboundingbox obj 'mn 'mx)
+               (list (vlax-safearray->list mn) (vlax-safearray->list mx)))
+            '()))
+  (if (vl-catch-all-error-p r) nil r))
+
+;; The fallback for an entity with no R12 spelling: its bounding box as
+;; a rectangle, labelled with the type, so the report shows that
+;; something was there and what kind of thing it was.  Better than
+;; dropping it silently, which would make the report lie by omission.
+(defun lzd:asbox (e ed / bb lo hi lay ty)
+  (setq lay (lzd:lay ed) ty (lzd:dxf 0 ed) bb (lzd:bbox e))
+  (if bb
+    (progn
+      (setq lo (car bb) hi (cadr bb))
+      (list (list "PLINE" lay 1
+                  (list (list (car lo) (cadr lo) 0.0)
+                        (list (car hi) (cadr lo) 0.0)
+                        (list (car hi) (cadr hi) 0.0)
+                        (list (car lo) (cadr hi) 0.0)))
+            (list "TEXT" lay (list (car lo) (cadr hi) 0.0) 0.0
+                  (strcat "<" ty " not copied>") 0.0)))
+    (if (lzd:dxf 10 ed)
+      (list (list "POINT" lay (lzd:dxf 10 ed))
+            (list "TEXT" lay (lzd:dxf 10 ed) 0.0
+                  (strcat "<" ty " not copied>") 0.0)))))
+
+(defun lzd:flatten (e / ed ty lay p)
+  (setq ed (entget e))
+  (if (null ed)
+    nil
+    (progn
+      (setq ty (lzd:dxf 0 ed) lay (lzd:lay ed))
+      (cond
+        ((= ty "LINE")
+         (list (list "LINE" lay (lzd:dxf 10 ed) (lzd:dxf 11 ed))))
+        ((= ty "CIRCLE")
+         (list (list "CIRCLE" lay (lzd:dxf 10 ed) (lzd:dxf 40 ed))))
+        ((= ty "ARC")
+         (list (list "ARC" lay (lzd:dxf 10 ed) (lzd:dxf 40 ed)
+                     (lzd:deg (lzd:dxf 50 ed)) (lzd:deg (lzd:dxf 51 ed)))))
+        ((= ty "POINT")
+         (list (list "POINT" lay (lzd:dxf 10 ed))))
+        ((= ty "TEXT")
+         (list (list "TEXT" lay (lzd:dxf 10 ed) (lzd:dxf 40 ed)
+                     (lzd:dxf 1 ed) (lzd:deg (lzd:dxf 50 ed)))))
+        ((= ty "MTEXT")
+         (list (list "TEXT" lay (lzd:dxf 10 ed) (lzd:dxf 40 ed)
+                     (lzd:demtext (lzd:dxf 1 ed))
+                     (lzd:deg (lzd:dxf 50 ed)))))
+        ((= ty "LWPOLYLINE")
+         (list (list "PLINE" lay (logand 1 (if (lzd:dxf 70 ed)
+                                               (lzd:dxf 70 ed) 0))
+                     (lzd:lwverts ed))))
+        ((= ty "POLYLINE")
+         (list (list "PLINE" lay (logand 1 (if (lzd:dxf 70 ed)
+                                               (lzd:dxf 70 ed) 0))
+                     (lzd:plverts e))))
+        ((= ty "SOLID")
+         (list (list "PLINE" lay 1
+                     (list (lzd:dxf 10 ed) (lzd:dxf 11 ed)
+                           (lzd:dxf 13 ed) (lzd:dxf 12 ed)))))
+        ;; A dimension is a block in the drawing and has no R12 form
+        ;; worth rebuilding.  What a diagnosis needs off one is what it
+        ;; was measuring and what it said: the two extension-line
+        ;; origins as a line, and the measurement as text.
+        ((= ty "DIMENSION")
+         (setq p (lzd:dxf 11 ed))
+         (append
+           (if (and (lzd:dxf 13 ed) (lzd:dxf 14 ed))
+             (list (list "LINE" lay (lzd:dxf 13 ed) (lzd:dxf 14 ed))))
+           (if p
+             (list (list "TEXT" lay p 0.0
+                         (strcat "<DIM "
+                                 (if (and (lzd:dxf 1 ed)
+                                          (/= (lzd:dxf 1 ed) ""))
+                                   (lzd:dxf 1 ed)
+                                   (lzd:num (lzd:dxf 42 ed)))
+                                 ">")
+                         0.0)))))
+        ((= ty "INSERT")
+         (list (list "POINT" lay (lzd:dxf 10 ed))
+               (list "TEXT" lay (lzd:dxf 10 ed) 0.0
+                     (strcat "<INSERT " (lzd:str (lzd:dxf 2 ed)) ">") 0.0)))
+        (t (lzd:asbox e ed))))))
+
+;; Every point a primitive occupies, for the extent below.
+(defun lzd:prim-pts (pr)
+  (cond
+    ((= (car pr) "LINE")   (list (caddr pr) (cadddr pr)))
+    ((= (car pr) "POINT")  (list (caddr pr)))
+    ((= (car pr) "TEXT")   (list (caddr pr)))
+    ((or (= (car pr) "CIRCLE") (= (car pr) "ARC"))
+     (list (list (- (car (caddr pr)) (cadddr pr))
+                 (- (cadr (caddr pr)) (cadddr pr)))
+           (list (+ (car (caddr pr)) (cadddr pr))
+                 (+ (cadr (caddr pr)) (cadddr pr)))))
+    ((= (car pr) "PLINE")  (nth 3 pr))))
+
+;; (minx miny maxx maxy) over a list of primitives, or nil for none.
+(defun lzd:extent (prims / lo hi x y out pr p)
+  (foreach pr prims
+    (foreach p (lzd:prim-pts pr)
+      (if (and p (numberp (car p)) (numberp (cadr p)))
+        (progn
+          (setq x (car p) y (cadr p))
+          (if (null out)
+            (setq out (list x y x y))
+            (setq out (list (min x (car out)) (min y (cadr out))
+                            (max x (caddr out)) (max y (cadddr out)))))))))
+  out)
+
+;;; -------------------- writing the DXF ---------------------------------
+;;; AC1009 by hand.  lzd:g is the whole format: a group code on its own
+;;; line, its value on the next.  Everything below is that call with the
+;;; codes filled in, which is why there is no DXF library here to get
+;;; out of step with what AutoCAD actually reads.
+
+(setq lzd:*errlayer*  "CALOFIN-ERROR"    ; the report text
+      lzd:*picklayer* "CALOFIN-PICKS")   ; the points the user clicked
+
+(defun lzd:g (fp code val)
+  (write-line (lzd:pad3 code) fp)
+  (write-line val fp))
+
+(defun lzd:gn (fp code v) (lzd:g fp code (lzd:num v)))
+(defun lzd:gi (fp code v) (lzd:g fp code (itoa (fix v))))
+(defun lzd:gs (fp code s) (lzd:g fp code (lzd:str s)))
+
+;; A point at group BASE -- 10 writes 10/20/30, 11 writes 11/21/31.
+(defun lzd:gp (fp base p)
+  (lzd:gn fp base       (car p))
+  (lzd:gn fp (+ base 10) (cadr p))
+  (lzd:gn fp (+ base 20) (if (and (caddr p) (numberp (caddr p)))
+                             (caddr p) 0.0)))
+
+(defun lzd:sec (fp name) (lzd:g fp 0 "SECTION") (lzd:g fp 2 name))
+(defun lzd:endsec (fp)   (lzd:g fp 0 "ENDSEC"))
+
+(defun lzd:header (fp ext / lo hi)
+  (setq lo (if ext (list (car ext) (cadr ext)) '(0.0 0.0))
+        hi (if ext (list (caddr ext) (cadddr ext)) '(0.0 0.0)))
+  (lzd:sec fp "HEADER")
+  (lzd:g fp 9 "$ACADVER")   (lzd:g fp 1 "AC1009")
+  (lzd:g fp 9 "$INSBASE")   (lzd:gp fp 10 '(0.0 0.0 0.0))
+  (lzd:g fp 9 "$EXTMIN")    (lzd:gp fp 10 lo)
+  (lzd:g fp 9 "$EXTMAX")    (lzd:gp fp 10 hi)
+  ;; decimal units in the report, whatever the job drawing used: every
+  ;; number in here was written by lzd:num as a decimal and must read
+  ;; back as one
+  (lzd:g fp 9 "$LUNITS")    (lzd:gi fp 70 2)
+  (lzd:endsec fp))
+
+(defun lzd:tables (fp layers / l)
+  (lzd:sec fp "TABLES")
+  ;; CONTINUOUS has to exist before a layer may name it
+  (lzd:g fp 0 "TABLE") (lzd:g fp 2 "LTYPE") (lzd:gi fp 70 1)
+  (lzd:g fp 0 "LTYPE") (lzd:g fp 2 "CONTINUOUS") (lzd:gi fp 70 0)
+  (lzd:g fp 3 "Solid line") (lzd:gi fp 72 65) (lzd:gi fp 73 0)
+  (lzd:gn fp 40 0.0)
+  (lzd:g fp 0 "ENDTAB")
+  (lzd:g fp 0 "TABLE") (lzd:g fp 2 "LAYER") (lzd:gi fp 70 (length layers))
+  (foreach l layers
+    (lzd:g fp 0 "LAYER") (lzd:gs fp 2 l) (lzd:gi fp 70 0)
+    ;; red for the report's own layers, so the diagnosis stands out from
+    ;; the copied drawing rather than hiding in it
+    (lzd:gi fp 62 (if (or (= l lzd:*errlayer*) (= l lzd:*picklayer*)) 1 7))
+    (lzd:g fp 6 "CONTINUOUS"))
+  (lzd:g fp 0 "ENDTAB")
+  (lzd:endsec fp))
+
+(defun lzd:prim-out (fp pr / ty lay v)
+  (setq ty (car pr) lay (cadr pr))
+  (cond
+    ((= ty "LINE")
+     (lzd:g fp 0 "LINE") (lzd:gs fp 8 lay)
+     (lzd:gp fp 10 (caddr pr)) (lzd:gp fp 11 (cadddr pr)))
+    ((= ty "CIRCLE")
+     (lzd:g fp 0 "CIRCLE") (lzd:gs fp 8 lay)
+     (lzd:gp fp 10 (caddr pr)) (lzd:gn fp 40 (cadddr pr)))
+    ((= ty "ARC")
+     (lzd:g fp 0 "ARC") (lzd:gs fp 8 lay)
+     (lzd:gp fp 10 (caddr pr)) (lzd:gn fp 40 (cadddr pr))
+     (lzd:gn fp 50 (nth 4 pr)) (lzd:gn fp 51 (nth 5 pr)))
+    ((= ty "POINT")
+     (lzd:g fp 0 "POINT") (lzd:gs fp 8 lay) (lzd:gp fp 10 (caddr pr)))
+    ((= ty "TEXT")
+     (lzd:g fp 0 "TEXT") (lzd:gs fp 8 lay)
+     (lzd:gp fp 10 (caddr pr))
+     (lzd:gn fp 40 (if (and (cadddr pr) (> (cadddr pr) 0.0))
+                       (cadddr pr) 1.0))
+     (lzd:gs fp 1 (nth 4 pr))
+     (lzd:gn fp 50 (if (nth 5 pr) (nth 5 pr) 0.0)))
+    ((= ty "PLINE")
+     (lzd:g fp 0 "POLYLINE") (lzd:gs fp 8 lay)
+     (lzd:gi fp 66 1) (lzd:gi fp 70 (if (caddr pr) (caddr pr) 0))
+     (lzd:gp fp 10 '(0.0 0.0 0.0))
+     (foreach v (nth 3 pr)
+       (lzd:g fp 0 "VERTEX") (lzd:gs fp 8 lay)
+       ;; x and y explicitly, Z always zero: a vertex here is
+       ;; (x y bulge), and handing the whole triple to lzd:gp would
+       ;; write the bulge into group 30 and lose the curve twice over
+       (lzd:gp fp 10 (list (car v) (cadr v) 0.0))
+       (if (and (caddr v) (numberp (caddr v)) (/= (caddr v) 0.0))
+         (lzd:gn fp 42 (caddr v))))
+     (lzd:g fp 0 "SEQEND") (lzd:gs fp 8 lay))))
+
+;; Every layer the primitives name, plus the report's own two.  A layer
+;; an entity sits on but the table does not list is the one way this
+;; file fails to load.
+(defun lzd:layers (prims / out l pr)
+  (setq out (list "0" lzd:*errlayer* lzd:*picklayer*))
+  (foreach pr prims
+    (setq l (cadr pr))
+    (if (and l (= (type l) 'STR) (not (member l out)))
+      (setq out (cons l out))))
+  (reverse out))
+
+;; Write it.  Returns the path on success and nil when the file would
+;; not open, which is the signal lzd:write walks its candidate folders
+;; on.  Nothing in here may throw: it is called from inside *error*.
+(defun lzd:dxfwrite (path prims / fp ext pr)
+  (setq fp (open path "w"))
+  (if (null fp)
+    nil
+    (progn
+      (setq ext (lzd:extent prims))
+      (lzd:header fp ext)
+      (lzd:tables fp (lzd:layers prims))
+      (lzd:sec fp "ENTITIES")
+      (foreach pr prims (lzd:prim-out fp pr))
+      (lzd:endsec fp)
+      (lzd:g fp 0 "EOF")
+      (close fp)
+      path)))
+
+;;; -------------------- where the file goes -----------------------------
+
+;; Downloads, and four ways to still write something if it is not there.
+;; In order: an explicit override for a shop that wants reports
+;; elsewhere; the two spellings of the user's profile; the folder the
+;; job drawing is in; AutoCAD's own temp folder, which is writable on
+;; every machine that can run AutoCAD at all.
+;; Add DIR to the list unless it is nothing, or already on it.  Both
+;; halves are real: an unsaved drawing answers DWGPREFIX with "" and
+;; only nil is false in AutoLISP, so the empty string would go on the
+;; list and the report would be written to whatever AutoCAD's working
+;; directory happened to be, under a name with no folder in front of it
+;; -- the one outcome worse than not writing it, because the message
+;; then tells the user to send a file they cannot find.  And the two
+;; spellings of the profile usually name the SAME folder, which would
+;; otherwise be tried twice and listed twice when it failed.
+(defun lzd:addcand (lst dir)
+  (if (and dir (= (type dir) 'STR) (/= dir "") (not (member dir lst)))
+    (cons dir lst)
+    lst))
+
+(defun lzd:candidates ( / out h)
+  (setq out (lzd:addcand out (getenv "CalofinErrorDir")))
+  (if (setq h (getenv "USERPROFILE"))
+    (setq out (lzd:addcand out (strcat h "\\" lzd:*subdir*))))
+  (if (and (setq h (getenv "HOMEDRIVE")) (getenv "HOMEPATH"))
+    (setq out (lzd:addcand out (strcat h (getenv "HOMEPATH")
+                                       "\\" lzd:*subdir*))))
+  (setq out (lzd:addcand out (getvar "DWGPREFIX")))
+  (setq out (lzd:addcand out (getvar "TEMPPREFIX")))
+  (reverse out))
+
+(defun lzd:join (dir name)
+  (cond
+    ((or (null dir) (= dir "")) name)
+    ((= (substr dir (strlen dir) 1) "\\") (strcat dir name))
+    (t (strcat dir "\\" name))))
+
+;; A file name with nothing in it a file system will argue about.
+(defun lzd:safe (s / out i c n)
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (setq out (strcat out (if (wcmatch c "[A-Za-z0-9._-]") c "-"))
+          i (1+ i)))
+  (if (= out "") "LISP" out))
+
+;; "POOL-v2.7-error-2026-09-11-143207.dxf" -- tool, version, what it is
+;; and when, with the seconds on the end so two failures a minute apart
+;; do not overwrite each other.
+(defun lzd:filename-kind (tool ver kind)
+  (strcat (lzd:safe (if tool (lzd:str tool) "LISP")) "-"
+          (lzd:safe (if ver (lzd:str ver) "noversion")) "-" kind "-"
+          (lzd:stamp) ".dxf"))
+
+(defun lzd:filename (tool ver) (lzd:filename-kind tool ver "error"))
+
+;; Try each candidate folder until one takes the file.  Returns the full
+;; path written, or nil if every one of them refused -- which is the
+;; only thing that puts the user on the click-into-the-drawing path.
+(defun lzd:write (name prims / path got d)
+  (foreach d (lzd:candidates)
+    (if (null got)
+      (progn
+        (vl-mkdir d)    ; a profile that has never downloaded anything
+        (setq path (vl-catch-all-apply 'lzd:dxfwrite
+                                       (list (lzd:join d name) prims)))
+        (if (and (not (vl-catch-all-error-p path)) path)
+          (setq got path)))))
+  got)
+
+;;; -------------------- the report text ---------------------------------
+
+(defun lzd:pair (k v)
+  (strcat "  " (lzd:str k) (substr "              " 1
+                                   (max 1 (- 14 (strlen (lzd:str k)))))
+          (lzd:str v)))
+
+;; Which build this is.  cal:*version* exists only when CALOFIN-LIB is
+;; loaded, so an unbound read here is the standalone answer rather than
+;; a missing one -- and knowing which of the two tiers failed is half of
+;; reproducing it, since the whole point of shared/ is that the two are
+;; meant to behave identically.
+(defun lzd:build ()
+  (if cal:*version*
+    (strcat "LAZPASS / shared build (CALOFIN-LIB " cal:*version* ")")
+    "standalone file from lisp/"))
+
+(defun lzd:report-lines (tool ver msg nents / out)
+  (setq out
+    (list
+      "CALOFIN ERROR REPORT"
+      "===================="
+      ""
+      (lzd:pair "tool" (strcat (lzd:str tool) " "
+                               (if ver (lzd:str ver) "(no version banner)")))
+      (lzd:pair "build" (lzd:build))
+      (lzd:pair "lazdiag" *lazdiag-version*)
+      (lzd:pair "run started" (if lzd:*started* lzd:*started* "(not recorded)"))
+      (lzd:pair "failed at" (cal:datestr))
+      ""
+      "THE ERROR"
+      (lzd:pair "message" msg)
+      (lzd:pair "last step" (if lzd:*step* lzd:*step*
+                                "(none - it failed before the first prompt)"))
+      (lzd:pair "ERRNO" (getvar "ERRNO"))
+      (lzd:pair "CMDNAMES" (getvar "CMDNAMES"))
+      (lzd:pair "LASTPROMPT" (getvar "LASTPROMPT"))
+      ""
+      "THE DRAWING"
+      (lzd:pair "DWGNAME" (getvar "DWGNAME"))
+      (lzd:pair "DWGPREFIX" (getvar "DWGPREFIX"))
+      (lzd:pair "CLAYER" (getvar "CLAYER"))
+      (lzd:pair "OSMODE" (getvar "OSMODE"))
+      (lzd:pair "LUNITS" (getvar "LUNITS"))
+      (lzd:pair "INSUNITS" (getvar "INSUNITS"))
+      (lzd:pair "DIMSTYLE" (getvar "DIMSTYLE"))
+      (lzd:pair "DIMSCALE" (getvar "DIMSCALE"))
+      (lzd:pair "CMDECHO" (getvar "CMDECHO"))
+      (lzd:pair "UNDOCTL" (getvar "UNDOCTL"))
+      ""
+      "GEOMETRY COPIED INTO THIS FILE"
+      (lzd:pair "entities" (strcat (itoa nents)
+                                   (if (>= nents lzd:*max-ents*)
+                                     (strcat " (TRUNCATED at lzd:*max-ents* = "
+                                             (itoa lzd:*max-ents*) ")")
+                                     "")))
+      (lzd:pair "picked points" (length lzd:*pts*))
+      (lzd:pair "on layers" (strcat lzd:*errlayer* " = this report, "
+                                    lzd:*picklayer* " = the clicks"))
+      ""
+      "WHAT THIS REPORT CANNOT TELL YOU"
+      "  AutoLISP hands an error handler a message and nothing else: no"
+      "  stack, no file, no line number.  'last step' above is the"
+      "  nearest thing -- the last prompt the run reached -- and the"
+      "  transcript below says how it got there.  Between them they name"
+      "  the prompt it died at, which is the question a line number"
+      "  would have answered."
+      ""
+      "THE RUN, PROMPT BY PROMPT"))
+  (setq out (append out
+                    (if lzd:*log*
+                      (reverse lzd:*log*)
+                      (list "  (nothing recorded - the tool does not call"
+                            "   lzd:begin, or it failed before its first"
+                            "   prompt)"))))
+  (append out
+          (list ""
+                "Send this file to whoever maintains calofin.  It holds"
+                "the failure and no more of your drawing than the failure"
+                "needed; your own drawing was not changed.")))
+
+;;; -------------------- building the whole report -----------------------
+
+(defun lzd:textheight (ext / d)
+  (setq d (if ext (distance (list (car ext) (cadr ext))
+                            (list (caddr ext) (cadddr ext)))
+              0.0))
+  (if (> d 1.0) (/ d 140.0) 1.0))
+
+;; The report as TEXT, placed to the LEFT of everything copied and
+;; top-aligned with it.  Left rather than on top of it: a report written
+;; over the geometry it is describing is one you have to move before you
+;; can read either.
+(defun lzd:textblock (lines ext h / x y w n out l)
+  (setq n 0)
+  (foreach l lines (if (> (strlen l) n) (setq n (strlen l))))
+  (setq w (* n h 0.7))
+  (if ext
+    (setq x (- (car ext) w (* h 6.0)) y (cadddr ext))
+    (setq x 0.0 y 0.0))
+  (foreach l lines
+    (setq out (cons (list "TEXT" lzd:*errlayer* (list x y 0.0) h l 0.0) out)
+          y (- y (* h 1.7))))
+  (reverse out))
+
+;; Every point the user clicked, as a point and its prompt.  For the
+;; tools that take measurements rather than select geometry, this IS the
+;; geometry that caused the failure.
+(defun lzd:pickpts ()
+  (mapcar '(lambda (pr) (list "POINT" lzd:*picklayer* (cdr pr)))
+          (reverse lzd:*pts*)))
+
+(defun lzd:picklabels (h / out i pr)
+  (setq i 0)
+  (foreach pr (reverse lzd:*pts*)
+    (setq i (1+ i)
+          out (cons (list "TEXT" lzd:*picklayer* (cdr pr) h
+                          (strcat (itoa i) ". " (car pr)) 0.0)
+                    out)))
+  (reverse out))
+
+;; Geometry, clicks and report text as one list of primitives.  The
+;; order is deliberate: the extent is measured off the drawing content
+;; only, so the labels and the report are placed against the geometry
+;; rather than against themselves.
+;; One entity's primitives, or a label saying it could not be read.
+;; Per entity and not per report: a single entity this cannot flatten
+;; must cost its own shape and nothing else.  Before the catch was here
+;; one unconvertible entity took the WHOLE report down -- the drafter
+;; got "could not be written to a file" and no diagnosis at all, for a
+;; drawing the tool had merely been asked to copy.
+(defun lzd:flatten-safe (e / r)
+  (setq r (vl-catch-all-apply 'lzd:flatten (list e)))
+  (if (vl-catch-all-error-p r)
+    (list (list "TEXT" lzd:*errlayer* '(0.0 0.0 0.0) 0.0
+                (strcat "<entity not readable: "
+                        (lzd:str (vl-catch-all-error-message r)) ">")
+                0.0))
+    r))
+
+(defun lzd:build-prims (tool ver msg / geo pts ext h nents e)
+  (setq geo nil nents 0)
+  (foreach e (lzd:gather)
+    (setq geo (append geo (lzd:flatten-safe e)) nents (1+ nents)))
+  (setq pts (lzd:pickpts)
+        ext (lzd:extent (append geo pts))
+        h   (lzd:textheight ext))
+  (append geo pts (lzd:picklabels h)
+          (lzd:textblock (lzd:report-lines tool ver msg nents) ext h)))
+
+;;; -------------------- what the user is told ---------------------------
+
+(defun lzd:announce (tool ver path)
+  (princ (strcat "\n[calofin] " (lzd:str tool)
+                 (if ver (strcat " " (lzd:str ver)) "")
+                 " has FAILED -- this is a bug, not"))
+  (princ "\n[calofin] something you did wrong.  An error report has been")
+  (princ "\n[calofin] written to")
+  (princ (strcat "\n[calofin]     " path))
+  (princ "\n[calofin] SEND THAT FILE IN FOR DIAGNOSIS.  It holds a copy of")
+  (princ "\n[calofin] the geometry, every prompt and answer of the run, and")
+  (princ "\n[calofin] what AutoCAD was doing when it stopped.  Your own")
+  (princ "\n[calofin] drawing has not been touched.")
+  (princ))
+
+;; Every candidate folder refused the file, or the report itself blew
+;; up.  The user still has to be told -- a failure that says nothing is
+;; the thing this whole file exists to stop -- and LAZDIAG is where they
+;; go next, because that runs from a clean command line where a prompt
+;; is safe and this does not.
+(defun lzd:nofile (tool ver msg why / d)
+  (princ (strcat "\n[calofin] " (lzd:str tool)
+                 (if ver (strcat " " (lzd:str ver)) "")
+                 " has FAILED: " (lzd:str msg)))
+  (princ "\n[calofin] The error report could NOT be written to a file.")
+  ;; Either the report broke -- in which case the reason is the whole
+  ;; story and the folder list is noise -- or every folder refused it,
+  ;; in which case which ones were tried is the whole story.
+  (if why
+    (princ (strcat "\n[calofin]   " (lzd:str why)))
+    (foreach d (lzd:candidates) (princ (strcat "\n[calofin]   tried " d))))
+  (princ "\n[calofin] Type LAZDIAG to try again, or to place the report")
+  (princ "\n[calofin] into this drawing instead as a last resort.")
+  (if (null lzd:*last*) (setq lzd:*last* (list tool ver msg nil nil)))
+  (princ))
+
+;;; -------------------- the entry point from *error* --------------------
+;;; Every tool's handler ends with a call to this.  Three things it must
+;;; never do, because the caller is an *error* handler and has nowhere to
+;;; put a failure of its own:
+;;;   - throw.  The work happens under vl-catch-all-apply, and the catch
+;;;     is what turns a broken reporter into a printed line rather than a
+;;;     handler that dies halfway and leaves the undo group open.
+;;;   - re-enter.  lzd:*inside* refuses a second report raised by the
+;;;     first one, which would otherwise recurse until AutoCAD gave up.
+;;;   - prompt.  Nothing here asks the user anything; that is LAZDIAG's
+;;;     job, from a clean command line.
+
+;; T when the stored context belongs to the tool now reporting.  A run
+;; that finished cleanly leaves its transcript behind, and handing it to
+;; the NEXT tool's failure would produce a report that is wrong and
+;; looks right -- the one outcome worse than no report at all.
+(defun lzd:mine-p (tool)
+  (and lzd:*tool* tool
+       (= (strcase (lzd:str tool)) (strcase lzd:*tool*))))
+
+(defun lzd:disown ()
+  (setq lzd:*tool* nil lzd:*ver* nil lzd:*log* nil lzd:*step* nil
+        lzd:*watch* nil lzd:*pts* nil lzd:*mark* nil)
+  nil)
+
+(defun lzd:report-1 (tool ver msg / prims name path)
+  (if (not (lzd:mine-p tool)) (lzd:disown))
+  (setq prims (lzd:build-prims tool ver msg)
+        name  (lzd:filename tool ver)
+        path  (lzd:write name prims)
+        lzd:*last* (list tool ver msg prims name)
+        lzd:*lastfile* path)
+  (if path (lzd:announce tool ver path) (lzd:nofile tool ver msg nil))
+  (lzd:end tool)
+  path)
+
+(defun lzd:report (tool ver msg / r)
+  (cond
+    ;; Esc is not a bug.  A drafter who backs out of POOL twenty times a
+    ;; day must not find twenty DXFs in Downloads.
+    ((lzd:cancel-p msg) nil)
+    (lzd:*inside*
+     (princ "\n[calofin] The error reporter failed while reporting an")
+     (princ "\n[calofin] error -- no file written.  The original error was:")
+     (princ (strcat "\n[calofin]     " (lzd:str msg))))
+    (t
+     (setq lzd:*inside* T
+           r (vl-catch-all-apply 'lzd:report-1 (list tool ver msg))
+           lzd:*inside* nil)
+     (if (vl-catch-all-error-p r)
+       (lzd:nofile tool ver msg (vl-catch-all-error-message r)))))
+  (princ))
+
+;;; -------------------- LAZDIAG, the command ----------------------------
+
+;; THE LAST RESORT.  Only reached by typing LAZDIAG after a report that
+;; could not be written to any folder -- never automatically, and never
+;; from inside an error handler.  This is the one path that asks the user
+;; to click, and the one path that writes into the drawing they are
+;; working in, which is why it is last and why it says so first.
+(defun lzd:paste (lines / p h y n l)
+  (princ "\n[calofin] LAST RESORT: no folder would take the file, so the")
+  (princ "\n[calofin] report has to go into THIS drawing as text.  Pick a")
+  (princ "\n[calofin] spot well clear of your work -- off to one side of")
+  (princ "\n[calofin] everything, not on the sheet.")
+  (setq p (getpoint "\nPlace the error report, far from the drawing: "))
+  (if (null p)
+    (progn (princ "\n[calofin] Nothing placed.") nil)
+    (progn
+      (cal:ensure-layer lzd:*errlayer* 1)
+      (setq h (/ (getvar "VIEWSIZE") 90.0))
+      (if (or (null h) (<= h 0.0)) (setq h 1.0))
+      (setq y (cadr p) n 0)
+      (foreach l lines
+        (entmakex (list '(0 . "TEXT") (cons 8 lzd:*errlayer*)
+                        (cons 10 (list (car p) y 0.0))
+                        (cons 40 h) (cons 1 (lzd:str l))))
+        (setq y (- y (* h 1.7)) n (1+ n)))
+      (princ (strcat "\n[calofin] " (itoa n) " lines placed on layer "
+                     lzd:*errlayer* "."))
+      (princ "\n[calofin] Send this drawing in, or copy those lines out --")
+      (princ "\n[calofin] and erase them when the bug is fixed.")
+      T)))
+
+;; The lines of the stored report, rebuilt if only the bare facts of it
+;; survived (lzd:nofile stores those when the report itself threw).
+(defun lzd:last-lines ( / r)
+  (setq r lzd:*last*)
+  (if (nth 3 r)
+    (mapcar '(lambda (pr) (nth 4 pr))
+            (vl-remove-if-not
+              '(lambda (pr) (and (= (car pr) "TEXT")
+                                 (= (cadr pr) lzd:*errlayer*)))
+              (nth 3 r)))
+    (lzd:report-lines (car r) (cadr r) (caddr r) 0)))
+
+;; Write the last failure's report again -- to a folder that may have
+;; become writable, or that the user has just pointed CalofinErrorDir at.
+(defun lzd:again ( / r path)
+  (setq r    lzd:*last*
+        path (lzd:write (if (nth 4 r) (nth 4 r)
+                            (lzd:filename (car r) (cadr r)))
+                        (if (nth 3 r)
+                          (nth 3 r)
+                          (lzd:textblock (lzd:last-lines) nil 1.0))))
+  (if path
+    (progn (setq lzd:*lastfile* path)
+           (lzd:announce (car r) (cadr r) path))
+    (lzd:paste (lzd:last-lines))))
+
+;; Nothing has failed.  Rather than say so and stop, write a report
+;; anyway: it proves the whole path -- folder, permissions, DXF -- works
+;; on THIS machine, which is the question somebody asks precisely when
+;; they are about to need it and cannot afford to find out then.
+(defun lzd:selftest ( / prims path d)
+  (princ "\n[calofin] Nothing has failed in this session, so this is a")
+  (princ "\n[calofin] self test: a report written exactly where a real")
+  (princ "\n[calofin] one would go.")
+  (lzd:disown)
+  (lzd:say "--- LAZDIAG self test: no failure, nothing wrong")
+  (setq prims (lzd:build-prims "LAZDIAG" *lazdiag-version*
+                               "(self test - no failure has occurred)")
+        path  (lzd:write (lzd:filename-kind "LAZDIAG" *lazdiag-version*
+                                            "selftest")
+                         prims))
+  (if path
+    (progn
+      (princ (strcat "\n[calofin] Written: " path))
+      (princ "\n[calofin] Error reports will reach you.  Delete that file.")
+      (setq lzd:*lastfile* path))
+    (progn
+      (princ "\n[calofin] Could NOT write it.  None of these would take it:")
+      (foreach d (lzd:candidates) (princ (strcat "\n[calofin]   " d)))
+      (princ "\n[calofin] Set the AutoCAD environment string")
+      (princ "\n[calofin] CalofinErrorDir to a folder you can write to:")
+      (princ "\n[calofin]   (setenv \"CalofinErrorDir\" \"C:\\\\temp\")")))
+  (lzd:disown)
+  (princ))
+
+(defun c:LAZDIAG ( / *error* oce)
+  (defun *error* (m)
+    (if oce (setvar "CMDECHO" oce))
+    (if (and m (not (lzd:cancel-p m)))
+      (princ (strcat "\nLAZDIAG error: " m)))
+    (if lzd:report (lzd:report "LAZDIAG" *lazdiag-version* m))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZDIAG" *lazdiag-version*))
+  (setq oce (getvar "CMDECHO"))
+  (setvar "CMDECHO" 0)
+  (if lzd:*last* (lzd:again) (lzd:selftest))
+  (setvar "CMDECHO" oce)
+  (princ))
+
+(defun c:LAZDIAGVER ()
+  (princ (strcat "\nLAZDIAG " *lazdiag-version*))
+  (princ))
+
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZDIAG " *lazdiag-version*
+                 " loaded -- a failed calofin command now writes a DXF"
+                 " error report to your Downloads folder; type LAZDIAG to"
+                 " prove that works before you ever need it.")))
 (princ)
 
 
@@ -976,7 +2275,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091026 REV25")
+(setq pool:*version* "091226 REV26")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1184,7 +2483,10 @@
 ;;;  asked for turns red.  The nominal point rings below are what the
 ;;;  guide starts at before any measurement is in -- proportions, not
 ;;;  sizes, since the first answer rescales them.
-(setq pool:*pv-col*  8)         ; guide outline (dark gray)
+(setq pool:*pv-col*  'auto)     ; guide outline: 'auto picks the
+                                ; grey for the background (8 is
+                                ; nearly the stock dark one), a
+                                ; number is used exactly as given
 (setq pool:*pvx-col* 7)         ; cross-dim / measuring line (white)
 (setq pool:*hi-col*  1)         ; the element being asked for (red)
 (setq pool:*pv-margin* 30.0)    ; smallest margin round the guide's zoom
@@ -1683,6 +2985,7 @@
   (cal:osup)
   (initget 7)                           ; no null, no zero, no negative
   (setq v (getdist (strcat "\n" msg ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cal:osdown)
   v)
 
@@ -1812,6 +3115,16 @@
 ;; c:POOL.  nil for a typed POOL, always.
 (setq pool:*nobottom* nil)
 
+;; The other side of that gate, and the reason a FORM can draw without
+;; stopping to talk.  A sheet that carries the hopper chain and the
+;; depths has already said there is a bottom; asking again is the one
+;; question a completely filled LAZFORM sheet could not answer, and it
+;; used to be asked on every single run.  Set by the form, cleared with
+;; pool:*nobottom* on both exits of c:POOL.  nil for a typed POOL,
+;; always, and pool:*nobottom* wins if something ever sets both --
+;; "draw no bottom" is the safer of the two to be wrong about.
+(setq pool:*hasbottom* nil)
+
 ;; Did the form answer KEY at all?  This is the absent/nil distinction
 ;; that (cdr (assoc ...)) throws away.
 (defun pool:fhas (key) (if (assoc key pool:*form*) t nil))
@@ -1923,6 +3236,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cal:osdown)
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -1990,19 +3304,28 @@
 ;; pool:*nobottom* and the gate answers No without appearing.  That is
 ;; the whole of "cover mode" -- one gate, closed.
 ;;
-;; It is a run flag rather than an entry in pool:*form* on purpose.
+;; And the other way: a sheet that HAS the hopper chain and the depths
+;; filled in has already said there is a bottom, so LAZFORM sets
+;; pool:*hasbottom* and the gate answers Yes without appearing.  That
+;; was the one question a completely filled sheet could not answer, and
+;; it used to be asked on every form-driven run.  nobottom wins if both
+;; are somehow set -- "draw no bottom" is the safer way to be wrong.
+;;
+;; Both are run flags rather than entries in pool:*form* on purpose.
 ;; The store is consume-once (an answer is removed as it is read, so a
 ;; range check can escape to the keyboard and Back cannot deadlock),
 ;; which is right for a measurement asked once and wrong for a gate
 ;; that five different shape paths may reach.  A flag answers wherever
 ;; the run happens to land.
 ;;
-;; Like the store, it is cleared on the way out of c:POOL -- both exits
-;; -- so a cover run can never leave the next POOL silently bottomless.
+;; Like the store, both are cleared on the way out of c:POOL -- both
+;; exits -- so neither a cover run nor a form run can leave the next
+;; POOL silently bottomless or silently un-asked.
 (defun pool:askbottom ()
-  (if pool:*nobottom*
-      nil
-      (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil)))
+  (cond
+    (pool:*nobottom* nil)
+    (pool:*hasbottom* t)
+    (t (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))))
 
 ;; Does this treatment cut real geometry off the corner?  NotGiven
 ;; does NOT: its corner is built square, so everything that asks
@@ -2131,7 +3454,7 @@
 (defun pool:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      pool:*pv-col*))
+      (cal:ink pool:*pv-col* 'guide)))
 
 ;; Guide entities for a list of corner-label keys, e.g. '(lA lB), so a
 ;; prompt can light up the letters it names as well as the line.
@@ -2144,7 +3467,7 @@
 
 (defun pool:pvline (p1 p2)
   (pool:line p1 p2 pool:*lay-notes*)
-  (pool:setcol (entlast) pool:*pv-col*))
+  (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))
 
 ;; Guide measuring line -- the cross dims and other ties, drawn WHITE
 ;; and DOTTED so they stand out from the gray pool outline.
@@ -2268,13 +3591,13 @@
     ((= ty "LINED") (pool:pvadd (pool:pvlined (cadr pr) (caddr pr))))
     ((= ty "TEXT")
      (pool:text (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     ((= ty "ARC")
      (pool:arc3p (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     ((= ty "ELL")
      (pool:pvell (cadr pr) (caddr pr) (cadddr pr))
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))))
 
 ;; The two primitives of one field-sheet tie -- the dotted measuring
 ;; line and its letter beside the midpoint.
@@ -4968,7 +6291,7 @@
       ((= (car cc) "Radius")
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                    pool:*lay-notes*)
-       (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))))
+       (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))))
     (setq i (1+ i)))
   pv)
 
@@ -5065,6 +6388,7 @@
                                         (if dflt (strcat " <" (rtos dflt) ">")
                                             "")
                                         ": ")))
+              (if lzd:ask (lzd:ask subject sz))
               (if (null sz) (setq sz dflt))))
         ;; how far this treatment eats along each wall, at the real
         ;; corner angle -- so the cap holds on a 135-degree bend or a
@@ -6082,7 +7406,7 @@
     ((and pvflag pool:*pvcoll*) (pool:pvcput (list "ARC" p mm q)))
     (pvflag
      (pool:arc3p p mm q pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     (t (pool:arc3p p mm q lay))))
 
 ;;; ---------------- oval pool bottom (True Oval sheet) -----------------
@@ -6239,11 +7563,18 @@
                                 nil nil nil '(pool:sugsym ans totv2))
                           (list 'k 'SUG "K - hopper to bottom side" (cdr (assoc "K" pv)) '(m h)
                                 nil nil '(pool:chainrest ans '(m l) totv2))
-                          (list 'tt 'NAX "T - straight side length (check)" (cdr (assoc "T" pv)))))
+                          ;; ttc, not tt.  The hopper's straight-side CHECK
+                          ;; and the PERIMETER's T are two questions on one
+                          ;; run of a Roman -- rm:letters asks 'tt and then
+                          ;; this asked 'tt again -- and the store is
+                          ;; consume-once, so one key could only ever answer
+                          ;; the first of them.  A form that has the side
+                          ;; length sends it to both under its own name.
+                          (list 'ttc 'NAX "T - straight side length (check)" (cdr (assoc "T" pv)))))
               hraw (pool:sq ans 'h) graw (pool:sq ans 'g) r3raw (pool:sq ans 'r3)
               w (pool:sq ans 'w) fraw (pool:sq ans 'f) eraw (pool:sq ans 'e)
               mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
-              tt (pool:sq ans 'tt))
+              tt (pool:sq ans 'ttc))
         (pool:pvkill)
         ;; resolve against tip-to-tip length and side-to-side width
         ;; (both measured out above, before the questions)
@@ -8828,10 +10159,12 @@
     ;; Cover mode is the same hazard, quieter: a leaked flag draws the
     ;; next pool with no bottom and never asks why
     (pool:fclear)
-    (setq pool:*nobottom* nil)
+    (setq pool:*nobottom* nil pool:*hasbottom* nil)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "POOL" pool:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOL" pool:*version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -8927,7 +10260,7 @@
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (pool:fclear)
-  (setq pool:*nobottom* nil)
+  (setq pool:*nobottom* nil pool:*hasbottom* nil)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
@@ -8957,10 +10290,18 @@
                  (if tutorial:*version* tutorial:*version* "not loaded")))
   (princ))
 
-(princ (strcat "\nPOOL " pool:*version*
-               " loaded.  POOL to lay out a pool, POOLVER for the version"
-               (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
-               "."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOL " pool:*version*
+                 " loaded.  POOL to lay out a pool, POOLVER for the version"
+                 (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
+                 ".")))
 (princ)
 
 
@@ -9001,7 +10342,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "090126 REV07")
+(setq pooldemo:*version* "091226 REV08")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -9313,7 +10654,9 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
+    (if lzd:report (lzd:report "POOLDEMO" pooldemo:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
   (if (not (member 'pool:hopcalc (atoms-family 0)))
       (princ "\nPOOL.LSP is not loaded -- APPLOAD it first, then run POOLDEMO.")
@@ -9331,7 +10674,9 @@
     (cal:sysrestore)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "POOLDEMO" pooldemo:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
@@ -9378,8 +10723,16 @@
   (princ (strcat "\nPOOLDEMO " pooldemo:*version*))
   (princ))
 
-(princ (strcat "\nPOOLDEMO " pooldemo:*version*
-               " loaded.  Type POOLDEMO to draw the install-check sheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOLDEMO " pooldemo:*version*
+                 " loaded.  Type POOLDEMO to draw the install-check sheet.")))
 (princ)
 
 
@@ -9416,7 +10769,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "090126 REV07")
+(setq tutorial:*version* "091226 REV08")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -9731,7 +11084,9 @@
     (if (and msg
              (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPOOL error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALPOOL" tutorial:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALPOOL" tutorial:*version*))
 
   (if (null pool:*version*)
       (progn
@@ -9753,7 +11108,9 @@
     (cal:sysrestore)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "TUTORIALPOOL" tutorial:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALPOOL" tutorial:*version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
@@ -9795,8 +11152,16 @@
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
-(princ (strcat "\nTUTORIALPOOL " tutorial:*version*
-               " loaded.  Type TUTORIALPOOL for a guided walkthrough of POOL.LSP."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTUTORIALPOOL " tutorial:*version*
+                 " loaded.  Type TUTORIALPOOL for a guided walkthrough of POOL.LSP.")))
 (princ)
 
 
@@ -9864,14 +11229,16 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.3")
+(setq *poolside-version* "v1.4")
 
 ;;; -------------------- adjustable constants ---------------------------
 
 (setq psd:*base*       (list 0.0 0.0))  ; insertion base for this run
 (setq psd:*pvents*     nil)             ; live guide entities
 (setq psd:*valnotes*   nil)             ; validation problems, for the notes
-(setq psd:*pv-col*     8)               ; guide outline color (dark gray)
+(setq psd:*pv-col*     'auto)           ; guide outline color: 'auto picks
+                                        ; it for the background (grey either
+                                        ; way round), a number is used as given
 (setq psd:*pvx-col*    7)               ; guide measuring-tie color (white)
 (setq psd:*hi-col*     1)               ; highlight color (red)
 
@@ -9938,7 +11305,7 @@
 (defun psd:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      psd:*pv-col*))
+      (cal:ink psd:*pv-col* 'guide)))
 
 ;;; -------------------- guide preview ----------------------------------
 ;;; Everything the guide draws is tracked here, so the *error* handler
@@ -9956,7 +11323,7 @@
 ;; over the outline).
 (defun psd:pvline (p1 p2)
   (psd:line p1 p2 "POOL-NOTES")
-  (psd:setcol (entlast) psd:*pv-col*))
+  (psd:setcol (entlast) (cal:ink psd:*pv-col* 'guide)))
 
 (defun psd:pvtieline (p1 p2)
   (psd:line p1 p2 "POOL-NOTES")
@@ -9981,6 +11348,7 @@
   (cal:osup)
   (initget 7)                           ; no null, no zero, no negative
   (setq v (getdist (strcat "\n" msg ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cal:osdown)
   v)
 
@@ -10004,6 +11372,7 @@
                     (if (eq kind 'REQ) "" " (or NA if not measured)")
                     (if back " [Back]" "")
                     ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cal:osdown)
   (mapcar '(lambda (e c) (psd:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -10305,7 +11674,9 @@
     (psd:pvkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "POOLSIDE" *poolside-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOLSIDE" *poolside-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -10493,8 +11864,16 @@
   (princ (strcat "\nPOOLSIDE " *poolside-version*))
   (princ))
 
-(princ (strcat "\nPOOLSIDE " *poolside-version*
-               " loaded.  Type POOLSIDE to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOLSIDE " *poolside-version*
+                 " loaded.  Type POOLSIDE to run.")))
 (princ)
 
 
@@ -10728,7 +12107,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091026 REV18")
+(setq spa:*version* "091226 REV20")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -10942,7 +12321,10 @@
 ;;;  A grey nominal spa is drawn as soon as the shape is picked and the
 ;;;  element being measured turns red.  The nominal sizes below are what
 ;;;  the guide is drawn at before any measurement is in.
-(setq spa:*pv-col*  8)          ; guide outline (dark gray)
+(setq spa:*pv-col*  'auto)      ; guide outline: 'auto picks the
+                                ; grey for the background (8 is
+                                ; nearly the stock dark one), a
+                                ; number is used exactly as given
 (setq spa:*pvx-col* 7)          ; measuring tie (white)
 (setq spa:*hi-col*  1)          ; the element being asked for (red)
 ;;  The RECTANGLE guide's nominal box.  The octagon and round guides
@@ -10958,6 +12340,8 @@
 (setq spa:*pv-olbl* 20.0)       ; ...and an octagon one, which sits tighter
 (setq spa:*pv-cap* 50.0)        ; biggest treatment the guide will draw,
                                 ; so one huge corner cannot swallow it
+(setq spa:*pv-zoom* 0.35)       ; margin round the real spa when the view
+                                ; leaves the guide for it (of its long side)
 
 ;; ---- the foam sheet
 ;;;
@@ -11060,6 +12444,7 @@
 (setq spa:*advice*    nil)           ; hardware recommendations
 (setq spa:*grade*     nil)           ; from the Spa Cover Details block
 (setq spa:*taper*     nil)
+(setq spa:*blockasked* nil)          ; ...which is offered ONCE a run
 ;;; -------------------- small vector helpers --------------------------
 
 (defun spa:unit (p / d)
@@ -11677,6 +13062,7 @@
                             (t " (or NA if not measured)"))
                       (if back " [Back]" "")
                       ": ")))
+    (if lzd:ask (lzd:ask msg v))
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
@@ -11734,6 +13120,7 @@
                                    (back " [Back]")
                                    (t ""))
                              ": ")))
+    (if lzd:ask (lzd:ask msg v))
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
@@ -11827,7 +13214,7 @@
 (defun spa:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      spa:*pv-col*))
+      (cal:ink spa:*pv-col* 'guide)))
 
 ;; Guide entities for a list of corner-label keys, e.g. '(lA lB).
 (defun spa:lbl (pv keys / out k)
@@ -11844,7 +13231,7 @@
 
 (defun spa:pvline (p1 p2)
   (spa:line p1 p2 spa:*lay-notes* nil)
-  (spa:setcol (entlast) spa:*pv-col*))
+  (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
 
 ;; Guide measuring line, drawn WHITE and DOTTED so it stands out from
 ;; the gray outline.
@@ -11858,7 +13245,7 @@
   (setq e (spa:pvadd (spa:pvlined p q)))
   (spa:text (cal:v+ (cal:mid p q) (list (* 0.5 th) (* 0.5 th)))
             (* 1.2 th) lbl spa:*lay-notes*)
-  (setq et (spa:pvadd (spa:setcol (entlast) spa:*pv-col*)))
+  (setq et (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))))
   (cons lbl (list e et)))
 
 ;; Remove an item (by equality) from a list.
@@ -11878,6 +13265,23 @@
   (foreach e spa:*pvents*
     (if (and e (entget e)) (entdel e)))
   (setq spa:*pvents* nil))
+
+;; The guide comes down and the real outline goes up in its place.
+;;
+;; The two are not the same size: the guide is drawn at a nominal
+;; 240 x 200 whatever the spa measures, so the window the flow zoomed
+;; to for it is the wrong one for the real thing -- a 7-foot spa lands
+;; as a speck in its corner, which reads as nothing at all.  The view
+;; moves with the handover, so the screen is never without a spa on it.
+;; across / up are the real overalls; every flow draws from (0,0) to
+;; (across, up) before the base point is added.
+(defun spa:pvhandover (across up / m)
+  (spa:pvkill)
+  ;; a floor on the margin so a degenerate size still leaves a window
+  (setq m (max 1.0 (* spa:*pv-zoom* (max across up))))
+  (command "_.ZOOM" "_Window"
+           (spa:wp (list (- 0.0 m) (- 0.0 m)))
+           (spa:wp (list (+ across m) (+ up m)))))
 
 ;;; -------------------- report table -----------------------------------
 
@@ -12702,9 +14106,14 @@
 
 ;; Try to read GRADE and TAPER off a Spa Cover Details block.  Sets the
 ;; globals; either may be left nil.  Returns T when something was read.
+;; The offer is recorded whether or not it read anything: skipping it,
+;; or picking a block with no tags on it, is an answer, and asking again
+;; later is the same question a second time.
 (defun spa:readblock ( / sel ed bn att v got)
+  (setq spa:*blockasked* t)
   (cal:osup)
   (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
+  (if lzd:watch (lzd:watch sel))
   (cal:osdown)
   (if sel
       (progn
@@ -12733,14 +14142,20 @@
   ;; reached without going through c:SPA's own consume -- same rules,
   ;; same code, and a no-op when the store was already drained
   (spa:formdetails)
-  (if (and (null spa:*grade*) (null spa:*taper*))
-      (spa:readblock))                  ; not offered earlier -- offer now
+  ;; The pick is offered once a run, up front in c:SPA -- where the
+  ;; drafter's own drawing is still on the screen to click, which by
+  ;; here it need not be.  Skipping it there settled the question: the
+  ;; taper is typed below instead.  A caller that reached this point
+  ;; without going through c:SPA's own read is still offered it.
+  (if (and (null spa:*blockasked*) (null spa:*grade*) (null spa:*taper*))
+      (spa:readblock))
   (if (null spa:*grade*) (setq spa:*grade* "STANDARD"))
   (if (spa:thermop) (setq spa:*taper* spa:*thermotaper*))
   ;; getstring cannot take keywords, so Back is typed like a value here
   ;; -- B, BACK, U or UNDO alone, any case -- as the prompt says
   (while (null spa:*taper*)
     (setq v (getstring "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8) [type B to go Back]: "))
+    (if lzd:ask (lzd:ask "spa:askdetails" v))
     (if (spa:backstr v)
         (setq spa:*taper* 'CAL-BACK)
         (progn
@@ -13199,7 +14614,7 @@
       ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                   spa:*lay-notes* nil)
-       (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))))
+       (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))))
     (setq i (1+ i)))
   pv)
 
@@ -13315,7 +14730,7 @@
     (spa:text (cal:v+ (car pr)
                       (cal:v* (spa:unit (cal:v- (car pr) cen)) spa:*pv-lbl*))
               spa:*pv-th* (cadr pr) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) spa:*pv-col*)
+    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
           all (cons ent all)
           pv (cons (cons (spa:lblkey (cadr pr)) (list ent)) pv)))
   (setq spa:*pvents* all)
@@ -13424,7 +14839,6 @@
           nil)))
 
   (spa:stages (list 'rc:sides 'rc:corners))
-  (spa:pvkill)
 
   ;; -------------------------------------------------- hinges, asked now
   ;; The hinge questions come BEFORE anything is drawn because their
@@ -13432,6 +14846,12 @@
   ;; can dodge is dodged by turning the cover instead, and there is no
   ;; turning it once it is on the screen.  The hinges themselves are
   ;; drawn at the end, on whichever outline they belong to.
+  ;;
+  ;; The guide stays up across them, treatments and all.  It is the
+  ;; only spa on the screen until the real one is drawn below, and
+  ;; these questions name its corners and its walls -- taking it away
+  ;; as the corners were answered left the drafter looking at an empty
+  ;; screen for the rest of the questions.
   (spa:hingeask)
 
   ;; -------------------------------------------------- orientation
@@ -13467,6 +14887,8 @@
         mode1 spa:*mode*)
 
   ;; ------------------------------------------- draw the first outline
+  ;; the guide has done its work: it comes off as this goes on
+  (spa:pvhandover w l)
   (spa:drawrect quad corners)
 
   ;; ------------------------------------------- and, if wanted, the other
@@ -13706,7 +15128,7 @@
   (foreach p npts
     (spa:text (spa:lbloff p cen npts spa:*pv-olbl*) spa:*pv-th*
               (nth k spa:*octnames*) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) spa:*pv-col*)
+    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
           all (cons ent all)
           pv (cons (cons (spa:lblkey (nth k spa:*octnames*)) (list ent)) pv)
           k (1+ k)))
@@ -13756,7 +15178,6 @@
         s2raw (spa:sq ans 's2)
         ovres (spa:octov aov bov sraw traw s1raw vraw s2raw)
         s (car ovres) tv (cadr ovres) s1 (caddr ovres) v (cadddr ovres))
-  (spa:pvkill)
 
   ;; the sheet letters must close POSITIVE against the overalls; one
   ;; that does not fit is adjusted and the report says so
@@ -13778,7 +15199,9 @@
         (spa:valnote "V LONGER THAN A - ADJUSTED")))
 
   ;; -------------------------------------------------- hinges, asked now
-  ;; before anything is drawn, so a spillaway can still turn the spa
+  ;; before anything is drawn, so a spillaway can still turn the spa --
+  ;; and with the guide still up, because it is the only spa on the
+  ;; screen until the real one is drawn below
   (spa:hingeask)
 
   ;; -------------------------------------------------- orientation
@@ -13808,6 +15231,7 @@
 
   ;; ------------------------------------------- draw the first outline
   ;; one closed polyline, not eight loose lines
+  (spa:pvhandover bov aov)
   (spa:perpoly (mapcar '(lambda (p) (cons p 0.0)) pts))
 
   ;; ------------------------------------------- and, if wanted, the other
@@ -13969,7 +15393,7 @@
 (defun spa:roundpreview ( / cen pv)
   (setq cen (list 120.0 120.0))
   (spa:body-round cen 240.0 240.0 spa:*lay-notes* nil)
-  (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))
+  (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
   (setq pv (list
     (spa:pvtie (list 0.0 285.0) (list 240.0 285.0) "B" spa:*pv-tie*)
     (spa:pvtie (list -50.0 0.0) (list -50.0 240.0) "A" spa:*pv-tie*)))
@@ -14010,10 +15434,11 @@
               bov (spa:sq ans 'b)
               aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov)))
       (setq aov bov))
-  (spa:pvkill)
 
   ;; hinges are asked before anything is drawn, so a spillaway can still
-  ;; turn the spa (a round one turns too: the spillway travels with it)
+  ;; turn the spa (a round one turns too: the spillway travels with it),
+  ;; and the guide stays up across them -- it is the only spa on the
+  ;; screen until the real one is drawn below
   (spa:hingeask)
 
   ;; an out-of-round spa lies with its long overall west to east, unless
@@ -14035,6 +15460,7 @@
         th (max spa:*th-min* (/ (max bov aov) spa:*th-div*))
         spa:*dashlt* (spa:ltload "DASHED")
         mode1 spa:*mode*)
+  (spa:pvhandover bov aov)
   (spa:perround cen bov aov)
   (if (> (abs (- aov bov)) 1.0e-6)
       (princ "\nThe two overalls differ, so the spa is drawn as an ellipse.")
@@ -14186,7 +15612,9 @@
     (spa:pvkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "SPA" spa:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPA" spa:*version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -14202,7 +15630,8 @@
         spa:*hingerows* nil
         spa:*advice* nil
         spa:*grade* nil
-        spa:*taper* nil)
+        spa:*taper* nil
+        spa:*blockasked* nil)
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
@@ -14215,9 +15644,13 @@
   ;; The Spa Cover Details block is read UP FRONT because its grade can
   ;; settle the next question outright: a Thermo-Light cover's water's
   ;; edge and cover size are the same thing, so there is nothing to ask
-  ;; and nothing to add later.  Skipping here just defers the block to
-  ;; the hinge pass.
+  ;; and nothing to add later.  It is also the ONE place it is asked
+  ;; for: here the drafter's own drawing is still on the screen to
+  ;; click, which after the guide goes up it is not.  Skipping is an
+  ;; answer -- the taper is typed in the hinge pass instead, and a
+  ;; Thermo-Light grade is simply never read.
   (princ "\nThe Spa Cover Details block sets the grade and taper.")
+  (princ "\n(asked once -- skip it and any taper the hinges need is typed later)")
   (spa:readblock)
   ;; the form's grade/taper land HERE, before the Thermo-Light branch,
   ;; so a form grade of THERMOLIGHT behaves exactly like the block's
@@ -14305,10 +15738,18 @@
                  (if tut:*version* tut:*version* "not loaded")))
   (princ))
 
-(princ (strcat "\nSPA " spa:*version*
-               " loaded.  SPA to draw, SPAVER for the version"
-               (if tut:*version* ", TUTORIALSPA to learn it" "")
-               "."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPA " spa:*version*
+                 " loaded.  SPA to draw, SPAVER for the version"
+                 (if tut:*version* ", TUTORIALSPA to learn it" "")
+                 ".")))
 (princ)
 
 
@@ -14345,7 +15786,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "090826 REV11")
+(setq tut:*version* "091226 REV13")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -14400,9 +15841,11 @@
 (setq tut:*asks*
   (list
     "1.  The Spa Cover Details block -- picked FIRST, because its GRADE"
-    "    decides what comes next.  Enter skips it; the hinge pass will"
-    "    ask again.  GRADE and TAPER are read off the tags, and the"
-    "    'Grade:' / 'Taper:' prefixes are stripped."
+    "    decides what comes next, and because your own drawing is still"
+    "    on the screen to click.  ASKED ONCE: Enter skips it and the"
+    "    taper is typed at the hinge pass instead.  GRADE and TAPER are"
+    "    read off the tags, and the 'Grade:' / 'Taper:' prefixes are"
+    "    stripped."
     "2.  Water's edge or cover size.  NOT asked on Thermo-Light -- the"
     "    two are the same thing there, so it draws the cover size."
     "3.  Shape: Rectangle, Octagon or Round."
@@ -14424,10 +15867,12 @@
     "    Asked one at a time, corner A's answer autofills B, C and D"
     "    -- Enter accepts."
     "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No,"
-    "    then the grade and taper if the block did not give them."
+    "    then the taper, typed, if the block did not give it."
     "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
     "    is dodged by turning the spa, and nothing already on the screen"
     "    can be turned.  The hinges are drawn at the end all the same."
+    "    The grey guide spa stays up across these, and comes down only"
+    "    as the real outline goes up in its place."
     "8.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
     "    Skipped on Thermo-Light."))
@@ -14795,7 +16240,9 @@
     (cal:dimstyrestore)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "TUTORIALSPA" tut:*version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALSPA" tut:*version*))
 
   (if (null spa:*version*)
       (progn
@@ -14826,8 +16273,16 @@
         (if *pop-error-mode* (*pop-error-mode*))
         (princ))))
 
-(princ (strcat "\nTUTORIALSPA " tut:*version*
-               " loaded.  Type TUTORIALSPA to walk through SPA."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTUTORIALSPA " tut:*version*
+                 " loaded.  Type TUTORIALSPA to walk through SPA.")))
 (princ)
 
 
@@ -15066,7 +16521,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.6")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.7")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -15101,7 +16556,11 @@
 (setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
-(setq oasis:*guidecolor* 8)
+(setq oasis:*guidecolor* 'auto)        ; 'auto picks it for the background:
+                                       ; 8 on a light one, a lighter grey on
+                                       ; a dark one, where 8 is very nearly
+                                       ; the background itself.  A number is
+                                       ; used exactly as given
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
 ;; Two styles, because the two drawings are read differently: the pool
@@ -15657,6 +17116,7 @@
       (setq v (getkword (strcat "\n" msg " [" shown
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((member v '("Back" "Undo")) 'OASIS-BACK)
             ((null v) (if dflt dflt (oasis:askkw msg kws shown dflt back)))
             (t v)))))
@@ -15694,6 +17154,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -16823,6 +18284,7 @@
   (if back (initget "Back Undo"))
   (setq v (getpoint (strcat "\nInsertion base point <0,0>"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "oasis:askbase" v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
@@ -16933,6 +18395,7 @@
     (t
      (initget 7 "Line Back Undo")
      (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
+     (if lzd:ask (lzd:ask msg v))
      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
            ((= (type v) 'STR) "LINE")
            (t v)))))
@@ -16949,6 +18412,7 @@
     (progn
       (initget 0 "Back Undo")
       (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
             ((null v) 0.0)
             (t v)))))
@@ -17018,6 +18482,7 @@
     (progn
       (initget 0 "Tie Back Undo")
       (setq v (getdist (strcat "\n" msg " [Tie/Back] <0>: ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
             ((= (type v) 'STR) "TIE")
             ((null v) 0.0)
@@ -17634,6 +19099,7 @@
     (initget 7 "Back Undo")
     (setq v (getint (strcat "\n" msg " -- tangency change 1-" (itoa n)
                             " [Back]: ")))
+    (if lzd:ask (lzd:ask msg v))
     (cond ((and (= (type v) 'STR) (member v '("Back" "Undo")))
            (setq v 'OASIS-BACK))
           ((and (= (type v) 'INT) (<= v n)))
@@ -17647,6 +19113,7 @@
 (defun oasis:asknear (msg arcs base / v)
   (initget 1 "Back Undo")
   (setq v (getpoint (strcat "\n" msg " [Back]: ")))
+  (if lzd:ask (lzd:ask msg v))
   (if (and (= (type v) 'STR) (member v '("Back" "Undo")))
       'OASIS-BACK
       (oasis:ringnear arcs (list (- (car v) (car base))
@@ -17922,6 +19389,7 @@
                 (strcat "\nHopper offset in from the wall [Back] <"
                         (rtos (cond (oasis:*hopoff-last*) (oasis:*hopoff*)))
                         ">: ")))
+    (if lzd:ask (lzd:ask "oasis:askhopoff" off))
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
        (setq bot 'OASIS-BACK))
@@ -18101,7 +19569,9 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nOASIS error: " msg)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "OASIS" *oasis-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "OASIS" *oasis-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain and the UNDO close above; harmless no-op guard on
@@ -18132,7 +19602,8 @@
          (command "_.UNDO" "_Begin")
          (setq undo-open T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
-     (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
+     (cal:ensure-layer oasis:*guidelayer*
+                        (cal:ink oasis:*guidecolor* 'guide))
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
 
      ;; -- which shape, where it goes, and then the eight measurements,
@@ -18308,8 +19779,16 @@
   (princ (strcat "\nOASIS " *oasis-version*))
   (princ))
 
-(princ (strcat "\nOASIS " *oasis-version*
-               " loaded.  Type OASIS to draw a continuous-tangent pool."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nOASIS " *oasis-version*
+                 " loaded.  Type OASIS to draw a continuous-tangent pool.")))
 (princ)
 
 
@@ -18409,7 +19888,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.7")
+(setq *abcdef-version* "v5.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -19901,7 +21380,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nABCDEF error: " msg)))
+    (if lzd:report (lzd:report "ABCDEF" *abcdef-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCDEF" *abcdef-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -20280,8 +21761,16 @@
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
 
-(princ (strcat "\nABCDEF.lsp rev " *abcdef-version*
-               " loaded.  Type ABCDEF to plot points from a spreadsheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABCDEF.lsp rev " *abcdef-version*
+                 " loaded.  Type ABCDEF to plot points from a spreadsheet.")))
 (princ)
 
 
@@ -20522,6 +22011,67 @@
 ;;;   answer and re-asks the number, because a typo is the other way
 ;;;   to get here and Enter must not plot a point from one.
 ;;;
+;;; MORE THAN ONE AB LINE ON THE SHEET.  A drawing can carry two
+;;; surveys - two pools in one yard, or two field sheets merged - and
+;;; then it carries two points named A, two named B, and two of every
+;;; Pt.## after them.  Which pair of stakes a point was taped off is
+;;; then a real question, and the wrong answer draws two ties that
+;;; measure nothing: Pt.1 off the OTHER survey's stakes is not a
+;;; reading anybody took.
+;;;
+;;; An AB LINE is one such pair.  They are worked out once, at the top
+;;; of the run: every A is paired with a B shortest tie first, each
+;;; stake claimed once - a pair of stakes is set out together and
+;;; stands a couple of tape lengths apart, so the shortest tie still
+;;; going is the pair that was set out - and they are labelled L1, L2
+;;; in the order their A stakes appear in the drawing.  A point belongs
+;;; to the line it sits nearest.
+;;;
+;;; A drawing with ONE pair of stakes makes one line, and none of this
+;;; is ever asked or printed.  It is a sheet with two that asks, and it
+;;; asks once:
+;;;
+;;;   * ABFIND and ABMOVE read the line off the FIRST point they are
+;;;     given.  Name a number only one point carries and it is simply
+;;;     taken, and the line it sits on is reported.  Name one that
+;;;     several carry and every one of them is ringed on screen and
+;;;     labelled with its line, with what each was taped at off ITS OWN
+;;;     stakes printed beside it - which is what the field sheet has,
+;;;     and so what tells them apart:
+;;;
+;;;         2 points are numbered "1" - one per AB line, ringed and
+;;;         labelled on screen.
+;;;          tag   A             B
+;;;          ----  ------------  ------------
+;;;          L1    21'-1"        18'-6"
+;;;          L2    16'-4"        22'-0"
+;;;
+;;;         Which AB line is Pt.1 on - click the one you mean, or type
+;;;         its label [Back] <Enter = none>:
+;;;
+;;;   * ABPCREATE has no point to read it off - the point does not
+;;;     exist yet, which is the whole reason for the command - so it
+;;;     asks off the LINES themselves, each ringed at its two stakes
+;;;     with the tie between them dashed and labelled.  So does either
+;;;     of the other two when the number it was given names no point
+;;;     and the answer to "create it?" was Yes.
+;;;
+;;; AND THEN IT STAYS THERE.  The answer is the run's: every point
+;;; after it is taken to be on the same line, so a second doubled
+;;; number is resolved from it and only reported -
+;;;
+;;;     2 points are numbered "2" - the one on L2 taken.
+;;;
+;;; - and the ties are measured from that line's stakes.  Only a number
+;;; whose points include none on that line asks again, because then the
+;;; assumption has nothing to stand on.  A CLICK is never asked about
+;;; either way: it names the point it landed on, whatever that point is
+;;; numbered.
+;;;
+;;; Two points numbered the same ON ONE LINE is a fault in the drawing
+;;; rather than a second survey, and it is still answerable: the second
+;;; takes a letter after the label (L1, L1b).
+;;;
 ;;; THE STAKES.  A and B are looked up by name among the survey points,
 ;;; the same way any other point is: an "ab_pt" INSERT anywhere or any
 ;;; other INSERT on the POINTS layer, named by its "number" attribute
@@ -20540,7 +22090,11 @@
 ;;; prompt re-asks -- nothing is drawn from a typo or a stray click.
 ;;;
 ;;; Going back a step follows the shared Back convention (see the root
-;;; README).  In ABFIND, B/BACK/U/UNDO typed at the point number undoes
+;;; README).  Back at either of the two questions above re-asks the one
+;;; in front of it: at the ringed points, the point number; at the AB
+;;; lines, the point number that offered to create one - and nothing,
+;;; in an ABPCREATE run, where it is the first question of all.
+;;; In ABFIND, B/BACK/U/UNDO typed at the point number undoes
 ;;; the whole of the last round -- its ties, and, if that round moved a
 ;;; point, the moved point, its ring and its note, with the original
 ;;; ties put back.  Back at "Move Pt.17?" un-draws that point's ties
@@ -20571,7 +22125,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.12")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.15")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -20640,10 +22194,12 @@
                                     ; of the tag height - how long the
                                     ; strip a click on a tag can land
                                     ; on is taken to be
-(setq abf:*locus-color*  8)         ; colour of the guide line each
+(setq abf:*locus-color*  'auto)     ; colour of the guide line each
                                     ; group of suggestions sits on:
                                     ; grey, so it reads as a guide and
-                                    ; not as drawn work
+                                    ; not as drawn work.  'auto picks
+                                    ; the grey for the background; a
+                                    ; number is used exactly as given
 (setq abf:*locus-ltype*  "DASHED")  ; and its linetype - created at
                                     ; pool scale when the drawing has
                                     ; no linetype by that name
@@ -20653,6 +22209,23 @@
                                     ; in abf:*locus-ltype*: red, so a
                                     ; pair that cannot cross reads as
                                     ; wrong at a glance
+(setq abf:*dupe-color*   4)         ; colour of the ring round each
+                                    ; point a number names when it
+                                    ; names more than one, and round
+                                    ; the stakes of each AB line: cyan,
+                                    ; so a real point being chosen
+                                    ; between never reads as a
+                                    ; suggestion (abf:*sug-color*) or
+                                    ; as a point already ringed
+(setq abf:*dupe-radius*  9.0)       ; radius of that ring - wider than
+                                    ; abf:*sug-radius* and than the
+                                    ; ring round a moved point, so the
+                                    ; three never read as one mark
+(setq abf:*line-prefix*  "L")       ; what an AB line is called, on
+                                    ; screen and at the prompt: the
+                                    ; lines are L1, L2, ... in the
+                                    ; order their A stakes appear in
+                                    ; the drawing
 (setq abf:*new-atts*     nil)       ; T makes a CREATED point copy the
                                     ; other attribute values of the
                                     ; point it was patterned on (an
@@ -20720,6 +22293,7 @@
 (defun abf:askfirst (msg endtext / v)
   (initget 6 "Back Undo")
   (setq v (getdist (strcat "\n" msg " [Back] <Enter = " endtext ">: ")))
+  (if lzd:ask (lzd:ask msg v))
   (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK v))
 
 ;;; ---------------------- layers ----------------------------------------
@@ -20815,14 +22389,21 @@
     (rtos (distof s 2) 2 8)
     s))
 
-;; The survey point the typed number names, or nil.  The first match
-;; wins when a drawing carries the same number twice.
-(defun abf:find-point (s cands / want found c)
-  (setq want (abf:canon s) found nil)
+;; EVERY survey point a typed number names, in drawing order.  More
+;; than one of them is a sheet carrying more than one survey - see
+;; "the AB lines" below, where the caller finds out which is meant.
+(defun abf:matches (s cands / want out c)
+  (setq want (abf:canon s) out nil)
   (foreach c cands
-    (if (and (null found) (= (abf:canon (abf:cd-nm c)) want))
-      (setq found c)))
-  found)
+    (if (= (abf:canon (abf:cd-nm c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;; The survey point the typed number names, or nil - the first when a
+;; drawing carries the same number twice.  Every prompt that can ASK
+;; about a duplicate goes through abf:matches instead; this one is for
+;; the places where the question is only "is this number taken?".
+(defun abf:find-point (s cands)
+  (car (abf:matches s cands)))
 
 ;; The survey point nearest to pick PK, when one sits within
 ;; abf:*snap* of it; nil otherwise.  Returns the ((x y z) . name) pair.
@@ -21013,6 +22594,156 @@
               (+ (cadr m) (* dist (/ dx d)))
               0.0)
         m))))
+
+;;; ---------------------- the AB lines ----------------------------------
+;;; A sheet can carry more than one survey, and each brings its own pair
+;;; of stakes and its own numbering: two points named A, two named B,
+;;; and two of every Pt.## after them.  An AB LINE is one such pair, and
+;;; it is what tells those duplicates apart - Pt.1 taped off THIS A and
+;;; B is a different point from the Pt.1 taped off the other pair, and
+;;; the two ties ABFIND draws are only right if they run to the stakes
+;;; the point was actually surveyed from.
+;;;
+;;; A line is (index a-position b-position tag), the tag being "L1",
+;;; "L2": both its label on screen and the answer you type.  A drawing
+;;; with one pair of stakes makes one line and nothing here is ever
+;;; asked; a drawing that names no stakes makes none, and its stakes are
+;;; clicked the way they always were.
+
+(defun abf:ln-ix  (l) (car    l))
+(defun abf:ln-a   (l) (cadr   l))
+(defun abf:ln-b   (l) (caddr  l))
+(defun abf:ln-tag (l) (cadddr l))
+
+;; Insert (distance a b) into LST, shortest tie first.
+(defun abf:ins-pair (p lst / out done q)
+  (setq out nil done nil)
+  (foreach q lst
+    (if (and (null done) (< (car p) (car q)))
+      (setq done T out (cons p out)))
+    (setq out (cons q out)))
+  (if (null done) (setq out (cons p out)))
+  (reverse out))
+
+;; The AB lines the drawing carries.  Every A is paired with a B,
+;; shortest tie first, each stake claimed once: a pair of stakes is set
+;; out together and stands a couple of tape lengths apart, so the
+;; shortest tie still going is the pair that was set out.  They are
+;; NUMBERED in the order their A stakes appear in the drawing, so L1 is
+;; the first A on the sheet however the pairing fell out.  A stake left
+;; over - three As and two Bs - joins no line, and the caller says so.
+(defun abf:lines (cands / as bs raw a b d p useda usedb pairs out ix)
+  (setq as  (abf:matches abf:*a-name* cands)
+        bs  (abf:matches abf:*b-name* cands)
+        raw nil)
+  (foreach a as
+    (foreach b bs
+      (setq d (cal:dist (abf:cd-pt a) (abf:cd-pt b)))
+      (if (> d abf:*fuzz*)
+        (setq raw (abf:ins-pair (list d a b) raw)))))
+  (setq pairs nil useda nil usedb nil)
+  (foreach p raw
+    (if (and (null (member (cadr  p) useda))
+             (null (member (caddr p) usedb)))
+      (setq useda (cons (cadr  p) useda)
+            usedb (cons (caddr p) usedb)
+            pairs (cons p pairs))))
+  (setq out nil ix 0)
+  (foreach a as
+    (foreach p pairs
+      (if (equal (cadr p) a)
+        (setq ix  (1+ ix)
+              out (cons (list ix (abf:cd-pt a) (abf:cd-pt (caddr p))
+                              (strcat abf:*line-prefix* (itoa ix)))
+                        out)))))
+  (reverse out))
+
+;; How many stakes joined no line: the odd A in a drawing with three of
+;; them and two Bs.  Worth saying out loud - it means a survey on the
+;; sheet has no pair to be measured from.
+(defun abf:spare-stakes (cands lines)
+  (- (+ (length (abf:matches abf:*a-name* cands))
+        (length (abf:matches abf:*b-name* cands)))
+     (* 2 (length lines))))
+
+;; The AB line a point belongs to: the one whose A-B line it sits
+;; nearest.  A survey is taped from its own two stakes and falls around
+;; them, so the nearest pair is the pair it was taped from - and the
+;; readings printed beside each candidate let the drafter check that
+;; against the field sheet before answering.  nil when there are no
+;; lines at all.
+(defun abf:line-of (p lines / best bd l d)
+  (setq best nil bd nil)
+  (foreach l lines
+    (setq d (abf:seg-dist (cal:2d p) (cal:2d (abf:ln-a l))
+                          (cal:2d (abf:ln-b l))))
+    (if (or (null bd) (< d bd)) (setq best l bd d)))
+  best)
+
+;; T when point P belongs to line L.
+(defun abf:on-line-p (p l lines / hit)
+  (and l
+       (setq hit (abf:line-of p lines))
+       (= (abf:ln-ix hit) (abf:ln-ix l))))
+
+;; The ones of HITS that belong to L, in the order they were given.
+(defun abf:on-line (hits l lines / out c)
+  (setq out nil)
+  (foreach c hits
+    (if (abf:on-line-p (abf:cd-pt c) l lines) (setq out (cons c out))))
+  (reverse out))
+
+;; The survey points the field side is read off: one line's own, so one
+;; survey never votes on which side of another survey's A-B line its
+;; pool sits.  Everything, when the drawing makes no lines at all.
+(defun abf:line-pts (l lines cands / out c)
+  (if (null l)
+    cands
+    (progn
+      (setq out nil)
+      (foreach c cands
+        (if (abf:on-line-p (abf:cd-pt c) l lines) (setq out (cons c out))))
+      (reverse out))))
+
+;; T when TAG is already one of the labels in LST.
+(defun abf:tag-used-p (tag lst / hit c)
+  (setq hit nil)
+  (foreach c lst (if (= (car c) tag) (setq hit T)))
+  hit)
+
+;; The points a doubled number names, each labelled with the AB line it
+;; belongs to, as (tag position nil point): (tag position ...) is what
+;; abf:ask-tag reads a click against, and the point is what the answer
+;; stands for.  The label IS the line, because the line is what the
+;; question is really about - so two points on the SAME line, which is
+;; one survey having used a number twice rather than a second survey,
+;; take a letter after it (L1, L1b) so they can still be told apart.
+(defun abf:dupe-tags (hits lines / out c l base tag n)
+  (setq out nil)
+  (foreach c hits
+    (setq l    (abf:line-of (abf:cd-pt c) lines)
+          base (if l (abf:ln-tag l) "?")
+          tag  base
+          n    1)
+    (while (abf:tag-used-p tag out)
+      (setq n   (1+ n)
+            tag (strcat base (chr (+ 96 n)))))
+    (setq out (cons (list tag (abf:cd-pt c) nil c) out)))
+  (reverse out))
+
+;; The entry of such a list whose label reads S.
+(defun abf:dupe-by-tag (s lst / hit c)
+  (setq s (strcase (cal:trim s)) hit nil)
+  (foreach c lst
+    (if (and (null hit) (= (strcase (car c)) s)) (setq hit c)))
+  hit)
+
+;; The line whose tag reads S, whatever case it was typed in.
+(defun abf:line-by-tag (s lines / hit l)
+  (setq s (strcase (cal:trim s)) hit nil)
+  (foreach l lines
+    (if (and (null hit) (= (strcase (abf:ln-tag l)) s)) (setq hit l)))
+  hit)
 
 ;;; ---------------------- readings and misreadings ----------------------
 
@@ -21745,6 +23476,102 @@
                  (cons 40 rad)))
   (list (entlast)))
 
+;; A ring round something the run is asking the drafter to choose
+;; between: one of several points a number names, or the stakes of one
+;; AB line.  Wider than a suggestion's marker and a different colour,
+;; because what it rings is a REAL point already in the drawing, not a
+;; place one might move to.  Scaffolding all the same - the suggestion
+;; layer, swept at the end of the round.
+(defun abf:dupe-ring (p)
+  (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                 (cons 8 abf:*sug-layer*)
+                 (cons 62 abf:*dupe-color*) '(100 . "AcDbCircle")
+                 (list 10 (car p) (cadr p) 0.0)
+                 (cons 40 abf:*dupe-radius*)))
+  (list (entlast)))
+
+;; The tag that says which one it is, up and to the right of the ring so
+;; it clears both the ring and the point's own number underneath it.
+(defun abf:dupe-tag (p tag)
+  (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                 (cons 8 abf:*sug-layer*)
+                 (cons 62 abf:*dupe-color*) '(100 . "AcDbText")
+                 (list 10 (+ (car  p) abf:*dupe-radius*)
+                          (+ (cadr p) abf:*dupe-radius*) 0.0)
+                 (cons 40 abf:*sug-hgt*) (cons 1 tag)))
+  (list (entlast)))
+
+;; One of several points a number names: ringed, and labelled with the
+;; AB line it belongs to.  The label is the answer, so two points on the
+;; SAME line - a number a survey used twice, which is a drawing fault
+;; rather than a second survey - are told apart by a letter after it.
+(defun abf:mark-dupe (p tag)
+  (append (abf:dupe-ring p) (abf:dupe-tag p tag)))
+
+;; One AB line drawn whole: both stakes ringed, the tie between them
+;; dashed, and the line's tag at the middle of it.  This is what
+;; ABPCREATE shows when it asks which line a point it is about to plot
+;; belongs to - there is no point to ring yet, so the lines themselves
+;; are what is picked between.
+(defun abf:mark-line (l / out)
+  (abf:ensure-dashed)
+  (setq out (append (abf:dupe-ring (abf:ln-a l))
+                    (abf:dupe-ring (abf:ln-b l))))
+  (entmake (list '(0 . "LINE") '(100 . "AcDbEntity")
+                 (cons 8 abf:*sug-layer*)
+                 (cons 62 abf:*dupe-color*)
+                 (cons 6 abf:*locus-ltype*) '(100 . "AcDbLine")
+                 (list 10 (car (abf:ln-a l)) (cadr (abf:ln-a l)) 0.0)
+                 (list 11 (car (abf:ln-b l)) (cadr (abf:ln-b l)) 0.0)))
+  (setq out (append out (list (entlast))))
+  (append out (abf:dupe-tag (abf:loc (abf:ln-a l) (abf:ln-b l) 0.0)
+                            (abf:ln-tag l))))
+
+;; How far a click landed from one of the things on screen: from the
+;; point, or - for an AB line, which is given as its two stakes - from
+;; the tie itself, so anywhere along it picks that line.
+(defun abf:tag-dist (pk s)
+  (if (caddr s)
+    (abf:seg-dist (cal:2d pk) (cal:2d (cadr s)) (cal:2d (caddr s)))
+    (cal:dist pk (cadr s))))
+
+;; Which of the ringed things was meant.  ONE prompt, the way stage 4
+;; asks about suggestions: click the one you want, or type its tag.
+;; SPOTS is ((tag position [second-position]) ...).  A click takes the
+;; NEAREST - there is nothing else on the layer to hit, and what was
+;; taken is read back before anything is drawn from it - so no click is
+;; refused for being a few feet out.  Returns the tag, 'CAL-BACK, or
+;; nil for Enter.
+(defun abf:ask-tag (msg spots back / ans best bd s d)
+  (initget 128)
+  (setq ans (getpoint (strcat msg (if back " [Back]" "")
+                              " <Enter = none>: ")))
+  (if lzd:ask (lzd:ask msg ans))
+  (cond
+    ((null ans) nil)
+    ((and (not (listp ans)) (cal:back-word-p ans))
+     (if back
+       'CAL-BACK
+       (progn (princ "\n  Nothing to step back to.") 'ABF-AGAIN)))
+    ((listp ans)
+     (setq best nil bd nil)
+     (foreach s spots
+       (setq d (abf:tag-dist ans s))
+       (if (or (null bd) (< d bd)) (setq best (car s) bd d)))
+     best)
+    (t
+     (setq best nil)
+     (foreach s spots
+       (if (and (null best)
+                (= (strcase (cal:trim ans)) (strcase (car s))))
+         (setq best (car s))))
+     (if best
+       best
+       (progn (princ (strcat "\n  \"" ans "\" is not one of the labels"
+                             " - type one of them, or click the one you"
+                             " want."))
+              'ABF-AGAIN)))))
+
 ;; One suggestion on screen: its marker, and its tag hung off the arc at
 ;; SPOT (abf:tag-spots, or abf:create-spots) on a leader from the
 ;; marker.  A tag whose direction would read upside down is turned round
@@ -21881,7 +23708,7 @@
       (abf:ensure-dashed)
       (entmake (list '(0 . "ARC") '(100 . "AcDbEntity")
                      (cons 8 abf:*sug-layer*)
-                     (cons 62 abf:*locus-color*)
+                     (cons 62 (cal:ink abf:*locus-color* 'guide))
                      (cons 6 abf:*locus-ltype*)
                      '(100 . "AcDbCircle")
                      (list 10 (car ctr) (cadr ctr) 0.0)
@@ -21943,7 +23770,8 @@
                        pair sugs temps c kws shown ans sug havestyle
                        np newpt newnm tried lasthold ments ring note
                        npair spots hits h astep movep createp near ra rb
-                       why fromfind built deft tmpl pents mk)
+                       why fromfind built deft tmpl pents mk
+                       lines curln pend lsel dtag dupes l)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -21958,7 +23786,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" (if cmd cmd "ABFIND") " error: " m)))
+    (if lzd:report (lzd:report "ABFIND" *abfind-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "ABFIND" *abfind-version*))
 
   (setq movep   (eq mode 'MOVE)
         ;; createp is the ROUND, not the command: ABFIND and ABMOVE
@@ -21987,35 +23817,72 @@
                        (strcat "  Click one, or type its number as it"
                                " reads in the drawing (\"35\" or"
                                " \"Pt.35\")."))))
-      ;; -- the two stakes, before OSMODE goes down: a drawing that
-      ;;    does not name them wants object snap for the clicks
-      ;; the two stakes are a chain: Back at B re-asks A.  Back is only
-      ;; ON THE TABLE when A was CLICKED - when the drawing names it
-      ;; there is no question behind this one, and re-asking it would
-      ;; find the same point again and walk straight forward, which is a
-      ;; deadlock rather than a way back (STANDARDS 7.2, same reason).
-      (setq astep 1)
-      (while (<= astep 2)
-        (cond
-          ((= astep 1)
-           (setq pa    (abf:stake abf:*a-name* cands nil)
-                 astep 2))
-          ((= astep 2)
-           (if (null pa)
-             (setq astep 3)
-             (progn
-               (setq pb (abf:stake abf:*b-name* cands
-                                   (null (abf:find-point abf:*a-name* cands))))
-               (if (eq pb 'CAL-BACK)
-                 (progn (princ "\n  Stepping back one stake.")
-                        (setq pb nil astep 1))
-                 (setq astep 3)))))))
+      ;; -- the stakes.  A sheet can carry more than one survey, and
+      ;;    then it carries more than one A, more than one B, and more
+      ;;    than one of every number after them.  abf:lines pairs the
+      ;;    stakes up into AB LINES; which line the run is on decides
+      ;;    which stakes the ties are measured from AND which of two
+      ;;    points numbered the same is meant.
+      (setq lines (abf:lines cands)
+            curln nil
+            pend  nil)
+      ;; only worth saying where a pair was actually made: a drawing
+      ;; that names one stake and not the other is asked to click the
+      ;; missing one, which says it better than a count would
+      (if (and lines (> (abf:spare-stakes cands lines) 0))
+        (princ (strcat "\n" (itoa (abf:spare-stakes cands lines))
+                       " stake(s) pair with nothing - a survey on this"
+                       " sheet has no " abf:*a-name* "/" abf:*b-name*
+                       " pair to be measured from.")))
+      (if (< (length lines) 2)
+        ;; the ordinary sheet: one pair of stakes, or none named.
+        ;; before OSMODE goes down, because a drawing that does not name
+        ;; them wants object snap for the clicks.
+        ;; the two stakes are a chain: Back at B re-asks A.  Back is only
+        ;; ON THE TABLE when A was CLICKED - when the drawing names it
+        ;; there is no question behind this one, and re-asking it would
+        ;; find the same point again and walk straight forward, which is a
+        ;; deadlock rather than a way back (STANDARDS 7.2, same reason).
+        (progn
+          (setq astep 1)
+          (while (<= astep 2)
+            (cond
+              ((= astep 1)
+               (setq pa    (abf:stake abf:*a-name* cands nil)
+                     astep 2))
+              ((= astep 2)
+               (if (null pa)
+                 (setq astep 3)
+                 (progn
+                   (setq pb (abf:stake abf:*b-name* cands
+                                       (null (abf:find-point abf:*a-name* cands))))
+                   (if (eq pb 'CAL-BACK)
+                     (progn (princ "\n  Stepping back one stake.")
+                            (setq pb nil astep 1))
+                     (setq astep 3)))))))
+          (setq curln (car lines)))
+        ;; more than one survey on the sheet.  Which line the run is on
+        ;; is not settled here, because the drafter cannot answer it
+        ;; here: ABFIND and ABMOVE read it off the first point they are
+        ;; given, with the points that carry that number ringed (stage
+        ;; 1), and a run that is PLOTTING a point - ABPCREATE, or either
+        ;; of the other two creating one - has no point to read it off,
+        ;; so it is asked off the lines themselves (stage 11).
+        (progn
+          (setq pend T)
+          (princ (strcat "\n" (itoa (length lines)) " AB lines on this"
+                         " sheet - " abf:*a-name* " and " abf:*b-name*
+                         " are each numbered more than once, so every"
+                         " point number may be too."))
+          (princ (strcat "\n  Which line the run is on is settled by the"
+                         " first point it handles, and every point after"
+                         " it is taken to be on the same one."))))
       (cond
-        ((null pa)
+        ((and (null pend) (null pa))
          (princ (strcat "\nNo " abf:*a-name* " stake - nothing drawn.")))
-        ((null pb)
+        ((and (null pend) (null pb))
          (princ (strcat "\nNo " abf:*b-name* " stake - nothing drawn.")))
-        ((< (cal:dist pa pb) abf:*fuzz*)
+        ((and (null pend) (< (cal:dist pa pb) abf:*fuzz*))
          (princ (strcat "\nThe " abf:*a-name* " and " abf:*b-name*
                         " stakes sit on the same spot - two tapes off"
                         " one stake cannot place anything.")))
@@ -22046,7 +23913,15 @@
          ;;    nothing, and only that one is asked (stage 8).  ABFIND
          ;;    and ABMOVE need it too, because either can end up
          ;;    creating a point.
-         (setq near (abf:field-ref pa pb cands))
+         ;;
+         ;;    On a sheet with more than one AB line it is read off THAT
+         ;;    line's own points: another survey sits wherever it sits,
+         ;;    and letting it vote would put the new point on the wrong
+         ;;    side of this one.  A run whose line is not settled yet
+         ;;    (ABFIND and ABMOVE, stage 1) reads it when the line is.
+         (if (null pend)
+           (setq near (abf:field-ref pa pb
+                                     (abf:line-pts curln lines cands))))
 
          ;; -- the round loop.  A round is one point:
          ;;      1  which point       -- its two ties are drawn.  A
@@ -22070,8 +23945,10 @@
          ;;    Each question backs out into the one before it.  ABFIND
          ;;    and ABPCREATE go round again after every round;
          ;;    ABMOVE settles its one point and ends.
-         (setq hist nil stage (if createp 6 1) done nil made 0 moves 0
-               built 0 temps nil)
+         (setq hist nil done nil made 0 moves 0 built 0 temps nil
+               stage (cond ((and createp pend) 11)
+                           (createp 6)
+                           (t 1)))
          (while (not done)
            (cond
 
@@ -22115,10 +23992,107 @@
                 (t
                  ;; a click names the survey point under it, exactly as
                  ;; a typed number names one; nothing under it names
-                 ;; nothing, and is reported the way a typo is
-                 (setq hit (if (listp ans)
-                             (abf:nearest ans cands)
-                             (abf:find-point ans cands)))
+                 ;; nothing, and is reported the way a typo is.  A click
+                 ;; is never ambiguous - it names the point it landed
+                 ;; on, whatever that point is numbered - so only a
+                 ;; typed number can reach the question below.
+                 (setq hit nil dupes nil)
+                 (if (listp ans)
+                   (setq hit (abf:nearest ans cands))
+                   (progn
+                     (setq dupes (abf:matches ans cands)
+                           lsel  (if (and curln (> (length dupes) 1))
+                                   (abf:on-line dupes curln lines)))
+                     (cond
+                       ;; one point carries it: the ordinary sheet, and
+                       ;; the ordinary sheet is never asked anything
+                       ((< (length dupes) 2) (setq hit (car dupes)))
+                       ;; the run is already on an AB line and exactly
+                       ;; one of them is on it - that is the convention:
+                       ;; once a line is settled the rest of the run
+                       ;; stays on it, so this one is not asked again,
+                       ;; only reported
+                       ((= (length lsel) 1)
+                        (setq hit (car lsel))
+                        (princ (strcat "\n  " (itoa (length dupes))
+                                       " points are numbered \""
+                                       (abf:as-number ans) "\" - the one"
+                                       " on " (abf:ln-tag curln)
+                                       " taken.")))
+                       ;; otherwise ask: ring them all, print what each
+                       ;; was taped at off ITS OWN stakes - which is
+                       ;; what the field sheet has, and so what tells
+                       ;; them apart - and take a click or a label
+                       (t
+                        (cal:ensure-layer abf:*sug-layer* abf:*sug-color*)
+                        (abf:drop temps)
+                        (setq dtag  (abf:dupe-tags dupes lines)
+                              temps nil)
+                        (foreach c dtag
+                          (setq temps (append temps
+                                              (abf:mark-dupe (cadr c)
+                                                             (car c)))))
+                        (princ (strcat "\n  " (itoa (length dupes))
+                                       " points are numbered \""
+                                       (abf:as-number ans) "\" - one per"
+                                       " AB line, ringed and labelled on"
+                                       " screen."
+                                       (if curln
+                                         (strcat "  None of them is on "
+                                                 (abf:ln-tag curln) ".")
+                                         "")))
+                        (princ (strcat "\n   " (cal:pad "tag" 6)
+                                       (cal:pad abf:*a-name* 14)
+                                       abf:*b-name*))
+                        (princ (strcat "\n   " (cal:pad "----" 6)
+                                       (cal:pad "------------" 14)
+                                       "------------"))
+                        (foreach c dtag
+                          (setq l (abf:line-of (cadr c) lines))
+                          (princ (strcat "\n   " (cal:pad (car c) 6)
+                                         (cal:pad
+                                           (abf:fmt (cal:dist (abf:ln-a l)
+                                                              (cadr c)))
+                                           14)
+                                         (abf:fmt (cal:dist (abf:ln-b l)
+                                                            (cadr c))))))
+                        (setq lsel (abf:ask-tag
+                                     (strcat "\n  Which AB line is Pt."
+                                             (abf:as-number ans)
+                                             " on - click the one you"
+                                             " mean, or type its label")
+                                     dtag T))
+                        (abf:drop temps)
+                        (setq temps nil)
+                        (cond
+                          ;; Back re-asks the number itself: that is the
+                          ;; question in front of this one
+                          ((eq lsel 'CAL-BACK)
+                           (princ "\n  Back to the point number."))
+                          ((or (null lsel) (eq lsel 'ABF-AGAIN))
+                           (princ (strcat "\n  None taken - nothing"
+                                          " drawn.")))
+                          (t
+                           (setq hit (cadddr (abf:dupe-by-tag lsel
+                                                              dtag)))))))))
+                 ;; the AB line is settled by the first point the run
+                 ;; handles, and every point after it is taken to be on
+                 ;; the same one - that is what lets the answer above be
+                 ;; assumed rather than asked a second time
+                 (if (and hit pend)
+                   (progn
+                     (setq curln (abf:line-of (abf:cd-pt hit) lines)
+                           pa    (abf:ln-a curln)
+                           pb    (abf:ln-b curln)
+                           pend  nil
+                           near  (abf:field-ref
+                                   pa pb
+                                   (abf:line-pts curln lines cands)))
+                     (princ (strcat "\n  On AB line " (abf:ln-tag curln)
+                                    " (" abf:*a-name* " to " abf:*b-name*
+                                    " " (abf:fmt (cal:dist pa pb))
+                                    ") - the rest of the run stays on"
+                                    " it."))))
                  (cond
                    ;; a click on nothing is a stray click and is simply
                    ;; reported; a NUMBER that names nothing is far more
@@ -22126,6 +24100,12 @@
                    ;; so that one is offered the way forward.  No is the
                    ;; Enter answer, because a typo is the other way to
                    ;; get here and Enter must not plot a point from one
+                   ;; a number that named points and was then declined
+                   ;; or backed out of at the pick has said its piece
+                   ;; already - it is not a typo and must not raise the
+                   ;; offer to plot a point that is plainly in the
+                   ;; drawing twice over
+                   ((and (null hit) dupes))
                    ((null hit)
                     (if (listp ans)
                       (princ (strcat "\n  No survey point within "
@@ -22152,9 +24132,15 @@
                               (setq newnm    mk
                                     createp  T
                                     fromfind T
-                                    stage    6)))))))
-                   ((or (< (cal:dist (abf:cd-pt hit) pa) abf:*fuzz*)
-                        (< (cal:dist (abf:cd-pt hit) pb) abf:*fuzz*))
+                                    ;; there is no point to read the AB
+                                    ;; line off - a point that does not
+                                    ;; exist is the reason we are here -
+                                    ;; so a sheet with more than one
+                                    ;; asks for it first
+                                    stage    (if pend 11 6))))))))
+                   ((and pa pb
+                         (or (< (cal:dist (abf:cd-pt hit) pa) abf:*fuzz*)
+                             (< (cal:dist (abf:cd-pt hit) pb) abf:*fuzz*)))
                     (princ (strcat "\n  Pt." (abf:cd-nm hit) " IS a"
                                    " stake - the ties are measured"
                                    " FROM it.")))
@@ -22392,6 +24378,80 @@
                        (if createp (abf:say-made sug) (abf:say-taken sug))
                        (setq newpt (nth 5 sug)
                              stage (if createp 10 5)))))))))
+
+             ;; -- 11: which AB line, on a sheet that carries more than
+             ;;        one.  A run that is PLOTTING a point comes here
+             ;;        first: there is no point yet to read the line
+             ;;        off, so the lines themselves are what is picked
+             ;;        between - each ringed at its two stakes with the
+             ;;        tie between them dashed and labelled.  Asked
+             ;;        once per run: the answer stands for every point
+             ;;        after it, which is the whole convention.
+             ((= stage 11)
+              (cal:ensure-layer abf:*sug-layer* abf:*sug-color*)
+              (abf:drop temps)
+              (setq temps nil lsel nil)
+              (foreach l lines
+                (setq temps (append temps (abf:mark-line l))))
+              (princ (strcat "\n  " (itoa (length lines)) " AB lines,"
+                             " each ringed at its stakes and labelled on"
+                             " the tie between them."))
+              (princ (strcat "\n   " (cal:pad "tag" 6)
+                             abf:*a-name* " to " abf:*b-name*))
+              (princ (strcat "\n   " (cal:pad "----" 6) "------------"))
+              (foreach l lines
+                (princ (strcat "\n   " (cal:pad (abf:ln-tag l) 6)
+                               (abf:fmt (cal:dist (abf:ln-a l)
+                                                  (abf:ln-b l))))))
+              (setq dtag (abf:ask-tag
+                           (strcat "\n  Which AB line is "
+                                   (if newnm (strcat "Pt." newnm)
+                                       "the new point")
+                                   " taped off - click it, or type its"
+                                   " label")
+                           (mapcar '(lambda (x) (list (abf:ln-tag x)
+                                                      (abf:ln-a x)
+                                                      (abf:ln-b x)))
+                                   lines)
+                           T))
+              (cond
+                ((eq dtag 'ABF-AGAIN))          ; re-ask, nothing moved
+                ((eq dtag 'CAL-BACK)
+                 (abf:drop temps)
+                 (setq temps nil)
+                 ;; the point number is the question in front of this
+                 ;; one when that is what sent us here; ABPCREATE has
+                 ;; nothing in front of its first question
+                 (if fromfind
+                   (progn
+                     (setq createp nil fromfind nil newnm nil stage 1)
+                     (princ "\n  Back to the point number."))
+                   (princ "\n  Already at the first question.")))
+                ((null dtag)
+                 (abf:drop temps)
+                 (setq temps nil)
+                 (princ (strcat "\n  No AB line taken - a point is"
+                                " plotted off two stakes, and which two"
+                                " is the first thing to settle."))
+                 (if fromfind
+                   (setq createp nil fromfind nil newnm nil stage 1)
+                   (setq done T)))
+                (t
+                 (abf:drop temps)
+                 (setq lsel  (abf:line-by-tag dtag lines)
+                       temps nil
+                       curln lsel
+                       pa    (abf:ln-a lsel)
+                       pb    (abf:ln-b lsel)
+                       pend  nil
+                       near  (abf:field-ref
+                               pa pb (abf:line-pts curln lines cands))
+                       stage 6)
+                 (princ (strcat "\n  " (abf:ln-tag lsel) " taken: "
+                                abf:*a-name* " and " abf:*b-name* " "
+                                (abf:fmt (cal:dist pa pb))
+                                " apart - the rest of the run stays on"
+                                " it.")))))
 
              ;; -- 6: the A reading.  ABPCREATE's first question, and
              ;;       where ABFIND and ABMOVE land when the number they
@@ -22774,13 +24834,21 @@
                  "  (commands: ABFIND, ABMOVE, ABPCREATE)"))
   (princ))
 
-(princ (strcat "\nABFIND " *abfind-version*
-               " loaded.  Commands: ABFIND (dim Pt.## from the "
-               abf:*a-name* " and " abf:*b-name*
-               " stakes), ABMOVE (the same, and move it to where a"
-               " misread tape would put it), ABPCREATE (plot a point"
-               " that is not there yet from the two readings it was"
-               " taped at)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABFIND " *abfind-version*
+                 " loaded.  Commands: ABFIND (dim Pt.## from the "
+                 abf:*a-name* " and " abf:*b-name*
+                 " stakes), ABMOVE (the same, and move it to where a"
+                 " misread tape would put it), ABPCREATE (plot a point"
+                 " that is not there yet from the two readings it was"
+                 " taped at).")))
 (princ)
 
 
@@ -22833,7 +24901,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.8")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -23754,7 +25822,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nALTABCDEF error: " msg)))
+    (if lzd:report (lzd:report "ALTABCDEF" *altabcdef-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ALTABCDEF" *altabcdef-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -23947,8 +26017,16 @@
   (princ (strcat "\nALTABCDEF " *altabcdef-version*))
   (princ))
 
-(princ (strcat "\nALTABCDEF " *altabcdef-version*
-               " loaded.  Type ALTABCDEF to plot points from a spreadsheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nALTABCDEF " *altabcdef-version*
+                 " loaded.  Type ALTABCDEF to plot points from a spreadsheet.")))
 (princ)
 
 
@@ -23962,6 +26040,10 @@
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
 ;;; Commands:  ABHD - fit the perimeter, then optionally the bottom
+;;;            SIMPABHD - the same fit with NONE of ABHD's three
+;;;                   numbers asked: five ready-made perimeters are
+;;;                   drawn and you keep the one that looks like the
+;;;                   pool (see the SIMPABHD section further down)
 ;;;            ADAB - the pool bottom on its own, over an existing
 ;;;                   perimeter (select the closed polyline or its
 ;;;                   exploded lines/arcs; the survey points sitting
@@ -24016,11 +26098,32 @@
 ;;;
 ;;; THE MISS ALLOWANCE: the perimeter no longer has to thread every
 ;;; point exactly.  A share of the points - asked per run, standard
-;;; *PF-MISS-PCT* (15%), rounded UP to the nearest whole point - may
-;;; sit off the result by up to the max distance (default 1 unit =
-;;; about an inch, capped at *PF-TOL-MAX*); every other point stays on
-;;; it (within *PF-ON-EPS*).  That slack is spent where it buys the
-;;; most: longer arcs, fewer curves, nicer radii.
+;;; *PF-MISS-PCT* (20%), rounded UP to the nearest whole point - may
+;;; sit off the result by up to the max distance (default 1 unit = one
+;;; inch, capped at *PF-TOL-MAX*); every other point stays on it
+;;; (within *PF-ON-EPS*).  That slack is spent where it buys the most:
+;;; longer arcs, fewer curves, nicer radii.  A fifth of the points an
+;;; inch off is the recommendation because it is what an AB survey of
+;;; a built shell looks like - the three questions at steps 1 to 3 now
+;;; offer one coherent answer rather than three separate ones.
+;;;
+;;; MOVED POINTS ARE NOT SURVEY POINTS: a number carrying the letter
+;;; *PF-MOVED-MARK* ("m") is out of the fit entirely.  ABFIND writes
+;;; "17m" when it copies Pt.17 to a position it worked out from two
+;;; tape readings off a pair of good points - the original was a bad
+;;; shot, and the copy is where that point SHOULD be, not where
+;;; anybody stood.  Holding a perimeter to a deduction dresses it up
+;;; as evidence: the fit bends to meet a position no one measured,
+;;; and the report then claims it held a point that was never there.
+;;; So a moved point is dropped as the selection is read, before the
+;;; point list exists - not ordered into the loop, not fitted, not
+;;; held, not counted against the miss allowance, and never ringed or
+;;; listed as one the line missed.  The original it came from is
+;;; still in the survey and still fitted; only the deduced twin is
+;;; out.  The command says how many it left out, so a survey that
+;;; comes up short is explained rather than mysterious.  Matched
+;;; case-insensitively anywhere in the number, so "17m", "17M" and
+;;; "17m2" are all out.
 ;;;
 ;;; DECLARED STRAIGHT WALLS: the user may declare dead-straight walls
 ;;; up front by picking their two end points; each is marked with a
@@ -24178,6 +26281,21 @@
                                     ; used to label it as "Pt.17"; a
                                     ; block without it is numbered in
                                     ; selection order
+(setq *PF-MOVED-MARK*   "M")        ; a point number carrying this letter
+                                    ; is a MOVED point - ABFIND writes
+                                    ; "17m" when it copies Pt.17 to a
+                                    ; position worked out from two tape
+                                    ; readings (abf:*moved-suffix*).
+                                    ; That position is a deduction, not
+                                    ; a shot: nobody stood there.  So a
+                                    ; number with this letter in it is
+                                    ; left out of the fit ENTIRELY - not
+                                    ; ordered into the loop, not fitted,
+                                    ; not held, not counted against the
+                                    ; miss allowance and never reported
+                                    ; as a point the line failed to
+                                    ; hold.  Matched case-insensitively
+                                    ; anywhere in the number
 (setq *PF-OUT-LAYER*    "POOL-FIT") ; layer the three candidate fits
                                     ; preview on, with their labels
 (setq *PF-OUT-COLOUR*   3)          ; ...its colour when ABHD creates it
@@ -24281,19 +26399,91 @@
                                     ;     long as that distance permits
                                     ; Colours and wording are yours to
                                     ; edit; the three mode names are not
+(setq *PF-SIMP-TOL*     1.0)        ; the distance SIMPABHD fits and
+                                    ; measures to.  SIMPABHD asks no
+                                    ; numbers at all, so this is the one
+                                    ; it uses in place of step 1 - and
+                                    ; the one the table's columns are
+                                    ; read against, exactly as the typed
+                                    ; distance is in ABHD's
+(setq *PF-SIMP-COMPARE*             ; the five candidates SIMPABHD draws
+  '(("tight" 1 "red"     "most curves - least error"                nil nil  nil)
+    ("pct"   2 "yellow"  "10% off by 1in, a third as many curves"   0.10 1.0  3.0)
+    ("hold"  3 "green"   "all but the 3 worst held, half as many"   3    1.0  2.0)
+    ("pct"   4 "cyan"    "20% off by 1/2in, a third as many curves" 0.20 0.5  3.0)
+    ("few"   6 "magenta" "fewest curves - still within the distance" nil nil  nil)))
+                                    ; (kind, AutoCAD colour, colour name,
+                                    ; description, share, distance,
+                                    ; points-per-curve).  ABHD asks three
+                                    ; numbers and draws the two ends of
+                                    ; the trade around them; SIMPABHD
+                                    ; asks none and draws the same two
+                                    ; ends around three ready-made
+                                    ; answers, so what is chosen is a
+                                    ; picture rather than a guess at
+                                    ; three settings.  Rows 1 and 5 are
+                                    ; ABHD's own "tight" and "few" - the
+                                    ; least error there is and the fewest
+                                    ; curves that still hold the distance
+                                    ; - and take no share, distance or
+                                    ; cap of their own: capping either
+                                    ; would be asking for the most curves,
+                                    ; or the fewest, and then overruling
+                                    ; the answer.  The three between them
+                                    ; are read as:
+                                    ;   "pct"  - this share of the points
+                                    ;     may sit off the line, by up to
+                                    ;     this distance, with the curve
+                                    ;     cap set to the point count over
+                                    ;     the last number, rounded to the
+                                    ;     nearest whole curve
+                                    ;   "hold" - every point is held but
+                                    ;     this many: the share column is a
+                                    ;     COUNT, not a fraction, and the
+                                    ;     ones given up are the worst the
+                                    ;     fitter meets
+                                    ; Colours and wording are yours to
+                                    ; edit; the four kind names are not
+(setq *PF-SIMP-DEFAULT-FIT* "2")    ; the candidate Enter keeps at
+                                    ; SIMPABHD's choose prompt.  "2" is
+                                    ; the middle of the road - a tenth of
+                                    ; the points an inch off, a third as
+                                    ; many curves as points - and the
+                                    ; nearest of the five to what ABHD
+                                    ; itself recommends
+(if (not (member *PF-SIMP-DEFAULT-FIT* '("1" "2" "3" "4" "5")))
+  (setq *PF-SIMP-DEFAULT-FIT* "2"))
 
 ;; ---- 2. FITTER TUNING ----------------------------------------------
 (setq *PF-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
                                     ; prompt (2 inches): further than
                                     ; that and the line is no longer a
                                     ; trace of the points
-(setq *PF-MISS-PCT*     0.15)       ; share of the points (rounded UP to
+(setq *PF-MISS-PCT*     0.20)       ; share of the points (rounded UP to
                                     ; a whole point) that may sit off the
                                     ; result by up to the tolerance
-                                    ; (about an inch by default) - this
-                                    ; slack is what buys longer spans and
+                                    ; (an inch by default) - this slack
+                                    ; is what buys longer spans and
                                     ; fewer curves.  Step 2 offers it;
-                                    ; the answer is per run, on purpose
+                                    ; the answer is per run, on purpose.
+                                    ; A fifth of an AB survey off by an
+                                    ; inch is what the built shell
+                                    ; actually does: at 15% the fitter
+                                    ; ran out of allowance early in the
+                                    ; loop and paid for the rest of it
+                                    ; in short arcs
+(setq *PF-ARC-DIV*      3.0)        ; the RECOMMENDED curve cap: one
+                                    ; curve per this many survey points,
+                                    ; rounded to the NEAREST whole curve
+                                    ; and never below 1 (pf:rec-arcs).
+                                    ; A third of the points is what a
+                                    ; pool edge reads as - long
+                                    ; overarching arcs with three or so
+                                    ; points under each, rather than one
+                                    ; curve per shot.  It is only what
+                                    ; Enter offers at step 3: a number
+                                    ; typed there wins, and None still
+                                    ; lifts the cap entirely
 (setq *PF-ON-EPS*       0.25)       ; a point within this of the result
                                     ; counts as ON it; only points off by
                                     ; more than this eat into the miss
@@ -24512,7 +26702,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "091026 REV16") ; announced on load.  The
+(setq pf:*version*      "091226 REV18") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -24529,10 +26719,23 @@
                                     ; the bottom flow offers first; the
                                     ; first offset typed in a run
                                     ; becomes the next run's default
-;; *PF-MAX-ARCS* : the curve cap the last run was given; nil = no cap.
-;; Asked at step 3 (Enter keeps it, "None" clears it) and remembered
-;; like the two above.  Deliberately not set here at all: it is nil
-;; until something asks, and seeding it would only say so again.
+;; *PF-MAX-ARCS* : the curve cap the last run was given, in one of
+;; three states:
+;;     'AUTO    - the recommendation, worked out from the survey once
+;;                the points are in hand: one curve per *PF-ARC-DIV*
+;;                of them (pf:rec-arcs).  The cap is asked at step 3,
+;;                four steps before the points are selected, so the
+;;                recommendation cannot be a number there - it is a
+;;                RULE that becomes a number at step 7.  This is what
+;;                a fresh session starts on
+;;     a number - that many curves, typed at step 3
+;;     nil      - no cap at all, "None" typed at step 3
+;; Asked at step 3 (Enter keeps whichever it is on) and remembered
+;; like the two above.  Seeded only when unset, like them, which does
+;; mean a mid-session re-load of this file reads a "None" back as
+;; 'AUTO - nil is the one state that cannot be told from never-asked.
+;; Re-typing None at the next step 3 puts it back.
+(if (null *PF-MAX-ARCS*) (setq *PF-MAX-ARCS* 'AUTO))
 ;;
 ;; Cover mode: the pool-bottom question in pf:bottom answers No without
 ;; being asked, so a cover sheet is fitted to its perimeter and stops
@@ -24810,6 +27013,27 @@
 ;; pf-miss-pct from the user's answer; Enter keeps the standard value.
 (defun pf:misspct ()
   (if pf-miss-pct pf-miss-pct *PF-MISS-PCT*))
+
+;; A curve cap of N points over D of them, rounded to the NEAREST
+;; whole curve and never below 1.  A cap of nothing is not a cap, and
+;; a survey small enough to round to zero is one the fitter will not
+;; reach a cap on anyway.
+(defun pf:div-arcs (n d / c)
+  (setq c (fix (+ 0.5 (/ (float n) d))))
+  (if (< c 1) 1 c))
+
+;; The RECOMMENDED curve cap for N points: one curve per *PF-ARC-DIV*
+;; of them.  SIMPABHD's rows carry their own divisor and go straight
+;; to pf:div-arcs.
+(defun pf:rec-arcs (n) (pf:div-arcs n *PF-ARC-DIV*))
+
+;; The curve cap actually in force over N points, resolving the three
+;; states of *PF-MAX-ARCS*: 'AUTO is the recommendation worked out
+;; from the count, a number is itself, nil is no cap.  Every reader of
+;; the cap goes through here, so the recommendation becomes a number
+;; in exactly one place.
+(defun pf:cap-for (n)
+  (if (eq 'AUTO *PF-MAX-ARCS*) (pf:rec-arcs n) *PF-MAX-ARCS*))
 
 ;; The "on the shape" threshold in force for the current run.  It
 ;; scales with the tolerance (a quarter of it, never below
@@ -25091,14 +27315,37 @@
     (setq sub (entnext sub)))
   val)
 
+;; Is NM the number of a MOVED point - one ABFIND deduced from two tape
+;; readings and numbered "17m" rather than one somebody shot?  The
+;; letter is *PF-MOVED-MARK*, matched anywhere in the number and in
+;; either case, so "17m", "17M" and "17m2" all answer yes.  A point
+;; with no number at all (a bare POINT entity) answers no: there is no
+;; number to carry the letter.
+(defun pf:moved-p (nm)
+  (and nm
+       (eq 'STR (type nm))
+       (wcmatch (strcase nm) (strcat "*" (strcase *PF-MOVED-MARK*) "*"))))
+
 ;; Remember a point and what to call it, so a miss can be reported as
 ;; "Pt.17" using the number in the drawing rather than a private
 ;; index.  Points with no number of their own get the next count.
+;;
+;; A moved point never gets remembered.  It is the one point in the
+;; survey nobody stood on - ABFIND worked out where Pt.17 should have
+;; been and wrote "17m" beside it - so holding the fit to it would be
+;; holding it to a deduction.  Dropping it HERE, before pts exists,
+;; is what makes that true of everything downstream at once: the
+;; ordering walk, the fit, the miss allowance, the unheld rings and
+;; the report all read pts, and none of them can see what was never
+;; put in it.  The count goes to pf-nmoved so the command can say how
+;; many it left out.
 (defun pf:add-point (p nm)
-  (setq npt        (1+ npt)
-        pts        (cons p pts)
-        pf-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
-                         pf-ptnames)))
+  (if (pf:moved-p nm)
+    (setq pf-nmoved (1+ (if pf-nmoved pf-nmoved 0)))
+    (setq npt        (1+ npt)
+          pts        (cons p pts)
+          pf-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
+                           pf-ptnames))))
 
 ;; What to call the surveyed point at Q.
 (defun pf:pt-name (q / nm p)
@@ -25975,13 +28222,17 @@
 ;; Print the hit report for the fit the user kept.  ALLOW is the run's
 ;; miss allowance (how many points were permitted to sit between the
 ;; on-the-shape threshold and the tolerance off the result).
-(defun pf:report (newsegs pts tol allow prior / nl na hiton hitok miss
+(defun pf:report (newsegs pts tol allow prior cmd
+                  / ndist nl na hiton hitok miss
                                                 q s s2 d dmin worst sum
                                                 sumo no nice onpt inner
                                                 ns i te ts kk mk nk
                                                 hw hq pf-on-eps)
-  ;; report against the same on-the-shape threshold the fit used
-  (setq pf-on-eps (max *PF-ON-EPS* (* *PF-ON-FRAC* tol)))
+  ;; report against the same on-the-shape threshold the fit used, and
+  ;; name the cap off the same count the fit was capped by (pf:build
+  ;; reads the distinct points, and PTS here may hold duplicates)
+  (setq pf-on-eps (max *PF-ON-EPS* (* *PF-ON-FRAC* tol))
+        ndist     (length (cal:dedupe pts *PF-EXACT-EPS*)))
   (progn
       ;; -- segment mix, nice radii, arcs anchored on a point --------
       (setq nl 0 na 0 nice 0 onpt 0)
@@ -26029,7 +28280,7 @@
             (if (> kk mk) (setq mk kk))
             (if (> kk (+ *PF-TANG-TOL* 1.0e-6)) (setq nk (1+ nk)))))
         (setq i (1+ i)))
-      (princ (strcat "\nABHD: " (itoa ns) " segments ("
+      (princ (strcat "\n" cmd ": " (itoa ns) " segments ("
                      (itoa nl) " lines + " (itoa na)
                      " curves) written to layer " *PF-POOL-LAYER* "."
                      "\n  Points on the perimeter:      " (itoa hiton)
@@ -26081,8 +28332,9 @@
                            " is off by " (rtos hw 2 4)
                            " - the drawn shape or a declared wall"
                            " overruled it.")))))
-      (if (and *PF-MAX-ARCS* (> na *PF-MAX-ARCS*))
-        (princ (strcat "\n  (the curve cap is " (itoa *PF-MAX-ARCS*)
+      (if (and (pf:cap-for ndist) (> na (pf:cap-for ndist)))
+        (princ (strcat "\n  (the curve cap is "
+                       (itoa (pf:cap-for ndist))
                        " but " (itoa na) " curves was the fewest"
                        " reachable: a closed loop needs at least 2"
                        " segments)")))
@@ -26205,7 +28457,11 @@
         left (cond ((= mode "tight") 0)
                    ((= mode "few")   1000000)
                    (T                allow))
-        cap  (if (= mode "asked") *PF-MAX-ARCS*)
+        ;; the cap's own count is the DISTINCT points - the survey as
+        ;; the drafter sees it.  Not (if tour tour pts) like the drop
+        ;; budget below: that one is a per-span fair share and has
+        ;; always read the list it is prorating over
+        cap  (if (= mode "asked") (pf:cap-for (length dpts)))
         drop (if (= mode "tight")
                0
                (cal:ceil (* *PF-DROP-PCT*
@@ -26215,6 +28471,65 @@
   (if tour
     (pf:coarse-loop tour ftol cap left drop (not (= mode "few")))
     (pf:guided-fit loop pts dpts tol ftol left drop cap)))
+
+;; ---- the five SIMPABHD candidates ------------------------------------
+;; ABHD asks three numbers and draws the two ends of the trade around
+;; them.  SIMPABHD asks none: the two ends are the same two, and the
+;; three between them are ready-made answers (*PF-SIMP-COMPARE*).  So
+;; the fitter is ABHD's, unchanged - only the budgets handed to it
+;; come off a table instead of off the prompts.
+
+;; How many points a SIMPABHD row lets sit OFF the line.  A "pct" row
+;; carries a share of the survey; a "hold" row carries a flat COUNT -
+;; "all but the 3 worst held" is 3 points however big the survey is,
+;; which is the whole point of offering it beside two shares.  The
+;; tight end allows none and the few end allows every one of them.
+(defun pf:row-allow (row n)
+  (cond ((= (car row) "tight") 0)
+        ((= (car row) "few")   n)
+        ((= (car row) "hold")  (fix (nth 4 row)))
+        (T                     (cal:ceil (* (nth 4 row) n)))))
+
+;; Build one SIMPABHD candidate from its row.  The five differ only in
+;; what they are ALLOWED, so they all come out of the same fitter:
+;;   TOL   the row's own FIT distance, or *PF-SIMP-TOL* where it has
+;;         none (the two ends borrow the distance the table is
+;;         measured against, exactly as ABHD's do from step 1).  In
+;;         guided mode this is pf:guided-fit's ftol, NOT its tol: that
+;;         one is the radius a drawn vertex snaps to a survey point
+;;         within and the reach an arc gathers its points over, and it
+;;         has to stay the distance the whole table is read against.
+;;         Handing the tight row its own 0.01 there would snap no
+;;         vertex and gather no point, and the row whose job is the
+;;         least error would come out the coarsest.  ABHD keeps the
+;;         two apart for the same reason.
+;;   LEFT  pf:row-allow above, with the few end's lifted to a number
+;;         no survey reaches - that lift is what lets its arcs run as
+;;         long as the distance permits.
+;;   DROP  how many may end up PAST the distance: none for the tight
+;;         end, and for a "hold" row the same count it is allowed to
+;;         miss by - "all but the 3 worst held" means three points are
+;;         given up, not three plus a share.
+;;   CAP   only the three middle rows carry one.  Capping the row whose
+;;         whole job is to draw the most curves - or the fewest -
+;;         would be asking for that and then overruling the answer.
+(defun pf:simp-build (tour loop pts dpts row
+                      / pf-miss-left pf-on-eps kind n tol left drop cap)
+  (setq kind (car row)
+        n    (length dpts)
+        tol  (cond ((= kind "tight") (min *PF-SIMP-TOL* *PF-TIGHT-TOL*))
+                   ((nth 5 row)      (nth 5 row))
+                   (T                *PF-SIMP-TOL*))
+        left (if (= kind "few") 1000000 (pf:row-allow row n))
+        drop (cond ((= kind "tight") 0)
+                   ((= kind "hold")  (fix (nth 4 row)))
+                   (T (cal:ceil (* *PF-DROP-PCT* n))))
+        cap  (if (nth 6 row) (pf:div-arcs n (nth 6 row)))
+        pf-miss-left left
+        pf-on-eps    (max *PF-ON-EPS* (* *PF-ON-FRAC* tol)))
+  (if tour
+    (pf:coarse-loop tour tol cap left drop (not (= kind "few")))
+    (pf:guided-fit loop pts dpts *PF-SIMP-TOL* tol left drop cap)))
 
 ;; Deviation summary for SEGS against PTS: (worst avg avg-off).
 ;;   worst   - furthest any point sits from the line
@@ -26241,7 +28556,7 @@
 (defun pf:fmt-dev (x)
   (if x (rtos x 2 2) "-"))
 
-;; ---- offer three fits and let the user pick ---------------------------
+;; ---- offer the fits and let the user pick -----------------------------
 ;; Knowing up front how much curve to spend on how much accuracy is the
 ;; hardest part of the command, so instead of asking the user to
 ;; imagine it, draw the two ends of that trade and the middle: the
@@ -26249,15 +28564,34 @@
 ;; fewest curves that still hold the distance.  Each goes on in its own
 ;; colour with what it costs, and the one they point at is kept.
 ;; Everything is judged against the tolerance the user actually typed,
-;; so the columns compare like for like even though the three were not
+;; so the columns compare like for like even though they were not
 ;; built alike.
-(defun pf:compare (tour loop pts dpts tol allow
+;;
+;; SIMP non-nil is SIMPABHD's five instead of ABHD's three: the same
+;; screen, the same table, the same pick - built off *PF-SIMP-COMPARE*
+;; and pf:simp-build rather than off the three answers.  One function
+;; and not two, because everything a drafter reads here - the columns,
+;; the "no fit could hold these" note, the click-or-type pick, the
+;; erase-the-losers rule, Redo - is the same job either way, and the
+;; way two copies of it go wrong is that one of them stops matching
+;; what the other promises.
+(defun pf:compare (tour loop pts dpts tol allow simp
                    / prior vars v e ent lab st onv segs bad allbad first
-                     i pick idx keep ce bb hgt sel picked keyed pr res)
+                     i pick idx keep ce bb hgt sel picked keyed pr res
+                     tbl nfit defl kws word)
   (setq prior (pf:prior-fits))
   (cal:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
-  ;; every candidate is judged against the distance the user typed, so
-  ;; "off the line" means the same thing in all three rows
+  (setq tbl  (if simp *PF-SIMP-COMPARE* *PF-COMPARE*)
+        nfit (length tbl)
+        defl (if simp *PF-SIMP-DEFAULT-FIT* *PF-DEFAULT-FIT*)
+        word (if simp "Five" "Three")
+        kws  "")
+  (setq i 1)
+  (repeat nfit (setq kws (strcat kws (itoa i) " ") i (1+ i)))
+  (setq kws (strcat kws "All None Redo"))
+  ;; every candidate is judged against the distance the user typed (or,
+  ;; in SIMPABHD, the one the table is read against), so "off the line"
+  ;; means the same thing in every row
   (setq onv (max *PF-ON-EPS* (* *PF-ON-FRAC* tol)))
   ;; label height: a twentieth of the shape, so it reads at any zoom
   (setq bb  (pf:bbox pts)
@@ -26265,13 +28599,16 @@
                     (- (cadddr bb) (cadr bb)))
                *PF-LABEL-FRAC*))
   (if (<= hgt 0.0) (setq hgt 1.0))
-  (setq pf-phase "building the three candidate fits"
+  (setq pf-phase (strcat "building the " (strcase word T)
+                         " candidate fits")
         vars     nil
         allbad   nil
         first    T
         i        1)
-  (foreach v *PF-COMPARE*
-    (setq segs (pf:build tour loop pts dpts tol allow (car v))
+  (foreach v tbl
+    (setq segs (if simp
+                 (pf:simp-build tour loop pts dpts v)
+                 (pf:build tour loop pts dpts tol allow (car v)))
           ent  (pf:temp-add
                  (pf:make-pline
                    (mapcar '(lambda (s) (list (car s) (caddr s))) segs)
@@ -26305,7 +28642,7 @@
   (if (null (cadr (car vars)))
     (princ "\nABHD: could not draw the result - is the drawing read-only?")
     (progn
-      (princ (strcat "\n\nThree candidate fits are now drawn on layer "
+      (princ (strcat "\n\n" word " candidate fits are now drawn on layer "
                      *PF-OUT-LAYER*
                      ",\neach numbered on screen in its own colour:\n"))
       (princ "\n   #  segs  curves  worst off  avg all  avg off  not held  ")
@@ -26330,22 +28667,37 @@
                      "\n  \"avg all\" averages every point; \"avg off\""
                      " averages only the points that are off the line"
                      "\n  (further than " (rtos onv 2 3) " from it)."))
-      (princ (strcat "\n  All three are measured against the "
-                     (rtos tol 2 3) " you typed, but only one is built"
-                     " to it:"
-                     "\n  the tight fit spends curves to drive the error"
-                     " towards nothing (it"
-                     "\n  ignores that distance"
-                     (if *PF-MAX-ARCS* " and the curve cap" "")
-                     " and gives up no point at all), the middle one is"
-                     "\n  your settings exactly, and the few fit holds"
-                     " the same distance with as few"
-                     "\n  curves as it can - those two may write off up"
-                     " to " (itoa (cal:ceil (* *PF-DROP-PCT*
-                                              (length (if tour
-                                                        tour
-                                                        pts)))))
-                     " stray point(s) between them."))
+      (if simp
+        (princ (strcat "\n  All five are measured against the "
+                       (rtos tol 2 3) " this command works to, but they"
+                       " are not built alike:"
+                       "\n  fit 1 spends curves to drive the error"
+                       " towards nothing (no point given"
+                       "\n  up, no cap), fit 5 holds that distance with"
+                       " as few curves as it can,"
+                       "\n  and 2, 3 and 4 are three ready-made answers"
+                       " in between - each with its"
+                       "\n  own slack and its own curve cap, printed"
+                       " against it in the last column."
+                       "\n  Nothing here was typed: pick the outline"
+                       " that looks like the pool."))
+        (princ (strcat "\n  All three are measured against the "
+                       (rtos tol 2 3) " you typed, but only one is built"
+                       " to it:"
+                       "\n  the tight fit spends curves to drive the error"
+                       " towards nothing (it"
+                       "\n  ignores that distance"
+                       (if (pf:cap-for (length dpts))
+                         " and the curve cap" "")
+                       " and gives up no point at all), the middle one is"
+                       "\n  your settings exactly, and the few fit holds"
+                       " the same distance with as few"
+                       "\n  curves as it can - those two may write off up"
+                       " to " (itoa (cal:ceil (* *PF-DROP-PCT*
+                                                (length (if tour
+                                                          tour
+                                                          pts)))))
+                       " stray point(s) between them.")))
       (if allbad
         (princ (strcat "\n  NOTE: " (itoa (length allbad))
                        " point(s) could not be held by ANY fit built to"
@@ -26359,19 +28711,21 @@
       ;; number still works for anyone who prefers the keyboard.
       (setq pf-phase "waiting for the choice of fit")
       (princ "\n\n  Click the outline you want to keep, or type its number.")
-      (princ "\n  Redo refits with new settings, and lets you omit points first.")
-      (initget "1 2 3 All None Redo")
+      (princ (if simp
+               "\n  Redo lets you omit points and draw the five again."
+               "\n  Redo refits with new settings, and lets you omit points first."))
+      (initget kws)
       (setq pick (getkword
-                   (strcat "\n  Keep which fit - click one, or"
-                           " [1/2/3/All/None/Redo] <"
-                           *PF-DEFAULT-FIT* ">: ")))
+                   (strcat "\n  Keep which fit - click one, or ["
+                           (if simp "1/2/3/4/5" "1/2/3")
+                           "/All/None/Redo] <" defl ">: ")))
       (if (null pick)
         ;; no keyword typed: give them a click, and fall back to the
         ;; standing default
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
-                                    " Enter for " *PF-DEFAULT-FIT*
-                                    "): ")))
+                                    " Enter for " defl "): ")))
+          (if lzd:watch (lzd:watch sel))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -26382,15 +28736,16 @@
                 (setq i (1+ i)))
               (if (null pick)
                 (progn
-                  (princ (strcat "\n  (that is not one of the three -"
-                                 " keeping " *PF-DEFAULT-FIT* ")"))
-                  (setq pick *PF-DEFAULT-FIT*))))
-            (setq pick *PF-DEFAULT-FIT*))))
+                  (princ (strcat "\n  (that is not one of the "
+                                 (strcase word T) " - keeping "
+                                 defl ")"))
+                  (setq pick defl))))
+            (setq pick defl))))
       ;; anything not explicitly kept stays registered as scaffolding
       ;; and is swept when the command ends
       (cond
         ((= pick "Redo")
-         ;; clear this trio off the screen right away - the caller
+         ;; clear this set off the screen right away - the caller
          ;; asks its questions and draws a fresh one
          (foreach v vars
            (if (and (cadr v) (entget (cadr v))) (entdel (cadr v)))
@@ -26401,10 +28756,12 @@
          (foreach v vars
            (pf:temp-drop (cadr v))
            (foreach e (nth 4 v) (pf:temp-drop e)))
-         (princ "\nKeeping all three, in their preview colours.")
+         (princ (strcat "\nKeeping all " (strcase word T)
+                        ", in their preview colours."))
          (princ "\n  (the number labels are kept too - erase them when done)"))
         ((= pick "None")
-         (princ "\nAll three erased - nothing was added to the drawing."))
+         (princ (strcat "\nAll " (strcase word T)
+                        " erased - nothing was added to the drawing.")))
         (T
          (setq idx (atoi pick) i 1)
          (foreach v vars
@@ -26414,7 +28771,7 @@
              ;; while the report is read
              (if (and (cadr v) (entget (cadr v))) (entdel (cadr v))))
            (setq i (1+ i)))
-         ;; name the aim that was kept, not just its number - the three
+         ;; name the aim that was kept, not just its number - they
          ;; were built to different ends and the report that follows is
          ;; read against the settings as typed
          (if keep
@@ -26427,7 +28784,16 @@
       (if keep
         (progn
           (setq keyed (pf:mark-unheld (caddr keep) (car keep) bb hgt))
-          (pf:report (car keep) pts tol allow prior)
+          ;; the hit report is read against what the KEPT fit was
+          ;; allowed.  In ABHD that is the run's own answer to step 2;
+          ;; in SIMPABHD each row carries its own, so a report under
+          ;; the run's would name a budget that fit never had
+          (pf:report (car keep) pts tol
+                     (if simp
+                       (pf:row-allow (cadddr keep) (length dpts))
+                       allow)
+                     prior
+                     (if simp "SIMPABHD" "ABHD"))
           (if keyed
             (progn
               (princ (strcat "\n  " (itoa (length keyed))
@@ -27153,6 +29519,7 @@
   (setq ans (getkword (strcat
               "\n  Slope line from the offset at Pt." nm
               " [Straight/Guided/Points/Back] <Straight>: ")))
+  (if lzd:ask (lzd:ask "pf:ask-slope" ans))
   (setq slopemarks nil)     ; the caller's register of this side's rings
   (cond
     ((member ans '("Back" "Undo")) 'PF-BACK)
@@ -27396,6 +29763,30 @@
        (setq go nil))))
   (princ))
 
+;; ---- walking the settings chain --------------------------------------
+;; The chain is one chain whichever command is walking it; only the
+;; numbers printed on it move.  ABHD asks all seven steps; SIMPABHD
+;; asks none of the first three, so its step 4 is the drafter's step 1
+;; and its step 7 is step 4.
+
+;; "Step 4 of 7 - " in ABHD, "Step 1 of 4 - " in SIMPABHD.
+(defun pf:step-n (step simp)
+  (strcat "\n\n  Step " (itoa (if simp (- step 3) step))
+          " of " (if simp "4" "7") " - "))
+
+;; Back out of the question at STEP, where LO is the first question
+;; the running command actually asks.  At LO there is nothing behind
+;; this question, so the step re-opens instead - which is what makes
+;; Back at SIMPABHD's first prompt safe rather than a way out of the
+;; run.
+(defun pf:step-back (step lo)
+  (cond ((> step lo)
+         (princ "\n  Stepping back one question.")
+         (1- step))
+        (T
+         (princ "\n  Already at the first question.")
+         step)))
+
 ;; ---- the numeric parameters ------------------------------------------
 ;; Asked identically at the start of a run and again on a Redo -
 ;; Enter keeps the shown value each time.
@@ -27411,6 +29802,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *PF-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "pf:ask-tol" tol))
   (cond
     ((pf:back-kw tol) 'PF-BACK)
     (T
@@ -27432,6 +29824,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "pf:ask-pct" pct))
   (cond
     ((pf:back-kw pct) 'PF-BACK)
     ((null pct) def)
@@ -27440,18 +29833,30 @@
      1.0)
     (T (/ pct 100.0))))
 
-;; Curve cap; remembered in *PF-MAX-ARCS* (nil = no cap).
+;; What the cap prompt shows in its <angle brackets> - the standing
+;; answer in words, since one of the three states is a rule rather
+;; than a number.
+(defun pf:cap-word ()
+  (cond ((eq 'AUTO *PF-MAX-ARCS*) "Auto")
+        (*PF-MAX-ARCS*            (itoa *PF-MAX-ARCS*))
+        (T                        "None")))
+
+;; Curve cap; remembered in *PF-MAX-ARCS* - 'AUTO (a third of the
+;; points), a number, or nil for no cap.  Auto and None are keywords
+;; rather than numbers because neither IS a number: Auto is a rule
+;; that only becomes one once the points are counted.
 (defun pf:ask-cap (back / mx)
-  (if back (initget 4 "None Back Undo") (initget 4 "None"))
-  (setq mx (getint (strcat "\n  Maximum curves <"
-                           (if *PF-MAX-ARCS* (itoa *PF-MAX-ARCS*) "None")
-                           ">"
-                           (if back " [None/Back]" "") ": ")))
+  (if back (initget 4 "Auto None Back Undo") (initget 4 "Auto None"))
+  (setq mx (getint (strcat "\n  Maximum curves <" (pf:cap-word) ">"
+                           (if back " [Auto/None/Back]" " [Auto/None]")
+                           ": ")))
+  (if lzd:ask (lzd:ask "pf:ask-cap" mx))
   (cond
     ((pf:back-kw mx) 'PF-BACK)
     (T
      (cond ((null mx) nil)                         ; Enter: keep as-is
-           ((eq 'STR (type mx)) (setq *PF-MAX-ARCS* nil))
+           ((eq 'STR (type mx))
+            (setq *PF-MAX-ARCS* (if (= mx "Auto") 'AUTO nil)))
            (T (setq *PF-MAX-ARCS* mx)))
      *PF-MAX-ARCS*)))
 
@@ -27733,66 +30138,37 @@
       (T (setq ans nil))))
   (if res 'PF-BACK))
 
-;; ---- the command -----------------------------------------------------
-(defun c:ABHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
-                    step rstep v mk wallmk cnrmk holdmk pf-decl-marks
-                    ss i en ed lay typ ext nunsup nocs
-                    segs pts dpts allow loop tour ok stale npt
-                    again omits pts2 ent ring pf-omitted
-                    pf-miss-pct pf-walls pf-corners pf-holds
-                    pf-temp pf-ptnames
-                    pf-dim-warned *error* pf-old-err pf-phase
-                    undo-open pf-pick)
-  ;; report which step failed if anything goes wrong, sweep away any
-  ;; preview geometry drawn so far, then restore the old handler - a
-  ;; cancelled run must not leave dashed markers or candidate outlines
-  ;; lying around
-  (setq pf-temp   nil
-        pf-old-err *error*
-        *error*
-          (lambda (m)
-            (if (and m (not (wcmatch (strcase m)
-                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-              (princ (strcat "\nABHD stopped while "
-                             (if pf-phase pf-phase "starting up")
-                             " -- " m)))
-            (pf:temp-clear)
-            ;; close the group after the sweep so one U takes back the
-            ;; whole run, previews included; only if it ever opened
-            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-            (setq undo-open nil)
-            (setq *error* pf-old-err)
-            ;; cover mode must not outlive the run that asked for it,
-            ;; or the next ABHD would skip its bottom without a word
-            (setq abhd:*nobottom* nil)
-            (princ)))
-
-  ;; sweep leftovers from a run that was interrupted before it could
-  ;; tidy up after itself
-  (setq stale (pf:purge-mine *PF-WALL-LAYER*))
-  (if (> stale 0)
-    (princ (strcat "\nABHD: cleared " (itoa stale)
-                   " leftover marker(s) from layer " *PF-WALL-LAYER*
-                   ".")))
-
-  ;; a pickfirst selection if there is one - kept for step 7, so the
-  ;; survey can be highlighted before the command is typed.  Probed
-  ;; here, before the undo group opens: the typed prompts between here
-  ;; and step 7 leave a pickfirst set alone, a command call would not
-  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-
-  ;; one undo group around the whole fit - a U after ABHD takes back
-  ;; the perimeter, the bottom and the markers in one step (the stale
-  ;; purge above stays outside it, so U does not resurrect old junk)
-  ;; only when undo is recording - _Begin in a drawing with UNDO
-  ;; off (bit 1 of UNDOCTL clear) errors out of the command
-  (if (= 1 (logand 1 (getvar "UNDOCTL")))
-    (progn
-      (command "_.UNDO" "_Begin")
-      (setq undo-open T)))
-
-  (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
-
+;; ---- the run itself, shared by ABHD and SIMPABHD ---------------------
+;; Everything from the first question to the last sweep: the settings
+;; chain, the selection, the mode, the candidates and the Redo loop.
+;; SIMP non-nil is SIMPABHD - the same run with its first three
+;; questions not asked and five candidates drawn instead of three.
+;;
+;; One function and not two.  What a second copy would have to keep in
+;; step is not the fitter (that is pf:build's job) but every promise
+;; the run makes around it: that Back walks the chain, that a step
+;; re-entered from below throws away what the earlier pass collected,
+;; that declared walls and holds snap onto survey points and say so
+;; when they were picked wide, that an omitted point takes its wall
+;; with it, that the point order forgets what was omitted.  Those are
+;; the ones that rot quietly.
+;;
+;; It is dynamically scoped on purpose: pf-walls, pf-corners,
+;; pf-holds, pf-ptnames, pf-omitted and pf-miss-pct are bound HERE and
+;; read by the fitter, the reporter and the ask helpers, which is how
+;; they were already bound by the commands this was lifted out of.
+;; pf-phase and pf-temp are deliberately NOT bound here: the caller's
+;; error handler reads the one and sweeps the other, and a binding of
+;; either in this frame would hide the run's own state from the
+;; handler that has to clean up after it.
+(defun pf:fit-session (simp
+                       / cmd lo tol ans go wp1 wp2 rawwalls rawcnrs
+                         rawholds w w1 w2 step rstep v mk wallmk cnrmk
+                         holdmk pf-decl-marks ss i en ed lay typ ext
+                         nunsup nocs segs pts dpts allow loop tour ok
+                         npt pf-nmoved again omits pts2 ent ring
+                         pf-omitted pf-miss-pct pf-walls pf-corners
+                         pf-holds pf-ptnames pf-dim-warned)
   ;; -- steps 1 to 6: the settings, walked as one chain --------------
   ;; Every question after the first offers Back (Undo is its hidden
   ;; synonym), so a mistyped tolerance or a wrong Yes costs one
@@ -27801,8 +30177,16 @@
   ;; by one, and a step re-entered from below throws away whatever the
   ;; earlier pass collected there - markers included - so the second
   ;; answer replaces the first instead of piling on top of it.
-  (setq step 1 rawwalls nil rawcnrs nil rawholds nil
-        wallmk nil cnrmk nil holdmk nil)
+  ;;
+  ;; SIMPABHD starts the SAME chain at step 4.  Its three numbers are
+  ;; not asked, so there is nothing behind the walls question and Back
+  ;; there re-opens it instead of falling out of the run; the internal
+  ;; step numbers do not move, only the ones printed (pf:step-n).
+  (setq step (if simp 4 1) rawwalls nil rawcnrs nil rawholds nil
+        wallmk nil cnrmk nil holdmk nil
+        cmd    (if simp "SIMPABHD" "ABHD")
+        lo     (if simp 4 1))
+  (if simp (setq tol *PF-SIMP-TOL*))
   (while (<= step 6)
     (cond
 
@@ -27813,7 +30197,8 @@
       ;; would silently collapse the fit into single-point stubs.
       ((= step 1)
        (setq pf-phase "reading the tolerance")
-       (princ "\n\n  Step 1 of 7 - how far may the fitted line sit from a survey point?")
+       (princ (strcat (pf:step-n step simp)
+                      "how far may the fitted line sit from a survey point?"))
        (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
        (princ "\n  pick two points in the drawing to measure one.")
        (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
@@ -27826,11 +30211,13 @@
       ;; purpose.
       ((= step 2)
        (setq pf-phase "reading the miss percentage")
-       (princ "\n\n  Step 2 of 7 - what percent of the points may sit OFF the line")
+       (princ (strcat (pf:step-n step simp)
+                      "what percent of the points may sit OFF the line"))
        (princ "\n  (off, but still within the distance above)?")
-       (princ (strcat "\n  Press Enter for the standard "
+       (princ (strcat "\n  Press Enter for the recommended "
                       (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
-                      " percent."))
+                      " percent - a fifth of an AB survey an inch off"
+                      "\n  is what a built shell measures like."))
        (setq v (pf:ask-pct *PF-MISS-PCT* T))
        (if (eq v 'PF-BACK)
          (progn (princ "\n  Stepping back one question.")
@@ -27841,8 +30228,15 @@
       ;; -- step 3: optional cap on how many curves the result may use
       ((= step 3)
        (setq pf-phase "reading the curve limit")
-       (princ "\n\n  Step 3 of 7 - limit how many curves the result may use?")
-       (princ "\n  Type a whole number, or None for no limit.")
+       (princ (strcat (pf:step-n step simp)
+                      "limit how many curves the result may use?"))
+       (princ "\n  Type a whole number, None for no limit, or Auto for the")
+       (princ (strcat "\n  recommended cap - one curve per "
+                      (rtos *PF-ARC-DIV* 2 0)
+                      " points, worked out once they are"
+                      "\n  selected (a "
+                      (itoa (pf:rec-arcs 30))
+                      "-curve cap on a 30-point survey)."))
        (if (eq (pf:ask-cap T) 'PF-BACK)
          (progn (princ "\n  Stepping back one question.")
                 (setq step 2))
@@ -27859,7 +30253,8 @@
        (foreach mk wallmk (pf:temp-kill mk))
        (setq wallmk nil)
        (setq pf-phase "asking about straight lines")
-       (princ "\n\n  Step 4 of 7 - does the pool edge have any dead-straight walls?")
+       (princ (strcat (pf:step-n step simp)
+                      "does the pool edge have any dead-straight walls?"))
        (princ "\n  If Yes you will pick the two end points of each (snap to the")
        (princ "\n  survey points); a dashed line marks each declared wall.")
        (initget "Yes No Back Undo")
@@ -27867,8 +30262,7 @@
              rawwalls nil)
        (cond
          ((member ans '("Back" "Undo"))
-          (princ "\n  Stepping back one question.")
-          (setq step 3))
+          (setq step (pf:step-back step lo)))
          ((= ans "Yes")
           (setq rawwalls (pf:declare-walls)
                 wallmk   pf-decl-marks)
@@ -27892,7 +30286,8 @@
        (foreach mk cnrmk (pf:temp-kill mk))
        (setq cnrmk nil)
        (setq pf-phase "asking about sharp corners")
-       (princ "\n\n  Step 5 of 7 - are there any sharp corners the fit must not round off?")
+       (princ (strcat (pf:step-n step simp)
+                      "are there any sharp corners the fit must not round off?"))
        (princ "\n  Obvious ones are found automatically; declare the gentler ones here.")
        (princ "\n  If Yes you will pick each corner point (snap to the survey points).")
        (initget "Yes No Back Undo")
@@ -27923,7 +30318,8 @@
        (foreach mk holdmk (pf:temp-kill mk))
        (setq holdmk nil)
        (setq pf-phase "asking about held points")
-       (princ "\n\n  Step 6 of 7 - any points that must be held ABSOLUTELY?")
+       (princ (strcat (pf:step-n step simp)
+                      "any points that must be held ABSOLUTELY?"))
        (princ "\n  A held point can never be fudged: the line passes through it")
        (princ "\n  exactly, in every candidate.  If Yes you will pick each one")
        (princ "\n  (snap to the survey points); a small dashed ring marks it.")
@@ -27957,17 +30353,19 @@
   (if pf-pick
     (setq ss pf-pick)
     (progn
-      (princ "\n\n  Step 7 of 7 - select the survey points (POINTS layer or ab_pt")
+      (princ (strcat (pf:step-n 7 simp)
+                     "select the survey points (POINTS layer or ab_pt"))
       (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn
       ;; -- sort the selection into perimeter segments and points -----
       (setq pf-phase "reading the selected entities")
       (setq segs nil pts nil i 0 nunsup 0 nocs 0
-            npt 0 pf-ptnames nil)
+            npt 0 pf-ptnames nil pf-nmoved 0)
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
@@ -28010,17 +30408,24 @@
            (pf:add-point (cal:2d (cdr (assoc 10 ed)))
                          (pf:block-number en)))))
       (if (> nunsup 0)
-        (princ (strcat "\nABHD: warning - " (itoa nunsup)
+        (princ (strcat "\n" cmd ": warning - " (itoa nunsup)
                        " SPLINE/ELLIPSE object(s) on layer "
                        *PF-POOL-LAYER*
                        " were ignored (only lines, arcs, circles and"
                        " polylines can be read - explode or convert"
                        " them first).")))
       (if (> nocs 0)
-        (princ (strcat "\nABHD: warning - " (itoa nocs)
+        (princ (strcat "\n" cmd ": warning - " (itoa nocs)
                        " selected object(s) are not drawn in the world"
                        " plane; the fit is flat (XY) and may be wrong."
                        "  Set UCS to World and flatten them first.")))
+      ;; a moved point is a deduction, not a shot - say how many were
+      ;; left out, so a thin survey is explained rather than mysterious
+      (if (and pf-nmoved (> pf-nmoved 0))
+        (princ (strcat "\n" cmd ": " (itoa pf-nmoved)
+                       " moved point(s) (a \"" *PF-MOVED-MARK*
+                       "\" in the number) left out - nobody stood on"
+                       " one of those, so the line is not held to it.")))
       ;; the miss allowance: this share of the points (the answer to
       ;; step 2, rounded UP to a whole point) may sit off the result
       ;; by up to TOL
@@ -28065,7 +30470,7 @@
               (setq pf-holds (cons w1 pf-holds))))))
       (setq pf-holds (reverse pf-holds))
       (if (> (length dpts) *PF-SLOW-NOTE*)
-        (princ (strcat "\nABHD: " (itoa (length dpts))
+        (princ (strcat "\n" cmd ": " (itoa (length dpts))
                        " points - ordering and fitting will take a"
                        " little while, please wait...")))
       (cond
@@ -28117,7 +30522,7 @@
              (setq again T)
              (while again
                (setq again nil)
-               (if (eq 'REDO (pf:compare tour loop pts dpts tol allow))
+               (if (eq 'REDO (pf:compare tour loop pts dpts tol allow simp))
                  (progn
                    ;; -- redo: maybe omit points, then re-ask the
                    ;; numbers and draw a fresh trio -----------------
@@ -28211,12 +30616,22 @@
                        ;; walls and corners may change for the retry
                        (princ "\n\n  Straight walls and sharp corners can change too -")
                        (princ "\n  Enter keeps each list as it is.")
+                       (if simp
+                         (princ (strcat "\n  (there are no numbers to"
+                                        " re-ask - " cmd
+                                        " works to "
+                                        (rtos *PF-SIMP-TOL* 2 3)
+                                        " and draws the same five.)")))
                        ;; the Redo settings are a chain like the opening
                        ;; questions, and walk back the same way: Back at
                        ;; any of the six re-opens the one before it, and
                        ;; Back at the first has nowhere to go
+                       ;; SIMPABHD asked no numbers, so its Redo has
+                       ;; none to re-ask: the walls, corners and holds
+                       ;; can still change, and so can the omit list
+                       ;; above - that IS its Redo
                        (setq rstep 1)
-                       (while (<= rstep 6)
+                       (while (<= rstep (if simp 3 6))
                          (cond
                            ((= rstep 1)
                             (setq pf-phase "editing straight walls")
@@ -28262,6 +30677,159 @@
                          ((not (pf:has-arcs loop))
                           (setq tour (pf:loop-order loop dpts))))
                        (setq again T))))))))))))
+  (princ))
+
+;; ---- the commands ----------------------------------------------------
+(defun c:ABHD ( / stale pf-temp *error* pf-old-err pf-phase
+                    undo-open pf-pick)
+  ;; report which step failed if anything goes wrong, sweep away any
+  ;; preview geometry drawn so far, then restore the old handler - a
+  ;; cancelled run must not leave dashed markers or candidate outlines
+  ;; lying around
+  (setq pf-temp   nil
+        pf-old-err *error*
+        *error*
+          (lambda (m)
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+              (princ (strcat "\nABHD stopped while "
+                             (if pf-phase pf-phase "starting up")
+                             " -- " m)))
+            (pf:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+            (setq undo-open nil)
+            (setq *error* pf-old-err)
+            ;; cover mode must not outlive the run that asked for it,
+            ;; or the next ABHD would skip its bottom without a word
+            (setq abhd:*nobottom* nil)
+            (if lzd:report (lzd:report "ABHD" pf:*version* m))
+            (princ)))
+          (if lzd:begin (lzd:begin "ABHD" pf:*version*))
+
+  ;; sweep leftovers from a run that was interrupted before it could
+  ;; tidy up after itself
+  (setq stale (pf:purge-mine *PF-WALL-LAYER*))
+  (if (> stale 0)
+    (princ (strcat "\nABHD: cleared " (itoa stale)
+                   " leftover marker(s) from layer " *PF-WALL-LAYER*
+                   ".")))
+
+  ;; a pickfirst selection if there is one - kept for step 7, so the
+  ;; survey can be highlighted before the command is typed.  Probed
+  ;; here, before the undo group opens: the typed prompts between here
+  ;; and step 7 leave a pickfirst set alone, a command call would not
+  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (if lzd:watch (lzd:watch pf-pick))
+
+  ;; one undo group around the whole fit - a U after ABHD takes back
+  ;; the perimeter, the bottom and the markers in one step (the stale
+  ;; purge above stays outside it, so U does not resurrect old junk)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+
+  (princ "\n\nABHD - fit a pool perimeter through the surveyed points.")
+
+  (pf:fit-session nil)
+
+  ;; sweep the dashed wall markers and any candidate the user did not
+  ;; keep - the command tidies up after itself
+  (pf:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
+  (setq *error* pf-old-err)   ; restore the previous error handler
+  (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
+  (princ))
+
+;; ---- SIMPABHD: the same fit with nothing to decide first -------------
+;; ABHD's first three questions are the ones that stop a run before it
+;; starts.  How far may the line sit off a point?  What share may be
+;; off?  How many curves?  None of the three can be answered from the
+;; command line, because the answer is the shape they produce - which
+;; is why ABHD draws three of them and lets the drafter point.
+;;
+;; SIMPABHD takes that the rest of the way: it asks NONE of the three
+;; and draws FIVE.  Two are ABHD's own ends of the trade - fit 1 the
+;; least error there is, fit 5 the fewest curves that still hold the
+;; distance - so whatever a typed answer could have produced sits
+;; between them.  The three in the middle are ready-made answers, each
+;; a share, a distance and a curve cap together, printed beside its
+;; outline (*PF-SIMP-COMPARE*).  Everything after that is ABHD: the
+;; same walls, corners and held points, the same selection, the same
+;; table, the same pick, the same report, the same pool bottom.
+;;
+;; It is the same run, not a simpler one - pf:fit-session walks the
+;; same chain from step 4, so a rule ABHD keeps is a rule this keeps.
+(defun c:SIMPABHD ( / stale pf-temp *error* pf-old-err pf-phase
+                        undo-open pf-pick)
+  ;; report which step failed if anything goes wrong, sweep away any
+  ;; preview geometry drawn so far, then restore the old handler - a
+  ;; cancelled run must not leave dashed markers or candidate outlines
+  ;; lying around
+  (setq pf-temp   nil
+        pf-old-err *error*
+        *error*
+          (lambda (m)
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+              (princ (strcat "\nSIMPABHD stopped while "
+                             (if pf-phase pf-phase "starting up")
+                             " -- " m)))
+            (pf:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+            (setq undo-open nil)
+            (setq *error* pf-old-err)
+            ;; cover mode is ABHDCOVER's, and it must not outlive any
+            ;; run that reached the bottom flow with it set
+            (setq abhd:*nobottom* nil)
+            (if lzd:report (lzd:report "SIMPABHD" pf:*version* m))
+            (princ)))
+          (if lzd:begin (lzd:begin "SIMPABHD" pf:*version*))
+
+  ;; sweep leftovers from a run that was interrupted before it could
+  ;; tidy up after itself
+  (setq stale (pf:purge-mine *PF-WALL-LAYER*))
+  (if (> stale 0)
+    (princ (strcat "\nSIMPABHD: cleared " (itoa stale)
+                   " leftover marker(s) from layer " *PF-WALL-LAYER*
+                   ".")))
+
+  ;; a pickfirst selection if there is one - kept for the selection
+  ;; step, so the survey can be highlighted before the command is
+  ;; typed.  Probed here, before the undo group opens: the typed
+  ;; prompts in between leave a pickfirst set alone, a command call
+  ;; would not
+  (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (if lzd:watch (lzd:watch pf-pick))
+
+  ;; one undo group around the whole fit - a U after SIMPABHD takes
+  ;; back the perimeter, the bottom and the markers in one step (the
+  ;; stale purge above stays outside it, so U does not resurrect old
+  ;; junk).  Only when undo is recording - _Begin in a drawing with
+  ;; UNDO off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+
+  (princ "\n\nSIMPABHD - fit a pool perimeter, with nothing to decide first.")
+  (princ (strcat "\n  No numbers are asked.  Five perimeters are drawn to "
+                 (rtos *PF-SIMP-TOL* 2 3)
+                 " - the least"
+                 "\n  error there is, the fewest curves that hold it, and"
+                 " three ready-made"
+                 "\n  answers in between - and you keep the one that looks"
+                 " like the pool."))
+
+  (pf:fit-session T)
+
   ;; sweep the dashed wall markers and any candidate the user did not
   ;; keep - the command tidies up after itself
   (pf:temp-clear)
@@ -28297,7 +30865,8 @@
 ;; selected are trimmed by the same rule.  For when the perimeter was
 ;; fitted (or drawn) some other day and only the floor is needed.
 (defun c:ADAB ( / ss i en ed typ ext lay segs pts dpts loop nocs nskip
-                    nall npt stale pf-temp pf-ptnames pf-dim-warned
+                    nall npt pf-nmoved stale pf-temp pf-ptnames
+                    pf-dim-warned
                     *error* pf-old-err pf-phase undo-open pf-pick)
   (setq pf-temp   nil
         pf-old-err *error*
@@ -28312,7 +30881,9 @@
             (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* pf-old-err)
+            (if lzd:report (lzd:report "ADAB" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "ADAB" pf:*version*))
   ;; sweep leftovers from a run interrupted before it could tidy up
   (setq stale (pf:purge-mine *PF-WALL-LAYER*))
   (if (> stale 0)
@@ -28322,6 +30893,7 @@
   ;; a pickfirst selection if there is one, otherwise ask for it -
   ;; probed before the undo group opens, which would clear the set
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch pf-pick))
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -28338,13 +30910,14 @@
       (princ "\n  lines/arcs.  The survey points sitting on it are found by")
       (princ "\n  themselves; select them too only if they live somewhere unusual.")
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (princ "\nNothing usable selected (survey points and the perimeter geometry).")
     (progn
       (setq pf-phase "reading the selected entities")
       (setq segs nil pts nil i 0 nocs 0 nskip 0
-            npt 0 pf-ptnames nil)
+            npt 0 pf-ptnames nil pf-nmoved 0)
       (while (< i (sslength ss))
         (setq en  (ssname ss i)
               ed  (entget en)
@@ -28437,6 +31010,13 @@
                (princ (strcat "\n  (" (itoa (- nall (length dpts)))
                               " selected point(s) well off the"
                               " perimeter were set aside)")))))
+         ;; a moved point is a deduction, not a shot - say how many were
+         ;; left out, so a thin survey is explained rather than mysterious
+         (if (and pf-nmoved (> pf-nmoved 0))
+           (princ (strcat "\nADAB: " (itoa pf-nmoved)
+                          " moved point(s) (a \"" *PF-MOVED-MARK*
+                          "\" in the number) left out - nobody stood on"
+                          " one of those, so the line is not held to it.")))
          (if (null dpts)
            (princ (strcat "\nNo survey points sit on this perimeter"
                           " (within " (rtos *PF-PICKUP-EPS* 2 1)
@@ -28501,15 +31081,29 @@
   (princ "\n\nWHAT ABHD NEEDS")
   (princ "\n  * Survey points: ab_pt block inserts (any layer, their number")
   (princ "\n    attribute names them) or POINT entities on layer POINTS.")
+  (princ (strcat "\n  * A number carrying the letter \""
+                 *PF-MOVED-MARK*
+                 "\" is a MOVED point - ABFIND"))
+  (princ "\n    writes \"17m\" when it works out where Pt.17 SHOULD have been")
+  (princ "\n    from two tape readings.  Nobody stood there, so it is left out")
+  (princ "\n    of the fit entirely: not ordered, not fitted, not held, not")
+  (princ "\n    counted against the allowance, never ringed as a miss.  The")
+  (princ "\n    original it came from is still in.  The run says how many went.")
   (princ "\n  * Optionally on layer POOL: a drawn perimeter (guided mode) or a")
   (princ "\n    lines-only connect-the-dots sketch (sets the point order).")
   (princ "\n    With neither, the points are ordered automatically.")
   (pf:tut-pause)
   (princ "\nTHE SEVEN QUESTIONS")
   (princ "\n  1. Max distance a point may sit from the line (2 inch ceiling).")
-  (princ "\n  2. Percent of points allowed off the line (Enter = 15, rounded")
+  (princ (strcat "\n  2. Percent of points allowed off the line (Enter = "
+                 (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
+                 ", rounded"))
   (princ "\n     UP to whole points - the slack that buys longer arcs).")
-  (princ "\n  3. Curve cap (None = unlimited; binds in every mode).")
+  (princ (strcat "\n  3. Curve cap (Enter = Auto: one curve per "
+                 (rtos *PF-ARC-DIV* 2 0)
+                 " points, rounded to"))
+  (princ "\n     the nearest, worked out once they are selected.  None =")
+  (princ "\n     unlimited; either way it binds in every mode).")
   (princ "\n  4. Dead-straight walls: pick both ends, dashed marker, comes out")
   (princ "\n     as a straight LINE no arc may swallow or cross.")
   (princ "\n  5. Sharp corners: pick points where tangency is waived.")
@@ -28517,6 +31111,10 @@
   (princ "\n     never fudged, never spent from the miss allowance; tangency")
   (princ "\n     still applies at them (they are not corners).")
   (princ "\n  7. Select the points (and the POOL guide if you have one).")
+  (princ "\n  SIMPABHD asks NONE of the first three and draws five perimeters")
+  (princ "\n  instead of three - the least error there is, the fewest curves")
+  (princ "\n  that hold an inch, and three ready-made answers in between.")
+  (princ "\n  Everything from question 4 on is the same run, rule for rule.")
   (pf:tut-pause)
   (princ "\nWHAT THE FITTER GUARANTEES")
   (princ "\n  * Arc endpoints sit ON survey points; arc middles pass through a")
@@ -28605,7 +31203,7 @@
 ;; The watching tour: draw it, fit it, choose it, floor it, clean up.
 (defun pf:tut-demo ( / cp tour dpts allow bb hgt cap v segs ent cand
                        kept d1 d2 s1 s2 sp1 sp2 dp1 dp2 back lines q
-                       pts npt pf-ptnames pf-miss-pct pf-walls
+                       pts npt pf-nmoved pf-ptnames pf-miss-pct pf-walls
                        pf-corners pf-holds pf-dim-warned)
   (setq pf-phase "picking a spot for the demo")
   (princ "\n\n  The demo draws a practice pool about 30 ft wide, walks it")
@@ -28622,6 +31220,7 @@
       (cal:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
       (setq cp   (cal:2d cp)
             npt  0
+            pf-nmoved 0
             tour (pf:tut-survey cp)
             dpts (cal:dedupe pts *PF-EXACT-EPS*)
             bb   (pf:bbox dpts)
@@ -28738,7 +31337,9 @@
               (princ (strcat "\nTUTORIALABHD stopped -- " m)))
             (pf:temp-clear)
             (setq *error* pf-old-err)
+            (if lzd:report (lzd:report "TUTORIALABHD" pf:*version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "TUTORIALABHD" pf:*version*))
   (princ (strcat "\n\nTUTORIALABHD - how the ABHD pool fitter works ("
                  pf:*version* ")."))
   ;; one bracket, exactly the keyword list (STANDARDS section 1 rule
@@ -28763,11 +31364,21 @@
   (princ (strcat "\nABHD " pf:*version*))
   (princ))
 
-(princ (strcat "\nABHD " pf:*version*
-               " loaded.  ABHD fits the pool perimeter through its"
-               " points;"))
-(princ "\nADAB draws the pool bottom over an existing perimeter;")
-(princ "\nTUTORIALABHD (or TUTORIALADAB) walks new users through everything.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nABHD " pf:*version*
+                   " loaded.  ABHD fits the pool perimeter through its"
+                   " points;"))
+    (princ "\nSIMPABHD does the same with nothing to decide first;")
+    (princ "\nADAB draws the pool bottom over an existing perimeter;")
+    (princ "\nTUTORIALABHD (or TUTORIALADAB) walks new users through everything.")))
 (princ)
 
 
@@ -28876,7 +31487,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.7")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -29941,11 +32552,13 @@
 (defun acc:select ( / ss)
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\n\nSelect the closed perimeter - one polyline, or the same")
       (princ "\nshape exploded into lines and arcs.")
-      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))))
+      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nABCURCHECK: nothing selected.") nil)
     ss))
@@ -30001,7 +32614,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECK error: " msg)))
+    (if lzd:report (lzd:report "ABCURCHECK" *abcurcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCURCHECK" *abcurcheck-version*))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -30023,7 +32638,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKSCAN error: " msg)))
+    (if lzd:report (lzd:report "ABCURCHECKSCAN" *abcurcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCURCHECKSCAN" *abcurcheck-version*))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -30049,7 +32666,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "ABCURCHECKRESCUE" *abcurcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCURCHECKRESCUE" *abcurcheck-version*))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -30076,8 +32695,16 @@
   (princ (strcat "\nABCURCHECK " *abcurcheck-version* " loaded."))
   (princ))
 
-(princ (strcat "\nABCURCHECK " *abcurcheck-version*
-               " loaded.  Type ABCURCHECK to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABCURCHECK " *abcurcheck-version*
+                 " loaded.  Type ABCURCHECK to run.")))
 (princ)
 
 
@@ -30153,7 +32780,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.6")
+(setq *abpcheck-version* "v1.7")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -30771,6 +33398,7 @@
 (defun abp:asklimit (msg dflt / v)
   (initget 6)
   (setq v (getdist (strcat "\n" msg " <" (abp:dstr dflt) ">: ")))
+  (if lzd:ask (lzd:ask msg v))
   (if v v dflt))
 
 ;;; -------------------- the commands ------------------------------------
@@ -30784,13 +33412,16 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABPCHECK error: " msg)))
+    (if lzd:report (lzd:report "ABPCHECK" *abpcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABPCHECK" *abpcheck-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - probed BEFORE the undo
   ;; group opens, because that command clears the set (the convention
   ;; FITABHD and abhd already carry)
   (setq ss (ssget "_I" abp:*filter*))
+  (if lzd:watch (lzd:watch ss))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -30801,7 +33432,8 @@
   (if (null ss)
     (progn
       (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")
-      (setq ss (ssget abp:*filter*))))
+      (setq ss (ssget abp:*filter*))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X" abp:*filter*)))
   (if (null ss)
     (princ "\nNothing to check - no points or lines in the drawing.")
@@ -30868,7 +33500,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABPCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "ABPCHECKRESCUE" *abpcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABPCHECKRESCUE" *abpcheck-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -30892,8 +33526,16 @@
   (princ (strcat "\nABPCHECK " *abpcheck-version* " loaded."))
   (princ))
 
-(princ (strcat "\nABPCHECK " *abpcheck-version*
-               " loaded.  Type ABPCHECK to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABPCHECK " *abpcheck-version*
+                 " loaded.  Type ABPCHECK to run.")))
 (princ)
 
 
@@ -30958,6 +33600,18 @@
 ;;; dropped with it and said so, rather than being quietly snapped onto
 ;;; some other point.
 ;;;
+;;; MOVED POINTS ARE NOT SURVEY POINTS, and this is not the cutoff: a
+;;; number carrying the letter *CAB-MOVED-MARK* ("m") is out of the
+;;; fit before the cutoff is even asked.  ABFIND writes "17m" when it
+;;; copies Pt.17 to a position it worked out from two tape readings -
+;;; that is where the point SHOULD be, not where anybody stood, so a
+;;; perimeter held to it reports holding a point nobody measured.  The
+;;; cutoff and the omit list both KEEP a point and decide about it; a
+;;; moved point is not in the survey to be decided about.  Its digits
+;;; would have sorted it right beside the original it came from - the
+;;; original is still in and still fitted; only the deduced twin is
+;;; out.  ABHD's rule, held here word for word; the count is reported.
+;;;
 ;;; TWO MODES, chosen automatically from the selection:
 ;;;   * GUIDED  - the selection contains POOL geometry: the drawn
 ;;;               shape is used as the guide and re-fitted through the
@@ -30997,9 +33651,9 @@
 ;;;
 ;;; THE MISS ALLOWANCE: the perimeter does not have to thread every
 ;;; point exactly.  A share of the points - asked per run, standard
-;;; *CAB-MISS-PCT* (15%), rounded UP to the nearest whole point - may
-;;; sit off the result by up to the max distance (default 1 unit =
-;;; about an inch, capped at *CAB-TOL-MAX*); every other point stays on
+;;; *CAB-MISS-PCT* (20%), rounded UP to the nearest whole point - may
+;;; sit off the result by up to the max distance (default 1 unit = one
+;;; inch, capped at *CAB-TOL-MAX*); every other point stays on
 ;;; it (within *CAB-ON-EPS*).  That slack is spent where it buys the
 ;;; most: longer arcs, fewer curves, nicer radii.  It is a share of the
 ;;; points the CUTOFF KEPT - the ones it dropped buy no slack, since
@@ -31102,7 +33756,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.1")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.3")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -31124,6 +33778,16 @@
 (setq *CAB-PT-TAG*       "number")   ; attribute tag on the point block
                                     ; holding the surveyed point number,
                                     ; used to label it as "Pt.17"
+(setq *CAB-MOVED-MARK*   "M")        ; a point number carrying this letter
+                                    ; is a MOVED point - ABFIND writes
+                                    ; "17m" when it copies Pt.17 to a
+                                    ; position deduced from two tape
+                                    ; readings (abf:*moved-suffix*).
+                                    ; Nobody stood there, so it is out
+                                    ; of the fit entirely; ABHD's
+                                    ; *PF-MOVED-MARK* rule, held here
+                                    ; too.  Matched case-insensitively
+                                    ; anywhere in the number
 (setq *CAB-WALL-LAYER*   "POOL-WALLS"); layer the dashed markers for
                                     ; user-declared straight walls go on
 (setq *CAB-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
@@ -31170,12 +33834,19 @@
                                     ; allowance below.  Calibrated from a
                                     ; hand-drawn reference trace: ~87% of
                                     ; its points sat within a quarter inch
-(setq *CAB-MISS-PCT*     0.15)       ; share of the points (rounded UP to
+(setq *CAB-MISS-PCT*     0.20)       ; share of the points (rounded UP to
                                     ; a whole point) that may sit off the
                                     ; result by up to the tolerance
-                                    ; (about an inch by default) - this
-                                    ; slack is what buys longer spans and
-                                    ; fewer curves
+                                    ; (an inch by default) - this slack
+                                    ; is what buys longer spans and
+                                    ; fewer curves.  ABHD's
+                                    ; *PF-MISS-PCT*, held equal: the two
+                                    ; commands promise the same fit
+(setq *CAB-ARC-DIV*      3.0)        ; the RECOMMENDED curve cap: one
+                                    ; curve per this many survey points
+                                    ; the cutoff kept, rounded to the
+                                    ; NEAREST whole curve and never below
+                                    ; 1.  ABHD's *PF-ARC-DIV*, held equal
 (setq *CAB-CORNER-ANG*   (/ pi 4.0)) ; a point that turns more than this
                                     ; (45 deg) is a sharp corner: it may
                                     ; start or end a span but never gets
@@ -31314,10 +33985,14 @@
                                     ; practical purpose: it is not
                                     ; snapped to a nice radius
 (if (null *CAB-TOL*) (setq *CAB-TOL* 1.0)) ; default tolerance, 1 inch
-;; *CAB-MAX-ARCS* : cap on the number of curved segments in the output;
-;; nil = no cap.  The command prompts for it (Enter keeps the current
-;; value, "None" removes the cap) and remembers it for the session,
-;; like *CAB-TOL*.
+;; *CAB-MAX-ARCS* : cap on the number of curved segments in the output,
+;; in one of three states - 'AUTO (the recommendation: one curve per
+;; *CAB-ARC-DIV* points the cutoff kept, worked out at step 7 since
+;; step 3 has no points yet), a number, or nil for no cap at all.  The
+;; command prompts for it (Enter keeps the current value, "Auto" and
+;; "None" pick the other two) and remembers it for the session, like
+;; *CAB-TOL*.  ABHD's *PF-MAX-ARCS*, rule for rule.
+(if (null *CAB-MAX-ARCS*) (setq *CAB-MAX-ARCS* 'AUTO))
 
 ;; ---- circle / arc geometry -----------------------------------------
 
@@ -31588,6 +34263,18 @@
 ;; cab-miss-pct from the user's answer; Enter keeps the standard value.
 (defun cab:misspct ()
   (if cab-miss-pct cab-miss-pct *CAB-MISS-PCT*))
+
+;; The RECOMMENDED curve cap for N points: one curve per *CAB-ARC-DIV*
+;; of them, rounded to the nearest whole curve, never below 1.
+(defun cab:rec-arcs (n / c)
+  (setq c (fix (+ 0.5 (/ (float n) *CAB-ARC-DIV*))))
+  (if (< c 1) 1 c))
+
+;; The curve cap actually in force over N points, resolving the three
+;; states of *CAB-MAX-ARCS*.  Every reader of the cap goes through
+;; here, so the recommendation becomes a number in exactly one place.
+(defun cab:cap-for (n)
+  (if (eq 'AUTO *CAB-MAX-ARCS*) (cab:rec-arcs n) *CAB-MAX-ARCS*))
 
 ;; The "on the shape" threshold in force for the current run.  It
 ;; scales with the tolerance (a quarter of it, never below
@@ -31869,20 +34556,42 @@
     (setq sub (entnext sub)))
   val)
 
+;; Is NM the number of a MOVED point - one ABFIND deduced from two tape
+;; readings and numbered "17m" rather than one somebody shot?  ABHD's
+;; pf:moved-p, held here word for word.
+(defun cab:moved-p (nm)
+  (and nm
+       (eq 'STR (type nm))
+       (wcmatch (strcase nm) (strcat "*" (strcase *CAB-MOVED-MARK*) "*"))))
+
 ;; Remember a point, what to call it, and the number the run sorts it
 ;; by, so a miss can be reported as "Pt.17" using the number in the
 ;; drawing rather than a private index, and the cutoff below knows how
 ;; far up the survey the point sits.  Points with no number of their
 ;; own get the next count.
+;;
+;; A moved point is never remembered - not in pts, not in cab-allpts,
+;; so not in cab:live-pts either, which is what the cutoff and the
+;; omit list rebuild the fit from.  It is a deduction rather than a
+;; shot (see *CAB-MOVED-MARK*), and a perimeter held to a deduction
+;; reports holding a point nobody measured.  Note this is NOT the
+;; cutoff and NOT the omit list: both of those keep the point and
+;; decide about it, and a moved point is not in the survey to decide
+;; about.  Its digits would have sorted it right beside the original
+;; it came from (cab:num-in reads "17m" as 17), which is exactly the
+;; place it must not be.
 (defun cab:add-point (p nm / num)
-  (setq num         (cab:num-in nm)
-        npt         (1+ npt)
-        pts         (cons p pts)
-        cab-allpts  (cons p cab-allpts)
-        cab-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
-                          cab-ptnames)
-        cab-ptkeys  (cons (cons p (if num num npt)) cab-ptkeys))
-  (if num (setq cab-numbered (1+ cab-numbered))))
+  (if (cab:moved-p nm)
+    (setq cab-nmoved (1+ (if cab-nmoved cab-nmoved 0)))
+    (progn
+      (setq num         (cab:num-in nm)
+            npt         (1+ npt)
+            pts         (cons p pts)
+            cab-allpts  (cons p cab-allpts)
+            cab-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
+                              cab-ptnames)
+            cab-ptkeys  (cons (cons p (if num num npt)) cab-ptkeys))
+      (if num (setq cab-numbered (1+ cab-numbered))))))
 
 ;; The whole number a surveyed label carries: the FIRST run of digits
 ;; in it, so "17", "P17" and "17A" all read as seventeen.  nil when the
@@ -31992,6 +34701,7 @@
     (setq ans (getint (strcat "\n  Include points up to [Pick/All"
                               (if back "/Back" "") "] <"
                               (if out (itoa out) "All") ">: ")))
+    (if lzd:ask (lzd:ask "cab:ask-cut" ans))
     (cond
       ((null ans) (setq cut out))                     ; Enter: unchanged
       ;; the only question in front of this one is the selection, so
@@ -32935,13 +35645,16 @@
 ;; Print the hit report for the fit the user kept.  ALLOW is the run's
 ;; miss allowance (how many points were permitted to sit between the
 ;; on-the-shape threshold and the tolerance off the result).
-(defun cab:report (newsegs pts tol allow prior / nl na hiton hitok miss
+(defun cab:report (newsegs pts tol allow prior / ndist nl na hiton hitok
+                                                miss
                                                 q s s2 d dmin worst sum
                                                 sumo no nice onpt inner
                                                 ns i te ts kk mk nk
                                                 hw hq cab-on-eps)
-  ;; report against the same on-the-shape threshold the fit used
-  (setq cab-on-eps (max *CAB-ON-EPS* (* *CAB-ON-FRAC* tol)))
+  ;; report against the same on-the-shape threshold the fit used, and
+  ;; name the cap off the same count the fit was capped by
+  (setq cab-on-eps (max *CAB-ON-EPS* (* *CAB-ON-FRAC* tol))
+        ndist      (length (cal:dedupe pts *CAB-EXACT-EPS*)))
   (progn
       ;; -- segment mix, nice radii, arcs anchored on a point --------
       (setq nl 0 na 0 nice 0 onpt 0)
@@ -33041,8 +35754,9 @@
                            " is off by " (rtos hw 2 4)
                            " - the drawn shape or a declared wall"
                            " overruled it.")))))
-      (if (and *CAB-MAX-ARCS* (> na *CAB-MAX-ARCS*))
-        (princ (strcat "\n  (the curve cap is " (itoa *CAB-MAX-ARCS*)
+      (if (and (cab:cap-for ndist) (> na (cab:cap-for ndist)))
+        (princ (strcat "\n  (the curve cap is "
+                       (itoa (cab:cap-for ndist))
                        " but " (itoa na) " curves was the fewest"
                        " reachable: a closed loop needs at least 2"
                        " segments)")))
@@ -33165,7 +35879,8 @@
         left (cond ((= mode "tight") 0)
                    ((= mode "few")   1000000)
                    (T                allow))
-        cap  (if (= mode "asked") *CAB-MAX-ARCS*)
+        ;; the cap's own count is the DISTINCT points the cutoff kept
+        cap  (if (= mode "asked") (cab:cap-for (length dpts)))
         drop (if (= mode "tight")
                0
                (cal:ceil (* *CAB-DROP-PCT*
@@ -33325,7 +36040,8 @@
                      "\n  the tight fit spends curves to drive the error"
                      " towards nothing (it"
                      "\n  ignores that distance"
-                     (if *CAB-MAX-ARCS* " and the curve cap" "")
+                     (if (cab:cap-for (length dpts))
+                       " and the curve cap" "")
                      " and gives up no point at all), the middle one is"
                      "\n  your settings exactly, and the few fit holds"
                      " the same distance with as few"
@@ -33368,6 +36084,7 @@
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
                                     dflt "): ")))
+          (if lzd:watch (lzd:watch sel))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -33471,6 +36188,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *CAB-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "cab:ask-tol" tol))
   (cond
     ((cab:back-kw tol) 'CAB-BACK)
     (T
@@ -33492,6 +36210,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "cab:ask-pct" pct))
   (cond
     ((cab:back-kw pct) 'CAB-BACK)
     ((null pct) def)
@@ -33500,18 +36219,28 @@
      1.0)
     (T (/ pct 100.0))))
 
-;; Curve cap; remembered in *CAB-MAX-ARCS* (nil = no cap).
+;; What the cap prompt shows in its <angle brackets> - the standing
+;; answer in words, since one of the three states is a rule rather
+;; than a number.
+(defun cab:cap-word ()
+  (cond ((eq 'AUTO *CAB-MAX-ARCS*) "Auto")
+        (*CAB-MAX-ARCS*            (itoa *CAB-MAX-ARCS*))
+        (T                         "None")))
+
+;; Curve cap; remembered in *CAB-MAX-ARCS* - 'AUTO (a third of the
+;; points the cutoff kept), a number, or nil for no cap.
 (defun cab:ask-cap (back / mx)
-  (if back (initget 4 "None Back Undo") (initget 4 "None"))
-  (setq mx (getint (strcat "\n  Maximum curves <"
-                           (if *CAB-MAX-ARCS* (itoa *CAB-MAX-ARCS*) "None")
-                           ">"
-                           (if back " [None/Back]" "") ": ")))
+  (if back (initget 4 "Auto None Back Undo") (initget 4 "Auto None"))
+  (setq mx (getint (strcat "\n  Maximum curves <" (cab:cap-word) ">"
+                           (if back " [Auto/None/Back]" " [Auto/None]")
+                           ": ")))
+  (if lzd:ask (lzd:ask "cab:ask-cap" mx))
   (cond
     ((cab:back-kw mx) 'CAB-BACK)
     (T
      (cond ((null mx) nil)                         ; Enter: keep as-is
-           ((eq 'STR (type mx)) (setq *CAB-MAX-ARCS* nil))
+           ((eq 'STR (type mx))
+            (setq *CAB-MAX-ARCS* (if (= mx "Auto") 'AUTO nil)))
            (T (setq *CAB-MAX-ARCS* mx)))
      *CAB-MAX-ARCS*)))
 
@@ -33806,6 +36535,7 @@
                     ss i en ed lay typ ext nunsup nocs dall cut0 ent
                     segs pts dpts allow loop tour ok stale npt
                     again ring cab-cut cab-allpts cab-ptkeys cab-numbered
+                    cab-nmoved
                     cab-omitted cab-miss-pct cab-walls cab-corners
                     cab-holds cab-temp cab-ptnames
                     *error* cab-old-err cab-phase undo-open cab-pick)
@@ -33833,7 +36563,9 @@
             (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* cab-old-err)
+            (if lzd:report (lzd:report "CABHD" *cabhd-version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "CABHD" *cabhd-version*))
 
   ;; sweep leftovers from a run that was interrupted before it could
   ;; tidy up after itself
@@ -33846,6 +36578,7 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq cab-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+  (if lzd:watch (lzd:watch cab-pick))
 
   ;; one undo group around the whole fit - a U after CABHD takes back
   ;; the edge, the markers and the previews in one step (the stale
@@ -33895,9 +36628,10 @@
        (setq cab-phase "reading the miss percentage")
        (princ "\n\n  Step 2 of 8 - what percent of the points may sit OFF the line")
        (princ "\n  (off, but still within the distance above)?")
-       (princ (strcat "\n  Press Enter for the standard "
+       (princ (strcat "\n  Press Enter for the recommended "
                       (itoa (fix (+ 0.5 (* 100.0 *CAB-MISS-PCT*))))
-                      " percent."))
+                      " percent - a fifth of an AB survey an inch off"
+                      "\n  is what a built shell measures like."))
        (setq v (cab:ask-pct *CAB-MISS-PCT* T))
        (if (eq v 'CAB-BACK)
          (progn (princ "\n  Stepping back one question.")
@@ -33909,7 +36643,13 @@
       ((= step 3)
        (setq cab-phase "reading the curve limit")
        (princ "\n\n  Step 3 of 8 - limit how many curves the result may use?")
-       (princ "\n  Type a whole number, or None for no limit.")
+       (princ "\n  Type a whole number, None for no limit, or Auto for the")
+       (princ (strcat "\n  recommended cap - one curve per "
+                      (rtos *CAB-ARC-DIV* 2 0)
+                      " of the points the cutoff keeps,"
+                      "\n  worked out once they are selected (a "
+                      (itoa (cab:rec-arcs 30))
+                      "-curve cap on 30 points)."))
        (if (eq (cab:ask-cap T) 'CAB-BACK)
          (progn (princ "\n  Stepping back one question.")
                 (setq step 2))
@@ -34040,7 +36780,8 @@
         (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
         (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
         (princ "\n  Select objects: ")
-        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))))
+        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
+        (if lzd:watch (lzd:watch ss))))
     (if (null ss)
       (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
       (progn
@@ -34048,7 +36789,7 @@
         (setq cab-phase "reading the selected entities")
         (setq segs nil pts nil i 0 nunsup 0 nocs 0
               npt 0 cab-ptnames nil cab-ptkeys nil cab-allpts nil
-              cab-omitted nil cab-cut nil)
+              cab-omitted nil cab-cut nil cab-nmoved 0)
         (while (< i (sslength ss))
           (setq en  (ssname ss i)
                 ed  (entget en)
@@ -34106,6 +36847,14 @@
                          " selected object(s) are not drawn in the world"
                          " plane; the fit is flat (XY) and may be wrong."
                          "  Set UCS to World and flatten them first.")))
+        ;; a moved point is a deduction, not a shot - say how many
+        ;; were left out, so a survey that comes up short is
+        ;; explained rather than mysterious
+        (if (and cab-nmoved (> cab-nmoved 0))
+          (princ (strcat "\nCABHD: " (itoa cab-nmoved)
+                         " moved point(s) (a \"" *CAB-MOVED-MARK*
+                         "\" in the number) left out - nobody stood on"
+                         " one of those, so the line is not held to it.")))
         (cond
           ((null pts)
            (princ (strcat "\nNo survey points found (looked for POINT entities on layer "
@@ -34415,11 +37164,20 @@
   (princ))
 
 ;; ----------------------------------------------------------------------
-(princ (strcat "\nCABHD " *cabhd-version*
-               " loaded.  Type CABHD to fit a pool perimeter through"
-               " the surveyed"))
-(princ "\npoints, up to the point number where the pool edge stops.")
-(princ "\nCABHDVER prints the version.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nCABHD " *cabhd-version*
+                   " loaded.  Type CABHD to fit a pool perimeter through"
+                   " the surveyed"))
+    (princ "\npoints, up to the point number where the pool edge stops.")
+    (princ "\nCABHDVER prints the version.")))
 (princ)
 
 
@@ -34490,7 +37248,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.4")
+(setq *pointrenamer-version* "v1.5")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob the tool has, all of them here.
@@ -34690,6 +37448,7 @@
   (if back (initget 6 "Back Undo") (initget 6))
   (setq v (getdist (strcat "\n" msg (if back " [Back]" "")
                            " <" (ptr:dstr dflt) ">: ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) dflt)
         (t v)))
@@ -34700,6 +37459,7 @@
   (if back (initget 6 "Back Undo") (initget 6))
   (setq v (getint (strcat "\n" msg (if back " [Back]" "")
                           " <" (itoa dflt) ">: ")))
+  (if lzd:ask (lzd:ask msg v))
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) dflt)
         (t v)))
@@ -35139,6 +37899,7 @@
                         (cdr (assoc 8 (entget cand))) ") [Back]: ")
                 (strcat "\nSelect the perimeter (a polyline, circle,"
                         " line or arc) [Back]: "))))
+    (if lzd:watch (lzd:watch v))
     (cond
       ((member v '("Back" "Undo")) (setq done T res 'CAL-BACK))
       ;; entsel answers nil for Enter AND for a click that hit nothing.
@@ -35177,13 +37938,16 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nPOINTRENAMER error: " msg)))
+    (if lzd:report (lzd:report "POINTRENAMER" *pointrenamer-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POINTRENAMER" *pointrenamer-version*))
   (cal:syssave ptr:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; a highlight made before the command was typed (pickfirst), grabbed
   ;; before the undo group's command clears it - step 1 takes it once,
   ;; so coming Back re-asks interactively
   (setq pick1 (ssget "_I" ptr:*filter*))
+  (if lzd:watch (lzd:watch pick1))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -35201,7 +37965,8 @@
          (setq ss pick1 pick1 nil)
          (progn
            (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
-           (setq ss (ssget ptr:*filter*))))
+           (setq ss (ssget ptr:*filter*))
+           (if lzd:watch (lzd:watch ss))))
        ;; "whole drawing" is the tab you are looking at, the same scope
        ;; the clash check sweeps and the same one COVERCHECK and XFTCONV
        ;; use for this prompt: renumbering points in a layout you cannot
@@ -35390,8 +38155,16 @@
   (princ (strcat "\nPOINTRENAMER " *pointrenamer-version*))
   (princ))
 
-(princ (strcat "\nPOINTRENAMER " *pointrenamer-version*
-               " loaded.  Type POINTRENAMER to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOINTRENAMER " *pointrenamer-version*
+                 " loaded.  Type POINTRENAMER to run.")))
 (princ)
 
 
@@ -35467,7 +38240,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.0")
+(setq *lobf-version* "v1.1")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -35543,8 +38316,11 @@
 (setq lobf:*layer*         "LOBF")           ; the construction line kept
 (setq lobf:*color*         4)                ; ACI (cyan)
 (setq lobf:*preview-layer* "LOBF-PREVIEW")   ; the three candidates
-(setq lobf:*preview-color* 8)                ; ACI (grey) -- each XLINE
-                                             ; carries its own colour
+(setq lobf:*preview-color* 'auto)            ; ACI (grey) -- each XLINE
+                                             ; carries its own colour.
+                                             ; 'auto picks the grey for
+                                             ; the background; a number
+                                             ; is used exactly as given
 (setq lobf:*ign-layer*     "LOBF-IGNORED")   ; ring round a set-aside point
 (setq lobf:*ign-color*     1)                ; ACI (red)
 (setq lobf:*appid*         "LOBF")           ; renaming this orphans
@@ -36035,12 +38811,14 @@
   (initget "1 2 3 All None Redo")
   (setq pick (getkword (strcat "\n  Keep which fit - click one, or"
                                " [1/2/3/All/None/Redo] <" dflt ">: ")))
+  (if lzd:ask (lzd:ask "lobf:askfit" pick))
   (if (null pick)
     ;; no keyword typed: give them a click, and fall back to the
     ;; default this run worked out
     (progn
       (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
                                 dflt "): ")))
+      (if lzd:watch (lzd:watch sel))
       (if sel
         (progn
           (setq picked (car sel) i 1)
@@ -36129,7 +38907,8 @@
                      " give a direction - there is no line in them."))
       nil)
     (progn
-      (cal:ensure-layer lobf:*preview-layer* lobf:*preview-color*)
+      (cal:ensure-layer lobf:*preview-layer*
+                         (cal:ink lobf:*preview-color* 'guide))
       ;; sized to the run the points cover, so the labels read at any
       ;; scale the sheet is drawn at
       (setq run (lobf:runlen pts (lobf:cand-org (car cands))
@@ -36221,13 +39000,16 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLOBF error: " msg)))
+    (if lzd:report (lzd:report "LOBF" *lobf-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LOBF" *lobf-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - probed BEFORE the undo
   ;; group opens, because that command clears the set (the convention
   ;; ABPCHECK and abhd already carry)
   (setq ss (ssget "_I" lobf:*filter*))
+  (if lzd:watch (lzd:watch ss))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -36241,7 +39023,8 @@
     (if (null ss)
       (progn
         (princ "\nHighlight the points to fit (Enter = every point in the drawing): ")
-        (setq ss (ssget lobf:*filter*))))
+        (setq ss (ssget lobf:*filter*))
+        (if lzd:watch (lzd:watch ss))))
     (if (null ss) (setq ss (ssget "_X" lobf:*filter*)))
     (if (null ss)
       (princ "\nNothing to fit - no points in the drawing.")
@@ -36285,8 +39068,2481 @@
   (princ (strcat "\nLOBF " *lobf-version* " loaded."))
   (princ))
 
-(princ (strcat "\nLOBF " *lobf-version*
-               " loaded.  Type LOBF to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLOBF " *lobf-version*
+                 " loaded.  Type LOBF to run.")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> ABLOBF.lsp
+;;; ======================================================================
+
+;;; ===================================================================
+;;; ABLOBF.lsp  --  the line of best fit through points, as a POLYLINE
+;;; -------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  ABLOBF     fit an open run of arcs and lines through the
+;;;                       points, between two ends you pick
+;;;            ABLOBFVER  print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; LOBF's bigger sibling.  LOBF answers a row of points with ONE
+;;; STRAIGHT LINE; ABLOBF answers them with a POLYLINE - arcs and lines
+;;; threaded through the points the way ABHD threads a pool perimeter,
+;;; but OPEN.  A wall that bows, a coping run round one end of a pool,
+;;; a bench or a step nose: anything the points trace that is not a
+;;; closed loop and is not straight.
+;;;
+;;; WHAT MAKES IT DIFFERENT FROM ABHD.  ABHD fits a loop, and a loop
+;;; needs no ends: it closes on itself and the seam is the only joint
+;;; that has to be argued about.  A run that does not close has TWO
+;;; ends, and nothing in a cloud of points says which they are - so
+;;; ABLOBF asks.  Click the point the run starts at and the point it
+;;; ends at, or type the survey numbers they already carry; Enter takes
+;;; the farthest-apart pair, which is right for a run that does not
+;;; double back and wrong exactly when it does.  Everything else is
+;;; ordered BETWEEN those two: a nearest-neighbour walk from the start,
+;;; the end forced last, then 2-opt uncrossing with both ends pinned.
+;;;
+;;; WHAT COUNTS AS A POINT - ABHD's survey classifier:
+;;;   * an INSERT of the survey point block ("ab_pt"), on any layer;
+;;;     the number attribute it carries names it in reports AND is what
+;;;     you can type instead of clicking an end
+;;;   * a plain POINT entity on ANY layer - the selection is explicit,
+;;;     so there is nothing to guess at
+;;;   * any other INSERT sitting on the POINTS layer
+;;; Nothing else.  ABLOBF reads no drawn geometry at all: the order of
+;;; the run comes from the two ends and the walk between them, so a
+;;; window dragged over the whole sheet picks up the survey and leaves
+;;; what is drawn alone.
+;;;
+;;; HELD POINTS: the user may declare points that must be held
+;;; ABSOLUTELY - control shots, tie-ins, anything measured as an exact
+;;; position.  A held point is never buried inside a span, so every
+;;; span ends ON it and the fitted run passes through it exactly, in
+;;; every candidate; it costs nothing from the miss allowance and the
+;;; tangency window still applies at its joint (it is not a corner).
+;;;
+;;; The FITTER is ABHD's, walked in a straight line instead of round a
+;;; loop: there is no seam, no closing span and no start tangent to
+;;; arrive back at, so the first span starts free and the last simply
+;;; ends at the final point.  The two ends of the run are free kinks by
+;;; construction, and sharp corners are only ever flagged on interior
+;;; points.  Everything else is the loop walker's, unchanged - the
+;;; window widening, the exact-arc preference, the floating-arc rule
+;;; and the nice-radius snap.
+;;;
+;;; And everything else is ABHD's behaviour, kept on purpose: the miss
+;;; allowance, declared straight stretches and sharp corners, the curve
+;;; cap with its relaxing refit, nice radii, and the three candidates
+;;; (tight / as asked / few) drawn side by side to pick from.  The kept
+;;; run lands on the POOL layer like ABHD's, as an OPEN polyline, so
+;;; the rest of the toolset can read it.
+;;; ===================================================================
+
+;; ---- configuration -------------------------------------------------
+;;  Every value ABLOBF reads that someone might want to change lives in
+;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
+;;  file again; to try a value for one session, type the setq at the
+;;  command line, because every knob is read when the command runs.
+(setq *ablobf-version*   "v1.1")     ; announced on load; release_lisp.py
+                                    ; reads this banner and stamps the
+                                    ; dated twin in releases/ from it
+(setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
+                                    ; ABHD's, so the rest of the
+                                    ; toolset can read the result
+(setq *ABL-POINT-LAYER*  "POINTS")   ; layer whose POINTs/INSERTs are
+                                    ; always points
+(setq *ABL-POINT-BLOCK*  "ab_pt")    ; block name whose INSERTs mark
+                                    ; points wherever they sit
+(setq *ABL-OUT-LAYER*    "ABLOBF-FIT")  ; layer the candidate fits go on
+(setq *ABL-MISS-LAYER*   "FGStep")   ; layer the "could not hold this
+                                    ; point" rings go on; ABLOBF stamps
+                                    ; its objects and only erases its
+                                    ; own (see abl:tag-mine)
+(setq *ABL-MISS-RADIUS*  4.0)        ; radius of those rings (4 inches)
+(setq *ABL-PT-TAG*       "number")   ; attribute tag on the point block
+                                    ; naming the point, as in "Pt.17"
+(setq *ABL-WALL-LAYER*   "POOL-WALLS") ; layer for the dashed markers of
+                                    ; declared straight stretches
+(setq *ABL-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
+                                    ; prompt (2 inches)
+(setq *ABL-COMPARE*                  ; the three candidate fits offered:
+  '(("tight" 1 "red"    "most curves - least error")
+    ("asked" 2 "yellow" "as asked")
+    ("few"   4 "cyan"   "fewest curves - still within the distance")))
+                                    ; same three aims as ABHD: "tight"
+                                    ; fits to *ABL-TIGHT-TOL* with no
+                                    ; miss allowance and no cap;
+                                    ; "asked" is the settings as
+                                    ; typed; "few" lifts the miss
+                                    ; allowance so arcs run as long as
+                                    ; the typed distance permits
+(setq *ABL-TIGHT-TOL*    0.01)       ; the "tight" candidate's accuracy
+                                    ; target (units)
+(setq *ABL-EXACT-EPS*    0.001)      ; "exactly on" threshold (units)
+(setq *ABL-FIT-EPS*      0.01)       ; an arc through an interior point
+                                    ; must pass within twice this of it
+                                    ; to count as anchored
+(setq *ABL-ON-EPS*       0.25)       ; a point within this of the result
+                                    ; counts as ON it; only points off
+                                    ; by more eat into the allowance
+(setq *ABL-MISS-PCT*     0.15)       ; share of the points (rounded UP)
+                                    ; that may sit off the result by up
+                                    ; to the tolerance
+(setq *ABL-CORNER-ANG*   (/ pi 4.0)) ; a point that turns more than this
+                                    ; (45 deg) is a sharp corner: it
+                                    ; may start or end a span but never
+                                    ; gets buried inside one
+(setq *ABL-NICE-RADII* '(12.0 6.0 1.0)) ; preferred arc-radius tiers,
+                                    ; tried in order: whole feet, half
+                                    ; feet, whole inches
+(setq *ABL-TANG-TOL* (/ pi 22.5))    ; wiggle room from perfect tangency
+                                    ; at each joint (8 degrees)
+(setq *ABL-TANG-STEPS* '(1.0 1.25 1.5)) ; when nothing fits inside the
+                                    ; tangent window, stretch it by
+                                    ; these multiples before falling
+                                    ; back to a one-point stub
+(setq *ABL-ARC-SLACK* (/ pi 3.0))    ; how much further than its own
+                                    ; points actually turn one arc may
+                                    ; sweep (60 degrees).  An arc is
+                                    ; allowed to curve about as much as
+                                    ; the run of points it covers
+                                    ; curves, and no more - which is
+                                    ; what stops a shaky survey coming
+                                    ; back as a chain of loops.  A span
+                                    ; between two neighbouring points
+                                    ; covers no turn at all, so it gets
+                                    ; the slack alone.
+(setq *ABL-DROP-PCT*     0.10)       ; share of the points (rounded UP)
+                                    ; the fit may give up on entirely:
+                                    ; left further off than the max
+                                    ; distance, counted as "not held"
+                                    ; and ringed in the drawing.  Spent
+                                    ; only where the walk would
+                                    ; otherwise shatter into one-point
+                                    ; stubs, and only when each point
+                                    ; given up buys at least two more
+                                    ; points of span.  Declared
+                                    ; corners, stretch points and held
+                                    ; points are never given up, and
+                                    ; the "tight" candidate is granted
+                                    ; none of this at all.
+(setq *ABL-DROP-MULT*    2.0)        ; how far past the max distance a
+                                    ; point has to be before the fit
+                                    ; may give up on it at all - what
+                                    ; separates a bad shot from a
+                                    ; feature.  A point that misses by
+                                    ; a little is still fought for and
+                                    ; still stops the span, exactly as
+                                    ; before.
+(setq *ABL-SNAP-EPS*     0.02)       ; a nice-radius snap may move the
+                                    ; covered points at most this far
+                                    ; beyond where they already sat
+(setq *ABL-CHAIN-FUZZ*   1.0e-4)     ; endpoint-matching fuzz for
+                                    ; chaining sketch segments
+(setq *ABL-FLOAT-GAIN*   2)          ; an arc that floats between the
+                                    ; points (its middle on no survey
+                                    ; point) is taken only when it
+                                    ; covers at least this many more
+                                    ; points than the longest arc that
+                                    ; passes exactly through one
+(setq *ABL-DROP-GAIN*    2)          ; and every point given up must buy
+                                    ; at least this many more points of
+                                    ; span, or it is held after all
+(setq *ABL-ON-FRAC*      0.25)       ; the on-the-shape threshold scales
+                                    ; with the distance typed: this
+                                    ; fraction of it, or *ABL-ON-EPS*,
+                                    ; whichever is larger.  If 4 inches
+                                    ; of error is accepted, a point an
+                                    ; inch off is plainly still ON the
+                                    ; shape - counting it as a miss
+                                    ; would burn the whole allowance on
+                                    ; the first span
+(setq *ABL-ANCHOR-EPS*   (* 2.0 *ABL-FIT-EPS*)) ; an arc "passes
+                                    ; through" an interior survey point
+                                    ; when the point sits within this
+                                    ; of it - twice the fit epsilon, so
+                                    ; a nice-radius snap of a hair
+                                    ; still counts as anchored
+(setq *ABL-CAP-RELAX*    1.4)        ; when a fit needs more curves
+                                    ; than the cap allows, the whole
+                                    ; run is refitted with the distance
+                                    ; multiplied by this, again and
+                                    ; again, until the cap holds.
+                                    ; Nearer 1 = finer steps, more
+                                    ; refits, a result closer to the cap
+(setq *ABL-CAP-TRIES*    40)         ; ...and at most this many refits;
+                                    ; the fewest-curves result seen is
+                                    ; kept when the cap is still unmet
+(setq *ABL-BULGE-CLAMP*  1.373)      ; the half-angle a tangent-window
+                                    ; edge, or a span's own permitted
+                                    ; turn, may reach (radians): its
+                                    ; tangent is a bulge of about 5, an
+                                    ; arc sweeping some 314 degrees.
+                                    ; Keeps U-turn geometry finite
+(setq *ABL-STRAIGHT-R*   1.0e6)      ; an arc whose radius reaches this
+                                    ; is a straight line for every
+                                    ; practical purpose: it is not
+                                    ; snapped to a nice radius
+(if (null *ABL-TOL*)   (setq *ABL-TOL* 1.0))      ; default tolerance
+;; *ABL-MAX-ARCS* : cap on the number of curved segments in the output;
+;; nil = no cap.  Prompted for and remembered per session, like
+;; *ABL-TOL*.
+
+;; ---- circle / arc geometry -----------------------------------------
+
+;; Circumcenter of three points, nil when (nearly) collinear.
+(defun abl:circumcenter (pa pb pc / x1 y1 x2 y2 x3 y3 d s1 s2 s3)
+  (setq x1 (car pa) y1 (cadr pa)
+        x2 (car pb) y2 (cadr pb)
+        x3 (car pc) y3 (cadr pc)
+        d  (* 2.0 (+ (* x1 (- y2 y3)) (* x2 (- y3 y1)) (* x3 (- y1 y2)))))
+  (if (< (abs d) 1.0e-10)
+    nil
+    (progn
+      (setq s1 (+ (* x1 x1) (* y1 y1))
+            s2 (+ (* x2 x2) (* y2 y2))
+            s3 (+ (* x3 x3) (* y3 y3)))
+      (list (/ (+ (* s1 (- y2 y3)) (* s2 (- y3 y1)) (* s3 (- y1 y2))) d)
+            (/ (+ (* s1 (- x3 x2)) (* s2 (- x1 x3)) (* s3 (- x2 x1))) d)))))
+
+;; Bulge of the unique circular arc that starts at P1, ends at P2 and
+;; passes through Q.  0.0 when collinear or a (near) full circle.
+(defun abl:bulge-3pt (p1 q p2 / c a1 a2 aq dccw dq)
+  (setq p1 (cal:2d p1) q (cal:2d q) p2 (cal:2d p2)
+        c  (abl:circumcenter p1 q p2))
+  (if (null c)
+    0.0
+    (progn
+      (setq a1   (angle c p1)
+            a2   (angle c p2)
+            aq   (angle c q)
+            dccw (cal:angnorm (- a2 a1))
+            dq   (cal:angnorm (- aq a1)))
+      (cond
+        ((< dccw 1.0e-9) 0.0)                       ; degenerate sweep
+        ((> dccw (- (* 2.0 pi) 1.0e-9)) 0.0)        ; degenerate sweep
+        ((<= dq dccw) (cal:tan (/ dccw 4.0)))        ; CCW arc through Q
+        (T (- (cal:tan (/ (- (* 2.0 pi) dccw) 4.0)))))))) ; CW through Q
+
+;; Arc geometry of a bulged segment: (center radius angStart angEnd).
+;; nil for a straight segment.
+(defun abl:arc-geom (p1 p2 b / ch dir apex c)
+  (if (< (abs b) 1.0e-9)
+    nil
+    (progn
+      (setq p1   (cal:2d p1)
+            p2   (cal:2d p2)
+            ch   (cal:dist p1 p2)
+            dir  (cal:v* (cal:v- p2 p1) (/ 1.0 ch))
+            apex (cal:v+ (cal:mid p1 p2)
+                         (cal:v* (cal:perp dir) (* -0.5 ch b)))
+            c    (abl:circumcenter p1 apex p2))
+      (if (null c)
+        nil
+        (list c (cal:dist c p1) (angle c p1) (angle c p2))))))
+
+;; Distance from point P to segment (p1 p2 bulge).
+(defun abl:seg-dist (p seg / p1 p2 b v w len2 t2 g c r a1 a2 ap sweep rel)
+  (setq p  (cal:2d p)
+        p1 (cal:2d (car seg))
+        p2 (cal:2d (cadr seg))
+        b  (caddr seg))
+  (if (< (abs b) 1.0e-9)
+    (progn
+      (setq v    (cal:v- p2 p1)
+            w    (cal:v- p p1)
+            len2 (cal:dot v v))
+      (if (< len2 1.0e-20)
+        (cal:dist p p1)
+        (progn
+          (setq t2 (/ (cal:dot w v) len2))
+          (if (< t2 0.0) (setq t2 0.0))
+          (if (> t2 1.0) (setq t2 1.0))
+          (cal:dist p (cal:v+ p1 (cal:v* v t2))))))
+    (progn
+      (setq g (abl:arc-geom p1 p2 b))
+      (if (null g)
+        (min (cal:dist p p1) (cal:dist p p2))
+        (progn
+          (setq c  (car g)  r (cadr g)
+                a1 (caddr g) a2 (cadddr g)
+                ap (angle c p))
+          (if (> b 0.0)
+            (setq sweep (cal:angnorm (- a2 a1)) rel (cal:angnorm (- ap a1)))
+            (setq sweep (cal:angnorm (- a1 a2)) rel (cal:angnorm (- ap a2))))
+          (if (<= rel sweep)
+            (abs (- (cal:dist p c) r))
+            (min (cal:dist p p1) (cal:dist p p2))))))))
+
+
+;; ---- entity -> segment extraction ----------------------------------
+;; A segment is (startPt endPt bulge), 2D points.
+
+;; ---- span fitting helpers --------------------------------------------
+;; A "span" is one candidate segment from A to B judged against QS, the
+;; survey points it is supposed to represent.
+
+;; Worst distance from any of QS to the segment (A B bulge).
+(defun abl:span-dev (a b bul qs / seg mx d q)
+  (setq seg (list a b bul) mx 0.0)
+  (foreach q qs
+    (setq d (abl:seg-dist q seg))
+    (if (> d mx) (setq mx d)))
+  mx)
+
+;; The miss percentage in force for the current run.
+(defun abl:misspct ()
+  (if abl-miss-pct abl-miss-pct *ABL-MISS-PCT*))
+
+;; The "on the shape" threshold in force for the current run; scales
+;; with the tolerance (a quarter of it, never below *ABL-ON-EPS*).
+;; abl-on-eps is bound per pass by abl:fit-pass / abl:fit-pass-open.
+(defun abl:oneps ()
+  (if abl-on-eps abl-on-eps *ABL-ON-EPS*))
+
+;; How many of QS sit farther than the on-the-shape threshold from the
+;; segment - the points that would eat into the miss allowance.
+(defun abl:span-misses (a b bul qs / seg c q lim)
+  (setq seg (list a b bul) c 0 lim (abl:oneps))
+  (foreach q qs
+    (if (> (abl:seg-dist q seg) lim) (setq c (1+ c))))
+  c)
+
+;; Radius of the arc (A B bulge); nil for a straight segment.
+(defun abl:bulge-radius (a b bl / h)
+  (if (< (abs bl) 1.0e-9)
+    nil
+    (progn
+      (setq h (/ (cal:dist a b) 2.0))
+      (/ (* h (1+ (* bl bl))) (* 2.0 (abs bl))))))
+
+;; Bulge of the arc from A to B with radius R, on the same side and
+;; with the same minor/major-arc character as reference bulge BREF.
+(defun abl:radius-bulge (a b r bref / h s bl)
+  (setq h (/ (cal:dist a b) 2.0))
+  (if (or (< r h) (< h 1.0e-9))
+    nil
+    (progn
+      (setq s  (sqrt (- (* r r) (* h h)))
+            bl (if (> (abs bref) 1.0)
+                 (/ (+ r s) h)              ; major arc
+                 (/ (- r s) h)))            ; minor arc
+      (if (< bref 0.0) (- bl) bl))))
+
+;; Try to snap the arc A->B (free-fit bulge BL over points QS) to a
+;; nice radius, keeping every point within TOL and at most LEFT of
+;; them off by more than the on-the-shape threshold.  When WIN (a
+;; bulge interval) is given the snapped bulge must stay inside it.
+;; Returns (bulge . misses) of the snapped arc, or nil.
+(defun abl:snap-arc (a b bl qs tol left win / r0 h best tier lo hi
+                                              cands r bl2 mis)
+  (setq r0   (abl:bulge-radius a b bl)
+        h    (/ (cal:dist a b) 2.0)
+        best nil)
+  (if (and r0 (< r0 *ABL-STRAIGHT-R*))       ; a huge radius is basically straight
+    (foreach tier *ABL-NICE-RADII*
+      (if (null best)
+        (progn
+          (setq lo    (* tier (fix (/ r0 tier)))
+                hi    (+ lo tier)
+                cands (if (< (- r0 lo) (- hi r0))
+                        (list lo hi)
+                        (list hi lo)))
+          (foreach r cands
+            (if (and (null best) (>= r h) (> r 0.0))
+              (progn
+                (setq bl2 (abl:radius-bulge a b r bl))
+                (if (and bl2
+                         (or (null win)
+                             (and (>= bl2 (car win)) (<= bl2 (cdr win))))
+                         (<= (abl:span-dev a b bl2 qs) tol)
+                         (<= (setq mis (abl:span-misses a b bl2 qs))
+                             left))
+                  (setq best (cons bl2 mis))))))))))
+  best)
+
+;; ---- point ordering and naming ---------------------------------------
+
+;; Remove every element equal (within fuzz) to VAL from LST.
+(defun abl:remove (val lst / out x)
+  (foreach x lst
+    (if (not (equal x val 1.0e-9)) (setq out (cons x out))))
+  (reverse out))
+
+;; Insert (key . val) pair X into the already-sorted list LST.
+(defun abl:ins-car (x lst)
+  (cond ((null lst) (list x))
+        ((< (car x) (car (car lst))) (cons x lst))
+        (T (cons (car lst) (abl:ins-car x (cdr lst))))))
+
+;; Insertion-sort a list of (key . val) pairs ascending by key.
+(defun abl:sort-car (lst / out x)
+  (foreach x lst (setq out (abl:ins-car x out)))
+  out)
+
+;; The farthest-apart pair of points, as (a b) - the automatic choice
+;; of ends for an open run.
+(defun abl:far-pair (pts / a b best q r d)
+  (setq best -1.0 a nil b nil)
+  (foreach q pts
+    (foreach r pts
+      (setq d (cal:dist q r))
+      (if (> d best) (setq best d a q b r))))
+  (list a b))
+
+;; The point in QS farthest from P.  QS holds at least two distinct
+;; points, so this is never P itself - which is what makes it the safe
+;; thing to OFFER as the second end once the first one is taken.
+(defun abl:far-from (p qs / best bd q d)
+  (foreach q qs
+    (setq d (cal:dist p q))
+    (if (or (null bd) (> d bd)) (setq best q bd d)))
+  best)
+
+;; Order points into an OPEN run from E1 to E2 (nil = pick the
+;; farthest-apart pair automatically): nearest-neighbour walk from E1,
+;; E2 forced last, then 2-opt with BOTH ENDS FIXED.  Reversing
+;; tour[i+1..j] changes only the edges (i,i+1) and (j,j+1); with j
+;; capped at n-2 the index j+1 always exists, so there is no
+;; wraparound and no closing edge to price - the closed 2-opt's delta
+;; would charge for an edge an open run does not have.
+(defun abl:order-points-open (pts e1 e2 / pr cur tour rest best bd q d n
+                                          i j k ti ti1 tj tj1 delta head
+                                          midl taill pass improved)
+  (if (null e1)
+    (progn
+      (setq pr (abl:far-pair pts)
+            e1 (car pr)
+            e2 (cadr pr))))
+  (setq cur  e1
+        rest (abl:remove e2 (abl:remove e1 pts))
+        tour (list e1))
+  (while rest
+    (setq best nil bd nil)
+    (foreach q rest
+      (setq d (cal:dist cur q))
+      (if (or (null bd) (< d bd)) (setq best q bd d)))
+    (setq tour (cons best tour)
+          cur  best
+          rest (abl:remove best rest)))
+  (setq tour (reverse (cons e2 tour))
+        n    (length tour)
+        pass 0
+        improved T)
+  (while (and improved (< pass 40))
+    (setq improved nil pass (1+ pass) i 0)
+    (while (< i (- n 2))
+      (setq j (1+ i))
+      (while (< j (1- n))
+        (setq ti    (nth i tour)
+              ti1   (nth (1+ i) tour)
+              tj    (nth j tour)
+              tj1   (nth (1+ j) tour)
+              delta (- (+ (cal:dist ti tj) (cal:dist ti1 tj1))
+                       (+ (cal:dist ti ti1) (cal:dist tj tj1))))
+        (if (< delta -1.0e-9)
+          (progn                        ; reverse tour[i+1 .. j]
+            (setq head nil midl nil taill nil k 0)
+            (foreach q tour
+              (cond ((<= k i) (setq head (cons q head)))
+                    ((<= k j) (setq midl (cons q midl)))
+                    (T        (setq taill (cons q taill))))
+              (setq k (1+ k)))
+            (setq tour     (append (reverse head) midl (reverse taill))
+                  improved T)))
+        (setq j (1+ j)))
+      (setq i (1+ i))))
+  tour)
+
+;; Remember a point, what to call it, and the number the survey gives
+;; it, so a miss reports as "Pt.17" using the number in the drawing and
+;; an end can be named by typing that number instead of hunting for the
+;; point.  Points with no number of their own get the next count.
+(defun abl:add-point (p nm / num)
+  (setq num         (abl:num-in nm)
+        npt         (1+ npt)
+        pts         (cons p pts)
+        abl-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
+                          abl-ptnames)
+        abl-ptkeys  (cons (cons p (if num num npt)) abl-ptkeys))
+  (if num (setq abl-numbered (1+ abl-numbered))))
+
+;; The whole number a surveyed label carries: the FIRST run of digits in
+;; it, so "17", "P17" and "17A" all read as seventeen.  nil when the
+;; label holds no digit at all - such a point falls back to its place in
+;; the selection (see abl:add-point).  (cab:num-in, CABHD.lsp.)
+(defun abl:num-in (s / i n c out done)
+  (setq out "" done nil i 1 n (if s (strlen s) 0))
+  (while (and (<= i n) (null done))
+    (setq c (substr s i 1))
+    (cond ((and (>= c "0") (<= c "9")) (setq out (strcat out c)))
+          ((/= out "") (setq done T)))
+    (setq i (1+ i)))
+  (if (= out "") nil (atoi out)))
+
+;; The survey number of the point at Q, or 0 when it has none.
+(defun abl:pt-key (q / k p)
+  (setq k nil)
+  (foreach p abl-ptkeys
+    (if (and (null k) (< (cal:dist (car p) q) *ABL-EXACT-EPS*))
+      (setq k (cdr p))))
+  (if k k 0))
+
+;; The lowest and highest survey number in QS, as (lo . hi).
+(defun abl:key-range (qs / lo hi k q)
+  (foreach q qs
+    (setq k (abl:pt-key q))
+    (if (or (null lo) (< k lo)) (setq lo k))
+    (if (or (null hi) (> k hi)) (setq hi k)))
+  (if lo (cons lo hi)))
+
+;; The point in QS whose survey number is N, or nil when no point
+;; carries it.  Two points cannot share a number in a sane survey; if
+;; they do, the first one read wins and the caller says which it took.
+(defun abl:pt-of-key (n qs / out q)
+  (foreach q qs
+    (if (and (null out) (= (abl:pt-key q) n)) (setq out q)))
+  out)
+
+;; What to call the survey point at Q.
+(defun abl:pt-name (q / nm p)
+  (setq nm nil)
+  (foreach p abl-ptnames
+    (if (and (null nm) (< (cal:dist (car p) q) *ABL-EXACT-EPS*))
+      (setq nm (cdr p))))
+  (if nm nm "?"))
+
+;; The member of LST nearest to P.
+(defun abl:nearest (p lst / best bd q d)
+  (setq best nil bd nil)
+  (foreach q lst
+    (setq d (cal:dist p q))
+    (if (or (null bd) (< d bd)) (setq best q bd d)))
+  best)
+
+;; Index of point P in TOUR (exact-point fuzz), or nil.
+(defun abl:tour-index (p tour / i k q)
+  (setq i nil k 0)
+  (foreach q tour
+    (if (and (null i) (< (cal:dist p q) *ABL-EXACT-EPS*)) (setq i k))
+    (setq k (1+ k)))
+  i)
+
+;; Number of curved segments in a span list.
+(defun abl:arc-count (spans / c sp)
+  (setq c 0)
+  (foreach sp spans (if (>= (abs (caddr sp)) 1.0e-9) (setq c (1+ c))))
+  c)
+
+;; ---- near-tangent span fitting ---------------------------------------
+;; Arcs sit ON the survey points: every span runs from tour point to
+;; tour point and its interior is fitted through the points with exact
+;; 3-point arcs.  Tangency is a WINDOW: at each joint the new arc's
+;; start tangent may differ from the previous arc's end tangent by at
+;; most *ABL-TANG-TOL*.  A bulge window is a cons (lo . hi); nil means
+;; unconstrained.
+
+;; Allowed bulge interval for the span A->B whose START tangent must
+;; lie within *ABL-TANG-TOL* (times WF) of the incoming tangent TE.
+(defun abl:tang-window (te a b wf / tt phi alo ahi lo hi)
+  (setq tt  (* *ABL-TANG-TOL* wf)
+        phi (cal:signed-dang te (angle a b))
+        alo (max (min (/ (- phi tt) 2.0) *ABL-BULGE-CLAMP*) (- *ABL-BULGE-CLAMP*))
+        ahi (max (min (/ (+ phi tt) 2.0) *ABL-BULGE-CLAMP*) (- *ABL-BULGE-CLAMP*))
+        lo  (cal:tan alo)
+        hi  (cal:tan ahi))
+  (if (<= lo hi) (cons lo hi) (cons hi lo)))
+
+;; Clamp bulge B into window WIN (nil = unconstrained).
+(defun abl:clamp-b (b win)
+  (cond ((null win) b)
+        ((< b (car win)) (car win))
+        ((> b (cdr win)) (cdr win))
+        (T b)))
+
+;; Closest any of QS comes to the segment (A B bulge).
+(defun abl:span-min (a b bul qs / seg mn d q)
+  (setq seg (list a b bul) mn nil)
+  (foreach q qs
+    (setq d (abl:seg-dist q seg))
+    (if (or (null mn) (< d mn)) (setq mn d)))
+  mn)
+
+;; ---- how far an arc is allowed to curve ---------------------------
+;; The fitter used to accept any bulge the tangent window let through,
+;; and the window opens all the way to a near-full circle once the
+;; incoming tangent has swung round.  On a survey with real scatter
+;; that let one bad joint spiral: every arc came back a semicircle,
+;; each one flinging the tangent further round, until the outline
+;; read as a string of loops.  So an arc now has to justify its
+;; curvature with the points it covers.
+
+;; Total turning of the polyline A -> QS... -> B, in radians - how far
+;; round the run of points this span sits on actually swings.
+(defun abl:span-turn (a b qs / chain tot)
+  (setq chain (cons a (append qs (list b)))
+        tot   0.0)
+  (while (cddr chain)
+    (setq tot   (+ tot (abs (cal:signed-dang
+                              (angle (car chain) (cadr chain))
+                              (angle (cadr chain) (caddr chain)))))
+          chain (cdr chain)))
+  tot)
+
+;; The steepest bulge this span's own points justify: it may sweep as
+;; far as they turn, plus *ABL-ARC-SLACK*.  A span between two
+;; neighbours covers no turn, so it gets the slack alone.
+(defun abl:max-bulge (a b qs)
+  (cal:tan (min (/ (+ (abl:span-turn a b qs) *ABL-ARC-SLACK*) 4.0) *ABL-BULGE-CLAMP*)))
+
+;; Clamp bulge B to +/- MX.
+(defun abl:cap-b (b mx)
+  (cond ((> b mx) mx) ((< b (- mx)) (- mx)) (T b)))
+
+;; How the arc (A B BUL) treats the points QS, in one pass:
+;;   (written-off  worst deviation of the rest  misses among the rest)
+;; Only a point PLAINLY off - further than *ABL-DROP-MULT* times TOL -
+;; may be written off; that is what separates a bad shot from a
+;; feature, and writing one off is what keeps a bad shot from
+;; shattering the span into stubs.  A point that misses by merely a
+;; little still counts against the fit, so the span stops at it as it
+;; always did.  The caller rations how many may go.
+(defun abl:span-score (a b bul qs tol / seg drop dev mis lim d q)
+  (setq seg (list a b bul) drop 0 dev 0.0 mis 0 lim (abl:oneps))
+  (foreach q qs
+    (setq d (abl:seg-dist q seg))
+    (if (> d (* *ABL-DROP-MULT* tol))
+      (setq drop (1+ drop))
+      (progn
+        (if (> d dev) (setq dev d))
+        (if (> d lim) (setq mis (1+ mis))))))
+  (list drop dev mis))
+
+;; The points of QS this arc actually holds (within TOL) - the ones it
+;; wrote off must not go on to steer the nice-radius snap.
+(defun abl:span-kept (a b bul qs tol / seg out q)
+  (setq seg (list a b bul))
+  (foreach q qs
+    (if (<= (abl:seg-dist q seg) tol) (setq out (cons q out))))
+  (reverse out))
+
+;; T when score SC beats KEY: fewer points written off, or as few and
+;; a closer fit.
+(defun abl:better (sc key)
+  (or (< (car sc) (car key))
+      (and (= (car sc) (car key)) (< (cadr sc) (cadr key)))))
+
+;; Best bulge for the span A->B over interior points QS, restricted to
+;; the tangent window WIN (nil = free) and to what the span's own
+;; points justify (abl:max-bulge - no arc may come back as a loop).
+;; EXACT 3-POINT ARCS COME FIRST: an unclamped 3-point bulge through
+;; one of the actual interior points - so the arc's middle lands ON a
+;; survey point - is preferred whenever one holds the span within TOL
+;; and LEFT misses.  Compromise bulges (average / window-clamped /
+;; window edges), which float between the points, are used only when
+;; no exact arc works.  DLIM points may be written off - left plainly
+;; off, see abl:span-score - instead of holding the span back; the
+;; fewer written off the better, and a tie goes to the closer fit.
+;; Returns (bulge dev misses exactflag written-off).
+(defun abl:span-fit (a b qs win tol left dlim / bls m sum bl cands best
+                                               bkey mx sc)
+  (setq bls  (mapcar '(lambda (q) (abl:bulge-3pt a q b)) qs)
+        m    (length qs)
+        mx   (abl:max-bulge a b qs)
+        best nil
+        bkey nil)
+  ;; exact candidates: through an interior point, inside the window,
+  ;; and no steeper than the points themselves justify
+  (foreach bl bls
+    (if (and (<= (abs bl) mx)
+             (or (null win)
+                 (and (>= bl (car win)) (<= bl (cdr win)))))
+      (progn
+        (setq sc (abl:span-score a b bl qs tol))
+        ;; an exact arc still has to HOLD the span - the points it did
+        ;; not write off must all be inside TOL - or the compromise
+        ;; bulges below never get their turn
+        (if (and (<= (cadr sc) tol)
+                 (<= (car sc) dlim)
+                 (<= (caddr sc) left)
+                 (or (null bkey) (abl:better sc bkey)))
+          (setq best (list bl (cadr sc) (caddr sc) T (car sc))
+                bkey sc)))))
+  ;; compromise candidates, only when no exact arc holds the span
+  (if (null best)
+    (progn
+      (setq sum 0.0)
+      (foreach bl bls (setq sum (+ sum bl)))
+      (setq cands (list (/ sum m) (nth (/ m 2) bls)))
+      (if (>= m 4)
+        (setq cands (append cands (list (nth (/ m 4) bls)
+                                        (nth (/ (* 3 m) 4) bls)))))
+      (if win
+        (setq cands (append (mapcar '(lambda (bl) (abl:clamp-b bl win))
+                                    cands)
+                            (list (car win) (cdr win)
+                                  (/ (+ (car win) (cdr win)) 2.0)))))
+      (setq cands (mapcar '(lambda (bl) (abl:cap-b bl mx)) cands))
+      (foreach bl cands
+        (setq sc (abl:span-score a b bl qs tol))
+        (if (or (null bkey) (abl:better sc bkey))
+          (setq best (list bl (cadr sc) (caddr sc) nil (car sc))
+                bkey sc)))))
+  best)
+
+;; The longest feasible span from POS, allowing DLIM of the points it
+;; covers to be written off (0 = it must hold every one of them).  The
+;; tangent window is stretched by degrees rather than abandoned; only
+;; when even the widest step finds nothing does this return nil and
+;; the stub in abl:span-loop take over.  Returns
+;; (length bulge misses window written-off) or nil.
+(defun abl:grow-span (tour pos te sharp nogrow lim tol left dlim pro
+                     / a best bstx steps wf len go bnd win qs lm dm
+                       fr)
+  (setq a     (nth pos tour)
+        best  nil
+        bstx  nil
+        steps *ABL-TANG-STEPS*)
+  (while (and (null best) steps)
+    (setq wf    (car steps)
+          steps (cdr steps)
+          len   2
+          go    T)
+    (while (and go (<= len lim))
+      ;; plain indices, not the loop walker's (rem ... n): LIM caps
+      ;; pos+len at the last point, so there is nothing to wrap and a
+      ;; wrap here would grow a span back through the start
+      (if (nth (+ pos len -1) nogrow)
+        (setq go nil)             ; never bury a corner or a stretch pt
+        (progn
+          (setq bnd (nth (+ pos len) tour)
+                win (if te (abl:tang-window te a bnd wf)))
+          (setq qs (cal:sublist tour (1+ pos) (1- len))
+                lm (if pro
+                     (min left (cal:ceil (* (abl:misspct) len)))
+                     left)
+                dm (if (> dlim 0)
+                     (min dlim (cal:ceil (* *ABL-DROP-PCT* len)))
+                     0)
+                fr (abl:span-fit a bnd qs win tol lm dm))
+          (if (and (<= (cadr fr) tol) (<= (caddr fr) lm)
+                   (<= (nth 4 fr) dm))
+            (progn
+              (setq best (list len (car fr) (caddr fr) win (nth 4 fr)))
+              (if (cadddr fr) (setq bstx best))
+              (setq len (1+ len)))
+            (setq go nil))))))
+  ;; an arc that floats between the points has to earn its keep:
+  ;; only take it when it covers at least 2 more points than the
+  ;; longest arc that passes exactly through a point
+  (if (and bstx best (< (car best) (+ (car bstx) *ABL-FLOAT-GAIN*)))
+    (setq best bstx))
+  best)
+
+;; Cover the OPEN tour with arcs, walking it once from end to end.
+;; This is abl:span-loop rebuilt with LINEAR indices - not a stripped
+;; copy, because the loop walker's modular arithmetic (rem ... n) is
+;; exactly what an open run must not do: there is no seam, no closing
+;; span, no start-tangent seeding, and the last span simply ends at
+;; the final point.  The two path ends are free kinks by construction;
+;; sharp corners are flagged on interior points only.  Everything else
+;; - the window widening, exact-arc preference, floating-arc rule and
+;; nice-radius snap - is the loop walker's, unchanged.
+(defun abl:span-path (tour tol left drop pro / n sharp i prev cur next
+                                              turn segs pos te lim a
+                                              best alt len bnd win qs
+                                              bl mis sn dev0 anch phi
+                                              stub walls w i1 i2 nogrow
+                                              f wrec)
+  (setq n (length tour))
+  ;; sharp corners: interior points only - the ends have no joint
+  (setq sharp nil i 0)
+  (repeat n
+    (if (or (= i 0) (= i (1- n)))
+      (setq sharp (cons nil sharp))
+      (progn
+        (setq prev (nth (1- i) tour)
+              cur  (nth i tour)
+              next (nth (1+ i) tour)
+              turn (abs (cal:signed-dang (angle prev cur)
+                                        (angle cur next))))
+        (setq sharp (cons (or (> turn *ABL-CORNER-ANG*)
+                              (abl:memb cur abl-corners))
+                          sharp))))
+    (setq i (1+ i)))
+  (setq sharp (reverse sharp))
+  ;; declared straight stretches map straight onto linear indices -
+  ;; no short-way-around: an open run has only one way between them
+  (setq walls nil)
+  (foreach w abl-walls
+    (setq i1 (abl:tour-index (car w) tour)
+          i2 (abl:tour-index (cadr w) tour))
+    (if (and i1 i2 (/= i1 i2))
+      (progn
+        (if (> i1 i2) (setq f i1 i1 i2 i2 f))
+        (setq walls (cons (list i1 i2) walls)))))
+  ;; indices ordinary spans may not swallow - including every HELD
+  ;; point: a span may end on one (landing exactly) but never bury it
+  (setq nogrow nil i 0)
+  (repeat n
+    (setq f (nth i sharp))
+    (foreach w walls
+      (if (and (>= i (car w)) (<= i (cadr w))) (setq f T)))
+    (if (abl:memb (nth i tour) abl-holds) (setq f T))
+    (setq nogrow (cons f nogrow)
+          i      (1+ i)))
+  (setq nogrow (reverse nogrow)
+        segs   nil
+        pos    0
+        te     nil
+        stub   nil)                 ; was the span just emitted a stub?
+  (while (< pos (1- n))
+    (setq a    (nth pos tour)
+          wrec (assoc pos walls))
+    (if wrec
+      ;; ---- a declared straight stretch starts here: emit verbatim --
+      (progn
+        (setq len  (- (cadr wrec) pos)
+              bnd  (nth (cadr wrec) tour)
+              qs   (cal:sublist tour (1+ pos) (1- len))
+              mis  (abl:span-misses a bnd 0.0 qs)
+              segs (cons (list a bnd 0.0) segs)
+              left (max 0 (- left mis))
+              pos  (cadr wrec)
+              te   (if (and (< pos (1- n)) (nth pos sharp))
+                     nil
+                     (angle a bnd))))
+      ;; ---- an ordinary span --------------------------------------
+      (progn
+    ;; a span may reach the last point and no further; one arc over
+    ;; the whole open run is legitimate, so no stop-short rule here.
+    ;; With no seam to close there is no start tangent to arrive at,
+    ;; so abl:grow-span is handed a nil one and never merges an end
+    ;; window - the closed walk's growth, minus the loop
+    (setq lim  (- (1- n) pos)
+          best (abl:grow-span tour pos te sharp nogrow lim tol
+                             left 0 pro))
+    ;; writing a point off: a last resort, offered only where the span
+    ;; stopped growing and kept only when every point given up bought
+    ;; at least two more points of span
+    (if (and (> drop 0) (or (null best) (< (car best) lim)))
+      (progn
+        (setq alt (abl:grow-span tour pos te sharp nogrow lim tol
+                                left drop pro))
+        (if (and alt
+                 (> (nth 4 alt) 0)
+                 (>= (car alt) (+ (if best (car best) 1)
+                                  (* *ABL-DROP-GAIN* (nth 4 alt)))))
+          (setq best alt))))
+    (if (null best)
+      ;; stub to the very next point.  One stub carries the incoming
+      ;; tangent on exactly; a second straight after it keeps only
+      ;; what the tangent window allows, so a mismatch decays instead
+      ;; of doubling at every stub until the arcs come back as loops
+      (progn
+        (setq bnd (nth (1+ pos) tour))
+        (if te
+          (progn
+            (setq phi (cal:signed-dang te (angle a bnd)))
+            (if stub
+              (setq phi (max (- *ABL-TANG-TOL*)
+                             (min *ABL-TANG-TOL* phi))))
+            (setq bl (cal:tan (/ phi 2.0))
+                  bl (abl:cap-b bl (abl:max-bulge a bnd nil))))
+          (setq bl 0.0))
+        (setq best (list 1 bl 0 nil 0)
+              stub T))
+      ;; nice-radius snap inside the same tangent window, over the
+      ;; points the arc actually holds
+      (progn
+        (setq len  (car best)
+              bl   (cadr best)
+              win  (cadddr best)
+              bnd  (nth (+ pos len) tour)
+              qs   (abl:span-kept a bnd bl
+                                 (cal:sublist tour (1+ pos) (1- len))
+                                 tol)
+              dev0 (abl:span-dev a bnd bl qs)
+              anch (and qs
+                        (<= (abl:span-min a bnd bl qs)
+                            *ABL-ANCHOR-EPS*))
+              sn   (abl:snap-arc a bnd bl qs
+                                (max dev0 *ABL-SNAP-EPS*) left win))
+        (if (and sn
+                 (<= (abs (car sn)) (abl:max-bulge a bnd qs))
+                 (or (not anch)
+                     (<= (abl:span-min a bnd (car sn) qs)
+                         *ABL-ANCHOR-EPS*)))
+          (setq best (list len (car sn) (cdr sn) win (nth 4 best))))
+        (setq stub nil)))
+    (setq len  (car best)
+          bl   (cadr best)
+          mis  (caddr best)
+          bnd  (nth (+ pos len) tour)
+          segs (cons (list a bnd bl) segs)
+          left (- left mis)
+          drop (- drop (nth 4 best))
+          pos  (+ pos len)
+          te   (if (and (< pos (1- n)) (nth pos sharp))
+                 nil
+                 (+ (angle a bnd) (* 2.0 (atan bl))))))))
+  (reverse segs))
+
+;; One full OPEN fit.  A single walk is the whole job: there is no
+;; seam to close, so the seam-kink re-run has nothing to do here.
+(defun abl:fit-pass-open (tour tol left drop pro / abl-on-eps)
+  (setq abl-on-eps (max *ABL-ON-EPS* (* *ABL-ON-FRAC* tol)))
+  (abl:span-path tour tol left drop pro))
+
+;; The open counterpart: same relaxing cap loop, but the tour is NOT
+;; rotated - an open run's start and end are its endpoints, and
+;; rotating them away would corrupt the path.
+(defun abl:coarse-path (tour tol maxarcs left drop pro / segs segs2 tol2
+                                                       tries)
+  (setq segs (abl:fit-pass-open tour tol left drop pro))
+  (if maxarcs
+    (progn
+      (setq tol2 tol tries 0)
+      (while (and (> (abl:arc-count segs) maxarcs) (< tries *ABL-CAP-TRIES*))
+        (setq tol2  (* tol2 *ABL-CAP-RELAX*)
+              tries (1+ tries)
+              segs2 (abl:fit-pass-open tour tol2 1000000 drop nil))
+        (if (< (abl:arc-count segs2) (abl:arc-count segs))
+          (setq segs segs2)))))
+  segs)
+
+;; ---- self-intersection check -----------------------------------------
+
+;; Cross product of (P-O) x (Q-O); its sign says which side Q is on.
+(defun abl:cross3 (o p q)
+  (- (* (- (car p) (car o)) (- (cadr q) (cadr o)))
+     (* (- (cadr p) (cadr o)) (- (car q) (car o)))))
+
+;; T when segments A-B and C-D properly cross.
+(defun abl:segs-cross (a b c d / d1 d2 d3 d4)
+  (setq d1 (abl:cross3 a b c) d2 (abl:cross3 a b d)
+        d3 (abl:cross3 c d a) d4 (abl:cross3 c d b))
+  (and (< (* d1 d2) 0.0) (< (* d3 d4) 0.0)))
+
+;; Sample the fitted chain into a point list; arcs get intermediate
+;; points so a bulging arc's real path is tested, not just its chord.
+(defun abl:loop-pts (segs / out s g c r a1 a2 sweep k j aa)
+  (setq out nil)
+  (foreach s segs
+    (setq out (cons (cal:2d (car s)) out))
+    (if (>= (abs (caddr s)) 1.0e-9)
+      (progn
+        (setq g (abl:arc-geom (car s) (cadr s) (caddr s)))
+        (if g
+          (progn
+            (setq c  (car g)   r  (cadr g)
+                  a1 (caddr g) a2 (cadddr g))
+            (if (> (caddr s) 0.0)
+              (setq sweep (cal:angnorm (- a2 a1)))
+              (setq sweep (- (cal:angnorm (- a1 a2)))))
+            (setq k 4 j 1)
+            (while (< j k)
+              (setq aa  (+ a1 (* sweep (/ (float j) (float k))))
+                    out (cons (list (+ (car c) (* r (cos aa)))
+                                    (+ (cadr c) (* r (sin aa))))
+                              out)
+                    j   (1+ j))))))))
+  (reverse out))
+
+;; T when the fitted result crosses itself.  Closed results test the
+;; ring of chords with the first/last pair exempt (they legitimately
+;; share a vertex); open results test the open chain, whose real end
+;; point is appended instead of the ring-closing repeat.
+(defun abl:self-crosses (segs / p n found ti tj i j a b c d)
+  (setq p (append (abl:loop-pts segs)
+                  (list (cal:2d (cadr (last segs))))))
+  (if (< (length p) 4)
+    nil
+    (progn
+      (setq n     (1- (length p))            ; number of chords
+            found nil
+            ti    p
+            i     0)
+      (while (and (not found) (< i (- n 2)))
+        (setq a  (car ti)
+              b  (cadr ti)
+              tj (cddr ti)
+              j  (+ i 2))
+        (while (and (not found) (< j n))
+          (setq c (car tj) d (cadr tj))
+          (if (abl:segs-cross a b c d) (setq found T))
+          (setq tj (cdr tj) j (1+ j)))
+        (setq ti (cdr ti) i (1+ i)))
+      found)))
+
+;; ---- output helpers --------------------------------------------------
+
+;; How many fitted polylines are already on the output layer.
+(defun abl:prior-fits (/ ss)
+  (setq ss (ssget "_X" (list (cons 8 *ABL-OUT-LAYER*)
+                             '(0 . "LWPOLYLINE"))))
+  (if ss (sslength ss) 0))
+
+;; T when R is a whole multiple of one of the *ABL-NICE-RADII* tiers.
+(defun abl:nice-radius-p (r / found tier q)
+  (setq found nil)
+  (if (and r (< r *ABL-STRAIGHT-R*))
+    (foreach tier *ABL-NICE-RADII*
+      (setq q (/ r tier))
+      (if (< (abs (- q (fix (+ q 0.5)))) 1.0e-6) (setq found T))))
+  found)
+
+;; VERTS: list of (pt bulge) in order.  For a CLOSED polyline the last
+;; vertex's bulge curves back to the first; an OPEN polyline needs the
+;; final end point as one more vertex (bulge 0) or its last segment
+;; silently vanishes - the callers append it.  ELEV is the single
+;; height the whole polyline sits at (LWPOLYLINE group 38); COL is an
+;; AutoCAD colour index, or nil for BYLAYER.
+(defun abl:make-pline (verts layer col / dxf v)
+  (setq dxf (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
+                  (cons 8 layer)))
+  (if col (setq dxf (append dxf (list (cons 62 col)))))
+  (setq dxf (append dxf (list '(100 . "AcDbPolyline")
+                              (cons 90 (length verts))
+                              '(70 . 0))))
+  (foreach v verts
+    (setq dxf (append dxf (list (cons 10 (car v)) (cons 42 (cadr v))))))
+  (entmakex dxf))
+
+;; The kept fit joins the POOL layer in ByLayer colour: the preview
+;; colour and layer belonged to the comparison - the result belongs
+;; with the rest of the drawing.
+(defun abl:set-bylayer (en / ed)
+  (cal:ensure-layer *ABL-POOL-LAYER* 4)
+  (setq ed (entget en)
+        ed (subst (cons 8 *ABL-POOL-LAYER*) (assoc 8 ed) ed))
+  (if (assoc 62 ed) (setq ed (subst '(62 . 256) (assoc 62 ed) ed)))
+  (entmod ed))
+
+;; The points SEGS fails to hold within TOL.
+(defun abl:unheld (segs pts tol / out q s d dmin)
+  (setq out nil)
+  (foreach q pts
+    (setq dmin nil)
+    (foreach s segs
+      (setq d (abl:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (if (> dmin tol) (setq out (cons q out))))
+  (reverse out))
+
+;; List membership by position, within the exact-point fuzz.
+(defun abl:memb (q lst / found p)
+  (setq found nil)
+  (foreach p lst
+    (if (< (cal:dist p q) *ABL-EXACT-EPS*) (setq found T)))
+  found)
+
+(defun abl:isect (a b / out q)
+  (setq out nil)
+  (foreach q a
+    (if (abl:memb q b) (setq out (cons q out))))
+  (reverse out))
+
+;; ---- temporary preview geometry --------------------------------------
+;; Every piece of scaffolding - dashed markers, candidate outlines,
+;; labels - registers here as it is created and is swept away when the
+;; command ends, however it ends.  Whatever the user keeps is dropped
+;; from the list first.
+
+(defun abl:temp-add (en)
+  (if en (setq abl-temp (cons en abl-temp)))
+  en)
+
+(defun abl:temp-drop (en / out x)
+  (setq out nil)
+  (foreach x abl-temp
+    (if (not (eq x en)) (setq out (cons x out))))
+  (setq abl-temp (reverse out))
+  en)
+
+;; Scaffolding removed early - when a Back re-opens the step that drew
+;; it - rather than at command end.
+(defun abl:temp-kill (en)
+  (if (and en (entget en)) (entdel en))
+  (abl:temp-drop en))
+
+;; T when a prompt that DOES take keywords was answered Back - or its
+;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
+;; a string where a value would be a list or a number, so the type test
+;; is what separates the two.
+(defun abl:back-kw (v)
+  (and (= (type v) 'STR) (member v '("Back" "Undo"))))
+
+(defun abl:temp-clear ( / en)
+  (foreach en abl-temp
+    (if (and en (entget en)) (entdel en)))
+  (setq abl-temp nil))
+
+;; ---- "this one is mine" stamping -------------------------------------
+;; ABLOBF writes onto layers the drawing may already be using, so it must
+;; never clear a layer wholesale: everything it creates carries xdata
+;; naming this command, and only stamped objects are ever erased.
+
+(defun abl:tag-mine (en / ed)
+  (if en
+    (progn
+      (regapp "ABLOBF")
+      (setq ed (entget en))
+      (entmod (append ed (list (list -3 (list "ABLOBF" (cons 1000 "ABLOBF"))))))))
+  en)
+
+;; Erase only ABLOBF's own objects on a layer.  Returns how many went.
+(defun abl:purge-mine (name / ss i n en)
+  (setq n 0)
+  (if (tblsearch "LAYER" name)
+    (progn
+      (setq ss (ssget "_X" (list (cons 8 name))))
+      (if ss
+        (progn
+          (setq i 0)
+          (repeat (sslength ss)
+            (setq en (ssname ss i))
+            (if (assoc -3 (entget en '("ABLOBF")))
+              (progn (entdel en) (setq n (1+ n))))
+            (setq i (1+ i)))))))
+  n)
+
+;; Make sure the DASHED linetype exists (pure entmake).
+(defun abl:ensure-dashed ()
+  (if (not (tblsearch "LTYPE" "DASHED"))
+    (entmake (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLinetypeTableRecord")
+                   '(2 . "DASHED") '(70 . 0)
+                   '(3 . "Dashed __ __ __ __ __")
+                   '(72 . 65) '(73 . 2) '(40 . 18.0)
+                   '(49 . 12.0) '(74 . 0)
+                   '(49 . -6.0) '(74 . 0)))))
+
+;; Draw the dashed ring marking a declared sharp corner.
+(defun abl:draw-corner-marker (p)
+  (abl:ensure-dashed)
+  (cal:ensure-layer *ABL-WALL-LAYER* 8)
+  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                  (cons 8 *ABL-WALL-LAYER*) '(6 . "DASHED")
+                  '(100 . "AcDbCircle")
+                  (cons 10 (list (car p) (cadr p) 0.0))
+                  (cons 40 *ABL-MISS-RADIUS*))))
+
+;; Draw the marker for a declared HELD point: a dashed ring at half
+;; the miss-ring radius, so it reads apart from corner rings.
+(defun abl:draw-hold-marker (p)
+  (abl:ensure-dashed)
+  (cal:ensure-layer *ABL-WALL-LAYER* 8)
+  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                  (cons 8 *ABL-WALL-LAYER*) '(6 . "DASHED")
+                  '(100 . "AcDbCircle")
+                  (cons 10 (list (car p) (cadr p) 0.0))
+                  (cons 40 (* 0.5 *ABL-MISS-RADIUS*)))))
+
+;; Draw the dashed marker for a declared straight stretch.
+(defun abl:draw-wall-marker (p1 p2)
+  (abl:ensure-dashed)
+  (cal:ensure-layer *ABL-WALL-LAYER* 8)
+  (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
+                  (cons 8 *ABL-WALL-LAYER*) '(6 . "DASHED")
+                  '(100 . "AcDbLine")
+                  (cons 10 (list (car p1) (cadr p1) 0.0))
+                  (cons 11 (list (car p2) (cadr p2) 0.0)))))
+
+;; Bounding box of a point list, as (minx miny maxx maxy).
+(defun abl:bbox (pts / x0 y0 x1 y1 q)
+  (foreach q pts
+    (if (null x0)
+      (setq x0 (car q) x1 (car q) y0 (cadr q) y1 (cadr q))
+      (setq x0 (min x0 (car q)) x1 (max x1 (car q))
+            y0 (min y0 (cadr q)) y1 (max y1 (cadr q)))))
+  (list x0 y0 x1 y1))
+
+;; Draw "1", "2", "3" beside each candidate, in that candidate's own
+;; colour, with that fit's numbers spelled out beside it.
+(defun abl:label (num colour bb hgt row top bot / x y out e pr)
+  (setq x   (+ (caddr bb) (* 0.6 hgt))
+        y   (- (cadddr bb) (* row hgt 2.1))
+        out nil)
+  (setq e (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                          (cons 8 *ABL-OUT-LAYER*) (cons 62 colour)
+                          '(100 . "AcDbText")
+                          (cons 10 (list x y 0.0))
+                          (cons 40 hgt)
+                          (cons 1 num))))
+  (if e (setq out (cons e out)))
+  (foreach pr (list (cons top (* 0.55 hgt)) (cons bot (* -0.05 hgt)))
+    (setq e (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                            (cons 8 *ABL-OUT-LAYER*) (cons 62 colour)
+                            '(100 . "AcDbText")
+                            (cons 10 (list (+ x (* 1.4 hgt))
+                                           (+ y (cdr pr))
+                                           0.0))
+                            (cons 40 (* 0.42 hgt))
+                            (cons 1 (car pr)))))
+    (if e (setq out (cons e out))))
+  (reverse out))
+
+;; Ring every point the chosen fit could not hold and list them beside
+;; the shape, worst first.
+(defun abl:mark-unheld (bad segs bb hgt / q d s dmin keyed pair th x y
+                                         line)
+  (abl:purge-mine *ABL-MISS-LAYER*)
+  (if bad
+    (progn
+      (cal:ensure-layer *ABL-MISS-LAYER* 1)
+      (foreach q bad
+        (abl:tag-mine
+          (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                          (cons 8 *ABL-MISS-LAYER*) '(100 . "AcDbCircle")
+                          (cons 10 (list (car q) (cadr q) 0.0))
+                          (cons 40 *ABL-MISS-RADIUS*)))))
+      (setq keyed nil)
+      (foreach q bad
+        (setq dmin nil)
+        (foreach s segs
+          (setq d (abl:seg-dist q s))
+          (if (or (null dmin) (< d dmin)) (setq dmin d)))
+        (setq keyed (cons (cons dmin q) keyed)))
+      (setq keyed (reverse (abl:sort-car keyed))
+            th    (* 0.5 hgt)
+            x     (+ (caddr bb) (* 0.6 hgt))
+            y     (cadddr bb))
+      (abl:tag-mine
+        (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                        (cons 8 *ABL-MISS-LAYER*) '(100 . "AcDbText")
+                        (cons 10 (list x y 0.0))
+                        (cons 40 th)
+                        (cons 1 (strcat "POINTS OFF THE LINE ("
+                                        (itoa (length bad)) ")")))))
+      (foreach pair keyed
+        (setq y    (- y (* th 1.6))
+              line (strcat "Pt." (abl:pt-name (cdr pair))
+                           "   off by " (rtos (car pair) 4 4)))
+        (abl:tag-mine
+          (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                          (cons 8 *ABL-MISS-LAYER*) '(100 . "AcDbText")
+                          (cons 10 (list x y 0.0))
+                          (cons 40 th)
+                          (cons 1 line)))))))
+  keyed)
+
+;; Print the hit report for the fit the user kept.  ALLOW is the run's
+;; miss allowance; CLOSED says which joint the chain has none of.
+(defun abl:report (newsegs pts tol allow prior
+                  / nl na hiton hitok miss q s s2 d dmin worst sum
+                    sumo no nice onpt inner ns nj i te ts kk mk nk
+                    hw hq abl-on-eps)
+  ;; report against the same on-the-shape threshold the fit used
+  (setq abl-on-eps (max *ABL-ON-EPS* (* *ABL-ON-FRAC* tol)))
+  (progn
+      ;; -- segment mix, nice radii, arcs anchored on a point --------
+      (setq nl 0 na 0 nice 0 onpt 0)
+      (foreach s newsegs
+        (if (< (abs (caddr s)) 1.0e-9)
+          (setq nl (1+ nl))
+          (progn
+            (setq na (1+ na))
+            (if (abl:nice-radius-p
+                  (abl:bulge-radius (car s) (cadr s) (caddr s)))
+              (setq nice (1+ nice)))
+            (setq inner nil)
+            (foreach q pts
+              (if (and (> (cal:dist q (car s)) *ABL-EXACT-EPS*)
+                       (> (cal:dist q (cadr s)) *ABL-EXACT-EPS*)
+                       (<= (abl:seg-dist q s) *ABL-ANCHOR-EPS*))
+                (setq inner T)))
+            (if inner (setq onpt (1+ onpt))))))
+      ;; -- how the survey points landed ------------------------------
+      (setq hiton 0 hitok 0 miss 0 worst 0.0 sum 0.0 sumo 0.0 no 0)
+      (foreach q pts
+        (setq dmin nil)
+        (foreach s newsegs
+          (setq d (abl:seg-dist q s))
+          (if (or (null dmin) (< d dmin)) (setq dmin d)))
+        (if (> dmin worst) (setq worst dmin))
+        (setq sum (+ sum dmin))
+        (if (> dmin (abl:oneps))
+          (setq sumo (+ sumo dmin) no (1+ no)))
+        (cond
+          ((<= dmin (abl:oneps)) (setq hiton (1+ hiton)))
+          ((<= dmin tol)        (setq hitok (1+ hitok)))
+          (T                    (setq miss  (1+ miss)))))
+      ;; -- smoothness: worst kink at a joint that is not a corner ----
+      ;; an open chain has one joint fewer - its seam does not exist
+      (setq ns (length newsegs)
+            nj (1- ns)
+            i 0 mk 0.0 nk 0)
+      (while (< i nj)
+        (setq s  (nth i newsegs)
+              s2 (nth (rem (1+ i) ns) newsegs)
+              te (+ (angle (car s) (cadr s)) (* 2.0 (atan (caddr s))))
+              ts (- (angle (car s2) (cadr s2)) (* 2.0 (atan (caddr s2))))
+              kk (abs (cal:signed-dang te ts)))
+        (if (<= kk *ABL-CORNER-ANG*)     ; bigger = an intentional corner
+          (progn
+            (if (> kk mk) (setq mk kk))
+            (if (> kk (+ *ABL-TANG-TOL* 1.0e-6)) (setq nk (1+ nk)))))
+        (setq i (1+ i)))
+      (princ (strcat "\nABLOBF: " (itoa ns) " segments ("
+                     (itoa nl) " lines + " (itoa na)
+                     " curves) written to layer " *ABL-POOL-LAYER* "."
+                     "\n  Points on the outline:        " (itoa hiton)
+                     "\n  Points off within tolerance:  " (itoa hitok)
+                     "  (allowance " (itoa allow) ")"
+                     "\n  Points beyond tolerance:      " (itoa miss)
+                     "\n  Worst point deviation:        " (rtos worst 2 3)
+                     "\n  Average off, all points:      "
+                     (rtos (if (> (length pts) 0)
+                             (/ sum (length pts))
+                             0.0)
+                           2 3)
+                     "\n  Average off, off points only: "
+                     (if (> no 0)
+                       (strcat (rtos (/ sumo no) 2 3)
+                               "  (" (itoa no) " point(s))")
+                       "-  (every point is on the line)")
+                     "\n  Curves through a point:       " (itoa onpt)
+                     " of " (itoa na)
+                     "\n  Curves on foot/half/inch radii:" (itoa nice)
+                     " of " (itoa na)
+                     "\n  Largest joint kink:           "
+                     (rtos (* 180.0 (/ mk pi)) 2 1) " deg  (limit "
+                     (rtos (* 180.0 (/ *ABL-TANG-TOL* pi)) 2 1) ")"))
+      (if (> nk 0)
+        (princ (strcat "\n  (" (itoa nk)
+                       " joint(s) needed more than the tangent limit)")))
+      (if abl-walls
+        (princ (strcat "\n  (" (itoa (length abl-walls))
+                       " declared straight stretch(es) kept dead"
+                       " straight)")))
+      (if abl-holds
+        (progn
+          ;; every held point must sit ON the kept fit exactly; one
+          ;; that does not means a declared stretch overruled it, and
+          ;; that deserves a loud line of its own
+          (setq hw 0.0)
+          (foreach q abl-holds
+            (setq dmin nil)
+            (foreach s newsegs
+              (setq d (abl:seg-dist q s))
+              (if (or (null dmin) (< d dmin)) (setq dmin d)))
+            (if (> dmin hw) (setq hw dmin hq q)))
+          (if (<= hw *ABL-EXACT-EPS*)
+            (princ (strcat "\n  (" (itoa (length abl-holds))
+                           " held point(s) all landed on the line"
+                           " exactly)"))
+            (princ (strcat "\n  WARNING: held Pt." (abl:pt-name hq)
+                           " is off by " (rtos hw 2 4)
+                           " - a declared stretch overruled it.")))))
+      (if (and *ABL-MAX-ARCS* (> na *ABL-MAX-ARCS*))
+        (princ (strcat "\n  (the curve cap is " (itoa *ABL-MAX-ARCS*)
+                       " but " (itoa na) " curves was the fewest"
+                       " reachable)")))
+      (if (> miss 0)
+        (princ "\n  (points beyond tolerance: the curve cap overruled them)"))
+      (if (abl:self-crosses newsegs)
+        (princ (strcat "\n  WARNING: the result crosses itself - the"
+                       " automatic point order is probably wrong."
+                       "  Draw a rough lines-only sketch on layer "
+                       *ABL-POOL-LAYER*
+                       " through the points in the right order and"
+                       " select it too.")))
+      (if (> prior 0)
+        (princ (strcat "\n  (" (itoa prior)
+                       " earlier fit(s) were already on layer "
+                       *ABL-OUT-LAYER* " - erase them if you only want"
+                       " the new one)"))))
+  (princ))
+
+;; Build one candidate fit in MODE - "tight", "asked" or "few".  TOL
+;; is always the distance the user typed; the mode sets what differs:
+;; the fit tolerance, the miss allowance, and whether the curve cap
+;; binds (only "asked" honours it).  CLOSED picks the engine.
+(defun abl:build (tour tol allow mode / ftol left cap drop)
+  (setq ftol (if (= mode "tight") (min tol *ABL-TIGHT-TOL*) tol)
+        left (cond ((= mode "tight") 0)
+                   ((= mode "few")   1000000)
+                   (T                allow))
+        cap  (if (= mode "asked") *ABL-MAX-ARCS*)
+        ;; the tight candidate gives up no point at all - that is the
+        ;; whole of its aim, and what makes it the reference the other
+        ;; two are read against
+        drop (if (= mode "tight")
+               0
+               (cal:ceil (* *ABL-DROP-PCT* (length tour)))))
+  (abl:coarse-path tour ftol cap left drop (not (= mode "few"))))
+
+;; Deviation summary for SEGS against PTS: (worst avg avg-off).
+(defun abl:devstats (segs pts on / w q s d dmin sum n sumo no)
+  (setq w 0.0 sum 0.0 n 0 sumo 0.0 no 0)
+  (foreach q pts
+    (setq dmin nil)
+    (foreach s segs
+      (setq d (abl:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (if (> dmin w) (setq w dmin))
+    (setq sum (+ sum dmin) n (1+ n))
+    (if (> dmin on) (setq sumo (+ sumo dmin) no (1+ no))))
+  (list w
+        (if (> n 0) (/ sum n) 0.0)
+        (if (> no 0) (/ sumo no) nil)))
+
+;; A deviation for a table cell; "-" when there is nothing to average.
+(defun abl:fmt-dev (x)
+  (if x (rtos x 2 2) "-"))
+
+;; ---- offer three fits and let the user pick ---------------------------
+;; The two ends of the curve-versus-accuracy trade and the middle, all
+;; drawn, each in its own colour with what it costs; the one the user
+;; points at is kept.  ELEV is the height every candidate is drawn at.
+(defun abl:compare (tour pts tol allow
+                   / prior vars v e ent lab st onv segs verts bad allbad
+                     first i pick idx keep ce bb hgt sel picked keyed pr
+                     res)
+  (setq prior (abl:prior-fits))
+  (cal:ensure-layer *ABL-OUT-LAYER* 3)
+  (setq onv (max *ABL-ON-EPS* (* *ABL-ON-FRAC* tol)))
+  (setq bb  (abl:bbox pts)
+        hgt (/ (max (- (caddr bb) (car bb))
+                    (- (cadddr bb) (cadr bb)))
+               20.0))
+  (if (<= hgt 0.0) (setq hgt 1.0))
+  (setq abl-phase "building the three candidate fits"
+        vars     nil
+        allbad   nil
+        first    T
+        i        1)
+  (foreach v *ABL-COMPARE*
+    (setq segs  (abl:build tour tol allow (car v))
+          verts (mapcar '(lambda (s) (list (car s) (caddr s))) segs))
+    ;; an open polyline's last segment needs its end point as one more
+    ;; vertex -- there is no closing curve back to vertex 0 to supply it
+    (setq verts (append verts (list (list (cadr (last segs)) 0.0))))
+    (setq ent  (abl:temp-add
+                 (abl:make-pline verts *ABL-OUT-LAYER* (cadr v)))
+          bad  (abl:unheld segs pts tol)
+          st   (abl:devstats segs pts onv)
+          lab  (abl:label
+                 (itoa i) (cadr v) bb hgt i
+                 (strcat (itoa (length segs)) " segs    "
+                         (itoa (abl:arc-count segs)) " curves    "
+                         (itoa (length bad)) " not held    "
+                         (cadddr v))
+                 (strcat "worst " (abl:fmt-dev (car st))
+                         "    avg all " (abl:fmt-dev (cadr st))
+                         "    avg off " (abl:fmt-dev (caddr st))))
+          vars (cons (list segs ent bad v lab st) vars)
+          i    (1+ i))
+    (foreach e lab (abl:temp-add e))
+    ;; only fits built to the user's distance vote on the "no fit
+    ;; could hold these" note - the tight one threads everything
+    (if (not (= (car v) "tight"))
+      (if first
+        (setq allbad bad first nil)
+        (setq allbad (abl:isect allbad bad)))))
+  (setq vars (reverse vars))
+  (if (null (cadr (car vars)))
+    (princ "\nABLOBF: could not draw the result - is the drawing read-only?")
+    (progn
+      (princ (strcat "\n\nThree candidate fits are now drawn on layer "
+                     *ABL-OUT-LAYER*
+                     ",\neach numbered on screen in its own colour:\n"))
+      (princ "\n   #  segs  curves  worst off  avg all  avg off  not held  ")
+      (princ "\n   -  ----  ------  ---------  -------  -------  --------  ")
+      (setq i 1)
+      (foreach v vars
+        (setq segs (car v) bad (caddr v) ce (cadddr v) st (nth 5 v))
+        (princ (strcat "\n   " (itoa i) "  "
+                       (cal:pad (itoa (length segs)) 6)
+                       (cal:pad (itoa (abl:arc-count segs)) 8)
+                       (cal:pad (abl:fmt-dev (car st)) 11)
+                       (cal:pad (abl:fmt-dev (cadr st)) 9)
+                       (cal:pad (abl:fmt-dev (caddr st)) 9)
+                       (cal:pad (itoa (length bad)) 10)
+                       (cadddr ce)))
+        (setq i (1+ i)))
+      (princ (strcat "\n\n  \"not held\" = points further than "
+                     (rtos tol 2 3) " from that fit - some of them"
+                     " given up on purpose,"
+                     "\n  to keep the shape whole where holding them"
+                     " would break it into stubs."
+                     "\n  \"avg all\" averages every point; \"avg off\""
+                     " averages only the points that are off the line"
+                     "\n  (further than " (rtos onv 2 3) " from it)."))
+      (princ (strcat "\n  All three are measured against the "
+                     (rtos tol 2 3) " you typed, but only one is built"
+                     " to it:"
+                     "\n  the tight fit spends curves to drive the error"
+                     " towards nothing (it"
+                     "\n  ignores that distance"
+                     (if *ABL-MAX-ARCS* " and the curve cap" "")
+                     " and gives up no point at all), the middle one is"
+                     "\n  your settings exactly, and the few fit holds"
+                     " the same distance with as few"
+                     "\n  curves as it can - those two may write off up"
+                     " to " (itoa (cal:ceil (* *ABL-DROP-PCT*
+                                              (length pts))))
+                     " stray point(s) between them."))
+      (if allbad
+        (princ (strcat "\n  NOTE: " (itoa (length allbad))
+                       " point(s) could not be held by ANY fit built to"
+                       " that distance - likely a mis-shot, a duplicate,"
+                       " or a corner that needs more points around it."
+                       "\n  (the tight fit threads every point it can"
+                       " reach, so it does not get a vote here.)")))
+      (setq abl-phase "waiting for the choice of fit")
+      (princ "\n\n  Click the outline you want to keep, or type its number.")
+      (princ "\n  Redo refits with new settings, and lets you omit points first.")
+      (initget "1 2 3 All None Redo")
+      (setq pick (getkword
+                   "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: "))
+      (if (null pick)
+        (progn
+          (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+          (if lzd:watch (lzd:watch sel))
+          (if sel
+            (progn
+              (setq picked (car sel) i 1)
+              (foreach v vars
+                (if (or (eq picked (cadr v))
+                        (member picked (nth 4 v)))
+                  (setq pick (itoa i)))
+                (setq i (1+ i)))
+              (if (null pick)
+                (progn
+                  (princ "\n  (that is not one of the three - keeping 2)")
+                  (setq pick "2"))))
+            (setq pick "2"))))
+      (cond
+        ((= pick "Redo")
+         (foreach v vars
+           (if (and (cadr v) (entget (cadr v))) (entdel (cadr v)))
+           (foreach e (nth 4 v)
+             (if (and e (entget e)) (entdel e))))
+         (setq res 'REDO))
+        ((= pick "All")
+         (foreach v vars
+           (abl:temp-drop (cadr v))
+           (foreach e (nth 4 v) (abl:temp-drop e)))
+         (princ "\nKeeping all three, in their preview colours.")
+         (princ "\n  (the number labels are kept too - erase them when done)"))
+        ((= pick "None")
+         (princ "\nAll three erased - nothing was added to the drawing."))
+        (T
+         (setq idx (atoi pick) i 1)
+         (foreach v vars
+           (if (= i idx)
+             (setq keep v)
+             (if (and (cadr v) (entget (cadr v))) (entdel (cadr v))))
+           (setq i (1+ i)))
+         (if keep
+           (princ (strcat "\n  Keeping fit " pick " - "
+                          (cadddr (cadddr keep)) ".")))
+         (if (cadr keep)
+           (progn
+             (abl:temp-drop (cadr keep))
+             (abl:set-bylayer (cadr keep))))))
+      (if keep
+        (progn
+          (setq keyed (abl:mark-unheld (caddr keep) (car keep) bb hgt))
+          (abl:report (car keep) pts tol allow prior)
+          (if keyed
+            (progn
+              (princ (strcat "\n  " (itoa (length keyed))
+                             " point(s) beyond the distance are ringed"
+                             " on layer " *ABL-MISS-LAYER*
+                             " and listed beside the shape, worst"
+                             " first:"))
+              (foreach pr keyed
+                (princ (strcat "\n    Pt." (abl:pt-name (cdr pr))
+                               "   off by " (rtos (car pr) 4 4))))))))))
+  (princ)
+  res)
+
+;; ---- the numeric parameters ------------------------------------------
+
+;; Each takes BACK: non-nil adds Back (and its hidden Undo synonym) to
+;; the prompt and returns ABL-BACK when it is answered, so the caller
+;; can re-open the step before it.  Offering Back never loosens the
+;; value check - initget keeps its bits either way.
+
+;; Maximum distance from a point; remembered in *ABL-TOL*.
+(defun abl:ask-tol (back / tol)
+  (if back (initget 6 "Back Undo") (initget 6))
+  (setq tol (getdist (strcat "\n  Maximum distance from a point <"
+                             (rtos *ABL-TOL* 2 3) ">"
+                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "abl:ask-tol" tol))
+  (cond
+    ((abl:back-kw tol) 'ABL-BACK)
+    (T
+     (if (null tol) (setq tol *ABL-TOL*))
+     (if (> tol *ABL-TOL-MAX*)
+       (progn
+         (princ (strcat "\n  (more than " (rtos *ABL-TOL-MAX* 2 1)
+                        " and the line is no longer a trace of the points"
+                        " - using " (rtos *ABL-TOL-MAX* 2 1) ")"))
+         (setq tol *ABL-TOL-MAX*)))
+     (setq *ABL-TOL* tol)
+     tol)))
+
+;; Share of the points allowed off the line, returned as a fraction;
+;; DEF is the fraction Enter keeps.
+(defun abl:ask-pct (def back / pct)
+  (if back (initget 4 "Back Undo") (initget 4))
+  (setq pct (getint (strcat "\n  Percent of points allowed off <"
+                            (itoa (fix (+ 0.5 (* 100.0 def))))
+                            ">"
+                            (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "abl:ask-pct" pct))
+  (cond
+    ((abl:back-kw pct) 'ABL-BACK)
+    ((null pct) def)
+    ((> pct 100)
+     (princ "\n  (more than 100 makes no sense - using 100)")
+     1.0)
+    (T (/ pct 100.0))))
+
+;; Curve cap; remembered in *ABL-MAX-ARCS* (nil = no cap).
+(defun abl:ask-cap (back / mx)
+  (if back (initget 4 "None Back Undo") (initget 4 "None"))
+  (setq mx (getint (strcat "\n  Maximum curves <"
+                           (if *ABL-MAX-ARCS* (itoa *ABL-MAX-ARCS*) "None")
+                           ">"
+                           (if back " [None/Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "abl:ask-cap" mx))
+  (cond
+    ((abl:back-kw mx) 'ABL-BACK)
+    (T
+     (cond ((null mx) nil)                         ; Enter: keep as-is
+           ((eq 'STR (type mx)) (setq *ABL-MAX-ARCS* nil))
+           (T (setq *ABL-MAX-ARCS* mx)))
+     *ABL-MAX-ARCS*)))
+
+;; ---- the two ends ----------------------------------------------------
+;; The one thing ABLOBF asks that neither ABHD nor LHD does up front: a
+;; run that does not close has to start somewhere and stop somewhere,
+;; and only the drafter knows where.  An end is named by clicking it or
+;; by typing the survey number it already carries in the drawing --
+;; typing wins where the points crowd and a click cannot separate two of
+;; them.  Enter takes the automatic choice, which is the farthest-apart
+;; pair: right often enough to be the default, and wrong exactly when
+;; the run doubles back on itself, which is when you pick by hand.
+
+;; One end of the run.  DFLT is the point Enter takes.  OTHER, when
+;; given, is the end already chosen -- picking it twice would ask for a
+;; run of no length, so it is refused and re-asked rather than fitted.
+;; Returns the point, or ABL-BACK.
+(defun abl:ask-end (msg dpts dflt other back / v q done out rng)
+  (setq done nil out nil rng (abl:key-range dpts))
+  (while (null done)
+    (setq done T)
+    (if back (initget "Number Back Undo") (initget "Number"))
+    (setq v (getpoint (strcat "\n  " msg " [Number"
+                              (if back "/Back" "") "] <Pt."
+                              (abl:pt-name dflt) ">: ")))
+    (if lzd:ask (lzd:ask msg v))
+    (cond
+      ((abl:back-kw v) (setq out 'ABL-BACK))
+      ((null v) (setq out dflt))                  ; Enter: the offer
+      ((and (eq 'STR (type v)) (= v "Number"))
+       (initget 4)
+       (setq v (getint (strcat "\n    Survey number"
+                               (if rng
+                                 (strcat " (" (itoa (car rng)) " to "
+                                         (itoa (cdr rng)) ")")
+                                 "")
+                               ", or Enter to pick instead: ")))
+       (cond
+         ((null v) (setq done nil))               ; Enter: back to the pick
+         ((setq q (abl:pt-of-key v dpts))
+          (setq out q)
+          (princ (strcat "  - Pt." (abl:pt-name q))))
+         (T
+          (princ (strcat "\n  No selected point carries the number "
+                         (itoa v) " - try again."))
+          (setq done nil))))
+      (T (setq out (abl:snap-break v dpts)))))
+  ;; a run from a point to itself is not a run
+  (if (and out other (not (eq out 'ABL-BACK))
+           (< (cal:dist out other) *ABL-EXACT-EPS*))
+    (progn
+      (princ "\n  That is the other end - the run needs two different points.")
+      (abl:ask-end msg dpts dflt other back))
+    out))
+
+;; ---- redo-time editing of walls and corners --------------------------
+
+;; Erase this run's scaffolding markers of one entity type on the
+;; marker layer, so the set can be redrawn to match an edited list.
+(defun abl:sweep-marks (etype / keep en ed)
+  (setq keep nil)
+  (foreach en abl-temp
+    (setq ed (if (and en (entget en)) (entget en)))
+    (if (and ed
+             (= etype (cdr (assoc 0 ed)))
+             (= (strcase *ABL-WALL-LAYER*)
+                (strcase (cdr (assoc 8 ed)))))
+      (entdel en)
+      (setq keep (cons en keep))))
+  (setq abl-temp (reverse keep)))
+
+;; Snap a picked point onto the nearest survey point.
+(defun abl:snap-break (p dpts / q)
+  (setq p (cal:2d p)
+        q (abl:nearest p dpts))
+  (if (null q)
+    p
+    (progn
+      (if (> (cal:dist p q) (* 3.0 *ABL-TOL*))
+        (princ "\n  (picked well away from any survey point - snapped to the nearest one)"))
+      q)))
+
+;; Add or remove declared straight stretches.
+(defun abl:edit-walls (dpts / ans wp1 wp2 w1 w2 best bd w d res)
+  (setq ans T res nil)
+  (while ans
+    (initget "Add Remove Keep Back Undo")
+    (setq ans (getkword (strcat
+                "\n  Straight stretches (" (itoa (length abl-walls))
+                " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (cond
+      ((member ans '("Back" "Undo")) (setq ans nil res T))
+      ((= ans "Add")
+       (setq abl-phase "picking a straight stretch")
+       (initget "Back Undo")
+       (setq wp1 (getpoint "\n  First end of the straight stretch [Back]: "))
+       (if (abl:back-kw wp1) (setq wp1 nil wp2 nil)
+         (progn
+           (initget "Back Undo")
+           (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
+           (if (abl:back-kw wp2) (setq wp2 nil))))
+       (if wp2
+         (progn
+           (setq w1 (abl:snap-break wp1 dpts)
+                 w2 (abl:snap-break wp2 dpts))
+           (if (< (cal:dist w1 w2) *ABL-EXACT-EPS*)
+             (princ "\n  (both ends landed on the same survey point - ignored)")
+             (progn
+               (setq abl-walls (append abl-walls (list (list w1 w2))))
+               (abl:temp-add (abl:tag-mine (abl:draw-wall-marker w1 w2)))
+               (princ (strcat "\n  stretch Pt." (abl:pt-name w1)
+                              " - Pt." (abl:pt-name w2) " added")))))))
+      ((= ans "Remove")
+       (if (null abl-walls)
+         (princ "\n  (no straight stretches to remove)")
+         (progn
+           (setq abl-phase "removing a straight stretch")
+           (initget "Back Undo")
+           (setq wp1 (getpoint "\n  Pick near the straight stretch to remove [Back]: "))
+           (if (abl:back-kw wp1) (setq wp1 nil))
+           (if wp1
+             (progn
+               (setq wp1 (cal:2d wp1) best nil bd nil)
+               (foreach w abl-walls
+                 (setq d (abl:seg-dist wp1 (list (car w) (cadr w) 0.0)))
+                 (if (or (null bd) (< d bd)) (setq best w bd d)))
+               (setq abl-walls (abl:remove best abl-walls))
+               ;; redraw the stretch markers to match what is left
+               (abl:sweep-marks "LINE")
+               (foreach w abl-walls
+                 (abl:temp-add (abl:tag-mine
+                   (abl:draw-wall-marker (car w) (cadr w)))))
+               (princ (strcat "\n  stretch Pt." (abl:pt-name (car best))
+                              " - Pt." (abl:pt-name (cadr best))
+                              " removed")))))))
+      (T (setq ans nil))))
+  (if res 'ABL-BACK))
+
+;; Add or remove declared sharp corners the same way.
+(defun abl:edit-corners (dpts / ans wp1 w1 best bd w res)
+  (setq ans T res nil)
+  (while ans
+    (initget "Add Remove Keep Back Undo")
+    (setq ans (getkword (strcat
+                "\n  Sharp corners (" (itoa (length abl-corners))
+                " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (cond
+      ((member ans '("Back" "Undo")) (setq ans nil res T))
+      ((= ans "Add")
+       (setq abl-phase "picking a sharp corner")
+       (initget "Back Undo")
+       (setq wp1 (getpoint "\n  Corner point [Back]: "))
+       (if (abl:back-kw wp1) (setq wp1 nil))
+       (if wp1
+         (progn
+           (setq w1 (abl:snap-break wp1 dpts))
+           (if (abl:memb w1 abl-corners)
+             (princ "\n  (that corner is already declared)")
+             (progn
+               (setq abl-corners (append abl-corners (list w1)))
+               (abl:temp-add (abl:tag-mine (abl:draw-corner-marker w1)))
+               (princ (strcat "\n  corner Pt." (abl:pt-name w1)
+                              " added")))))))
+      ((= ans "Remove")
+       (if (null abl-corners)
+         (princ "\n  (no declared corners to remove)")
+         (progn
+           (setq abl-phase "removing a sharp corner")
+           (initget "Back Undo")
+           (setq wp1 (getpoint "\n  Pick the declared corner to remove [Back]: "))
+           (if (abl:back-kw wp1) (setq wp1 nil))
+           (if wp1
+             (progn
+               (setq wp1 (cal:2d wp1) best nil bd nil)
+               (foreach w abl-corners
+                 (if (or (null bd) (< (cal:dist wp1 w) bd))
+                   (setq best w bd (cal:dist wp1 w))))
+               (setq abl-corners (abl:remove best abl-corners))
+               ;; the rings share their look with the omit markers;
+               ;; redraw the corner and hold rings (spent omit rings
+               ;; go quietly - the omissions already happened)
+               (abl:sweep-marks "CIRCLE")
+               (foreach w abl-corners
+                 (abl:temp-add (abl:tag-mine (abl:draw-corner-marker w))))
+               (foreach w abl-holds
+                 (abl:temp-add (abl:tag-mine (abl:draw-hold-marker w))))
+               (princ (strcat "\n  corner Pt." (abl:pt-name best)
+                              " removed")))))))
+      (T (setq ans nil))))
+  (if res 'ABL-BACK))
+
+;; Add or remove HELD points the same way.
+(defun abl:edit-holds (dpts / ans wp1 w1 best bd w res)
+  (setq ans T res nil)
+  (while ans
+    (initget "Add Remove Keep Back Undo")
+    (setq ans (getkword (strcat
+                "\n  Held points (" (itoa (length abl-holds))
+                " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (cond
+      ((member ans '("Back" "Undo")) (setq ans nil res T))
+      ((= ans "Add")
+       (setq abl-phase "picking a held point")
+       (initget "Back Undo")
+       (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
+       (if (abl:back-kw wp1) (setq wp1 nil))
+       (if wp1
+         (progn
+           (setq w1 (abl:snap-break wp1 dpts))
+           (if (abl:memb w1 abl-holds)
+             (princ "\n  (that point is already held)")
+             (progn
+               (setq abl-holds (append abl-holds (list w1)))
+               (abl:temp-add (abl:tag-mine (abl:draw-hold-marker w1)))
+               (princ (strcat "\n  held Pt." (abl:pt-name w1)
+                              " added")))))))
+      ((= ans "Remove")
+       (if (null abl-holds)
+         (princ "\n  (no held points to remove)")
+         (progn
+           (setq abl-phase "removing a held point")
+           (initget "Back Undo")
+           (setq wp1 (getpoint "\n  Pick the held point to release [Back]: "))
+           (if (abl:back-kw wp1) (setq wp1 nil))
+           (if wp1
+             (progn
+               (setq wp1 (cal:2d wp1) best nil bd nil)
+               (foreach w abl-holds
+                 (if (or (null bd) (< (cal:dist wp1 w) bd))
+                   (setq best w bd (cal:dist wp1 w))))
+               (setq abl-holds (abl:remove best abl-holds))
+               ;; redraw the rings to match what is left
+               (abl:sweep-marks "CIRCLE")
+               (foreach w abl-corners
+                 (abl:temp-add (abl:tag-mine (abl:draw-corner-marker w))))
+               (foreach w abl-holds
+                 (abl:temp-add (abl:tag-mine (abl:draw-hold-marker w))))
+               (princ (strcat "\n  held Pt." (abl:pt-name best)
+                              " released")))))))
+      (T (setq ans nil))))
+  (if res 'ABL-BACK))
+
+;; ---- the command -----------------------------------------------------
+(defun c:ABLOBF ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
+                   step rstep estep mk decls reselect
+                   ss i en ed lay typ ext nocs far
+                   pts dpts allow tour stale npt
+                   v e1 e2
+                   again omits pts2 ent ring abl-omitted
+                   abl-miss-pct abl-walls abl-corners abl-holds
+                   abl-temp abl-ptnames abl-ptkeys abl-numbered
+                   *error* abl-old-err abl-phase undo-open
+                   abl-pick)
+  ;; report which step failed if anything goes wrong, sweep away any
+  ;; preview geometry drawn so far, then restore the old handler
+  (setq abl-temp   nil
+        abl-old-err *error*
+        *error*
+          (lambda (m)
+            (if (and m (not (wcmatch (strcase m)
+                     "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+              (princ (strcat "\nABLOBF stopped while "
+                             (if abl-phase abl-phase "starting up")
+                             " -- " m)))
+            (abl:temp-clear)
+            ;; close the group after the sweep so one U takes back the
+            ;; whole run, previews included; only if it ever opened
+            (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+            (setq undo-open nil)
+            (setq *error* abl-old-err)
+            (if lzd:report (lzd:report "ABLOBF" *ablobf-version* m))
+            (princ)))
+  (if lzd:begin (lzd:begin "ABLOBF" *ablobf-version*))
+
+  ;; sweep leftovers from a run that was interrupted before it could
+  ;; tidy up after itself
+  (setq stale (abl:purge-mine *ABL-WALL-LAYER*))
+  (if (> stale 0)
+    (princ (strcat "\nABLOBF: cleared " (itoa stale)
+                   " leftover marker(s) from layer " *ABL-WALL-LAYER*
+                   ".")))
+
+  ;; a pickfirst selection if there is one - kept for step 5, probed
+  ;; before the undo group opens, which would clear the set.  Points
+  ;; only, exactly as step 5 asks: ABLOBF reads no drawn geometry, so
+  ;; letting some in here would spend the pickfirst set on objects the
+  ;; classifier goes on to ignore
+  (setq abl-pick (ssget "_I" '((0 . "POINT,INSERT"))))
+  (if lzd:watch (lzd:watch abl-pick))
+
+  ;; one undo group around the whole fit - a U after ABLOBF takes back
+  ;; the outline, the labels and the markers in one step (the stale
+  ;; purge above stays outside it, so U does not resurrect old junk)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+
+  (princ "\n\nABLOBF - fit an open run of arcs and lines through survey points.")
+
+  ;; -- steps 1 to 5: the settings, walked as one chain --------------
+  ;; Every question after the first offers Back (Undo is its hidden
+  ;; synonym), so a mistyped percentage costs one keystroke instead of
+  ;; the whole run.  STEP is the position in the chain and the only way
+  ;; through it.
+  (setq step 1)
+  (while (<= step 4)
+    (cond
+
+      ;; -- step 1: how close must the line stay to the points? ------
+      ((= step 1)
+       (setq abl-phase "reading the tolerance")
+       (princ "\n\n  Step 1 of 6 - how far may the fitted run sit from a survey point?")
+       (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
+       (princ "\n  pick two points in the drawing to measure one.")
+       (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
+       ;; the first question of the command: nothing to go back to
+       (setq tol  (abl:ask-tol nil)
+             step 2))
+
+      ;; -- step 2: how many of the points may sit off the line? -----
+      ((= step 2)
+       (setq abl-phase "reading the miss percentage")
+       (princ "\n\n  Step 2 of 6 - what percent of the points may sit OFF the line")
+       (princ "\n  (off, but still within the distance above)?")
+       (princ (strcat "\n  Press Enter for the standard "
+                      (itoa (fix (+ 0.5 (* 100.0 *ABL-MISS-PCT*))))
+                      " percent."))
+       (setq v (abl:ask-pct *ABL-MISS-PCT* T))
+       (if (eq v 'ABL-BACK)
+         (progn (princ "\n  Stepping back one question.")
+                (setq step 1))
+         (setq abl-miss-pct v
+               step         3)))
+
+      ;; -- step 3: optional cap on how many curves the result may use
+      ((= step 3)
+       (setq abl-phase "reading the curve limit")
+       (princ "\n\n  Step 3 of 6 - limit how many curves the result may use?")
+       (princ "\n  Type a whole number, or None for no limit.")
+       (if (eq (abl:ask-cap T) 'ABL-BACK)
+         (progn (princ "\n  Stepping back one question.")
+                (setq step 2))
+         (setq step 4)))
+
+      ;; -- step 4: straight stretches and sharp corners --------------
+      ;; ABHD's steps 4 and 5 folded into one loop: a declared straight
+      ;; stretch comes out as a dead-straight LINE between its two
+      ;; points; a declared corner is exempt from the tangency rule.
+      ;;
+      ;; One loop means one history: DECLS remembers what was declared
+      ;; and in what order, so Back takes back the LAST declaration of
+      ;; any kind - marker and all - rather than guessing at a kind.
+      ;; With nothing left to take back it re-opens step 3 instead.
+      ((= step 4)
+       (setq abl-phase "asking about stretches, corners and held points"
+             rawwalls nil
+             rawcnrs  nil
+             rawholds nil
+             decls    nil
+             go       T)
+       (princ "\n\n  Step 4 of 6 - any dead-straight stretches, sharp corners, or points")
+       (princ "\n  to hold ABSOLUTELY?  A held point can never be fudged: the line")
+       (princ "\n  passes through it exactly, in every candidate.  Each is picked by")
+       (princ "\n  its point(s), snapping to the survey points; dashed markers")
+       (princ "\n  confirm them and clear themselves afterwards.")
+       (setq step 5)                    ; unless a Back below says otherwise
+       (while go
+         (initget "Stretch Corner Hold Done Back Undo")
+         (setq ans (getkword
+                     "\n  Declare a stretch, corner or held point - or Done to fit? [Stretch/Corner/Hold/Done/Back] <Done>: "))
+         (cond
+           ((member ans '("Back" "Undo"))
+            (if decls
+              (progn
+                (abl:temp-kill (cdar decls))
+                (cond
+                  ((= (caar decls) "Stretch")
+                   (setq rawwalls (cdr rawwalls))
+                   (princ "\n  Stepping back one stretch."))
+                  ((= (caar decls) "Corner")
+                   (setq rawcnrs (cdr rawcnrs))
+                   (princ "\n  Stepping back one corner."))
+                  (T
+                   (setq rawholds (cdr rawholds))
+                   (princ "\n  Stepping back one held point.")))
+                (setq decls (cdr decls)))
+              (progn (princ "\n  Already at the first declaration.")
+                     (setq go nil step 3))))
+           ((= ans "Hold")
+            (setq abl-phase "picking a held point")
+            (initget "Back Undo")
+            (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
+            (if (and wp1 (not (abl:back-kw wp1)))
+              (progn
+                (setq wp1      (cal:2d wp1)
+                      rawholds (cons wp1 rawholds)
+                      mk       (abl:temp-add (abl:tag-mine (abl:draw-hold-marker wp1)))
+                      decls    (cons (cons "Hold" mk) decls)))))
+           ((= ans "Stretch")
+            (setq abl-phase "picking a straight stretch")
+            (initget "Back Undo")
+            (setq wp1 (getpoint "\n  First end of the straight stretch [Back]: "))
+            (if (abl:back-kw wp1) (setq wp1 nil wp2 nil)
+              (progn
+                (initget "Back Undo")
+                (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
+                (if (abl:back-kw wp2) (setq wp2 nil))))
+            (if wp2
+              (progn
+                (setq wp1      (cal:2d wp1)
+                      wp2      (cal:2d wp2)
+                      mk       (abl:temp-add (abl:tag-mine (abl:draw-wall-marker wp1 wp2)))
+                      rawwalls (cons (list wp1 wp2) rawwalls)
+                      decls    (cons (cons "Stretch" mk) decls)))))
+           ((= ans "Corner")
+            (setq abl-phase "picking a sharp corner")
+            (initget "Back Undo")
+            (setq wp1 (getpoint "\n  Corner point [Back]: "))
+            (if (and wp1 (not (abl:back-kw wp1)))
+              (progn
+                (setq wp1     (cal:2d wp1)
+                      mk      (abl:temp-add (abl:tag-mine (abl:draw-corner-marker wp1)))
+                      rawcnrs (cons wp1 rawcnrs)
+                      decls   (cons (cons "Corner" mk) decls)))))
+           (T (setq go nil))))
+       (if (= step 5)
+         (progn
+           (setq rawwalls (reverse rawwalls)
+                 rawcnrs  (reverse rawcnrs)
+                 rawholds (reverse rawholds))
+           (if (or rawwalls rawcnrs rawholds)
+             (princ (strcat "\n  " (itoa (length rawwalls))
+                            " stretch(es), " (itoa (length rawcnrs))
+                            " corner(s) and " (itoa (length rawholds))
+                            " held point(s) noted - the dashed markers on "
+                            *ABL-WALL-LAYER*
+                            " clear themselves when the command finishes."))))))))
+
+  ;; -- steps 5 and 6, as one chain -----------------------------------
+  ;; RESELECT is set by a Back at the first end, which is the only
+  ;; question the selection has in front of it.  Classification rebuilds
+  ;; every list it fills, so a second pass starts clean.
+  (setq reselect T)
+  (while reselect
+    (setq reselect nil)
+    ;; -- step 5: the selection ----------------------------------------
+    ;; Points only.  ABLOBF reads no geometry: the order of the run
+    ;; comes from the two ends and the walk between them, so a window
+    ;; dragged over the whole sheet picks up the survey and leaves what
+    ;; is drawn alone.
+    (setq abl-phase "waiting for the selection")
+    (if abl-pick
+      (setq ss abl-pick)
+      (progn
+        (princ "\n\n  Step 5 of 6 - select the survey points (POINT entities on any layer,")
+        (princ (strcat "\n  \"" *ABL-POINT-BLOCK* "\" blocks anywhere, and blocks on layer "
+                       *ABL-POINT-LAYER* ")."))
+        (princ "\n  Select objects: ")
+        (setq ss (ssget '((0 . "POINT,INSERT"))))
+        (if lzd:watch (lzd:watch ss))))
+    (if (null ss)
+      (princ "\nNo points selected - there is nothing to fit a run through.")
+      (progn
+        ;; -- sort the selection into points ----------------------------
+        (setq abl-phase "reading the selected entities")
+        (setq pts nil i 0 nocs 0
+              npt 0 abl-ptnames nil abl-ptkeys nil abl-numbered 0)
+        (while (< i (sslength ss))
+          (setq en  (ssname ss i)
+                ed  (entget en)
+                lay (strcase (cdr (assoc 8 ed)))
+                typ (cdr (assoc 0 ed))
+                ext (cdr (assoc 210 ed))
+                i   (1+ i))
+          ;; geometry drawn in a tilted UCS reads back in its own plane,
+          ;; so a flat 2D fit of it would be wrong - count and warn
+          (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
+          (cond
+            ;; the survey point block is ALWAYS a point, on any layer
+            ((and (= typ "INSERT")
+                  (= (strcase (cdr (assoc 2 ed))) (strcase *ABL-POINT-BLOCK*)))
+             (abl:add-point (cal:2d (cdr (assoc 10 ed)))
+                            (cal:block-number en *ABL-PT-TAG*)))
+            ;; a plain POINT counts on ANY layer - the selection is
+            ;; explicit, so there is no guessing involved
+            ((= typ "POINT")
+             (abl:add-point (cal:2d (cdr (assoc 10 ed))) nil))
+            ;; any other block dropped on the POINTS layer -> a point
+            ((and (= typ "INSERT") (= lay (strcase *ABL-POINT-LAYER*)))
+             (abl:add-point (cal:2d (cdr (assoc 10 ed)))
+                            (cal:block-number en *ABL-PT-TAG*)))))
+        (if (> nocs 0)
+          (princ (strcat "\nABLOBF: warning - " (itoa nocs)
+                         " selected object(s) are not drawn in the world"
+                         " plane; the fit is flat (XY) and may be wrong."
+                         "  Set UCS to World and flatten them first.")))
+        (setq dpts  (if pts (cal:dedupe pts *ABL-EXACT-EPS*))
+              allow (cal:ceil (* (abl:misspct) (length dpts))))
+        ;; snap the declared stretch ends and corners onto actual points
+        (setq abl-walls nil)
+        (foreach w rawwalls
+          (setq w1 (abl:nearest (car w) dpts)
+                w2 (abl:nearest (cadr w) dpts))
+          (cond
+            ((or (null w1) (null w2)) nil)
+            ((< (cal:dist w1 w2) *ABL-EXACT-EPS*)
+             (princ "\n  (both ends of a declared stretch landed on the same survey point - that stretch is ignored)"))
+            (T
+             (if (or (> (cal:dist (car w) w1) (* 3.0 tol))
+                     (> (cal:dist (cadr w) w2) (* 3.0 tol)))
+               (princ "\n  (a declared stretch end was picked well away from any survey point - snapped to the nearest one)"))
+             (setq abl-walls (cons (list w1 w2) abl-walls)))))
+        (setq abl-walls (reverse abl-walls))
+        (setq abl-corners nil)
+        (foreach w rawcnrs
+          (setq w1 (abl:nearest w dpts))
+          (if w1
+            (progn
+              (if (> (cal:dist w w1) (* 3.0 tol))
+                (princ "\n  (a declared corner was picked well away from any survey point - snapped to the nearest one)"))
+              (setq abl-corners (cons w1 abl-corners)))))
+        (setq abl-corners (reverse abl-corners))
+        ;; held points snap onto survey points the same way; duplicates
+        ;; collapse to one
+        (setq abl-holds nil)
+        (foreach w rawholds
+          (setq w1 (abl:nearest w dpts))
+          (if w1
+            (progn
+              (if (> (cal:dist w w1) (* 3.0 tol))
+                (princ "\n  (a held point was picked well away from any survey point - snapped to the nearest one)"))
+              (if (not (abl:memb w1 abl-holds))
+                (setq abl-holds (cons w1 abl-holds))))))
+        (setq abl-holds (reverse abl-holds))
+        (if (> (length dpts) 150)
+          (princ (strcat "\nABLOBF: " (itoa (length dpts))
+                         " points - ordering and fitting will take a"
+                         " little while, please wait...")))
+        (cond
+          ((null pts)
+           (princ (strcat "\nNo survey points found (looked for POINT"
+                          " entities, \"" *ABL-POINT-BLOCK*
+                          "\" block insertions, and blocks on layer "
+                          *ABL-POINT-LAYER* ").")))
+          ((< (length dpts) 2)
+           (princ "\nAt least 2 distinct points are needed for a run."))
+          (T
+           ;; -- step 6: the two ends -----------------------------------
+           ;; The question ABHD never has to ask.  A closed loop has no
+           ;; ends; an open run has two, and nothing in the points
+           ;; themselves says which they are.  Enter takes the
+           ;; farthest-apart pair - right for a run that does not double
+           ;; back, and wrong exactly when it does, which is when you
+           ;; pick by hand.  The two are a chain of their own: Back at
+           ;; the second re-opens the first, and Back at the first hands
+           ;; the whole selection back, since nothing is drawn yet and
+           ;; the classifier rebuilds every list it fills.
+           (setq far   (abl:far-pair dpts)
+                 e1    nil
+                 e2    nil
+                 estep 1)
+           ;; offer the pair the way the survey reads: a run from Pt.9
+           ;; back to Pt.1 is the same run, and the lower number first
+           ;; is the one a drafter expects to see
+           (if (> (abl:pt-key (car far)) (abl:pt-key (cadr far)))
+             (setq far (list (cadr far) (car far))))
+           (princ "\n\n  Step 6 of 6 - where does the run START, and where does it END?")
+           (princ "\n  Click a point or type the survey number it carries; Enter takes")
+           (princ "\n  the farthest-apart pair.  Everything else is ordered between them.")
+           (if (> abl-numbered 0)
+             (princ (strcat "\n  (" (itoa abl-numbered) " of " (itoa npt)
+                            " selected point(s) carry a number of their own;"
+                            " the rest are numbered in the order they were"
+                            " read.)")))
+           (while (<= estep 2)
+             (cond
+               ((= estep 1)
+                (setq abl-phase "picking the point the run starts at"
+                      v (abl:ask-end "Point the run STARTS at" dpts
+                                     (car far) nil T))
+                (if (eq v 'ABL-BACK)
+                  (progn (princ "\n  Stepping back to the selection.")
+                         (setq reselect T abl-pick nil estep 3))
+                  (setq e1 v estep 2)))
+               ((= estep 2)
+                (setq abl-phase "picking the point the run ends at"
+                      v (abl:ask-end
+                          "Point the run ENDS at" dpts
+                          ;; never offer the end already taken
+                          (abl:far-from e1 dpts) e1 T))
+                (if (eq v 'ABL-BACK)
+                  (progn (princ "\n  Stepping back one question.")
+                         (setq estep 1))
+                  (setq e2 v estep 3)))))
+           (if (not reselect)
+             (progn
+               (princ (strcat "\n  Run: Pt." (abl:pt-name e1) " to Pt."
+                              (abl:pt-name e2) ", through "
+                              (itoa (- (length dpts) 2)) " point(s)"
+                              " between them."))
+               (setq abl-phase "ordering the points"
+                     tour (abl:order-points-open dpts e1 e2))
+               (setq again T)
+               (while again
+                 (setq again nil)
+                 (if (eq 'REDO (abl:compare tour pts tol allow))
+                       (progn
+                         ;; -- redo: maybe omit points, then re-ask ---------
+                         (setq abl-phase "picking points to omit"
+                               omits    nil)
+                         (princ "\n\nRedoing the fit.  Any points to leave out this time?")
+                         (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
+                         (princ "\n  anything the line should not chase; each gets a dashed ring.")
+                         (if abl-omitted
+                           (princ (strcat "\n  " (itoa (length abl-omitted))
+                                          " point(s) are already out -"
+                                          " picking one of those puts it"
+                                          " BACK IN.")))
+                         (while (setq wp1 (getpoint
+                                            "\n  Point to omit - or a ringed one to restore (Enter when done): "))
+                           (setq wp1 (cal:2d wp1)
+                                 w1  (abl:nearest wp1 dpts)
+                                 w2  (abl:nearest wp1 (mapcar 'car abl-omitted)))
+                           (cond
+                             ((and w2 (or (null w1)
+                                          (<= (cal:dist wp1 w2)
+                                              (cal:dist wp1 w1))))
+                              (setq ent        (assoc w2 abl-omitted)
+                                    pts        (append pts (cadr ent))
+                                    dpts       (cal:dedupe pts *ABL-EXACT-EPS*)
+                                    abl-omitted (abl:remove ent abl-omitted)
+                                    omits      (abl:remove w2 omits))
+                              (if (and (caddr ent) (entget (caddr ent)))
+                                (progn
+                                  (abl:temp-drop (caddr ent))
+                                  (entdel (caddr ent))))
+                              (princ (strcat "  - Pt." (abl:pt-name w2)
+                                             " back in")))
+                             (w1
+                              (setq pts2 nil ent nil)
+                              (foreach w pts
+                                (if (< (cal:dist w w1) *ABL-EXACT-EPS*)
+                                  (setq ent (cons w ent))
+                                  (setq pts2 (cons w pts2))))
+                              (setq pts  (reverse pts2)
+                                    dpts (cal:dedupe pts *ABL-EXACT-EPS*)
+                                    ring (abl:temp-add (abl:tag-mine
+                                           (abl:draw-corner-marker w1)))
+                                    abl-omitted (cons (list w1 ent ring)
+                                                     abl-omitted)
+                                    omits      (cons w1 omits))
+                              (princ (strcat "  - omitting Pt."
+                                             (abl:pt-name w1))))))
+                         (if omits
+                           (progn
+                             ;; declared stretches and corners anchored on
+                             ;; an omitted point make no sense any more
+                             (setq pts2 nil)
+                             (foreach w abl-walls
+                               (if (not (or (abl:memb (car w) omits)
+                                            (abl:memb (cadr w) omits)))
+                                 (setq pts2 (cons w pts2))))
+                             (if (< (length pts2) (length abl-walls))
+                               (princ "\n  (a declared stretch lost an end and was dropped)"))
+                             (setq abl-walls (reverse pts2)
+                                   pts2     nil)
+                             (foreach w abl-corners
+                               (if (not (abl:memb w omits))
+                                 (setq pts2 (cons w pts2))))
+                             (setq abl-corners (reverse pts2)
+                                   pts2       nil)
+                             ;; a held point that was just omitted is out of
+                             ;; the fit entirely - nothing left to hold
+                             (foreach w abl-holds
+                               (if (not (abl:memb w omits))
+                                 (setq pts2 (cons w pts2))))
+                             (if (< (length pts2) (length abl-holds))
+                               (princ "\n  (an omitted point was held - its hold went with it)"))
+                             (setq abl-holds (reverse pts2))))
+                         (if abl-omitted
+                           (princ (strcat "\n  " (itoa (length abl-omitted))
+                                          " point(s) omitted in total - "
+                                          (itoa (length dpts))
+                                          " in the fit.")))
+                         (if (< (length dpts) 2)
+                           (princ "\nToo few points remain for a fit - nothing redone.")
+                           (progn
+                             ;; stretches and corners may change for the retry
+                             (princ "\n\n  Straight stretches and sharp corners can change too -")
+                             (princ "\n  Enter keeps each list as it is.")
+                             ;; An end that was just omitted is not a point
+                             ;; any more, so the offer has to be replaced
+                             ;; BEFORE the chain below re-asks for it -
+                             ;; otherwise Enter takes a point that is no
+                             ;; longer in the fit.
+                             (if (not (and (abl:memb e1 dpts)
+                                           (abl:memb e2 dpts)))
+                               (progn
+                                 (princ "\n  (an end point was omitted - offering the farthest-apart pair instead)")
+                                 (setq far (abl:far-pair dpts)
+                                       e1  (car far)
+                                       e2  (cadr far))))
+                             ;; the Redo settings are a chain like the opening
+                             ;; questions, and walk back the same way: Back at
+                             ;; any of them re-opens the one before it, and
+                             ;; Back at the first has nowhere to go
+                             (setq rstep 1)
+                             (while (<= rstep 7)
+                               (cond
+                                 ((= rstep 1)
+                                  (setq abl-phase "editing straight stretches")
+                                  (abl:edit-walls dpts)      ; first: no Back out
+                                  (setq rstep 2))
+                                 ((= rstep 2)
+                                  (setq abl-phase "editing sharp corners")
+                                  (setq rstep (if (eq (abl:edit-corners dpts) 'ABL-BACK)
+                                                (progn (princ "\n  Stepping back one question.") 1)
+                                                3)))
+                                 ((= rstep 3)
+                                  (setq abl-phase "editing held points")
+                                  (setq rstep (if (eq (abl:edit-holds dpts) 'ABL-BACK)
+                                                (progn (princ "\n  Stepping back one question.") 2)
+                                                4)))
+                                 ((= rstep 4)
+                                  ;; the ends can move on a Redo, and an
+                                  ;; end that has just been omitted MUST.
+                                  ;; Enter keeps the one standing, so
+                                  ;; saying nothing changes nothing
+                                  (setq abl-phase "picking the run's ends"
+                                        v (abl:ask-end
+                                            "Point the run STARTS at"
+                                            dpts e1 nil T))
+                                  (cond
+                                    ((eq v 'ABL-BACK)
+                                     (princ "\n  Stepping back one question.")
+                                     (setq rstep 3))
+                                    (T
+                                     (setq e1 v
+                                           v  (abl:ask-end
+                                                "Point the run ENDS at"
+                                                dpts
+                                                (if (< (cal:dist e2 e1)
+                                                       *ABL-EXACT-EPS*)
+                                                  (abl:far-from e1 dpts)
+                                                  e2)
+                                                e1 T))
+                                     (if (eq v 'ABL-BACK)
+                                       ;; back to the START ask, which is
+                                       ;; the top of this same step
+                                       (progn (princ "\n  Stepping back one question.")
+                                              (setq rstep 4))
+                                       (setq e2 v rstep 5)))))
+                                 ((= rstep 5)
+                                  (princ "\n\n  New settings - Enter keeps each one as it is.")
+                                  (setq abl-phase "reading the tolerance"
+                                        v        (abl:ask-tol T))
+                                  (if (eq v 'ABL-BACK)
+                                    (progn (princ "\n  Stepping back one question.")
+                                           (setq rstep 4))
+                                    (setq tol v rstep 6)))
+                                 ((= rstep 6)
+                                  (setq abl-phase "reading the miss percentage"
+                                        v        (abl:ask-pct abl-miss-pct T))
+                                  (if (eq v 'ABL-BACK)
+                                    (progn (princ "\n  Stepping back one question.")
+                                           (setq rstep 5))
+                                    (setq abl-miss-pct v rstep 7)))
+                                 ((= rstep 7)
+                                  (setq abl-phase "reading the curve limit")
+                                  (setq rstep (if (eq (abl:ask-cap T) 'ABL-BACK)
+                                                (progn (princ "\n  Stepping back one question.") 6)
+                                                8)))))
+                             (setq allow (cal:ceil (* (abl:misspct)
+                                                     (length dpts))))
+                             ;; the point order must forget the omitted ones
+                             (setq abl-phase "ordering the points"
+                                   tour (abl:order-points-open dpts e1 e2))
+                             ;; say what the run is NOW.  The ends can
+                             ;; have moved, or been replaced because one
+                             ;; was omitted, and a refit that quietly
+                             ;; ran between two different points would
+                             ;; be read as the same run drawn better
+                             (princ (strcat "\n  Run: Pt." (abl:pt-name e1)
+                                            " to Pt." (abl:pt-name e2)
+                                            ", through "
+                                            (itoa (- (length dpts) 2))
+                                            " point(s) between them."))
+                             (setq again T)))))))))))))
+  ;; sweep the dashed markers and any candidate the user did not keep
+  (abl:temp-clear)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
+  (setq *error* abl-old-err)   ; restore the previous error handler
+  (princ))
+
+(defun c:ABLOBFVER ()
+  (princ (strcat "\nABLOBF " *ablobf-version*))
+  (princ))
+
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABLOBF " *ablobf-version*
+                 " loaded.  Type ABLOBF to fit an open run of arcs and"
+                 " lines through survey points.")))
 (princ)
 
 
@@ -36352,7 +41608,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.7"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.8"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -36667,7 +41923,9 @@
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; autobead-flush drain and the UNDO close above; harmless no-op
@@ -36892,13 +42150,16 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
+    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
   (autobead-ensure-layer *autobead-layer*)
   ;; a pickfirst selection skips straight to the direction question;
   ;; the probe sits OUTSIDE the stage loop so Back at that question
   ;; still lands on the interactive selection, never a re-probe
   (setq ss (ssget "_I" (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+  (if lzd:watch (lzd:watch ss))
   ;; staged: Back (or Undo) at any later prompt re-opens the stage before
   (setq stage (if ss 2 1) done nil)
   (while (not done)
@@ -36908,6 +42169,7 @@
                        *autobead-filter* "): "))
        (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
+       (if lzd:watch (lzd:watch ss))
        (if (null ss)
          (progn
            (prompt (strcat "\nNothing selected on a " *autobead-filter*
@@ -37248,10 +42510,18 @@
 
 ;; ---------------------------------------------------------------------------
 
-(princ (strcat "\nAUTOBEAD " *autobead-version* " loaded."
-                "\n  AUTOBEAD          - bead selected pool lines"
-                "\n  TUTORIALAUTOBEAD  - how it works"
-                "\n  AUTOBEADVER       - version check"))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nAUTOBEAD " *autobead-version* " loaded."
+                  "\n  AUTOBEAD          - bead selected pool lines"
+                  "\n  TUTORIALAUTOBEAD  - how it works"
+                  "\n  AUTOBEADVER       - version check")))
 (princ)
 
 
@@ -37289,7 +42559,10 @@
 ;;;                end point that is not on an object is pulled back to
 ;;;                the last object before it, so every dim runs object
 ;;;                to object and none hangs off the end into open
-;;;                drawing.
+;;;                drawing.  Say No and it asks whether you would like
+;;;                pads instead: Yes there hands the plan to PADDLE,
+;;;                which drops a pad at every concave perimeter
+;;;                feature - see "Pads instead of floor dims" below.
 ;;;             Step 5. Places the two overall dims, no input needed:
 ;;;                the plan's full width about 2ft above the topmost
 ;;;                dimension and its full height about 2ft to the left
@@ -37347,6 +42620,38 @@
 ;;;    dimension is placed on that clear side.  Because only the
 ;;;    highlighted stuff blocks the rays, title borders, notes and
 ;;;    anything else in the drawing cannot get in the way.
+;;;
+;;;  Pads instead of floor dims:
+;;;    Step 4's two answers are alternatives, not a pair.  No to floor
+;;;    dims is followed by "Would you like pads?"; Yes to floor dims is
+;;;    not - a run that is dimensioning the floor is not the run that
+;;;    wants the pads laid out, and asking both questions every time is
+;;;    one question more than the answer needs.  Back at the pad
+;;;    question re-opens the floor dims one, so an answer given by
+;;;    mistake is not a run wasted.
+;;;    Yes to pads hands PADDLE the step-1 plan as a pickfirst
+;;;    selection rather than letting it hunt for one: PADDLE
+;;;    auto-detects the largest closed loop in the WHOLE drawing, and a
+;;;    title block border is a bigger loop than the pool.  Handed the
+;;;    plan, it pads what was just dimensioned and asks nothing - it
+;;;    keeps the lines, arcs and polylines out of what it is given, so
+;;;    a plan drawn without any of those is the one case where it falls
+;;;    back on its own selection prompt.
+;;;    PICKFIRST is switched on for the handoff and put back after -
+;;;    with it at 0, sssetfirst still highlights while PADDLE's
+;;;    (ssget "_I") reads nothing, and the handoff would go quietly
+;;;    missing.  (An Esc inside PADDLE is caught by PADDLE's own
+;;;    handler, which is the innermost one, so this command's never
+;;;    sees it and PICKFIRST is left switched on - AutoCAD's own
+;;;    default, and the state a drafter who never turned it off is in.)
+;;;    The pads go in LAST, once the dims are placed and this command's
+;;;    layer, dimension style, CMDECHO and undo group are back: PADDLE
+;;;    is a command in its own right and must start from the drafter's
+;;;    settings, not this one's.  It opens its own undo mark too, so one
+;;;    U backs the pads out and the next one the dims.
+;;;    PADDLE lives in its own file, so it may not be in the session at
+;;;    all.  Then the dims have still been placed, and saying so beats
+;;;    dying on an undefined function.
 ;;;
 ;;;  Dimension styles - every dimension picks its own, by what it
 ;;;  measures rather than by which step placed it (a style the drawing
@@ -37422,8 +42727,10 @@
 ;;;      inches without dragging the rest of the chain with it.
 ;;;    * The two floor dims lines are construction lines only - they
 ;;;      are erased once their dimension chain has been created.
-;;;    * Answering No to the floor dims question skips straight to the
-;;;      overall dims; Back at it re-opens the stairs.
+;;;    * Answering No to the floor dims question puts the pad question
+;;;      instead, and the overall dims follow either answer to that;
+;;;      Back at the floor dims question re-opens the stairs, Back at
+;;;      the pad question re-opens the floor dims question.
 ;;;    * Break points closer together than 0.0001 drawing units
 ;;;      (ad:*merge-tol*) are merged so no zero-length dimensions are
 ;;;      created.
@@ -37435,7 +42742,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v1.9")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -38442,7 +43749,7 @@
               (setq cnt (+ cnt (ad:dimchain pts loc ad:*style-plan*)))))))))
   cnt)
 
-;; ------------------------------------------------- part 3: the floor dims
+;; --------------------------- part 3: the floor dims, or the pads instead
 
 ;; WCS intersection points between the line object and every object in ss
 (defun ad:xpoints (lobj ss / i rtn pts res)
@@ -38587,6 +43894,33 @@
     ((eq out 'CAL-BACK) 'CAL-BACK)
     ((eq out 'skip) nil)
     (T (car out))))
+
+;; Step 4's other branch.  Hand PADDLE the plan as a pickfirst
+;; selection rather than letting it hunt for one: PADDLE auto-detects
+;; the largest closed loop in the WHOLE drawing, and a title block
+;; border is a bigger loop than the pool.  Handed the plan, it pads
+;; what was just dimensioned and asks nothing - the same handoff
+;; LINGUTTER and TYLERDRONESUITE make.
+;;
+;; PADDLE is its own file, so it may not be in this session: an unbound
+;; c: symbol is nil, which is the test here.  When it is missing the
+;; dims have still been placed, and saying so beats dying on an
+;; undefined function.
+;;
+;; The caller switches PICKFIRST on and puts it back - with it at 0
+;; sssetfirst still highlights while PADDLE's (ssget "_I") reads
+;; nothing, and the handoff would go quietly missing.
+(defun ad:paddle (plan)
+  (if c:PADDLE
+    (progn
+      (prompt "\nHanding the plan to PADDLE for the pads...")
+      (sssetfirst nil plan)
+      (c:PADDLE))
+    (prompt (strcat "\nPADDLE is not loaded, so no pads were placed - the"
+                    " dimensions above are all this run did.  APPLOAD"
+                    " PADDLE.lsp (or shared/LAZPASS.lsp, which is the whole"
+                    " build in one) and type PADDLE.")))
+  (princ))
 
 ;; ---------------------------------------------- part 4: the overall dims
 
@@ -38798,8 +44132,12 @@
 ;; --------------------------------------------------------------- commands
 
 ;; AUTODIM's plan flow, steps 2 to 5: the perimeter, then the stairs,
-;; then the two floor dims lines, then the two overall dims.
-(defun ad:runplan (plan / nper nstair nover nf1 nf2 stage mark3 mark4 v)
+;; then the two floor dims lines - or, when those are turned down, the
+;; pad question - then the two overall dims.  Returns (count pads),
+;; pads being T when the drafter asked for them: the pads themselves go
+;; in after the command has put its own state back, so the answer
+;; travels out of here rather than being acted on mid-run.
+(defun ad:runplan (plan / nper nstair nover nf1 nf2 stage mark3 mark4 v pad)
   (prompt (strcat "\n=== AUTODIM step 2 of 5: perimeter ==="
                   "\nDimensioning the straight lines about the"
                   " perimeter - no input needed..."))
@@ -38807,9 +44145,11 @@
   (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
   ;; steps 3 and 4 walk back through each other: Back at the floor dims
   ;; question re-opens the stairs, erasing what they drew, and Back at
-  ;; the second floor line re-opens the first
+  ;; the second floor line re-opens the first.  Stage 7 is step 4's
+  ;; other branch - the pad question, reached only from No at stage 4 -
+  ;; and Back there re-opens the question that sent it.
   (setq stage 3)
-  (while (< stage 7)
+  (while (< stage 8)
     (cond
       ((= stage 3)
        (prompt "\n=== AUTODIM step 3 of 5: stairs ===")
@@ -38844,7 +44184,7 @@
          (progn
            (setq nf1 (if (numberp v) v 0))    ; 'skip counts as none
            (setq stage 6))))
-      (T
+      ((= stage 6)
        (setq v (ad:getfloor "Floor dims 2 of 2" plan T))
        (if (eq v 'CAL-BACK)
          (progn
@@ -38854,7 +44194,25 @@
            (setq stage 5))
          (progn
            (setq nf2 (if (numberp v) v 0))
-           (setq stage 7))))))
+           (setq stage 8))))                  ; floor dims taken - no pads
+      (T
+       ;; step 4's other branch, put only on the runs that turned the
+       ;; floor dims down: the two are alternatives, so a plan that got
+       ;; its floor dims is never asked this
+       (prompt (strcat "\nPADDLE can pad the plan instead: a pad at every"
+                       " concave feature around the perimeter - the inside"
+                       " corners, and the arcs tight enough to need one."
+                       "  The plan you highlighted is handed to it, so"
+                       " there is nothing to pick again, and the pads go"
+                       " in once the dims are placed."))
+       (setq v (cal:askyn "Would you like pads?" "Yes" T))
+       (cond
+         ((eq v 'CAL-BACK)
+          (prompt "\nStepping back to the floor dims question.")
+          (setq stage 4))
+         (T (setq pad v)
+            (if (null pad) (prompt "\nNo pads."))
+            (setq stage 8))))))
   (prompt (strcat "\n=== AUTODIM step 5 of 5: overall dims ==="
                   "\nPlacing the overall width about "
                   (ad:numstr ad:*over-feet*) "ft above the topmost dim"
@@ -38863,8 +44221,9 @@
                   " left-most one - no input needed..."))
   (setq nover (ad:overall plan))
   (prompt (strcat "\n" (itoa nover) " overall dimension(s) placed."))
-  ;; the run's total, for AUTODIM's sign-off line
-  (+ nper nstair (if nf1 nf1 0) (if nf2 nf2 0) nover))
+  ;; the run's total, for AUTODIM's sign-off line, and the pad answer
+  ;; for it to act on once its own state is back
+  (list (+ nper nstair (if nf1 nf1 0) (if nf2 nf2 0) nover) pad))
 
 ;; AUTODIM's side-view flow, for when step 1's selection turned out to
 ;; be a flight of steps drawn in side view: the depth of every step
@@ -38879,10 +44238,13 @@
                   " needed..."))
   (setq n (ad:dimsteps (ad:stepchain risers) 1.0 T ad:*style-steps*))
   (prompt (strcat "\n" (itoa n) " step dimension(s) placed."))
-  ;; the run's total, for AUTODIM's sign-off line
-  n)
+  ;; the run's total, for AUTODIM's sign-off line, and no pad answer:
+  ;; pads go at a plan's concave perimeter features, so the side view
+  ;; never puts that question
+  (list n nil))
 
-(defun c:AUTODIM (/ *error* oldcmd olddim oldlay plan risers n undo-open)
+(defun c:AUTODIM (/ *error* oldcmd olddim oldlay oldpick plan risers res n
+                    pad undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -38892,11 +44254,18 @@
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
+    ;; only switched on for the PADDLE handoff, and nil the rest of the
+    ;; run - an Esc in that window is the one this puts back
+    (if oldpick (setvar "PICKFIRST" oldpick))
+    (setq oldpick nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
+    (if lzd:report (lzd:report "AUTODIM" *autodim-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTODIM" *autodim-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq plan (ssget "_I" (ad:geomfilter)))
+  (if lzd:watch (lzd:watch plan))
   (if (null plan)
     (progn
       (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
@@ -38906,7 +44275,8 @@
                       "\nHighlight a flight of steps drawn in side view"
                       " instead and it is recognised as one: the depth of"
                       " every step gets dimensioned rather than a plan."))
-      (setq plan (ssget (ad:geomfilter)))))
+      (setq plan (ssget (ad:geomfilter)))
+      (if lzd:watch (lzd:watch plan))))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
@@ -38921,9 +44291,13 @@
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
       (setq oldlay (ad:enterlayer ad:*layer*))
-      (setq n (if (setq risers (ad:stepprofile-p plan))
-                (ad:runsteps risers)
-                (ad:runplan plan)))
+      ;; both flows answer with (count pads); the side view puts no pad
+      ;; question, so its pads are always nil
+      (setq res (if (setq risers (ad:stepprofile-p plan))
+                  (ad:runsteps risers)
+                  (ad:runplan plan))
+            n   (car res)
+            pad (cadr res))
       (ad:skipreport)
       (ad:usestyle olddim)
       (if oldlay (setvar "CLAYER" oldlay))
@@ -38934,7 +44308,23 @@
       (setvar "CMDECHO" oldcmd)
       (prompt (strcat "\nAUTODIM finished - "
                       (if (numberp n) (itoa n) "0")
-                      " dimension(s) placed."))))
+                      " dimension(s) placed."))
+      ;; The pads go in last of all, with this command's layer, style,
+      ;; CMDECHO and undo group already back: PADDLE is a command in its
+      ;; own right, it starts from the drafter's settings rather than
+      ;; this run's, and it opens an undo mark of its own.  The handoff
+      ;; also has to come after the last (command ...) above, which
+      ;; would clear the pickfirst set it puts up.
+      (if pad
+        (progn
+          ;; with PICKFIRST at 0 sssetfirst still highlights while
+          ;; PADDLE's (ssget "_I") reads nothing, and the handoff would
+          ;; go quietly missing
+          (setq oldpick (getvar "PICKFIRST"))
+          (setvar "PICKFIRST" 1)
+          (ad:paddle plan)
+          (setvar "PICKFIRST" oldpick)
+          (setq oldpick nil)))))
   (princ))
 
 (defun c:STAIRDIM (/ *error* oldcmd olddim oldlay n ss0 undo-open)
@@ -38949,12 +44339,15 @@
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
+    (if lzd:report (lzd:report "STAIRDIM" *autodim-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "STAIRDIM" *autodim-version*))
   (setq oldcmd (getvar "CMDECHO")
         olddim (getvar "DIMSTYLE"))
   ;; a pickfirst selection if there is one, grabbed before the undo
   ;; group's command clears it - nil makes ad:dimstairs ask
   (setq ss0 (ssget "_I" (ad:stairfilter)))
+  (if lzd:watch (lzd:watch ss0))
   (setvar "CMDECHO" 0)
   (ad:begin)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -38986,7 +44379,9 @@
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
+    (if lzd:report (lzd:report "FLOORDIM" *autodim-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "FLOORDIM" *autodim-version*))
   (setq oldcmd (getvar "CMDECHO")
         olddim (getvar "DIMSTYLE"))
   (setvar "CMDECHO" 0)
@@ -39031,9 +44426,12 @@
     (if oldcmd (setvar "CMDECHO" oldcmd))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
+    (if lzd:report (lzd:report "AUTODIMSIDEPOV" *autodim-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "AUTODIMSIDEPOV" *autodim-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" (ad:stairfilter)))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side"
@@ -39041,7 +44439,8 @@
                       " step, plus the overall height."
                       "\nHighlight the side view of the steps, then press"
                       " Enter."))
-      (setq ss (ssget (ad:stairfilter)))))
+      (setq ss (ssget (ad:stairfilter)))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (prompt "\nNothing highlighted - AUTODIMSIDEPOV cancelled.")
     (progn
@@ -39080,7 +44479,15 @@
   (princ (strcat "\nAUTODIM " *autodim-version*))
   (princ))
 
-(princ (strcat "\nAutoDim.lsp " *autodim-version* " loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nAutoDim.lsp " *autodim-version* " loaded.  Commands: AUTODIM (highlight plan -> perimeter + stairs + two floor dims or PADDLE's pads + the two overall dims; highlight a side view of steps -> the depth of every step), STAIRDIM (dimension another stair selection), FLOORDIM (one extra floor dims chain), AUTODIMSIDEPOV (dimension steps drawn in side view).")))
 (princ)
 
 
@@ -39135,7 +44542,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *bpcallout-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.10")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -39324,7 +44731,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nBPCALLOUT error: " msg)))
+    (if lzd:report (lzd:report "BPCALLOUT" *bpcallout-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "BPCALLOUT" *bpcallout-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -39403,9 +44812,483 @@
   (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
   (princ))
 
-(princ (strcat "\nBPCALLOUT " *bpcallout-version*
-               " loaded. Command: BPCALLOUT (ring bad points and write"
-               " the callout)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nBPCALLOUT " *bpcallout-version*
+                 " loaded. Command: BPCALLOUT (ring bad points and write"
+                 " the callout).")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> DIMSTAMP.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; DIMSTAMP.lsp  --  click a point, stamp a feet/inch dimension text
+;;;                    there, and repeat
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  DIMSTAMP       stamp dimension text, click after click
+;;;            DIMSTAMPVER    print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; Click a point and type the text once; it lands there as a TEXT
+;;; entity.  Beside it, a little vertical RULER appears -- a column of
+;;; nearby values, each drawn as a tick and a label, graded like a real
+;;; ruler: the near eighth-inch steps are the smallest text and the
+;;; shortest ticks, quarters and halves step up from there, and the
+;;; whole-inch jumps (1", 2", 3" either way) are the tallest and
+;;; boldest, exactly where the deepest mark on a tape measure would be.
+;;; A small CIRCLE rides the row that is the CURRENT value.
+;;;
+;;; From there, one prompt does three jobs:
+;;;   * click empty space           -- stamps the CURRENT text there,
+;;;                                    and the ruler follows the click;
+;;;   * click a row on the ruler    -- adopts THAT row's value as the
+;;;                                    new current text (nothing is
+;;;                                    stamped yet; the ruler redraws
+;;;                                    in place, re-graded around it);
+;;;   * type something else         -- becomes the new current text,
+;;;                                    the same way, once it parses.
+;;; Enter ends the run.  The ruler is scratch, not drawing content: it
+;;; is erased and redrawn every time the current value changes, and
+;;; swept away for good when the command ends or is cancelled -- only
+;;; the TEXT it actually stamped is left behind.
+;;;
+;;; Every value is one of four forms, exactly -- nothing else parses:
+;;;   34"                     whole inches
+;;;   3'-4"                   feet and whole inches
+;;;   34 1/2"                 inches and a fraction
+;;;   3'- 4 1/2"              feet, inches and a fraction
+;;;
+;;; What the ruler offers depends on which family the current text is
+;;; in:
+;;;   * bare inches, no feet (34" or 34 1/2") -- every eighth of an
+;;;     inch from there up to the next whole inch (34-1/8" ... 35");
+;;;   * feet and inches, fraction or not (3'-4" or 3'- 4 1/2") -- every
+;;;     eighth of an inch up and down for up to 7/8" either side, THEN
+;;;     whole-inch jumps of 1", 2" and 3" beyond that on each side --
+;;;     quarters and eighths together on the one ruler, told apart by
+;;;     tier rather than by switching which the tool offers.
+;;; A row that would come out at or below zero is dropped.
+;;;
+;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
+;;; *dimstamp-version* below and stamps a dated, REV-numbered twin of
+;;; this file into releases/.
+;;; ======================================================================
+
+;;; -------------------- version ---------------------------------------
+(setq *dimstamp-version* "v2.0")   ; announced on load; release_lisp.py
+                                   ; reads this banner and stamps the
+                                   ; dated twin in releases/ from it
+
+;;; -------------------- tunables --------------------------------------
+(setq ds:*layer* "DIMENSION")       ; layer the stamped text (and the
+                                    ; scratch ruler) lands on -- the
+                                    ; same layer name ABFIND, CDCREATE
+                                    ; and CDCALLOUT use for their own
+                                    ; dimension text
+(setq ds:*layer-color* 7)          ; ACI colour the layer is CREATED
+                                    ; with -- 7 is AutoCAD's own
+                                    ; black-on-white/white-on-black
+                                    ; swap, so it reads on any screen
+                                    ; without a measured 'auto knob.  A
+                                    ; layer already in the drawing
+                                    ; keeps its own colour
+(setq ds:*text-hgt* 6.0)           ; TEXT height of a stamped value,
+                                    ; and of the ruler's own biggest
+                                    ; (jump-tier) row labels
+(setq ds:*ruler-gap* 24.0)         ; how far right of the anchor point
+                                    ; the ruler's spine sits
+(setq ds:*ruler-row-gap* 9.0)      ; vertical distance between one
+                                    ; ruler row and the next
+(setq ds:*ruler-ticklen* 4.0)      ; tick length for the tallest
+                                    ; (current/jump) rows; smaller
+                                    ; tiers scale it down
+(setq ds:*ruler-txt-gap* 2.0)      ; gap between a tick's outer end
+                                    ; and where its label starts
+(setq ds:*ruler-circle-r* 1.5)     ; radius of the circle marking the
+                                    ; current value's row
+(setq ds:*ruler-click-width* 70.0) ; how far right of the spine a
+                                    ; click still counts as picking a
+                                    ; row rather than an empty-space
+                                    ; stamp -- generous, since a label
+                                    ; is never measured for its real
+                                    ; width
+(setq ds:*ruler-hit-pad* 2.0)      ; how far LEFT of the spine still
+                                    ; counts too, so a click that lands
+                                    ; just shy of it is not read as
+                                    ; empty space
+
+;;; -------------------- helpers ----------------------------------------
+
+;; T when every character of S is 0-9 and S is not empty.
+(defun ds:digit-p (c)
+  (and (>= (ascii c) 48) (<= (ascii c) 57)))
+
+(defun ds:digits-p (s / i n ok)
+  (setq n (strlen s) ok (> n 0) i 1)
+  (while (and ok (<= i n))
+    (if (not (ds:digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+;; Parse a measurement string into (EIGHTHS HASFEET), where EIGHTHS is
+;; the total value in eighths of an inch (an integer) and HASFEET is T
+;; when the text used feet notation -- carried back through so a value
+;; renders, and is offered further suggestions, in the family it came
+;; in.  nil when S is not one of the four canonical forms in the
+;; header.
+(defun ds:parse (s / n apos feetstr rest hasfeet feetnum spc wholestr
+                    fracstr slash numstr denstr wholenum num den frac
+                    ok eighths)
+  (setq ok T)
+  (setq s (vl-string-trim " \t" s))
+  (setq n (strlen s))
+  (if (or (= n 0) (/= (substr s n 1) "\""))
+    (setq ok nil)
+    (setq s (substr s 1 (1- n))))
+  (setq hasfeet nil feetnum 0)
+  (if (and ok (setq apos (vl-string-search "'" s)))
+    (progn
+      (setq feetstr (substr s 1 apos))
+      (setq rest (substr s (+ apos 2)))
+      (if (or (= feetstr "") (not (ds:digits-p feetstr)))
+        (setq ok nil)
+        (setq feetnum (atoi feetstr) hasfeet T))
+      (setq rest (vl-string-trim " " rest))
+      (if (and ok (> (strlen rest) 0) (= (substr rest 1 1) "-"))
+        (setq rest (vl-string-trim " " (substr rest 2)))
+        (setq ok nil)))
+    (setq rest (vl-string-trim " " s)))
+  (setq wholenum 0 frac 0.0)
+  (if ok
+    (progn
+      (setq spc (vl-string-search " " rest))
+      (if spc
+        (setq wholestr (substr rest 1 spc)
+              fracstr  (vl-string-trim " " (substr rest (+ spc 2))))
+        (setq wholestr rest fracstr nil))
+      (if (or (= wholestr "") (not (ds:digits-p wholestr)))
+        (setq ok nil)
+        (setq wholenum (atoi wholestr)))
+      (if (and ok fracstr)
+        (progn
+          (setq slash (vl-string-search "/" fracstr))
+          (if (null slash)
+            (setq ok nil)
+            (progn
+              (setq numstr (substr fracstr 1 slash)
+                    denstr (substr fracstr (+ slash 2)))
+              (if (or (not (ds:digits-p numstr)) (not (ds:digits-p denstr))
+                      (= (atoi denstr) 0))
+                (setq ok nil)
+                (setq num (atoi numstr) den (atoi denstr)
+                      frac (/ (float num) (float den))))))))))
+  (if ok
+    (progn
+      (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feetnum 12.0) wholenum frac)))))
+      (list eighths hasfeet))
+    nil))
+
+;; Render TOTAL-EIGHTHS (an integer count of 1/8" units) back to text,
+;; in the HASFEET family the source text used -- feet notation, or
+;; plain inches regardless of magnitude.  The fraction is simplified
+;; and shown only when the remainder is not a whole inch.
+(defun ds:format (total-eighths hasfeet / feet remeighths whole f8 g num den)
+  (if hasfeet
+    (setq feet (/ total-eighths 96)
+          remeighths (- total-eighths (* feet 96)))
+    (setq feet 0 remeighths total-eighths))
+  (setq whole (/ remeighths 8)
+        f8    (- remeighths (* whole 8))
+        num   0
+        den   1)
+  (if (/= f8 0)
+    (progn
+      (setq g (gcd f8 8))
+      (setq num (/ f8 g) den (/ 8 g))))
+  (cond
+    ((and hasfeet (/= num 0))
+     (strcat (itoa feet) "'- " (itoa whole) " " (itoa num) "/" (itoa den)
+             "\""))
+    ((and hasfeet (= num 0))
+     (strcat (itoa feet) "'-" (itoa whole) "\""))
+    ((/= num 0)
+     (strcat (itoa whole) " " (itoa num) "/" (itoa den) "\""))
+    (T
+     (strcat (itoa whole) "\""))))
+
+;; The RULER TIER an offset of OFFSET eighths from the current value
+;; falls in -- 'jump for a whole inch or more, 'half/'quarter/'eighth
+;; for the finer steps, biggest to smallest.  This is what a row's
+;; tick length and text height read off; ds:suggestions tags every row
+;; with it as the row is generated.
+(defun ds:tier (offset / a m)
+  (setq a (abs offset) m (rem a 8))
+  (cond
+    ((= m 0) 'jump)
+    ((= m 4) 'half)
+    ((member m '(2 6)) 'quarter)
+    (T 'eighth)))
+
+;; The nearby values to offer, as a list of (EIGHTHS TIER) pairs (see
+;; the header banner for what each family offers); a row that would
+;; come out at or below zero is dropped.  Unsorted -- the ruler sorts
+;; once it also has the current row to place among them.
+(defun ds:suggestions (total-eighths hasfeet / out i off)
+  (setq out nil)
+  (if (not hasfeet)
+    (progn
+      ;; bare inches: every eighth from here up to the next whole inch
+      (setq i 1)
+      (while (<= i 8)
+        (setq out (cons (list (+ total-eighths i) (ds:tier i)) out))
+        (setq i (1+ i))))
+    (progn
+      ;; feet involved: eighths up and down for up to 7/8" a side...
+      (setq i 1)
+      (while (<= i 7)
+        (setq out (cons (list (- total-eighths i) (ds:tier i)) out))
+        (setq out (cons (list (+ total-eighths i) (ds:tier i)) out))
+        (setq i (1+ i)))
+      ;; ...then whole-inch jumps of 1, 2 and 3 beyond that, each side
+      (setq i 1)
+      (while (<= i 3)
+        (setq off (* i 8))
+        (setq out (cons (list (- total-eighths off) 'jump) out))
+        (setq out (cons (list (+ total-eighths off) 'jump) out))
+        (setq i (1+ i)))))
+  (vl-remove-if '(lambda (pr) (<= (car pr) 0)) out))
+
+;; Ascending by value -- the comparator ds:draw-ruler sorts rows with.
+(defun ds:val-lt (a b) (< (car a) (car b)))
+
+;; TEXT height for a ruler row of this TIER.
+(defun ds:ruler-hgt (tier)
+  (cond
+    ((eq tier 'half) (* ds:*text-hgt* 0.8))
+    ((eq tier 'quarter) (* ds:*text-hgt* 0.65))
+    ((eq tier 'eighth) (* ds:*text-hgt* 0.5))
+    (T ds:*text-hgt*)))            ; 'current and 'jump
+
+;; Tick length for a ruler row of this TIER.
+(defun ds:ruler-tick (tier)
+  (cond
+    ((eq tier 'half) (* ds:*ruler-ticklen* 0.75))
+    ((eq tier 'quarter) (* ds:*ruler-ticklen* 0.55))
+    ((eq tier 'eighth) (* ds:*ruler-ticklen* 0.35))
+    (T ds:*ruler-ticklen*)))       ; 'current and 'jump
+
+;; Write STR at PT.
+(defun ds:draw-text (pt str)
+  (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                  (cons 8 ds:*layer*) '(100 . "AcDbText")
+                  (cons 10 (list (car pt) (cadr pt) 0.0))
+                  (cons 40 ds:*text-hgt*)
+                  (cons 1 str))))
+
+;; Erase every entity in ENTS -- how the scratch ruler is swept away,
+;; before a redraw and for good when the run ends.
+(defun ds:erase-ents (ents / e)
+  (foreach e ents (if (and e (entget e)) (entdel e))))
+
+;; Draw the ruler beside AP for the current value (TOTAL-EIGHTHS,
+;; HASFEET), one row per suggestion plus a circled CURRENT row among
+;; them.  Returns (ENTS SPX ROWS): the entities drawn (for
+;; ds:erase-ents), the ruler's spine X (for a click's X test), and
+;; ROWS as a list of (VALUE ROW-Y) pairs (for a click's Y test).
+(defun ds:draw-ruler (ap total-eighths hasfeet / rows n i row val tier y
+                          hgt tl spx ents lbl ty result)
+  (cal:ensure-layer ds:*layer* ds:*layer-color*)
+  (setq rows (cons (list total-eighths 'current)
+                   (ds:suggestions total-eighths hasfeet)))
+  (setq rows (vl-sort rows 'ds:val-lt))
+  (setq n (length rows) i 0 ents nil result nil
+        spx (+ (car ap) ds:*ruler-gap*))
+  (foreach row rows
+    (setq val (car row) tier (cadr row))
+    (setq y (+ (cadr ap) (* i ds:*ruler-row-gap*)))
+    (setq hgt (ds:ruler-hgt tier))
+    (setq tl  (ds:ruler-tick tier))
+    (setq ents (cons
+                (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
+                                (cons 8 ds:*layer*) '(100 . "AcDbLine")
+                                (cons 10 (list spx y 0.0))
+                                (cons 11 (list (+ spx tl) y 0.0))))
+                ents))
+    (setq lbl (ds:format val hasfeet))
+    (setq ty (- y (/ hgt 2.0)))
+    (setq ents (cons
+                (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                                (cons 8 ds:*layer*) '(100 . "AcDbText")
+                                (cons 10 (list (+ spx tl ds:*ruler-txt-gap*)
+                                              ty 0.0))
+                                (cons 40 hgt)
+                                (cons 1 lbl)))
+                ents))
+    (if (eq tier 'current)
+      (setq ents (cons
+                  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                                  (cons 8 ds:*layer*) '(100 . "AcDbCircle")
+                                  (cons 10 (list spx y 0.0))
+                                  (cons 40 ds:*ruler-circle-r*)))
+                  ents)))
+    (setq result (cons (list val y) result))
+    (setq i (1+ i)))
+  (setq ents (cons
+              (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
+                              (cons 8 ds:*layer*) '(100 . "AcDbLine")
+                              (cons 10 (list spx (cadr ap) 0.0))
+                              (cons 11 (list spx
+                                             (+ (cadr ap)
+                                                (* (1- n) ds:*ruler-row-gap*))
+                                             0.0))))
+              ents))
+  (list ents spx (reverse result)))
+
+;; Erase OLDENTS and draw a fresh ruler at AP for PARSED -- the
+;; (EIGHTHS HASFEET) pair ds:parse hands back.
+(defun ds:redraw-ruler (ap parsed oldents)
+  (ds:erase-ents oldents)
+  (ds:draw-ruler ap (car parsed) (cadr parsed)))
+
+;; The ruler row (if any) that PT lands on, close enough in Y to one
+;; of ROWS and within the ruler's column in X -- nil when PT is empty
+;; space, meant as a stamp point instead.  Returns the row's VALUE.
+(defun ds:ruler-hit (pt spx rows / r best bd d)
+  (setq best nil bd nil)
+  (if (and spx (>= (car pt) (- spx ds:*ruler-hit-pad*))
+                (<= (car pt) (+ spx ds:*ruler-click-width*)))
+    (foreach r rows
+      (setq d (abs (- (cadr pt) (cadr r))))
+      (if (and (<= d (/ ds:*ruler-row-gap* 2.0)) (or (null bd) (< d bd)))
+        (setq best (car r) bd d))))
+  best)
+
+;; One validated free-text answer.  PROMPT already carries its leading
+;; \n and trailing ": ".  Loops on anything that is not one of the
+;; four canonical forms.
+(defun ds:ask-raw (prompt / v)
+  (setq v (getstring T prompt))
+  (if lzd:ask (lzd:ask prompt v))
+  (if (ds:parse v)
+    v
+    (progn
+      (princ (strcat "\nDIMSTAMP: \"" v "\" is not one of the four forms"
+                     " (34\", 3'-4\", 34 1/2\", 3'- 4 1/2\") - try again."))
+      (ds:ask-raw prompt))))
+
+;; The very first text of a run: no default, no ruler yet -- nothing
+;; exists to build one around.
+(defun ds:ask-first ()
+  (ds:ask-raw "\nText, e.g. 34\", 3'-4\", 34 1/2\" or 3'- 4 1/2\": "))
+
+;; The second-and-later prompt: one click or one typed line does every
+;; job.  Returns nil for Enter (done), (adopt TEXT) for a new current
+;; value picked off the ruler or typed fresh, or (stamp PT) for a
+;; point to stamp the CURRENT text at.  SPX and ROWS are the live
+;; ruler's hit-test data from ds:draw-ruler/ds:redraw-ruler; HASFEET is
+;; the current value's family, for formatting a ruler pick.
+(defun ds:next-action (spx rows hasfeet / pk hitval)
+  (initget 128)
+  (setq pk (getpoint (strcat "\nClick to place text, click the ruler to"
+                             " change it, or type new text (Enter when"
+                             " done): ")))
+  (if lzd:ask (lzd:ask "ds:next-action" pk))
+  (cond
+    ((null pk) nil)
+    ((= (type pk) 'STR)
+     (if (ds:parse pk)
+       (list 'adopt pk)
+       (progn
+         (princ (strcat "\nDIMSTAMP: \"" pk "\" is not one of the four"
+                        " forms (34\", 3'-4\", 34 1/2\", 3'- 4 1/2\") -"
+                        " try again."))
+         (ds:next-action spx rows hasfeet))))
+    (T
+     (setq hitval (ds:ruler-hit pk spx rows))
+     (if hitval
+       (list 'adopt (ds:format hitval hasfeet))
+       (list 'stamp pk)))))
+
+;;; -------------------- the command ------------------------------------
+;; NOTE: no local here may be named after a function this routine
+;; calls - an AutoLISP local SHADOWS the function of the same name for
+;; the whole call, so a local called "last" turns every (last ...) in
+;; the body into "no function definition: LAST" at runtime.
+(defun c:DIMSTAMP (/ *error* undo-open pk lasttext count parsed anchor
+                    rulerents rulerx rulerrows action rr)
+  (defun *error* (msg)
+    (ds:erase-ents rulerents)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDIMSTAMP error: " msg)))
+    (if lzd:report (lzd:report "DIMSTAMP" *dimstamp-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DIMSTAMP" *dimstamp-version*))
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+
+  (princ (strcat "\nDIMSTAMP " *dimstamp-version*
+                 " - click a point, then give the text.  After that,"
+                 " click to stamp again, click the ruler to change the"
+                 " value, or type a new one; Enter when done."))
+  (setq count 0 rulerents nil)
+  (setq pk (getpoint "\nClick a point to place text (Enter when done): "))
+  (if pk
+    (progn
+      (setq lasttext (ds:ask-first))
+      (cal:ensure-layer ds:*layer* ds:*layer-color*)
+      (ds:draw-text pk lasttext)
+      (setq count 1 anchor pk parsed (ds:parse lasttext))
+      (princ (strcat "\n  \"" lasttext "\" placed."))
+      (setq rr (ds:redraw-ruler anchor parsed rulerents)
+            rulerents (car rr) rulerx (cadr rr) rulerrows (caddr rr))
+      (while (setq action (ds:next-action rulerx rulerrows (cadr parsed)))
+        (cond
+          ((= (car action) 'stamp)
+           (cal:ensure-layer ds:*layer* ds:*layer-color*)
+           (ds:draw-text (cadr action) lasttext)
+           (setq count (1+ count) anchor (cadr action))
+           (princ (strcat "\n  \"" lasttext "\" placed.")))
+          (T                                    ; 'adopt
+           (setq lasttext (cadr action) parsed (ds:parse lasttext))))
+        (setq rr (ds:redraw-ruler anchor parsed rulerents)
+              rulerents (car rr) rulerx (cadr rr) rulerrows (caddr rr)))
+      (ds:erase-ents rulerents)
+      (setq rulerents nil)))
+
+  (princ (strcat "\nDIMSTAMP: " (itoa count) " placed."))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
+  (princ))
+
+(defun c:DIMSTAMPVER ()
+  (princ (strcat "\nDIMSTAMP " *dimstamp-version*))
+  (princ))
+
+;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
+;; the flag while they load their members.  APPLOADed alone the flag
+;; is nil and this prints, which is the one time somebody wants to be
+;; told.  CALVER reports the whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nDIMSTAMP " *dimstamp-version*
+                 " loaded. Command: DIMSTAMP (stamp dimension text,"
+                 " click after click).")))
 (princ)
 
 
@@ -39445,7 +45328,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *ccprecheck-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *ccprecheck-version* "v1.5")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -39553,6 +45436,7 @@
                                 (vl-string-translate " " "/" kwlist)
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
+    (if lzd:ask (lzd:ask prompt ans))
     (if (and (null ans) dflt) (setq ans dflt))
   )
   (if (member ans '("Back" "Undo"))
@@ -40035,7 +45919,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nCCPRECHECK error: " msg)))
+    (if lzd:report (lzd:report "CCPRECHECK" *ccprecheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CCPRECHECK" *ccprecheck-version*))
 
   (setq *chk:log* nil product nil)
   (princ "\n--- Tech Flow Chart checklist ---")
@@ -40068,8 +45954,16 @@
   (princ (strcat "\nCCPRECHECK " *ccprecheck-version*))
   (princ))
 
-(princ (strcat "\nCCPRECHECK " *ccprecheck-version*
-               " loaded. Type CCPRECHECK to run the tech flow chart checklist."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCCPRECHECK " *ccprecheck-version*
+                 " loaded. Type CCPRECHECK to run the tech flow chart checklist.")))
 (princ)
 
 
@@ -40121,10 +46015,41 @@
 ;;; prompt re-asks -- nothing is drawn from a typo.  The whole run is
 ;;; one undo group: a single U takes every dimension away.
 ;;;
+;;; A NUMBER THE DRAWING CARRIES TWICE.  A sheet can hold two surveys --
+;;; two pools in one yard, or two field sheets merged -- and each
+;;; numbers its points from 1, so "1" names two different places.  A tie
+;;; to the wrong one runs across the drawing and measures nothing
+;;; anybody taped, so it is not guessed at: every point carrying the
+;;; number is ringed on screen in cdo:*pick-color* on a throwaway layer
+;;; of its own, labelled P1, P2, ... in drawing order, and the run says
+;;; what tells them apart --
+;;;
+;;;     2 points are numbered "7" - each one is ringed and labelled
+;;;     on screen.
+;;;      tag   from Pt.1
+;;;      ----  ------------
+;;;      P1    8'-4"
+;;;      P2    20'-0"
+;;;
+;;;     Which Pt.7 is meant - click it, or type its label [Back]
+;;;     <Enter = none>:
+;;;
+;;; -- which at the TO prompt is how long the dimension each one would
+;;; draw is, the number the drafter has on the sheet in front of them,
+;;; and at the FROM prompt, where there is no other end yet, is where
+;;; each one sits.  Click the one you want or type its label; Back
+;;; re-asks the number, Enter takes none and draws nothing.  The rings
+;;; go as soon as it is answered.
+;;;
+;;; A number only ONE point carries is taken exactly as it always was:
+;;; nothing is ringed, nothing is asked, nothing is printed.
+;;;
 ;;; Going back a step follows the shared Back convention (see the root
 ;;; README): B/BACK/U/UNDO at the TO prompt re-asks FROM, and Back at
 ;;; the FROM prompt (offered once something is drawn) un-draws the
-;;; last dimension.
+;;; last dimension.  Back at the ringed points re-asks the number they
+;;; came from - the FROM number at the FROM prompt, the TO number at
+;;; the TO prompt - because that is the question in front of them.
 ;;;
 ;;; A missing "CROSS DIMENSIONS" style is NOT invented: the dims are
 ;;; drawn in whatever style is current and the routine says so, so a
@@ -40141,7 +46066,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcallout-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.11")  ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -40188,6 +46113,34 @@
                                     ; naming the point.  A block without
                                     ; it lends its first attribute that
                                     ; reads as a number instead
+
+;; -- how a number that names MORE THAN ONE point is asked about
+(setq cdo:*pick-layer* "CDCALLOUT-PICK") ; the rings round the points a
+                                    ; doubled number names get a layer
+                                    ; of their OWN, never the points
+                                    ; layer: they are throwaway, they
+                                    ; would inherit the points layer's
+                                    ; colour, and while they existed
+                                    ; every other tool in the toolset
+                                    ; would count them as real survey
+                                    ; points.  Created when missing, and
+                                    ; erased as soon as the question is
+                                    ; answered
+(setq cdo:*pick-color* 4)           ; colour of that layer, and an
+                                    ; entity override to match: cyan, so
+                                    ; a ring reads as a question and not
+                                    ; as drawn work
+(setq cdo:*pick-radius* 9.0)        ; radius of one of those rings, in
+                                    ; drawing units - wide enough to
+                                    ; stand clear of the point block's
+                                    ; own number
+(setq cdo:*pick-hgt* 5.0)           ; height of the label beside it -
+                                    ; above the 4" point numbers
+(setq cdo:*pick-prefix* "P")        ; what those labels are called, on
+                                    ; screen and at the prompt: P1, P2,
+                                    ; ... in drawing order
+(setq cdo:*prec* 4)                 ; rtos precision for the distances
+                                    ; printed in the table: 4 = 1/16"
 
 ;;; -------------------- point lookup ------------------------------------
 
@@ -40237,14 +46190,31 @@
     (rtos (distof out 2) 2 8)
     out))
 
-;; The survey point the typed number names, or nil.  The first match
-;; wins when a drawing carries the same number twice.
-(defun cdo:find-point (s cands / want found c)
-  (setq want (cdo:canon s) found nil)
+;; EVERY survey point a typed number names, in drawing order.  A
+;; drawing CAN carry the same number twice - two surveys merged onto one
+;; sheet, each numbering its points from 1 - and then which of them the
+;; tie runs to is a real question with a wrong answer, so the caller
+;; asks it rather than taking the first.
+(defun cdo:matches (s cands / want out c)
+  (setq want (cdo:canon s) out nil)
   (foreach c cands
-    (if (and (null found) (= (cdo:canon (cdr c)) want))
-      (setq found c)))
-  found)
+    (if (= (cdo:canon (cdr c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;; Leading and trailing blanks off a typed answer.
+(defun cdo:trim (s / i n)
+  (setq i 1 n (strlen s))
+  (while (and (<= i n) (= " " (substr s i 1))) (setq i (1+ i)))
+  (while (and (>= n i) (= " " (substr s n 1))) (setq n (1- n)))
+  (if (> i n) "" (substr s i (1+ (- n i)))))
+
+;; A distance as the drawing reads it: feet and inches to cdo:*prec*.
+(defun cdo:fmt (d) (rtos d 4 cdo:*prec*))
+
+;; S padded out to W characters, so the table below lines up.
+(defun cdo:pad (s w)
+  (while (< (strlen s) w) (setq s (strcat s " ")))
+  s)
 
 ;;; -------------------- dimension helpers (CDCREATE's, kept) ------------
 
@@ -40328,6 +46298,148 @@
       (entupd en)
       t)))
 
+;;; -------------------- which of several points -------------------------
+;;; A number that names ONE point is simply taken, and none of this is
+;;; ever seen.  A number that names several is a sheet carrying two
+;;; surveys, each numbered from 1, and picking the wrong one draws a
+;;; dimension across the drawing that measures nothing anybody taped.
+;;; So every one of them is ringed on screen, labelled P1, P2, ... in
+;;; drawing order, and the label is what you type - or you click the one
+;;; you want, which is the same answer.
+
+;; A ring round one of the points a doubled number names, and the label
+;; that says which it is, up and to the right of the ring so it clears
+;; both the ring and the point's own number underneath it.  Scaffolding:
+;; its own layer, erased the moment the question is answered.
+(defun cdo:mark-pick (p tag / out)
+  (setq out nil)
+  (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                 (cons 8 cdo:*pick-layer*)
+                 (cons 62 cdo:*pick-color*) '(100 . "AcDbCircle")
+                 (list 10 (car p) (cadr p) 0.0)
+                 (cons 40 cdo:*pick-radius*)))
+  (setq out (cons (entlast) out))
+  (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                 (cons 8 cdo:*pick-layer*)
+                 (cons 62 cdo:*pick-color*) '(100 . "AcDbText")
+                 (list 10 (+ (car  p) cdo:*pick-radius*)
+                          (+ (cadr p) cdo:*pick-radius*) 0.0)
+                 (cons 40 cdo:*pick-hgt*) (cons 1 tag)))
+  (cons (entlast) out))
+
+;; Erase a list of entities, skipping any that has gone already.
+(defun cdo:drop (lst / e)
+  (foreach e lst (if (and e (entget e)) (entdel e))))
+
+;; Everything on the pick layer, gone.  The rings are erased as soon as
+;; the question is answered; this is the path Esc takes, where the erase
+;; never runs - and sweeping the LAYER rather than a list is what makes
+;; it safe to call from the error handler, which has no list.
+(defun cdo:sweep ( / ss i)
+  (if (setq ss (ssget "_X" (list (cons 8 cdo:*pick-layer*))))
+    (progn
+      (setq i (sslength ss))
+      (while (> i 0) (entdel (ssname ss (setq i (1- i))))))))
+
+;; The label the Nth candidate carries.
+(defun cdo:pick-tag (n)
+  (strcat cdo:*pick-prefix* (itoa n)))
+
+;; Ring every point HITS names and print what tells them apart: where
+;; each one sits, and - at the TO prompt, where the other end is already
+;; settled - how long the dimension choosing it would draw, which is the
+;; number the drafter is checking against the sheet.  Returns what was
+;; drawn, for the caller to erase.
+(defun cdo:show-picks (nm hits from / out n c)
+  (cdo:ensure-layer cdo:*pick-layer* cdo:*pick-color*)
+  (setq out nil n 0)
+  (foreach c hits
+    (setq n   (1+ n)
+          out (append out (cdo:mark-pick (car c) (cdo:pick-tag n)))))
+  (princ (strcat "\n  " (itoa (length hits)) " points are numbered \""
+                 nm "\" - each one is ringed and labelled on screen."))
+  (princ (strcat "\n   " (cdo:pad "tag" 6)
+                 (if from
+                   (strcat "from Pt." (cdr from))
+                   "at")))
+  (princ (strcat "\n   " (cdo:pad "----" 6)
+                 (if from "------------" "--------------------------")))
+  (setq n 0)
+  (foreach c hits
+    (setq n (1+ n))
+    (princ (strcat "\n   " (cdo:pad (cdo:pick-tag n) 6)
+                   (if from
+                     (cdo:fmt (distance (car from) (car c)))
+                     (strcat (cdo:fmt (car  (car c))) ", "
+                             (cdo:fmt (cadr (car c))))))))
+  out)
+
+;; Which of them was meant.  ONE prompt, two ways to answer it: click
+;; the one you want, or type its label.  (initget 128) hands typed text
+;; back from getpoint as the string it is while a click comes back as
+;; the point it is, which is how the AB tools take both at one prompt
+;; too.  A click takes the NEAREST - there is nothing else on that layer
+;; to hit - and what was taken is read back before anything is drawn.
+;; Returns the point, 'CDO-BACK, or nil for Enter.
+(defun cdo:ask-pick (nm hits / ans best bd n d c)
+  (initget 128)
+  (setq ans (getpoint (strcat "\n  Which Pt." nm
+                              " is meant - click it, or type its"
+                              " label [Back] <Enter = none>: ")))
+  (if lzd:ask (lzd:ask "cdo:ask-pick" ans))
+  (cond
+    ((null ans) nil)
+    ((and (not (listp ans)) (cal:back-word-p ans)) 'CDO-BACK)
+    ((listp ans)
+     (setq best nil bd nil n 0)
+     (foreach c hits
+       (setq n (1+ n)
+             d (distance (list (car ans) (cadr ans) 0.0) (car c)))
+       (if (or (null bd) (< d bd)) (setq best (list n c) bd d)))
+     best)
+    (t
+     (setq best nil n 0)
+     (foreach c hits
+       (setq n (1+ n))
+       (if (and (null best)
+                (= (strcase (cdo:trim ans)) (cdo:pick-tag n)))
+         (setq best (list n c))))
+     (if best
+       best
+       (progn (princ (strcat "\n  \"" ans "\" is not one of the labels"
+                             " - type one of them, or click the point"
+                             " you want."))
+              'CDO-AGAIN)))))
+
+;; The one of HITS the typed number names: itself when only one point
+;; carries it, otherwise the one the drafter picked out of the ringed
+;; set.  TEMPS is where the rings are registered so the error handler
+;; can take them away; the caller passes the list it keeps.  Returns
+;; the point, 'CDO-BACK, or nil.
+(defun cdo:settle (s cands from / hits nm drawn out)
+  (setq hits (cdo:matches s cands)
+        ;; the number as the DRAWING spells it, not as it was typed:
+        ;; "pt 01" asks about Pt.1, which is what the rings are beside
+        nm   (if hits (cdr (car hits)) (cdo:trim s)))
+  (cond
+    ((null hits) nil)
+    ((= (length hits) 1) (car hits))
+    (t
+     (setq drawn (cdo:show-picks nm hits from) out 'CDO-AGAIN)
+     (while (eq out 'CDO-AGAIN) (setq out (cdo:ask-pick nm hits)))
+     (cdo:drop drawn)
+     (cond
+       ((eq out 'CDO-BACK) 'CDO-BACK)
+       ((null out)
+        (princ "\n  None taken - nothing drawn.")
+        nil)
+       (t
+        (princ (strcat "\n  " (cdo:pick-tag (car out)) " taken: Pt."
+                       (cdr (cadr out)) " at "
+                       (cdo:fmt (car  (car (cadr out)))) ", "
+                       (cdo:fmt (cadr (car (cadr out)))) "."))
+        (cadr out))))))
+
 ;;; -------------------- the command ------------------------------------
 ;; NOTE: no local here may be named after a function this routine
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
@@ -40341,6 +46453,10 @@
   ;;    the undo group, or the next U would swallow the user's own work
   (setq olderr *error*)
   (defun *error* (m)
+    ;; the rings round a doubled number are scaffolding, and Esc at the
+    ;; prompt that asks about them is the one way out that never reaches
+    ;; the erase
+    (vl-catch-all-apply 'cdo:sweep nil)
     (if (and odim (not (equal odim (getvar "DIMSTYLE"))))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
     (if ocl (setvar "CLAYER"  ocl))
@@ -40350,7 +46466,9 @@
     (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
+    (if lzd:report (lzd:report "CDCALLOUT" *cdcallout-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "CDCALLOUT" *cdcallout-version*))
 
   (vl-load-com)
   (setq oce  (getvar "CMDECHO")
@@ -40415,9 +46533,19 @@
                         made    (1- made))
                   (princ "\nStepping back one dimension."))
                 (princ "\nAlready at the first dimension.")))
-             ((null (setq a (cdo:find-point s1 cands)))
-              (princ (strcat "\n  No point numbered \"" s1
-                             "\" in the drawing -- nothing drawn.")))
+             ;; a number the drawing carries TWICE is two surveys on one
+             ;; sheet, and the tie can only run to one of them: every
+             ;; point that carries it is ringed and the question asked.
+             ;; A number only one point carries is simply taken, exactly
+             ;; as it always was
+             ((null (setq a (cdo:settle s1 cands nil)))
+              (if (null (cdo:matches s1 cands))
+                (princ (strcat "\n  No point numbered \"" s1
+                               "\" in the drawing -- nothing drawn."))))
+             ;; Back at the ringed points re-asks the number itself:
+             ;; that is the question in front of it
+             ((eq a 'CDO-BACK)
+              (princ "\n  Back to the point number."))
              (t (setq stage 2))))
           ;; -- TO: a good answer draws the dimension right away and
           ;;    the loop goes back to FROM for the next pair
@@ -40429,9 +46557,18 @@
               (princ "\n  No second point -- this one skipped.")
               (setq stage 1))
              ((cal:back-word-p s2) (setq stage 1))
-             ((null (setq b (cdo:find-point s2 cands)))
-              (princ (strcat "\n  No point numbered \"" s2
-                             "\" in the drawing -- nothing drawn.")))
+             ;; the same question, with the other end of the tie already
+             ;; settled - so the table can say how long the dimension
+             ;; each candidate would draw is, which is the number the
+             ;; drafter has on the sheet
+             ((null (setq b (cdo:settle s2 cands a)))
+              (if (null (cdo:matches s2 cands))
+                (princ (strcat "\n  No point numbered \"" s2
+                               "\" in the drawing -- nothing drawn."))))
+             ;; Back at the ringed points re-asks the TO number, which
+             ;; is the question in front of them - NOT the FROM number,
+             ;; which is two questions back and still settled
+             ((eq b 'CDO-BACK) (princ "\n  Back to the point number."))
              ((< (distance (car a) (car b)) cdo:*exact-eps*)
               (princ (strcat "\n  Pt." (cdr a) " and Pt." (cdr b)
                              " sit on the same spot -- nothing to"
@@ -40479,10 +46616,18 @@
   (princ (strcat "\nCDCALLOUT " *cdcallout-version*))
   (princ))
 
-(princ (strcat "\nCDCALLOUT " *cdcallout-version*
-               " loaded. Command: CDCALLOUT (cross-dimension from"
-               " Pt.## to Pt.## by number, style \"" cdo:*style*
-               "\", layer \"" cdo:*layer* "\")."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCDCALLOUT " *cdcallout-version*
+                 " loaded. Command: CDCALLOUT (cross-dimension from"
+                 " Pt.## to Pt.## by number, style \"" cdo:*style*
+                 "\", layer \"" cdo:*layer* "\").")))
 (princ)
 
 
@@ -40564,7 +46709,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcreate-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.5")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -40808,7 +46953,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCDCREATE error: " m)))
+    (if lzd:report (lzd:report "CDCREATE" *cdcreate-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "CDCREATE" *cdcreate-version*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
@@ -40817,10 +46964,12 @@
   ;; -- 1. the highlighted lines: a pickfirst selection if there is
   ;;       one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nHighlight the lines to cross-dimension: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
 
   (if (null ss)
     (princ "\nNothing highlighted -- nothing to dimension.")
@@ -40958,9 +47107,17 @@
   (princ (strcat "\nCDCREATE " *cdcreate-version*))
   (princ))
 
-(princ (strcat "\nCDCREATE " *cdcreate-version*
-               " loaded -- dimension highlighted lines as cross dims"
-               " (style \"" cdc:*style* "\", layer \"" cdc:*layer* "\")."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCDCREATE " *cdcreate-version*
+                 " loaded -- dimension highlighted lines as cross dims"
+                 " (style \"" cdc:*style* "\", layer \"" cdc:*layer* "\").")))
 (princ)
 
 
@@ -41010,7 +47167,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.9")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -41374,14 +47531,18 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCHECK error: " msg)))
+    (if lzd:report (lzd:report "CHECK" *checkdrawing-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CHECK" *checkdrawing-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to CHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - CHECK cancelled."))
@@ -41433,8 +47594,15 @@
           (cond ((eq res 'fixed)   (setq naf (1+ naf)))
                 ((eq res 'skipped) (setq nas (1+ nas)))
                 (t                 (setq nao (1+ nao)))))
-        (command "_.UNDO" "_End")
-        (setq undo-open nil)
+        ;; closed only if one was opened -- the same guard the handler
+        ;; above makes.  With undo recording off (UNDOCTL bit 1 clear)
+        ;; there is no group of this run's, and an _End on nothing is an
+        ;; error of its own: it would land here, with every dimension
+        ;; and arc already fixed and the CMDECHO putback below it
+        (if undo-open
+          (progn
+            (command "_.UNDO" "_End")
+            (setq undo-open nil)))
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n--- CHECK complete (attachment tolerance "
                        (rtos *cfchk-tol* *cfchk-dist-mode* *cfchk-tol-prec*)
@@ -41464,8 +47632,16 @@
   (princ (strcat "\nCHECK " *checkdrawing-version*))
   (princ))
 
-(princ (strcat "\ncheck_drawing.lsp " *checkdrawing-version*
-               " loaded - type CHECK to audit dimension & arc attachment."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ncheck_drawing.lsp " *checkdrawing-version*
+                 " loaded - type CHECK to audit dimension & arc attachment.")))
 (princ)
 
 
@@ -41722,7 +47898,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.5") ; printed on load and at command start so a
+(setq *cs-version* "v4.6") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -42243,7 +48419,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCORNERSTP: " msg)))
+    (if lzd:report (lzd:report "CORNERSTP" *cs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CORNERSTP" *cs-version*))
 
   ;; remove the most recently drawn step and roll the state back
   (defun cs-popstep ( / rec e)
@@ -42300,11 +48478,13 @@
   ;; ---- 1. selection ---------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nSelect the two walls forming the corner ")
       (princ "(a corner diagonal or fillet arc may be included):")
-      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
 
@@ -43283,7 +49463,9 @@
     (if oldstyle (cs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
+    (if lzd:report (lzd:report "TUTORIALCORNERSTP" *cs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCORNERSTP" *cs-version*))
 
   (princ (strcat "\n================ CORNERSTP TUTORIAL " *cs-version*
                  " ================"))
@@ -43443,9 +49625,17 @@
   (princ (strcat "\nCORNERSTP " *cs-version*))
   (princ))
 
-(princ (strcat "\nCORNERSTP.lsp " *cs-version*
-               " loaded - CORNERSTP to draw corner steps,"
-               " TUTORIALCORNERSTP to learn it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCORNERSTP.lsp " *cs-version*
+                 " loaded - CORNERSTP to draw corner steps,"
+                 " TUTORIALCORNERSTP to learn it.")))
 (princ)
 
 
@@ -43686,7 +49876,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.16") ; printed on load and at command start so a
+(setq *hs-version* "v3.17") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -44312,7 +50502,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHEMISTEP: " msg)))
+    (if lzd:report (lzd:report "HEMISTEP" *hs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "HEMISTEP" *hs-version*))
 
   ;; remove the most recently drawn step and roll the state back
   (defun hs-popstep ( / e)
@@ -44363,11 +50555,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the base curve (arc, circle"
                      " or polyline), or the curve plus its axis line:"))
-      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -45098,7 +51292,9 @@
     (if oldstyle (hs-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
+    (if lzd:report (lzd:report "TUTORIALHEMISTEP" *hs-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALHEMISTEP" *hs-version*))
 
   (princ (strcat "\n================ HEMISTEP TUTORIAL " *hs-version*
                  " ================"))
@@ -45248,9 +51444,17 @@
   (princ (strcat "\nHEMISTEP " *hs-version*))
   (princ))
 
-(princ (strcat "\nHEMISTEP.lsp " *hs-version*
-               " loaded - HEMISTEP to draw hemisphere steps,"
-               " TUTORIALHEMISTEP to learn it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nHEMISTEP.lsp " *hs-version*
+                 " loaded - HEMISTEP to draw hemisphere steps,"
+                 " TUTORIALHEMISTEP to learn it.")))
 (princ)
 
 
@@ -45500,7 +51704,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.9") ; printed on load and at command start so a
+(setq *ns-version* "v3.10") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -46159,7 +52363,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nNORMIESTEP: " msg)))
+    (if lzd:report (lzd:report "NORMIESTEP" *ns-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "NORMIESTEP" *ns-version*))
 
   ;; remove the most recently drawn step and roll the state back
   (defun ns-popstep ( / e)
@@ -46212,11 +52418,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the two lines of a corner,"
                      " or a U-shaped step perimeter:"))
-      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -47089,7 +53297,9 @@
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
+    (if lzd:report (lzd:report "TUTORIALNORMIESTEP" *ns-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALNORMIESTEP" *ns-version*))
 
   (princ (strcat "\n================ NORMIESTEP TUTORIAL " *ns-version*
                  " ================"))
@@ -47253,9 +53463,17 @@
   (princ (strcat "\nNORMIESTEP " *ns-version*))
   (princ))
 
-(princ (strcat "\nNORMIESTEP.lsp " *ns-version*
-               " loaded - NORMIESTEP to draw plain steps,"
-               " TUTORIALNORMIESTEP to learn it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nNORMIESTEP.lsp " *ns-version*
+                 " loaded - NORMIESTEP to draw plain steps,"
+                 " TUTORIALNORMIESTEP to learn it.")))
 (princ)
 
 
@@ -47369,7 +53587,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.6")
+(setq *lazstep-version* "v1.7")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -48120,6 +54338,14 @@
 (setq lzt:*y0* 0)               ; the band being drawn, in per-mille
 (setq lzt:*y1* 1000)
 
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
 
 (defun lzt:px (v) (fix (/ (* v lzt:*dx*) 1000.0)))
 (defun lzt:py (v)
@@ -48236,7 +54462,7 @@
       (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   cal:*imgcol-hi*))
+                   (cal:ink cal:*imgcol-hi* 'hi)))
   (cal:imgtext txt lx ly sc
             (if (= (lzt:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
 
@@ -48271,7 +54497,7 @@
     (foreach d (lzt:c-dims c)
       (if (not (member (cadr d) wk))
           (lzt:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d)
-                     cal:*imgcol-dim*)))
+                     (cal:ink cal:*imgcol-dim* 'dim))))
     (foreach d (lzt:c-dims c)
       (if (and (not (member (cadr d) wk))
                (lzt:inband (lzt:anchor d)))
@@ -48704,7 +54930,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZSTEP error: " msg)))
+    (if lzd:report (lzd:report "LAZSTEP" *lazstep-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZSTEP" *lazstep-version*))
   (setq lzt:*vals*  nil
         lzt:*sel*   nil
         lzt:*steps* nil
@@ -48799,8 +55027,16 @@
                  (itoa lzt:*max-steps*) " steps."))
   (princ))
 
-(princ (strcat "\nLAZSTEP " *lazstep-version*
-               " loaded.  Type LAZSTEP to fill a step drawing in."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZSTEP " *lazstep-version*
+                 " loaded.  Type LAZSTEP to fill a step drawing in.")))
 (princ)
 
 
@@ -49039,7 +55275,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.14")
+(setq *cchk-version* "v1.15")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -49196,7 +55432,13 @@
 
 ;; -- colours -----------------------------------------------------------
 
-(setq *cchk-grey-color*    8)       ; ACI: everything not under review, faded (grey)
+(setq *cchk-grey-color*    'auto)  ; ACI: everything not under review, faded.
+                                   ; 'auto fades it the way round the drawing
+                                   ; needs -- darker than the work on a dark
+                                   ; background, lighter on a light one, since
+                                   ; 8 recedes on the first and is one of the
+                                   ; most prominent things on screen on the
+                                   ; second.  A number is used exactly as given
 (setq *cchk-flag-color*    1)       ; ACI: what you answered "No" to (red)
 (setq *cchk-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
 (setq *cchk-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
@@ -49394,7 +55636,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCOVERCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "COVERCHECKRESCUE" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "COVERCHECKRESCUE" *cchk-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -49539,7 +55783,7 @@
 (defun cchk:unstage (ent keep)
   ;; send a reviewed entity back into the grey background
   (if (and (entget ent) (not (member ent keep)))
-    (cchk:set-color ent *cchk-grey-color*)))
+    (cchk:set-color ent (cal:ink *cchk-grey-color* 'fade))))
 
 (defun cchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -51757,6 +58001,7 @@
          (setq replp T)
          (setq pk (entsel (strcat "\nPick the '" *cchk-repl-block*
                                   "' block <it is not placed>: ")))
+         (if lzd:watch (lzd:watch pk))
          (cond
            ((and pk
                  (= "INSERT" (cdr (assoc 0 (entget (car pk)))))
@@ -51831,7 +58076,7 @@
 
 ;; --- command -------------------------------------------------------
 
-(defun c:COVERCHECK ( / *error* oldecho vc vs undo-open ss i e et
+(defun c:COVERCHECK ( / *error* oldecho vc vs undo-open ss i e et grey
                       cands dims arcs plns segs blks olaps e1 e2 pr
                       saved keep res n total lines
                       anchors anchheld
@@ -51863,14 +58108,18 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCOVERCHECK error: " msg)))
+    (if lzd:report (lzd:report "COVERCHECK" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "COVERCHECK" *cchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to COVERCHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - COVERCHECK cancelled."))
@@ -51971,6 +58220,10 @@
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; COVERCHECKRESCUE can recover them even after a crash
+        ;; the fade, resolved once for the whole run: the knob may
+        ;; be 'auto, and measuring the background per entity would
+        ;; be a COM round trip per entity
+        (setq grey (cal:ink *cchk-grey-color* 'fade))
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
@@ -51979,7 +58232,7 @@
             (progn
               (setq saved (cons (cons e (cchk:ent-color e)) saved))
               (cchk:stash-color e (cchk:ent-color e))
-              (cchk:set-color e *cchk-grey-color*))))
+              (cchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -52006,13 +58259,13 @@
                                  (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
-             (cchk:set-color e *cchk-grey-color*)
+             (cchk:set-color e grey)
              (setq skiprest T)
              (princ (strcat "\n  Skipping the remaining "
                             (itoa (- total n)) " dimension(s).")))
             ((eq (cadr res) 'back)
              ;; undo what the previous item recorded, then redo it
-             (cchk:set-color e *cchk-grey-color*)
+             (cchk:set-color e grey)
              (if (> n 0)
                (progn
                  (setq n  (1- n)
@@ -52038,14 +58291,14 @@
                                                       carried))))
                      (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
-                 (cchk:set-color e1 *cchk-grey-color*)
+                 (cchk:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
              (setq n (1- n)))                            ; loop's 1+ re-enters it
             (t
              (if (cadr res)
                (progn (setq ndok (1+ ndok))
-                      (cchk:set-color e *cchk-grey-color*))
+                      (cchk:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (cchk:dim-style e))
@@ -52088,7 +58341,7 @@
           (setq nasnap (+ nasnap (cadddr res)))
           (if (cadr res)
             (progn (setq naok (1+ naok))
-                   (cchk:set-color e *cchk-grey-color*))
+                   (cchk:set-color e grey))
             (progn (setq namoved (1+ namoved))
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
@@ -52251,15 +58504,19 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "COVERCHECK" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "COVERCHECK" *cchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the drawing to " name
                       " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -52685,7 +58942,9 @@
     (if fil0 (setvar "FILEDIA" fil0))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALCOVERCHECK" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCOVERCHECK" *cchk-version*))
 
   (cchk:tut-checklist)
 
@@ -52727,7 +58986,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECKCLEAN error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALCOVERCHECKCLEAN" *cchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCOVERCHECKCLEAN" *cchk-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -52760,9 +59021,18 @@
 ;; the version reporter TOOLNAMEVER, and muscle memory keeps the old one
 (defun c:COVERCHECKVERSION () (c:COVERCHECKVER))
 
-(princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
-(princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
-(princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVER prints this file's version.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\ncovercheck.lsp loaded (" *cchk-version* ") - COVERCHECK reviews dims, arcs & the cover rules,"))
+    (princ "\n  COVERSCAN reports everything read-only, COVERCHECKRESCUE undoes COVERCHECK's marks.")
+    (princ "\n  TUTORIALCOVERCHECK walks a new user through it; COVERCHECKVER prints this file's version.")))
 (princ)
 
 
@@ -52851,7 +59121,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.3")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.4")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -52881,6 +59151,7 @@
       (if back (initget 6 "Back Undo") (initget 6))
       (setq v (getdist (strcat "\n" msg (if back " [Back]" "")
                                " <" (rtos last) ">: ")))
+      (if lzd:ask (lzd:ask msg v))
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
             ((null v) last)
             (t v)))))
@@ -52896,6 +59167,7 @@
   ;; section 1 -- the wording itself is section 3's Placement question
   (setq v (getpoint (strcat "\nInsertion base point"
                             (if back " [Back]" "") " <0,0>: ")))
+  (if lzd:ask (lzd:ask "cbk:askbase" v))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
@@ -53008,7 +59280,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nCUSTBLOCK error: " m)))
+    (if lzd:report (lzd:report "CUSTBLOCK" *custblock-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "CUSTBLOCK" *custblock-version*))
 
   (setq go T)
   (while go
@@ -53143,10 +59417,18 @@
   (princ (strcat "\nCUSTBLOCK " *custblock-version*))
   (princ))
 
-(princ (strcat "\nCUSTBLOCK " *custblock-version*
-               " loaded -- type CUSTBLOCK to draw a block from its"
-               " length, width and height (layer \"" cbk:*layer*
-               "\", dims \"" cbk:*style* "\")."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCUSTBLOCK " *custblock-version*
+                 " loaded -- type CUSTBLOCK to draw a block from its"
+                 " length, width and height (layer \"" cbk:*layer*
+                 "\", dims \"" cbk:*style* "\").")))
 (princ)
 
 
@@ -53274,7 +59556,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.17")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.18")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -53358,7 +59640,13 @@
 
 ;; -- colours -----------------------------------------------------------
 
-(setq *dchk-grey-color*   8)       ; ACI: everything not under review, faded (grey)
+(setq *dchk-grey-color*   'auto)  ; ACI: everything not under review, faded.
+                                  ; 'auto fades it the way round the drawing
+                                  ; needs -- darker than the work on a dark
+                                  ; background, lighter on a light one, since
+                                  ; 8 recedes on the first and is one of the
+                                  ; most prominent things on screen on the
+                                  ; second.  A number is used exactly as given
 (setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
 (setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
 (setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
@@ -53561,7 +59849,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "DIMCHECKRESCUE" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DIMCHECKRESCUE" *dchk-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -53704,7 +59994,7 @@
 (defun dchk:unstage (ent keep)
   ;; send a reviewed entity back into the grey background
   (if (and (entget ent) (not (member ent keep)))
-    (dchk:set-color ent *dchk-grey-color*)))
+    (dchk:set-color ent (cal:ink *dchk-grey-color* 'fade))))
 
 (defun dchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -54525,7 +60815,7 @@
          (princ "\n  Left as drawn.")
          (list label "left as drawn" 'left))))))
 
-(defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et
+(defun c:DIMCHECK ( / *error* oldecho vc vs undo-open ss i e et grey
                       cands dims arcs lns plns segs olaps rest e1 e2 pr
                       anchors anchheld saved keep res n total lines ans
                       ndok ndflag ndmoved ndanch naok namoved nasnap
@@ -54554,14 +60844,18 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMCHECK error: " msg)))
+    (if lzd:report (lzd:report "DIMCHECK" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DIMCHECK" *dchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to DIMCHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - DIMCHECK cancelled."))
@@ -54662,6 +60956,10 @@
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; DIMCHECKRESCUE can recover them even after a crash
+        ;; the fade, resolved once for the whole run: the knob may
+        ;; be 'auto, and measuring the background per entity would
+        ;; be a COM round trip per entity
+        (setq grey (cal:ink *dchk-grey-color* 'fade))
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
@@ -54670,7 +60968,7 @@
             (progn
               (setq saved (cons (cons e (dchk:ent-color e)) saved))
               (dchk:stash-color e (dchk:ent-color e))
-              (dchk:set-color e *dchk-grey-color*))))
+              (dchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -54697,13 +60995,13 @@
                                  (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
-             (dchk:set-color e *dchk-grey-color*)
+             (dchk:set-color e grey)
              (setq skiprest T)
              (princ (strcat "\n  Skipping the remaining "
                             (itoa (- total n)) " dimension(s).")))
             ((eq (cadr res) 'back)
              ;; undo what the previous item recorded, then redo it
-             (dchk:set-color e *dchk-grey-color*)
+             (dchk:set-color e grey)
              (if (> n 0)
                (progn
                  (setq n  (1- n)
@@ -54729,14 +61027,14 @@
                                                       carried))))
                      (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
-                 (dchk:set-color e1 *dchk-grey-color*)
+                 (dchk:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
              (setq n (1- n)))                            ; loop's 1+ re-enters it
             (t
              (if (cadr res)
                (progn (setq ndok (1+ ndok))
-                      (dchk:set-color e *dchk-grey-color*))
+                      (dchk:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (dchk:dim-style e))
@@ -54779,7 +61077,7 @@
           (setq nasnap (+ nasnap (cadddr res)))
           (if (cadr res)
             (progn (setq naok (1+ naok))
-                   (dchk:set-color e *dchk-grey-color*))
+                   (dchk:set-color e grey))
             (progn (setq namoved (1+ namoved))
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
@@ -54953,14 +61251,18 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDIMSCAN error: " msg)))
+    (if lzd:report (lzd:report "DIMSCAN" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DIMSCAN" *dchk-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -55325,7 +61627,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALDIMCHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALDIMCHECK" *dchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALDIMCHECK" *dchk-version*))
 
   (princ (strcat "\n=================================================="
                  "\n  DIMCHECK tutorial   [" *dchk-version* "]"
@@ -55403,11 +61707,20 @@
 
 (defun c:TUTORIALDIMSCAN () (c:TUTORIALDIMCHECK))
 
-(princ (strcat "\ndimcheck.lsp " *dchk-version*
-               " loaded - DIMCHECK reviews dimensions, arcs & overlapping"))
-(princ "\n  lines one at a time; DIMSCAN reports it read-only; DIMCHECKRESCUE undoes")
-(princ "\n  DIMCHECK's marks. For steps, wall height, the liner pattern and the")
-(princ "\n  title block border too, load linfincheck.lsp and run LINFINCHECK.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\ndimcheck.lsp " *dchk-version*
+                   " loaded - DIMCHECK reviews dimensions, arcs & overlapping"))
+    (princ "\n  lines one at a time; DIMSCAN reports it read-only; DIMCHECKRESCUE undoes")
+    (princ "\n  DIMCHECK's marks. For steps, wall height, the liner pattern and the")
+    (princ "\n  title block border too, load linfincheck.lsp and run LINFINCHECK.")))
 (princ)
 
 
@@ -55451,7 +61764,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.6")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -55508,7 +61821,9 @@
     (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
+    (if lzd:report (lzd:report "DIMCONTEND" *dimcontinue-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "DIMCONTEND" *dimcontinue-version*))
 
   (setq oce  (getvar "CMDECHO")
         ocl  (getvar "CLAYER")
@@ -55524,6 +61839,7 @@
     (setq en nil ss nil pl nil kept nil)
     (while (null en)
       (setq tref (entsel "\nSelect the dimension to continue: "))
+      (if lzd:watch (lzd:watch tref))
       (cond
         ((null tref)                                 ; Enter / miss -> quit
            ;; a quoted symbol, not :none - a colon symbol evaluates to
@@ -55548,6 +61864,7 @@
         ;; -- 2. highlight the drawing to dimension -----------------
         (princ "\nHighlight the drawing to dimension (window/crossing): ")
         (setq ss (ssget))
+        (if lzd:watch (lzd:watch ss))
 
         (if (null ss)
           (princ "\nNothing highlighted -- nothing to do.")
@@ -55633,8 +61950,16 @@
   (princ (strcat "\nDIMCONTEND " *dimcontinue-version*))
   (princ))
 
-(princ (strcat "\nDIMCONTEND / DCE " *dimcontinue-version*
-               " loaded -- continue a dimension to the end of the drawing."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nDIMCONTEND / DCE " *dimcontinue-version*
+                 " loaded -- continue a dimension to the end of the drawing.")))
 (princ)
 
 
@@ -55707,7 +62032,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *dronedistortion-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.3")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -55795,7 +62120,9 @@
     (setvar "CMDECHO" cmd)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
+    (if lzd:report (lzd:report "DDFIX" *dronedistortion-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "DDFIX" *dronedistortion-version*))
 
   ;; The three questions are staged: Back (Undo works too) at the
   ;; height prompts re-opens the previous one, and a bad value re-asks
@@ -55804,6 +62131,7 @@
   ;; selection - skip straight to the height question; Back from there
   ;; re-opens an interactive pick.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (setq stage (if ss 2 1) done nil)
   (while (not done)
     (cond
@@ -55812,6 +62140,7 @@
       ((= stage 1)
        (princ "\nSelect the spa / obstacle to correct (one or more objects), then Enter.")
        (setq ss (ssget))
+       (if lzd:watch (lzd:watch ss))
        (if (null ss)
          (progn (princ "\nNothing selected.") (setq done T))
          (setq stage 2)))
@@ -55876,7 +62205,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDSET : set / change the drone height H for this drawing
 ;; ---------------------------------------------------------------------------
-(defun c:DDSET ( / h cur-h)
+(defun c:DDSET ( / *error* h cur-h)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDSET error: " msg)))
+    (if lzd:report (lzd:report "DDSET" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDSET" *dronedistortion-version*))
   (setq cur-h (dd-get "H"))
   (setq h (getreal (strcat "\nDrone height ABOVE THE DECK, in FEET"
                            (if cur-h (strcat " <" (dd-num cur-h) ">") "")
@@ -55897,7 +62237,18 @@
 ;;          (independent cross-check on the logged altitude)
 ;;          H = Lapp * z / (Lapp - Ltrue)
 ;; ---------------------------------------------------------------------------
-(defun c:DDCAL ( / lapp ltrue z h stage done)
+(defun c:DDCAL ( / *error* lapp ltrue z h stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDCAL error: " msg)))
+    (if lzd:report (lzd:report "DDCAL" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDCAL" *dronedistortion-version*))
   (princ "\nCalibrate drone height from a feature of known true size.")
   ;; staged: Back (or Undo) at the later prompts re-opens the previous one
   (setq stage 1 done nil)
@@ -55936,7 +62287,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDINFO : report current settings
 ;; ---------------------------------------------------------------------------
-(defun c:DDINFO ( / h)
+(defun c:DDINFO ( / *error* h)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDINFO error: " msg)))
+    (if lzd:report (lzd:report "DDINFO" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDINFO" *dronedistortion-version*))
   (setq h (dd-get "H"))
   (princ "\n--- Drone Distortion settings (this drawing) ---")
   (if h
@@ -56020,7 +62382,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDALT : read RelativeAltitude from a drone image and (optionally) set H
 ;; ---------------------------------------------------------------------------
-(defun c:DDALT ( / file m ft off h ans stage done)
+(defun c:DDALT ( / *error* file m ft off h ans stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDALT error: " msg)))
+    (if lzd:report (lzd:report "DDALT" *dronedistortion-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDALT" *dronedistortion-version*))
   ;; staged: Back (or Undo) at a later prompt re-opens the previous
   ;; one, all the way back to the file dialog
   (setq stage 1 done nil)
@@ -56087,9 +62460,18 @@
   (princ (strcat "\nDDFIX " *dronedistortion-version*))
   (princ))
 
-(princ (strcat "\nDrone Distortion tool " *dronedistortion-version*
-               " loaded  (DDALT accepts PNG / JPG / TIF and fails loud)."))
-(princ "\n  Commands: DDFIX  DDSET  DDALT  DDCAL  DDINFO")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nDrone Distortion tool " *dronedistortion-version*
+                   " loaded  (DDALT accepts PNG / JPG / TIF and fails loud)."))
+    (princ "\n  Commands: DDFIX  DDSET  DDALT  DDCAL  DDINFO")))
 (princ)
 
 
@@ -56235,7 +62617,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *droneheightgps-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *droneheightgps-version* "v1.2")   ; announced on load; release_lisp.py
                                             ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -56953,7 +63335,9 @@
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " m)))
+    (if lzd:report (lzd:report "DDGPS" *droneheightgps-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "DDGPS" *droneheightgps-version*))
 
   ;; 1) pick the photo - start in the last-used folder, else the H: drive
   (setq def (getenv "DDGPS_LastDir"))
@@ -57232,7 +63616,18 @@
 ;; ---------------------------------------------------------------------------
 ;;  DDELEV : ground elevation at a typed latitude / longitude
 ;; ---------------------------------------------------------------------------
-(defun c:DDELEV ( / lat lon g stage done)
+(defun c:DDELEV ( / *error* lat lon g stage done)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDELEV error: " msg)))
+    (if lzd:report (lzd:report "DDELEV" *droneheightgps-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDELEV" *droneheightgps-version*))
   ;; staged: Back (or Undo) at the longitude re-asks the latitude
   (setq stage 1 done nil)
   (while (not done)
@@ -57269,7 +63664,18 @@
 ;;  Walks every step DDGPS uses and reports what your machine actually allows.
 ;;  Run this once on a file that fails and send the report.
 ;; ---------------------------------------------------------------------------
-(defun c:DDTEST ( / file out fsz r pr cu tmp lst n m)
+(defun c:DDTEST ( / *error* file out fsz r pr cu tmp lst n m)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDDTEST error: " msg)))
+    (if lzd:report (lzd:report "DDTEST" *droneheightgps-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DDTEST" *droneheightgps-version*))
   (setq file (getfiled "Pick the photo that will not read" "" "png;jpg;jpeg;tif;tiff" 16))
   (cond
     ((null file) (princ "\nNo file selected."))
@@ -57352,9 +63758,18 @@
   (princ (strcat "\nDDGPS " *droneheightgps-version*))
   (princ))
 
-(princ (strcat "\nDrone Height from GPS " *droneheightgps-version*
-               " loaded  (pick a photo, click a point, place the height report)."))
-(princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nDrone Height from GPS " *droneheightgps-version*
+                   " loaded  (pick a photo, click a point, place the height report)."))
+    (princ "\n  Commands: DDGPS (photo -> click a point -> height report)   DDELEV (elevation at a lat/long)   DDTEST (why will this photo not read?)")))
 (princ)
 
 
@@ -57453,6 +63868,19 @@
 ;;; dimensions printed in feet and inches.  Keep it and it moves to
 ;;; the POOL layer in ByLayer colour, like ABHD's.
 ;;;
+;;; MOVED POINTS ARE NOT SURVEY POINTS: a number carrying the letter
+;;; fit:*moved-mark* ("m") is out of the fit entirely.  ABFIND writes
+;;; "17m" when it copies Pt.17 to a position it worked out from two
+;;; tape readings off a pair of good points - that is where the point
+;;; SHOULD be, not where anybody stood.  The whole idea here is that
+;;; the POINTS place the template, so a deduced position is the one
+;;; thing that must not get a vote: it would pull a wall to meet a
+;;; number, and the hit report would then claim the outline held a
+;;; point nobody measured.  Dropped as the selection is read, so it is
+;;; never fitted, never on the omit list and never ringed as a stray.
+;;; The original it came from is still in.  ABHD's rule, held here
+;;; word for word; the count is reported.
+;;;
 ;;; THE POOL BOTTOM assumes a STANDARD HOPPER, so it is generated, not
 ;;; traced: pick which end is deep, type where the two breaks fall and
 ;;; the hopper's side and back offsets, and the bottom is drawn square
@@ -57475,7 +63903,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.6")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.8")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -57486,6 +63914,16 @@
                                    ; points; insertion point = location
 (setq fit:*pt-tag*      "number")  ; attribute tag carrying the point
                                    ; number, for the miss report
+(setq fit:*moved-mark*  "M")       ; a point number carrying this letter
+                                   ; is a MOVED point - ABFIND writes
+                                   ; "17m" when it copies Pt.17 to a
+                                   ; position deduced from two tape
+                                   ; readings (abf:*moved-suffix*).
+                                   ; Nobody stood there, so it is out of
+                                   ; the fit entirely; ABHD's
+                                   ; *PF-MOVED-MARK* rule, held here
+                                   ; too.  Matched case-insensitively
+                                   ; anywhere in the number
 (setq fit:*out-layer*   "POOL-FIT"); layer the preview outline goes on
 (setq fit:*miss-layer*  "FGStep")  ; layer the stray-point rings go on;
                                    ; may already be in use, so FITABHD
@@ -61081,12 +67519,28 @@
 ;; POINT entities and other blocks count on the POINTS layer.  The
 ;; run-scoped fit-pts / fit-npt / fit-ptnames are bound by the command.
 
+;; Is NM the number of a MOVED point - one ABFIND deduced from two tape
+;; readings and numbered "17m" rather than one somebody shot?  ABHD's
+;; pf:moved-p, held here word for word.
+(defun fit:moved-p (nm)
+  (and nm
+       (eq 'STR (type nm))
+       (wcmatch (strcase nm) (strcat "*" (strcase fit:*moved-mark*) "*"))))
+
+;; A moved point is never remembered: the template is placed by what
+;; the points prove, and a deduced position proves nothing (see
+;; fit:*moved-mark*).  Dropped here, before fit-pts exists, so the
+;; template fit, the omit list and the miss report all miss it
+;; together.  The count goes to fit-nmoved for the line fit:gather
+;; prints.
 (defun fit:add-point (p nm)
-  (setq fit-npt     (1+ fit-npt)
-        fit-pts     (cons p fit-pts)
-        fit-ptnames (cons (cons p (if (and nm (/= nm "")) nm
-                                    (itoa fit-npt)))
-                          fit-ptnames)))
+  (if (fit:moved-p nm)
+    (setq fit-nmoved (1+ (if fit-nmoved fit-nmoved 0)))
+    (setq fit-npt     (1+ fit-npt)
+          fit-pts     (cons p fit-pts)
+          fit-ptnames (cons (cons p (if (and nm (/= nm "")) nm
+                                      (itoa fit-npt)))
+                            fit-ptnames))))
 
 ;; What to call the surveyed point at Q.
 (defun fit:pt-name (q / nm p)
@@ -61123,6 +67577,14 @@
                    " selected object(s) that are not survey points"
                    " were ignored - the pool TYPE is the guide here,"
                    " not drawn geometry.")))
+  ;; a moved point is a deduction, not a shot - say how many were left
+  ;; out, so a survey that comes up short is explained rather than
+  ;; mysterious (and a type that now lacks its minimum says why)
+  (if (and fit-nmoved (> fit-nmoved 0))
+    (princ (strcat "\nFITABHD: " (itoa fit-nmoved)
+                   " moved point(s) (a \"" fit:*moved-mark*
+                   "\" in the number) left out - nobody stood on one"
+                   " of those, so the template is not placed by it.")))
   (length fit-pts))
 
 ;; ---- the report ------------------------------------------------------
@@ -61939,6 +68401,7 @@
        (initget 6 "Back Undo")
        (setq v (getdist (strcat "\nMaximum distance from a point <"
                                 (rtos tol 2 3) "> [Back]: ")))
+       (if lzd:ask (lzd:ask "fit:ask-settings" v))
        (cond
          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
           (princ "\nStepping back one step.")
@@ -62114,7 +68577,8 @@
 
 (defun c:FITABHD ( / *error* undo-open set ptype treat tol pct oos bowed
                     ss n res verts en swept ans again dpts
-                    fit-pts fit-npt fit-ptnames fit-omit fit-pick botback)
+                    fit-pts fit-npt fit-nmoved fit-ptnames fit-omit
+                    fit-pick botback)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -62125,12 +68589,15 @@
     ;; cover mode lasts one run: leaked, it would quietly cost the next
     ;; FITABHD its bottom
     (setq fit:*nobottom* nil)
+    (if lzd:report (lzd:report "FITABHD" *fitabhd-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "FITABHD" *fitabhd-version*))
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq fit-pick (ssget "_I" '((0 . "POINT,INSERT"))))
+  (if lzd:watch (lzd:watch fit-pick))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -62143,7 +68610,7 @@
     (princ (strcat "\nFITABHD: swept " (itoa swept)
                    " leftover preview outline(s) from an earlier run.")))
   (princ "\n\nFITABHD - fit a typical pool's template through the survey points.")
-  (setq fit-pts nil fit-npt 0 fit-ptnames nil fit-omit nil
+  (setq fit-pts nil fit-npt 0 fit-nmoved 0 fit-ptnames nil fit-omit nil
         set (fit:ask-settings (list fit:*ptype* "Square" fit:*tol*
                                     fit:*miss-pct* fit:*oos* fit:*bowed*)
                               7)
@@ -62154,7 +68621,8 @@
       (princ (strcat "\n\n  Step 7 of 7 - select the survey points (POINTS layer or"
                      "\n  " fit:*point-block* " blocks)."))
       (princ "\n  Select objects: ")
-      (setq ss (ssget '((0 . "POINT,INSERT"))))))
+      (setq ss (ssget '((0 . "POINT,INSERT"))))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (princ (strcat "\nNothing usable selected (POINT entities on layer "
@@ -62262,9 +68730,17 @@
   (princ))
 
 ;; ----------------------------------------------------------------------
-(princ (strcat "\nFITABHD " *fitabhd-version*
-               " loaded.  Type FITABHD to run (FITABHDVER for the"
-               " version)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nFITABHD " *fitabhd-version*
+                 " loaded.  Type FITABHD to run (FITABHDVER for the"
+                 " version).")))
 (princ)
 
 
@@ -62329,7 +68805,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.2")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.3")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -64268,6 +70744,7 @@
       (if (null pick)
         (progn
           (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+          (if lzd:watch (lzd:watch sel))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -64340,6 +70817,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *LH-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "lh:ask-tol" tol))
   (cond
     ((lh:back-kw tol) 'LH-BACK)
     (T
@@ -64361,6 +70839,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "lh:ask-pct" pct))
   (cond
     ((lh:back-kw pct) 'LH-BACK)
     ((null pct) def)
@@ -64376,6 +70855,7 @@
                            (if *LH-MAX-ARCS* (itoa *LH-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
+  (if lzd:ask (lzd:ask "lh:ask-cap" mx))
   (cond
     ((lh:back-kw mx) 'LH-BACK)
     (T
@@ -64392,6 +70872,7 @@
               "\n  Closed outline or Open polyline? [Closed/Open"
               (if back "/Back" "") "] <"
               *LH-SHAPE* ">: ")))
+  (if lzd:ask (lzd:ask "lh:ask-shape" ans))
   (cond
     ((member ans '("Back" "Undo")) 'LH-BACK)
     (T (if ans (setq *LH-SHAPE* ans))
@@ -64406,6 +70887,7 @@
               "\n  Draw the outline at which height - [Top/Bottom/Average/Zero"
               (if back "/Back" "") "] <"
               *LH-ZMODE* ">: ")))
+  (if lzd:ask (lzd:ask "lh:ask-zmode" ans))
   (cond
     ((member ans '("Back" "Undo")) 'LH-BACK)
     (T (if ans (setq *LH-ZMODE* ans))
@@ -64647,7 +71129,9 @@
             (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
             (setq undo-open nil)
             (setq *error* lh-old-err)
+            (if lzd:report (lzd:report "LHD" *lh-version* m))
             (princ)))
+          (if lzd:begin (lzd:begin "LHD" *lh-version*))
 
   ;; sweep leftovers from a run that was interrupted before it could
   ;; tidy up after itself
@@ -64660,6 +71144,7 @@
   ;; a pickfirst selection if there is one - kept for step 6, probed
   ;; before the undo group opens, which would clear the set
   (setq lh-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
+  (if lzd:watch (lzd:watch lh-pick))
 
   ;; one undo group around the whole fit - a U after LHD takes back
   ;; the outline, the labels and the markers in one step (the stale
@@ -64843,7 +71328,8 @@
         (princ (strcat "\n  \"" *LH-POINT-BLOCK* "\" blocks, elevation text) and, if you have one, a rough"))
         (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
         (princ "\n  Select objects: ")
-        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))))
+        (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
+        (if lzd:watch (lzd:watch ss))))
     (if (null ss)
       (princ "\nNothing usable selected (points, and optionally a sketch on the POOL layer).")
       (progn
@@ -65204,9 +71690,17 @@
   (princ (strcat "\nLHD " *lh-version*))
   (princ))
 
-(princ (strcat "\nLHD " *lh-version*
-               " loaded.  LHD fits a top-down outline (closed or open)"
-               " through laser-scanned points."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLHD " *lh-version*
+                 " loaded.  LHD fits a top-down outline (closed or open)"
+                 " through laser-scanned points.")))
 (princ)
 
 
@@ -65240,7 +71734,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.5")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -65363,6 +71857,7 @@
                                 (vl-string-translate " " "/" kwlist)
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
+    (if lzd:ask (lzd:ask prompt ans))
     (if (and (null ans) dflt) (setq ans dflt))
   )
   (if (member ans '("Back" "Undo"))
@@ -65579,7 +72074,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nLINCHECK error: " msg)))
+    (if lzd:report (lzd:report "LINCHECK" *lincheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINCHECK" *lincheck-version*))
 
   (setq *lin:log* nil fib nil vin nil)
   (princ "\n--- Liner Tech Drawing Checklist ---")
@@ -65666,8 +72163,16 @@
   (princ (strcat "\nLINCHECK " *lincheck-version*))
   (princ))
 
-(princ (strcat "\nLINCHECK " *lincheck-version*
-               " loaded. Type LINCHECK to run the liner checklist."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLINCHECK " *lincheck-version*
+                 " loaded. Type LINCHECK to run the liner checklist.")))
 (princ)
 
 
@@ -65955,7 +72460,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.13")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.14")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -66112,7 +72617,13 @@
 
 ;; -- colours -----------------------------------------------------------
 
-(setq *lfc-grey-color*    8)       ; ACI: everything not under review, faded (grey)
+(setq *lfc-grey-color*    'auto)  ; ACI: everything not under review, faded.
+                                  ; 'auto fades it the way round the drawing
+                                  ; needs -- darker than the work on a dark
+                                  ; background, lighter on a light one, since
+                                  ; 8 recedes on the first and is one of the
+                                  ; most prominent things on screen on the
+                                  ; second.  A number is used exactly as given
 (setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
 (setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
 (setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
@@ -66314,7 +72825,9 @@
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINFINCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "LINFINCHECKRESCUE" *lfc-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINFINCHECKRESCUE" *lfc-version*))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -66457,7 +72970,7 @@
 (defun lfc:unstage (ent keep)
   ;; send a reviewed entity back into the grey background
   (if (and (entget ent) (not (member ent keep)))
-    (lfc:set-color ent *lfc-grey-color*)))
+    (lfc:set-color ent (cal:ink *lfc-grey-color* 'fade))))
 
 (defun lfc:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -68380,7 +74893,7 @@
 
 ;; --- command -------------------------------------------------------
 
-(defun c:LINFINCHECK ( / *error* oldecho vc vs undo-open ss i e et
+(defun c:LINFINCHECK ( / *error* oldecho vc vs undo-open ss i e et grey
                       cands dims arcs lns plns segs blks olaps rest e1 e2 pr
                       saved keep res n total lines ans
                       anchors anchheld
@@ -68420,14 +74933,18 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINFINCHECK error: " msg)))
+    (if lzd:report (lzd:report "LINFINCHECK" *lfc-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINFINCHECK" *lfc-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to LINFINCHECK: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (cond
     ((null ss)
      (prompt "\nNothing selected - LINFINCHECK cancelled."))
@@ -68530,6 +75047,10 @@
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; LINFINCHECKRESCUE can recover them even after a crash
+        ;; the fade, resolved once for the whole run: the knob may
+        ;; be 'auto, and measuring the background per entity would
+        ;; be a COM round trip per entity
+        (setq grey (cal:ink *lfc-grey-color* 'fade))
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
@@ -68538,7 +75059,7 @@
             (progn
               (setq saved (cons (cons e (lfc:ent-color e)) saved))
               (lfc:stash-color e (lfc:ent-color e))
-              (lfc:set-color e *lfc-grey-color*))))
+              (lfc:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -68565,13 +75086,13 @@
                                  (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
-             (lfc:set-color e *lfc-grey-color*)
+             (lfc:set-color e grey)
              (setq skiprest T)
              (princ (strcat "\n  Skipping the remaining "
                             (itoa (- total n)) " dimension(s).")))
             ((eq (cadr res) 'back)
              ;; undo what the previous item recorded, then redo it
-             (lfc:set-color e *lfc-grey-color*)
+             (lfc:set-color e grey)
              (if (> n 0)
                (progn
                  (setq n  (1- n)
@@ -68597,14 +75118,14 @@
                                                       carried))))
                      (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
-                 (lfc:set-color e1 *lfc-grey-color*)
+                 (lfc:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
              (setq n (1- n)))                            ; loop's 1+ re-enters it
             (t
              (if (cadr res)
                (progn (setq ndok (1+ ndok))
-                      (lfc:set-color e *lfc-grey-color*))
+                      (lfc:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (lfc:dim-style e))
@@ -68647,7 +75168,7 @@
           (setq nasnap (+ nasnap (cadddr res)))
           (if (cadr res)
             (progn (setq naok (1+ naok))
-                   (lfc:set-color e *lfc-grey-color*))
+                   (lfc:set-color e grey))
             (progn (setq namoved (1+ namoved))
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
@@ -69382,15 +75903,19 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "LINFINCHECK" *lfc-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINFINCHECK" *lfc-version*))
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the drawing to " name
                       " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -70077,7 +76602,9 @@
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALLINFINCHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALLINFINCHECK" *lfc-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALLINFINCHECK" *lfc-version*))
 
   (princ (strcat "\n=================================================="
                  "\n  LINFINCHECK tutorial   [" *lfc-version* "]"
@@ -70155,11 +76682,20 @@
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))
 
-(princ (strcat "\nlinfincheck.lsp " *lfc-version*
-               " loaded - LINFINCHECK reviews the whole title block one item at a"))
-(princ "\n  time (dims, arcs, overlaps, steps, wall height, liner, border); LINFINSCAN reports")
-(princ "\n  it read-only; LINFINCHECKRESCUE undoes LINFINCHECK's marks. For just dims, arcs")
-(princ "\n  and overlaps, load dimcheck.lsp instead and run DIMCHECK.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nlinfincheck.lsp " *lfc-version*
+                   " loaded - LINFINCHECK reviews the whole title block one item at a"))
+    (princ "\n  time (dims, arcs, overlaps, steps, wall height, liner, border); LINFINSCAN reports")
+    (princ "\n  it read-only; LINFINCHECKRESCUE undoes LINFINCHECK's marks. For just dims, arcs")
+    (princ "\n  and overlaps, load dimcheck.lsp instead and run DIMCHECK.")))
 (princ)
 
 
@@ -70184,7 +76720,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.6")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -70273,7 +76809,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINTXTCHK error: " msg)))
+    (if lzd:report (lzd:report "LINTXTCHK" *lintxtchk-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LINTXTCHK" *lintxtchk-version*))
 
   (setq height  ltc:*height*
         spacing (* height ltc:*spacing*)
@@ -70329,8 +76867,16 @@
   (princ (strcat "\nLINTXTCHK " *lintxtchk-version*))
   (princ))
 
-(princ (strcat "\nLINTXTCHK " *lintxtchk-version*
-               " loaded.  Type LINTXTCHK to place the liner checklist."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLINTXTCHK " *lintxtchk-version*
+                 " loaded.  Type LINTXTCHK to place the liner checklist.")))
 (princ)
 
 
@@ -70415,7 +76961,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.12")
+(setq *paddle-version* "v1.13")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -70953,7 +77499,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPADDLE error: " msg)))
+    (if lzd:report (lzd:report "PADDLE" *paddle-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "PADDLE" *paddle-version*))
 
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
@@ -70973,10 +77521,12 @@
   ;; loop -- being handed the loop beats guessing at it beside a title
   ;; block border.
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
       (progn
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
-        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))))
+        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+        (if lzd:watch (lzd:watch ss))))
   (setq perims (paddle--perimeters ss))
 
   (if (not perims)
@@ -71060,7 +77610,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPADDLE error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALPADDLE" *paddle-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALPADDLE" *paddle-version*))
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
   (vla-StartUndoMark doc)
@@ -71165,8 +77717,16 @@
   (princ (strcat "\nPADDLE " *paddle-version*))
   (princ))
 
-(princ (strcat "\nPADDLE " *paddle-version*
-               " loaded. Commands: PADDLE (place pads), TUTORIALPADDLE (guided demo)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPADDLE " *paddle-version*
+                 " loaded. Commands: PADDLE (place pads), TUTORIALPADDLE (guided demo).")))
 (princ)
 
 
@@ -71312,7 +77872,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.3")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.4")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -72008,10 +78568,12 @@
 ;; it, and nothing outside the highlight is read, kept or erased.
 (defun lg:highlight ( / ss)
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\nHighlight the area to gut: ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   ss)
 
 ;; the highlighted set as a list of enames
@@ -72223,7 +78785,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTER error: " m)))
+    (if lzd:report (lzd:report "LINGUTTER" *lingutter-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "LINGUTTER" *lingutter-version*))
 
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (princ (strcat "\nLINGUTTER " *lingutter-version*))
@@ -72290,7 +78854,9 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLINGUTTERSCAN error: " m)))
+    (if lzd:report (lzd:report "LINGUTTERSCAN" *lingutter-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "LINGUTTERSCAN" *lingutter-version*))
   (princ (strcat "\nLINGUTTERSCAN " *lingutter-version*
                  " - reading only, nothing in the drawing is changed."))
   (setq ss (lg:highlight))
@@ -72305,11 +78871,19 @@
   (princ (strcat "\nLINGUTTER " *lingutter-version*))
   (princ))
 
-(princ (strcat "\nLINGUTTER " *lingutter-version*
-               " loaded -- highlight an area: its perimeter goes onto \""
-               lg:*poollayer* "\", the rest of it is erased, PADDLE runs."
-               "\nLINGUTTERSCAN reports what it would do and changes"
-               " nothing."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLINGUTTER " *lingutter-version*
+                 " loaded -- highlight an area: its perimeter goes onto \""
+                 lg:*poollayer* "\", the rest of it is erased, PADDLE runs."
+                 "\nLINGUTTERSCAN reports what it would do and changes"
+                 " nothing.")))
 (princ)
 
 
@@ -72339,6 +78913,10 @@
 ;;; so all offsets accumulate in one consistent direction.  Repeat as
 ;;; many times as you like.
 ;;;
+;;; Every line the routine draws is offered the same width correction
+;;; the selected one is: a course comes out only as wide as the typed
+;;; offsets add up to, and the round after it measures along it.
+;;;
 ;;; Workflow
 ;;;   1. Select a LINE (a polyline is also accepted, so work started in
 ;;;      an earlier session can be resumed).
@@ -72363,28 +78941,36 @@
 ;;;      numbers are arcs -- "1 3-5" -- and leaves the rest straight.
 ;;;      The question is only asked once there are three points or
 ;;;      more, and the answer becomes the default for the next round.
-;;;   7. Choose whether to repeat on the new polyline.  If so, enter a
+;;;   7. Say whether the overall width of the line just drawn has
+;;;      changed -- step 2's question, asked of the course this round
+;;;      built.  It is resized the same way, half the difference at
+;;;      each end, before anything is measured off it.
+;;;   8. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 5 with the new polyline as
 ;;;      the path.
-;;;   8. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
 ;;; The offset side is fixed once from the direction click in step 3 and
 ;;; reused for every round, so all offsets stay on the same side of the
-;;; original line and every dimension stays perpendicular to it.
+;;; original line and every dimension stays perpendicular to it -- until
+;;; a round corrects its width at step 7, which moves its new points
+;;; along the resized line and leaves that round's dimensions reading
+;;; the corrected drawing instead.
 ;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what step 2 asks
-;;;   for -- never the developed length of the OBJECT, which on anything
-;;;   bowed runs further than the width it spans.  Grew and Shrank take
-;;;   the difference, New takes the width itself, and Unchanged (the
-;;;   default, and Enter) leaves everything exactly as it was.
+;;;   distance straight across, end to end.  That is what steps 2 and 7
+;;;   ask for -- never the developed length of the OBJECT, which on
+;;;   anything bowed runs further than the width it spans.  Grew and
+;;;   Shrank take the difference, New takes the width itself, and
+;;;   Unchanged (the default, and Enter) leaves everything exactly as it
+;;;   was.
 ;;;
-;;;   A new width is made true by scaling the selected object about the
-;;;   midpoint of its two ends, so exactly half the difference lands at
-;;;   each end and the shape between them is carried along.  The object
-;;;   in the drawing is resized too, not just the numbers behind it: the
+;;;   A new width is made true by scaling the object about the midpoint
+;;;   of its two ends, so exactly half the difference lands at each end
+;;;   and the shape between them is carried along.  The object in the
+;;;   drawing is resized too, not just the numbers behind it: the
 ;;;   offsets and their dimensions are measured off it, so leaving it at
 ;;;   the old width would put every base point somewhere the drawing
 ;;;   says nothing is.  The base points and dimensions then follow the
@@ -72392,10 +78978,27 @@
 ;;;   The whole thing sits inside the command's undo group, so one U
 ;;;   puts the width back.
 ;;;
+;;;   Every line gets that question, not just the one selected: each
+;;;   round draws the next course out, and a course is re-measured the
+;;;   same way the first one was.  A line the routine draws is only ever
+;;;   as wide as the typed offsets add up to, so ends measured a little
+;;;   long or a little short leave it that much wide or narrow -- and
+;;;   the next round spaces its base points along it, which is the same
+;;;   reason step 2 resizes the selected object rather than only
+;;;   remembering a number.  Step 7 asks after the polyline is drawn,
+;;;   because that is when there is a width to compare against, and
+;;;   before its dimensions are recorded: a round that corrects its
+;;;   width has its new points moved with the line, so each dimension
+;;;   reads the distance the corrected drawing really has rather than
+;;;   the length that was typed into it.  A resize the drawing will not
+;;;   take stops step 2 -- nothing is drawn yet, so re-running costs a
+;;;   click -- but at step 7 it leaves the line at the width it drew and
+;;;   says so, because whole rounds of typed lengths sit behind it.
+;;;
 ;;; Straight lines, arcs, or both
 ;;;   A measured wall is rarely all one or all the other: a radiused
 ;;;   stretch reads as an arc, a straight run reads as a line, and one
-;;;   profile often needs both -- which is why step 5 asks instead of
+;;;   profile often needs both -- which is why step 6 asks instead of
 ;;;   assuming.  An arc segment is a bulge written onto the same
 ;;;   LWPOLYLINE, so whatever the answer the round produces one
 ;;;   editable polyline through the measured points: never a spline and
@@ -72413,7 +79016,7 @@
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the object they were offset from.
 ;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
-;;;     and use the dimension style picked in step 6 when the drawing
+;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
@@ -72436,7 +79039,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.12")
+(setq *perp-version* "v0.14")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -72753,9 +79356,11 @@
 ;; Ask whether the overall width has changed.  Returns the width to work
 ;; to, or nil when it has not -- so an unchanged answer skips the resize
 ;; altogether and the command behaves exactly as it always did.  d is
-;; the width the drawing carries now.
-(defun perp:ask-width (d / kws ans v w out done)
-  (princ (strcat "\nOverall width, end to end: " (rtos d) "."))
+;; the width the drawing carries now, and lbl heads the line that
+;; reports it: the question is asked of the selected object AND of every
+;; line a round draws, so it has to say which one it means.
+(defun perp:ask-width (lbl d / kws ans v w out done)
+  (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" done nil out nil)
   ;; the amount is a second question, so Back at it re-asks the first
   ;; rather than abandoning the resize
@@ -72765,6 +79370,10 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
+    ;; the label, not the helper name: one helper asks this of the
+    ;; selected object and of every line a round draws, and a report
+    ;; that cannot tell them apart cannot say which one died
+    (if lzd:ask (lzd:ask lbl ans))
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -72839,7 +79448,7 @@
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
                     path pathEnt n lastN basePts newPts guideEnts total
                     len lastLen i base np again ans iter p e seg
-                    join lastJoin kws nseg picks reply tangs
+                    join lastJoin kws nseg picks reply tangs plEnt
                     wOld wNew mid fac)
 
   ;; erase one temporary entity and forget it
@@ -72884,7 +79493,9 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
+    (if lzd:report (lzd:report "PERPPTS" *perp-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "PERPPTS" *perp-version*))
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain in perp:finish; harmless no-op guard on older
   ;; releases where it doesn't exist
@@ -72919,6 +79530,7 @@
   (setq ent nil)
   (while (null ent)
     (setq sel (entsel "\nSelect a line or polyline: "))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))
@@ -72953,7 +79565,7 @@
         ;; a plan projection with no width at all has nothing to
         ;; ask about; the direction click below is where that
         ;; gets reported
-        wNew (if (> wOld 1e-9) (perp:ask-width wOld)))
+        wNew (if (> wOld 1e-9) (perp:ask-width "Overall width" wOld)))
   (if wNew
     (progn
       (setq mid (list (/ (+ (car p1)  (car p2))  2.0)
@@ -73231,8 +79843,9 @@
     ;; dimension still lands on the curve.
     (setq tangs (if (equal join "Straight") nil (perp:tangents newPts)))
     (if tangs (perp:arcs (entlast) newPts tangs picks))
+    (setq plEnt (entlast))
     ;; a round that drew arcs is the next round's curve to measure along
-    (setq pathEnt (if tangs (entlast)))
+    (setq pathEnt (if tangs plEnt))
     (princ (strcat "\nRound " (itoa iter) ": polyline drawn "
                    (cond ((equal join "Straight") "with straight segments")
                          ((equal join "Arcs")     "with arcs through the points")
@@ -73244,11 +79857,57 @@
     (foreach e guideEnts (perp:kill e))
     (setq guideEnts nil)
 
+    ;; --- has the width of the line just drawn changed? ---------------
+    ;; Step 2's question, asked again of the line this round built.  It
+    ;; is the next course out and it was re-measured too, and the typed
+    ;; offsets only reach the width they happen to add up to: a course
+    ;; whose ends were measured a little long or a little short comes
+    ;; out that much wide or narrow, and everything taken off it after
+    ;; -- this round's dimensions, and the base points of every round
+    ;; that follows -- would be measured off a width the wall does not
+    ;; have.  So it is resized here, before any of that: half the
+    ;; difference at each end, scaled about the midpoint of the two, the
+    ;; same correction and the same undo group as step 2.  Unchanged is
+    ;; the default and the Enter answer, which leaves the round exactly
+    ;; as it drew.
+    (setq dx   (- (car  (last newPts)) (car  (car newPts)))
+          dy   (- (cadr (last newPts)) (cadr (car newPts)))
+          wOld (sqrt (+ (* dx dx) (* dy dy)))
+          ;; ends that land on top of each other span no width, so there
+          ;; is nothing to ask about and nothing to scale about either
+          wNew (if (> wOld 1e-9)
+                 (perp:ask-width "Overall width of the new polyline" wOld)))
+    (if wNew
+      (progn
+        (setq mid (list (/ (+ (car  (car newPts)) (car  (last newPts))) 2.0)
+                        (/ (+ (cadr (car newPts)) (cadr (last newPts))) 2.0)
+                        (caddr (car newPts)))
+              fac (/ wNew wOld))
+        ;; A refused resize stops step 2 outright: nothing is drawn yet
+        ;; there, so re-running costs one click.  Here rounds of typed
+        ;; lengths sit behind it and not one dimension is written, so
+        ;; the line is left at the width it drew and the drafter is told
+        ;; which width that is -- nothing is scaled, so the drawing and
+        ;; the numbers measured off it still agree.
+        (if (perp:rescale plEnt mid fac)
+          (progn
+            (setq newPts (perp:scale-pts newPts mid fac))
+            (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
+                           (rtos (/ (abs (- wNew wOld)) 2.0))
+                           (if (> wNew wOld) " added at" " taken off")
+                           " each end.")))
+          (princ (strcat "\nThe new polyline could not be resized - it is"
+                         " most likely on a locked, frozen or switched-off"
+                         " layer.  It is left at the " (rtos wOld)
+                         " it was drawn, and the dimensions follow it.")))))
+
     ;; --- remember the dimensions to draw -----------------------------
     ;; np = base + len*(nx,ny), so each dimension runs along the fixed
     ;; normal, i.e. perpendicular to the ORIGINAL line, no matter which
-    ;; polyline `base` sits on.  They are drawn once at the end, after
-    ;; the dimension style has been chosen.
+    ;; polyline `base` sits on -- until a width correction above moves
+    ;; the new points along it, and then each dimension reads the
+    ;; distance the corrected drawing really has.  They are drawn once
+    ;; at the end, after the dimension style has been chosen.
     (setq i 0)
     (while (< i n)
       (setq dimPairs (cons (list (nth i basePts) (nth i newPts)) dimPairs)
@@ -73295,8 +79954,16 @@
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
   (princ))
 
-(princ (strcat "\nperp_points.lsp " *perp-version*
-               " loaded.  Type PERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nperp_points.lsp " *perp-version*
+                 " loaded.  Type PERPPTS to run.")))
 (princ)
 
 
@@ -73342,35 +80009,92 @@
 ;;;          FINISH, fixing the order the lengths are entered in;
 ;;;        - the side of the curve the click lands on is the side the
 ;;;          new points are offset toward.
-;;;   4. Enter how many values (points) are required  (>= 2).
-;;;   5. Enter a length for each point, in order START -> FINISH.
+;;;   4. Optionally select a BOUNDARY the offsets may not cross -- a
+;;;      property line, a house wall, a deck edge already drawn.  Enter
+;;;      takes None and nothing is capped.
+;;;   5. Enter how many values (points) are required  (>= 2).
+;;;   6. Enter a length for each point, in order START -> FINISH.
 ;;;      Press Enter to reuse the previous length when it repeats, or
 ;;;      type B (Back) to step back and re-enter the previous point
-;;;      (U, the old keyword, is still accepted).
-;;;   6. Choose whether to repeat on the new polyline.  If so, enter a
-;;;      new point count and repeat from step 5 with the new polyline as
+;;;      (U, the old keyword, is still accepted).  With a boundary in
+;;;      force the prompt names the distance to it and takes M (Max) to
+;;;      go exactly that far; a longer length is brought back to it.
+;;;   7. Say whether the overall width of the curve just drawn has
+;;;      changed -- step 2's question, asked of the course this round
+;;;      built.  It is resized the same way, half the difference at
+;;;      each end, before anything is measured off it.
+;;;   8. Choose whether to repeat on the new polyline.  If so, enter a
+;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
-;;;   7. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
+;;;
+;;; The boundary
+;;;   A wall is not always free to run as far as the tape says: there
+;;;   is a property line, a house, a deck edge already drawn, and the
+;;;   course being built has to stop at it.  Step 4 takes that object
+;;;   once and turns it into the maximum for every offset in every
+;;;   round -- per point, not one number for the run, because a
+;;;   boundary at an angle to the curve is nearer at one end than at
+;;;   the other.
+;;;
+;;;   At each point a ray is cast from the base point along the offset
+;;;   normal and the nearest crossing ahead of it is that point's
+;;;   maximum.  The length prompt names it, M (Max) takes it exactly,
+;;;   and a longer length is brought back to it and said so -- the
+;;;   number typed is still what Enter repeats at the next point, since
+;;;   the tape has not changed, only where this one point may reach.
+;;;   Where the ray never meets the boundary -- it is behind the offset
+;;;   side, or stops short of that end of the run -- the point has no
+;;;   maximum and the prompt is the one it always was.
+;;;
+;;;   Two things the cap is not.  It holds the measured POINTS inside
+;;;   the boundary, and the arcs between them are fitted to the curve's
+;;;   tangents: where a boundary bends away between two points, the arc
+;;;   joining them can still bow past it, and the answer is a point
+;;;   there rather than a different arc.  And it is not re-applied by
+;;;   the width correction at step 7, which scales the whole curve
+;;;   about the midpoint of its ends: that is the drafter's own
+;;;   measurement and is not second-guessed, but a correction that
+;;;   carries points past the boundary says how many.
 ;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what step 2 asks
-;;;   for -- never the developed length of the CURVE, which on anything
-;;;   bowed runs further than the width it spans.  Grew and Shrank take
-;;;   the difference, New takes the width itself, and Unchanged (the
-;;;   default, and Enter) leaves everything exactly as it was.
+;;;   distance straight across, end to end.  That is what steps 2 and 7
+;;;   ask for -- never the developed length of the CURVE, which on
+;;;   anything bowed runs further than the width it spans.  Grew and
+;;;   Shrank take the difference, New takes the width itself, and
+;;;   Unchanged (the default, and Enter) leaves everything exactly as it
+;;;   was.
 ;;;
-;;;   A new width is made true by scaling the selected curve about the
-;;;   midpoint of its two ends, so exactly half the difference lands at
-;;;   each end and the curve keeps its shape: an arc stays that arc,
-;;;   scaled.  The curve in the drawing is resized too, not just the
-;;;   numbers behind it -- the offsets and their dimensions are measured
-;;;   off it, so leaving it at the old width would put every base point
-;;;   somewhere the drawing says nothing is.  The base points and
-;;;   dimensions then follow the resized curve, since they are spaced
-;;;   along it after the resize.  The whole thing sits inside the
-;;;   command's undo group, so one U puts the width back.
+;;;   A new width is made true by scaling the curve about the midpoint
+;;;   of its two ends, so exactly half the difference lands at each end
+;;;   and the curve keeps its shape: an arc stays that arc, scaled.  The
+;;;   curve in the drawing is resized too, not just the numbers behind
+;;;   it -- the offsets and their dimensions are measured off it, so
+;;;   leaving it at the old width would put every base point somewhere
+;;;   the drawing says nothing is.  The base points and dimensions then
+;;;   follow the resized curve, since they are spaced along it after the
+;;;   resize.  The whole thing sits inside the command's undo group, so
+;;;   one U puts the width back.
+;;;
+;;;   Every curve gets that question, not just the one selected: each
+;;;   round draws the next course out, and a course is re-measured the
+;;;   same way the first one was.  A curve the routine draws is only
+;;;   ever as wide as the typed offsets add up to, so ends measured a
+;;;   little long or a little short leave it that much wide or narrow --
+;;;   and the next round spaces its base points along it and reads its
+;;;   tangents, which is the same reason step 2 resizes the selected
+;;;   curve rather than only remembering a number.  Step 7 asks after
+;;;   the polyline is drawn, because that is when there is a width to
+;;;   compare against, and before its dimensions are recorded: a round
+;;;   that corrects its width has its new points moved with the curve,
+;;;   so each dimension reads the distance the corrected drawing really
+;;;   has rather than the length that was typed into it.  A resize the
+;;;   drawing will not take stops step 2 -- nothing is drawn yet, so
+;;;   re-running costs a click -- but at step 7 it leaves the curve at
+;;;   the width it drew and says so, because whole rounds of typed
+;;;   lengths sit behind it.
 ;;;
 ;;; How the offset direction is found
 ;;;   Every round works from the NEWEST curve.  Round 1 offsets from the
@@ -73379,7 +80103,10 @@
 ;;;   newest curve, and its offset runs along the normal of the curve's
 ;;;   tangent underneath it -- so both the offset and its dimension read
 ;;;   perpendicular to the line the point actually sits on, and each
-;;;   round follows the shape its predecessor took.
+;;;   round follows the shape its predecessor took.  A round that
+;;;   corrects its width at step 7 is the one exception: the correction
+;;;   moves its new points along the resized curve, and that round's
+;;;   dimensions read the corrected drawing instead.
 ;;;
 ;;;   Which side is used is fixed once, from the direction click,
 ;;;   relative to the direction of travel (START -> FINISH), so every
@@ -73390,7 +80117,7 @@
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the curve they were offset from.
 ;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
-;;;     and use the dimension style picked in step 6 when the drawing
+;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
@@ -73419,7 +80146,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.11")
+(setq *cperp-version* "v0.14")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -73544,18 +80271,20 @@
 ;; direction of travel and the offset side are left alone, and the shape
 ;; between the ends is carried along with it.
 
-;; Ask whether the overall width has changed.  Returns the width to work
-;; to, or nil when it has not -- so an unchanged answer skips the resize
-;; altogether and the command behaves exactly as it always did.  d is
-;; the width the drawing carries now.
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getdist/getpoint/getint hand a keyword back as
 ;; a string where a value would be a number or a list.
 (defun cperp:back-kw (v)
   (and (= (type v) 'STR) (member v '("Back" "Undo"))))
 
-(defun cperp:ask-width (d / kws ans v w out done)
-  (princ (strcat "\nOverall width, end to end: " (rtos d) "."))
+;; Ask whether the overall width has changed.  Returns the width to work
+;; to, or nil when it has not -- so an unchanged answer skips the resize
+;; altogether and the command behaves exactly as it always did.  d is
+;; the width the drawing carries now, and lbl heads the line that
+;; reports it: the question is asked of the selected curve AND of every
+;; curve a round draws, so it has to say which one it means.
+(defun cperp:ask-width (lbl d / kws ans v w out done)
+  (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" done nil out nil)
   ;; the amount is a second question, so Back at it re-asks the first
   ;; rather than abandoning the resize
@@ -73565,6 +80294,10 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
+    ;; the label, not the helper name: one helper asks this of the
+    ;; selected object and of every line a round draws, and a report
+    ;; that cannot tell them apart cannot say which one died
+    (if lzd:ask (lzd:ask lbl ans))
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -73608,6 +80341,107 @@
                   k)))
   (not (vl-catch-all-error-p r)))
 
+;; p scaled about ctr by k, in plan; z is carried through untouched
+(defun cperp:scale-pt (p ctr k)
+  (list (+ (car ctr)  (* k (- (car p)  (car ctr))))
+        (+ (cadr ctr) (* k (- (cadr p) (cadr ctr))))
+        (caddr p)))
+
+;; every point of pts scaled about ctr by k.  The selected curve is
+;; re-read from the drawing after a resize, but a curve a round draws
+;; has its points in hand -- they are what the dimensions are recorded
+;; from -- so they are scaled with it rather than measured off it again.
+(defun cperp:scale-pts (pts ctr k / out p)
+  (setq out '())
+  (foreach p pts (setq out (cons (cperp:scale-pt p ctr k) out)))
+  (reverse out))
+
+;; --- the boundary a run may not cross --------------------------------
+;; A wall is not always free to run as far as the tape says: there is a
+;; property line, a house, a deck edge already drawn, and the course
+;; being built has to stop at it.  Selecting that object once turns it
+;; into the maximum for EVERY offset -- per point, since a boundary
+;; that runs at an angle to the curve is nearer at one end than the
+;; other, and one number could not say where.
+
+;; How far p may travel along the unit vector u before it meets bnd:
+;; the nearest crossing strictly ahead of p, or nil when the ray never
+;; reaches the boundary -- it lies behind the offset side, or off the
+;; end of the run, and that point simply has no maximum.
+;;
+;; A ray is not something AutoCAD can intersect, so one is drawn.  The
+;; temporary line is made long enough to reach any point of bnd -- the
+;; distance to the nearest point of it plus its own length, which no
+;; point on it can be further off than -- and IntersectWith reports the
+;; crossings.  The line is erased before this returns, whatever came
+;; back, so a run cannot litter the drawing one probe at a time.
+(defun cperp:capdist (bnd p u / near far prev ln rtn lst q d best)
+  ;; the nearest point of bnd may not be readable on a degenerate
+  ;; curve; its own length alone still reaches a boundary that crosses
+  ;; the run, which is the case a cap is wanted for
+  (setq near (vlax-curve-getClosestPointTo bnd (trans p 1 0))
+        far  (+ (if near (distance p (trans near 0 1)) 0.0)
+                (cperp:curvelen bnd)))
+  (if (< far 1e-9) (setq far 1.0))
+  (setq prev (entlast))
+  (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP")
+                 (cons 10 (trans p 1 0))
+                 (cons 11 (trans (list (+ (car p)  (* far (car u)))
+                                       (+ (cadr p) (* far (cadr u)))
+                                       (caddr p))
+                                 1 0))))
+  (setq ln (entlast))
+  ;; entlast is unmoved when entmake was refused, and erasing on that
+  ;; would take whatever WAS last out of the drawing.  No ray, no cap.
+  (if (eq ln prev)
+    nil
+    (progn
+      (setq rtn (vl-catch-all-apply
+                  'vlax-invoke
+                  (list (vlax-ename->vla-object ln) 'IntersectWith
+                        (vlax-ename->vla-object bnd)
+                        ;; acExtendNone: neither object is stretched to
+                        ;; reach the other.  The symbol is AutoCAD's own
+                        ;; and is nil where it was never loaded, so the
+                        ;; number it stands for is spelled out behind it.
+                        (cond (acExtendNone) (0)))))
+      (entdel ln)
+      (if (or (vl-catch-all-error-p rtn) (null rtn))
+        nil
+        (progn
+          ;; a flat list of WCS x y z, one triple per crossing
+          (setq lst rtn best nil)
+          (while (>= (length lst) 3)
+            (setq q (trans (list (car lst) (cadr lst) (caddr lst)) 0 1)
+                  d (+ (* (- (car q)  (car p))  (car u))
+                       (* (- (cadr q) (cadr p)) (cadr u))))
+            (if (and (> d 1e-8) (or (null best) (< d best))) (setq best d))
+            (setq lst (cdddr lst)))
+          best)))))
+
+;; How many of pts sit past bnd, each measured along the ray from the
+;; base it was offset from.  Every length was capped as it was typed,
+;; so this can only come back above zero after a width correction: that
+;; scales the whole curve about the midpoint of its ends and can carry
+;; a point that was sitting ON the boundary out beyond it.  A curve
+;; that quietly crosses a boundary the drafter asked it to respect is
+;; worth a line of its own.
+(defun cperp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
+  (setq i 0 n (min (length bases) (length pts)) out 0)
+  (while (< i n)
+    (setq a  (nth i bases)
+          b  (nth i pts)
+          dx (- (car b)  (car a))
+          dy (- (cadr b) (cadr a))
+          d  (sqrt (+ (* dx dx) (* dy dy))))
+    (if (> d 1e-9)
+      (progn
+        (setq u   (list (/ dx d) (/ dy d))
+              cap (cperp:capdist bnd a u))
+        (if (and cap (> d (+ cap 1e-8))) (setq out (1+ out)))))
+    (setq i (1+ i)))
+  out)
+
 ;; --- command ---------------------------------------------------------
 
 ;; ahead of the command on purpose: the structural tests scan from
@@ -73628,7 +80462,7 @@
                      curCrv curRev n lastN basePts newPts usedBases idxs
                      tangs tg guideEnts total len lastLen i base np again
                      ans iter plt p e seg
-                     wOld wNew mid fac)
+                     wOld wNew mid fac bnd cap over)
 
   ;; erase one temporary entity and forget it
   (defun cperp:kill (e)
@@ -73670,7 +80504,9 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
+    (if lzd:report (lzd:report "CPERPPTS" *cperp-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CPERPPTS" *cperp-version*))
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain in cperp:finish; harmless no-op guard on older
   ;; releases where it doesn't exist
@@ -73704,6 +80540,7 @@
   (setq crv nil)
   (while (null crv)
     (setq sel (entsel "\nSelect a curve (polyline, arc, spline...): "))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))
@@ -73741,7 +80578,7 @@
         ;; a plan projection with no width at all has nothing to
         ;; ask about; the direction click below is where that
         ;; gets reported
-        wNew (if (> wOld 1e-9) (cperp:ask-width wOld)))
+        wNew (if (> wOld 1e-9) (cperp:ask-width "Overall width" wOld)))
   (if wNew
     (progn
       (setq mid (list (/ (+ (car sp)  (car ep))  2.0)
@@ -73807,8 +80644,41 @@
   (setq side (if (>= cross 0.0) 1.0 -1.0))
 
   ;; --- prepare the layers ---------------------------------------------
+  ;; PERPPTS-TEMP first: the boundary probe below draws its ray on that
+  ;; layer, and the question that picks the boundary comes after it
   (cal:ensure-layer "PERPPTS-TEMP" 1)
   (cal:ensure-layer "DIMENSIONS"   4)
+
+  ;; --- 4. the boundary the offsets may not cross (optional) -----------
+  ;; Asked after the direction click because the click is what fixes
+  ;; which way the offsets run, and a boundary is only a boundary on the
+  ;; side they run toward.  Enter takes None and the command behaves
+  ;; exactly as it did before there was one.
+  (setq bnd 'RETRY)
+  (while (eq bnd 'RETRY)
+    (initget "None")
+    (setq sel (entsel (strcat "\nSelect a boundary the offsets may not"
+                              " cross [None] <None>: ")))
+    (if lzd:watch (lzd:watch sel))
+    (cond
+      ;; entsel answers nil for Enter AND for a click that hit nothing.
+      ;; ERRNO 7 is what tells them apart, and without asking, a click
+      ;; that missed would quietly drop the boundary the drafter was
+      ;; reaching for and cap nothing all run.
+      ((and (null sel) (= 7 (getvar "ERRNO")))
+       (princ "\nNothing there - click the boundary itself, or press Enter for none."))
+      ((or (null sel) (= (type sel) 'STR)) (setq bnd nil))
+      ((not (cperp:curve-p (car sel)))
+       (princ (strcat "\nA " (cdr (assoc 0 (entget (car sel))))
+                      " cannot be crossed - pick a curve, or press Enter"
+                      " for none.")))
+      ((eq (car sel) crv)
+       (princ (strcat "\nThat is the curve being offset from - a run"
+                      " cannot be bounded by where it starts.")))
+      (t (setq bnd (car sel)))))
+  (if bnd
+    (princ (strcat "\nBoundary set: no offset will cross that "
+                   (cdr (assoc 0 (entget bnd))) ".")))
 
   ;; --- draw an arrow pointing at the START end ------------------------
   ;; The shaft runs back from START along the curve's tangent there, so
@@ -73909,14 +80779,36 @@
                         ": the curve direction cannot be read there."))
          (setq i (1+ i)))
         (t
-         (initget 6 "Back Undo")     ; Undo kept as a hidden synonym
+         ;; How far this point may go before it meets the boundary.
+         ;; Measured per point along its own normal: a boundary running
+         ;; at an angle to the curve is nearer at one end than at the
+         ;; other, and one number could not say where.  nil when the ray
+         ;; never reaches it, and then nothing below changes.
+         (setq cap (if bnd (cperp:capdist bnd base nrm)))
+         ;; Undo kept as a hidden synonym; Max is offered only where
+         ;; there is a boundary ahead of this point to reach
+         (initget 6 (if cap "Back Undo Max" "Back Undo"))
          (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
                                     " of " (itoa n)
+                                    (if cap
+                                      (strcat ", boundary at " (rtos cap))
+                                      "")
                                     (if lastLen
                                       (strcat " <" (rtos lastLen) ">")
                                       "")
-                                    " [Back]: ")))
+                                    (if cap " [Back/Max]: " " [Back]: "))))
          (if (null len) (setq len lastLen))
+         (if (equal len "Max") (setq len cap))
+         ;; The typed number is what Enter repeats, not the capped one:
+         ;; the tape still says what it says, and the next point has its
+         ;; own boundary to meet it against.
+         (if (numberp len) (setq lastLen len))
+         (if (and cap (numberp len) (> len cap))
+           (progn
+             (princ (strcat "\n" (rtos len) " would cross the boundary -"
+                            " point " (itoa (1+ i)) " is capped at "
+                            (rtos cap) "."))
+             (setq len cap)))
          (cond
            ((eq (type len) 'STR)
             (if newPts
@@ -73933,8 +80825,7 @@
            ((null len)
             (princ "\nA length is required."))
            (t
-            (setq lastLen len
-                  np      (list (+ (car base)  (* len (car nrm)))
+            (setq np      (list (+ (car base)  (* len (car nrm)))
                                 (+ (cadr base) (* len (cadr nrm)))
                                 (caddr base)))
             (setq newPts    (cons np newPts)
@@ -73982,9 +80873,71 @@
     (foreach e guideEnts (cperp:kill e))
     (setq guideEnts nil)
 
+    ;; --- has the width of the curve just drawn changed? --------------
+    ;; Step 2's question, asked again of the curve this round built.  It
+    ;; is the next course out and it was re-measured too, and the typed
+    ;; offsets only reach the width they happen to add up to: a course
+    ;; whose ends were measured a little long or a little short comes
+    ;; out that much wide or narrow, and everything taken off it after
+    ;; -- this round's dimensions, and the base points of every round
+    ;; that follows -- would be measured off a width the wall does not
+    ;; have.  So it is resized here, before any of that: half the
+    ;; difference at each end, scaled about the midpoint of the two, the
+    ;; same correction and the same undo group as step 2.  Unchanged is
+    ;; the default and the Enter answer, which leaves the round exactly
+    ;; as it drew.
+    (setq tx   (- (car  (last newPts)) (car  (car newPts)))
+          ty   (- (cadr (last newPts)) (cadr (car newPts)))
+          wOld (sqrt (+ (* tx tx) (* ty ty)))
+          ;; ends that land on top of each other span no width, so there
+          ;; is nothing to ask about and nothing to scale about either
+          wNew (if (> wOld 1e-9)
+                 (cperp:ask-width "Overall width of the new curve" wOld)))
+    (if wNew
+      (progn
+        (setq mid (list (/ (+ (car  (car newPts)) (car  (last newPts))) 2.0)
+                        (/ (+ (cadr (car newPts)) (cadr (last newPts))) 2.0)
+                        (caddr (car newPts)))
+              fac (/ wNew wOld))
+        ;; A refused resize stops step 2 outright: nothing is drawn yet
+        ;; there, so re-running costs one click.  Here rounds of typed
+        ;; lengths sit behind it and not one dimension is written, so
+        ;; the curve is left at the width it drew and the drafter is
+        ;; told which width that is -- nothing is scaled, so the drawing
+        ;; and the numbers measured off it still agree.
+        (if (cperp:rescale curCrv mid fac)
+          (progn
+            (setq newPts (cperp:scale-pts newPts mid fac))
+            (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
+                           (rtos (/ (abs (- wNew wOld)) 2.0))
+                           (if (> wNew wOld) " added at" " taken off")
+                           " each end."))
+            ;; every length was capped as it was typed, but this scales
+            ;; the whole curve about the midpoint of its ends and can
+            ;; carry a point that was sitting ON the boundary out past
+            ;; it.  The correction is the drafter's measurement and is
+            ;; not second-guessed -- but a curve that crosses a boundary
+            ;; it was told to respect does not go without saying.
+            (if bnd
+              (progn
+                (setq over (cperp:past-bnd bnd usedBases newPts))
+                (if (> over 0)
+                  (princ (strcat "\n" (itoa over) " of "
+                                 (itoa (length newPts)) " points now sit"
+                                 " past the boundary - the width"
+                                 " correction carried the curve beyond"
+                                 " it."))))))
+          (princ (strcat "\nThe new curve could not be resized - it is"
+                         " most likely on a locked, frozen or switched-off"
+                         " layer.  It is left at the " (rtos wOld)
+                         " it was drawn, and the dimensions follow it.")))))
+
     ;; --- remember the dimensions to draw -----------------------------
     ;; each pair runs along the normal of the curve the base point sits
-    ;; on, so the dimension reads perpendicular to that curve
+    ;; on, so the dimension reads perpendicular to that curve -- until a
+    ;; width correction above moves the new points along the curve they
+    ;; landed on, and then each dimension reads the distance the
+    ;; corrected drawing really has
     (setq i 0)
     (while (< i (length newPts))
       (setq dimPairs (cons (list (nth i usedBases) (nth i newPts)) dimPairs)
@@ -74028,8 +80981,16 @@
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
   (princ))
 
-(princ (strcat "\ncperp_points.lsp " *cperp-version*
-               " loaded.  Type CPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ncperp_points.lsp " *cperp-version*
+                 " loaded.  Type CPERPPTS to run.")))
 (princ)
 
 
@@ -74067,7 +81028,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.6")
+(setq *tutperp-version* "v0.8")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -74136,7 +81097,9 @@
     (tutp:finish)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
+    (if lzd:report (lzd:report "TUTORIALPERPPTS" *tutperp-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALPERPPTS" *tutperp-version*))
 
   (setq os (getvar "OSMODE")
         ce (getvar "CMDECHO")
@@ -74177,6 +81140,12 @@
                   "  * right after the selection you are asked whether the"
                   "    overall width has changed: Grew, Shrank, New, or"
                   "    Unchanged (the default, and Enter)"
+                  "  * EVERY line gets that question, not just the selected"
+                  "    one: each round draws the next course out, and the"
+                  "    line it drew is asked about the moment it appears -"
+                  "    a line built from typed offsets is only as wide as"
+                  "    they add up to, and the next round is spaced along"
+                  "    it"
                   "  * the width meant is the distance straight ACROSS, end"
                   "    to end - never the length of the OBJECT, which on"
                   "    anything bowed runs further than the width it spans"
@@ -74184,10 +81153,14 @@
                   "    EACH end: the OBJECT in the drawing is resized to"
                   "    match, so the base points and their dimensions still"
                   "    land on it.  One U puts the width back"
+                  "  * a corrected round has its new points moved with the"
+                  "    line, so its dimensions read the corrected drawing"
+                  "    rather than the lengths typed into it"
                   "  * shrinking away the whole width is rejected, and a"
                   "    resize the drawing will not take - a locked, frozen"
-                  "    or switched-off layer - stops the command rather"
-                  "    than measuring off geometry that is not there"
+                  "    or switched-off layer - stops the command at the"
+                  "    selection, where nothing is drawn yet; at a round it"
+                  "    leaves the line at the width it drew and says so"
                   ""
                   "Direction click"
                   "  * the end nearest your click becomes START - lengths are"
@@ -74384,12 +81357,15 @@
         (setq i (1+ i)))
       (tutp:say '(""
                   "STAGE 7 - repeating."
-                  "After each polyline PERPPTS asks: Repeat on the new"
-                  "polyline?  Answering Yes spaces a fresh set of points by"
-                  "arc length ALONG that polyline and offsets them again -"
-                  "same side, dimensions still perpendicular to the original"
-                  "line.  Here a second round of 15s was added.  Repeat as"
-                  "many times as you like; a single U undoes the whole run."))
+                  "After each polyline PERPPTS asks whether ITS overall"
+                  "width has changed - the same Grew/Shrank/New/Unchanged"
+                  "question the selected line got, applied the same way -"
+                  "and then: Repeat on the new polyline?  Answering Yes"
+                  "spaces a fresh set of points by arc length ALONG that"
+                  "polyline and offsets them again - same side, dimensions"
+                  "still perpendicular to the original line.  Here a second"
+                  "round of 15s was added.  Repeat as many times as you"
+                  "like; a single U undoes the whole run."))
       (tutp:pause)
 
       ;; keep or erase the demo
@@ -74405,8 +81381,16 @@
               "Tutorial finished.  Type PERPPTS to try it for real."))
   (princ))
 
-(princ (strcat "\ntutorial_perp_points.lsp " *tutperp-version*
-               " loaded.  Type TUTORIALPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ntutorial_perp_points.lsp " *tutperp-version*
+                 " loaded.  Type TUTORIALPERPPTS to run.")))
 (princ)
 
 
@@ -74443,7 +81427,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.6")
+(setq *tutcperp-version* "v0.9")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -74535,7 +81519,9 @@
     (tutc:finish)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg)))
+    (if lzd:report (lzd:report "TUTORIALCPERPPTS" *tutcperp-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALCPERPPTS" *tutcperp-version*))
 
   ;; one demo round: sample n points along crv by arc length, offset
   ;; each along the left travel normal by (nth i lens), draw guides,
@@ -74618,6 +81604,12 @@
                   "  * right after the selection you are asked whether the"
                   "    overall width has changed: Grew, Shrank, New, or"
                   "    Unchanged (the default, and Enter)"
+                  "  * EVERY curve gets that question, not just the selected"
+                  "    one: each round draws the next course out, and the"
+                  "    curve it drew is asked about the moment it appears -"
+                  "    a curve built from typed offsets is only as wide as"
+                  "    they add up to, and the next round is spaced along"
+                  "    it and reads its tangents"
                   "  * the width meant is the distance straight ACROSS, end"
                   "    to end - never the length of the CURVE, which on"
                   "    anything bowed runs further than the width it spans"
@@ -74625,10 +81617,39 @@
                   "    EACH end: the CURVE in the drawing is resized to"
                   "    match, so the base points and their dimensions still"
                   "    land on it.  One U puts the width back"
+                  "  * a corrected round has its new points moved with the"
+                  "    curve, so its dimensions read the corrected drawing"
+                  "    rather than the lengths typed into it"
                   "  * shrinking away the whole width is rejected, and a"
                   "    resize the drawing will not take - a locked, frozen"
-                  "    or switched-off layer - stops the command rather"
-                  "    than measuring off geometry that is not there"
+                  "    or switched-off layer - stops the command at the"
+                  "    selection, where nothing is drawn yet; at a round it"
+                  "    leaves the curve at the width it drew and says so"
+                  ""
+                  "The boundary (optional)"
+                  "  * after the direction click you may select a curve"
+                  "    already in the drawing - a property line, a house"
+                  "    wall, a deck edge - that the offsets may not cross;"
+                  "    Enter takes None and nothing is capped"
+                  "  * the cap is measured PER POINT: a ray from each base"
+                  "    point along its own normal, and the nearest crossing"
+                  "    ahead of it is that point's maximum.  A boundary at"
+                  "    an angle to the run is nearer at one end than the"
+                  "    other, which one number could never say"
+                  "  * the length prompt names the distance to it, M (Max)"
+                  "    takes it exactly, and a longer length is brought back"
+                  "    to it and said so - the number TYPED is still what"
+                  "    Enter repeats at the next point"
+                  "  * where the ray never reaches the boundary that point"
+                  "    has no maximum, so a boundary covering part of a run"
+                  "    caps only the part it covers"
+                  "  * it holds the measured POINTS inside the boundary:"
+                  "    where the boundary bends away between two of them the"
+                  "    arc joining them can still bow past it, and the"
+                  "    answer is a point there.  The width correction is not"
+                  "    re-capped either - it is your measurement - but a"
+                  "    correction that carries points past the boundary says"
+                  "    how many"
                   ""
                   "Direction click"
                   "  * the curve end nearest your click becomes START; a red"
@@ -74773,7 +81794,10 @@
       (setq crv (tutc:round crv lens))
       (tutc:say '(""
                   "STAGE 7 - repeating."
-                  "Answering Yes to the repeat prompt runs the next round"
+                  "After each curve CPERPPTS asks whether ITS overall width"
+                  "has changed - the same Grew/Shrank/New/Unchanged question"
+                  "the selected curve got, applied the same way - and then"
+                  "whether to repeat.  Answering Yes runs the next round"
                   "FROM THE NEWEST CURVE: fresh arc-length points along the"
                   "curve just built, offset perpendicular to ITS tangents -"
                   "here a uniform round of 12s.  Each round follows the"
@@ -74794,8 +81818,1064 @@
               "Tutorial finished.  Type CPERPPTS to try it for real."))
   (princ))
 
-(princ (strcat "\ntutorial_cperp_points.lsp " *tutcperp-version*
-               " loaded.  Type TUTORIALCPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ntutorial_cperp_points.lsp " *tutcperp-version*
+                 " loaded.  Type TUTORIALCPERPPTS to run.")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> PERPMARK.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; PERPMARK.lsp  --  measured distances marked square off the pool wall,
+;;;                   then joined into one polyline and dimensioned
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  PERPMARK     mark measured distances off the perimeter
+;;;            PERPMARKVER  print the loaded version
+;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; What it is for
+;;;   A bench, a step, a tanning ledge and a gutter are all measured the
+;;;   same way in the field: stand at a survey point on the wall, run the
+;;;   tape square off it, and write the number down beside that point's
+;;;   number.  PERPMARK is that, at the keyboard.  Name the point -- click
+;;;   it or type its number -- give the distance, and the point gets a
+;;;   circle of that radius, the swing of the tape, and a line of that
+;;;   length running square off the wall into the pool.  Name the next
+;;;   point, type the next number, and so on for as long as the sheet
+;;;   lasts.  Enter ends it.
+;;;
+;;;   Then, if the marks are meant to BE something, it will join them up:
+;;;   one polyline through the far end of every line between the two
+;;;   points you name, the circles cleared away, and each line replaced
+;;;   by the dimension that says what it measured.
+;;;
+;;;   The points are the ones the rest of the family reads -- ABHD,
+;;;   CABHD, ABFIND, BPCALLOUT, CDCALLOUT and LHD all classify a survey
+;;;   point the same way, and this uses their classifier: an "ab_pt"
+;;;   INSERT wherever it sits, any other INSERT on the POINTS layer, and
+;;;   a plain POINT on that layer, numbered by its "number" attribute.
+;;;
+;;; Workflow
+;;;   1. Select the perimeter -- the wall the distances were taped off.
+;;;      Any curve: a polyline (arc segments included), a line, an arc, a
+;;;      circle, and anything else AutoCAD can measure along.
+;;;   2. Click the centre of the pool.  That is the whole of the direction
+;;;      question: a mark runs square off the wall toward the side the
+;;;      centre is on, so nothing has to be answered per point.  It is the
+;;;      one pick in the command that is a place rather than a point.
+;;;   3. Name a survey point, give the distance, and repeat:
+;;;        - click the point, or type its number; "17", "Pt.17", "#17"
+;;;          and "017" all name the same one;
+;;;        - a point that is not ON the perimeter is projected onto it,
+;;;          and the mark is drawn from where it landed, so a shot that
+;;;          sits an inch off the fitted wall still marks the wall;
+;;;        - naming a point already marked REPLACES its mark -- the sheet
+;;;          has one distance at a point, so the second answer is a
+;;;          correction rather than a second mark;
+;;;        - Back takes the last mark away again;
+;;;        - Enter ends the round.
+;;;   4. Draw a polyline through the marks?  No leaves every circle and
+;;;      every line exactly where they are, for you to do as you see fit.
+;;;   5. Yes asks which point the run starts at and which it ends at,
+;;;      named the same way.  A point that was taped is the mark made at
+;;;      it, so the run starts where the tape reached; a point that was
+;;;      NOT taped measures zero and the run starts on the wall itself,
+;;;      which is how a step that dies back into the wall is drawn.
+;;;   6. The polyline goes in on the perimeter's own layer and properties,
+;;;      every circle is erased, and every line becomes a
+;;;      "SIDE STANDARD" dimension on layer "DIMENSION".
+;;;
+;;; How the direction is found
+;;;   Each mark's base point is the point of the perimeter closest to the
+;;;   survey point.  The perimeter's tangent there, turned 90 degrees,
+;;;   gives the two ways a mark could run; the one whose direction agrees
+;;;   with "toward the centre click" is the one used.  It is measured per
+;;;   mark rather than fixed once, so a run of marks around a corner or
+;;;   along a radius each come off their own piece of wall square.
+;;;
+;;;   That makes the centre click a direction, not a datum: it is never
+;;;   measured from and it does not have to be the true centroid.  What it
+;;;   has to be is unambiguously INSIDE, which on a deeply notched shape
+;;;   (a narrow L, a keyhole) is worth a thought before clicking -- see
+;;;   the README's limitations.
+;;;
+;;; The order the polyline runs in
+;;;   Marks are kept with their STATION -- how far along the perimeter,
+;;;   measured from its start, the base point sits -- so the polyline runs
+;;;   along the wall in the order the wall does, whatever order the points
+;;;   were named in.  On a closed perimeter the run goes forward from
+;;;   the start station to the end station, wrapping past the polyline's
+;;;   own seam if that is the way round the two ends point.
+;;;
+;;;   What decides whether a run end IS one of the marks is the survey
+;;;   point's own identity, never how close the two landed.  That is the
+;;;   whole reason the pick is a point rather than a place: two shots a
+;;;   quarter inch apart are still two shots, and the sheet says which.
+;;;
+;;; Properties
+;;;   * Circles and lines land on layer "PERPMARK" (created if missing).
+;;;     They are the run's working marks: keep them, turn the layer off,
+;;;     or let step 5 clear them.
+;;;   * The joined polyline takes the layer, colour, linetype, lineweight
+;;;     and linetype scale of the perimeter it was measured off.
+;;;   * Dimensions go on layer "DIMENSION" in the "SIDE STANDARD" style
+;;;     when the drawing has it; otherwise the current style is used and
+;;;     a note is printed.
+;;;
+;;; Robustness
+;;;   * The whole run is one UNDO group: a single U reverses all of it.
+;;;   * Esc or an error at any prompt restores every system variable the
+;;;     command changed (OSMODE, CMDECHO, CLAYER and the dimension style)
+;;;     and closes the UNDO group.
+;;;   * A number nothing carries, a number two points share, a click on
+;;;     nothing, a point the perimeter cannot be read under, and a centre
+;;;     click that leaves the direction ambiguous all re-prompt where
+;;;     they stand instead of guessing.
+;;;   * All geometry is worked in WCS and converted at the edges, so the
+;;;     command behaves under a rotated or shifted UCS.
+;;;
+;;; License: GPL-3.0-or-later
+;;; ----------------------------------------------------------------------
+
+(vl-load-com)
+
+;; Version banner: tools/release_lisp.py reads it to stamp the dated
+;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
+(setq *perpmark-version* "v1.1")
+
+;;; ----------------------------------------------------------------------
+;;;  Tunables
+;;; ----------------------------------------------------------------------
+
+;; Layer the circles and the perpendicular lines are drawn on.  Change it
+;; to put the run's working marks somewhere a plot style already hides.
+(setq pm:*marklayer* "PERPMARK")
+
+;; ACI colour that layer is CREATED with, on a drawing that lacks it.  A
+;; number, not 'auto: these marks are the measurement record and are
+;; meant to be seen, so they take a colour that reads on any background
+;; rather than one that recedes into it.
+(setq pm:*markcolor* 1)
+
+;; Layer and creation colour for the dimensions step 6 leaves behind.
+(setq pm:*dimlayer* "DIMENSION")
+(setq pm:*dimcolor* 7)
+
+;; Dimension style those dimensions are drawn in.  A drawing without it
+;; keeps its current style and is told so.
+(setq pm:*dimstyle* "SIDE STANDARD")
+
+;; What counts as a survey point.  The classifier is the one BPCALLOUT,
+;; CDCALLOUT, ABFIND and LHD share: change it in all of them or the
+;; tools disagree about what the drawing holds.
+(setq pm:*point-block* "ab_pt")    ; block name whose INSERTs mark
+                                   ; points wherever they sit
+(setq pm:*point-layer* "POINTS")   ; layer whose POINTs and INSERTs are
+                                   ; always points, whatever block
+(setq pm:*pt-tag* "number")        ; attribute tag on the point block
+                                   ; naming the point.  A block without
+                                   ; it lends its first attribute that
+                                   ; reads as a number instead
+(setq pm:*unknown* "?")            ; what a point with no readable
+                                   ; number is called.  It can still be
+                                   ; clicked; only a number can be typed
+(setq pm:*pt-prefix* "Pt.")        ; how a point is named in the prompts
+                                   ; and the report
+
+;; A click within this of a survey point picks that point.  The number
+;; typed at the same prompt never uses it -- a name is exact.  12.0 is
+;; what BPCALLOUT and ABFIND snap at, so a drafter's aim carries between
+;; the three.
+(setq pm:*snap* 12.0)
+
+;; Two points closer than this are one point: it keeps a zero-length
+;; segment out of the joined polyline and a zero-length normal out of
+;; the direction test.
+(setq pm:*fuzz* 1e-6)
+
+;;; ----------------------------------------------------------------------
+;;;  Vectors and angles
+;;;  Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
+;;;  standalone file loads alone -- see STANDARDS.md section 4.
+;;; ----------------------------------------------------------------------
+
+;;; ----------------------------------------------------------------------
+;;;  The perimeter, as segments
+;;;
+;;;  The wall is walked as a list of segments read off the entity itself
+;;;  rather than through vlax-curve-*, for one reason: the polyline step 6
+;;;  builds has to run along the wall in the wall's own order, and that
+;;;  order is each mark's STATION -- the distance along the perimeter of
+;;;  its base point.  A segment walk hands that back as a by-product of
+;;;  the projection it is doing anyway, where vlax-curve-getDistAtPoint
+;;;  would be a second COM round trip per mark with its own failure mode.
+;;;
+;;;  LINE, ARC, CIRCLE and LWPOLYLINE are what a pool perimeter is drawn
+;;;  as in this tree -- ABHD, POOL and ADAB all leave an LWPOLYLINE, arc
+;;;  segments and all.  Anything else (a SPLINE traced off a drone photo,
+;;;  an ELLIPSE, an old heavy POLYLINE) is measured through vlax-curve-*
+;;;  instead, by pm:project-com below.
+;;;
+;;;  A segment is one of:
+;;;     (S p1 p2)              a straight run from p1 to p2
+;;;     (A ctr rad a0 sweep)   an arc of rad about ctr, starting at angle
+;;;                            a0 and sweeping SIGNED sweep radians --
+;;;                            positive counterclockwise, which is the
+;;;                            sign a positive bulge carries
+;;;  Every point in one is WCS, because that is what entget hands back.
+;;; ----------------------------------------------------------------------
+
+;; The segment p1 -> p2 carrying polyline bulge b.  A bulge is
+;; tan(included/4), so the included angle is 4*atan(b) and its sign is
+;; the direction of travel; the centre sits half a chord away along the
+;; chord's normal, by (chord/2)/tan(included/2).
+(defun pm:mkseg (p1 p2 b / inc ch r th d cx cy ctr)
+  (setq inc (* 4.0 (atan b))
+        ch  (distance (cal:2d p1) (cal:2d p2)))
+  (if (or (< (abs b) 1e-12)
+          (< ch 1e-12)
+          (< (abs (sin (/ inc 2.0))) 1e-12))
+    (list 'S (cal:2d p1) (cal:2d p2))
+    (progn
+      (setq r   (abs (/ ch (* 2.0 (sin (/ inc 2.0)))))
+            th  (angle (cal:2d p1) (cal:2d p2))
+            d   (/ (/ ch 2.0) (cal:tan (/ inc 2.0)))
+            cx  (+ (/ (+ (car p1) (car p2)) 2.0)
+                   (* d (cos (+ th (/ pi 2.0)))))
+            cy  (+ (/ (+ (cadr p1) (cadr p2)) 2.0)
+                   (* d (sin (+ th (/ pi 2.0)))))
+            ctr (list cx cy))
+      (list 'A ctr r (angle ctr (cal:2d p1)) inc))))
+
+;; The vertices of an LWPOLYLINE as (point bulge), in order.  entget
+;; hands the groups back in order, so a 42 belongs to the 10 in front of
+;; it; a vertex with no 42 carries no bulge.
+(defun pm:lwverts (ed / vs g)
+  (setq vs '())
+  (foreach g ed
+    (cond
+      ((= 10 (car g)) (setq vs (cons (list (cal:2d (cdr g)) 0.0) vs)))
+      ((and (= 42 (car g)) vs)
+       (setq vs (cons (list (car (car vs)) (cdr g)) (cdr vs))))))
+  (reverse vs))
+
+;; EN as a list of segments, or nil when nothing here can read it.
+(defun pm:segs (en / ed typ vs closed n i out a0 a1 sw v1 v2)
+  (setq ed  (entget en)
+        typ (cdr (assoc 0 ed))
+        out '())
+  (cond
+    ((= typ "LINE")
+     (list (list 'S (cal:2d (cdr (assoc 10 ed))) (cal:2d (cdr (assoc 11 ed))))))
+    ((= typ "ARC")
+     (setq a0 (cdr (assoc 50 ed))
+           a1 (cdr (assoc 51 ed))
+           sw (cal:angnorm (- a1 a0)))
+     (if (< sw 1e-12) (setq sw (+ pi pi)))
+     (list (list 'A (cal:2d (cdr (assoc 10 ed))) (cdr (assoc 40 ed)) a0 sw)))
+    ((= typ "CIRCLE")
+     (list (list 'A (cal:2d (cdr (assoc 10 ed))) (cdr (assoc 40 ed))
+                 0.0 (+ pi pi))))
+    ((= typ "LWPOLYLINE")
+     (setq vs     (pm:lwverts ed)
+           n      (length vs)
+           closed (= 1 (logand 1 (cond ((cdr (assoc 70 ed))) (0))))
+           i      0)
+     (if (< n 2)
+       nil
+       (progn
+         (while (< i (if closed n (1- n)))
+           (setq v1  (nth i vs)
+                 v2  (nth (rem (1+ i) n) vs)
+                 out (cons (pm:mkseg (car v1) (car v2) (cadr v1)) out)
+                 i   (1+ i)))
+         (reverse out))))
+    (t nil)))
+
+(defun pm:seg-len (s)
+  (if (eq (car s) 'S)
+    (distance (cadr s) (caddr s))
+    (* (caddr s) (abs (nth 4 s)))))
+
+(defun pm:seg-start (s / ctr)
+  (if (eq (car s) 'S)
+    (cadr s)
+    (progn
+      (setq ctr (cadr s))
+      (list (+ (car ctr)  (* (caddr s) (cos (nth 3 s))))
+            (+ (cadr ctr) (* (caddr s) (sin (nth 3 s))))))))
+
+(defun pm:seg-end (s / ctr a)
+  (if (eq (car s) 'S)
+    (caddr s)
+    (progn
+      (setq ctr (cadr s)
+            a   (+ (nth 3 s) (nth 4 s)))
+      (list (+ (car ctr)  (* (caddr s) (cos a)))
+            (+ (cadr ctr) (* (caddr s) (sin a)))))))
+
+;; The point of S closest to P.  A straight segment clamps the projection
+;; to its ends; an arc takes the radial point when the direction of P
+;; falls inside the sweep and the nearer end when it does not.
+(defun pm:seg-closest (s p / a b d l t01 ctr r rel u)
+  (setq p (cal:2d p))
+  (if (eq (car s) 'S)
+    (progn
+      (setq a (cadr s)
+            b (caddr s)
+            d (cal:v- b a)
+            l (cal:dot d d))
+      (if (< l 1e-24)
+        a
+        (progn
+          (setq t01 (/ (cal:dot (cal:v- p a) d) l))
+          (cond ((< t01 0.0) (setq t01 0.0))
+                ((> t01 1.0) (setq t01 1.0)))
+          (cal:v+ a (cal:v* d t01)))))
+    (progn
+      (setq ctr (cadr s)
+            r   (caddr s)
+            u   (cal:unit (cal:v- p ctr)))
+      (if (null u)
+        (pm:seg-start s)
+        (progn
+          ;; how far into the sweep the direction of P lies, measured
+          ;; the way the sweep runs
+          (setq rel (cal:angnorm (* (if (< (nth 4 s) 0.0) -1.0 1.0)
+                                   (- (angle ctr p) (nth 3 s)))))
+          (if (<= rel (abs (nth 4 s)))
+            (cal:v+ ctr (cal:v* u r))
+            (if (< (distance p (pm:seg-start s))
+                   (distance p (pm:seg-end s)))
+              (pm:seg-start s)
+              (pm:seg-end s))))))))
+
+;; Unit tangent of S at Q (a point already on it), pointing the way the
+;; segment travels.  nil on a segment with no length.
+(defun pm:seg-tangent (s q / ctr rad)
+  (if (eq (car s) 'S)
+    (cal:unit (cal:v- (caddr s) (cadr s)))
+    (progn
+      (setq ctr (cadr s)
+            rad (cal:unit (cal:v- q ctr)))
+      (if (null rad)
+        nil
+        (cal:v* (cal:perp rad) (if (< (nth 4 s) 0.0) -1.0 1.0))))))
+
+;; Arc length from the start of S to Q.
+(defun pm:seg-station (s q / ctr rel)
+  (if (eq (car s) 'S)
+    (distance (cadr s) (cal:2d q))
+    (progn
+      (setq ctr (cadr s)
+            rel (cal:angnorm (* (if (< (nth 4 s) 0.0) -1.0 1.0)
+                               (- (angle ctr q) (nth 3 s)))))
+      (if (> rel (abs (nth 4 s)))
+        ;; past the far end: the clamp landed on one end or the other
+        (if (< (distance (cal:2d q) (pm:seg-start s))
+               (distance (cal:2d q) (pm:seg-end s)))
+          0.0
+          (pm:seg-len s))
+        (* (caddr s) rel)))))
+
+(defun pm:total (segs / tot s)
+  (setq tot 0.0)
+  (foreach s segs (setq tot (+ tot (pm:seg-len s))))
+  tot)
+
+;; T when the walk closes back on itself -- a circle, a closed polyline,
+;; or a shape drawn open but ending where it started.
+(defun pm:closed-p (segs)
+  (and segs
+       (< (distance (pm:seg-start (car segs))
+                    (pm:seg-end (last segs)))
+          1e-9)))
+
+;; (base tangent station) for the point of SEGS closest to P, all WCS.
+(defun pm:project (segs p / acc best bd s q d)
+  (setq acc 0.0 best nil bd nil)
+  (foreach s segs
+    (setq q (pm:seg-closest s p)
+          d (distance (cal:2d p) q))
+    (if (or (null best) (< d bd))
+      (setq best (list q (pm:seg-tangent s q) (+ acc (pm:seg-station s q)))
+            bd   d))
+    (setq acc (+ acc (pm:seg-len s))))
+  (if (and best (cadr best)) best))
+
+;;; ----------------------------------------------------------------------
+;;;  The perimeter AutoCAD can measure but this file cannot read
+;;;
+;;;  A SPLINE, an ELLIPSE or a heavy POLYLINE has no segment list here,
+;;;  so the same three numbers are asked of AutoCAD instead: the closest
+;;;  point, the distance along to it, and the first derivative there for
+;;;  the tangent.  Every call is caught -- a curve AutoCAD will not answer
+;;;  for comes back nil and the pick is re-prompted, never half-measured.
+;;; ----------------------------------------------------------------------
+
+(defun pm:comcall (fn args / r)
+  (setq r (vl-catch-all-apply fn args))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun pm:project-com (en p / q prm st dv tg)
+  (setq q (pm:comcall 'vlax-curve-getClosestPointTo (list en (cal:2d p))))
+  (if (null q)
+    nil
+    (progn
+      (setq st  (pm:comcall 'vlax-curve-getDistAtPoint (list en q))
+            prm (pm:comcall 'vlax-curve-getParamAtPoint (list en q)))
+      (if (null prm)
+        nil
+        (progn
+          (setq dv (pm:comcall 'vlax-curve-getFirstDeriv (list en prm))
+                tg (if dv (cal:unit dv)))
+          (if (or (null tg) (null st))
+            nil
+            (list (cal:2d q) tg st)))))))
+
+;; Either reader, whichever this perimeter answers to.
+(defun pm:locate (en segs p)
+  (if segs (pm:project segs p) (pm:project-com en p)))
+
+(defun pm:runlen (en segs / prm r)
+  (if segs
+    (pm:total segs)
+    (progn
+      (setq prm (pm:comcall 'vlax-curve-getEndParam (list en))
+            r   (if prm (pm:comcall 'vlax-curve-getDistAtParam
+                          (list en prm))))
+      (if (numberp r) r 0.0))))
+
+(defun pm:isclosed (en segs)
+  (if segs
+    (pm:closed-p segs)
+    (if (pm:comcall 'vlax-curve-isClosed (list en)) T)))
+
+;;; ----------------------------------------------------------------------
+;;;  Lists
+;;; ----------------------------------------------------------------------
+
+;; LST sorted ascending on the car of each element, stably.  vl-sort is
+;; not used on purpose: it DROPS items that compare equal, which here
+;; would silently lose a mark that shares a station with another.
+(defun pm:sortkey (lst / out e head)
+  (setq out '())
+  (foreach e lst
+    (setq head '())
+    (while (and out (<= (car (car out)) (car e)))
+      (setq head (cons (car out) head)
+            out  (cdr out)))
+    (setq out (cons e out))
+    (while head
+      (setq out  (cons (car head) out)
+            head (cdr head))))
+  out)
+
+;;; ----------------------------------------------------------------------
+;;;  Layers and drawing
+;;; ----------------------------------------------------------------------
+
+(defun pm:circle (ctr r lay)
+  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity") (cons 8 lay)
+                  '(100 . "AcDbCircle")
+                  (cons 10 (list (car ctr) (cadr ctr) 0.0))
+                  (cons 40 r))))
+
+(defun pm:line (a b lay)
+  (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity") (cons 8 lay)
+                  '(100 . "AcDbLine")
+                  (cons 10 (list (car a) (cadr a) 0.0))
+                  (cons 11 (list (car b) (cadr b) 0.0)))))
+
+;; The groups that carry an entity's look, for the joined polyline to
+;; inherit from the perimeter it was measured off.
+(defun pm:props (ed / out g)
+  (setq out '())
+  (foreach g '(62 420 6 370 48)
+    (if (assoc g ed) (setq out (cons (assoc g ed) out))))
+  (reverse out))
+
+(defun pm:pline (pts ed / e p)
+  (setq e (append (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
+                        (cons 8 (cdr (assoc 8 ed))))
+                  (pm:props ed)
+                  (list '(100 . "AcDbPolyline")
+                        (cons 90 (length pts)) '(70 . 0))))
+  (foreach p pts
+    (setq e (append e (list (cons 10 (list (car p) (cadr p)))))))
+  (entmakex e))
+
+(defun pm:erase (e)
+  (if (and e (entget e)) (entdel e)))
+
+;;; ----------------------------------------------------------------------
+;;;  The survey points
+;;;
+;;;  A distance off the wall is taped AT a point -- one of the numbered
+;;;  shots ABHD, CABHD and the rest of the family read -- so a point is
+;;;  what this command marks, and its number is what names it.  The
+;;;  classifier below is BPCALLOUT's, shared with CDCALLOUT, ABFIND and
+;;;  LHD: an ab_pt INSERT wherever it sits, any other INSERT on the
+;;;  POINTS layer, and a plain POINT on that layer.
+;;;
+;;;  A point with no readable number is carried as "?" rather than
+;;;  dropped: it can be clicked like any other, it just cannot be typed.
+;;; ----------------------------------------------------------------------
+
+;; What the routine knows about one survey point: where it is, what it
+;; is called, and the entity it is.  The entity is its IDENTITY -- it is
+;; how a second pick of the same point is known to be a re-mark, and how
+;; a run end is known to be a mark already made.
+(defun pm:cd-pt (c) (car c))        ; (x y)
+(defun pm:cd-nm (c) (cadr c))       ; "17"
+(defun pm:cd-en (c) (caddr c))      ; the INSERT (or POINT) it was read from
+
+;; "Pt.17", the way the prompts and the report name a point.
+(defun pm:ptname (nm) (strcat pm:*pt-prefix* nm))
+
+;; Every survey point in the drawing, as (position name entity).
+(defun pm:collect-points ( / ss i en ed typ p nm out)
+  (setq out nil
+        ss  (ssget "_X" '((0 . "INSERT,POINT"))))
+  (if ss
+    (progn
+      (setq i 0)
+      (repeat (sslength ss)
+        (setq en  (ssname ss i)
+              ed  (entget en)
+              typ (cdr (assoc 0 ed))
+              p   (cdr (assoc 10 ed))
+              nm  nil)
+        (cond
+          ((= typ "INSERT")
+           (if (or (= (strcase (cdr (assoc 2 ed)))
+                      (strcase pm:*point-block*))
+                   (= (strcase (cdr (assoc 8 ed)))
+                      (strcase pm:*point-layer*)))
+             (progn
+               (setq nm (cal:block-number en pm:*pt-tag*))
+               (setq out (cons (list (list (car p) (cadr p))
+                                     (if (and nm (/= nm "")) nm pm:*unknown*)
+                                     en)
+                               out)))))
+          ((= typ "POINT")
+           (if (= (strcase (cdr (assoc 8 ed)))
+                  (strcase pm:*point-layer*))
+             (setq out (cons (list (list (car p) (cadr p)) pm:*unknown* en)
+                             out)))))
+        (setq i (1+ i)))))
+  (reverse out))
+
+;; The NUMBER a typed point name carries: the spelling with the spaces,
+;; the hashes and the "Pt." prefix taken off, and nothing else touched.
+;; Only the dot right after PT is a prefix dot - a point genuinely named
+;; "40.5" keeps its decimal.  (ABFIND's abf:as-number.)
+(defun pm:as-number (s / out i ch)
+  (setq out "" i 1)
+  (while (<= i (strlen s))
+    (setq ch (substr s i 1))
+    (if (not (member ch '(" " "#")))
+      (setq out (strcat out ch)))
+    (setq i (1+ i)))
+  (if (and (>= (strlen out) 2) (= (strcase (substr out 1 2)) "PT"))
+    (progn
+      (setq out (substr out 3))
+      (if (= (substr out 1 1) ".") (setq out (substr out 2)))))
+  out)
+
+;; One comparable form for a point number, so "35", "Pt.35", "pt 35",
+;; "#35" and "035" all meet in the middle.  (ABFIND's abf:canon.)
+(defun pm:canon (s)
+  (setq s (pm:as-number (strcase s)))
+  (if (distof s 2)
+    (rtos (distof s 2) 2 8)
+    s))
+
+;; The survey point nearest PK, when one sits within pm:*snap* of it.
+(defun pm:nearest (pk cands / best bd c d)
+  (setq best nil bd nil)
+  (foreach c cands
+    (setq d (distance (cal:2d pk) (pm:cd-pt c)))
+    (if (and (<= d pm:*snap*) (or (null bd) (< d bd)))
+      (setq best c bd d)))
+  best)
+
+;; Every point whose number is the one typed.  More than one is a sheet
+;; that numbers two points the same, and is asked about rather than
+;; guessed at.
+(defun pm:matches (s cands / want out c)
+  (setq want (pm:canon s) out nil)
+  (foreach c cands
+    (if (= (pm:canon (pm:cd-nm c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;;; ----------------------------------------------------------------------
+;;;  Ask helpers
+;;;  Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
+;;;  standalone file loads alone -- see STANDARDS.md section 4.
+;;;  Back sentinel: CAL-BACK.
+;;; ----------------------------------------------------------------------
+
+;; A PLACE, in the current UCS -- the centre click, and nothing else in
+;; this command.  Always required: Enter re-asks.  Returns the point or
+;; CAL-BACK.  (A survey point is pm:askpoint below, which is a different
+;; question: it names one of the drawing's own points.)
+(defun pm:askpt (msg back / v)
+  (if back (initget 1 "Back Undo") (initget 1))
+  (setq v (getpoint (strcat "\n" msg (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask msg v))
+  (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK v))
+
+;; A survey point, clicked or typed.  One prompt takes both: (initget
+;; 128) is arbitrary input, which hands typed text back from getpoint as
+;; the string it is where a click comes back as the point it is.  The
+;; misses are re-asked HERE rather than unwinding the caller's chain --
+;; a number nothing carries and a click on nothing are typos, not
+;; answers, and the question they belong to is this one.  tail is the
+;; prose inside the angle brackets on a loop prompt whose Enter ends the
+;; loop (nil = a point is required).  Returns the candidate, nil for
+;; Enter, or CAL-BACK.
+(defun pm:askpoint (msg tail back cands / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (if lzd:ask (lzd:ask msg v))
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'CAL-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (pm:matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (pm:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (pm:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (pm:nearest v cands))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
+
+;;; ----------------------------------------------------------------------
+;;;  System variables
+;;; ----------------------------------------------------------------------
+
+
+(defun pm:sysvars () '("OSMODE" "CMDECHO" "CLAYER"))
+
+;;; ----------------------------------------------------------------------
+;;;  The marks
+;;;
+;;;  One mark is (station base offs dist circle line name ent):
+;;;    station  how far along the perimeter its base point sits
+;;;    base     the point ON the perimeter the tape was run from
+;;;    offs     where the tape reached -- base + dist square off the wall
+;;;    dist     the measurement (0.0 for a run end that was never taped)
+;;;    circle   the swing of the tape, an ename (nil on a zero station)
+;;;    line     the measurement itself, an ename (nil on a zero station)
+;;;    name     the survey point's number, for the prompts and the report
+;;;    ent      the survey point itself, which is the mark's IDENTITY:
+;;;             picking that point again is a re-mark, and naming it at
+;;;             a run end is naming this mark
+;;; ----------------------------------------------------------------------
+
+;; A run end at a point that was never taped: it sits ON the wall, so
+;; its offset is its base and it carries no circle and no line.
+(defun pm:mk-station (station base name ent)
+  (list station base base 0.0 nil nil name ent))
+
+(defun pm:m-station (m) (car m))
+(defun pm:m-base (m) (cadr m))
+(defun pm:m-offs (m) (caddr m))
+(defun pm:m-dist (m) (nth 3 m))
+(defun pm:m-circle (m) (nth 4 m))
+(defun pm:m-line (m) (nth 5 m))
+(defun pm:m-name (m) (nth 6 m))
+(defun pm:m-ent (m) (nth 7 m))
+
+;; Which way a mark at BASE runs: square off the wall, on the side CTR is.
+;; nil when the tangent is unreadable or the centre click leaves the two
+;; sides tied -- both are re-prompts, never a guess.
+(defun pm:inward (tg base ctr / n side)
+  (setq n (if tg (cal:unit (cal:perp tg))))
+  (if (null n)
+    nil
+    (progn
+      (setq side (cal:dot n (cal:v- ctr base)))
+      (cond ((> side  pm:*fuzz*) n)
+            ((< side (- pm:*fuzz*)) (cal:v* n -1.0))
+            (t nil)))))
+
+;; d wrapped into [0, tot) -- how far FORWARD along a closed perimeter,
+;; so a run that crosses the polyline's own seam is one stretch and not
+;; two.
+(defun pm:wrap (d tot)
+  (if (< tot 1e-12)
+    0.0
+    (progn
+      (while (< d 0.0) (setq d (+ d tot)))
+      (while (>= d tot) (setq d (- d tot)))
+      d)))
+
+;; The marks between two stations, in the order the wall runs.  s0 and s1
+;; are the run's ends; on a closed perimeter the run goes FORWARD from s0
+;; and wraps past the seam when that is the way the two picks point, on an
+;; open one it is simply the stretch between them, read from s0 toward s1.
+(defun pm:span (marks s0 s1 closed tot / out m k span)
+  (setq out '())
+  (if closed
+    (progn
+      (setq span (pm:wrap (- s1 s0) tot))
+      (foreach m marks
+        (setq k (pm:wrap (- (pm:m-station m) s0) tot))
+        (if (<= k (+ span pm:*fuzz*)) (setq out (cons (cons k m) out)))))
+    (foreach m marks
+      (setq k (- (pm:m-station m) s0))
+      (if (< s1 s0) (setq k (- k)))
+      (if (and (>= k (- pm:*fuzz*))
+               (<= k (+ (abs (- s1 s0)) pm:*fuzz*)))
+        (setq out (cons (cons k m) out)))))
+  (mapcar 'cdr (pm:sortkey out)))
+
+;; What a run end names.  A point that was taped is the mark that was
+;; made at it, so the run starts where the tape reached; a point that
+;; was NOT taped is a station of its own measuring zero, which is how a
+;; step that dies back into the wall is drawn.  It is the point's own
+;; identity that decides which, never how close the two landed -- that
+;; is the whole reason the pick is a point rather than a place.  nil
+;; when the perimeter cannot be read under it at all.
+;; The mark made at survey point ENT, when one was made.
+(defun pm:marked-at (marks ent / hit m)
+  (setq hit nil)
+  (foreach m marks
+    (if (eq (pm:m-ent m) ent) (setq hit m)))
+  hit)
+
+(defun pm:runend (en segs marks cand / hit loc)
+  (setq hit (pm:marked-at marks (pm:cd-en cand)))
+  (if hit
+    hit
+    (progn
+      (setq loc (pm:locate en segs (pm:cd-pt cand)))
+      (if loc
+        (pm:mk-station (caddr loc) (car loc)
+                       (pm:cd-nm cand) (pm:cd-en cand))))))
+
+;; MARKS with the one made at ENT taken out, its circle and its line
+;; erased with it.  Picking a point a second time is a correction, not a
+;; second mark: the sheet has one distance at that point.
+(defun pm:unmark (marks ent / out m)
+  (setq out '())
+  (foreach m marks
+    (if (eq (pm:m-ent m) ent)
+      (progn (pm:erase (pm:m-circle m)) (pm:erase (pm:m-line m)))
+      (setq out (cons m out))))
+  (reverse out))
+
+;; PTS with each point that repeats its predecessor dropped, so the
+;; joined polyline never carries a zero-length segment.  Consecutive-only
+;; on purpose: two marks the same distance apart at opposite ends of the
+;; pool are two marks, and cal:dedupe's any-kept-one test would drop one
+;; of them.
+(defun pm:dedupe (pts / out p)
+  (setq out '())
+  (foreach p pts
+    (if (or (null out) (> (distance p (car out)) pm:*fuzz*))
+      (setq out (cons p out))))
+  (reverse out))
+
+;; Every mark that measured something, dimensioned where its line was.
+;; Returns how many went in.  The dimension style is restored by the
+;; caller -- it is one of the settings the *error* handler owes the user.
+(defun pm:dimension (marks / n m)
+  (setq n 0)
+  (setvar "CLAYER" (cal:ensure-layer pm:*dimlayer* pm:*dimcolor*))
+  (if (tblsearch "DIMSTYLE" pm:*dimstyle*)
+    (command "_.-DIMSTYLE" "_Restore" pm:*dimstyle*)
+    (princ (strcat "\nDimension style \"" pm:*dimstyle*
+                   "\" is not in this drawing - using the current style"
+                   " instead.")))
+  (foreach m (reverse marks)
+    (if (> (pm:m-dist m) pm:*fuzz*)
+      (progn
+        ;; command arguments are read in the CURRENT UCS, and every mark
+        ;; has been carried in WCS since the pick that made it
+        (command "_.DIMALIGNED"
+                 (trans (pm:m-base m) 0 1)
+                 (trans (pm:m-offs m) 0 1)
+                 (trans (pm:m-offs m) 0 1))
+        (setq n (1+ n)))))
+  n)
+
+;;; ----------------------------------------------------------------------
+;;;  Commands
+;;; ----------------------------------------------------------------------
+
+;; ahead of the command on purpose: the structural test scans from
+;; c:PERPMARK to end-of-file for leaked variables, and a defun name there
+;; would read as one
+(defun c:PERPMARKVER ()
+  (princ (strcat "\nPERPMARK " *perpmark-version*))
+  (princ))
+
+(defun c:PERPMARK (/ *error* undo-open
+                     sel en ed segs tot closed ctr pick cand cands loc
+                     base tg nrm d ans marks stage done pts run s0 s1
+                     m0 m1 lay odim ndims npts m)
+
+  (defun *error* (msg)
+    ;; user settings come back FIRST so nothing below can skip them
+    (cal:sysrestore)
+    ;; DIMSTYLE cannot be setvar'd back
+    (if (and odim (tblsearch "DIMSTYLE" odim))
+      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
+    ;; command-s, never plain command: 2015+ engines reject (command)
+    ;; inside *error* unless the error mode was pushed beforehand
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nPERPMARK error: " msg)))
+    (if lzd:report (lzd:report "PERPMARK" *perpmark-version* msg))
+    (princ))
+
+  (if lzd:begin (lzd:begin "PERPMARK" *perpmark-version*))
+  (cal:syssave (pm:sysvars))
+  (setvar "CMDECHO" 0)
+  ;; one group for the whole run -- the marks are drawn as they are
+  ;; answered, so anything less would take one U per circle
+  (setq undo-open (cal:undobegin)
+        odim      (getvar "DIMSTYLE")
+        marks     '()
+        stage     1
+        done      nil)
+
+  (while (not done)
+    (cond
+
+      ;; --- 1. the perimeter the distances were taped off ---------------
+      ((= stage 1)
+       (setq sel (entsel "\nSelect the pool perimeter: "))
+       (if lzd:watch (lzd:watch sel))
+       (cond
+         ((null sel)
+          (princ "\nNothing selected - try again, or press Esc to quit."))
+         (t
+          (setq en   (car sel)
+                ed   (entget en)
+                segs (pm:segs en)
+                tot  (pm:runlen en segs))
+          (cond
+            ((and (null segs)
+                  (null (pm:project-com en (cal:2d (trans (cadr sel) 1 0)))))
+             (princ (strcat "\nA " (cdr (assoc 0 ed))
+                            " is not something PERPMARK can measure along"
+                            " - select the pool wall.")))
+            ((< tot 1e-9)
+             (princ "\nThat perimeter has no length."))
+            (t
+             (setq closed (pm:isclosed en segs)
+                   cands  (pm:collect-points))
+             (if (null cands)
+               (progn
+                 (princ (strcat "\nNo survey points in this drawing -"
+                                " PERPMARK marks the distances taped at"
+                                " the numbered points ABHD and its family"
+                                " read."))
+                 (setq done T))
+               (progn
+                 (princ (strcat "\n" (itoa (length cands))
+                                " survey point(s) found."))
+                 (setq stage 2))))))))
+
+      ;; --- 2. the centre, which is the whole direction question --------
+      ((= stage 2)
+       (princ (strcat "\nA mark runs square off the wall, toward the side"
+                      " the centre is on."))
+       (setq pick (pm:askpt "Click the centre of the pool" T))
+       (cond
+         ((eq pick 'CAL-BACK) (setq stage 1))
+         ((null pick)
+          (princ "\nA point is required - click inside the pool."))
+         (t (setq ctr   (cal:2d (trans pick 1 0))
+                  stage 3))))
+
+      ;; --- 3. name a survey point.  Enter ends the round; Back takes
+      ;;        the last mark away again, and at the first one re-opens
+      ;;        the centre click ---------------------------------------
+      ((= stage 3)
+       (setq cand (pm:askpoint "Pick a survey point, or type its number"
+                               "Enter = done" T cands))
+       (cond
+         ((eq cand 'CAL-BACK)
+          (cond
+            ((null marks)
+             (princ "\nStepping back one question.")
+             (setq stage 2))
+            (t
+             (princ (strcat "\nStepping back one point - "
+                            (pm:ptname (pm:m-name (car marks))) " undone."))
+             (setq marks (pm:unmark marks (pm:m-ent (car marks)))))))
+         ((null cand)
+          (if (null marks)
+            (progn (princ "\nNothing marked.") (setq done T))
+            (setq stage 4)))
+         (t
+          (setq loc (pm:locate en segs (pm:cd-pt cand)))
+          (cond
+            ((null loc)
+             (princ (strcat "\nThe perimeter cannot be read under "
+                            (pm:ptname (pm:cd-nm cand))
+                            " - pick a point nearer the wall.")))
+            (t
+             (setq base (car loc)
+                   tg   (cadr loc)
+                   nrm  (pm:inward tg base ctr))
+             (if (null nrm)
+               (princ (strcat "\nWhich side the mark runs to is a tie at "
+                              (pm:ptname (pm:cd-nm cand))
+                              " - the centre lines up with the wall there."
+                              "  Back at the first point re-opens the"
+                              " centre click."))
+               (setq stage 31)))))))
+
+      ;; --- 3b. and the distance taped off it --------------------------
+      ((= stage 31)
+       (setq d (cal:askdist 'REQ
+                 (strcat "Distance from the perimeter at "
+                         (pm:ptname (pm:cd-nm cand)))
+                 nil T))
+       (cond
+         ((or (eq d 'CAL-BACK) (null d)) (setq stage 3))
+         (t
+          (if (null lay)
+            (setq lay (cal:ensure-layer pm:*marklayer* pm:*markcolor*)))
+          ;; a point picked twice is the sheet being corrected, not two
+          ;; marks at one shot: the older one goes
+          (if (pm:marked-at marks (pm:cd-en cand))
+            (progn
+              (princ (strcat "\n" (pm:ptname (pm:cd-nm cand))
+                             " re-marked - the first distance goes."))
+              (setq marks (pm:unmark marks (pm:cd-en cand)))))
+          (setq marks (cons (list (caddr loc) base
+                                  (cal:v+ base (cal:v* nrm d)) d
+                                  (pm:circle base d lay)
+                                  (pm:line base (cal:v+ base (cal:v* nrm d))
+                                           lay)
+                                  (pm:cd-nm cand) (pm:cd-en cand))
+                            marks)
+                stage 3))))
+
+      ;; --- 4. join them up? -------------------------------------------
+      ((= stage 4)
+       (setq ans (cal:askyn "Draw a polyline through the marks?" "Yes" T))
+       (cond
+         ((eq ans 'CAL-BACK) (setq stage 3))
+         ((null ans)
+          (princ (strcat "\n" (itoa (length marks)) " mark(s) left on layer"
+                         " \"" pm:*marklayer* "\" - circles and lines both."))
+          (setq done T))
+         (t (setq stage 5))))
+
+      ;; --- 5 and 6. where the run starts, and where it ends ------------
+      ((= stage 5)
+       (setq cand (pm:askpoint
+                    "The point the run starts at, or type its number"
+                    nil T cands))
+       (cond
+         ((eq cand 'CAL-BACK) (setq stage 4))
+         (t
+          (setq m0 (pm:runend en segs marks cand))
+          (if (null m0)
+            (princ (strcat "\nThe perimeter cannot be read under "
+                           (pm:ptname (pm:cd-nm cand))
+                           " - pick a point nearer the wall."))
+            (setq stage 6)))))
+
+      ((= stage 6)
+       (setq cand (pm:askpoint
+                    "The point the run ends at, or type its number"
+                    nil T cands))
+       (cond
+         ((eq cand 'CAL-BACK) (setq stage 5))
+         (t
+          (setq m1 (pm:runend en segs marks cand))
+          (if (null m1)
+            (princ (strcat "\nThe perimeter cannot be read under "
+                           (pm:ptname (pm:cd-nm cand))
+                           " - pick a point nearer the wall."))
+            (progn
+              ;; --- the run, in the order the wall goes ----------------
+              (setq s0  (pm:m-station m0)
+                    s1  (pm:m-station m1)
+                    run (pm:span (append (list m0 m1) marks) s0 s1 closed tot)
+                    pts (pm:dedupe (mapcar 'pm:m-offs run)))
+              (if (< (length pts) 2)
+                (progn
+                  (princ (strcat "\nThose two picks enclose fewer than two"
+                                 " marks, so there is no polyline to draw"
+                                 " - nothing was erased."))
+                  (setq done T))
+                (progn
+                  (pm:pline pts ed)
+                  (setq npts (length pts))
+                  ;; --- the circles go, the lines become dimensions ----
+                  (foreach m marks
+                    (pm:erase (pm:m-circle m))
+                    (pm:erase (pm:m-line m)))
+                  (setq ndims (pm:dimension marks))
+                  (princ (strcat "\nDone: a " (itoa npts)
+                                 "-point polyline on layer \""
+                                 (cdr (assoc 8 ed)) "\", "
+                                 (itoa (length marks))
+                                 " circle(s) erased and " (itoa ndims)
+                                 " dimension(s) on layer \"" pm:*dimlayer*
+                                 "\"."))
+                  (setq done T))))))))))
+
+  ;; only when pm:dimension moved it: a run answered No never touched the
+  ;; style, and restoring it to itself is a command line nobody asked for
+  (if (and odim (/= odim (getvar "DIMSTYLE")) (tblsearch "DIMSTYLE" odim))
+    (command "_.-DIMSTYLE" "_Restore" odim))
+  (if undo-open (setq undo-open (cal:undoend)))
+  (cal:sysrestore)
+  (princ))
+
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPERPMARK " *perpmark-version*
+                 " loaded.  Type PERPMARK to run.")))
 (princ)
 
 
@@ -74907,9 +82987,22 @@
 ;;;      labels still tell the arcs apart.
 ;;;    * OSMODE, CMDECHO, CLAYER, FILLETRAD, TRIMMODE and the current
 ;;;      dimension style are all put back the way they were.
+;;;    * FILLET does not give up when it refuses a pick -- it asks
+;;;      AGAIN -- and DIMRADIUS does the same with a location it will
+;;;      not take.  Either one left waiting swallows whatever is sent
+;;;      next, so both are followed by a bounded cancel (AUTOBEAD's
+;;;      autobead-flush idiom).  Without it a refused radius took the
+;;;      dimension, the style restore and the undo close down with it,
+;;;      and the run died one step after the click that was meant to
+;;;      cut the corner.
+;;;    * The undo group is closed only when one was OPENED: with undo
+;;;      recording off (UNDOCTL bit 1 clear) none is, and an _End on
+;;;      nothing is an error of its own -- landing at the end of the
+;;;      run, with the corner already cut and the settings restore
+;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.2")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.5")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -74944,7 +83037,10 @@
                              ; a label belongs to is a matter of shade
                              ; rather than of tracing it by eye.  Both
                              ; stay green on black; a light-background
-                             ; drawing wants the pair swapped round
+                             ; drawing wants the pair swapped round.
+                             ; Either one nil = no true colour at all,
+                             ; and the fan reads as the layer's own
+                             ; colour above
 (setq sf:*trans*      40)    ; per cent transparency on every preview,
                              ; so an arc crossing another still reads.
                              ; 0 or nil = solid; over 90 is a preview
@@ -75030,9 +83126,16 @@
   (setq lo sf:*shade-lo*
         hi sf:*shade-hi*
         f  (if (> n 1) (/ (float i) (float (1- n))) 0.0))
-  (list (sf:mix (float (car   lo)) (float (car   hi)) f)
-        (sf:mix (float (cadr  lo)) (float (cadr  hi)) f)
-        (sf:mix (float (caddr lo)) (float (caddr hi)) f)))
+  ;; Either end set to nil means "no true colour" -- the fan reads as
+  ;; the layer's own sf:*color* instead, which is what sf:colgroups
+  ;; already does with a nil shade.  nil is the value every other knob
+  ;; in the SETTINGS block takes for "leave it to the drawing", and the
+  ;; pair is the one a light-background drawing is told to touch, so it
+  ;; is the one somebody empties rather than swaps.
+  (if (and lo hi)
+    (list (sf:mix (float (car   lo)) (float (car   hi)) f)
+          (sf:mix (float (cadr  lo)) (float (cadr  hi)) f)
+          (sf:mix (float (caddr lo)) (float (caddr hi)) f))))
 
 ;; The DXF 440 value for sf:*trans*: 0x02000000 flags the word as a
 ;; transparency and the low byte is the ALPHA, so 255 is opaque and the
@@ -75312,6 +83415,7 @@
   (while (not ans)
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel) (setq ans 'SF-NONE))
@@ -75334,6 +83438,7 @@
   (while (not ans)
     (initget "Cancel")
     (setq sel (entsel "\nClick the rounded corner you want [Cancel]: "))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel)
@@ -75346,6 +83451,29 @@
 
 ;;; -------------------- cutting and dimensioning --------------------
 
+;; Safety valve, AUTOBEAD's (autobead-flush): an internal command left
+;; WAITING for input is still on the command line, and the next
+;; (command ...) from here is read as an answer to it rather than as a
+;; command of its own.  FILLET is the one that does this -- it refuses a
+;; pick and asks again ("Radius is too large", two lines it cannot join)
+;; rather than giving up -- and DIMRADIUS does it with a location it
+;; will not take.  Left un-cancelled, the run derails one step after the
+;; click that was meant to cut the corner: the radius dimension is
+;; swallowed as an answer, then the style restore, then the UNDO close,
+;; and what the drafter gets is an error where the rest of the corners
+;; should have been.
+;;
+;; A bare (command) CANCELS, where an Enter would only answer the prompt
+;; in front of it.  Bounded, for the reason AUTOBEAD gives: one bit of
+;; CMDACTIVE means "a dialog is up", which no keystroke from here can
+;; clear, and an unbounded loop against that bit hangs AutoCAD with no
+;; Esc out.
+(defun sf:flush ( / guard)
+  (setq guard 0)
+  (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (command)
+    (setq guard (1+ guard))))
+
 ;; Cut the corner for real.  The two picks go to FILLET exactly as the
 ;; user made them, so the side each line keeps is the side clicked.
 ;; Returns the arc FILLET made, or nil when it refused.
@@ -75353,6 +83481,10 @@
   (setq pre (entlast))
   (setvar "FILLETRAD" r)
   (command "_.FILLET" (list e1 (trans pk1 0 1)) (list e2 (trans pk2 0 1)))
+  ;; a FILLET that refused a pick is still asking: cancel it here, where
+  ;; the refusal costs one message, rather than letting the next command
+  ;; answer it
+  (sf:flush)
   (setq new (entlast))
   (if (and new (not (eq new pre))
            (setq ed (entget new))
@@ -75414,6 +83546,10 @@
       (setq od (sf:dimsbegin r))
       (command "_.DIMRADIUS" (list arc (trans on 0 1))
                "_non" (trans loc 0 1))
+      ;; the same valve: a DIMRADIUS still asking would swallow the
+      ;; style restore below and leave the run dimensioning in the
+      ;; small style
+      (sf:flush)
       (sf:dimsend od)
       (setq new (entlast))
       (if (and new (not (eq new pre))) new))))
@@ -75476,6 +83612,13 @@
   (defun *error* (m)
     (sf:clear)
     (cal:sysrestore)
+    ;; An Esc part-way through FILLET or DIMRADIUS leaves that command
+    ;; pending, and the two command calls BELOW this line -- the style
+    ;; restore and the undo close -- would be read as answers to it.  So
+    ;; the valve comes first here, before either of them.  (command) is
+    ;; only legal from inside *error* behind *push-error-using-command*,
+    ;; which the command pushes on the way in.
+    (sf:flush)
     (sf:restyle odim)
     (if undo-open
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -75483,7 +83626,15 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSMARTFILLET error: " m)))
+    (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "SMARTFILLET" *smartfillet-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "SMARTFILLET" *smartfillet-version*))
+
+  ;; AutoCAD 2012+ requires this before *error* may call (command) --
+  ;; the CMDACTIVE drain and the undo close in the handler above; a
+  ;; harmless no-op guard on older releases, where it does not exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
@@ -75588,8 +83739,14 @@
                          "")
                        "."))))
 
-     (command "_.UNDO" "_End")
-     (setq undo-open nil)))
+     ;; close only a group this run opened: with undo recording off
+     ;; (UNDOCTL bit 1 clear) none was, and an _End on nothing is an
+     ;; error of its own -- and it lands HERE, with the corner already
+     ;; cut and the settings restore below it never reached
+     (if undo-open
+       (progn
+         (command "_.UNDO" "_End")
+         (setq undo-open nil)))))
 
   ;; every path out drops the snapshot, the quiet ones included: a run
   ;; that found nothing to do and kept its snapshot would hand it to the
@@ -75598,15 +83755,28 @@
   (sf:restyle odim)
   (cal:sysrestore)
   (setq *error* olderr)
+  ;; ...and so does the error mode pushed at the top: every quiet exit
+  ;; and the cut one come through here, and a mode left stacked refuses
+  ;; command-s inside every later handler in the session (AutoLISP
+  ;; reference, *push-error-using-command*)
+  (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
 (defun c:SMARTFILLETVER ()
   (princ (strcat "\nSMARTFILLET " *smartfillet-version*))
   (princ))
 
-(princ (strcat "\nSMARTFILLET " *smartfillet-version*
-               " loaded -- type SMARTFILLET, pick two lines, and click"
-               " the rounded corner you want."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSMARTFILLET " *smartfillet-version*
+                 " loaded -- type SMARTFILLET, pick two lines, and click"
+                 " the rounded corner you want.")))
 (princ)
 
 
@@ -75733,9 +83903,22 @@
 ;;;      labels still tell the arcs apart.
 ;;;    * OSMODE, CMDECHO, CLAYER, FILLETRAD, TRIMMODE and the current
 ;;;      dimension style are all put back the way they were.
+;;;    * FILLET does not give up when it refuses a pick -- it asks
+;;;      AGAIN -- and DIMRADIUS does the same with a location it will
+;;;      not take.  Either one left waiting swallows whatever is sent
+;;;      next, so both are followed by a bounded cancel (AUTOBEAD's
+;;;      autobead-flush idiom).  Without it a refused radius took the
+;;;      dimension, the style restore and the undo close down with it,
+;;;      and the run died one step after the click that was meant to
+;;;      cut the corner.
+;;;    * The undo group is closed only when one was OPENED: with undo
+;;;      recording off (UNDOCTL bit 1 clear) none is, and an _End on
+;;;      nothing is an error of its own -- landing at the end of the
+;;;      run, with the corner already cut and the settings restore
+;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.3")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -75783,7 +83966,10 @@
                              ; a label belongs to is a matter of shade
                              ; rather than of tracing it by eye.  Both
                              ; stay green on black; a light-background
-                             ; drawing wants the pair swapped round
+                             ; drawing wants the pair swapped round.
+                             ; Either one nil = no true colour at all,
+                             ; and the fan reads as the layer's own
+                             ; colour above
 (setq hn:*trans*      40)    ; per cent transparency on every preview,
                              ; so an arc crossing another still reads.
                              ; 0 or nil = solid; over 90 is a preview
@@ -75873,9 +84059,16 @@
   (setq lo hn:*shade-lo*
         hi hn:*shade-hi*
         f  (if (> n 1) (/ (float i) (float (1- n))) 0.0))
-  (list (hn:mix (float (car   lo)) (float (car   hi)) f)
-        (hn:mix (float (cadr  lo)) (float (cadr  hi)) f)
-        (hn:mix (float (caddr lo)) (float (caddr hi)) f)))
+  ;; Either end set to nil means "no true colour" -- the fan reads as
+  ;; the layer's own hn:*color* instead, which is what hn:colgroups
+  ;; already does with a nil shade.  nil is the value every other knob
+  ;; in the SETTINGS block takes for "leave it to the drawing", and the
+  ;; pair is the one a light-background drawing is told to touch, so it
+  ;; is the one somebody empties rather than swaps.
+  (if (and lo hi)
+    (list (hn:mix (float (car   lo)) (float (car   hi)) f)
+          (hn:mix (float (cadr  lo)) (float (cadr  hi)) f)
+          (hn:mix (float (caddr lo)) (float (caddr hi)) f))))
 
 ;; The DXF 440 value for hn:*trans*: 0x02000000 flags the word as a
 ;; transparency and the low byte is the ALPHA, so 255 is opaque and the
@@ -76187,6 +84380,7 @@
   (while (not ans)
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel) (setq ans 'HN-NONE))
@@ -76211,6 +84405,7 @@
   (while (not ans)
     (initget "Cancel")
     (setq sel (entsel (strcat "\n" msg " [Cancel]: ")))
+    (if lzd:watch (lzd:watch sel))
     (cond
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel)
@@ -76253,6 +84448,29 @@
 
 ;;; -------------------- cutting and dimensioning --------------------
 
+;; Safety valve, AUTOBEAD's (autobead-flush): an internal command left
+;; WAITING for input is still on the command line, and the next
+;; (command ...) from here is read as an answer to it rather than as a
+;; command of its own.  FILLET is the one that does this -- it refuses a
+;; pick and asks again ("Radius is too large", two lines it cannot join)
+;; rather than giving up -- and DIMRADIUS does it with a location it
+;; will not take.  Left un-cancelled, the run derails one step after the
+;; click that was meant to cut the corner: the radius dimension is
+;; swallowed as an answer, then the style restore, then the UNDO close,
+;; and what the drafter gets is an error where the rest of the corners
+;; should have been.
+;;
+;; A bare (command) CANCELS, where an Enter would only answer the prompt
+;; in front of it.  Bounded, for the reason AUTOBEAD gives: one bit of
+;; CMDACTIVE means "a dialog is up", which no keystroke from here can
+;; clear, and an unbounded loop against that bit hangs AutoCAD with no
+;; Esc out.
+(defun hn:flush ( / guard)
+  (setq guard 0)
+  (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (command)
+    (setq guard (1+ guard))))
+
 ;; Cut the corner for real.  The two picks go to FILLET exactly as the
 ;; user made them, so the side each line keeps is the side clicked.
 ;; Returns the arc FILLET made, or nil when it refused.
@@ -76260,6 +84478,10 @@
   (setq pre (entlast))
   (setvar "FILLETRAD" r)
   (command "_.FILLET" (list e1 (trans pk1 0 1)) (list e2 (trans pk2 0 1)))
+  ;; a FILLET that refused a pick is still asking: cancel it here, where
+  ;; the refusal costs one message, rather than letting the next command
+  ;; answer it
+  (hn:flush)
   (setq new (entlast))
   (if (and new (not (eq new pre))
            (setq ed (entget new))
@@ -76321,6 +84543,10 @@
       (setq od (hn:dimsbegin r))
       (command "_.DIMRADIUS" (list arc (trans on 0 1))
                "_non" (trans loc 0 1))
+      ;; the same valve: a DIMRADIUS still asking would swallow the
+      ;; style restore below and leave the run dimensioning in the
+      ;; small style
+      (hn:flush)
       (hn:dimsend od)
       (setq new (entlast))
       (if (and new (not (eq new pre))) new))))
@@ -76383,6 +84609,13 @@
   (defun *error* (m)
     (hn:clear)
     (cal:sysrestore)
+    ;; An Esc part-way through FILLET or DIMRADIUS leaves that command
+    ;; pending, and the two command calls BELOW this line -- the style
+    ;; restore and the undo close -- would be read as answers to it.  So
+    ;; the valve comes first here, before either of them.  (command) is
+    ;; only legal from inside *error* behind *push-error-using-command*,
+    ;; which the command pushes on the way in.
+    (hn:flush)
     (hn:restyle odim)
     (if undo-open
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -76390,7 +84623,15 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHONEFILLET error: " m)))
+    (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "HONEFILLET" *honefillet-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "HONEFILLET" *honefillet-version*))
+
+  ;; AutoCAD 2012+ requires this before *error* may call (command) --
+  ;; the CMDACTIVE drain and the undo close in the handler above; a
+  ;; harmless no-op guard on older releases, where it does not exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
@@ -76521,8 +84762,14 @@
                          "")
                        "."))))
 
-     (command "_.UNDO" "_End")
-     (setq undo-open nil)))
+     ;; close only a group this run opened: with undo recording off
+     ;; (UNDOCTL bit 1 clear) none was, and an _End on nothing is an
+     ;; error of its own -- and it lands HERE, with the corner already
+     ;; cut and the settings restore below it never reached
+     (if undo-open
+       (progn
+         (command "_.UNDO" "_End")
+         (setq undo-open nil)))))
 
   ;; every path out drops the snapshot, the quiet ones included: a run
   ;; that found nothing to do and kept its snapshot would hand it to the
@@ -76531,16 +84778,29 @@
   (hn:restyle odim)
   (cal:sysrestore)
   (setq *error* olderr)
+  ;; ...and so does the error mode pushed at the top: every quiet exit
+  ;; and the cut one come through here, and a mode left stacked refuses
+  ;; command-s inside every later handler in the session (AutoLISP
+  ;; reference, *push-error-using-command*)
+  (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
 (defun c:HONEFILLETVER ()
   (princ (strcat "\nHONEFILLET " *honefillet-version*))
   (princ))
 
-(princ (strcat "\nHONEFILLET " *honefillet-version*
-               " loaded -- type HONEFILLET, pick two lines, bracket two"
-               " of the corners offered, and click one of the half-inch"
-               " sizes between them."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nHONEFILLET " *honefillet-version*
+                 " loaded -- type HONEFILLET, pick two lines, bracket two"
+                 " of the corners offered, and click one of the half-inch"
+                 " sizes between them.")))
 (princ)
 
 
@@ -76663,7 +84923,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.14")
+(setq *spacheck-version* "v1.16")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -78368,15 +86628,19 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "SPACHECK" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to " name " (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to scan.")
@@ -78412,15 +86676,19 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSPACHECK error: " msg)))
+    (if lzd:report (lzd:report "SPACHECK" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to SPACHECK (Enter = whole drawing): "))
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to check.")
@@ -78462,8 +86730,16 @@
                   ((= ans "Skip") (setq k tot))))))))
       (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
-      (command "_.UNDO" "_End")
-      (setq undo-open nil)
+      ;; closed only if one was opened -- the guard the handler above
+      ;; already makes.  With undo recording off (UNDOCTL bit 1 clear)
+      ;; there is no group of this run's, and an _End on nothing is an
+      ;; error of its own: it would land here, with the report written
+      ;; and every flagged item recoloured, and the CMDECHO and sysvar
+      ;; putbacks below it never reached
+      (if undo-open
+        (progn
+          (command "_.UNDO" "_End")
+          (setq undo-open nil)))
       (setvar "CMDECHO" oldecho)
       (cal:sysrestore)
       (princ (strcat "\n--- SPACHECK complete ---"
@@ -78485,7 +86761,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSPACHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "SPACHECKRESCUE" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SPACHECKRESCUE" *spacheck-version*))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   (setq ss (ssget "_X") i 0 n 0)
@@ -78829,7 +87107,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALSPACHECK error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALSPACHECK" *spacheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALSPACHECK" *spacheck-version*))
   (setq oldecho (getvar "CMDECHO") oldlay (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
   (setq ans (cal:askkw "Show me" "Checks Demo Both" "Checks/Demo/Both" "Both" nil))
@@ -78841,8 +87121,1470 @@
   (setvar "CMDECHO" oldecho)
   (princ))
 
-(princ (strcat "\nSPACHECK " *spacheck-version*
-               " loaded.  Type SPACHECK to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPACHECK " *spacheck-version*
+                 " loaded.  Type SPACHECK to run.")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> SPACOVCREATE.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; SPACOVCREATE.lsp  --  build a spa cover, and its hinges, from the spa
+;;;                       that is already drawn
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  SPACOVCREATE     offset a selected spa outline into its
+;;;                             cover and hinge the cover
+;;;            SPACOVCREATEVER  print the loaded version
+;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  SPA.LSP draws a spa from its measurements.  This draws the COVER for
+;;;  a spa that is already on the sheet -- somebody else's drawing, a
+;;;  DXF off a survey, an outline traced from a photo -- where there are
+;;;  no measurements to type, only geometry to point at.
+;;;
+;;;  Three questions and it is done:
+;;;
+;;;    1  SELECT THE SPA.  Whatever you pick is the spa: one closed
+;;;       polyline, a circle, or a handful of loose lines and arcs that
+;;;       meet end to end.  They are chained into a loop and the biggest
+;;;       loop in the selection is the spa -- a bench line or a spillway
+;;;       picked up by a careless window is a smaller loop and is left
+;;;       alone (the report says how many it found and which it took).
+;;;
+;;;    2  HOW FAR THE COVER LAPS, defaulting to 6".  The cover is always
+;;;       the larger of the two, so the offset always goes OUTWARD.
+;;;
+;;;    3  WHAT TAPER.  Click the Spa Cover Details block and its GRADE
+;;;       and TAPER tags are read; or type the taper; or answer neither,
+;;;       in which case a STANDARD 4-2 is assumed AND SAID SO IN THE
+;;;       REPORT, in red, beside the drawing.  An assumption nobody can
+;;;       see on the sheet is the one that gets built.
+;;;
+;;;  THE OFFSET KEEPS THE ARCS.  A cover is not a tessellated
+;;;  approximation of a cover: a radius corner offsets to a radius
+;;;  corner, on the same centre, sweeping the same angle -- so the
+;;;  bulge is unchanged and only the vertex moves, out along the corner
+;;;  bisector.  A circle offsets to a circle.  What comes out is one
+;;;  closed LWPOLYLINE (or one CIRCLE) that picks in a single click and
+;;;  can be dimensioned, hatched, offset again or handed to STOCKCOVER.
+;;;  An ELLIPSE is the one shape with no exact answer -- the true offset
+;;;  of an ellipse is not an ellipse -- so it is offset as a polyline
+;;;  and the report says so rather than quietly drawing a lie.  A SPLINE
+;;;  is not read at all, for the same reason turned up: it is let
+;;;  through the selection filter purely so the run can SAY so, because
+;;;  dropped at the filter a spline outline reports "nothing closes" and
+;;;  leaves the drafter guessing.
+;;;
+;;;  THE HINGES follow the same shop data SPA works to, read off the
+;;;  same tables: the grade and taper pick a foam sheet, the sheet gives
+;;;  the widest a piece may be (so the closest two hinges may sit) and
+;;;  the longest a hinge may run, and the taper says which piece counts
+;;;  are acceptable.  A taper carrying more than one sheet has every
+;;;  sheet solved and scored -- the wider sheet needs fewer pieces, the
+;;;  longer one lets a hinge run further -- before fewest pieces
+;;;  decides.  Fold and velcro then follow the Hinge Arrangement Chart,
+;;;  pairs folding from both ends, labelled on the TEXT layer.
+;;;
+;;;  WHICH WAY THE HINGES RUN.  SPA turns the spa so its long overall
+;;;  runs west to east and then runs the hinges north-south.  Nothing
+;;;  here can be turned -- the geometry is already drawn, at whatever
+;;;  angle the sheet has it -- so the rule is applied the other way
+;;;  round: the hinges divide the LONGER of the cover's two overalls,
+;;;  which is the same layout SPA would reach, arrived at without
+;;;  moving anybody's drawing.  A cover wider than it is tall gets
+;;;  upright hinges; a tall one gets flat hinges.
+;;;
+;;;  WHAT IT DOES NOT DO.  It does not ask about spillaways: a spillway
+;;;  is a no-go zone that SPA dodges by turning the spa, and turning is
+;;;  not on the table here.  And it never moves, changes or erases the
+;;;  spa outline it was handed.  Anything out of spec -- a hinge over
+;;;  the foam length, a piece count the taper does not allow, an offset
+;;;  that ate a concave corner -- is still drawn and flagged in red in
+;;;  the report, because a drafter who can see the problem can fix it
+;;;  and one who cannot, cannot.
+;;; ======================================================================
+
+;;; -------------------- version -----------------------------------------
+;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
+;;;  one dot).  Bump it with every change and regenerate releases/.
+
+(setq *spacovcreate-version* "v1.1")
+
+;;; ======================================================================
+;;;  TUNABLES -- every value SPACOVCREATE reads that somebody might want
+;;;  changed lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file again.
+;;;  To try a value for one session only, type the setq at the command
+;;;  line -- e.g. (setq scv:*offset-dflt* 8.0) -- because every knob is
+;;;  read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey, 256 ByLayer).
+;;; ----------------------------------------------------------------------
+
+;; -- the questions -----------------------------------------------------
+
+;; How far the cover laps the spa, the number Enter takes.  SPA offers
+;; the same 6" as its cover-over-water's-edge lap; change one and change
+;; the other or the two tools will draw different covers for one spa.
+(setq scv:*offset-dflt* 6.0)      ; drawing units
+
+;; What the selection is allowed to hand the command.  Anything not in
+;; this list is never seen, so a window dragged over the whole spa picks
+;; up the outline and leaves the dimensions, the text and the blocks
+;; behind instead of making somebody pick each wall.
+;; SPLINE is in the list and is NOT read: a spline has no exact
+;; offset and no bulge to keep, so it would have to be chopped into
+;; straight runs and the cover would come back as a polygon of one.
+;; It is let through the filter anyway so the run can SAY that is what
+;; happened -- dropped at the filter, a traced outline that is all
+;; spline just reports "nothing closes" and leaves the drafter guessing.
+(setq scv:*filter*
+  '((0 . "LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE")))
+
+;; The grade and taper assumed when nobody gives one.  THE POINT OF
+;; THESE TWO is that the run still produces a hinged cover; the report
+;; carries a red line saying the taper was assumed, so the assumption
+;; arrives with the drawing rather than in somebody's memory.
+(setq scv:*taper-dflt* "4-2")
+(setq scv:*grade-dflt* "STANDARD")
+
+;; The block the grade and taper are read off, and its two tags.  The
+;; name is only used to warn that a DIFFERENT block was clicked -- its
+;; tags are read either way, because a shop that renamed the block still
+;; wants its numbers.
+(setq scv:*block-name* "SPA COVER DETAILS")
+(setq scv:*grade-tag*  "GRADE")
+(setq scv:*taper-tag*  "TAPER")
+
+;; -- reading the geometry ----------------------------------------------
+
+;; Two ends this close together are the same end.  Raise it for a
+;; drawing whose walls were drawn by eye and do not quite meet; too high
+;; and two different corners chain to each other.
+(setq scv:*chain-tol* 0.05)       ; drawing units
+
+;; How finely an arc is chopped when one has to be measured as points --
+;; the chord maths, the bounding box, the enclosed area.  The DRAWN
+;; cover keeps its arcs whatever this says; this only sets how closely
+;; they are measured.  Smaller is more accurate and slower.
+(setq scv:*arcstep* 5.0)          ; degrees per tessellated segment
+
+;; How far a corner may be stretched by the offset before the spike is
+;; cut back, in multiples of the offset itself.  A 90-degree corner
+;; mitres to 1.41; anything past this is a needle the drafter did not
+;; draw, so it is clamped and the report says which corner.
+(setq scv:*miterlim* 4.0)
+
+;; Anything smaller than this is zero: a zero-length wall, a bulge that
+;; is really a straight run, an area of nothing.
+(setq scv:*fuzz* 1.0e-6)
+
+;; -- what it draws -----------------------------------------------------
+
+;; The layers written on, created on first use with these colours.  An
+;; existing layer is used exactly as the drawing has it -- the office
+;; template wins -- and only a layer that had to be created gets the
+;; colour below.  These are SPA's own layers, so a cover drawn here and
+;; a cover drawn there land in the same place.
+(setq scv:*lay-cover*  "COVER")   ; the cover outline AND the hinges
+(setq scv:*col-cover*  6)         ; ACI (magenta)
+(setq scv:*lay-text*   "TEXT")    ; the Hinge / Velcro Hinge labels
+(setq scv:*col-text*   7)         ; ACI (white or black, whichever reads)
+(setq scv:*lay-report* "SPA-NOTES")  ; the report table beside the cover
+(setq scv:*col-report* 3)         ; ACI (green)
+(setq scv:*col-bad*    1)         ; ACI (red) -- a flagged report row
+(setq scv:*col-advice* 4)         ; ACI (cyan) -- a recommendation
+
+;; The fold hinge's linetype: the stock DASHED2 pattern, defined when
+;; the drawing lacks it, scaled so its dash plots 5" long no matter how
+;; the host drawing's LTSCALE is set (dash x LTSCALE x multiplier = 5).
+(setq scv:*hdashname* "DASHED2")
+(setq scv:*hdashpat*  '(0.25 -0.125))
+(setq scv:*hdashmult* 20.0)
+
+;; The hinge labels: SPA's numbers, so the two tools' drawings stack.
+(setq scv:*hingetxth*  5.0)       ; label height
+(setq scv:*hingetxw*  60.0)       ; label MTEXT frame width
+(setq scv:*hingestyle* "Attributes")  ; label style (Standard when absent)
+(setq scv:*hingetxoff* 0.6)       ; label heights from the line to the label
+
+;; The report table beside the cover.  Its text height is worked out
+;; from the size of the cover -- th-div bigger a spa means th-div bigger
+;; lettering -- so one table reads the same on a 5-foot spa and a
+;; 12-foot one, and never smaller than th-min.
+(setq scv:*th-min*    1.0)        ; smallest report lettering
+(setq scv:*th-div*   40.0)        ; cover size / this = lettering height
+(setq scv:*rep-gap*  12.0)        ; th multiples: cover -> the table
+(setq scv:*rep-row*   2.2)        ; th multiples: row pitch
+(setq scv:*rep-title* 1.25)       ; th multiples: heading text height
+(setq scv:*rep-note*  1.4)        ; th multiples: a red failure note
+(setq scv:*rep-adv*   1.15)       ; th multiples: a cyan recommendation
+(setq scv:*rep-c1*   22.0)        ; th multiples: the LIMIT column
+(setq scv:*rep-c2*   32.0)        ; th multiples: the ACTUAL column
+(setq scv:*rep-w*    44.0)        ; th multiples: how wide the box comes out
+
+;; -- the shop data the hinges are built on -----------------------------
+;;;
+;;;  THE FOAM SHEET.  Grade and taper pick a row, and the row gives the
+;;;  foam width (the widest a piece may be, so the furthest two hinges
+;;;  may sit apart), the foam length (the longest a hinge may run) and
+;;;  which piece counts are acceptable.
+;;;
+;;;  Row: (grade taper ((foamW . foamL) ...) (piece counts, 5 = 5+))
+;;;  A grade+taper with two width options (48" / 49-1/2") carries both;
+;;;  the solver picks the one that needs the fewest hinges.  A foamL of
+;;;  nil means the sheet sets no length limit.
+;;;
+;;;  This is SPA's spa:*foamtab*, value for value.  IT IS A COPY ON
+;;;  PURPOSE -- a standalone file has to load alone, and SPA is not
+;;;  loaded when this one is -- so a change to the shop's foam sheet is
+;;;  a change to BOTH, and tests/test_spacovcreate.py compares the two
+;;;  tables row by row so the copy cannot quietly drift.
+(setq scv:*foamtab*
+  (list
+    (list "ECONOMY"     "3-2"   (list (cons 48.0 96.0))                    (list 2))
+    (list "STANDARD"    "3-2"   (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2))
+    (list "STANDARD"    "4-2"   (list (cons 48.0 96.0)  (cons 49.5 102.0)) (list 2 3 4))
+    (list "STANDARD"    "4-3"   (list (cons 48.0 144.0))                   (list 2 3 4))
+    (list "STANDARD"    "5-3"   (list (cons 48.0 96.0))                    (list 2 3 4 5))
+    (list "STANDARD"    "5-4"   (list (cons 48.0 96.0))                    (list 2 3 4 5))
+    (list "STANDARD"    "3-3"   (list (cons 48.0 144.0))                   (list 2 3 4 5))
+    (list "ULTRA"       "3-2"   (list (cons 48.0 144.0))                   (list 2))
+    (list "ULTRA"       "4-3"   (list (cons 48.0 96.0))                    (list 2 3 4))
+    (list "ULTRA"       "3-3"   (list (cons 48.0 144.0))                   (list 2 3 4 5))
+    (list "THERMOLIGHT" "1-3/8" (list (cons 53.0 nil))                     (list 2 3 4 5))))
+
+(setq scv:*foamdflt* (list (cons 48.0 96.0)))  ; when nothing matches at all
+(setq scv:*foamdpc*  (list 2 3 4 5))           ; and the counts it will accept
+(setq scv:*thermotaper* "1-3/8")  ; the one taper a Thermo-Light comes in
+
+;;;  HARDWARE called for by the LONGEST hinge, per grade.  Each rule is
+;;;  (OVER <inches>) | (ALWAYS) | (NEVER) | (REQUEST), and the three
+;;;  columns are velcro hinges, double C channel, hold down kit -- in
+;;;  that order, which is the order they are reported in.  SPA's
+;;;  spa:*hardtab*, same copy rule as the foam table above.
+(setq scv:*hardtab*
+  (list                ;  grade          velcro        double C      hold down
+    (list "ECONOMY"     '(REQUEST)    '(REQUEST)    '(REQUEST))
+    (list "STANDARD"    '(OVER 120.0) '(OVER 108.0) '(OVER 120.0))
+    (list "ULTRA"       '(OVER 108.0) '(NEVER)      '(OVER 96.0))
+    (list "THERMOLIGHT" '(ALWAYS)     '(NEVER)      '(NEVER))))
+
+;; What the three columns are called in the report, in the order the
+;; table above holds them -- rename one and the report follows.
+(setq scv:*hardnames* (list "VELCRO HINGES" "DOUBLE C CHANNEL"
+                            "HOLD DOWN KIT"))
+
+;; The placement solver.  The fewest pieces that fit the foam width are
+;; used, spaced evenly; when that count is one the taper will not accept
+;; the search tries more, up to hinge-try counts past the minimum.
+(setq scv:*hinge-min* 2)          ; a cover is never fewer pieces than this
+(setq scv:*hinge-try* 3)          ; how many extra piece counts to try
+
+;;; ======================================================================
+;;;  END OF TUNABLES
+;;; ======================================================================
+
+;;; -------------------- run state (not tunables) ------------------------
+;;;  Declared here because AutoLISP wants a global to exist before the
+;;;  code that reads it loads.  These are written as the command runs;
+;;;  none of them is a setting.
+
+(setq scv:*notes*  nil)     ; red failure lines for the report
+(setq scv:*advice* nil)     ; cyan recommendations for the report
+(setq scv:*dashlt* "CONTINUOUS")  ; resolved to DASHED2 per run
+
+;;; -------------------- small helpers -----------------------------------
+
+(defun scv:3d (p) (list (car p) (cadr p) 0.0))
+(defun scv:right (v) (list (cadr v) (- (car v))))
+
+(defun scv:unit (v / l)
+  (setq l (cal:vlen v))
+  (if (> l scv:*fuzz*) (cal:v* v (/ 1.0 l)) (list 0.0 0.0)))
+
+(defun scv:samep (a b) (< (distance (cal:2d a) (cal:2d b)) scv:*chain-tol*))
+
+(defun scv:ceilv (v / f)
+  (setq f (fix v))
+  (if (> v (+ f scv:*fuzz*)) (1+ f) f))
+
+;; "Taper: 4-2" -> "4-2" (everything after the last colon, trimmed).
+(defun scv:aftercolon (s / i out)
+  (setq i (strlen s) out s)
+  (while (> i 0)
+    (if (= ":" (substr s i 1))
+        (progn (setq out (substr s (1+ i))) (setq i 0))
+        (setq i (1- i))))
+  (cal:trim out))
+
+(defun scv:say (s) (princ (strcat "\n" s)) (princ))
+
+;; A problem: printed now, and written into the report in red.
+(defun scv:note (msg)
+  (setq scv:*notes* (append scv:*notes* (list msg)))
+  (scv:say msg))
+
+;; A recommendation rather than a problem: cyan, under the red ones.
+(defun scv:advise (msg)
+  (setq scv:*advice* (append scv:*advice* (list msg)))
+  (scv:say msg))
+
+;;; -------------------- sysvars and layers ------------------------------
+
+;; The fold hinge's dashed linetype, defined when the drawing lacks it.
+;; Returns its name, or CONTINUOUS when it could not be made.
+(defun scv:ltmake (name descr pat / lst x)
+  (if (tblsearch "LTYPE" name)
+      name
+      (progn
+        (setq lst (list '(0 . "LTYPE") '(100 . "AcDbSymbolTableRecord")
+                        '(100 . "AcDbLinetypeTableRecord")
+                        (cons 2 name) '(70 . 0) (cons 3 descr)
+                        '(72 . 65) (cons 73 (length pat))
+                        (cons 40 (apply '+ (mapcar 'abs pat)))))
+        (foreach x pat (setq lst (append lst (list (cons 49 x) '(74 . 0)))))
+        (if (entmake lst) name "CONTINUOUS"))))
+
+;; Entity linetype scale that makes the dash plot 5" long whatever the
+;; drawing's LTSCALE is.
+(defun scv:ltsc ( / s)
+  (setq s (getvar "LTSCALE"))
+  (if (and s (> s scv:*fuzz*)) (/ 1.0 s) 1.0))
+
+(defun scv:hdash ( / )
+  (if (/= scv:*dashlt* "CONTINUOUS")
+      (list (cons 6 scv:*dashlt*)
+            (cons 48 (* scv:*hdashmult* (scv:ltsc))))))
+
+;;; ======================================================================
+;;;  THE GEOMETRY
+;;; ======================================================================
+;;;
+;;;  Everything below works on ONE representation, the same one an
+;;;  LWPOLYLINE uses, because that is what has to come out at the end:
+;;;
+;;;    a VERTEX is (point . bulge) -- the bulge belonging to the segment
+;;;      that LEAVES this vertex.  Zero is a straight run.
+;;;    a STRAND is (closed-flag vertex vertex ...).  Closed means the
+;;;      last vertex's segment runs back to the first; open means the
+;;;      last vertex's bulge is not a segment at all and is ignored.
+;;;
+;;;  Every entity read is turned into a strand, the open strands are
+;;;  chained end to end into loops, and the loop with the biggest area
+;;;  is the spa.  The bulge survives all of it, which is the point: the
+;;;  radius corner that came in is the radius corner that goes out.
+
+(defun scv:st-closed (s) (car s))
+(defun scv:st-verts (s) (cdr s))
+(defun scv:st (closed verts) (cons closed verts))
+(defun scv:vpt (v) (car v))
+(defun scv:vb (v) (cdr v))
+(defun scv:vx (p b) (cons (cal:2d p) b))
+
+;; Bulge <-> included angle.  The bulge is the tangent of a quarter of
+;; the angle the arc sweeps, negative when the arc runs clockwise.
+(defun scv:bulge (th) (/ (sin (* 0.25 th)) (cos (* 0.25 th))))
+(defun scv:sweep (b) (* 4.0 (atan b)))
+
+(defun scv:rot (v a / c s)
+  (setq c (cos a) s (sin a))
+  (list (- (* (car v) c) (* (cadr v) s))
+        (+ (* (car v) s) (* (cadr v) c))))
+
+;; Where the arc of a bulged segment lives: (centre radius sweep), or
+;; nil when the bulge is really a straight run.  The centre sits on the
+;; chord's perpendicular bisector, d*cot(sweep/2) to the LEFT of the
+;; chord -- which puts it on the far side from the way the arc bulges,
+;; and gets a major arc (bulge over 1) right by changing that cotangent's
+;; sign rather than by a special case.
+(defun scv:arcinfo (p q b / th d hs u)
+  (setq th (scv:sweep b)
+        d  (* 0.5 (distance (cal:2d p) (cal:2d q)))
+        hs (sin (* 0.5 th)))
+  (if (or (< (abs b) scv:*fuzz*) (< d scv:*fuzz*) (< (abs hs) scv:*fuzz*))
+      nil
+      (progn
+        (setq u (scv:unit (cal:v- q p)))
+        (list (cal:v+ (cal:mid p q)
+                      (cal:v* (cal:perp u) (* d (/ (cos (* 0.5 th)) hs))))
+              (abs (/ d hs))
+              th))))
+
+;; The direction the outline is travelling as it LEAVES p, and as it
+;; ARRIVES at q: the chord turned back and forward by half the sweep.
+;; For a straight run both are the chord itself.
+(defun scv:tan-out (p q b / u)
+  (setq u (scv:unit (cal:v- q p)))
+  (if (< (abs b) scv:*fuzz*) u (scv:rot u (* -0.5 (scv:sweep b)))))
+
+(defun scv:tan-in (p q b / u)
+  (setq u (scv:unit (cal:v- q p)))
+  (if (< (abs b) scv:*fuzz*) u (scv:rot u (* 0.5 (scv:sweep b)))))
+
+;; The points ALONG a bulged segment, first and last excluded, for the
+;; measuring that cannot be done on a bulge: the chord maths, the
+;; bounding box, the enclosed area.  Nothing drawn goes through here.
+(defun scv:arcpts (p q b / ai cen r th n i out a0 a)
+  (setq ai (scv:arcinfo p q b) out nil)
+  (if ai
+      (progn
+        (setq cen (car ai) r (cadr ai) th (caddr ai)
+              a0 (angle (cal:2d cen) (cal:2d p))
+              n (max 2 (scv:ceilv (/ (abs (* 180.0 (/ th pi)))
+                                     scv:*arcstep*)))
+              i 1)
+        (while (< i n)
+          (setq a (+ a0 (* th (/ (float i) n)))
+                out (cons (list (+ (car cen) (* r (cos a)))
+                                (+ (cadr cen) (* r (sin a))))
+                          out)
+                i (1+ i)))))
+  (reverse out))
+
+;; A closed strand as a plain list of points, arcs chopped up.  The
+;; closing point is NOT repeated -- every consumer below walks the list
+;; round on its own.
+(defun scv:flatten (verts / n i v w p out)
+  (setq n (length verts) i 0 out nil)
+  (while (< i n)
+    (setq v (nth i verts)
+          w (nth (rem (1+ i) n) verts)
+          out (cons (scv:vpt v) out))
+    (foreach p (scv:arcpts (scv:vpt v) (scv:vpt w) (scv:vb v))
+      (setq out (cons p out)))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; Twice the signed area of a polygon: positive counter-clockwise.  The
+;; sign is the only thing the orientation pass needs, and the size is
+;; what picks the spa out of a selection holding more than one loop.
+(defun scv:area2 (pts / n i p q s)
+  (setq n (length pts) i 0 s 0.0)
+  (while (< i n)
+    (setq p (nth i pts)
+          q (nth (rem (1+ i) n) pts)
+          s (+ s (cal:cross p q))
+          i (1+ i)))
+  s)
+
+(defun scv:bbox (pts / x1 y1 x2 y2 p)
+  (foreach p pts
+    (if (or (null x1) (< (car p) x1)) (setq x1 (car p)))
+    (if (or (null x2) (> (car p) x2)) (setq x2 (car p)))
+    (if (or (null y1) (< (cadr p) y1)) (setq y1 (cadr p)))
+    (if (or (null y2) (> (cadr p) y2)) (setq y2 (cadr p))))
+  (if x1 (list x1 y1 x2 y2)))
+
+;;; -------------------- reading entities into strands -------------------
+
+;; An ARC, as the two ends of one bulged segment.  DXF 50 / 51 always
+;; run counter-clockwise, so the sweep is their difference brought into
+;; 0..2pi -- a full turn meaning a full circle, which an ARC never is.
+(defun scv:arc-strand (ed / cen r a1 a2 th)
+  (setq cen (cdr (assoc 10 ed))
+        r   (cdr (assoc 40 ed))
+        a1  (cdr (assoc 50 ed))
+        a2  (cdr (assoc 51 ed))
+        th  (- a2 a1))
+  (while (< th 0.0) (setq th (+ th (* 2.0 pi))))
+  (while (>= th (* 2.0 pi)) (setq th (- th (* 2.0 pi))))
+  (scv:st nil
+          (list (scv:vx (list (+ (car cen) (* r (cos a1)))
+                              (+ (cadr cen) (* r (sin a1))))
+                        (scv:bulge th))
+                (scv:vx (list (+ (car cen) (* r (cos a2)))
+                              (+ (cadr cen) (* r (sin a2))))
+                        0.0))))
+
+;; A CIRCLE, as the two semicircles a closed polyline would use.  It
+;; survives the offset as two semicircles of a bigger radius, which is
+;; what lets the cover come back out as a CIRCLE (scv:circlep).
+(defun scv:circle-strand (ed / cen r)
+  (setq cen (cdr (assoc 10 ed)) r (cdr (assoc 40 ed)))
+  (scv:st t (list (scv:vx (list (+ (car cen) r) (cadr cen)) 1.0)
+                  (scv:vx (list (- (car cen) r) (cadr cen)) 1.0))))
+
+;; An ELLIPSE, chopped into straight runs.  There is no exact offset of
+;; an ellipse -- the curve parallel to an ellipse is not one -- so this
+;; is the one shape that cannot keep its curve, and the caller says so
+;; in the report rather than letting somebody find out at the saw.
+(defun scv:ellipse-strand (ed / cen maj rat t1 t2 n i verts a bx by)
+  (setq cen (cdr (assoc 10 ed))
+        maj (cdr (assoc 11 ed))
+        rat (cdr (assoc 40 ed))
+        t1  (cdr (assoc 41 ed))
+        t2  (cdr (assoc 42 ed)))
+  (if (null rat) (setq rat 1.0))
+  (if (null t1) (setq t1 0.0))
+  (if (null t2) (setq t2 (* 2.0 pi)))
+  (setq bx (cal:v* (cal:perp (cal:2d maj)) rat)
+        n (max 8 (scv:ceilv (/ (abs (* 180.0 (/ (- t2 t1) pi)))
+                               scv:*arcstep*)))
+        i 0 verts nil)
+  (while (< i n)
+    (setq a (+ t1 (* (- t2 t1) (/ (float i) n)))
+          by (cal:v+ (cal:v* (cal:2d maj) (cos a)) (cal:v* bx (sin a)))
+          verts (cons (scv:vx (cal:v+ (cal:2d cen) by) 0.0) verts)
+          i (1+ i)))
+  (scv:st t (reverse verts)))
+
+;; An LWPOLYLINE: its DXF 10 points in order, each with the DXF 42 that
+;; follows it, and closed when bit 1 of DXF 70 is set.
+(defun scv:lw-strand (ed / verts p b g)
+  (setq verts nil p nil b 0.0)
+  (foreach g ed
+    (cond
+      ((= (car g) 10)
+       (if p (setq verts (cons (scv:vx p b) verts)))
+       (setq p (cdr g) b 0.0))
+      ((= (car g) 42) (setq b (cdr g)))))
+  (if p (setq verts (cons (scv:vx p b) verts)))
+  (scv:st (= 1 (logand 1 (cdr (assoc 70 ed))))
+          (reverse verts)))
+
+;; A heavyweight 2D POLYLINE, whose vertices are entities of their own
+;; following the header until the SEQEND.
+(defun scv:pl-strand (en ed / e ved verts)
+  (setq verts nil e (entnext en))
+  (while (and e (setq ved (entget e))
+              (= "VERTEX" (cdr (assoc 0 ved))))
+    (if (/= 16 (logand 16 (cdr (assoc 70 ved))))   ; skip spline frames
+        (setq verts (cons (scv:vx (cdr (assoc 10 ved))
+                                  (if (assoc 42 ved) (cdr (assoc 42 ved)) 0.0))
+                          verts)))
+    (setq e (entnext e)))
+  (scv:st (= 1 (logand 1 (cdr (assoc 70 ed)))) (reverse verts)))
+
+;; Every entity in the selection as a strand, plus what the caller has
+;; to report about what was in there: whether an ellipse was among them
+;; (no exact offset) and how many splines were (not read at all).
+;; Returns (strands ellipsep splinecount).
+(defun scv:harvest (ss / i en ed typ st out ell spl)
+  (setq i 0 out nil ell nil spl 0)
+  (while (< i (sslength ss))
+    (setq en (ssname ss i)
+          ed (entget en)
+          i  (1+ i)
+          st nil)
+    (if ed
+        (progn
+          (setq typ (cdr (assoc 0 ed)))
+          (cond
+            ((= typ "LINE")
+             (setq st (scv:st nil (list (scv:vx (cdr (assoc 10 ed)) 0.0)
+                                        (scv:vx (cdr (assoc 11 ed)) 0.0)))))
+            ((= typ "ARC")        (setq st (scv:arc-strand ed)))
+            ((= typ "CIRCLE")     (setq st (scv:circle-strand ed)))
+            ((= typ "ELLIPSE")    (setq st (scv:ellipse-strand ed) ell t))
+            ((= typ "LWPOLYLINE") (setq st (scv:lw-strand ed)))
+            ((= typ "POLYLINE")   (setq st (scv:pl-strand en ed)))
+            ((= typ "SPLINE")     (setq spl (1+ spl))))
+          (if (and st (> (length (scv:st-verts st)) 1))
+              (setq out (cons st out))))))
+  (list (reverse out) ell spl))
+
+;;; -------------------- chaining the strands into loops -----------------
+
+;; An open strand walked the other way: the points reverse, and each
+;; bulge moves back one place and changes sign, because every segment is
+;; now being travelled backwards.
+(defun scv:revopen (verts / n i out)
+  (setq n (length verts) i 0 out nil)
+  (while (< i n)
+    (setq out (cons (scv:vx (scv:vpt (nth (- n 1 i) verts))
+                            (if (< i (1- n))
+                                (- (scv:vb (nth (- n 2 i) verts)))
+                                0.0))
+                    out)
+          i (1+ i)))
+  (reverse out))
+
+;; The same for a closed loop, where there is no spare last bulge: every
+;; vertex keeps a segment, so the shift wraps round instead of stopping.
+(defun scv:revclosed (verts / n i out k)
+  (setq n (length verts) i 0 out nil)
+  (while (< i n)
+    (setq k (rem (+ (- n 2 i) n) n)
+          out (cons (scv:vx (scv:vpt (nth (- n 1 i) verts))
+                            (- (scv:vb (nth k verts))))
+                    out)
+          i (1+ i)))
+  (reverse out))
+
+(defun scv:first-pt (verts) (scv:vpt (car verts)))
+(defun scv:last-pt (verts) (scv:vpt (last verts)))
+
+;; Chain the open strands end to end.  Each run starts from whatever
+;; open strand is left, keeps hunting for one that meets its far end --
+;; either way round -- and stops when it closes on itself or runs out of
+;; neighbours.  Returns (loops leftovers): loops are closed strands,
+;; leftovers are the counts of open runs that never closed.
+(defun scv:chain (strands / open loops leftover cur verts pool hit s sv
+                            grew)
+  (setq open nil loops nil leftover 0)
+  (foreach s strands
+    (if (scv:st-closed s)
+        (setq loops (cons s loops))
+        (setq open (cons s open))))
+  (setq pool (reverse open))
+  (while pool
+    (setq cur (car pool)
+          pool (cdr pool)
+          verts (scv:st-verts cur)
+          grew t)
+    (while grew
+      (setq grew nil hit nil)
+      (if (not (scv:samep (scv:last-pt verts) (scv:first-pt verts)))
+          (foreach s pool
+            (if (null hit)
+                (progn
+                  (setq sv (scv:st-verts s))
+                  (cond
+                    ((scv:samep (scv:last-pt verts) (scv:first-pt sv))
+                     (setq hit s))
+                    ((scv:samep (scv:last-pt verts) (scv:last-pt sv))
+                     (setq hit s sv (scv:revopen sv))))
+                  (if hit
+                      (setq verts (append (reverse (cdr (reverse verts))) sv)
+                            grew t
+                            pool (vl-remove s pool)))))))
+      ;; a closed run is a loop; the last vertex is the first one over
+      ;; again, so it goes, and the segment back to the start is already
+      ;; carried by the vertex in front of it
+      (if (and (> (length verts) 2)
+               (scv:samep (scv:last-pt verts) (scv:first-pt verts)))
+          (setq loops (cons (scv:st t (reverse (cdr (reverse verts)))) loops)
+                verts nil
+                grew nil)))
+    (if verts (setq leftover (1+ leftover))))
+  (list (reverse loops) leftover))
+
+;; The biggest loop in the list, walked counter-clockwise whichever way
+;; it arrived.  Returns (strand points area), the points being the
+;; flattened outline; nil when there is no loop with an area in it.
+(defun scv:pick-loop (loops / best bpts barea s pts a)
+  (foreach s loops
+    (setq pts (scv:flatten (scv:st-verts s))
+          a   (* 0.5 (scv:area2 pts)))
+    (if (or (null best) (> (abs a) (abs barea)))
+        (setq best s bpts pts barea a)))
+  (if (and best (> (abs barea) scv:*fuzz*))
+      (progn
+        (if (< barea 0.0)                      ; clockwise -- turn it round
+            (setq best (scv:st t (scv:revclosed (scv:st-verts best)))
+                  bpts (scv:flatten (scv:st-verts best))
+                  barea (- barea)))
+        (list best bpts barea))))
+
+;;; -------------------- the offset --------------------------------------
+;;;
+;;;  The loop runs counter-clockwise, so the inside is on the left and
+;;;  OUT is to the right of the way it is travelling.  Every vertex
+;;;  moves out along the bisector of the two directions meeting there,
+;;;  far enough that BOTH segments end up a full d further out --
+;;;  d*(n1+n2)/(1+n1.n2), the mitre, which is exact for two straight
+;;;  walls and exact again where an arc runs tangent into a wall (the
+;;;  two normals are then the same and it reduces to d straight out).
+;;;
+;;;  EVERY BULGE IS LEFT ALONE, and that is not an approximation: the
+;;;  offset of a circular arc is a circular arc on the same centre
+;;;  sweeping the same angle, and the bulge is a function of the angle
+;;;  alone.  A radius corner comes out a radius corner, r + d if it
+;;;  bulges outward and r - d if it bulges in.
+;;;
+;;;  Two things are flagged rather than fixed, because a cover the
+;;;  drafter can see is wrong beats a cover quietly repaired:
+;;;    * an inward arc (negative bulge) whose radius the offset eats;
+;;;    * a corner whose mitre runs past scv:*miterlim*, which is a
+;;;      needle nobody drew -- it is clamped, and named.
+(defun scv:offset (verts d / n i v vp vn p pp pn u1 u2 n1 n2 den mv ml
+                             ai out)
+  (setq n (length verts) i 0 out nil)
+  (while (< i n)
+    (setq v  (nth i verts)
+          vp (nth (rem (+ i (1- n)) n) verts)
+          vn (nth (rem (1+ i) n) verts)
+          p  (scv:vpt v)
+          pp (scv:vpt vp)
+          pn (scv:vpt vn)
+          u1 (scv:tan-in pp p (scv:vb vp))
+          u2 (scv:tan-out p pn (scv:vb v))
+          n1 (scv:right u1)
+          n2 (scv:right u2)
+          den (+ 1.0 (cal:dot n1 n2)))
+    (if (< den 1.0e-4)
+        ;; the outline doubles back on itself here; there is no bisector
+        ;; to run out along, so take the one normal and say so
+        (setq mv (cal:v* n2 d))
+        (setq mv (cal:v* (cal:v+ n1 n2) (/ d den))))
+    (setq ml (cal:vlen mv))
+    (if (> ml (* scv:*miterlim* (abs d)))
+        (progn
+          (setq mv (cal:v* (scv:unit mv) (* scv:*miterlim* (abs d))))
+          (scv:note (strcat "CORNER " (itoa (1+ i))
+                            " IS TOO SHARP TO OFFSET CLEANLY - CLAMPED"))))
+    ;; an arc that curves INTO the shape loses radius to the offset
+    (if (< (scv:vb v) (- scv:*fuzz*))
+        (progn
+          (setq ai (scv:arcinfo p pn (scv:vb v)))
+          (if (and ai (<= (cadr ai) (+ d scv:*fuzz*)))
+              (scv:note (strcat "INWARD ARC AT CORNER " (itoa (1+ i))
+                                " IS SMALLER THAN THE OFFSET - CHECK IT")))))
+    (setq out (cons (scv:vx (cal:v+ p mv) (scv:vb v)) out)
+          i (1+ i)))
+  (setq out (reverse out))
+  (scv:offset-check verts out)
+  out)
+
+;; Did the offset swallow a wall?  A segment whose chord comes out
+;; pointing the other way is one the offset ran straight over, and the
+;; cover has a little loop in it there.  It is drawn anyway -- see it,
+;; fix it -- but nobody finds it by accident.
+(defun scv:offset-check (verts out / n i a b c e)
+  (setq n (length verts) i 0)
+  (while (< i n)
+    (setq a (cal:v- (scv:vpt (nth (rem (1+ i) n) verts))
+                    (scv:vpt (nth i verts)))
+          b (cal:v- (scv:vpt (nth (rem (1+ i) n) out))
+                    (scv:vpt (nth i out)))
+          c (cal:vlen a)
+          e (cal:vlen b))
+    (if (and (> c scv:*fuzz*) (> e scv:*fuzz*)
+             (< (cal:dot (scv:unit a) (scv:unit b)) 0.0))
+        (scv:note (strcat "WALL " (itoa (1+ i))
+                          " IS SHORTER THAN THE OFFSET - COVER CROSSES ITSELF")))
+    (setq i (1+ i))))
+
+;; Is this loop really a circle?  Two vertices, each a half turn, the
+;; same distance apart both ways -- which is what a CIRCLE reads as and
+;; what its offset stays.  Returns (centre radius) so it can be drawn as
+;; one rather than as a two-vertex polyline nobody can dimension.
+(defun scv:circlep (verts / a b)
+  (if (= 2 (length verts))
+      (progn
+        (setq a (car verts) b (cadr verts))
+        (if (and (< (abs (- (scv:vb a) 1.0)) 1.0e-6)
+                 (< (abs (- (scv:vb b) 1.0)) 1.0e-6))
+            (list (cal:mid (scv:vpt a) (scv:vpt b))
+                  (* 0.5 (distance (cal:2d (scv:vpt a))
+                                   (cal:2d (scv:vpt b)))))))))
+
+;;; ======================================================================
+;;;  THE HINGES
+;;; ======================================================================
+;;;
+;;;  SPA turns the spa until its long overall runs west to east and then
+;;;  runs the hinges north-south.  Nothing here can be turned, so the
+;;;  same rule is read the other way round: the hinges divide the LONGER
+;;;  of the cover's two overalls.  Everything below is written as though
+;;;  that overall runs west to east; when it does not, the outline is
+;;;  handed over with x and y swapped and the answer swapped back, which
+;;;  is one function (scv:swap) instead of a second copy of the solver.
+
+(defun scv:swap (pts)
+  (mapcar '(lambda (p) (list (cadr p) (car p))) pts))
+
+;; (ybot ytop) of the outline at x, or nil when x misses it.  The
+;; outline is walked as a polygon and the lowest and highest crossings
+;; taken, so a hinge measured across a notched cover measures the whole
+;; run the foam has to cover, not the two bits either side of the notch.
+(defun scv:chordpoly (pts x / n i p q tt ys)
+  (setq n (length pts) i 0 ys nil)
+  (while (< i n)
+    (setq p (nth i pts) q (nth (rem (1+ i) n) pts))
+    (if (or (and (<= (car p) x) (> (car q) x))
+            (and (<= (car q) x) (> (car p) x)))
+        (setq tt (/ (- x (car p)) (- (car q) (car p)))
+              ys (cons (+ (cadr p) (* tt (- (cadr q) (cadr p)))) ys)))
+    (setq i (1+ i)))
+  (if (>= (length ys) 2)
+      (list (apply 'min ys) (apply 'max ys))))
+
+;; Even hinge stations for n pieces across [x1 x2].
+(defun scv:heven (x1 x2 n / i out)
+  (setq i 1 out nil)
+  (while (< i n)
+    (setq out (cons (+ x1 (* (- x2 x1) (/ (float i) n))) out)
+          i (1+ i)))
+  (reverse out))
+
+;; The longest hinge a station list produces -- what the foam LENGTH is
+;; measured against.
+(defun scv:hmaxchord (pts xs / m ch x)
+  (setq m 0.0)
+  (foreach x xs
+    (if (setq ch (scv:chordpoly pts x))
+        (setq m (max m (- (cadr ch) (car ch))))))
+  m)
+
+;; The widest piece a station list leaves -- what the foam WIDTH is
+;; measured against.
+(defun scv:hmaxpiece (x1 x2 xs / m prev x)
+  (setq m 0.0 prev x1)
+  (foreach x (append xs (list x2))
+    (setq m (max m (- x prev)) prev x))
+  m)
+
+;; A piece count the taper allows?  Five and over are one row on the
+;; sheet, so a 5 in the list stands for "five or more".
+(defun scv:hallow (n allowed)
+  (if (>= n 5) (member 5 allowed) (member n allowed)))
+
+;; The foam sheets a grade + taper may be cut from: (options counts got).
+;; A grade in a taper only the Standard sheet carries falls back to
+;; Standard, quietly, exactly as SPA does; nothing on the sheet at all
+;; falls back to scv:*foamdflt* with the flag down, and THAT is said.
+(defun scv:foamopts (grade taper / row r)
+  (foreach r scv:*foamtab*
+    (if (and (not row) (= (car r) grade) (= (cadr r) taper))
+        (setq row r)))
+  (if (not row)
+      (foreach r scv:*foamtab*
+        (if (and (not row) (= (car r) "STANDARD") (= (cadr r) taper))
+            (setq row r))))
+  (if row
+      (list (caddr row) (cadddr row) t)
+      (list scv:*foamdflt* scv:*foamdpc* nil)))
+
+;; The best layout over every foam sheet the taper carries, and over
+;; every piece count from the fewest that fit up to scv:*hinge-try*
+;; past it.  Each candidate is SCORED on what it satisfies -- the foam
+;; width (4), the foam length (2), an acceptable piece count (1) -- and
+;; only then on fewest pieces, so a cover that has to break one rule
+;; breaks the least important one.  The width is the heaviest because a
+;; piece wider than the sheet cannot be cut at all, where a hinge over
+;; the foam length is a cover that is made and then flagged.
+;; Returns (n xs fw fl wok lenok pcok maxchord maxpiece score).
+(defun scv:hbest (pts x1 x2 opts allowed / best bestsc opt fw fl nmin n xs
+                                          mc mp lenok pcok wok sc cand)
+  (setq best nil bestsc -1)
+  (foreach opt opts
+    (setq fw (car opt)
+          fl (cdr opt)
+          nmin (max scv:*hinge-min* (scv:ceilv (/ (- x2 x1) fw)))
+          n nmin)
+    (while (<= n (+ nmin scv:*hinge-try*))
+      (setq xs (scv:heven x1 x2 n)
+            mc (scv:hmaxchord pts xs)
+            mp (scv:hmaxpiece x1 x2 xs)
+            wok (<= mp (+ fw 0.01))
+            lenok (or (null fl) (<= mc (+ fl 0.01)))
+            pcok (if (scv:hallow n allowed) t nil)
+            sc (+ (if wok 4 0) (if lenok 2 0) (if pcok 1 0))
+            cand (list n xs fw fl wok lenok pcok mc mp sc))
+      (if (or (null best)
+              (> sc bestsc)
+              (and (= sc bestsc) (< n (car best)))
+              ;; nothing to choose on either -> the longer sheet, so a
+              ;; hinge that overruns overruns by as little as it can
+              (and (= sc bestsc) (= n (car best))
+                   (> (if fl fl 0.0) (if (nth 3 best) (nth 3 best) 0.0))))
+          (setq best cand bestsc sc))
+      (setq n (1+ n))))
+  best)
+
+;; Fold or velcro for each hinge, per the Hinge Arrangement Chart.  SPA's
+;; spa:hingetypes, unchanged, so the two tools draw one chart:
+;;
+;;     2  H              5  H V V H          8  H V H V H V H
+;;     3  H V            6  H V H V H        9  H V H V V H V H
+;;     4  H V H          7  H V H V V H
+;;
+;; The pieces fold up in PAIRS from both ends -- a fold hinge inside
+;; each pair, velcro between bundles -- an odd count leaving one flat
+;; piece at or beside the centre.  allvel (Thermo-Light) forces every
+;; hinge to velcro.  Returns a list of "H" / "V", west to east.
+(defun scv:hingetypes (n allvel / hc m zone p out)
+  (setq hc (1- n)
+        m (rem n 4)
+        zone (cond ((or (= m 0) (= m 2)) hc)
+                   ((= m 1) (/ hc 2))
+                   (t (/ (+ hc 2) 2)))
+        p 0 out nil)
+  (while (< p hc)
+    (setq out (append out
+                      (list (cond (allvel "V")
+                                  ((< p zone) (if (= 0 (rem p 2)) "H" "V"))
+                                  (t (nth (- hc 1 p) out)))))
+          p (1+ p)))
+  out)
+
+;; Hardware rule against the longest hinge -> (needed . reason).
+(defun scv:hardverdict (rule len / k v)
+  (setq k (car rule) v (cadr rule))
+  (cond
+    ((eq k 'ALWAYS)  (cons t   "always for this grade"))
+    ((eq k 'NEVER)   (cons nil "not used on this grade"))
+    ((eq k 'REQUEST) (cons t   "upon request only"))
+    ((> len v)       (cons t   (strcat "hinge " (rtos len 2 1)
+                                       " over " (rtos v 2 0))))
+    (t               (cons nil (strcat "hinge " (rtos len 2 1)
+                                       " not over " (rtos v 2 0))))))
+
+;;; -------------------- grade and taper vocabulary ----------------------
+;;;
+;;;  Matched as substrings, so "Taper: 4-2 Flat" and "4-2" are the same
+;;;  answer and a tag nobody trimmed still reads.  SPA's spa:tapernorm
+;;;  and spa:gradenorm, word for word.
+
+(defun scv:tapernorm (v / u)
+  (setq u (strcase v))
+  (cond ((wcmatch u "*3-2*") "3-2")
+        ((wcmatch u "*4-2*") "4-2")
+        ((wcmatch u "*4-3*") "4-3")
+        ((wcmatch u "*5-3*") "5-3")
+        ((wcmatch u "*5-4*") "5-4")
+        ((wcmatch u "*3-3*") "3-3")
+        ((wcmatch u "*3/8*") "1-3/8")))
+
+;; Anything unrecognised, or missing, is Standard.
+(defun scv:gradenorm (v / u)
+  (setq u (strcase (if v v "")))
+  (cond ((wcmatch u "*ECON*") "ECONOMY")
+        ((or (wcmatch u "*ULTRA*") (wcmatch u "*FRP*")) "ULTRA")
+        ((wcmatch u "*THERMO*") "THERMOLIGHT")
+        (t "STANDARD")))
+
+(defun scv:gradeshort (g)
+  (cond ((= g "ECONOMY") "ECO") ((= g "STANDARD") "STD")
+        ((= g "ULTRA") "ULTRA") (t "THERMO")))
+
+;; Attributes of a block reference, as ((TAG . value) ...).
+(defun scv:attribs (en / e ed out)
+  (setq e (entnext en))
+  (while (and e (setq ed (entget e)) (= "ATTRIB" (cdr (assoc 0 ed))))
+    (setq out (cons (cons (strcase (cdr (assoc 2 ed))) (cdr (assoc 1 ed)))
+                    out)
+          e (entnext e)))
+  (reverse out))
+
+;;; ======================================================================
+;;;  DRAWING
+;;; ======================================================================
+
+;; The cover as ONE closed LWPOLYLINE -- so it picks in a single click,
+;; encloses an area, and can be dimensioned, hatched, offset again or
+;; handed to STOCKCOVER.  Same shape as spa:perpoly, and on purpose.
+(defun scv:polyline (verts lay / lst v p)
+  (setq lst (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
+                  (cons 8 lay) '(100 . "AcDbPolyline")
+                  (cons 90 (length verts)) '(70 . 1)))
+  (foreach v verts
+    (setq p (scv:vpt v)
+          lst (append lst (list (cons 10 (list (car p) (cadr p)))
+                                (cons 42 (scv:vb v))))))
+  (entmake lst)
+  (entlast))
+
+(defun scv:circle (cen r lay)
+  (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity") (cons 8 lay)
+                 '(100 . "AcDbCircle") (cons 10 (scv:3d cen)) (cons 40 r)))
+  (entlast))
+
+(defun scv:line (p q lay extra)
+  (entmake (append (list '(0 . "LINE") '(100 . "AcDbEntity") (cons 8 lay)
+                         '(100 . "AcDbLine")
+                         (cons 10 (scv:3d p)) (cons 11 (scv:3d q)))
+                   extra))
+  (entlast))
+
+(defun scv:text (pt h str lay col)
+  (entmake (append (list '(0 . "TEXT") '(100 . "AcDbEntity") (cons 8 lay))
+                   (if col (list (cons 62 col)))
+                   (list '(100 . "AcDbText") (cons 10 (scv:3d pt))
+                         (cons 40 h) (cons 1 str))))
+  (entlast))
+
+;; A hinge's label: MTEXT reading ALONG the hinge, middle-centred one
+;; label-height clear of it on the left.  SPA writes its labels upright
+;; beside an upright hinge; this reaches the same place for an upright
+;; hinge and the matching one for a flat hinge, which SPA never has to
+;; draw because it turns the spa instead.
+(defun scv:hlabel (p q str / dir off mid)
+  (setq dir (scv:unit (cal:v- q p))
+        off (cal:v* (cal:perp dir) (* scv:*hingetxoff* scv:*hingetxth*))
+        mid (cal:v+ (cal:mid p q) off))
+  (entmake (list '(0 . "MTEXT") '(100 . "AcDbEntity")
+                 (cons 8 scv:*lay-text*) '(100 . "AcDbMText")
+                 (cons 10 (scv:3d mid))
+                 (cons 40 scv:*hingetxth*)
+                 (cons 41 scv:*hingetxw*)
+                 '(71 . 5)                      ; middle centre
+                 '(72 . 5)                      ; drawing direction: by style
+                 (cons 1 str)
+                 (cons 7 (if (tblsearch "STYLE" scv:*hingestyle*)
+                             scv:*hingestyle* "Standard"))
+                 (cons 11 (scv:3d dir))))
+  (entlast))
+
+;;; -------------------- the report beside the cover ---------------------
+;;;
+;;;  Three columns -- what was measured, the limit it is measured
+;;;  against, and what it came out at -- because every number the hinge
+;;;  maths produces is a number with a ceiling over it.  A row with no
+;;;  ceiling (the piece count, a hinge's position) prints a dash there
+;;;  rather than a nought, which would read as a limit of zero.
+;;;
+;;;  Under the rows go the red lines: anything out of spec, and THE
+;;;  ASSUMED TAPER, which is why this table exists at all.  Under those,
+;;;  in cyan, the hardware the longest hinge calls for.
+
+(defun scv:cell (v)
+  (cond ((null v) "-")
+        ((= (type v) 'STR) v)
+        (t (rtos v 2 2))))
+
+(defun scv:rtext (pt h str red)
+  (scv:text pt h str scv:*lay-report*
+            (if red scv:*col-bad* scv:*col-report*)))
+
+;; rows = (label limit actual [red]); limit and actual are numbers,
+;; strings or nil.  x / y is the table's top left corner, h its
+;; lettering height.  Returns the y it finished at.
+(defun scv:report (rows x y h / lh ytop y0 xr r n)
+  (setq lh (* scv:*rep-row* h)
+        ytop y
+        xr (+ x (* scv:*rep-w* h)))
+  (setq y (- y lh))
+  (scv:text (list x y) (* scv:*rep-title* h) "SPA COVER REPORT"
+            scv:*lay-report* scv:*col-report*)
+  (setq y (- y lh))
+  (scv:rtext (list x y) h "ITEM" nil)
+  (scv:rtext (list (+ x (* scv:*rep-c1* h)) y) h "LIMIT" nil)
+  (scv:rtext (list (+ x (* scv:*rep-c2* h)) y) h "ACTUAL" nil)
+  (foreach r rows
+    (setq y (- y lh))
+    (scv:rtext (list x y) h (car r) (nth 3 r))
+    (scv:rtext (list (+ x (* scv:*rep-c1* h)) y) h (scv:cell (cadr r))
+               (nth 3 r))
+    (scv:rtext (list (+ x (* scv:*rep-c2* h)) y) h (scv:cell (caddr r))
+               (nth 3 r)))
+  (foreach n scv:*notes*
+    (setq y (- y (* 1.5 lh)))
+    (scv:text (list x y) (* scv:*rep-note* h) n scv:*lay-report*
+              scv:*col-bad*))
+  (foreach n scv:*advice*
+    (setq y (- y (* 1.3 lh)))
+    (scv:text (list x y) (* scv:*rep-adv* h) n scv:*lay-report*
+              scv:*col-advice*))
+  (setq y0 (- y lh)
+        ytop (+ ytop (* 0.6 lh)))
+  (scv:line (list (- x h) y0) (list xr y0) scv:*lay-report* nil)
+  (scv:line (list xr y0) (list xr ytop) scv:*lay-report* nil)
+  (scv:line (list xr ytop) (list (- x h) ytop) scv:*lay-report* nil)
+  (scv:line (list (- x h) ytop) (list (- x h) y0) scv:*lay-report* nil)
+  y0)
+
+;;; ======================================================================
+;;;  THE QUESTIONS
+;;; ======================================================================
+;;;
+;;;  Three of them, walked with a step counter the way STANDARDS section
+;;;  3 asks for: each answer sets the counter to the step it wants next,
+;;;  and Back sets it to the one before.  The selection is the first
+;;;  question, so it offers no Back -- there is nothing in front of it.
+
+;; A measurement with a suggested default on a REQUIRED value (the SUGR
+;; kind): Enter takes the number shown, zero and negative are refused
+;; because a cover that laps nothing is not a cover, and Back re-opens
+;; the question before this one.
+(defun scv:askdist (msg dflt back / v out)
+  (cal:osup)
+  (while (null out)
+    (if back (initget (if dflt 6 7) "Back Undo") (initget (if dflt 6 7)))
+    (setq v (getdist (strcat "\n" msg
+                             (if dflt (strcat " <" (rtos dflt) ">") "")
+                             (if back " [Back]" "")
+                             ": ")))
+    (if lzd:ask (lzd:ask msg v))
+    (cond
+      ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'SCV-BACK))
+      ((and (null v) dflt) (setq out dflt))
+      ((and v (numberp v)) (setq out v))
+      (t (princ "\nA measurement is needed here."))))
+  (cal:osdown)
+  out)
+
+;; Back typed like a value, for the one prompt that cannot take keywords
+;; (getstring).  Any case, per the shared convention.
+(defun scv:backstr (v)
+  (member (strcase v) '("B" "BACK" "U" "UNDO")))
+
+;; The taper typed instead of clicked.  Returns the normalised taper, or
+;; SCV-BACK.
+(defun scv:asktaper (/ v out)
+  (while (null out)
+    (setq v (getstring
+              "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8) [type B to go Back]: "))
+    (if lzd:ask (lzd:ask "Taper" v))
+    (cond
+      ((scv:backstr v) (setq out 'SCV-BACK))
+      ((setq out (scv:tapernorm v)))
+      (t (princ "\nNot a taper on the foam sheet -- again."))))
+  out)
+
+;; THE TAPER QUESTION.  Click the block and its GRADE / TAPER tags are
+;; read; Type to type the taper; Skip -- which is what Enter does -- to
+;; take neither, and be told in the report that a standard 4-2 was
+;; assumed.  initget's keywords reach entsel exactly as they reach any
+;; other prompt, so one question carries all three answers instead of a
+;; do-you-want-to first.
+;;
+;; Returns (grade taper assumed-flag), or SCV-BACK.
+(defun scv:askblock (back / v ed bn att g tp)
+  (cal:osup)
+  (initget (if back "Type Skip Back Undo" "Type Skip"))
+  (setq v (entsel (strcat "\nSelect the block that gives the taper [Type/Skip"
+                          (if back "/Back" "") "] <Skip>: ")))
+  (if lzd:watch (lzd:watch v))
+  (if lzd:ask (lzd:ask "Block that gives the taper" v))
+  (cal:osdown)
+  (cond
+    ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'SCV-BACK)
+    ((and (= (type v) 'STR) (= v "Type"))
+     (setq tp (scv:asktaper))
+     (if (eq tp 'SCV-BACK) (scv:askblock back) (list scv:*grade-dflt* tp nil)))
+    ((or (null v) (= (type v) 'STR))            ; Skip, or Enter
+     (list scv:*grade-dflt* scv:*taper-dflt* t))
+    (t
+     (setq ed (entget (car v)))
+     (if (/= "INSERT" (cdr (assoc 0 ed)))
+         (progn
+           (scv:say "That is not a block reference.")
+           (scv:askblock back))
+         (progn
+           (setq bn (cdr (assoc 2 ed)))
+           (if (/= (strcase bn) (strcase scv:*block-name*))
+               (scv:say (strcat "(block is named \"" bn "\", not "
+                                scv:*block-name*
+                                " -- reading its tags anyway)")))
+           (setq att (scv:attribs (car v))
+                 g   (cdr (assoc scv:*grade-tag* att))
+                 tp  (cdr (assoc scv:*taper-tag* att))
+                 g   (if g (scv:gradenorm (scv:aftercolon g)) scv:*grade-dflt*)
+                 tp  (if tp (scv:tapernorm (scv:aftercolon tp))))
+           (if tp
+               (list g tp nil)
+               (progn
+                 (scv:say (strcat "No readable " scv:*taper-tag*
+                                  " tag on that block."))
+                 (list g scv:*taper-dflt* t))))))))
+
+;;; ======================================================================
+;;;  THE HINGE PASS
+;;; ======================================================================
+
+;; Draw the hinges on the cover and return the report rows.  cpts is the
+;; finished cover, flattened; grade and taper are whatever the taper
+;; question settled on.
+(defun scv:hingepass (cpts grade taper / bb across up longx wpts s1 s2 fo
+                                        opts allowed best n xs fw fl mc mp
+                                        allvel htys k x ch p q hty rows hw
+                                        h vd nm)
+  (setq bb (scv:bbox cpts)
+        across (- (caddr bb) (car bb))
+        up     (- (cadddr bb) (cadr bb))
+        longx  (>= across up)
+        wpts   (if longx cpts (scv:swap cpts))
+        s1     (if longx (car bb) (cadr bb))
+        s2     (if longx (caddr bb) (cadddr bb))
+        allvel (= grade "THERMOLIGHT")
+        fo     (scv:foamopts grade taper)
+        opts   (car fo)
+        allowed (cadr fo))
+  (if allvel
+      (scv:advise "THERMO-LIGHT: EVERY HINGE IS VELCRO - NO FOLD HINGE"))
+  (if (not (caddr fo))
+      (scv:note (strcat "GRADE/TAPER " grade " " taper
+                        " NOT ON THE FOAM SHEET - 48/96 ASSUMED")))
+  (setq best (scv:hbest wpts s1 s2 opts allowed)
+        n  (car best)   xs (cadr best)
+        fw (caddr best) fl (nth 3 best)
+        mc (nth 7 best) mp (nth 8 best))
+  (if (not (nth 4 best))
+      (scv:note (strcat "A PIECE IS WIDER THAN THE FOAM SHEET ("
+                        (rtos mp 2 1) " > " (rtos fw 2 1) ")")))
+  (if (not (nth 6 best))
+      (scv:note (strcat (itoa n) " PIECES NOT ACCEPTABLE FOR "
+                        (scv:gradeshort grade) " " taper)))
+  (if (> (length opts) 1)
+      (scv:advise (strcat "FOAM SHEET USED: " (rtos fw 2 2) " x "
+                          (if fl (rtos fl 2 0) "N/A")
+                          " (this taper has " (itoa (length opts))
+                          " sheets)")))
+  ;; the hinges themselves, west to east -- or south to north on a cover
+  ;; that is taller than it is wide, which is the same list read in the
+  ;; frame it was solved in
+  (setq htys (scv:hingetypes n allvel) k 0)
+  (foreach x xs
+    (setq ch (scv:chordpoly wpts x)
+          hty (nth k htys))
+    (if ch
+        (progn
+          (setq p (if longx (list x (car ch)) (list (car ch) x))
+                q (if longx (list x (cadr ch)) (list (cadr ch) x)))
+          (scv:line p q scv:*lay-cover* (if (= hty "H") (scv:hdash) nil))
+          (scv:hlabel p q (if (= hty "H") "Hinge" "Velcro Hinge"))
+          (if (and fl (> (- (cadr ch) (car ch)) (+ fl 0.01)))
+              (scv:note (strcat "HINGE " (itoa (1+ k))
+                                " EXCEEDS THE FOAM LENGTH ("
+                                (rtos (- (cadr ch) (car ch)) 2 1)
+                                " > " (rtos fl 2 0) ")")))))
+    (setq k (1+ k)))
+  (if (null fl)
+      (scv:note "THERMOLIGHT: HINGE LENGTH N/A - VERIFY"))
+  ;; hardware called for by the LONGEST hinge
+  (setq hw nil)
+  (foreach h scv:*hardtab*
+    (if (and (not hw) (= (car h) grade)) (setq hw h)))
+  (if hw
+      (progn
+        (setq k 0)
+        (foreach nm scv:*hardnames*
+          (setq vd (scv:hardverdict (nth (1+ k) hw) mc))
+          (if (car vd)
+              (scv:advise (strcat nm ": YES - " (cdr vd)))
+              (scv:advise (strcat nm ": no - " (cdr vd))))
+          (setq k (1+ k)))))
+  ;; the rows: the pieces, the two foam limits, then each hinge's
+  ;; position measured from the end the solver started at
+  (setq rows (list (list (strcat "PIECES (" (scv:gradeshort grade) " "
+                                 taper ")")
+                         nil (itoa n) (not (nth 6 best)))
+                   (list "FOAM WIDTH MAX" fw mp (not (nth 4 best)))
+                   (list "FOAM LENGTH MAX" fl mc (not (nth 5 best)))
+                   (list "HINGES RUN" nil
+                         (if longx "UP (dividing across)"
+                             "ACROSS (dividing up)"))))
+  (setq k 0)
+  (foreach x xs
+    (setq rows (append rows
+                       (list (list (strcat "HINGE " (itoa (1+ k))
+                                           (if (= (nth k htys) "H")
+                                               " (FOLD)" " (VELCRO)"))
+                                   nil (- x s1))))
+          k (1+ k)))
+  rows)
+
+;;; ======================================================================
+;;;  THE COMMAND
+;;; ======================================================================
+
+(defun c:SPACOVCREATE ( / *error* undo-open qstep pre ss hv strands ellp
+                          splines chained loops leftover picked sverts sarea
+                          d gt grade taper assumed cverts cpts cbb circ
+                          rows th across up size)
+
+  (defun *error* (msg)
+    ;; user settings come back FIRST so nothing below can skip them
+    (cal:sysrestore)
+    ;; command-s, never plain command: 2015+ engines reject (command)
+    ;; inside *error* unless the error mode was pushed beforehand
+    (if undo-open
+      (progn
+        (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+        ;; the run is one undo group, so whatever was half drawn goes
+        ;; back in one keystroke -- say which, because a half-drawn cover
+        ;; erased by hand is a half-drawn cover somebody misses a bit of
+        (princ "\nNothing was left half done - use U to roll the run back.")))
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nSPACOVCREATE error: " msg)))
+    (if lzd:report (lzd:report "SPACOVCREATE" *spacovcreate-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "SPACOVCREATE" *spacovcreate-version*))
+
+  (setq scv:*notes* nil scv:*advice* nil)
+  ;; the two this command actually changes -- it never touches CLAYER,
+  ;; because every entmake here carries its own layer in DXF 8
+  (cal:syssave '("OSMODE" "CMDECHO"))
+  (setvar "CMDECHO" 0)
+  ;; a highlight made before the command was typed is the spa -- probed
+  ;; BEFORE the undo group opens, because _.UNDO _Begin clears the
+  ;; pickfirst set (the convention LOBF and ABPCHECK already carry)
+  (setq pre (ssget "_I" scv:*filter*))
+  (if lzd:watch (lzd:watch pre))
+
+  (princ (strcat "\n\nSPACOVCREATE " *spacovcreate-version*
+                 " - the cover for a spa that is already drawn."))
+
+  ;; -------- the three questions, walked with a step counter ----------
+  (setq qstep 1)
+  (while (and qstep (< qstep 4))
+    (cond
+      ;; 1 -- which geometry is the spa
+      ((= qstep 1)
+       (if pre
+           (setq ss pre pre nil)
+           (progn
+             (princ "\nSelect the geometry that is the spa: ")
+             (setq ss (ssget scv:*filter*))
+             (if lzd:watch (lzd:watch ss))))
+       (if (null ss)
+           (progn (scv:say "Nothing selected - nothing to cover.")
+                  (setq qstep nil))
+           (progn
+             (setq hv (scv:harvest ss)
+                   strands (car hv)
+                   ellp (cadr hv)
+                   splines (caddr hv)
+                   chained (scv:chain strands)
+                   loops (car chained)
+                   leftover (cadr chained)
+                   picked (scv:pick-loop loops))
+             (cond
+               ((null picked)
+                (scv:say (strcat (cal:plural (sslength ss)
+                                             "object" "objects")
+                                 " selected and nothing closes into an"
+                                 " outline - check the walls meet at the"
+                                 " corners."))
+                (setq ss nil))
+               (t
+                (setq sverts (scv:st-verts (car picked))
+                      sarea  (caddr picked))
+                (scv:say (strcat (cal:plural (length loops)
+                                             "closed outline" "closed outlines")
+                                 " in the selection; the biggest is the spa ("
+                                 (rtos (/ sarea 144.0) 2 1) " sq ft)."))
+                (if (> leftover 0)
+                    (scv:note (strcat (cal:plural leftover
+                                                  "SELECTED RUN" "SELECTED RUNS")
+                                      " NEVER CLOSED - IGNORED")))
+                (if ellp
+                    (scv:note (strcat "ELLIPSE OFFSET AS A POLYLINE - NO"
+                                      " ELLIPSE IS PARALLEL TO ANOTHER")))
+                (if (> splines 0)
+                    (scv:note (strcat (cal:plural splines "SPLINE" "SPLINES")
+                                      " NOT READ - EXPLODE OR FIT TO A POLYLINE")))
+                (setq qstep 2))))))
+      ;; 2 -- how far the cover laps
+      ((= qstep 2)
+       (setq d (scv:askdist "Cover offset past the spa"
+                            scv:*offset-dflt* t))
+       (if (eq d 'SCV-BACK)
+           (progn (scv:say "Stepping back one question.")
+                  (setq ss nil qstep 1))
+           (setq qstep 3)))
+      ;; 3 -- the taper
+      ((= qstep 3)
+       (setq gt (scv:askblock t))
+       (if (eq gt 'SCV-BACK)
+           (progn (scv:say "Stepping back one question.")
+                  (setq qstep 2))
+           (setq grade (car gt) taper (cadr gt) assumed (caddr gt)
+                 qstep 4)))))
+
+  ;; -------- draw it -------------------------------------------------
+  (if (= qstep 4)
+      (progn
+        ;; A Thermo-Light comes in ONE taper, so the grade settles it:
+        ;; a block with no readable TAPER tag on a Thermo-Light is not a
+        ;; taper nobody gave, it is one the grade already answered -- and
+        ;; flagging that as an assumption would send a drafter hunting
+        ;; for a number that was never missing.  It is still SAID, in
+        ;; cyan, because the taper on the sheet is not the one drawn to.
+        (if (= grade "THERMOLIGHT")
+            (progn
+              (if (/= taper scv:*thermotaper*)
+                  (scv:advise (strcat "TAPER TAKEN FROM THE GRADE - A"
+                                      " THERMO-LIGHT IS "
+                                      scv:*thermotaper*)))
+              (setq taper scv:*thermotaper* assumed nil)))
+        (if assumed
+            (scv:note (strcat "TAPER NOT GIVEN - "
+                              (scv:gradeshort scv:*grade-dflt*) " "
+                              scv:*taper-dflt* " ASSUMED")))
+        ;; only when undo is recording -- _Begin in a drawing with UNDO
+        ;; off (bit 1 of UNDOCTL clear) errors out of the command
+        (if (= 1 (logand 1 (getvar "UNDOCTL")))
+            (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
+        (setvar "OSMODE" 0)
+        (cal:ensure-layer scv:*lay-cover* scv:*col-cover*)
+        (cal:ensure-layer scv:*lay-text* scv:*col-text*)
+        (cal:ensure-layer scv:*lay-report* scv:*col-report*)
+        (setq scv:*dashlt* (scv:ltmake scv:*hdashname*
+                                       "Dashed (.5x) _ _ _ _ _ _ _ _ _ _"
+                                       scv:*hdashpat*))
+        (setq cverts (scv:offset sverts d)
+              cpts   (scv:flatten cverts)
+              circ   (scv:circlep cverts))
+        (if circ
+            (scv:circle (car circ) (cadr circ) scv:*lay-cover*)
+            (scv:polyline cverts scv:*lay-cover*))
+        (setq cbb (scv:bbox cpts)
+              across (- (caddr cbb) (car cbb))
+              up     (- (cadddr cbb) (cadr cbb))
+              size   (max across up)
+              th     (max scv:*th-min* (/ size scv:*th-div*)))
+        (setq rows (append
+                     (list (list "SPA OUTLINE" nil
+                                 (strcat (cal:plural (sslength ss)
+                                                     "object" "objects")
+                                         ", "
+                                         (cal:plural (length sverts)
+                                                     "vertex" "vertices")))
+                           (list "COVER OFFSET" nil d)
+                           (list "COVER ACROSS" nil across)
+                           (list "COVER UP" nil up)
+                           (list "GRADE / TAPER" nil
+                                 (strcat (scv:gradeshort grade) " " taper)
+                                 assumed))
+                     (scv:hingepass cpts grade taper)))
+        (scv:report rows
+                    (+ (caddr cbb) (* scv:*rep-gap* th))
+                    (cadddr cbb)
+                    th)
+        (scv:say (strcat "Cover drawn on layer " scv:*lay-cover*
+                         " - " (rtos across 2 2) " across x "
+                         (rtos up 2 2) " up, "
+                         (if scv:*notes*
+                             (strcat (cal:plural (length scv:*notes*)
+                                                 "thing" "things")
+                                     " flagged.")
+                             "nothing flagged.")))
+        (if undo-open (command "_.UNDO" "_End"))
+        (setq undo-open nil)))
+
+  (cal:sysrestore)
+  (princ))
+
+;; Which build is loaded -- the first thing to check when a run does
+;; something the notes above say it should not.
+(defun c:SPACOVCREATEVER ()
+  (princ (strcat "\nSPACOVCREATE " *spacovcreate-version*))
+  (princ))
+
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPACOVCREATE " *spacovcreate-version*
+                 " loaded.  SPACOVCREATE to build a spa cover from the spa"
+                 " already on the sheet.")))
 (princ)
 
 
@@ -78903,7 +88645,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.7") ; printed on load and at command
+(setq *stockcover-version* "v1.9") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -79092,7 +88834,18 @@
 ;;;  STOCKCOVER-CFG
 ;;; -------------------------------------------------------------------
 
-(defun c:STOCKCOVER-CFG (/ cur f new)
+(defun c:STOCKCOVER-CFG ( / *error* cur f new)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nSTOCKCOVER-CFG error: " msg)))
+    (if lzd:report (lzd:report "STOCKCOVER-CFG" *stockcover-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "STOCKCOVER-CFG" *stockcover-version*))
   (setq cur (stock:folder))
   (stock:say (strcat "stock folder is now: " cur))
   ;; getfiled on any DWG inside the folder is the portable folder picker
@@ -79136,7 +88889,9 @@
       (progn
         (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
         (princ "\nNothing was left half done - use U to roll the run back.")))
+    (if lzd:report (lzd:report "STOCKCOVER" *stockcover-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "STOCKCOVER" *stockcover-version*))
 
   (setq oscm   (getvar "CMDECHO")
         osos   (getvar "OSMODE")
@@ -79164,10 +88919,12 @@
       ;; a highlight made before the command was typed (pickfirst) is
       ;; the perimeter - only ask when there is none
       (setq ss-old (ssget "_I"))
+      (if lzd:watch (lzd:watch ss-old))
       (if (null ss-old)
         (progn
           (princ "\nHighlight the perimeter to be replaced: ")
-          (setq ss-old (ssget))))
+          (setq ss-old (ssget))
+          (if lzd:watch (lzd:watch ss-old))))
       (if (null ss-old)
         (stock:say "nothing highlighted - nothing to replace.")
         (progn
@@ -79303,8 +89060,15 @@
                                         " object(s) in, "
                                         (itoa (sslength ss-old))
                                         " out."))))))))
-                  (command "_.UNDO" "_End")
-                  (setq undone nil)))))))))
+                  ;; closed only if one was opened, as the handler
+                  ;; above is: with undo recording off (UNDOCTL bit 1
+                  ;; clear) there is none, and an _End on nothing is an
+                  ;; error of its own -- here, with the cover already
+                  ;; placed on the anchor
+                  (if undone
+                    (progn
+                      (command "_.UNDO" "_End")
+                      (setq undone nil)))))))))))
 
   (stock:restore)
   (princ))
@@ -79315,10 +89079,18 @@
   (princ (strcat "\nSTOCKCOVER " *stockcover-version*))
   (princ))
 
-(princ (strcat "\nSTOCKCOVER " *stockcover-version*
-               " loaded.  STOCKCOVER to place a stock cover,"
-               " STOCKLIST to see what is available,"
-               " STOCKCOVER-CFG to set the folder."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSTOCKCOVER " *stockcover-version*
+                 " loaded.  STOCKCOVER to place a stock cover,"
+                 " STOCKLIST to see what is available,"
+                 " STOCKCOVER-CFG to set the folder.")))
 (princ)
 
 
@@ -79376,7 +89148,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.5")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -79508,7 +89280,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nDRONE error: " msg)))
+    (if lzd:report (lzd:report "DRONE" *drone-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "DRONE" *drone-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -79526,10 +89300,12 @@
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
   (setq ss-text (ssget "_I" '((0 . "TEXT"))))
+  (if lzd:watch (lzd:watch ss-text))
   (if (null ss-text)
     (progn
       (prompt "\nSelect text to update <Enter = all text in drawing>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
+      (if lzd:watch (lzd:watch ss-text))
       (if (null ss-text)
         (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
 
@@ -79636,7 +89412,15 @@
   (princ (strcat "\nDRONE " *drone-version*))
   (princ))
 
-(princ (strcat "\nDRONE " *drone-version* " loaded.  Type DRONE to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nDRONE " *drone-version* " loaded.  Type DRONE to run.")))
 (princ)
 
 
@@ -79687,7 +89471,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.6")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -79808,7 +89592,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTYDRN error: " msg)))
+    (if lzd:report (lzd:report "TYDRN" *tydrn-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TYDRN" *tydrn-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -79825,10 +89611,12 @@
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
   (setq ss-text (ssget "_I" '((0 . "TEXT"))))
+  (if lzd:watch (lzd:watch ss-text))
   (if (null ss-text)
     (progn
       (prompt "\nSelect text to update <Enter = all text in drawing>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
+      (if lzd:watch (lzd:watch ss-text))
       (if (null ss-text)
         (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
 
@@ -80097,7 +89885,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTYLERDRONESUITE error: " msg)))
+    (if lzd:report (lzd:report "TYLERDRONESUITE" *tydrn-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TYLERDRONESUITE" *tydrn-version*))
   ;; Every calofin stage is checked BEFORE any of them runs.  Half a
   ;; suite is worse than none: TYDRN would have moved the points and
   ;; the operator would find out only mid-run that the padding they ran
@@ -80185,9 +89975,17 @@
   (princ (strcat "\nTYDRN " *tydrn-version*))
   (princ))
 
-(princ (strcat "\nTYDRN " *tydrn-version*
-               " loaded.  Type TYDRN to run, or TYLERDRONESUITE"
-               " for the whole trace."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTYDRN " *tydrn-version*
+                 " loaded.  Type TYDRN to run, or TYLERDRONESUITE"
+                 " for the whole trace.")))
 (princ)
 
 
@@ -80276,7 +90074,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.3")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -80597,7 +90395,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSOCONV error: " msg)))
+    (if lzd:report (lzd:report "SOCONV" *soconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SOCONV" *soconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil)
@@ -80610,10 +90410,12 @@
   ;; IS the whole drawing, which is why Enter means that; highlight
   ;; first when two surveys share one drawing.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the survey import to convert <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -80673,7 +90475,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSORECONV error: " msg)))
+    (if lzd:report (lzd:report "SORECONV" *soconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "SORECONV" *soconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -80687,10 +90491,12 @@
   ;; carrying a record move either way, so Enter is as safe here as it
   ;; is there.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -80765,8 +90571,16 @@
   (princ (strcat "\nSOCONV " *soconv-version*))
   (princ))
 
-(princ (strcat "\nSOCONV " *soconv-version*
-               " loaded.  Type SOCONV to run, SORECONV to undo one."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSOCONV " *soconv-version*
+                 " loaded.  Type SOCONV to run, SORECONV to undo one.")))
 (princ)
 
 
@@ -80858,7 +90672,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.3")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -81219,7 +91033,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nVSCONV error: " msg)))
+    (if lzd:report (lzd:report "VSCONV" *vsconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "VSCONV" *vsconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -81256,6 +91072,7 @@
           (prompt (strcat "\nSelect the VS import <Enter = every VS layer"
                           " in the drawing>: "))
           (setq ss (ssget filter))
+          (if lzd:watch (lzd:watch ss))
           (if (null ss) (setq ss (ssget "_X" filter)))))
 
       ;; The destinations have to exist, and be usable, before anything
@@ -81381,7 +91198,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nVSRECONV error: " msg)))
+    (if lzd:report (lzd:report "VSRECONV" *vsconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "VSRECONV" *vsconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -81396,10 +91215,12 @@
   ;; drawing lives too -- so the record is what says which objects came
   ;; from an export, and nothing else is touched whatever is selected.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -81492,8 +91313,16 @@
   (princ (strcat "\nVSCONV " *vsconv-version*))
   (princ))
 
-(princ (strcat "\nVSCONV " *vsconv-version*
-               " loaded.  Type VSCONV to run, VSRECONV to undo one."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nVSCONV " *vsconv-version*
+                 " loaded.  Type VSCONV to run, VSRECONV to undo one.")))
 (princ)
 
 
@@ -81637,7 +91466,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.1")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -82151,10 +91980,12 @@
 ;; highlight first when two plans share one sheet.
 (defun g2m:scope (msg / ss)
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (prompt (strcat "\n" msg " <Enter = whole drawing>: "))
       (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))
       (if (null ss) (setq ss (ssget "_X")))))
   ss)
 
@@ -82178,7 +92009,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nG2MCONV error: " msg)))
+    (if lzd:report (lzd:report "G2MCONV" *g2mconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "G2MCONV" *g2mconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -82302,7 +92135,9 @@
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nG2MRECONV error: " msg)))
+    (if lzd:report (lzd:report "G2MRECONV" *g2mconv-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "G2MRECONV" *g2mconv-version*))
 
   (setq doc      (vla-get-ActiveDocument (vlax-get-acad-object))
         unlocked nil
@@ -82402,8 +92237,16 @@
   (princ (strcat "\nG2MCONV " *g2mconv-version*))
   (princ))
 
-(princ (strcat "\nG2MCONV " *g2mconv-version*
-               " loaded.  Type G2MCONV to run, G2MRECONV to undo."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nG2MCONV " *g2mconv-version*
+                 " loaded.  Type G2MCONV to run, G2MRECONV to undo.")))
 (princ)
 
 
@@ -82445,7 +92288,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.9")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -82983,8 +92826,10 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nWCALST error: " msg))
     )
+    (if lzd:report (lzd:report "WCALST" *wcalst-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "WCALST" *wcalst-version*))
   (setq oldlay (getvar "CLAYER"))
 
   ;; ---- 1.-7. the questions, staged so every prompt after the first
@@ -82996,6 +92841,7 @@
   ;; the first pass through stage 1 takes them; a too-small band or Back
   ;; re-asks interactively.
   (setq wc-pick (ssget "_I" '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch wc-pick))
   (setq stage 1)
   (while (< stage 6)
     (cond
@@ -83006,7 +92852,8 @@
          (setq ss wc-pick wc-pick nil)
          (progn
            (princ "\nSelect the band of lines (two long sides + rungs): ")
-           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))))
+           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+           (if lzd:watch (lzd:watch ss))))
        (if (not ss) (progn (princ "\nNothing selected.") (exit)))
        (setq segs (wc:build-segs ss))
        (if (< (length segs) wc:*min-segs*)
@@ -83021,6 +92868,7 @@
       ((= stage 2)
        (initget "Back Undo")
        (setq pick (entsel "\nClick the long side to STRAIGHTEN [Back]: "))
+       (if lzd:watch (lzd:watch pick))
        (cond
          ((= (type pick) 'STR) (setq stage 1))
          ((not pick)
@@ -83234,6 +93082,7 @@
   ;; equal steps up and down stay equal)
   (princ "\nWindow the STAIR section(s) if any (Enter = none): ")
   (setq ssstairs (ssget))
+  (if lzd:watch (lzd:watch ssstairs))
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a
@@ -83795,8 +93644,16 @@
   (princ (strcat "\nWCALST " *wcalst-version*))
   (princ))
 
-(princ (strcat "\nWCALST " *wcalst-version*
-               " loaded -- select the band, pick the side to straighten."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nWCALST " *wcalst-version*
+                 " loaded -- select the band, pick the side to straighten.")))
 (princ)
 
 
@@ -83872,7 +93729,7 @@
 
 
 
-(setq *xft-version* "v1.14") ; printed on load and at command start so a
+(setq *xft-version* "v1.16") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -84713,8 +94570,10 @@
     ;; error mode would stay pushed for the rest of the session
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if lzd:report (lzd:report "XFTCONV" *xft-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "XFTCONV" *xft-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -84734,10 +94593,12 @@
   ;; so there is nothing left to step back to.  a selection made before
   ;; the command was typed (pickfirst) skips even that prompt.
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (not ss)
     (progn
       (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -85007,8 +94868,10 @@
     (xft:restore)
     (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (princ "\nNothing was left half done - use U to roll the run back.")
+    (if lzd:report (lzd:report "XFTRECONV" *xft-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "XFTRECONV" *xft-version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
 
@@ -85021,10 +94884,12 @@
 
   ;; ---- selection, the same three ways XFTCONV takes it ------------
   (setq ss (ssget "_I"))
+  (if lzd:watch (lzd:watch ss))
   (if (not ss)
     (progn
       (princ "\nSelect the converted survey (Enter = everything in this space): ")
-      (setq ss (ssget))))
+      (setq ss (ssget))
+      (if lzd:watch (lzd:watch ss))))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -85109,8 +94974,15 @@
                         (rtos scale 2 4) " about the conversion's own base ..."))
          (command "_.SCALE" keep "" (trans base 0 1) (/ 1.0 scale))))
 
-     (command "_.UNDO" "_End")
-     (setq undone nil)
+     ;; closed only if one was opened, as the handler and XFTCONV's own
+     ;; close both are: with undo recording off (UNDOCTL bit 1 clear)
+     ;; there is none, and an _End on nothing is an error of its own --
+     ;; here, with every block already converted back and the sysvar
+     ;; restore below it
+     (if undone
+       (progn
+         (command "_.UNDO" "_End")
+         (setq undone nil)))
      (xft:restore)
 
      ;; ---- report -------------------------------------------------
@@ -85132,7 +95004,18 @@
 ;;;  make sure the pieces exist as soon as the file loads
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV-SETUP ()
+(defun c:XFTCONV-SETUP ( / *error*)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nXFTCONV-SETUP error: " msg)))
+    (if lzd:report (lzd:report "XFTCONV-SETUP" *xft-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "XFTCONV-SETUP" *xft-version*))
   (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
   (xft:ensure-block)
   (princ (strcat "\nLayer \"" *xft-block-layer* "\" and block \"" *xft-block* "\" are ready."))
@@ -85143,9 +95026,17 @@
   (princ (strcat "\nXFTCONV " *xft-version*))
   (princ))
 
-(princ (strcat "\nXFTCONV.lsp " *xft-version*
-               " loaded.  Type XFTCONV to scale a survey import and swap"
-               " its points, XFTRECONV to put one back."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nXFTCONV.lsp " *xft-version*
+                 " loaded.  Type XFTCONV to scale a survey import and swap"
+                 " its points, XFTRECONV to put one back.")))
 (princ)
 
 
@@ -85213,7 +95104,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.6")
+(setq *xyplot-version* "v1.8")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -85911,7 +95802,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nXYPLOT error: " msg)))
+    (if lzd:report (lzd:report "XYPLOT" *xyplot-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "XYPLOT" *xyplot-version*))
   (vl-load-com)
   (princ (strcat "\nXYPLOT " *xyplot-version*))
   ;; ---- the questions: Back at the second re-opens the first -------------
@@ -86113,9 +96006,16 @@
                 '())
               (princ "\n  View reset to plan (top).")
               ;; close the group before any ABHD handoff - the whole plot
-              ;; is one U, and ABHD grouped separately is ABHD's own U
-              (command "_.UNDO" "_End")
-              (setq undo-open nil)
+              ;; is one U, and ABHD grouped separately is ABHD's own U.
+              ;; Only a group this run opened, though: with undo
+              ;; recording off (UNDOCTL bit 1 clear) none was, and an
+              ;; _End on nothing is an error of its own -- landing here,
+              ;; with every graph already plotted and the report already
+              ;; written
+              (if undo-open
+                (progn
+                  (command "_.UNDO" "_End")
+                  (setq undo-open nil)))
               ;; ---- on to the pool perimeter ------------------------------
               (if (= "Yes" (cal:askkw
                              "Fit a pool perimeter through graph 1's points now?"
@@ -86130,8 +96030,16 @@
   (princ (strcat "\nXYPLOT " *xyplot-version* " (XYPLOT.lsp)"))
   (princ))
 
-(princ (strcat "\nXYPLOT.lsp " *xyplot-version*
-               " loaded.  Type XYPLOT to graph an X/Y sheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nXYPLOT.lsp " *xyplot-version*
+                 " loaded.  Type XYPLOT to graph an X/Y sheet.")))
 (princ)
 
 
@@ -86233,7 +96141,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.4")
+(setq *constellation-version* "v1.5")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -86271,7 +96179,8 @@
 ;; 6 magenta, 7 white, 8 grey.  Grey for the frame and cyan for the
 ;; legend, so neither competes with the result; the result itself lands
 ;; in the point and dimension colours the rest of the toolkit uses.
-(setq cst:*space-color*   8)
+(setq cst:*space-color*   'auto)  ; 'auto picks the grey for the
+                                  ; background; a number as given
 (setq cst:*guide-color*   4)
 (setq cst:*outline-color* 3)
 (setq cst:*dim-color*     2)
@@ -87420,7 +97329,8 @@
 
 (defun cst:preview (n w h base / pts i p r th lab)
   (cst:unpreview)
-  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
+  (cal:ensure-layer cst:*space-layer*
+                    (cal:ink cst:*space-color* 'guide))
   (cal:ensure-layer cst:*guide-layer* cst:*guide-color*)
   (setq r   (cst:dotr w h)
         th  (cst:texth w h)
@@ -87486,6 +97396,7 @@
   (setq dflt (fix (max cst:*minpts* (min cst:*maxpts* cst:*defcount*))))
   (initget 6 "Back Undo")
   (setq v (getint (strcat "\nHow many points? [Back] <" (itoa dflt) ">: ")))
+  (if lzd:ask (lzd:ask "cst:askcount" v))
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) dflt)
         ((or (< v cst:*minpts*) (> v cst:*maxpts*))
@@ -87498,6 +97409,7 @@
 (defun cst:askbase ( / v)
   (initget "Back Undo")
   (setq v (getpoint "\nInsertion base point [Back] <0,0>: "))
+  (if lzd:ask (lzd:ask "cst:askbase" v))
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) '(0.0 0.0))
         (t (cal:2d v))))
@@ -87791,7 +97703,8 @@
 ;; they are not part of the drawing to be swept and a redraw must not
 ;; keep re-announcing them.
 (defun cst:draw (pts n w h base chart arcs outline / mark th i p)
-  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
+  (cal:ensure-layer cst:*space-layer*
+                    (cal:ink cst:*space-color* 'guide))
   (cal:ensure-layer cst:*point-layer* cst:*point-color*)
   (cal:ensure-layer cst:*dim-layer* cst:*dim-color*)
   (if outline (cal:ensure-layer cst:*outline-layer* cst:*outline-color*))
@@ -87970,7 +97883,9 @@
              (setq undo-open nil)))
     (if (and msg (not (cal:error-cancel-p msg)))
       (princ (strcat "\nCONSTELLATION error: " msg)))
+    (if lzd:report (lzd:report "CONSTELLATION" *constellation-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CONSTELLATION" *constellation-version*))
   (cal:syssave (cst:sysvars))
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
@@ -88089,9 +98004,17 @@
                  " (CONSTELLATION.lsp)"))
   (princ))
 
-(princ (strcat "\nCONSTELLATION.lsp " *constellation-version*
-               " loaded.  Type CONSTELLATION to place points from"
-               " their cross dims."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCONSTELLATION.lsp " *constellation-version*
+                 " loaded.  Type CONSTELLATION to place points from"
+                 " their cross dims.")))
 (princ)
 
 
@@ -88184,7 +98107,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.5")
+(setq *lazspa-version* "v1.6")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -88613,6 +98536,14 @@
 (setq lzs:*y0* 0)               ; the band being drawn, in per-mille --
 (setq lzs:*y1* 1000)            ; the whole chart when nothing is cut
 
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
 
 ;; per-mille -> pixels
 (defun lzs:px (v) (fix (/ (* v lzs:*dx*) 1000.0)))
@@ -88739,7 +98670,7 @@
       (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   cal:*imgcol-hi*))
+                   (cal:ink cal:*imgcol-hi* 'hi)))
   (cal:imgtext txt lx ly sc
             (if (= (lzs:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
 
@@ -88785,7 +98716,7 @@
     (foreach d (lzs:dims c)
       (if (not (member (cadr d) wk))
           (lzs:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d)
-                     cal:*imgcol-dim*)))
+                     (cal:ink cal:*imgcol-dim* 'dim))))
     (foreach m (lzs:marks c)
       (if (lzs:inband (caddr m)) (lzs:mark m)))
     (foreach d (lzs:dims c)
@@ -89443,7 +99374,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZSPA error: " msg)))
+    (if lzd:report (lzd:report "LAZSPA" *lazspa-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZSPA" *lazspa-version*))
   (setq lzs:*vals* nil
         lzs:*picks* nil                 ; every dropdown back to (ask)
         lzs:*pos* nil                   ; the profile decides where this
@@ -89568,8 +99501,16 @@
                  (itoa (length lzs:*charts*)) " chart(s)."))
   (princ))
 
-(princ (strcat "\nLAZSPA " *lazspa-version*
-               " loaded.  Type LAZSPA to fill a chart in and draw it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZSPA " *lazspa-version*
+                 " loaded.  Type LAZSPA to fill a chart in and draw it.")))
 (princ)
 
 
@@ -89596,8 +99537,20 @@
 ;;; against a letter and the letter is REPLACED by what you typed --
 ;;; which is what the letter was standing in for all along.  Every box
 ;;; is labelled with its own letter, so the list and the picture read
-;;; as one thing.  Fill in what you know, leave the rest blank, press
-;;; Insert: the routine runs and asks only for the gaps.
+;;; as one thing.
+;;;
+;;; INSERT DRAWS THE POOL.  It used to hand over whatever had been
+;;; typed and leave POOL to ask for the rest a question at a time,
+;;; which is the interview a form is supposed to replace: a sheet you
+;;; filled in and then answered again.  So the sheet carries the whole
+;;; run or it does not go.  Press Insert on an unfinished one and the
+;;; page does not close: every letter with nothing usable against it is
+;;; struck TWICE, a pixel apart, in red -- what a stroke font has
+;;; instead of a bold weight -- the line under the form names them, and
+;;; the marks come off one at a time as the boxes are answered.  Press
+;;; it again and it draws, and the only thing left to do is pick the
+;;; point.  (A box that cannot be READ is a different thing: that is an
+;;; error in what is typed, and it greys the button outright.)
 ;;;
 ;;; TWO ROUTINES ARE FED FROM HERE.  The eight POOL sheets -- Rectangle,
 ;;; True Oval, Roman, both Grecians, True L Left, Round and Octagon --
@@ -89611,13 +99564,12 @@
 ;;; THE FORM SAYS WHAT IT IS ABOUT TO DO.  cal:formanswer turns anything it
 ;;; cannot read into "not answered", so a typo used to be dropped in
 ;;; silence while the chart went on showing it -- the chart draws the
-;;; STRING -- and POOL asked for that dimension again with no reason
-;;; given.  A state line under the form now names any box in that
-;;; position and Insert stays greyed until it is fixed; when none is,
-;;; the same line is the hand-off, saying how much of the sheet is
-;;; filled and which letters POOL will still ask for.  It reports what
-;;; lzf:form is about to send rather than second-guessing it, so the
-;;; line and the alist cannot say different things.
+;;; STRING.  The state line under the form names any box in that
+;;; position, and any box or dropdown still empty, by the name the
+;;; sheet prints against it; when nothing is left it says so, and says
+;;; what -- if anything -- the routine will still ask.  It reports
+;;; lzf:livekeys and lzf:form rather than second-guessing them, so the
+;;; line, the bold letters and the alist cannot say different things.
 ;;;
 ;;; ZERO INSTALL, like LAZPANEL: the dialog is plain DCL written to the
 ;;; temp folder at run time, and the chart is drawn with vector_image,
@@ -89666,7 +99618,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.16")
+(setq *lazform-version* "v2.18")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -89704,6 +99656,14 @@
 ;; ceiling the packer wraps at, never a preference.
 (setq lzf:*tabbudget* 84)       ; the row of chart tabs
 (setq lzf:*rowbudget* 92)       ; a row of paired column boxes
+
+;; The same wall, the other way up.  How many lines of generated DCL
+;; may stack in the column BESIDE the chart before it is split in two.
+;; The Roman and Grecian pages were at 1141px against a 1080px screen,
+;; and four more charts were within 20px of the line, all of them
+;; because the five boxes beside the picture were one tall stack.  The
+;; picture is only ~260px, so the room was always there, sideways.
+(setq lzf:*colbudget* 34)   ; the boxes beside the chart
 
 ;; The chart column: its width in cells, and its height as a share of
 ;; that width (a string, because DCL reads aspect_ratio as one).
@@ -89830,9 +99790,9 @@
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
     ;; the Normal bottom re-asks the side as a CHECK, under a key of
-    ;; its own (pool:hopoval), so it is a second box and not the T on
-    ;; the drawing
-    ("tt" "T - straight side length (check)")
+    ;; its own (pool:hopoval asks ttc), so it is a second box and not
+    ;; the T on the drawing
+    ("ttc" "T - straight side length (check)")
     ("e2" "E2 - left end shallow flat")
     ("f2" "F2 - left slope")
     ("f1" "F1 - right slope")
@@ -90034,9 +99994,15 @@
    (("c"  "C - wall height (shallow depth)")
     ("d"  "D - deep end depth")
     ("c2" "C2 - shallow floor at the break")
-    ;; the round pool hands its bottom to the oval's routine, which
-    ;; re-asks the straight side as a check even on a circle
-    ("tt" "T - straight side length (check)")
+    ;; A ROUND POOL'S HOPPER IS THE OVAL'S, and the oval's routine asks
+    ;; R3 between G and W.  The sheet did not carry it, so that one
+    ;; question was left at the command line on every round pool drawn
+    ;; from this form -- the gap the box count could not show, because
+    ;; a box that is not there is not counted.
+    ("r3" "R3 - hopper end radius")
+    ;; and the same routine re-asks the straight side as a check even
+    ;; on a circle, under its own key
+    ("ttc" "T - straight side length (check)")
     ("e2" "E2 - left end shallow flat")
     ("f2" "F2 - left slope")
     ("f1" "F1 - right slope")
@@ -90644,6 +100610,11 @@
 (setq lzf:*pos* nil)            ; where the dialog was last standing
 (setq lzf:*go* nil)             ; the chart a tab click asked for
 (setq lzf:*ranchart* nil)       ; the chart Insert was finally pressed on
+(setq lzf:*cover* nil)          ; this run is LAZFORMCOVER's, so the
+                                ; pool-bottom gate is already answered No
+(setq lzf:*marked* nil)         ; Insert has been pressed on an
+                                ; unfinished sheet, so the gaps are
+                                ; marked on the chart from here on
 
 (defun lzf:get (key / p)
   (if (setq p (assoc key lzf:*vals*)) (cdr p) ""))
@@ -90661,7 +100632,17 @@
 
 (setq lzf:*dx* 0)               ; the tile's extent this time round
 (setq lzf:*dy* 0)
+(setq lzf:*owed* nil)           ; the boxes THIS repaint draws in bold,
+                                ; taken once at the top of lzf:redraw
 
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
 
 ;; per-mille -> pixels
 (defun lzf:px (v) (fix (/ (* v lzf:*dx*) 1000.0)))
@@ -90733,7 +100714,8 @@
 ;; to run into its neighbours -- H, G, F and E sit shoulder to shoulder
 ;; along the middle of the chart and every one of them can carry a
 ;; five-character feet-and-inches number.
-(defun lzf:label (d / letter key x1 y1 x2 y2 side txt sc w h lx ly span mx my)
+(defun lzf:label (d / letter key x1 y1 x2 y2 side txt sc w h lx ly span
+                    mx my bold)
   (setq letter (car d) key (cadr d)
         x1 (lzf:px (nth 2 d)) y1 (lzf:py (nth 3 d))
         x2 (lzf:px (nth 4 d)) y2 (lzf:py (nth 5 d))
@@ -90781,9 +100763,28 @@
       (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   cal:*imgcol-hi*))
+                   (cal:ink cal:*imgcol-hi* 'hi)))
+  ;; THE LETTER IS BOLD WHILE THE BOX IS OWED.  A box this page will be
+  ;; asked about and has no usable answer in gets its letter struck
+  ;; TWICE, a pixel apart, in the missing colour -- which is as close
+  ;; to a bold weight as a stroke font gets, and it is the picture the
+  ;; drafter is reading rather than a line of text under it.  The
+  ;; second strike is a second call rather than a wider pen because
+  ;; there is no pen: vector_image draws one-pixel segments and takes
+  ;; no weight, and lzf:text is one of the helpers the grouped build
+  ;; swaps for the library's, so it may not grow an argument either.
+  ;;
+  ;; A greyed box is never bold: lzf:owedp is measured against
+  ;; lzf:livekeys, so a letter this bottom type or this square state
+  ;; has taken away goes on being drawn plainly -- which is now the
+  ;; difference on the picture between "still to answer" and "not
+  ;; asked here".
+  (setq bold (lzf:owedp key))
   (cal:imgtext txt lx ly sc
-            (if (= (lzf:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
+            (cond (bold cal:*imgcol-miss*)
+                  ((= (lzf:get key) "") cal:*imgcol-line*)
+                  (t cal:*imgcol-val*)))
+  (if bold (cal:imgtext txt (1+ lx) ly sc cal:*imgcol-miss*)))
 
 ;; The whole picture, start to end.  Every vector goes between one
 ;; start_image and one end_image so the tile is painted once: the
@@ -90793,14 +100794,25 @@
 (defun lzf:redraw ( / c poly d)
   (setq c lzf:*chart*
         lzf:*dx* (dimx_tile "chart")
-        lzf:*dy* (dimy_tile "chart"))
+        lzf:*dy* (dimy_tile "chart")
+        ;; what this repaint marks in bold, worked out once -- the
+        ;; letters are drawn off it, so every letter agrees with every
+        ;; other and with the state line drawn beside them.  Nothing
+        ;; is marked until Insert has been pressed on an unfinished
+        ;; sheet; after that the set shrinks as the boxes are filled.
+        ;; A box that cannot be READ is marked with the empty ones: it
+        ;; is the one the chart lies about hardest, because the chart
+        ;; draws the string, so a typo looks exactly like an answer
+        ;; until its letter goes red
+        lzf:*owed* (if lzf:*marked*
+                       (append (lzf:togo) (lzf:unreadable))))
   (start_image "chart")
   (fill_image 0 0 lzf:*dx* lzf:*dy* cal:*imgcol-back*)
   (foreach poly (lzf:outline c)
     (lzf:pline (cal:imgflatten poly) cal:*imgcol-line*))
   (foreach d (lzf:dims c)
     (lzf:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d) (nth 6 d)
-               cal:*imgcol-dim*))
+               (cal:ink cal:*imgcol-dim* 'dim)))
   (foreach d (lzf:dims c) (lzf:label d))
   (end_image)
   (princ))
@@ -90949,7 +100961,49 @@
 ;; One dialog per chart.  They all live in one generated file so the
 ;; page loop can load_dialog once and switch pages without touching
 ;; the disk again.
-(defun lzf:dcl-one (c / out d l)
+;;  (lzf:*colbudget* itself is set in the TUNABLES block at the top of the file.)
+
+;; Net braces opened by one line of DCL: +1 per {, -1 per }.  What
+;; makes the boxes beside the chart splittable without the builders
+;; above having to know they are being split -- a block is finished
+;; when its own braces balance.
+(defun lzf:brace (s / i n d ch)
+  (setq i 0 n (strlen s) d 0)
+  (while (< i n)
+    (setq i (1+ i) ch (substr s i 1))
+    (cond ((= ch "{") (setq d (1+ d)))
+          ((= ch "}") (setq d (1- d)))))
+  d)
+
+;; LINES -- the interior of the column beside the chart -- wrapped in
+;; one ": column {}", or in two with the boxes shared out between them
+;; when one stack would be too tall.  The split is by weight rather
+;; than by count: "Dimensions" is half the page on its own, so three
+;; small boxes beside it is the balanced answer, not two and two.
+(defun lzf:packcols (lines / blocks blk d l tot run half a b out)
+  (setq blocks nil blk nil d 0)
+  (foreach l lines
+    (setq blk (cons l blk) d (+ d (lzf:brace l)))
+    (if (= d 0) (setq blocks (cons (reverse blk) blocks) blk nil)))
+  (if blk (setq blocks (cons (reverse blk) blocks)))
+  (setq blocks (reverse blocks) tot 0)
+  (foreach blk blocks (setq tot (+ tot (length blk))))
+  (if (or (<= tot lzf:*colbudget*) (< (length blocks) 2))
+    ;; short enough, or nothing to split it on: the page as it was
+    (append (list "    : column {") lines (list "    }"))
+    (progn
+      ;; greedy: keep filling the first column while doing so leaves it
+      ;; no further past halfway than stopping would leave it short
+      (setq run 0 half (/ tot 2) a nil b nil)
+      (foreach blk blocks
+        (if (and (<= (+ run (length blk)) half) (null b))
+          (setq a (append a blk) run (+ run (length blk)))
+          (setq b (append b blk))))
+      (if (null a) (setq a (car blocks) b (apply 'append (cdr blocks))))
+      (setq out (append (list "    : column {") a (list "    }")))
+      (append out (list "    : column {") b (list "    }")))))
+
+(defun lzf:dcl-one (c / out d l col)
   ;; out is consed newest-first and reversed once at the end, so this
   ;; seed list reads BACKWARDS: the label second here puts it second in
   ;; the file, after the line that opens the dialog.  The other way
@@ -90965,9 +101019,11 @@
                           lzf:*chart-a* "; fixed_width = true; "
                           "fixed_height = true; color = -15; }")
                   out))
-  (setq out (cons "    : column {" out))
-  (setq out (cons "      : boxed_column {" out))
-  (setq out (cons "        label = \"Dimensions\";" out))
+  ;; the boxes are built into COL so they can be shared out
+  ;; between columns once their sizes are known
+  (setq col nil)
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons "        label = \"Dimensions\";" col))
   ;; Each dimension is a row: its LETTER as a button, then the box.
   ;; Clicking the letter puts the caret in that box and rings the
   ;; dimension on the chart -- which is as close to clicking the
@@ -90976,84 +101032,84 @@
   ;; chart draws has a row here: the picture is read, the column is
   ;; typed into, and the letter is what ties the two together.
   (foreach d (lzf:dims c)
-    (setq out (cons "        : row {" out))
-    (setq out (cons (strcat "          : button { key = \"pick_"
+    (setq col (cons "        : row {" col))
+    (setq col (cons (strcat "          : button { key = \"pick_"
                             (cadr d) "\"; label = \"" (car d)
                             "\"; fixed_width = true; }")
-                    out))
-    (setq out (cons (strcat "          : edit_box { key = \"" (cadr d)
+                    col))
+    (setq col (cons (strcat "          : edit_box { key = \"" (cadr d)
                             "\"; edit_width = 9; label = \"" (nth 7 d)
                             "\"; }")
-                    out))
-    (setq out (cons "        }" out)))
-  (setq out (cons "      }" out))
+                    col))
+    (setq col (cons "        }" col)))
+  (setq col (cons "      }" col))
   (if (lzf:extra c)
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Not on this view\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Not on this view\";" col))
       (foreach l (append
                    (lzf:packrows (lzf:notsport (lzf:extra c)) "        ")
                    (lzf:packrows (lzf:sportof (lzf:extra c)) "        "))
-        (setq out (cons l out)))
-      (setq out (cons "      }" out))))
+        (setq col (cons l col)))
+      (setq col (cons "      }" col))))
   ;; the cross dims, with the question that decides how many of them
   ;; POOL will ask for at the head of the box
   (if (lzf:cross c)
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Cross dims (out-of-square only)\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Cross dims (out-of-square only)\";" col))
       (foreach d (lzf:picks c)
         (if (= (caddr d) "cross")
-            (setq out (cons (lzf:pickline d "        ") out))))
+            (setq col (cons (lzf:pickline d "        ") col))))
       (foreach l (lzf:packrows (lzf:cross c) "        ")
-        (setq out (cons l out)))
-      (setq out (cons "      }" out))))
+        (setq col (cons l col)))
+      (setq col (cons "      }" col))))
   (if (lzf:corners c)
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Corners\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Corners\";" col))
       (foreach d (lzf:corners c)
-        (setq out (cons "        : row {" out))
-        (setq out (cons (strcat "          : popup_list { key = \"" (car d)
+        (setq col (cons "        : row {" col))
+        (setq col (cons (strcat "          : popup_list { key = \"" (car d)
                                 "\"; label = \"" (cadr d)
                                 "\"; edit_width = 9; }")
-                        out))
-        (setq out (cons (strcat "          : edit_box { key = \"" (car d)
+                        col))
+        (setq col (cons (strcat "          : edit_box { key = \"" (car d)
                                 "-sz\"; label = \"size\"; "
                                 "edit_width = 6; fixed_width = true; }")
-                        out))
-        (setq out (cons "        }" out)))
-      (setq out (cons "      }" out))))
-  (setq out (cons "      : boxed_column {" out))
-  (setq out (cons "        label = \"The rest of the run\";" out))
+                        col))
+        (setq col (cons "        }" col)))
+      (setq col (cons "      }" col))))
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons "        label = \"The rest of the run\";" col))
   ;; the in-square toggle and the bottom type are POOL's questions and
   ;; nothing on an oasis answers to either: it is arcs all round, so
   ;; there is no corner to run a tape across, and its floor is asked
   ;; about after the outline is drawn
   (if (not (lzf:oasis-p c))
     (progn
-      (setq out (cons (strcat "        : toggle { key = \"insq\"; "
+      (setq col (cons (strcat "        : toggle { key = \"insq\"; "
                               "label = \"Pool is in-square "
                               "(no cross dims)\"; }")
-                      out))
-      (setq out (cons (strcat "        : popup_list { key = \"btype\"; "
+                      col))
+      (setq col (cons (strcat "        : popup_list { key = \"btype\"; "
                               "label = \"Bottom type\"; }")
-                      out))))
+                      col))))
   ;; the keyword questions that are not about cross dims live here,
   ;; with the toggle and the bottom type
   (foreach d (lzf:picks c)
     (if (= (caddr d) "run")
-        (setq out (cons (lzf:pickline d "        ") out))))
-  (setq out (cons "      }" out))
-  (setq out (cons "    }" out))
+        (setq col (cons (lzf:pickline d "        ") col))))
+  (setq col (cons "      }" col))
+  (setq out (append (reverse (lzf:packcols (reverse col))) out))
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
   (setq out (cons (strcat "  : text { key = \"hint\"; width = 62; "
                           "label = \"Read the letters off the chart and type "
                           "the numbers in the column beside it.  Type NA where "
-                          "nothing was measured; leave a box empty and "
-                          (if (lzf:oasis-p c) "OASIS" "POOL")
-                          " will ask.\"; }")
+                          "nothing was measured; a letter stays BOLD and red "
+                          "until its box is answered, and Insert waits for "
+                          "the last one.\"; }")
                   out))
   ;; What a box will TAKE.  No inch mark in the sentence on purpose:
   ;; a bare " would end the DCL string it sits in, and this file writes
@@ -91161,6 +101217,12 @@
   (setq out (list
     "lazform_ascii : dialog {"
     "  label = \"LAZFORM  -  can this dialog draw in characters?\";"
+    ;; THE FIVE SECTIONS IN THREE COLUMNS, not one stack.  Stacked,
+    ;; the probe came to 1557px, and AutoCAD will not open a dialog
+    ;; taller than the screen -- so the one dialog whose entire job is
+    ;; to be looked at was the one that could not be.
+    "  : row {"
+    "    : column {"
     "  : boxed_column {"
     "    label = \"1.  Is the dialog font fixed-pitch?\";"
     "    : text { label = \"Twelve characters sit between the bars on every line.\"; }"
@@ -91179,6 +101241,8 @@
     "    : text { label = \"A staircase means indenting works; three bars in one\"; }"
     "    : text { label = \"column means DCL trimmed the spaces and art is impossible.\"; }"
     "  }"
+    "    }"
+    "    : column {"
     "  : boxed_column {"
     "    label = \"3.  The pool, drawn in characters\";"
     "    : text { label = \"    +--------------------------+\"; }"
@@ -91206,6 +101270,8 @@
     "      : text { label = \"--->|\"; width = 7; }"
     "    }"
     "  }"
+    "    }"
+    "    : column {"
     "  : boxed_column {"
     "    label = \"5.  Is a LIST BOX fixed-pitch?\";"
     (strcat "    : text { label = \"A text tile is not.  A list box is a "
@@ -91214,6 +101280,8 @@
             "characters after all.\"; }")
     "    : list_box { key = \"ruler\"; width = 32; height = 5; }"
     "    : list_box { key = \"pool\"; width = 78; height = 18; }"
+    "  }"
+    "    }"
     "  }"
     "  spacer;"
     "  : text { label = \"Tell the session which sections lined up.\"; alignment = centered; }"
@@ -91237,7 +101305,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZASCII error: " msg)))
+    (if lzd:report (lzd:report "LAZASCII" *lazform-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZASCII" *lazform-version*))
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZASCII error: could not write the dialog file."))
@@ -91395,7 +101465,9 @@
     (if f (vl-file-delete f))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZTXT error: " msg)))
+    (if lzd:report (lzd:report "LAZTXT" *lazform-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZTXT" *lazform-version*))
   ;; the same clean slate lzf:show starts from.  The in-square toggle
   ;; and the bottom-type row have to be reset here too, even though this
   ;; view carries no tile for either: it READS both when it builds the
@@ -91555,12 +101627,16 @@
 ;;;  reach.  Un-greyed they were counted live, called filled by the
 ;;;  state line and sent by lzf:poolform -- and read by nothing: an
 ;;;  Oval on a Wedge bottom draws the same 105 entities with them and
-;;;  without.  T is deliberately NOT in this list: it is the hopper's
-;;;  straight-side check on the oval family, but the Grecian's
-;;;  perimeter block and the Roman's letters mode both ask their own T,
-;;;  so greying it here would hide a box POOL really does ask for.
+;;;  without.  TTC is in the list for the same reason and T is not:
+;;;  ttc is the hopper's own straight-side CHECK, asked inside
+;;;  pool:hopoval beside W and R3 and nowhere else, while T is a
+;;;  perimeter letter the Grecian's block and the Roman's letters mode
+;;;  ask whatever the bottom is.  One key each is what separates them
+;;;  -- they were both "tt" until POOL gave the check its own name,
+;;;  and a Roman asks BOTH on one run, so one key could only ever
+;;;  answer the first.
 (defun lzf:btskip (bt / sp out)
-  (setq out (if (= bt "Normal") nil (list "w" "r3" "l1" "x")))
+  (setq out (if (= bt "Normal") nil (list "w" "r3" "l1" "x" "ttc")))
   (cond
     ((= bt "Sport") (append (list "h" "f" "e" "c2") out))
     ((not pool:btmspec) out)          ; no POOL: only the dispatch is known
@@ -91578,8 +101654,40 @@
 ;; answer is restricted to keys the page really carries, so a rule may
 ;; name a key no chart has and the two callers can both trust the list
 ;; -- mode_tile on a tile that is not there would error.
-;; A POOL page's dead keys: the bottom type, the in-square toggle and
-;; the mode dropdown, put together.
+
+;; EVERYTHING BEHIND THE POOL-BOTTOM GATE.  pool:askbottom stands in
+;; front of the bottom type, the whole hopper chain, the depths and the
+;; hopper's own checks; answer it No and none of them is ever asked.
+;; A cover sheet answers it No by definition -- that is the whole of
+;; cover mode -- so on LAZFORMCOVER every one of these is a box POOL
+;; will not reach, and offering them would be asking the drafter to
+;; fill in a chain nothing reads.
+(setq lzf:*bottomkeys*
+  (append '("btype" "h" "g" "f" "e" "w" "r3" "l1" "x" "m" "l" "k"
+            "c" "d" "c2" "ttc")
+          lzf:*sportchain*))
+
+;; PERFECT ENDS.  In square, POOL does not ask whether a Roman's two
+;; ends are identical -- it takes them as identical and asks one end's
+;; letters only, using the left-hand answer for both.  So the sheet's
+;; right-hand halves are dead there, exactly as a Normal hopper's C is:
+;; POOL will never ask, so a number typed into one would be read by
+;; nothing.  Out of square the sheet prints both ends and answers the
+;; question itself -- see lzf:poolform.
+(setq lzf:*perfectdead* '(("ROman" "sr" "s1r" "vr" "r2")))
+
+;; ONE MEASUREMENT, TWO QUESTIONS.  A Roman's straight side is asked
+;; twice on one run: rm:letters asks it as the perimeter letter T, and
+;; then the oval hopper asks it again as its own check, ttc.  There is
+;; one tape and one box on the sheet, so the box answers both --
+;; (sent-key . box-key), read after the boxes in lzf:poolform.
+(setq lzf:*echo* '(("ROman" ("ttc" . "tt"))))
+
+(defun lzf:echo (c) (cdr (assoc (car c) lzf:*echo*)))
+
+;; A POOL page's dead keys: the bottom type, the in-square toggle, the
+;; mode dropdown, the cover flag and the perfect-ends rule above, put
+;; together.
 (defun lzf:pooldead (c insq btype / out bt n i k)
   ;; the L family: POOL asks no bottom type there at all, so the popup
   ;; is dead and the page is judged against the bottom those flows
@@ -91590,6 +101698,13 @@
   ;; the Sport chain is asked by a Sport bottom and by nothing else
   (if (/= bt "Sport")
       (setq out (append out lzf:*sportchain*)))
+  ;; a cover sheet never gets past the gate, so nothing behind it is
+  ;; asked -- and nothing behind it is offered
+  (if lzf:*cover*
+      (setq out (append out lzf:*bottomkeys*)))
+  ;; in square, both of a Roman's ends are the left-hand one
+  (if insq
+      (setq out (append out (cdr (assoc (car c) lzf:*perfectdead*)))))
   ;; in square there are no cross dims to measure, no mode to measure
   ;; them from, and no second overall
   (if insq
@@ -91637,19 +101752,48 @@
     (mode_tile k (if (member k dead) 1 0))))
 
 ;;; -------------------- what the page still owes -------------------------
-;;;  THE FAILURE THIS CLOSES.  cal:formanswer turns anything it cannot read
-;;;  into SKIP, the key is then never sent, and POOL asks for it again
-;;;  at the command line -- while the chart goes on showing what was
-;;;  typed, because the chart draws the STRING.  So a box that will be
-;;;  silently dropped looks exactly like a box that was answered, and
-;;;  the drafter finds out after the form has closed, if at all.
+;;;  INSERT DRAWS THE POOL.  It used to hand over whatever was typed
+;;;  and let POOL ask for the rest at the command line, which is the
+;;;  one thing a form is supposed to remove: a sheet filled in on
+;;;  screen and then re-answered a question at a time is the interview
+;;;  it was meant to replace.  So the page now carries the whole
+;;;  answer or it does not go: every box the run will reach, every
+;;;  dropdown the run will ask, filled in here.
 ;;;
-;;;  The state line under the form says both halves of that out loud:
-;;;  which boxes cannot be read (and Insert stays greyed until they
-;;;  can), and, when they all can, how many are filled and what the
-;;;  routine will still have to ask for.  Nothing here changes what is
-;;;  SENT -- lzf:form is still the only thing that decides that -- it
-;;;  reports what lzf:form is about to do.
+;;;  WHAT IS STILL OWED IS MARKED, not merely counted.  Press Insert on
+;;;  an unfinished sheet and every box with nothing usable in it has
+;;;  its letter drawn BOLD on the chart, in the missing colour; the
+;;;  page stays open, the state line names what is left, and each mark
+;;;  comes off the moment its box is answered -- so the picture is a
+;;;  checklist that empties as it is worked through, and the same
+;;;  button draws once it has.
+;;;
+;;;  THREE THINGS COUNT AS STILL OWED (lzf:owed), and every one of them
+;;;  is a question POOL would otherwise ask at the command line:
+;;;
+;;;    an empty live box        nothing typed at all
+;;;    NA where only a number   the depths: pool:askh takes a form
+;;;    will do                  answer only when it is a NUMBER, so an
+;;;                             NA there is consumed and asked for
+;;;                             anyway (lzf:*numonly*)
+;;;    a dropdown on "(ask)"    a cross-dim mode or a corner row left
+;;;                             unanswered IS POOL asking
+;;;
+;;;  TWO THINGS GREY THE BUTTON OUTRIGHT, because they are errors in
+;;;  what has been typed rather than gaps in what has not:
+;;;
+;;;    an unreadable box        neither NA nor a distance -- the typo
+;;;                             cal:formanswer would drop in silence
+;;;                             (lzf:unreadable)
+;;;    an impossible depth      D no deeper than C, or C2 outside the
+;;;    pair                     two: pool:askdeep and pool:askc2 loop
+;;;                             on these rather than accept them
+;;;                             (lzf:depthbad)
+;;;
+;;;  A GREYED BOX IS NEVER OWED.  lzf:dead is still the one authority
+;;;  on what this page asks; everything here is measured against
+;;;  lzf:livekeys, so a box the state has taken away is neither marked,
+;;;  nor counted, nor waited for.
 
 ;; "Corner A (bottom left)" -> "Corner A".  A label with no bracket is
 ;; its own short name already.
@@ -91679,7 +101823,13 @@
     (if (and (not out) (= (car d) key))
       (setq out (lzf:leadletter (cadr d)))))
   (foreach d (lzf:corners c)
-    (if (and (not out) (= (strcat (car d) "-sz") key))
+    (if (and (not out) (member key (list (car d) (strcat (car d) "-sz"))))
+      (setq out (lzf:unbracket (cadr d)))))
+  ;; a dropdown is owed exactly as a box is, so it has to have a name
+  ;; on the page too -- its own label, cut at the bracket like a
+  ;; corner row's
+  (foreach d (lzf:picks c)
+    (if (and (not out) (= (car d) key))
       (setq out (lzf:unbracket (cadr d)))))
   (if out out (strcase key)))
 
@@ -91707,12 +101857,100 @@
       (setq out (cons k out))))
   (reverse out))
 
-;; The live boxes still empty -- exactly what the routine will ask for.
-(defun lzf:togo ( / c out k)
+;; THE DEPTHS TAKE A NUMBER AND NOTHING ELSE.  C, D and C2 are asked
+;; through pool:askh, which reads the store only when what it finds
+;; there is a number: every caller range checks the answer and none of
+;; them can do anything with nil, so an NA is consumed and then asked
+;; for at the command line anyway.  NA is a real answer in any other
+;; box on the sheet; in these three it is a question waiting to happen,
+;; and the sheet says so rather than letting Insert promise a draw it
+;; cannot make.
+(setq lzf:*numonly* '("c" "d" "c2"))
+
+;; The live boxes with no usable answer in them: empty, or NA where
+;; only a number will do.  A box holding a TYPO is not here -- it is in
+;; lzf:unreadable, which is a different thing to say and says it
+;; louder -- so the two lists and what lzf:form sends still partition
+;; the live boxes three ways with nothing in two of them.
+(defun lzf:togo ( / c out k v a)
   (setq c lzf:*chart*)
   (foreach k (lzf:livekeys c)
-    (if (= (cal:trim (lzf:get k)) "") (setq out (cons k out))))
+    (setq v (cal:trim (lzf:get k))
+          a (cal:formanswer v))
+    (if (or (= v "")
+            (and (member k lzf:*numonly*)
+                 (not (eq a 'SKIP))
+                 (not (numberp a))))
+        (setq out (cons k out))))
   (reverse out))
+
+;; The mode dropdowns still on "(ask)" that this page will be asked
+;; about.  A dead one is not owed: in square there is no cross-dim
+;; mode to pick, and lzf:dead is what says so.
+(defun lzf:pickowed ( / c dead out d)
+  (setq c lzf:*chart*
+        dead (lzf:dead c lzf:*insq* (nth lzf:*btype* lzf:*btypes*)))
+  (foreach d (lzf:picks c)
+    (if (and (not (member (car d) dead))
+             (= (lzf:pickval c (car d)) ""))
+        (setq out (cons (car d) out))))
+  (reverse out))
+
+;; The corner rows still on "(ask)".  A row answers whichever POOL
+;; questions this square state puts to it, and a row that answers none
+;; of them in this state -- no targets -- is not owed.
+(defun lzf:cornerowed ( / c out d)
+  (setq c lzf:*chart*)
+  (foreach d (lzf:corners c)
+    (if (and (if lzf:*insq* (caddr d) (cadddr d))
+             (zerop (lzf:cget (car d))))
+        (setq out (cons (car d) out))))
+  (reverse out))
+
+;; Everything the page still owes, in the order it is read: the boxes
+;; first, then the dropdowns.  One list, because the state line, the
+;; bold marking on the chart and Insert all have to agree about it --
+;; a letter marked bold while Insert is live, or the other way round,
+;; would be the form contradicting itself on screen.
+(defun lzf:owed ()
+  (append (lzf:togo) (lzf:cornerowed) (lzf:pickowed)))
+
+;; Is this key one of the boxes the chart should mark?  The chart draws
+;; letters, so only the box half of lzf:owed can ever be marked -- a
+;; dropdown has no letter on the picture and is named in the line
+;; instead.  Read off the snapshot lzf:redraw takes rather than worked
+;; out per letter: every dimension on the sheet would otherwise walk
+;; the whole page's greying rules again, twenty-odd times a repaint,
+;; and a repaint happens every time a caret leaves a box.
+;;
+;; The snapshot is empty until Insert has been pressed on an unfinished
+;; sheet.  Marking is not a state the page opens in: a fresh chart
+;; struck red all over would be shouting before it had been asked
+;; anything, and these letters are the sheet's own labels the rest of
+;; the time.  Once it is on it stays on for the rest of the run, tabs
+;; included -- somebody who has asked what this sheet still owes is
+;; asking about the next one too, and the set is worked out per page
+;; either way.
+(defun lzf:owedp (key) (if (member key lzf:*owed*) t nil))
+
+;; D MUST BEAT C, AND C2 MUST LAND BETWEEN THEM.  pool:askdeep and
+;; pool:askc2 do not accept a depth that fails this -- they print the
+;; reason and ask again -- so a sheet that sends one gets the question
+;; back at the command line, which is the thing Insert exists to
+;; prevent.  Said here, while the numbers can still be corrected, and
+;; only when both ends of a comparison are actually readable.
+(defun lzf:depth (key / v)
+  (if (and (member key (lzf:livekeys lzf:*chart*))
+           (numberp (setq v (cal:formanswer (cal:trim (lzf:get key))))))
+      v))
+
+(defun lzf:depthbad ( / cv dv c2v)
+  (setq cv (lzf:depth "c") dv (lzf:depth "d") c2v (lzf:depth "c2"))
+  (cond
+    ((and cv dv (<= dv cv))
+     "D must be deeper than C - POOL will not take it otherwise.")
+    ((and cv c2v dv (or (< c2v cv) (> c2v dv)))
+     "C2 has to land between C and D - POOL will not take it otherwise.")))
 
 (defun lzf:taglist (c keys / n i named k)
   (setq n (length keys) i 0)
@@ -91726,15 +101964,63 @@
     (strcat (cal:andjoin named nil) " and " (itoa (- n 3)) " more")
     (cal:andjoin named t)))
 
+;; How many answers this page is asking for: the live boxes, plus the
+;; dropdowns that are live with them.  The denominator of the state
+;; line, and what lzf:owed counts down to nothing.
+(defun lzf:askcount ( / c dead n d)
+  (setq c lzf:*chart*
+        dead (lzf:dead c lzf:*insq* (nth lzf:*btype* lzf:*btypes*))
+        n (length (lzf:livekeys c)))
+  (foreach d (lzf:picks c)
+    (if (not (member (car d) dead)) (setq n (1+ n))))
+  (foreach d (lzf:corners c)
+    (if (if lzf:*insq* (caddr d) (cadddr d)) (setq n (1+ n))))
+  n)
+
+;; THE ONE THING A FINISHED POOL SHEET CAN STILL LEAVE AT THE COMMAND
+;; LINE.  Two of the Grecian cross-dim modes tape 14 and 18 diagonals,
+;; far more than any sheet has boxes for, so the dropdown answers the
+;; gate here and the numbers are typed there.  It is on the page
+;; already (lzf:*grechint*); the hand-off line says it too, because a
+;; line that promises "Insert draws it" and then asks fourteen
+;; questions is the promise this whole section exists to keep.
+(defun lzf:modeasks ( / c m v)
+  (setq c lzf:*chart*)
+  (if (and (not lzf:*insq*)
+           (setq m (lzf:crossmode c))
+           (/= (setq v (lzf:pickval c m)) "")
+           (not (assoc v lzf:*crosslive*)))
+      v))
+
+;; What Insert will still not have answered when the sheet is full.
+;; An OASIS pool is asked about its floor AFTER the outline exists --
+;; there is no gate in front of that question for a form to close --
+;; so an oasis page says so rather than claiming a draw it cannot
+;; make; a POOL page has nothing left but the point it is placed at.
+;;
+;; One case is not listed here because it is not a state of the page:
+;; a hopper chain that RESOLVES G to zero on a Normal bottom makes POOL
+;; announce a slope bottom and ask for C and D, which a Normal bottom
+;; greys.  That is a discovery POOL makes while fitting the chain to
+;; the overalls, and reading it off the page would mean redoing
+;; pool:chainfix here -- see the README.
+(defun lzf:restasks ( / m)
+  (cond
+    ((lzf:oasis-p lzf:*chart*)
+     " - OASIS asks for the base point, then the floor.")
+    ((setq m (lzf:modeasks))
+     (strcat " - POOL asks for the base point and the " m " diagonals."))
+    (t " - POOL asks only for the base point.")))
+
 ;; The line itself.  An unreadable box is the urgent half and takes the
-;; line to itself; when there is none, the line is the hand-off: how
-;; much of the sheet is filled, and what is left for the command line.
-(defun lzf:statetext ( / c who bad togo n)
+;; line to itself; then a depth pair POOL would refuse; then what the
+;; sheet still owes, by the names it prints; and when it owes nothing,
+;; the line says Insert will draw.
+(defun lzf:statetext ( / c bad owed n)
   (setq c    lzf:*chart*
-        who  (if (lzf:oasis-p c) "OASIS" "POOL")
         bad  (lzf:unreadable)
-        togo (lzf:togo)
-        n    (length (lzf:livekeys c)))
+        owed (lzf:owed)
+        n    (lzf:askcount))
   (cond
     ((cdr bad)
      (strcat (lzf:taglist c bad)
@@ -91742,19 +102028,24 @@
     (bad
      (strcat (lzf:taglist c bad)
              " is not a measurement - type a number, or NA, or clear it."))
+    ((lzf:depthbad))
     ((zerop n)
-     (strcat "Nothing on this page is live - " who " will ask for all of it."))
-    ((not togo)
-     (strcat "All " (cal:plural n "box" "boxes") " filled - " who
-             " will ask only for the base point."))
-    ((= (length togo) n)
-     (strcat "Nothing filled yet - " who " will ask for all "
-             (cal:plural n "box" "boxes") ", plus the base point."))
+     "Nothing on this page is live - there is nothing here to draw with.")
+    ((not owed)
+     (strcat "Ready - Insert draws it" (lzf:restasks)))
+    ;; once Insert has marked them the chart is carrying the names, so
+    ;; the line points at it rather than repeating a list the picture
+    ;; is already showing -- except for the dropdowns, which have no
+    ;; letter to mark and are named here or nowhere
+    (lzf:*marked*
+     (strcat "Marked on the chart: " (lzf:taglist c owed) "."))
+    ((= (length owed) n)
+     (strcat "Nothing filled yet - Insert needs all "
+             (cal:plural n "box" "boxes") "."))
     (t
-     (strcat (itoa (- n (length togo))) " of "
-             (cal:plural n "box" "boxes") " filled - "
-             who " will ask for " (lzf:taglist c togo)
-             ", plus the base point."))))
+     (strcat (itoa (- n (length owed))) " of "
+             (cal:plural n "box" "boxes") " done - Insert needs "
+             (lzf:taglist c owed) "."))))
 
 ;; Fill the EMPTY live boxes from the stored sheet, and repaint.  Only
 ;; the empty ones: a recall must never overwrite a number just typed,
@@ -91769,14 +102060,41 @@
   (lzf:restate)
   n)
 
-;; Put the state on the page, and hold Insert back while any box holds
-;; something that cannot be read.  Greying it IS the feature: pressing
-;; Insert with an unreadable box in front of you drops that box without
-;; a word, which is the whole complaint.
-(defun lzf:restate ( / bad)
-  (setq bad (lzf:unreadable))
+;; Put the state on the page, and hold Insert back while something
+;; TYPED is wrong: a box that cannot be read, or a depth pair POOL
+;; would refuse.  Greying it IS the feature there, and for the reason
+;; it always was -- pressing Insert with an unreadable box in front of
+;; you used to drop it without a word.
+;;
+;; A box merely not filled in yet is a different thing and the button
+;; stays live for it: that press is how the drafter asks what is left,
+;; and lzf:insert answers by marking it.
+(defun lzf:restate ()
   (set_tile "state" (lzf:statetext))
-  (mode_tile "accept" (if bad 1 0))
+  (mode_tile "accept" (if (or (lzf:unreadable) (lzf:depthbad)) 1 0))
+  (princ))
+
+;; INSERT.  On a sheet that can be drawn from, it closes the page and
+;; POOL draws it.  On one that cannot, it does not hand the gaps to
+;; the command line -- it marks them: every letter with nothing usable
+;; against it goes bold and red on the chart, the line under the form
+;; names them, and the page stays open.  Press it again once they are
+;; answered and it draws.
+;;
+;; done_dialog is what closes a DCL page and it reports where the page
+;; was standing, which is why the close is here rather than in the
+;; caller: the answer has to be caught as the dialog goes.
+(defun lzf:insert ()
+  (if (or (lzf:owed) (lzf:unreadable) (lzf:depthbad))
+      (progn
+        ;; the last two grey the button, so this branch is normally
+        ;; reached only for the gaps -- it names them anyway, because a
+        ;; guard that depends on a tile really being un-clickable is a
+        ;; guard that hands POOL a dropped box the day it is not
+        (setq lzf:*marked* t)
+        (lzf:redraw)
+        (lzf:restate))
+      (setq lzf:*pos* (done_dialog 1)))
   (princ))
 
 (defun lzf:form (shape insq btype)
@@ -91837,6 +102155,33 @@
   ;; treatments would be read by nothing if it were left on No
   (if (and cp (member (car lzf:*chart*) lzf:*crecharts*))
       (setq out (cons (cons 'crec "Yes") out)))
+  ;; ONE MEASUREMENT ANSWERING TWO QUESTIONS -- a Roman's straight side
+  ;; is asked as the perimeter letter T and again as the hopper's own
+  ;; check.  Same box, both keys; a dead key is still dropped, so on
+  ;; any bottom but a Normal the check is not sent because it is not
+  ;; asked (lzf:btskip)
+  (foreach d (lzf:echo lzf:*chart*)
+    (setq a (cal:formanswer (lzf:get (cdr d))))
+    (if (and (not (eq a 'SKIP))
+             (not (member (cdr d) dead))
+             ;; lzf:pooldead and not lzf:dead: the key being ECHOED is
+             ;; by definition not a key this page carries a box for, and
+             ;; lzf:dead keeps only the page's own keys, so it would
+             ;; never name it.  The unfiltered rule is what says whether
+             ;; the question is asked on this bottom at all
+             (not (member (car d)
+                          (lzf:pooldead lzf:*chart* insq btype))))
+        (setq out (cons (cons (read (car d)) a) out))))
+  ;; PERFECT ENDS, out of square.  POOL asks whether a Roman's two ends
+  ;; are identical, and answers the whole right-hand half of the sheet
+  ;; with the left-hand one if they are.  This sheet PRINTS both halves
+  ;; and asks for both, so it answers that question itself -- left on
+  ;; the prompt, the right-hand boxes it has just made the drafter fill
+  ;; in would be read by nothing.  In square POOL does not ask at all:
+  ;; it takes the ends as perfect, which is why lzf:*perfectdead* greys
+  ;; the right-hand boxes there.
+  (if (and (not insq) (assoc (car lzf:*chart*) lzf:*perfectdead*))
+      (setq out (cons (cons 'perfect "No") out)))
   ;; the gates last, so a chart cannot be talked out of the path its
   ;; own letters live on
   (foreach k (lzf:gates lzf:*chart*)
@@ -91877,7 +102222,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZFORM error: " msg)))
+    (if lzd:report (lzd:report "LAZFORM" *lazform-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZFORM" *lazform-version*))
   (setq lzf:*vals* nil
         lzf:*cvals* nil                 ; corner dropdowns back to (ask)
         lzf:*pvals* nil                 ; and the mode dropdowns with them
@@ -91886,6 +102233,9 @@
         lzf:*pos* nil                   ; the profile decides where this
                                         ; run opens, not the last page
         lzf:*ranchart* nil              ; no page has been accepted yet
+        lzf:*marked* nil                ; and nothing is marked until
+                                        ; Insert has been pressed on an
+                                        ; unfinished one
         go chartkey)
   (cond
     ((not (lzf:chart go))
@@ -91987,7 +102337,7 @@
           (action_tile "recall"
             (strcat "(lzf:recall \"" (car c) "\")"))
           (if (not (lzf:recall-read (car c))) (mode_tile "recall" 1))
-          (action_tile "accept" "(setq lzf:*pos* (done_dialog 1))")
+          (action_tile "accept" "(lzf:insert)")
           (action_tile "cancel" "(setq lzf:*pos* (done_dialog 0))")
           (lzf:redraw)
           (lzf:btgrey c)
@@ -92078,6 +102428,13 @@
 ;; oasis is asked about its floor after the outline exists, so there
 ;; is no gate in front of the question to close.
 (defun lzf:run (cover / form c)
+  ;; the page has to KNOW it is a cover sheet while it is being filled
+  ;; in, not only when it is handed over: everything behind the
+  ;; pool-bottom gate is a box POOL will never reach on this run, so
+  ;; the sheet greys it rather than waiting for it to be filled in.
+  ;; Set before the form opens and cleared after it closes, so a
+  ;; cancelled cover run leaves the next LAZFORM as it found it.
+  (setq lzf:*cover* (if cover t nil))
   (cond
     ;; the chart fills POOL's answers in, so POOL has to be here to
     ;; receive them -- say so plainly rather than opening a form whose
@@ -92091,11 +102448,19 @@
      (princ "\nLAZFORM: cancelled, nothing drawn."))
     ((not (lzf:oasis-p (setq c (lzf:chart lzf:*ranchart*))))
      (princ (strcat "\nLAZFORM: " (itoa (length form))
-                    " answers to POOL; it will ask for whatever is left."))
+                    " answers to POOL; it draws from the sheet."))
      (if cover
        (progn
          (setq pool:*nobottom* t)
-         (princ "\n         Cover sheet - no pool bottom will be asked for.")))
+         (princ "\n         Cover sheet - no pool bottom will be asked for."))
+       ;; THE ONE QUESTION A FULL SHEET COULD NOT ANSWER.  The
+       ;; pool-bottom gate is a run flag and not a store key -- five
+       ;; shape paths reach it and the store is consume-once -- so a
+       ;; sheet carrying the hopper chain and the depths still stopped
+       ;; to be asked whether there was a bottom at all, on every run.
+       ;; It carries them, so there is: the flag says so, and c:POOL
+       ;; clears it on both its exits either way.
+       (setq pool:*hasbottom* t))
      (pool:run-with-answers form))
     ;; an oasis sheet, and OASIS is the one that has to be here for it
     ((not oasis:run-with-answers)
@@ -92106,6 +102471,7 @@
      (princ (strcat "\nLAZFORM: " (itoa (length form))
                     " answers to OASIS; it will ask for whatever is left."))
      (oasis:run-with-answers form)))
+  (setq lzf:*cover* nil)
   (princ))
 
 (defun c:LAZFORM () (lzf:run nil))
@@ -92120,8 +102486,16 @@
                  (itoa n) " of them OASIS."))
   (princ))
 
-(princ (strcat "\nLAZFORM " *lazform-version*
-               " loaded.  Type LAZFORM to fill a chart in and draw it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZFORM " *lazform-version*
+                 " loaded.  Type LAZFORM to fill a chart in and draw it.")))
 (princ)
 
 
@@ -92138,6 +102512,8 @@
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
+;;;            CALHELP        what a command does, at the command line
+;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -92153,17 +102529,23 @@
 ;;;
 ;;; Four JOB pages -- Pool, Cover, Spa, Rest -- hold what you
 ;;; reach for while doing that job, in columns that follow the work:
-;;; read somebody's export in, lay the shape out, tie the points, build
-;;; the steps, dimension and check.  Converters lead on Pool and Spa
-;;; because that is where they fall in the work -- XFTCONV, SOCONV,
-;;; VSCONV and G2MCONV all answer "here is a drawing somebody else
-;;; exported", which happens before anything is drawn.  Two of the
-;;; first three were reachable only from Rest until now, so a drafter
-;;; doing a pool job never saw them, and XFTCONV was filed under Shape,
-;;; which it never was.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
-;;; the same four names the VB.NET palette in ui/calofin_net uses --
-;;; hold the whole roster filed by what each tool IS.  A tool that
-;;; serves two jobs is on both, so there are more buttons than commands.
+;;; lay the shape out, tie the points, build the steps, convert what
+;;; somebody sent you, then dimension and check.  A CONVERTERS column
+;;; sits SECOND TO LAST on Pool and on Cover: past the drawing work,
+;;; in front of the dims-and-check column that ends every job.  XFTCONV,
+;;; SOCONV, VSCONV and G2MCONV all answer "here is a drawing somebody
+;;; else exported", which is how a job sometimes starts and not how
+;;; most of them do, so they no longer hold the left edge in front of
+;;; the tools that are reached for every time.  Spa is two columns
+;;; wide, where second to last IS the first column, so it keeps the
+;;; layout it had.  Cover gains the column: XFTCONV and XFTRECONV were
+;;; on that page all along, filed under Shape, which a converter never
+;;; was.  Five CATEGORY pages -- Layout, Points, Dimensions,
+;;; Converters, Checking, the same five names the VB.NET palette in
+;;; ui/calofin_net uses -- hold the whole roster filed by what each
+;;; tool IS; Converters is the newest, and holds the eight that used to
+;;; sit under Points.  A tool that serves two jobs is on both, so there
+;;; are more buttons than commands.
 ;;; Clicking a button closes the panel and runs the command exactly as
 ;;; if its name had been typed -- the panel adds nothing in front of a
 ;;; tool and nothing behind it.  (The Cover page names the cover twins,
@@ -92232,7 +102614,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.16")
+(setq *lazpanel-version* "v3.24")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -92243,7 +102625,9 @@
 ;;;  Also editable, but living beside the code that reads them because
 ;;;  they ARE the panel rather than settings of it:
 ;;;    lzp:*captions*   one caption per command -- the only place they live
-;;;    lzp:*groups*     the pages, as columns of command names
+;;;    lzp:*groups*     the pages, as columns of command names -- an
+;;;                     entry may be a headed run, ("Revert" "X" ...),
+;;;                     which labels part of a column from inside it
 ;;;  tools/check_registry.py --fix maintains both; the VB palette's
 ;;;  catalog is generated from them (tools/gen_ui_data.py).
 
@@ -92275,6 +102659,34 @@
 ;; preference.  84 fits a laptop screen.
 (setq lzp:*pinbudget* 84)
 
+;; How many captioned buttons may stack in ONE column before a page is
+;; split into more columns.  The width budget above has a twin here for
+;; the same reason: DCL does not scroll in EITHER direction, so a page
+;; taller than the screen does not clip, it refuses to open --
+;;     Dialog too large to fit on screen.
+;;     Requested Size = (436, 1085)   Maximum Size = (1920, 1080)
+;; which is what "Rest" did the day it reached 28 tools, and "Layout"
+;; had quietly passed it at 32.  Rest is COMPUTED -- every tool that is
+;; not on Pool, Cover or Spa lands there -- so the page that broke is
+;; the page every newly registered tool joins, and it would have broken
+;; again at the next one.  16 puts the tallest page near 770px and
+;; leaves room for several rows of pins and recents on top.
+(setq lzp:*colbudget* 16)
+
+;; How many rows the Pinned strip may occupy.  Pins are the one part of
+;; a page whose height the DRAFTER sets, and the note beside lzp:packrow
+;; used to say "pin thirty tools and you get a tall panel, never a
+;; broken one".  That was true when a page was 56 tools in three
+;; columns; it is not true now.  Thirty pins is six rows, which puts the
+;; tallest page at 1053px -- 27px under the limit -- and the next pin
+;; breaks it.  Three rows keeps the worst page under 950px with the
+;; Recent row still to come -- a whole row of slack against the budget
+;; in tools/check_dcl.py, where four rows left less than one, and a
+;; build sitting one row from failing its own check is a build the next
+;; change breaks.  Three rows is around seventeen tools; pins are for
+;; the handful run all day, so the cap is well past what they are for.
+(setq lzp:*pinrowmax* 3)
+
 ;; How many recently launched tools are remembered, newest first.  The
 ;; palette keeps the same number (PaletteMemory.RecentLimit) and
 ;; tests/test_palette_shell.py holds the two together.
@@ -92300,12 +102712,17 @@
 ;;  The first four pages are JOBS -- what the drafter is actually doing
 ;;  this hour: a pool, a cover, a spa, and everything those three do not
 ;;  reach.  They run in the order the work runs: lay the shape out, tie
-;;  the points, build the steps, then dimension and check.  A command
+;;  the points, build the steps, convert what somebody sent you, then
+;;  dimension and check.  A command
 ;;  that serves two jobs appears on both; AUTODIM and DIMCHECK are on
-;;  all three, because every job ends the same way.  The last four are
-;;  the CATEGORIES the panel has always had -- the whole roster filed by
-;;  what each tool is rather than when you reach for it -- so a tool you
-;;  cannot place in a job is still one tab away.
+;;  all three, because every job ends the same way.  The last five are
+;;  the CATEGORIES -- the whole roster filed by what each tool is
+;;  rather than when you reach for it -- so a tool you cannot place in
+;;  a job is still one tab away.  Converters is the newest of them and
+;;  holds the eight that used to be filed under Points: reading
+;;  somebody else's export is not a way of making points, it is its own
+;;  kind of work, and the job pages have said so with a column of that
+;;  name for a while.
 ;;
 ;;  Every command therefore appears at least twice: once on a job page
 ;;  and once on a category page.  Keys are only required to be unique
@@ -92342,6 +102759,7 @@
     ("ABCDEF"           "Rectangle plot")
     ("ABCURCHECK"       "Perimeter continuity")
     ("ABCURCHECKSCAN"   "Perimeter continuity, no marks")
+    ("ABLOBF"           "Open best-fit run")
     ("ABPCHECK"         "Survey point offsets")
     ("ABPCREATE"        "Create a missing point")
     ("ABFIND"           "A/B stake ties")
@@ -92369,6 +102787,7 @@
     ("DIMCHECK"         "Dimension review")
     ("DIMCONTEND"       "Continue dim chains")
     ("DIMSCAN"          "Dimension scan")
+    ("DIMSTAMP"         "Stamp dimension text")
     ("DRONE"            "Drone cleanup")
     ("FITABHD"          "Typed template fit")
     ("FITABHDCOVER"     "Typed template fit, no bottom")
@@ -92377,6 +102796,7 @@
     ("G2MRECONV"        "G2M conversion, undone")
     ("HEMISTEP"         "Hemi step")
     ("HONEFILLET"       "Corner radius, honed")
+    ("LAZDIAG"          "Error report for the last failure")
     ("LAZFORM"          "Pool from a filled-in chart")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
@@ -92396,18 +102816,21 @@
     ("LINGUTTER"        "Gut to perimeter, then pads")
     ("LINGUTTERSCAN"    "Gut scan, changes nothing")
     ("PADDLE"           "Paddle pads")
+    ("PERPMARK"         "Measured wall offsets")
     ("PERPPTS"          "Perpendicular points")
     ("POINTRENAMER"     "Renumber points in order")
     ("POOL"             "Pool layout")
     ("POOLCOVER"        "Pool layout, no bottom")
     ("POOLDEMO"         "Worked pool example")
     ("POOLSIDE"         "Pool side view")
+    ("SIMPABHD"         "Survey perimeter, no settings")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SOCONV"           "SO survey onto our layers")
     ("SORECONV"         "SO conversion, undone")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
+    ("SPACOVCREATE"     "Spa cover from the spa")
     ("STAIRDIM"         "Stair dims")
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
@@ -92426,12 +102849,17 @@
 ;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
 ;;  one entry per COLUMN, laid out side by side across the page.  The
 ;;  job pages break their tools into the columns the work falls into:
-;;  lay the shape out, tie the points, build the steps, dimension and
-;;  check.  That is the grouping the drafter already carries; the
-;;  columns just stop it being a single list of twenty-four.
+;;  lay the shape out, tie the points, build the steps, convert what
+;;  somebody sent you, dimension and check.  That is the grouping the
+;;  drafter already carries; the columns just stop it being a single
+;;  list of twenty-four.
 ;;
-;;  A column heading of "" means the page is one plain column -- what
-;;  the four category pages are.
+;;  A column heading of "" means the page is laid out as one plain list
+;;  -- what the five category pages and Rest are.  "One list" is not
+;;  "one column": a list too long to stack inside the screen is wrapped
+;;  into balanced columns at lzp:*colbudget*, which is why the table
+;;  below says nothing about how tall a page may be.  It is a list of
+;;  what belongs together, and the fitting is done for it.
 ;;
 ;;  WHY A MULTI-COLUMN PAGE SHOWS THE NAME ALONE.  A button reading
 ;;  "CDCALLOUT  -  Point-to-point cross dims" is about 39 cells wide;
@@ -92439,21 +102867,14 @@
 ;;  wider than the screen -- the dialog simply fails to open.  So the
 ;;  columns carry the meaning in their headings and the buttons carry
 ;;  the command name, which puts the widest page at about 64 cells.
-;;  Single-column pages have the room, and keep the caption on the
-;;  button: the category pages stay the place to go to find out what a
-;;  tool is, and the job pages are the place to go when you know.
+;;  A plain-list page has the room and keeps the caption on the button,
+;;  wrapped or not: the category pages stay the place to go to find out
+;;  what a tool IS, and the job pages are the place to go when you
+;;  know.  Wrapping one costs width rather than meaning -- two captioned
+;;  columns is about 98 cells, well inside the same wall that rules four
+;;  of them out.
 (setq lzp:*groups*
   '(("Pool"
-     ("Converters"
-      "XFTCONV"
-      "SOCONV"
-      "VSCONV"
-      "G2MCONV"
-      "XFTRECONV"
-      "SORECONV"
-      "VSRECONV"
-      "G2MRECONV"
-      )
      ("Shape"
       "POOL"
       "POOLSIDE"
@@ -92461,6 +102882,7 @@
       "LAZTXT"
       "OASIS"
       "ABHD"
+      "SIMPABHD"
       "ADAB"
       "FITABHD"
       )
@@ -92480,6 +102902,21 @@
       "AUTOBEAD"
       "PERPPTS"
       "CPERPPTS"
+      "PERPMARK"
+      )
+     ("Converters"
+      ("Convert"
+       "XFTCONV"
+       "SOCONV"
+       "VSCONV"
+       "G2MCONV"
+       )
+      ("Revert"
+       "XFTRECONV"
+       "SORECONV"
+       "VSRECONV"
+       "G2MRECONV"
+       )
       )
      ("Dims & check"
       "AUTODIM"
@@ -92499,8 +102936,6 @@
       "FITABHDCOVER"
       "STOCKCOVER"
       "CUSTBLOCK"
-      "XFTCONV"
-      "XFTRECONV"
       )
      ("Points"
       "ABFIND"
@@ -92509,6 +102944,10 @@
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
+      )
+     ("Converters"
+      "XFTCONV"
+      "XFTRECONV"
       )
      ("Pads, dims & check"
       "LINGUTTER"
@@ -92524,18 +102963,23 @@
     )
      ("Spa"
      ("Converters"
-      "XFTCONV"
-      "SOCONV"
-      "VSCONV"
-      "G2MCONV"
-      "XFTRECONV"
-      "SORECONV"
-      "VSRECONV"
-      "G2MRECONV"
+      ("Convert"
+       "XFTCONV"
+       "SOCONV"
+       "VSCONV"
+       "G2MCONV"
+       )
+      ("Revert"
+       "XFTRECONV"
+       "SORECONV"
+       "VSRECONV"
+       "G2MRECONV"
+       )
       )
      ("Shape, dims & check"
       "SPA"
       "LAZSPA"
+      "SPACOVCREATE"
       "CUSTBLOCK"
       "AUTODIM"
       "SPACHECK"
@@ -92573,7 +103017,10 @@
       "POINTRENAMER"
       "CONSTELLATION"
       "TYLERDRONESUITE"
+      "LAZDIAG"
       "LOBF"
+      "ABLOBF"
+      "DIMSTAMP"
       )
     )
      ("Layout"
@@ -92583,6 +103030,7 @@
       "LAZFORMCOVER"
       "LAZSPA"
       "SPA"
+      "SPACOVCREATE"
       "POOL"
       "POOLCOVER"
       "POOLSIDE"
@@ -92592,9 +103040,11 @@
       "FITABHDCOVER"
       "ABHD"
       "ABHDCOVER"
+      "SIMPABHD"
       "ADAB"
       "CABHD"
       "LHD"
+      "ABLOBF"
       "LINGUTTER"
       "LINGUTTERSCAN"
       "PADDLE"
@@ -92623,14 +103073,7 @@
       "POINTRENAMER"
       "PERPPTS"
       "CPERPPTS"
-      "XFTCONV"
-      "XFTRECONV"
-      "SOCONV"
-      "SORECONV"
-      "VSCONV"
-      "VSRECONV"
-      "G2MCONV"
-      "G2MRECONV"
+      "PERPMARK"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -92646,6 +103089,19 @@
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
+      "DIMSTAMP"
+      )
+    )
+     ("Converters"
+     (""
+      "XFTCONV"
+      "SOCONV"
+      "VSCONV"
+      "G2MCONV"
+      "XFTRECONV"
+      "SORECONV"
+      "VSRECONV"
+      "G2MRECONV"
       )
     )
      ("Checking"
@@ -92669,20 +103125,22 @@
       "LITESPACHECKSCAN"
       "LINTXTCHK"
       "CCPRECHECK"
+      "LAZDIAG"
       )
     )))
 
 ;; How the tab strip is laid out: one DCL row per entry, in this order.
 ;; Find and the jobs sit on one line and the categories on the next,
-;; which is both what they mean and what keeps the strip narrow -- nine
-;; tabs on a single row run about 104 character cells, and DCL will not
+;; which is both what they mean and what keeps the strip narrow -- ten
+;; tabs on a single row run about 120 character cells, and DCL will not
 ;; scroll a dialog that is wider than the screen.  This is presentation
 ;; only; the pages themselves are still lzp:*groups*, plus the one
 ;; search page below.  The test asserts the two tables name the same
 ;; pages, so neither can drift.
 (setq lzp:*rows*
   '(("Find, or by job" "Find" "Pool" "Cover" "Spa" "Rest")
-    ("Or by category"  "Layout" "Points" "Dimensions" "Checking")))
+    ("Or by category"  "Layout" "Points" "Dimensions" "Converters"
+                       "Checking")))
 
 ;; The name of the search page.  It is a PAGE but not a GROUP: it has no
 ;; column layout and no roster of its own, it searches the whole one, so
@@ -92713,10 +103171,38 @@
   (foreach g lzp:*groups*
     (if (= (car g) name)
         (foreach col (cdr g)
-          (foreach c (cdr col) (setq out (cons c out))))))
+          (foreach c (lzp:col-commands col) (setq out (cons c out))))))
   (reverse out))
 
-;; A page's columns: (heading cmd ...) each.
+;; T when every entry in COL is a headed run rather than a bare command
+;; -- the Converters column, and nothing else today.  Such a column
+;; carries its own labels inside it, so the renderer gives it a plain
+;; wrapper instead of a labelled box: "Converters" above "Convert"
+;; above "Revert" is three frames saying one thing.
+(defun lzp:col-runs-p (col / e out)
+  (setq out (and (cdr col) T))
+  (foreach e (cdr col)
+    (if (not (listp e)) (setq out nil)))
+  out)
+
+;; The commands in one column, flat.
+;;
+;; A column entry is EITHER a command name or a headed run of them --
+;; ("Revert" "XFTRECONV" ...) -- which is how the Converters column
+;; carries its two halves under their own labels without becoming two
+;; columns side by side (there is no width for that; see the panel
+;; README).  Everything that walks a column for the commands in it goes
+;; through here, so the two shapes are read in one place rather than in
+;; every caller.
+(defun lzp:col-commands (col / e c out)
+  (foreach e (cdr col)
+    (if (listp e)
+      (foreach c (cdr e) (setq out (cons c out)))    ; a headed run
+      (setq out (cons e out))))                      ; a plain command
+  (reverse out))
+
+;; A page's columns: (heading cmd ...) each, where a cmd may itself be
+;; a headed run -- lzp:col-commands is what flattens one.
 (defun lzp:group-columns (name / g out)
   (foreach g lzp:*groups*
     (if (= (car g) name) (setq out (cdr g))))
@@ -92728,7 +103214,7 @@
 (defun lzp:commands ( / g col c out)
   (foreach g lzp:*groups*
     (foreach col (cdr g)
-      (foreach c (cdr col)
+      (foreach c (lzp:col-commands col)
         (if (not (member c out))
           (setq out (cons c out))))))
   (reverse out))
@@ -92910,8 +103396,10 @@
 ;;  characters -- would push the dialog past the width DCL refuses to
 ;;  scroll, which does not clip the page, it stops it opening at all.
 ;;  So pins are packed greedily into as many rows as they need, with
-;;  the Pin... button packed last like any other item.  Pin thirty
-;;  tools and you get a tall panel, never a broken one.
+;;  the Pin... button packed last like any other item -- up to
+;;  lzp:*pinrowmax* rows, after which a further pin is REFUSED rather
+;;  than taken: height is the same hard wall width is, and a strip that
+;;  grew without limit would walk a page into it.
 ;;  (lzp:*pinbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzp:pin-label (n) (strcat "    : button { label = \"" n
@@ -93013,13 +103501,24 @@
   (lzp:recent-write)
   lzp:*recent*)
 
+;; Keep the newest lzp:*reclimit* and drop the rest.  lzp:remember caps
+;; what it WRITES, so this looks redundant and is not: a value stored
+;; by another build, or edited by hand, has never been through it, and
+;; Recent is a row on EVERY page -- an over-long one takes all nine
+;; past the screen at once, which is the one failure that cannot be
+;; escaped by moving to another tab.
+(defun lzp:rectrim ( )
+  (while (> (length lzp:*recent*) lzp:*reclimit*)
+    (setq lzp:*recent* (reverse (cdr (reverse lzp:*recent*)))))
+  lzp:*recent*)
+
 (defun lzp:recent-read ( / s)
   (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Recent")))
   (setq lzp:*recent*
     (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
       (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
                         (lzp:split s ";"))))
-  lzp:*recent*)
+  (lzp:rectrim))
 
 (defun lzp:recent-write ( / s n)
   (setq s "")
@@ -93031,7 +103530,36 @@
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
 ;; an edit to that table and nothing else.
-(defun lzp:dcl-one (g / out c col)
+;; NAMES split into as few BALANCED columns as the budget allows: 28
+;; tools at a budget of 16 come out 14 and 14 rather than 16 and 12,
+;; because a page with one full column beside a short one reads as two
+;; different lists.  A page that already fits comes back as a single
+;; column and is emitted exactly as it always was.
+(defun lzp:wrap (names / n cols per rem want out row c)
+  (setq n (length names))
+  (if (<= n lzp:*colbudget*)
+    (list names)
+    (progn
+      ;; the remainder is SHARED OUT, one to a column, rather than left
+      ;; to pile up on the last one: 82 over six columns is four of 14
+      ;; and two of 13, where rounding every column up the same way
+      ;; gives five of 14 and a stub of 12.
+      (setq cols (1+ (/ (1- n) lzp:*colbudget*))   ; columns, rounded up
+            per  (/ n cols)                        ; the even share
+            rem  (- n (* per cols))                ; this many get one more
+            out nil row nil
+            want (if (> rem 0) (1+ per) per))
+      (foreach c names
+        (setq row (cons c row))
+        (if (= (length row) want)
+          (setq out  (cons (reverse row) out)
+                row  nil
+                rem  (1- rem)
+                want (if (> rem 0) (1+ per) per))))
+      (if row (setq out (cons (reverse row) out)))
+      (reverse out))))
+
+(defun lzp:dcl-one (g / out c n col cols)
   ;; consed newest-first and reversed at the end, so this seed list
   ;; reads BACKWARDS: the dialog line last here comes out first
   (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
@@ -93046,13 +103574,33 @@
     ;; ONE COLUMN: the page has the width to spare, so every button
     ;; carries its caption -- this is what the category pages are for.
     ((= (length (cdr g)) 1)
-     (setq out (cons "  : boxed_column {" out))
-     (setq out (cons (strcat "    label = \"" (car g) "\";") out))
-     (foreach c (cdr (car (cdr g)))
-       (setq out (cons (strcat "    : button { label = \"" c "  -  "
-                               (lzp:caption c) "\"; key = \"" c "\"; }")
-                       out)))
-     (setq out (cons "  }" out)))
+     (setq cols (lzp:wrap (cdr (car (cdr g)))))
+     (if (= (length cols) 1)
+       ;; fits: the page it has always been, one boxed column
+       (progn
+         (setq out (cons "  : boxed_column {" out))
+         (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+         (foreach c (car cols)
+           (setq out (cons (strcat "    : button { label = \"" c "  -  "
+                                   (lzp:caption c) "\"; key = \"" c "\"; }")
+                           out)))
+         (setq out (cons "  }" out)))
+       ;; too tall for one column, so side by side -- and the captions
+       ;; STAY: a category page is where you go to find out what a tool
+       ;; is, which is the whole reason it carries them.  Plain columns
+       ;; inside the one box, because a border per column would say the
+       ;; halves of one list were separate things.
+       (progn
+         (setq out (cons "  : boxed_row {" out))
+         (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+         (foreach col cols
+           (setq out (cons "    : column {" out))
+           (foreach c col
+             (setq out (cons (strcat "      : button { label = \"" c "  -  "
+                                     (lzp:caption c) "\"; key = \"" c "\"; }")
+                             out)))
+           (setq out (cons "    }" out)))
+         (setq out (cons "  }" out)))))
     ;; SEVERAL COLUMNS, side by side: the heading says what the column
     ;; is for and the buttons carry the command name alone.  Four
     ;; captioned buttons abreast would be about 147 cells wide and the
@@ -93061,12 +103609,32 @@
      (setq out (cons "  : boxed_row {" out))
      (setq out (cons (strcat "    label = \"" (car g) "\";") out))
      (foreach col (cdr g)
-       (setq out (cons "    : boxed_column {" out))
-       (setq out (cons (strcat "      label = \"" (car col) "\";") out))
+       ;; a column that is nothing but headed runs labels itself from
+       ;; the inside, so the outer box carries no name of its own
+       (if (lzp:col-runs-p col)
+         (setq out (cons "    : column {" out))
+         (progn
+           (setq out (cons "    : boxed_column {" out))
+           (setq out (cons (strcat "      label = \"" (car col) "\";")
+                           out))))
        (foreach c (cdr col)
-         (setq out (cons (strcat "      : button { label = \"" c
-                                 "\"; key = \"" c "\"; }")
-                         out)))
+         (if (listp c)
+           ;; a HEADED RUN inside the column: its own labelled box, so
+           ;; the Converters column can say Convert above one half and
+           ;; Revert above the other without being two columns -- there
+           ;; is no width on Pool for a sixth column.
+           (progn
+             (setq out (cons "      : boxed_column {" out))
+             (setq out (cons (strcat "        label = \"" (car c) "\";")
+                             out))
+             (foreach n (cdr c)
+               (setq out (cons (strcat "        : button { label = \"" n
+                                       "\"; key = \"" n "\"; }")
+                               out)))
+             (setq out (cons "      }" out)))
+           (setq out (cons (strcat "      : button { label = \"" c
+                                   "\"; key = \"" c "\"; }")
+                           out))))
        (setq out (cons "    }" out)))
      (setq out (cons "  }" out))))
   (setq out (cons "  spacer;" out))
@@ -93076,27 +103644,24 @@
                   out))
   (reverse (cons "}" out)))
 
-;; The pin editor: every tool on the panel as a toggle, in three
-;; columns so fifty-six of them fit on a screen rather than a scroll
-;; DCL would not give.
-(defun lzp:dcl-pins ( / out cmds n per i j c)
-  (setq cmds (lzp:commands)
-        n    (length cmds)
-        per  (1+ (/ (1- n) 3))
-        i    0)
+;; The pin editor: every tool on the panel as a toggle, in as many
+;; columns as lzp:*colbudget* needs.  It was three FIXED columns, which
+;; was fine at the fifty-six tools of the day and is not at eighty-two:
+;; three columns of twenty-eight is the same 1085px that stopped "Rest"
+;; opening, on the one dialog that grows every time ANY tool is added.
+;; Sharing the page budget means it cannot drift out of step again.
+(defun lzp:dcl-pins ( / out col c)
   (setq out (list "lazpanel_pins : dialog {"
                   "  label = \"LazPanel  -  pinned tools\";"
-                  (strcat "  : text { label = \"Ticked tools sit in the "
-                          "Pinned row on every page.\"; }")
+                  (strcat "  : text { key = \"pinmsg\"; label = \"Ticked "
+                          "tools sit in the Pinned row on every page.\"; }")
                   "  : row {"))
-  (while (< i n)
-    (setq out (append out (list "    : column {")) j 0)
-    (while (and (< j per) (< i n))
-      (setq c (nth i cmds))
+  (foreach col (lzp:wrap (lzp:commands))
+    (setq out (append out (list "    : column {")))
+    (foreach c col
       (setq out (append out
         (list (strcat "      : toggle { label = \"" c
-                      "\"; key = \"tg_" c "\"; }"))))
-      (setq i (1+ i) j (1+ j)))
+                      "\"; key = \"tg_" c "\"; }")))))
     (setq out (append out (list "    }"))))
   (append out
     (list "  }" "  spacer;"
@@ -93189,13 +103754,24 @@
 ;; Read the pins back, dropping any name no longer on the roster: a pin
 ;; left over from an older build must not put a dead button on screen,
 ;; and the roster is the only thing that says what is real.
+;; Drop pins from the END until the strip fits lzp:*pinrowmax* rows.
+;; The cap is enforced as a tool is ticked, but a list stored by a
+;; build that predates the cap has never been through it -- and the
+;; same sentence applies as to a dead name: what is stored must not be
+;; allowed to put a page on screen that cannot open.  The last pinned
+;; go first, so the row the hand has learned is the part that survives.
+(defun lzp:pintrim ( )
+  (while (and lzp:*pins* (> (length (lzp:pinrows)) lzp:*pinrowmax*))
+    (setq lzp:*pins* (reverse (cdr (reverse lzp:*pins*)))))
+  lzp:*pins*)
+
 (defun lzp:pins-read ( / s)
   (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Pins")))
   (setq lzp:*pins*
     (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
       (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
                         (lzp:split s ";"))))
-  lzp:*pins*)
+  (lzp:pintrim))
 
 (defun lzp:pins-write ( / s n)
   (setq s "")
@@ -93204,12 +103780,31 @@
   (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Pins" s))
   lzp:*pins*)
 
+;; set_tile that cannot throw.  pin-toggle runs as a dialog action, so
+;; the tiles are there when a drafter clicks -- but it is also called
+;; directly, by the tests and by anything restoring a stored list, and
+;; set_tile outside a dialog is an error, not a no-op.
+(defun lzp:settile (key val)
+  (vl-catch-all-apply 'set_tile (list key val)))
+
 ;; Pin order is click order: a newly ticked tool goes on the END rather
 ;; than jumping into the middle of a row the hand has already learned.
-(defun lzp:pin-toggle (name val)
+(defun lzp:pin-toggle (name val / was)
   (if (= val "1")
     (if (not (member name lzp:*pins*))
-      (setq lzp:*pins* (append lzp:*pins* (list name))))
+      (progn
+        (setq was        lzp:*pins*
+              lzp:*pins* (append lzp:*pins* (list name)))
+        ;; one pin too many does not make a tall panel, it makes a page
+        ;; that will not open -- so put it back and say why, rather
+        ;; than storing something that breaks the next page opened
+        (if (> (length (lzp:pinrows)) lzp:*pinrowmax*)
+          (progn
+            (setq lzp:*pins* was)
+            (lzp:settile (strcat "tg_" name) "0")
+            (lzp:settile "pinmsg"
+                         (strcat "That is as many as the Pinned row"
+                                 " holds - un-tick one first."))))))
     (setq lzp:*pins* (vl-remove name lzp:*pins*)))
   (princ))
 
@@ -93322,12 +103917,17 @@
 ;; The complete .bmp as a byte list: 24bpp, bottom-up rows (a positive
 ;; height means the FIRST row in the file is the BOTTOM row of the
 ;; image, hence the reverse).  "X" pixels are orange -- stored B,G,R,
-;; so 0 165 255 -- and the rest panel grey.  Both sizes give a row
-;; width that is a multiple of 4 (48 and 96), so there is no row
-;; padding to get wrong.
+;; so 0 165 255 -- and the rest is PANEL GREY, which is two different
+;; greys: a .bmp has no alpha channel, so the square around the
+;; hexagon is painted, and painting it 54 54 54 on the light theme is
+;; a dark tile in a light toolbar.  It was, for every drafter not on
+;; the dark theme, from the day the button shipped.  The theme is read
+;; rather than assumed, and an unreadable one keeps the dark grey that
+;; was always here.  Both sizes give a row width that is a multiple of
+;; 4 (48 and 96), so there is no row padding to get wrong.
 (defun lzp:bmp-bytes (size grid / fg bg rowbytes out row s i)
   (setq fg '(0 165 255)
-        bg '(54 54 54)
+        bg (if (eq (cal:ui) 'light) '(240 240 240) '(54 54 54))
         rowbytes (* 3 size))
   (setq out (append
               (list 66 77)                      ; "BM"
@@ -93846,7 +104446,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZPANEL error: " msg)))
+    (if lzd:report (lzd:report "LAZPANEL" *lazpanel-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZPANEL" *lazpanel-version*))
   ;; NOT reset here: the panel reopens after every tool it launches, and
   ;; coming back to page one in the middle of the screen each time would
   ;; undo the whole point of reopening.  lzp:*page* and lzp:*pos* are
@@ -94027,7 +104629,9 @@
     (if f (vl-file-delete f))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZPIN error: " msg)))
+    (if lzd:report (lzd:report "LAZPIN" *lazpanel-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LAZPIN" *lazpanel-version*))
   (lzp:pins-read)
   (lzp:recent-read)
   (cond
@@ -94044,7 +104648,18 @@
                     (itoa (length lzp:*pins*)) " tools pinned."))))
   (princ))
 
-(defun c:LAZBUTTON ( / tb)
+(defun c:LAZBUTTON ( / *error* tb)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZBUTTON error: " msg)))
+    (if lzd:report (lzd:report "LAZBUTTON" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZBUTTON" *lazpanel-version*))
   (setq tb (vl-catch-all-apply 'lzp:button-init nil))
   (cond
     ((vl-catch-all-error-p tb)
@@ -94057,7 +104672,18 @@
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
   (princ))
 
-(defun c:LAZICON ( / paths tb btn r w)
+(defun c:LAZICON ( / *error* paths tb btn r w)
+  ;; Nothing to put back -- this command opens no undo group and
+  ;; changes no system variable -- but a failure still has to be SAID,
+  ;; and said to LAZDIAG, or it is the one command in the build whose
+  ;; bugs arrive as a bare AutoCAD message with no report behind them.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZICON error: " msg)))
+    (if lzd:report (lzd:report "LAZICON" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZICON" *lazpanel-version*))
   ;; The icon path is best effort and fails silently on purpose: a
   ;; missing picture must never stop the panel working.  Silence is the
   ;; right default and a poor answer to "why is my button blank", so
@@ -94069,6 +104695,17 @@
   (princ (strcat "\n  TEMPPREFIX : "
                  (if (= (type (getvar "TEMPPREFIX")) 'STR)
                      (getvar "TEMPPREFIX") "(not a string)")))
+  ;; which grey went behind the hexagon, and why.  A .bmp has no
+  ;; transparency, so this square is painted and the wrong one shows.
+  (princ (strcat "\n  theme      : "
+                 (cond ((eq (cal:ui) 'light) "light - icon ground 240 240 240")
+                       ((eq (cal:ui) 'dark)  "dark - icon ground 54 54 54")
+                       (t "cannot tell - icon ground 54 54 54, as it always was"))
+                 (if (and (getenv "CalofinTheme")
+                          (/= (getenv "CalofinTheme") ""))
+                     (strcat "  (CalofinTheme says "
+                             (getenv "CalofinTheme") ")")
+                     "  (COLORTHEME; CALSET overrides it)")))
   (setq paths (lzp:write-bmps))
   (cond
     (paths
@@ -94126,6 +104763,127 @@
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
   (princ))
 
+;;; -------------------- the two front-desk commands ---------------------
+;;  CALHELP and CALSET are machinery rather than drafting tools, which
+;;  is why they are here and not files of their own: this is where the
+;;  captions live, and where calofin's profile settings were already
+;;  being read and written (lzp:*poskey*, lzp:*pinkey*).  Both are in
+;;  NAMED_SATELLITES in tools/callib.py, so neither asks for a panel
+;;  button it has no use for.
+
+;; What a command IS, at the command line.  The captions have been
+;; here all along and the only way to read one was to open the panel
+;; and find the page the tool was filed on -- which is the same
+;; complaint the Find page answered inside the dialog, unanswered
+;; outside it.  Enter lists the lot.
+(defun c:CALHELP ( / *error* s hits n)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALHELP error: " msg)))
+    (if lzd:report (lzd:report "CALHELP" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALHELP" *lazpanel-version*))
+  (setq s (getstring T "\nCommand, or any part of one <Enter = all>: "))
+  (if lzd:ask (lzd:ask "Command, or any part of one" s))
+  (setq hits (if (= s "") (lzp:commands) (lzp:matches s)))
+  (cond
+    ((null hits)
+     (princ (strcat "\nNothing here matches \"" s "\".  CALHELP on its"
+                    " own lists every tool.")))
+    (t
+     (princ (strcat "\n" (itoa (length hits)) " tool"
+                    (if (= (length hits) 1) "" "s")
+                    (if (= s "") "" (strcat " matching \"" s "\""))
+                    " -- a name in brackets is not loaded in this"
+                    " session:"))
+     (foreach n hits
+       (princ (strcat "\n  " (if (lzp:has n) (strcat n) (strcat "(" n ")"))
+                      "  " (lzp:caption n))))))
+  (princ))
+
+;; The settings calofin keeps in the AutoCAD PROFILE, which is the one
+;; place a setting survives a rebuild: releases/ and LAZPASS.lsp are
+;; generated, so a number edited into either is gone at the next
+;; regeneration.  Each row is (key default what-it-does).
+(setq lzp:*settings*
+  '(("CalofinTheme"
+     "auto"
+     "dark / light / auto.  Which way the ink is picked: auto measures the drawing's background and AutoCAD's theme, and the other two say so outright when a measurement comes out wrong")
+    ("CalofinErrorDir"
+     ""
+     "the folder LAZDIAG writes its error report to.  Empty = the candidate walk, which starts at Downloads")
+    ("StockCover_Folder"
+     ""
+     "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
+
+(defun lzp:setshow ( / r v)
+  (princ "\ncalofin settings, as this session reads them:")
+  (foreach r lzp:*settings*
+    (setq v (getenv (car r)))
+    (princ (strcat "\n  " (car r)
+                   "\n      now: " (if (and v (/= v "")) v
+                                       (strcat "(unset -- " (cadr r) ")"))
+                   "\n      " (caddr r))))
+  (princ))
+
+(defun c:CALSET ( / *error* pick key v)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALSET error: " msg)))
+    (if lzd:report (lzd:report "CALSET" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALSET" *lazpanel-version*))
+  (lzp:setshow)
+  (initget "Theme Errordir Stockdir Quit")
+  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Quit] <Quit>: "))
+  (if lzd:ask (lzd:ask "Change which?" pick))
+  (setq key (cond ((= pick "Theme") "CalofinTheme")
+                  ((= pick "Errordir") "CalofinErrorDir")
+                  ((= pick "Stockdir") "StockCover_Folder")))
+  (cond
+    ((null key) (princ "\nNothing changed."))
+    ((= key "CalofinTheme")
+     ;; Undo is accepted everywhere Back is, unlisted (STANDARDS 1)
+     (initget "Dark Light Auto Back Undo")
+     (setq v (getkword "\nTheme [Dark/Light/Auto/Back] <Auto>: "))
+     (if lzd:ask (lzd:ask "Theme" v))
+     (cond
+       ((member v '("Back" "Undo")) (c:CALSET))
+       (t (setenv "CalofinTheme" (if v (strcase v) "Auto"))
+          ;; ...and beside the pins, where the VB palette reads it
+          ;; (ui/calofin_net/PaletteTheme.vb).  The profile is what the
+          ;; Lisp side reads and the registry is what the palette can
+          ;; reach, and a drafter who has said which way their screen
+          ;; reads has said it to both surfaces -- the same bargain the
+          ;; pinned row already strikes.
+          (vl-catch-all-apply
+            'vl-registry-write
+            (list lzp:*pinkey* "Theme"
+                  (if (= (strcase (getenv "CalofinTheme")) "AUTO") ""
+                      (strcase (getenv "CalofinTheme")))))
+          (princ (strcat "\nCalofinTheme is now "
+                         (getenv "CalofinTheme")
+                         ".  Every tool reads it on the next colour it"
+                         " picks; the toolbar icon takes it at the next"
+                         " LAZBUTTON or LAZICON, and the VB palette at"
+                         " its next chart.")))))
+    (t
+     (setq v (getstring T (strcat "\n" key
+                                  " (a folder, Back to leave it, "
+                                  "or . to clear it): ")))
+     (if lzd:ask (lzd:ask key v))
+     (cond
+       ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
+       ((= v "") (princ "\nUnchanged."))
+       ((= v ".")
+        (setenv key "")
+        (princ (strcat "\n" key " cleared.")))
+       (t (setenv key v)
+          (princ (strcat "\n" key " is now " v "."))))))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:commands))) " tools on the panel across "
@@ -94154,46 +104912,58 @@
   '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 
-(princ (strcat "\nLAZPANEL " *lazpanel-version*
-               " loaded.  LAZPANEL opens the panel;"
-               " LAZBUTTON puts its button on screen;"
-               " LAZPIN edits the pinned row."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZPANEL " *lazpanel-version*
+                 " loaded.  LAZPANEL opens the panel;"
+                 " LAZBUTTON puts its button on screen;"
+                 " LAZPIN edits the pinned row;"
+                 " CALHELP says what a command does;"
+                 " CALSET shows the settings.")))
 (princ)
 
 
 ;;; ======================================================================
 ;;; -------------------- what actually arrived ---------------------------
 (setq lazpass:*want* '(
-  "CALVER" "POOL" "POOLCOVER" "POOLVER" "POOLDEMO" "POOLDEMOVER"
-  "TUTORIALPOOL" "POOLSIDE" "POOLSIDEVER" "SPA" "SPAVER" "TUTORIALSPA"
-  "OASIS" "OASISVER" "ABCDEF" "ABCDEFVER" "ABFIND" "ABMOVE"
-  "ABPCREATE" "ABFINDVER" "ALTABCDEF" "ALTABCDEFVER" "ABHD" "ABHDCOVER"
-  "ADAB" "TUTORIALABHD" "TUTORIALADAB" "ABHDVER" "ABCURCHECK" "ABCURCHECKSCAN"
-  "ABCURCHECKRESCUE" "ABCURCHECKVER" "ABPCHECK" "ABPCHECKRESCUE" "ABPCHECKVER" "CABHDVER"
-  "CABHD" "POINTRENAMER" "POINTRENAMERVER" "LOBF" "LOBFVER" "AUTOBEAD"
-  "AUTOBEADVER" "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV"
-  "AUTODIMVER" "BPCALLOUT" "BPCALLOUTVER" "CCPRECHECK" "CCPRECHECKVER" "CDCALLOUT"
-  "CDCALLOUTVER" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK" "CHECKVER"
-  "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER"
-  "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE"
-  "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER"
-  "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK"
-  "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DIMCONTENDVER"
-  "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT" "DDFIXVER"
-  "DDGPS" "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER" "FITABHD"
-  "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK" "LINCHECKVER" "LINFINCHECKVER"
-  "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN"
-  "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER" "LINGUTTER"
-  "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER" "CPERPPTS"
-  "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER"
-  "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK"
-  "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER"
-  "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER"
-  "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER"
-  "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER"
-  "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER"
-  "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
-  "LAZPIN" "LAZBUTTON" "LAZICON" "LAZPANELVER"
+  "CALVER" "LAZDIAG" "LAZDIAGVER" "POOL" "POOLCOVER" "POOLVER"
+  "POOLDEMO" "POOLDEMOVER" "TUTORIALPOOL" "POOLSIDE" "POOLSIDEVER" "SPA"
+  "SPAVER" "TUTORIALSPA" "OASIS" "OASISVER" "ABCDEF" "ABCDEFVER"
+  "ABFIND" "ABMOVE" "ABPCREATE" "ABFINDVER" "ALTABCDEF" "ALTABCDEFVER"
+  "ABHD" "SIMPABHD" "ABHDCOVER" "ADAB" "TUTORIALABHD" "TUTORIALADAB"
+  "ABHDVER" "ABCURCHECK" "ABCURCHECKSCAN" "ABCURCHECKRESCUE" "ABCURCHECKVER" "ABPCHECK"
+  "ABPCHECKRESCUE" "ABPCHECKVER" "CABHDVER" "CABHD" "POINTRENAMER" "POINTRENAMERVER"
+  "LOBF" "LOBFVER" "ABLOBF" "ABLOBFVER" "AUTOBEAD" "AUTOBEADVER"
+  "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "AUTODIMVER"
+  "BPCALLOUT" "BPCALLOUTVER" "DIMSTAMP" "DIMSTAMPVER" "CCPRECHECK" "CCPRECHECKVER"
+  "CDCALLOUT" "CDCALLOUTVER" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
+  "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP"
+  "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER"
+  "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN"
+  "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE"
+  "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE"
+  "DIMCONTENDVER" "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT"
+  "DDFIXVER" "DDGPS" "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER"
+  "FITABHD" "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK" "LINCHECKVER"
+  "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
+  "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER"
+  "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER"
+  "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK" "SMARTFILLET"
+  "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN"
+  "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST"
+  "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN"
+  "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER" "VSCONV"
+  "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST"
+  "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT"
+  "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII"
+  "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN"
+  "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
@@ -94210,7 +104980,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.8 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.12 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 
@@ -94225,12 +104995,13 @@
   cal:datestr cal:dedupe cal:dimstyrestore cal:dimstysave cal:dist
   cal:dot cal:dotn cal:ensure-layer cal:error-cancel-p cal:formanswer
   cal:imgflatten cal:imgpline cal:imgtext cal:imgtexth cal:imgtextw
-  cal:kvpack cal:kvunpack cal:layer-usable-p cal:mid cal:midn
-  cal:mtext cal:nthcdr cal:osdown cal:osup cal:pad
-  cal:perp cal:plural cal:proj-param cal:pt-line-dist cal:signed-dang
-  cal:sublist cal:sysrestore cal:syssave cal:tan cal:text
-  cal:trim cal:undobegin cal:undoend cal:unit cal:unitn
-  cal:v* cal:v+ cal:v- cal:zeropad2
+  cal:ink cal:kvpack cal:kvunpack cal:layer-usable-p cal:mid
+  cal:midn cal:mtext cal:nthcdr cal:osdown cal:osup
+  cal:pad cal:perp cal:plural cal:proj-param cal:pt-line-dist
+  cal:signed-dang cal:sublist cal:sysrestore cal:syssave cal:tan
+  cal:text cal:trim cal:ui cal:undobegin cal:undoend
+  cal:unit cal:unitn cal:v* cal:v+ cal:v-
+  cal:vlen cal:zeropad2
 ))
 (setq lazpass:*nohelper* nil)
 (foreach n lazpass:*helpers*
@@ -94242,8 +105013,10 @@
     (foreach n (reverse lazpass:*nohelper*)
       (princ (strcat " " (vl-symbol-name n))))))
 
-;; the flag the header set for the library: cleared, so a later
-;; APPLOAD of CALOFIN-LIB.lsp on its own in this drawing still says
-;; what it is
+;; the flags the header set: cleared, so a later APPLOAD of
+;; CALOFIN-LIB.lsp on its own in this drawing still says what it
+;; is, and a single tool loaded over the top of the build still
+;; announces the version it arrived at
 (setq cal:*build-loading* nil)
+(setq *calofin-quiet* nil)
 (princ)

@@ -240,7 +240,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.9") ; printed on load and at command start so a
+(setq *ns-version* "v3.10") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -899,7 +899,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nNORMIESTEP: " msg)))
+    (if lzd:report (lzd:report "NORMIESTEP" *ns-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "NORMIESTEP" *ns-version*))
 
   ;; remove the most recently drawn step and roll the state back
   (defun ns-popstep ( / e)
@@ -952,11 +954,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the two lines of a corner,"
                      " or a U-shaped step perimeter:"))
-      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
+      (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -1829,7 +1833,9 @@
     (if oldstyle (ns-setstyle oldstyle))
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
+    (if lzd:report (lzd:report "TUTORIALNORMIESTEP" *ns-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "TUTORIALNORMIESTEP" *ns-version*))
 
   (princ (strcat "\n================ NORMIESTEP TUTORIAL " *ns-version*
                  " ================"))
@@ -1993,7 +1999,15 @@
   (princ (strcat "\nNORMIESTEP " *ns-version*))
   (princ))
 
-(princ (strcat "\nNORMIESTEP.lsp " *ns-version*
-               " loaded - NORMIESTEP to draw plain steps,"
-               " TUTORIALNORMIESTEP to learn it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nNORMIESTEP.lsp " *ns-version*
+                 " loaded - NORMIESTEP to draw plain steps,"
+                 " TUTORIALNORMIESTEP to learn it.")))
 (princ)

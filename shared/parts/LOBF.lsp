@@ -66,7 +66,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.0")
+(setq *lobf-version* "v1.1")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -142,8 +142,11 @@
 (setq lobf:*layer*         "LOBF")           ; the construction line kept
 (setq lobf:*color*         4)                ; ACI (cyan)
 (setq lobf:*preview-layer* "LOBF-PREVIEW")   ; the three candidates
-(setq lobf:*preview-color* 8)                ; ACI (grey) -- each XLINE
-                                             ; carries its own colour
+(setq lobf:*preview-color* 'auto)            ; ACI (grey) -- each XLINE
+                                             ; carries its own colour.
+                                             ; 'auto picks the grey for
+                                             ; the background; a number
+                                             ; is used exactly as given
 (setq lobf:*ign-layer*     "LOBF-IGNORED")   ; ring round a set-aside point
 (setq lobf:*ign-color*     1)                ; ACI (red)
 (setq lobf:*appid*         "LOBF")           ; renaming this orphans
@@ -634,12 +637,14 @@
   (initget "1 2 3 All None Redo")
   (setq pick (getkword (strcat "\n  Keep which fit - click one, or"
                                " [1/2/3/All/None/Redo] <" dflt ">: ")))
+  (if lzd:ask (lzd:ask "lobf:askfit" pick))
   (if (null pick)
     ;; no keyword typed: give them a click, and fall back to the
     ;; default this run worked out
     (progn
       (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
                                 dflt "): ")))
+      (if lzd:watch (lzd:watch sel))
       (if sel
         (progn
           (setq picked (car sel) i 1)
@@ -728,7 +733,8 @@
                      " give a direction - there is no line in them."))
       nil)
     (progn
-      (cal:ensure-layer lobf:*preview-layer* lobf:*preview-color*)
+      (cal:ensure-layer lobf:*preview-layer*
+                         (cal:ink lobf:*preview-color* 'guide))
       ;; sized to the run the points cover, so the labels read at any
       ;; scale the sheet is drawn at
       (setq run (lobf:runlen pts (lobf:cand-org (car cands))
@@ -820,13 +826,16 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLOBF error: " msg)))
+    (if lzd:report (lzd:report "LOBF" *lobf-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LOBF" *lobf-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - probed BEFORE the undo
   ;; group opens, because that command clears the set (the convention
   ;; ABPCHECK and abhd already carry)
   (setq ss (ssget "_I" lobf:*filter*))
+  (if lzd:watch (lzd:watch ss))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -840,7 +849,8 @@
     (if (null ss)
       (progn
         (princ "\nHighlight the points to fit (Enter = every point in the drawing): ")
-        (setq ss (ssget lobf:*filter*))))
+        (setq ss (ssget lobf:*filter*))
+        (if lzd:watch (lzd:watch ss))))
     (if (null ss) (setq ss (ssget "_X" lobf:*filter*)))
     (if (null ss)
       (princ "\nNothing to fit - no points in the drawing.")
@@ -884,6 +894,14 @@
   (princ (strcat "\nLOBF " *lobf-version* " loaded."))
   (princ))
 
-(princ (strcat "\nLOBF " *lobf-version*
-               " loaded.  Type LOBF to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLOBF " *lobf-version*
+                 " loaded.  Type LOBF to run.")))
 (princ)

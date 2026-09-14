@@ -69,11 +69,14 @@ SHEET = [("1", 0.0, 0.0), ("2", 120.0, 18.5), ("3", 240.25, 96.0),
          ("7", -36.0, 50.0)]
 
 
-def run(pts=SHEET, answer="No", with_abhd=True, origin=(0.0, 0.0)):
+def run(pts=SHEET, answer="No", with_abhd=True, origin=(0.0, 0.0),
+        undoctl=None):
     vm = VM()
     lispvm.BUILTINS[Sym('vl-cmdf')] = lispvm.BUILTINS[Sym('command')]
     vm.loads(STUBS)
     vm.load(LSP)
+    if undoctl is not None:
+        vm.sysvars['UNDOCTL'] = undoctl
     if with_abhd:
         vm.loads('(defun c:ABHD () nil)')
     body = " ".join('(list "%s" %s %s)'
@@ -328,6 +331,26 @@ def test_the_view_reset_runs():
           and ['_.zoom', '_Extents'] in vm.commands)
 
 
+def test_undo_off_closes_no_group():
+    print("\nwith undo recording off")
+    # The group is opened only when undo recording is on, so the close
+    # has to be conditional too: an _End on a group that was never
+    # opened is an error of its own, and it lands after every graph has
+    # been plotted and the report written.  The Enter-only sweep in
+    # tests/test_undo_off.py cannot reach this close -- XYPLOT wants a
+    # sheet and an origin first -- so it is driven from here, where the
+    # driver already lives.
+    vm = run(undoctl=5)
+    check("undo on: the bracket is opened and closed",
+          [c[1] for c in vm.commands if c and c[0] == '_.UNDO']
+          == ['_Begin', '_End'])
+    vm = run(undoctl=4)
+    check("undo off: neither half is sent",
+          [c for c in vm.commands if c and c[0] == '_.UNDO'] == [])
+    check("and the plot still finished",
+          not any('XYPLOT error' in str(p) for p in vm.printed))
+
+
 def main():
     tier = os.environ.get('CALOFIN_LISP_ROOT') or 'lisp/ (standalone)'
     print("XYPLOT.lsp runtime tests -- tier: %s" % tier)
@@ -343,7 +366,8 @@ def main():
                test_rows_missing_a_coordinate_are_named_not_guessed,
                test_report_carries_both_readings_of_every_value,
                test_abhd_handoff_takes_graph1_only,
-               test_the_view_reset_runs):
+               test_the_view_reset_runs,
+               test_undo_off_closes_no_group):
         try:
             fn()
         except LispError as e:

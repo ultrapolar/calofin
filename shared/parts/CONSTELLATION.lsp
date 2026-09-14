@@ -92,7 +92,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.4")
+(setq *constellation-version* "v1.5")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -130,7 +130,8 @@
 ;; 6 magenta, 7 white, 8 grey.  Grey for the frame and cyan for the
 ;; legend, so neither competes with the result; the result itself lands
 ;; in the point and dimension colours the rest of the toolkit uses.
-(setq cst:*space-color*   8)
+(setq cst:*space-color*   'auto)  ; 'auto picks the grey for the
+                                  ; background; a number as given
 (setq cst:*guide-color*   4)
 (setq cst:*outline-color* 3)
 (setq cst:*dim-color*     2)
@@ -1279,7 +1280,8 @@
 
 (defun cst:preview (n w h base / pts i p r th lab)
   (cst:unpreview)
-  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
+  (cal:ensure-layer cst:*space-layer*
+                    (cal:ink cst:*space-color* 'guide))
   (cal:ensure-layer cst:*guide-layer* cst:*guide-color*)
   (setq r   (cst:dotr w h)
         th  (cst:texth w h)
@@ -1345,6 +1347,7 @@
   (setq dflt (fix (max cst:*minpts* (min cst:*maxpts* cst:*defcount*))))
   (initget 6 "Back Undo")
   (setq v (getint (strcat "\nHow many points? [Back] <" (itoa dflt) ">: ")))
+  (if lzd:ask (lzd:ask "cst:askcount" v))
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) dflt)
         ((or (< v cst:*minpts*) (> v cst:*maxpts*))
@@ -1357,6 +1360,7 @@
 (defun cst:askbase ( / v)
   (initget "Back Undo")
   (setq v (getpoint "\nInsertion base point [Back] <0,0>: "))
+  (if lzd:ask (lzd:ask "cst:askbase" v))
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) '(0.0 0.0))
         (t (cal:2d v))))
@@ -1650,7 +1654,8 @@
 ;; they are not part of the drawing to be swept and a redraw must not
 ;; keep re-announcing them.
 (defun cst:draw (pts n w h base chart arcs outline / mark th i p)
-  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
+  (cal:ensure-layer cst:*space-layer*
+                    (cal:ink cst:*space-color* 'guide))
   (cal:ensure-layer cst:*point-layer* cst:*point-color*)
   (cal:ensure-layer cst:*dim-layer* cst:*dim-color*)
   (if outline (cal:ensure-layer cst:*outline-layer* cst:*outline-color*))
@@ -1829,7 +1834,9 @@
              (setq undo-open nil)))
     (if (and msg (not (cal:error-cancel-p msg)))
       (princ (strcat "\nCONSTELLATION error: " msg)))
+    (if lzd:report (lzd:report "CONSTELLATION" *constellation-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "CONSTELLATION" *constellation-version*))
   (cal:syssave (cst:sysvars))
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
@@ -1948,7 +1955,15 @@
                  " (CONSTELLATION.lsp)"))
   (princ))
 
-(princ (strcat "\nCONSTELLATION.lsp " *constellation-version*
-               " loaded.  Type CONSTELLATION to place points from"
-               " their cross dims."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nCONSTELLATION.lsp " *constellation-version*
+                 " loaded.  Type CONSTELLATION to place points from"
+                 " their cross dims.")))
 (princ)

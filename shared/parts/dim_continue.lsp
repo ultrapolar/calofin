@@ -34,7 +34,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.6")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -91,7 +91,9 @@
     (setq *error* olderr)
     (if (and m (not (wcmatch (strcase m) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\n** Error: " m)))
+    (if lzd:report (lzd:report "DIMCONTEND" *dimcontinue-version* m))
     (princ))
+  (if lzd:begin (lzd:begin "DIMCONTEND" *dimcontinue-version*))
 
   (setq oce  (getvar "CMDECHO")
         ocl  (getvar "CLAYER")
@@ -107,6 +109,7 @@
     (setq en nil ss nil pl nil kept nil)
     (while (null en)
       (setq tref (entsel "\nSelect the dimension to continue: "))
+      (if lzd:watch (lzd:watch tref))
       (cond
         ((null tref)                                 ; Enter / miss -> quit
            ;; a quoted symbol, not :none - a colon symbol evaluates to
@@ -131,6 +134,7 @@
         ;; -- 2. highlight the drawing to dimension -----------------
         (princ "\nHighlight the drawing to dimension (window/crossing): ")
         (setq ss (ssget))
+        (if lzd:watch (lzd:watch ss))
 
         (if (null ss)
           (princ "\nNothing highlighted -- nothing to do.")
@@ -216,6 +220,14 @@
   (princ (strcat "\nDIMCONTEND " *dimcontinue-version*))
   (princ))
 
-(princ (strcat "\nDIMCONTEND / DCE " *dimcontinue-version*
-               " loaded -- continue a dimension to the end of the drawing."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nDIMCONTEND / DCE " *dimcontinue-version*
+                 " loaded -- continue a dimension to the end of the drawing.")))
 (princ)

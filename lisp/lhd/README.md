@@ -110,12 +110,22 @@ does not have to close - an open sketch orders an open run.
 
 Its **fitter knobs are shared with ABHD**: the span fitter is ABHD's,
 carried over word for word, so every tuning constant it reads exists
-under all three prefixes (`*PF-`, `*LH-`, `*CAB-`) at the same value --
-the tangency window and its stretch steps, the arc slack, the give-up
-budget and what a written-off point must buy, the curve cap's relaxing
-refits, the bulge clamp. `tests/test_laser_fit.py` and
-`tests/test_cabhd.py` compare that fitter code for code against
-`abhd.lsp`, so a knob moved in one file has to move in all three.
+under all three prefixes (`*PF-`, `*LH-`, `*CAB-`) -- the tangency
+window and its stretch steps, the arc slack, the give-up budget and
+what a written-off point must buy, the curve cap's relaxing refits,
+the bulge clamp -- at the same value, with one deliberate exception.
+`tests/test_laser_fit.py` and `tests/test_cabhd.py` compare that
+fitter code for code against `abhd.lsp`, so a knob moved in one file
+has to move in all three.
+
+The exception is **`*-MISS-PCT*`**, which is not really a fitter knob
+but the share the command *recommends* at its own prompt, and the two
+surveys are not the same survey. `*PF-` and `*CAB-` offer **20%**,
+because an AB survey of a built shell measures that way; `*LH-` stays
+at **15%**, because a laser scan is a finer instrument than a tape and
+a rod. The fitter reads whichever its own command was given, through
+`pf:misspct` / `cab:misspct` / `lh:misspct`, so the shared code is
+still identical.
 
 ## Version banner and releases
 

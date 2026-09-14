@@ -99,7 +99,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.7")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1164,11 +1164,13 @@
 (defun acc:select ( / ss)
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+  (if lzd:watch (lzd:watch ss))
   (if (null ss)
     (progn
       (princ "\n\nSelect the closed perimeter - one polyline, or the same")
       (princ "\nshape exploded into lines and arcs.")
-      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))))
+      (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+      (if lzd:watch (lzd:watch ss))))
   (if (null ss)
     (progn (princ "\nABCURCHECK: nothing selected.") nil)
     ss))
@@ -1224,7 +1226,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECK error: " msg)))
+    (if lzd:report (lzd:report "ABCURCHECK" *abcurcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCURCHECK" *abcurcheck-version*))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1246,7 +1250,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKSCAN error: " msg)))
+    (if lzd:report (lzd:report "ABCURCHECKSCAN" *abcurcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCURCHECKSCAN" *abcurcheck-version*))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1272,7 +1278,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nABCURCHECKRESCUE error: " msg)))
+    (if lzd:report (lzd:report "ABCURCHECKRESCUE" *abcurcheck-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "ABCURCHECKRESCUE" *abcurcheck-version*))
   (cal:syssave acc:*sysvars*)
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1299,6 +1307,14 @@
   (princ (strcat "\nABCURCHECK " *abcurcheck-version* " loaded."))
   (princ))
 
-(princ (strcat "\nABCURCHECK " *abcurcheck-version*
-               " loaded.  Type ABCURCHECK to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABCURCHECK " *abcurcheck-version*
+                 " loaded.  Type ABCURCHECK to run.")))
 (princ)

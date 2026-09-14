@@ -58,14 +58,16 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.3")
+(setq *poolside-version* "v1.4")
 
 ;;; -------------------- adjustable constants ---------------------------
 
 (setq psd:*base*       (list 0.0 0.0))  ; insertion base for this run
 (setq psd:*pvents*     nil)             ; live guide entities
 (setq psd:*valnotes*   nil)             ; validation problems, for the notes
-(setq psd:*pv-col*     8)               ; guide outline color (dark gray)
+(setq psd:*pv-col*     'auto)           ; guide outline color: 'auto picks
+                                        ; it for the background (grey either
+                                        ; way round), a number is used as given
 (setq psd:*pvx-col*    7)               ; guide measuring-tie color (white)
 (setq psd:*hi-col*     1)               ; highlight color (red)
 
@@ -132,7 +134,7 @@
 (defun psd:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      psd:*pv-col*))
+      (cal:ink psd:*pv-col* 'guide)))
 
 ;;; -------------------- guide preview ----------------------------------
 ;;; Everything the guide draws is tracked here, so the *error* handler
@@ -150,7 +152,7 @@
 ;; over the outline).
 (defun psd:pvline (p1 p2)
   (psd:line p1 p2 "POOL-NOTES")
-  (psd:setcol (entlast) psd:*pv-col*))
+  (psd:setcol (entlast) (cal:ink psd:*pv-col* 'guide)))
 
 (defun psd:pvtieline (p1 p2)
   (psd:line p1 p2 "POOL-NOTES")
@@ -175,6 +177,7 @@
   (cal:osup)
   (initget 7)                           ; no null, no zero, no negative
   (setq v (getdist (strcat "\n" msg ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cal:osdown)
   v)
 
@@ -198,6 +201,7 @@
                     (if (eq kind 'REQ) "" " (or NA if not measured)")
                     (if back " [Back]" "")
                     ": ")))
+  (if lzd:ask (lzd:ask msg v))
   (cal:osdown)
   (mapcar '(lambda (e c) (psd:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -499,7 +503,9 @@
     (psd:pvkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (if lzd:report (lzd:report "POOLSIDE" *poolside-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "POOLSIDE" *poolside-version*))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -687,6 +693,14 @@
   (princ (strcat "\nPOOLSIDE " *poolside-version*))
   (princ))
 
-(princ (strcat "\nPOOLSIDE " *poolside-version*
-               " loaded.  Type POOLSIDE to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOLSIDE " *poolside-version*
+                 " loaded.  Type POOLSIDE to run.")))
 (princ)

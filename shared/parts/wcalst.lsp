@@ -32,7 +32,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v1.9")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -570,8 +570,10 @@
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nWCALST error: " msg))
     )
+    (if lzd:report (lzd:report "WCALST" *wcalst-version* msg))
     (princ)
   )
+  (if lzd:begin (lzd:begin "WCALST" *wcalst-version*))
   (setq oldlay (getvar "CLAYER"))
 
   ;; ---- 1.-7. the questions, staged so every prompt after the first
@@ -583,6 +585,7 @@
   ;; the first pass through stage 1 takes them; a too-small band or Back
   ;; re-asks interactively.
   (setq wc-pick (ssget "_I" '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+  (if lzd:watch (lzd:watch wc-pick))
   (setq stage 1)
   (while (< stage 6)
     (cond
@@ -593,7 +596,8 @@
          (setq ss wc-pick wc-pick nil)
          (progn
            (princ "\nSelect the band of lines (two long sides + rungs): ")
-           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))))
+           (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
+           (if lzd:watch (lzd:watch ss))))
        (if (not ss) (progn (princ "\nNothing selected.") (exit)))
        (setq segs (wc:build-segs ss))
        (if (< (length segs) wc:*min-segs*)
@@ -608,6 +612,7 @@
       ((= stage 2)
        (initget "Back Undo")
        (setq pick (entsel "\nClick the long side to STRAIGHTEN [Back]: "))
+       (if lzd:watch (lzd:watch pick))
        (cond
          ((= (type pick) 'STR) (setq stage 1))
          ((not pick)
@@ -821,6 +826,7 @@
   ;; equal steps up and down stay equal)
   (princ "\nWindow the STAIR section(s) if any (Enter = none): ")
   (setq ssstairs (ssget))
+  (if lzd:watch (lzd:watch ssstairs))
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a
@@ -1382,6 +1388,14 @@
   (princ (strcat "\nWCALST " *wcalst-version*))
   (princ))
 
-(princ (strcat "\nWCALST " *wcalst-version*
-               " loaded -- select the band, pick the side to straighten."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nWCALST " *wcalst-version*
+                 " loaded -- select the band, pick the side to straighten.")))
 (princ)
