@@ -220,6 +220,41 @@ TOOLS = {
         # every question in the chain tests for it by name
         'symbols': {'CST-BACK': 'CAL-BACK'},
     },
+    # Written against the library from the start (STANDARDS section 4's
+    # "a NEW tool starts there"), so the swap map is the whole of its
+    # helper layer: the vector set, the two angle helpers, ensure-layer
+    # and the ask trio.  What stays local is what the library has no
+    # answer for -- the segment walk over the perimeter, the mark record
+    # and pm:askpt, the point prompt none of the tools before it needed.
+    'PERPMARK': {
+        'src': 'lisp/perpmark/PERPMARK.lsp',
+        'swap': {
+            'pm:2d': 'cal:2d', 'pm:v-': 'cal:v-', 'pm:v+': 'cal:v+',
+            'pm:v*': 'cal:v*', 'pm:dot': 'cal:dot', 'pm:perp': 'cal:perp',
+            'pm:vlen': 'cal:vlen', 'pm:unit': 'cal:unit',
+            'pm:angnorm': 'cal:angnorm', 'pm:tan': 'cal:tan',
+            'pm:ensure-layer': 'cal:ensure-layer',
+            'pm:askkw': 'cal:askkw', 'pm:askyn': 'cal:askyn',
+            'pm:askdist': 'cal:askdist',
+            'pm:syssave': 'cal:syssave',
+            'pm:sysrestore': 'cal:sysrestore',
+            'pm:undobegin': 'cal:undobegin',
+            'pm:undoend': 'cal:undoend',
+        },
+        'drop_globals': ['pm:*sysold*'],
+        # cal:syssave takes the sysvars as an argument where pm:syssave
+        # baked them in, so the list travels with the call and
+        # pm:sysvars stays behind to supply it
+        'expand': {
+            '(cal:syssave)': ['(cal:syssave (pm:sysvars))'],
+        },
+        # pm:askkw already takes the SHOWN bracket third, like the
+        # library's -- so no bracket translation is needed here
+        'askkw_hidden': False,
+        # ...but the two signal Back with different symbols, and every
+        # caller tests for it, so the sentinel moves with the helper
+        'symbols': {'PM-BACK': 'CAL-BACK'},
+    },
     'XYPLOT': {
         'src': 'lisp/xyplot/XYPLOT.lsp',
         'swap': {
