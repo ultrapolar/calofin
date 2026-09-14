@@ -1224,6 +1224,19 @@ TOOLS = {
         },
         'drop_globals': [],
     },
+    # MOHAMADDLE ports PADDLE's own 2D vector kit under its own prefix
+    # (every lisp/ tool has to load alone), so the same eight names come
+    # out here for the same reason.
+    'MOHAMADDLE': {
+        'src': 'lisp/mohamaddle/MOHAMADDLE.lsp',
+        'swap': {
+            'mohamaddle--sub': 'cal:v-', 'mohamaddle--add': 'cal:v+',
+            'mohamaddle--scl': 'cal:v*', 'mohamaddle--len': 'cal:vlen',
+            'mohamaddle--unit': 'cal:unit', 'mohamaddle--cross': 'cal:cross',
+            'mohamaddle--dot': 'cal:dot', 'mohamaddle--2d': 'cal:2d',
+        },
+        'drop_globals': [],
+    },
     # CORNERSTP's one generic helper is the layer gate.  REAL DRIFT in
     # the hand twin: it dropped cs-layerok but renamed only three of
     # the four call sites -- cs-dimv still calls cs-layerok, which

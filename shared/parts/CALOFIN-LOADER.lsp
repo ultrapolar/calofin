@@ -134,6 +134,7 @@
                  "DroneDistortion.lsp" "DroneHeightGPS.lsp"
                  "FITABHD.lsp" "lhd.lsp" "lincheck.lsp"
                  "linfincheck.lsp" "LINTXTCHK.lsp" "PADDLE.lsp"
+                 "MOHAMADDLE.lsp"
                  "LINGUTTER.lsp"
                  "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
