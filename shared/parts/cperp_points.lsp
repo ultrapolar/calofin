@@ -113,7 +113,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.11")
+(setq *cperp-version* "v0.12")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -726,6 +726,14 @@
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
   (princ))
 
-(princ (strcat "\ncperp_points.lsp " *cperp-version*
-               " loaded.  Type CPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ncperp_points.lsp " *cperp-version*
+                 " loaded.  Type CPERPPTS to run.")))
 (princ)

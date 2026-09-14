@@ -224,7 +224,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091126 REV19")
+(setq spa:*version* "091226 REV20")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -438,7 +438,10 @@
 ;;;  A grey nominal spa is drawn as soon as the shape is picked and the
 ;;;  element being measured turns red.  The nominal sizes below are what
 ;;;  the guide is drawn at before any measurement is in.
-(setq spa:*pv-col*  8)          ; guide outline (dark gray)
+(setq spa:*pv-col*  'auto)      ; guide outline: 'auto picks the
+                                ; grey for the background (8 is
+                                ; nearly the stock dark one), a
+                                ; number is used exactly as given
 (setq spa:*pvx-col* 7)          ; measuring tie (white)
 (setq spa:*hi-col*  1)          ; the element being asked for (red)
 ;;  The RECTANGLE guide's nominal box.  The octagon and round guides
@@ -1328,7 +1331,7 @@
 (defun spa:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      spa:*pv-col*))
+      (cal:ink spa:*pv-col* 'guide)))
 
 ;; Guide entities for a list of corner-label keys, e.g. '(lA lB).
 (defun spa:lbl (pv keys / out k)
@@ -1345,7 +1348,7 @@
 
 (defun spa:pvline (p1 p2)
   (spa:line p1 p2 spa:*lay-notes* nil)
-  (spa:setcol (entlast) spa:*pv-col*))
+  (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
 
 ;; Guide measuring line, drawn WHITE and DOTTED so it stands out from
 ;; the gray outline.
@@ -1359,7 +1362,7 @@
   (setq e (spa:pvadd (spa:pvlined p q)))
   (spa:text (cal:v+ (cal:mid p q) (list (* 0.5 th) (* 0.5 th)))
             (* 1.2 th) lbl spa:*lay-notes*)
-  (setq et (spa:pvadd (spa:setcol (entlast) spa:*pv-col*)))
+  (setq et (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))))
   (cons lbl (list e et)))
 
 ;; Remove an item (by equality) from a list.
@@ -2728,7 +2731,7 @@
       ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                   spa:*lay-notes* nil)
-       (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))))
+       (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))))
     (setq i (1+ i)))
   pv)
 
@@ -2844,7 +2847,7 @@
     (spa:text (cal:v+ (car pr)
                       (cal:v* (spa:unit (cal:v- (car pr) cen)) spa:*pv-lbl*))
               spa:*pv-th* (cadr pr) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) spa:*pv-col*)
+    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
           all (cons ent all)
           pv (cons (cons (spa:lblkey (cadr pr)) (list ent)) pv)))
   (setq spa:*pvents* all)
@@ -3242,7 +3245,7 @@
   (foreach p npts
     (spa:text (spa:lbloff p cen npts spa:*pv-olbl*) spa:*pv-th*
               (nth k spa:*octnames*) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) spa:*pv-col*)
+    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
           all (cons ent all)
           pv (cons (cons (spa:lblkey (nth k spa:*octnames*)) (list ent)) pv)
           k (1+ k)))
@@ -3507,7 +3510,7 @@
 (defun spa:roundpreview ( / cen pv)
   (setq cen (list 120.0 120.0))
   (spa:body-round cen 240.0 240.0 spa:*lay-notes* nil)
-  (spa:pvadd (spa:setcol (entlast) spa:*pv-col*))
+  (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
   (setq pv (list
     (spa:pvtie (list 0.0 285.0) (list 240.0 285.0) "B" spa:*pv-tie*)
     (spa:pvtie (list -50.0 0.0) (list -50.0 240.0) "A" spa:*pv-tie*)))
@@ -3852,8 +3855,16 @@
                  (if tut:*version* tut:*version* "not loaded")))
   (princ))
 
-(princ (strcat "\nSPA " spa:*version*
-               " loaded.  SPA to draw, SPAVER for the version"
-               (if tut:*version* ", TUTORIALSPA to learn it" "")
-               "."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPA " spa:*version*
+                 " loaded.  SPA to draw, SPAVER for the version"
+                 (if tut:*version* ", TUTORIALSPA to learn it" "")
+                 ".")))
 (princ)

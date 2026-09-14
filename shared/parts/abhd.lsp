@@ -666,7 +666,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "091126 REV17") ; announced on load.  The
+(setq pf:*version*      "091226 REV18") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -5328,10 +5328,19 @@
   (princ (strcat "\nABHD " pf:*version*))
   (princ))
 
-(princ (strcat "\nABHD " pf:*version*
-               " loaded.  ABHD fits the pool perimeter through its"
-               " points;"))
-(princ "\nSIMPABHD does the same with nothing to decide first;")
-(princ "\nADAB draws the pool bottom over an existing perimeter;")
-(princ "\nTUTORIALABHD (or TUTORIALADAB) walks new users through everything.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nABHD " pf:*version*
+                   " loaded.  ABHD fits the pool perimeter through its"
+                   " points;"))
+    (princ "\nSIMPABHD does the same with nothing to decide first;")
+    (princ "\nADAB draws the pool bottom over an existing perimeter;")
+    (princ "\nTUTORIALABHD (or TUTORIALADAB) walks new users through everything.")))
 (princ)

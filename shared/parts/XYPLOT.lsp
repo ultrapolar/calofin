@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.6")
+(setq *xyplot-version* "v1.7")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -977,6 +977,14 @@
   (princ (strcat "\nXYPLOT " *xyplot-version* " (XYPLOT.lsp)"))
   (princ))
 
-(princ (strcat "\nXYPLOT.lsp " *xyplot-version*
-               " loaded.  Type XYPLOT to graph an X/Y sheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nXYPLOT.lsp " *xyplot-version*
+                 " loaded.  Type XYPLOT to graph an X/Y sheet.")))
 (princ)

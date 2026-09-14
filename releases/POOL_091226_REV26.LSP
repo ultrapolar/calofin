@@ -332,7 +332,10 @@
 ;;;  asked for turns red.  The nominal point rings below are what the
 ;;;  guide starts at before any measurement is in -- proportions, not
 ;;;  sizes, since the first answer rescales them.
-(setq pool:*pv-col*  8)         ; guide outline (dark gray)
+(setq pool:*pv-col*  'auto)     ; guide outline: 'auto picks the
+                                ; grey for the background (8 is
+                                ; nearly the stock dark one), a
+                                ; number is used exactly as given
 (setq pool:*pvx-col* 7)         ; cross-dim / measuring line (white)
 (setq pool:*hi-col*  1)         ; the element being asked for (red)
 (setq pool:*pv-margin* 30.0)    ; smallest margin round the guide's zoom
@@ -477,6 +480,73 @@
                        (list "Square" 0.0) (list "Square" 0.0)))
 
 ;;; -------------------- small vector helpers --------------------------
+
+;;  A colour knob set to 'auto asks for the ACI that suits the
+;;  background it will be seen against; a knob set to a NUMBER is used
+;;  exactly as given, so a shop that has picked its own colours keeps
+;;  them and so does a test that sets one.
+;;
+;;    role     what it is                    dark  light  unmeasured
+;;    fade     a review tool's grey-out       251    254        8
+;;    guide    preview and guide geometry     253      8        8
+;;    dim      a chart tile's dimensions      253      8        8
+;;    hi       a chart tile's active box        4      5        5
+;;
+;;  fade and guide are drawn into the DRAWING, so they measure its
+;;  background; dim and hi are drawn inside a dialog, where -15 and -16
+;;  already follow AutoCAD's interface theme, so they follow that
+;;  instead.  The two are different questions: a light-themed AutoCAD
+;;  over the stock near-black model space is an ordinary way to work.
+;;  CalofinTheme in the profile overrides both -- CALSET writes it --
+;;  and the unmeasured column is what this tool drew before the table
+;;  existed, so a session that cannot tell is not a session that
+;;  behaves differently.
+;;
+;;  Nothing is cached: the call sites that run in a loop resolve once
+;;  into a local before the loop, which is where the volume is.
+;;  CALOFIN-LIB.lsp's cal:ink is this function; the copy is here
+;;  because a standalone file has to load alone.
+(defun pool:ink (knob role / v th c lum)
+  (if (not (eq knob 'auto))
+    knob
+    (progn
+      (setq v  (getenv "CalofinTheme")
+            v  (if (and v (/= v "")) (strcase v) "AUTO")
+            th (cond
+                 ((= v "DARK") 'dark)
+                 ((= v "LIGHT") 'light)
+                 ((member role '(dim hi))
+                  (cond ((null (setq c (getvar "COLORTHEME"))) nil)
+                        ((= c 0) 'dark)
+                        (t 'light)))
+                 (t
+                  (setq c (vl-catch-all-apply
+                            '(lambda ()
+                               (vl-load-com)
+                               (vla-get-GraphicsWinModelBackgrndColor
+                                 (vla-get-Display
+                                   (vla-get-Preferences
+                                     (vlax-get-acad-object)))))
+                            nil))
+                  (if (or (vl-catch-all-error-p c) (not (numberp c)))
+                    nil
+                    (progn
+                      ;; an OLE colour is packed low byte first: R, G, B
+                      (setq c   (fix c)
+                            lum (+ (* 0.30 (rem c 256))
+                                   (* 0.59 (rem (/ c 256) 256))
+                                   (* 0.11 (rem (/ c 65536) 256))))
+                      (if (< lum 128.0) 'dark 'light))))))
+      (cond
+        ((eq role 'fade)
+         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+        ((eq role 'guide)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'dim)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'hi)
+         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+        (t 7)))))
 
 (defun pool:d2r (a) (* pi (/ a 180.0)))
 
@@ -1383,7 +1453,7 @@
 (defun pool:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      pool:*pv-col*))
+      (pool:ink pool:*pv-col* 'guide)))
 
 ;; Guide entities for a list of corner-label keys, e.g. '(lA lB), so a
 ;; prompt can light up the letters it names as well as the line.
@@ -1396,7 +1466,7 @@
 
 (defun pool:pvline (p1 p2)
   (pool:line p1 p2 pool:*lay-notes*)
-  (pool:setcol (entlast) pool:*pv-col*))
+  (pool:setcol (entlast) (pool:ink pool:*pv-col* 'guide)))
 
 ;; Guide measuring line -- the cross dims and other ties, drawn WHITE
 ;; and DOTTED so they stand out from the gray pool outline.
@@ -1520,13 +1590,13 @@
     ((= ty "LINED") (pool:pvadd (pool:pvlined (cadr pr) (caddr pr))))
     ((= ty "TEXT")
      (pool:text (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (pool:ink pool:*pv-col* 'guide))))
     ((= ty "ARC")
      (pool:arc3p (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (pool:ink pool:*pv-col* 'guide))))
     ((= ty "ELL")
      (pool:pvell (cadr pr) (caddr pr) (cadddr pr))
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))))
+     (pool:pvadd (pool:setcol (entlast) (pool:ink pool:*pv-col* 'guide))))))
 
 ;; The two primitives of one field-sheet tie -- the dotted measuring
 ;; line and its letter beside the midpoint.
@@ -4220,7 +4290,7 @@
       ((= (car cc) "Radius")
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                    pool:*lay-notes*)
-       (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))))
+       (pool:pvadd (pool:setcol (entlast) (pool:ink pool:*pv-col* 'guide)))))
     (setq i (1+ i)))
   pv)
 
@@ -5335,7 +5405,7 @@
     ((and pvflag pool:*pvcoll*) (pool:pvcput (list "ARC" p mm q)))
     (pvflag
      (pool:arc3p p mm q pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (pool:ink pool:*pv-col* 'guide))))
     (t (pool:arc3p p mm q lay))))
 
 ;;; ---------------- oval pool bottom (True Oval sheet) -----------------
@@ -8254,8 +8324,16 @@
                  (if tutorial:*version* tutorial:*version* "not loaded")))
   (princ))
 
-(princ (strcat "\nPOOL " pool:*version*
-               " loaded.  POOL to lay out a pool, POOLVER for the version"
-               (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
-               "."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOL " pool:*version*
+                 " loaded.  POOL to lay out a pool, POOLVER for the version"
+                 (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
+                 ".")))
 (princ)

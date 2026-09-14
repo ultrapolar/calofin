@@ -739,6 +739,73 @@
 
 ;;; -------------------- chart access ------------------------------------
 
+;;  A colour knob set to 'auto asks for the ACI that suits the
+;;  background it will be seen against; a knob set to a NUMBER is used
+;;  exactly as given, so a shop that has picked its own colours keeps
+;;  them and so does a test that sets one.
+;;
+;;    role     what it is                    dark  light  unmeasured
+;;    fade     a review tool's grey-out       251    254        8
+;;    guide    preview and guide geometry     253      8        8
+;;    dim      a chart tile's dimensions      253      8        8
+;;    hi       a chart tile's active box        4      5        5
+;;
+;;  fade and guide are drawn into the DRAWING, so they measure its
+;;  background; dim and hi are drawn inside a dialog, where -15 and -16
+;;  already follow AutoCAD's interface theme, so they follow that
+;;  instead.  The two are different questions: a light-themed AutoCAD
+;;  over the stock near-black model space is an ordinary way to work.
+;;  CalofinTheme in the profile overrides both -- CALSET writes it --
+;;  and the unmeasured column is what this tool drew before the table
+;;  existed, so a session that cannot tell is not a session that
+;;  behaves differently.
+;;
+;;  Nothing is cached: the call sites that run in a loop resolve once
+;;  into a local before the loop, which is where the volume is.
+;;  CALOFIN-LIB.lsp's cal:ink is this function; the copy is here
+;;  because a standalone file has to load alone.
+(defun lzf:ink (knob role / v th c lum)
+  (if (not (eq knob 'auto))
+    knob
+    (progn
+      (setq v  (getenv "CalofinTheme")
+            v  (if (and v (/= v "")) (strcase v) "AUTO")
+            th (cond
+                 ((= v "DARK") 'dark)
+                 ((= v "LIGHT") 'light)
+                 ((member role '(dim hi))
+                  (cond ((null (setq c (getvar "COLORTHEME"))) nil)
+                        ((= c 0) 'dark)
+                        (t 'light)))
+                 (t
+                  (setq c (vl-catch-all-apply
+                            '(lambda ()
+                               (vl-load-com)
+                               (vla-get-GraphicsWinModelBackgrndColor
+                                 (vla-get-Display
+                                   (vla-get-Preferences
+                                     (vlax-get-acad-object)))))
+                            nil))
+                  (if (or (vl-catch-all-error-p c) (not (numberp c)))
+                    nil
+                    (progn
+                      ;; an OLE colour is packed low byte first: R, G, B
+                      (setq c   (fix c)
+                            lum (+ (* 0.30 (rem c 256))
+                                   (* 0.59 (rem (/ c 256) 256))
+                                   (* 0.11 (rem (/ c 65536) 256))))
+                      (if (< lum 128.0) 'dark 'light))))))
+      (cond
+        ((eq role 'fade)
+         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+        ((eq role 'guide)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'dim)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'hi)
+         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+        (t 7)))))
+
 (defun lzf:chart (key / c out)
   (foreach c lzf:*charts*
     (if (and (not out) (= (car c) key)) (setq out c)))
@@ -1164,9 +1231,17 @@
 
 (setq lzf:*col-line* -16)       ; dialog foreground: the outline
 (setq lzf:*col-back* -15)       ; dialog background: the clear
-(setq lzf:*col-dim* 8)          ; grey: the dimension arrows
-(setq lzf:*col-val* 30)         ; orange: a value that has been typed
-(setq lzf:*col-hi* 5)           ; blue: the box round the active one
+(setq lzf:*col-dim* 'auto)      ; the dimension arrows: 'auto is grey
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+(setq lzf:*col-val* 30)         ; orange: a value that has been typed.
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+(setq lzf:*col-hi* 'auto)       ; the box round the active one: 'auto
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
 (setq lzf:*col-miss* 1)         ; red: a letter the sheet still owes
 
 ;; per-mille -> pixels
@@ -1343,7 +1418,7 @@
       (lzf:plinepx (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
                          (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
                          (- lx 3) (- ly 2))
-                   lzf:*col-hi*))
+                   (lzf:ink lzf:*col-hi* 'hi)))
   ;; THE LETTER IS BOLD WHILE THE BOX IS OWED.  A box this page will be
   ;; asked about and has no usable answer in gets its letter struck
   ;; TWICE, a pixel apart, in the missing colour -- which is as close
@@ -1392,7 +1467,7 @@
     (lzf:pline (lzf:flatten poly) lzf:*col-line*))
   (foreach d (lzf:dims c)
     (lzf:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d) (nth 6 d)
-               lzf:*col-dim*))
+               (lzf:ink lzf:*col-dim* 'dim)))
   (foreach d (lzf:dims c) (lzf:label d))
   (end_image)
   (princ))
@@ -3138,6 +3213,14 @@
                  (itoa n) " of them OASIS."))
   (princ))
 
-(princ (strcat "\nLAZFORM " *lazform-version*
-               " loaded.  Type LAZFORM to fill a chart in and draw it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZFORM " *lazform-version*
+                 " loaded.  Type LAZFORM to fill a chart in and draw it.")))
 (princ)

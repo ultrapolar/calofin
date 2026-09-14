@@ -237,6 +237,38 @@ trailing `(princ)`, which is its return value. The `(if ...)` guards are
 what keep a standalone file loading alone: an unbound symbol is nil, so
 with no LAZDIAG present every one of these lines is a no-op.
 
+### The load banner, and colour
+
+Two rules a new or edited tool has to meet, both enforced:
+
+**The banner is quiet inside the build.** A tool announces itself when
+it is APPLOADed alone and says nothing when `LAZPASS.lsp` or
+`CALOFIN-LOADER.lsp` loads it -- they set `*calofin-quiet*` while they
+load their members. Sixty-three greetings was 83 lines in every
+drawing opened. So the last form in the file is:
+
+```lisp
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTOOLNAME " *toolname-version* " loaded.  ...")))
+(princ)
+```
+
+`tools/check_lisp.py` fails a banner that is missing OR unguarded.
+Several lines share one guard and one `progn`. The flag is not a
+`cal:` symbol on purpose -- a `lisp/` file may not call or set one.
+
+**A colour that has to work on any screen says `'auto`.** ACI 8 was
+serving two opposite intents across the tree -- "recede" in the review
+tools and "be readable" in the guide previews -- and each was right on
+one background only. Such a knob is `'auto` now and is resolved at the
+point of use through `tool:ink` (`cal:ink` in the grouped build, one
+swap line in `tools/mirror_shared.py`), by role: `fade`, `guide`,
+`dim`, `hi`. A knob left as a NUMBER is used exactly as given. Resolve
+once into a local before a loop -- the measurement is a COM round
+trip. `tests/test_theme.py` pins the table and holds all fourteen
+copies against the library's; `CALSET` writes the `CalofinTheme`
+override for a drafter whose screen the measurement gets wrong.
+
 ### Adding or removing a command
 
 A tool is not finished when it draws. It has to *report its failures*

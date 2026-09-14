@@ -66,7 +66,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.0")
+(setq *lobf-version* "v1.1")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -142,8 +142,11 @@
 (setq lobf:*layer*         "LOBF")           ; the construction line kept
 (setq lobf:*color*         4)                ; ACI (cyan)
 (setq lobf:*preview-layer* "LOBF-PREVIEW")   ; the three candidates
-(setq lobf:*preview-color* 8)                ; ACI (grey) -- each XLINE
-                                             ; carries its own colour
+(setq lobf:*preview-color* 'auto)            ; ACI (grey) -- each XLINE
+                                             ; carries its own colour.
+                                             ; 'auto picks the grey for
+                                             ; the background; a number
+                                             ; is used exactly as given
 (setq lobf:*ign-layer*     "LOBF-IGNORED")   ; ring round a set-aside point
 (setq lobf:*ign-color*     1)                ; ACI (red)
 (setq lobf:*appid*         "LOBF")           ; renaming this orphans
@@ -730,7 +733,8 @@
                      " give a direction - there is no line in them."))
       nil)
     (progn
-      (cal:ensure-layer lobf:*preview-layer* lobf:*preview-color*)
+      (cal:ensure-layer lobf:*preview-layer*
+                         (cal:ink lobf:*preview-color* 'guide))
       ;; sized to the run the points cover, so the labels read at any
       ;; scale the sheet is drawn at
       (setq run (lobf:runlen pts (lobf:cand-org (car cands))
@@ -890,6 +894,14 @@
   (princ (strcat "\nLOBF " *lobf-version* " loaded."))
   (princ))
 
-(princ (strcat "\nLOBF " *lobf-version*
-               " loaded.  Type LOBF to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLOBF " *lobf-version*
+                 " loaded.  Type LOBF to run.")))
 (princ)

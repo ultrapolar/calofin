@@ -626,9 +626,20 @@ vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle"))')
 
 print("== the drawing lands inside the tile, in declared colours ==")
 COLS = {}
-for name in ('line', 'back', 'dim', 'val', 'hi'):
-    COLS[name] = int(vm.globals[lib('lzf:*col-%s*' % name,
-                                   'cal:*imgcol-%s*' % name)])
+# What the tile is actually painted in, not what the knob holds: since
+# the tile palette learned to follow the dialog theme, *col-dim* and
+# *col-hi* say 'auto and the ACI is picked at the point of use.  Ask
+# for it the same way lzf:redraw does -- through the ink table, whose
+# answers tests/test_theme.py pins role by role.
+for name, role in (('line', None), ('back', None), ('dim', 'dim'),
+                   ('val', None), ('hi', 'hi')):
+    knob = lib('lzf:*col-%s*' % name, 'cal:*imgcol-%s*' % name)
+    if role is None:
+        COLS[name] = int(vm.globals[knob])
+    else:
+        vm.loads("(setq test:*c* (%s %s '%s))"
+                 % (lib('lzf:ink', 'cal:ink'), knob, role))
+        COLS[name] = int(vm.globals['test:*c*'])
 for c in charts:
     name = str(c[0])
     _reset()
@@ -654,6 +665,40 @@ vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle")) (setq lzf:*vals* nil)'
          '(setq lzf:*focus* nil) (lzf:redraw)')
 blank = len(DRAW['vec'])
 
+
+
+print("== and it repaints when the dialog is dark ==")
+# -16 and -15 are the dialog's own foreground and background, so the
+# outline followed the theme all along; the dimension arrows (8, dark
+# grey) and the focus box (5, dark blue) did not, and those two are
+# what a dark dialog swallows.  Both say 'auto now.  This drives the
+# whole tile rather than the table -- tests/test_theme.py has the
+# table -- so a knob that stops being asked shows up here.
+#
+# It is here and not in the spa and step suites as well: those two
+# draw in BANDS, one image tile per band, and which label lands in
+# which band is a fixture of its own.  The three tile engines are the
+# same code by rule, and test_cal_parity holds their three ink copies
+# to the library's call for call, so the end-to-end proof is worth
+# having once rather than three times with two of them fragile.
+_reset()
+vm.loads('(setenv "CalofinTheme" "dark")')
+vm.loads('(setq lzf:*chart* (lzf:chart "Rectangle")) (setq lzf:*vals* nil)'
+         '(setq lzf:*focus* "tp") (lzf:redraw)')
+dark = {v[4] for v in DRAW['vec']}
+assert 8 not in dark, "the dimension arrows are still ACI 8 on a dark dialog"
+assert 5 not in dark, "the focus box is still ACI 5 on a dark dialog"
+assert 253 in dark, "nothing was drawn in the dark dialog's grey: %r" % dark
+assert 4 in dark, "the focus box did not follow: %r" % dark
+print("   arrows 8 -> 253 and the focus box 5 -> 4, the rest unmoved")
+
+_reset()
+vm.loads('(setenv "CalofinTheme" "")')
+vm.loads('(setq lzf:*focus* "tp") (lzf:redraw)')
+back = {v[4] for v in DRAW['vec']}
+assert 8 in back and 5 in back, \
+    "an unmeasurable theme must draw what it always drew: %r" % back
+print("   ...and with nothing to measure, the numbers it always used")
 
 print("== a typed value replaces its letter on the chart ==")
 assert not [v for v in DRAW['vec'] if v[4] == COLS['val']], \

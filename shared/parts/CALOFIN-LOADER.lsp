@@ -102,6 +102,10 @@
   (progn
     (princ (strcat "\n[calofin] build folder: " cal:*dir*))
     (setq cal:*build-loading* T)   ; the library arrives as part of a build
+    (setq *calofin-quiet* T)       ; and every member loads quietly: one
+                                   ; banner per file is 83 lines in every
+                                   ; drawing opened.  CALVER reads the
+                                   ; whole roster back when it is asked
     ;; The library first -- every tool below calls into it -- then
     ;; LAZDIAG, which every tool below calls when it FAILS: the calls are
     ;; guarded and resolve at run time, so this is not a load-order
@@ -147,6 +151,10 @@
     (if cal:*held-back*
       (princ (strcat "\n[calofin] " (itoa (length cal:*held-back*))
                      " file(s) held back - see cal:*held-back*.")))
-    (princ "\n[calofin] Type CALVER for the library version.")))
+    ;; the members loaded quietly; put the flag back so a single tool
+    ;; APPLOADed over the top of this build still announces itself
+    (setq *calofin-quiet* nil)
+    (princ "\n[calofin] Type CALVER for what is loaded, CALHELP for what")
+    (princ "\n[calofin] a command does, CALSET for the settings.")))
 
 (princ)

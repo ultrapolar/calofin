@@ -27,7 +27,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "091126 REV12")
+(setq tut:*version* "091226 REV13")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -514,6 +514,14 @@
         (if *pop-error-mode* (*pop-error-mode*))
         (princ))))
 
-(princ (strcat "\nTUTORIALSPA " tut:*version*
-               " loaded.  Type TUTORIALSPA to walk through SPA."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTUTORIALSPA " tut:*version*
+                 " loaded.  Type TUTORIALSPA to walk through SPA.")))
 (princ)

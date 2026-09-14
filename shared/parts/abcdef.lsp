@@ -90,7 +90,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.7")
+(setq *abcdef-version* "v5.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -1963,6 +1963,14 @@
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
 
-(princ (strcat "\nABCDEF.lsp rev " *abcdef-version*
-               " loaded.  Type ABCDEF to plot points from a spreadsheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABCDEF.lsp rev " *abcdef-version*
+                 " loaded.  Type ABCDEF to plot points from a spreadsheet.")))
 (princ)

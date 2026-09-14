@@ -103,7 +103,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.1")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -1086,8 +1086,16 @@
   (princ (strcat "\nLAZDIAG " *lazdiag-version*))
   (princ))
 
-(princ (strcat "\nLAZDIAG " *lazdiag-version*
-               " loaded -- a failed calofin command now writes a DXF"
-               " error report to your Downloads folder; type LAZDIAG to"
-               " prove that works before you ever need it."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZDIAG " *lazdiag-version*
+                 " loaded -- a failed calofin command now writes a DXF"
+                 " error report to your Downloads folder; type LAZDIAG to"
+                 " prove that works before you ever need it.")))
 (princ)
