@@ -310,6 +310,16 @@ answer is on the sheet either way instead of only in a sentence.
 (see below), it is marked in yellow, and the only thing left to settle
 is what the point is called.
 
+A pair that only just reaches touches at one spot and counts as
+crossing — and so does one that misses by less than `abf:*touch*`
+(1/32", half the 1/16" `abf:*prec*` prints to as shipped). Without
+that band the
+arithmetic finds gaps the drawing cannot print, and the command answers
+a pair of readings that *do* meet with `the two arcs fall 0" short of
+each other` and a table of readings to replace them with — noise in
+place of an answer. Raise `abf:*touch*` and a real gap gets silently
+closed; lower it and a miss too small to print gets reported.
+
 **They cannot cross.** Two circles miss each other two ways round, and
 they are different mistakes:
 
@@ -375,6 +385,19 @@ radial; on a reading barely longer than the label itself it is tens of
 degrees and the leaders do slant across each other, which is the right
 way round to fail — an untidy leader can be read past, two labels on
 top of each other cannot.
+
+One limit, and it is a fallback rather than a fix: an **inward** fan
+needs room between its arc and its stake for the text to lie in, and a
+reading no longer than the label itself has none — the spokes would
+meet at the stake, and the spacing that keeps them apart there would
+fling them right round the circle. Such a fan goes **outward** instead,
+and where both are forced out (two readings under about eight feet,
+from stakes far apart) the two point towards each other and their
+labels can cross. A point taped from five feet away is a rare thing to
+fail to place, the markers are still where they are, and the table on
+the command line still says which is which; what is not acceptable at
+any radius is a fan scattered round its own circle, and that is what
+the fallback stops.
 
 ### If none of them is right
 
@@ -664,8 +687,12 @@ The shared Back convention (see the root README) applies:
   suggestions still on screen;
 * in `ABPCREATE`, `Back` at **the A reading** undoes the whole of the
   last round the same way `ABFIND`'s point number does — the point it
-  created, its number and its ties — or, when it is `ABFIND` or
-  `ABMOVE` that sent you there, re-asks the point number instead;
+  created, its number and its ties. With no round left to undo it
+  re-asks **which AB line** on a sheet that carries more than one, and
+  that is also what it re-asks straight away when `ABFIND` or `ABMOVE`
+  sent you there through the line question; on a single-line sheet it
+  re-asks the point number in that case, and says
+  `Already at the first point.` in the other;
 * `Back` at **the B reading** re-asks the A reading;
 * `Back` at **which candidate** re-asks the B reading;
 * `Back` at **the number for the new point** re-asks which candidate —
@@ -674,8 +701,9 @@ The shared Back convention (see the root README) applies:
 
 `ABMOVE`'s first question has nothing to go back to, and once its point
 is settled — moved or created — the run is over; to undo that, `U`.
-`ABPCREATE`'s first question is the A reading of its first round, and
-that one says `Already at the first point.`
+`ABPCREATE`'s first question is the A reading of its first round — or,
+on a sheet with more than one AB line, the line itself, which is the
+one that says `Already at the first question.`
 
 The whole run is **one undo group**: a single `U` takes it all away.
 The dimension style, current layer, `OSMODE` and `CMDECHO` in force
@@ -771,6 +799,8 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*prec*         4)             ; rtos precision, 4 = 1/16"
 (setq abf:*same-eps*     0.125)         ; two suggestions this close
                                         ; are one place
+(setq abf:*touch*        0.03125)       ; a pair that misses by less
+                                        ; than this is taken as crossing
 ```
 
 `abf:*tag-gap*` is measured *across* the tags; along the arc they
@@ -843,6 +873,19 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV115.lsp`; run it after any change and bump
 the banner.
 
+* **v1.16** — the creation flow audited. A pair that misses touching
+  by less than the drawing can print is a **crossing** now
+  (`abf:*touch*`, with `abf:closest` solving the touch point), instead
+  of being answered `the two arcs fall 0" short of each other` and a
+  table of readings to replace a pair that meets — and `abf:circint`'s
+  square root has gone a hair negative there, so that answer was one
+  line away from `(car nil)`. A label fan with no room inside its own
+  arc hangs outside it rather than scattering round the circle. `Pt`,
+  `#` and a line of spaces no longer offer to create a point with no
+  number. `abf:click-side` tests a distance rather than a cross
+  product, so "on the A–B line" means the same thing at any stake
+  spacing. And `Back` at the first reading re-asks **which AB line**
+  where v1.13 put that question in front of it.
 * **v1.15** — the edge cases of the AB line question, each of them a
   live defect: a doubled number in a drawing whose stakes are **clicked**
   crashed (no line to answer from, a `nil` stake into `distance`) and now
