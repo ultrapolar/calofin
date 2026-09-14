@@ -249,4 +249,31 @@ if gone != ['OASIS']:
 print('  and it checks its own claim: %d names declared, missing ones named'
       % len(want))
 
+# THE QUIET FLAG IS THE BUILD'S, AND IT GIVES IT BACK.  Every member
+# is silent while the bundle loads it -- sixty-odd greetings was 83
+# lines in every drawing a Startup Suite opened -- and a tool APPLOADed
+# on its own afterwards has to greet the drafter as it always did.  If
+# the flag were left set, that tool would load silently and look like
+# it had failed, which is the one way this feature could cost somebody
+# an afternoon.
+qvm = VM()
+qvm.load(BUNDLE)
+if qvm.globals.get('*calofin-quiet*') not in (None, [], 'nil'):
+    fail('the bundle left *calofin-quiet* set: %r'
+         % qvm.globals.get('*calofin-quiet*'))
+print('  the bundle clears *calofin-quiet* when it is done')
+
+loud = [l for l in ''.join(str(x) for x in qvm.printed).split('\n') if l.strip()]
+if len(loud) != 1:
+    fail('the whole-build load printed %d lines, not one:\n    %s'
+         % (len(loud), '\n    '.join(loud[:8])))
+print('  ...and said one line while loading %d files: %r' % (len(ORDER), loud[0]))
+
+# a member loaded ALONE afterwards still announces itself
+avm = VM()
+avm.load(os.path.join(LISP, 'oasis', 'OASIS.lsp'))
+if not any('OASIS' in str(x) and 'loaded' in str(x) for x in avm.printed):
+    fail('a tool APPLOADed alone no longer greets the drafter')
+print('  and a tool APPLOADed alone still greets the drafter')
+
 print('ALL SHARED-BUILD CHECKS PASSED')

@@ -515,7 +515,7 @@ PADSTUB = """
     (princ))"""
 
 
-def autodim_pads(answers, segs=PLAN, pickfirst=1, paddle=True):
+def autodim_pads(answers, segs=PLAN, pickfirst=1, paddle=True, undoctl=None):
     """A whole AUTODIM run with every dimensioning step stubbed out, so
     what is left is the handover."""
     vm = fresh()
@@ -524,6 +524,8 @@ def autodim_pads(answers, segs=PLAN, pickfirst=1, paddle=True):
     if paddle:
         vm.loads(PADSTUB)
     vm.sysvars['PICKFIRST'] = pickfirst
+    if undoctl is not None:
+        vm.sysvars['UNDOCTL'] = undoctl
     vm.run('c:AUTODIM', [None, ents] + list(answers))
     return vm, ents
 
@@ -565,6 +567,36 @@ vm, _ = autodim_pads(['No', 'Yes'], paddle=False)
 assert any('PADDLE is not loaded' in s for s in vm.printed), vm.printed[-3:]
 assert any('AUTODIM finished' in s for s in vm.printed), vm.printed[-3:]
 print('   PADDLE not in the session: says so, and the run still finished')
+
+
+# ...and the edges of that handover.  Each of these is a state a drawing
+# really arrives in, and every one of them puts PADDLE and PICKFIRST
+# somewhere the happy path does not.
+vm, ents = autodim_pads(['No', 'Back', 'No', 'Back', 'Yes'])
+assert vm.globals['padruns'] == 0
+assert [str(x) for x in reversed(vm.globals['ran'])] == [
+    'perimeter', 'stairs', 'floor', 'floor', 'overall'], vm.globals['ran']
+print('   Back at the pad question twice over: the floor dims re-open, no pads')
+
+vm, ents = autodim_pads(['No', 'Yes'], undoctl=4)
+assert vm.globals['padruns'] == 1, vm.globals['padruns']
+assert undo_cmds(vm) == [], undo_cmds(vm)
+print('   undo recording off: no group, and the pads still go in')
+
+# an error AFTER the pad answer and before the handoff: the handler puts
+# PICKFIRST back and PADDLE is not run on a run that died
+vm = fresh()
+ents = draw(vm, PLAN)
+vm.loads(TRACE)
+vm.loads(PADSTUB)
+vm.loads('(defun ad:overall (plan) (ad:no-such-helper plan))')
+vm.handle_errors = True
+vm.sysvars['PICKFIRST'] = 0
+vm.run('c:AUTODIM', [None, ents, 'No', 'Yes'])
+assert len(vm.handled_errors) == 1, vm.handled_errors
+assert vm.sysvars['PICKFIRST'] == 0, vm.sysvars['PICKFIRST']
+assert vm.globals['padruns'] == 0, vm.globals['padruns']
+print('   a run that dies after the answer: PICKFIRST back, no pads placed')
 
 
 print('== a floor dims chain runs object to object ==')

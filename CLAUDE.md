@@ -354,9 +354,11 @@ python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
                                  # its prompt; --fix wires what is missing
 python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
                                  # VB compiler: blocks closed by the right
-                                 # closer, quotes and parens balanced, and
-                                 # every member and constructor arity of
-                                 # the assembly's own types resolved
+                                 # closer, quotes and parens balanced, every
+                                 # member and constructor arity of the
+                                 # assembly's own types resolved, and every
+                                 # framework type it names bare (SystemColors,
+                                 # Registry) brought in by an Imports
 python3 tools/check_dcl.py       # every generated dialog still FITS: DCL
                         [--list] # does not scroll, so one past the screen
                                  # does not clip, it refuses to open.  The

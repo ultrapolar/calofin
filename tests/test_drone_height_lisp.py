@@ -142,18 +142,23 @@ def static_checks(path):
     print("forms: no non-AutoLISP special forms  OK")
 
 # ------------------------------------------------- LISP mirrors -------------
-# Mirror of ddg-scan-to (state machine incl. its reset rule)
+# Mirror of ddg-scan-to: a failed partial match resumes one byte after
+# where it began, not where it failed (the old reset rule missed a
+# pattern whose second start sits inside a false first start)
 def scan_to(lst, tgt):
     tlen, m = len(tgt), 0
-    i = 0
+    i = start = 0
     n = len(lst)
     while i < n and m < tlen:
-        b = lst[i]; i += 1
+        b = lst[i]
         if b < 0: b += 256
         if b == tgt[m]:
-            m += 1
+            if m == 0: start = i
+            m += 1; i += 1
+        elif m > 0:
+            i = start + 1; m = 0
         else:
-            m = 1 if b == tgt[0] else 0
+            i += 1
     return lst[i:] if m == tlen else None
 
 def grab_text(lst, n):
@@ -220,6 +225,19 @@ def u32i(lst, off, le):
 def rat(lst, off, le):
     if off is None: return None
     n, d = u32(lst, off, le), u32(lst, off + 4, le)
+    if n is None or d is None or d == 0.0: return None
+    return n / d
+
+# Mirrors of ddg-s32 / ddg-srat: an SRATIONAL (TIFF type 10) carries its
+# sign in the numerator, not in GPSAltitudeRef
+def s32(lst, off, le):
+    r = u32(lst, off, le)
+    if r is None: return None
+    return r - 4294967296.0 if r >= 2147483648.0 else r
+
+def srat(lst, off, le):
+    if off is None: return None
+    n, d = s32(lst, off, le), s32(lst, off + 4, le)
     if n is None or d is None or d == 0.0: return None
     return n / d
 
@@ -290,7 +308,9 @@ def exif_gps(lst):
             if ent is not None: lonref = refchar(tif, ent)
             if lon is not None and lonref == "W": lon = -lon
             ent = ifd_find(tif, gps, le, 6)
-            if ent is not None: altm = rat(tif, u32i(tif, ent + 8, le), le)
+            if ent is not None:
+                reader = srat if u16(tif, ent + 2, le) == 10 else rat
+                altm = reader(tif, u32i(tif, ent + 8, le), le)
             ent = ifd_find(tif, gps, le, 5)
             if altm is not None and ent is not None and bb(tif, ent + 8) == 1:
                 altm = -altm
@@ -299,12 +319,14 @@ def exif_gps(lst):
     return (lat, lon, altm, tif is not None, latref, lonref)
 
 # Mirror of ddg-read-meta: XMP text packet first, binary EXIF GPS block
-# filling any gaps. The flags say whether each container was present at all.
+# filling any gaps. The flags say whether each container was present at
+# all; RelativeAltitude only ever comes from XMP.
 def read_meta(lst):
     t = xmp_text(lst)
     xmpf = len(t) > 0
     tiff = None
     absm = xmp_num(t, "AbsoluteAltitude")
+    relm = xmp_num(t, "RelativeAltitude")
     lat = xmp_num(t, "GpsLatitude")
     lon = xmp_num(t, "GpsLongitude")
     if lon is None: lon = xmp_num(t, "GpsLongtitude")
@@ -317,11 +339,25 @@ def read_meta(lst):
             if e[5]: lonok = True               # only if E/W was recorded
         if absm is None: absm = e[2]
         tiff = e[3]
-    return (absm, lat, lon, xmpf, tiff, lonok)
+    return (absm, lat, lon, xmpf, tiff, lonok, relm)
 
 # Mirror of ddg-round: round-half-away-from-zero (FIX truncates toward zero)
 def round_ft(x):
     return int(x + (0.5 if x >= 0.0 else -0.5))
+
+M2FT = 3.280839895
+
+# Mirror of DDGPS's route choice: a file with a RelativeAltitude never
+# goes near the sea-level arithmetic (DJI's AbsoluteAltitude is not sea
+# level - see the .lsp header); one without it takes the GPS route.
+def route(relm):
+    return "BARO" if relm is not None else "GPS"
+
+# Mirror of the barometric route: RelativeAltitude plus the take-off
+# offset (+ above the deck, - below), rounded; None when underground
+def h_baro(relm, off_ft):
+    h = round_ft(relm * M2FT + off_ft)
+    return float(h) if h > 0 else None
 
 # Mirror of the "assume West when EXIF omits E/W" rule and the US sanity net
 def assume_west(lon, lonok):
@@ -330,16 +366,18 @@ def assume_west(lon, lonok):
 def in_us(lat, lon):
     return 17.0 < lat < 72.0 and -180.0 < lon < -64.0
 
-# Mirror of DDGPS's altitude-reading decision. XMP AbsoluteAltitude is
-# sea-level by definition; EXIF GPSAltitude may hold either that or the
-# height above the take-off point, depending on the DJI model. Both readings
-# are computed and the physically possible one wins - a drone cannot fly
-# below the ground, nor legally above 400 ft AGL.
-def pick_altitude(absft, gft, altmsl):
+# Mirror of the GPS route's altitude-reading decision (files with no
+# RelativeAltitude). The one altitude may be DJI's "sea level" (really
+# the ellipsoid) or, on some models, the height above the take-off point.
+# Both readings are computed and the physically possible one wins - a
+# drone cannot fly below the ground, nor legally above 400 ft AGL. No
+# source is trusted as sea level outright any more: v1.2 did that for
+# XMP, and it is what refused every low-lying site.
+def pick_altitude(absft, gft):
     hmsl, hrel = absft - gft, absft
     okmsl = 1.0 < hmsl <= 400.0
     okrel = 1.0 < hrel <= 400.0
-    if altmsl or (okmsl and not okrel):
+    if okmsl and not okrel:
         return hmsl, "MSL"
     if okrel and not okmsl:
         return hrel, "REL"
@@ -388,9 +426,9 @@ def hexline(line):
     return out
 
 # Mirror of DDGPS's failure-classification cond (step 2b in the command).
-# Every branch is now a hard stop - AbsoluteAltitude alone decides
-# NO_ALTITUDE, since the barometric method is gone.
-def classify(absm, lat, lon, xmpf, tiff):
+# Every branch is a hard stop. Either altitude satisfies NO_ALTITUDE; a
+# RelativeAltitude under a foot is a shot taken before take-off.
+def classify(absm, lat, lon, xmpf, tiff, relm=None):
     if (lat is None or lon is None) and not xmpf and not tiff:
         return "NO_METADATA"
     if lat is None or lon is None:
@@ -399,8 +437,10 @@ def classify(absm, lat, lon, xmpf, tiff):
         return "NO_FIX"
     if abs(lat) > 90.0 or abs(lon) > 180.0:
         return "BAD_GPS"
-    if absm is None:
+    if absm is None and relm is None:
         return "NO_ALTITUDE"
+    if relm is not None and abs(relm * M2FT) < 1.0:
+        return "ON_GROUND"
     return "OK"
 
 # Mirror of ddg-num-after / ddg-json-num
@@ -424,7 +464,12 @@ def json_num(txt, key):
 LAT = 32 + 42/60 + 56.6568/3600
 LON = -(117 + 9/60 + 39.9016/3600)
 
-def build_tiff(le=True, with_gps=True, with_lonref=True):
+def build_tiff(le=True, with_gps=True, with_lonref=True,
+               alt=(123456, 1000), alt_below=False, alt_signed=False):
+    """A TIFF/EXIF block with a GPS IFD.  ALT is the GPSAltitude rational;
+    ALT_BELOW sets GPSAltitudeRef = 1 (below sea level, DJI's way of
+    writing a negative ellipsoid height); ALT_SIGNED stores it as an
+    SRATIONAL (type 10) with the sign in the numerator instead."""
     E = "<" if le else ">"
     order = b"II" if le else b"MM"
 
@@ -461,19 +506,26 @@ def build_tiff(le=True, with_gps=True, with_lonref=True):
     if with_lonref:
         gps += ent(3, 2, 2, b"W\x00\x00\x00")              # LonRef
     gps += ent(4, 5, 3, struct.pack(E + "I", lon_off))     # Lon
-    gps += ent(5, 1, 1, b"\x00\x00\x00\x00")               # AltRef: above sea
-    gps += ent(6, 5, 1, struct.pack(E + "I", alt_off))     # Alt: 1 rational
+    gps += ent(5, 1, 1, b"\x01\x00\x00\x00" if alt_below   # AltRef: 1 = below
+                        else b"\x00\x00\x00\x00")          # sea level
+    gps += ent(6, 10 if alt_signed else 5, 1,              # Alt: 1 (s)rational
+               struct.pack(E + "I", alt_off))
     gps += struct.pack(E + "I", 0)
     if not with_lonref: gps += bytes(12)                   # keep data_off valid
 
     data = rat_bytes([(32, 1), (42, 1), (566568, 10000)])
     data += rat_bytes([(117, 1), (9, 1), (399016, 10000)])
-    data += rat_bytes([(123456, 1000)])
+    data += struct.pack(E + ("ii" if alt_signed else "II"), *alt)
 
     return order + struct.pack(E + "H", 42) + struct.pack(E + "I", ifd0_off) + ifd0 + gps + data
 
 def xmp_packet(element_form=False, lon_tag="GpsLongtitude", gps=True, alts=True,
-               lat_s=b"+32.7157380", lon_s=b"-117.1610838"):
+               lat_s=b"+32.7157380", lon_s=b"-117.1610838",
+               abs_s=b"+123.45", rel_s=b"+30.50"):
+    """A DJI-style XMP packet.  ABS_S / REL_S are the AbsoluteAltitude /
+    RelativeAltitude strings as DJI writes them (metres, signed); REL_S
+    None leaves RelativeAltitude out, as a stripped or foreign file
+    would."""
     lt = lon_tag.encode()
     head = (b'<?xpacket begin="\xef\xbb\xbf" id="W5M0MpCehiHzreSzNTczkc9d"?>'
             b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF '
@@ -481,16 +533,18 @@ def xmp_packet(element_form=False, lon_tag="GpsLongtitude", gps=True, alts=True,
     tail = b"</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
     if element_form:
         body = (b'<rdf:Description xmlns:drone-dji="http://www.dji.com/drone-dji/1.0/">'
-                b"<drone-dji:AbsoluteAltitude>+123.45</drone-dji:AbsoluteAltitude>"
-                b"<drone-dji:RelativeAltitude>+30.50</drone-dji:RelativeAltitude>"
-                b"<drone-dji:GpsLatitude>+32.7157380</drone-dji:GpsLatitude>"
+                b"<drone-dji:AbsoluteAltitude>" + abs_s + b"</drone-dji:AbsoluteAltitude>"
+                + (b"<drone-dji:RelativeAltitude>" + rel_s + b"</drone-dji:RelativeAltitude>"
+                   if rel_s is not None else b"")
+                + b"<drone-dji:GpsLatitude>+32.7157380</drone-dji:GpsLatitude>"
                 b"<drone-dji:" + lt + b">-117.1610838</drone-dji:" + lt + b">"
                 b"</rdf:Description>")
     else:
         parts = [b'<rdf:Description xmlns:drone-dji="http://www.dji.com/drone-dji/1.0/"']
         if alts:
-            parts.append(b'drone-dji:AbsoluteAltitude="+123.45"')
-            parts.append(b'drone-dji:RelativeAltitude="+30.50"')
+            parts.append(b'drone-dji:AbsoluteAltitude="' + abs_s + b'"')
+            if rel_s is not None:
+                parts.append(b'drone-dji:RelativeAltitude="' + rel_s + b'"')
         if gps:
             parts.append(b'drone-dji:GpsLatitude="' + lat_s + b'"')
             parts.append(b'drone-dji:' + lt + b'="' + lon_s + b'"')
@@ -498,11 +552,12 @@ def xmp_packet(element_form=False, lon_tag="GpsLongtitude", gps=True, alts=True,
         body = b" ".join(parts)
     return head + body + tail
 
-def build_jpg(with_xmp=True, le=True, lon_tag="GpsLongtitude"):
-    body = b"Exif\x00\x00" + build_tiff(le)
+def build_jpg(with_xmp=True, le=True, lon_tag="GpsLongtitude", tiffkw=None,
+              **xmpkw):
+    body = b"Exif\x00\x00" + build_tiff(le, **(tiffkw or {}))
     out = b"\xff\xd8" + b"\xff\xe1" + struct.pack(">H", len(body) + 2) + body
     if with_xmp:
-        xmp = b"http://ns.adobe.com/xap/1.0/\x00" + xmp_packet(lon_tag=lon_tag)
+        xmp = b"http://ns.adobe.com/xap/1.0/\x00" + xmp_packet(lon_tag=lon_tag, **xmpkw)
         out += b"\xff\xe1" + struct.pack(">H", len(xmp) + 2) + xmp
     # junk incl. 0x1A bytes (kills text-mode reads) and a decoy FF E1
     out += b"\xff\xdb" + struct.pack(">H", 6) + b"\x1a\x00\x1a\x00"
@@ -697,14 +752,15 @@ def main():
     check("bare TIFF BE", approx(la, LAT) and approx(lo, LON) and approx(al, 123.456))
 
     # --- read_meta prefers XMP, EXIF fills gaps ---
-    absm, lat, lon, xmpf, tiff, lonok = read_meta(list(build_png(with_xmp=False)))
+    absm, lat, lon, xmpf, tiff, lonok, relm = read_meta(list(build_png(with_xmp=False)))
     check("read_meta from eXIf only",
           approx(lat, LAT) and approx(lon, LON) and approx(absm, 123.456)
           and not xmpf and tiff)
 
     # --- failure classification (mirrors DDGPS's loud-failure decision) ---
     def cls(data):
-        return classify(*read_meta(list(data))[:5])
+        m = read_meta(list(data))
+        return classify(*m[:5], relm=m[6])
     check("classify normal jpg -> OK", cls(build_jpg()) == "OK")
     check("classify normal png -> OK", cls(build_png()) == "OK")
     check("classify stripped png -> NO_METADATA",
@@ -741,17 +797,17 @@ def main():
     la, lo, al, tf, lr, nr = exif_gps(list(build_tiff(le=True)))
     check("exif: W ref makes the longitude negative", lo < 0)
     check("exif: refs are reported", lr == "N" and nr == "W")
-    absm, lat, lon, xmpf, tiff, lonok = read_meta(list(build_tiff(le=True)))
+    absm, lat, lon, xmpf, tiff, lonok, relm = read_meta(list(build_tiff(le=True)))
     check("read_meta: sign is known when the ref is present", lonok is True)
     # same file with GPSLongitudeRef removed
     la, lo, al, tf, lr, nr = exif_gps(list(build_tiff(le=True, with_lonref=False)))
     check("exif: missing W ref leaves longitude unsigned", lo > 0 and nr is None)
-    absm, lat, lon, xmpf, tiff, lonok = read_meta(
+    absm, lat, lon, xmpf, tiff, lonok, relm = read_meta(
         list(build_tiff(le=True, with_lonref=False)))
     check("read_meta: sign is NOT assumed when the ref is missing", lonok is None)
     check("read_meta: the coordinate itself still parses", approx(lon, abs(LON)))
     # a photo whose GPS came from XMP always has an explicit sign
-    absm, lat, lon, xmpf, tiff, lonok = read_meta(list(build_jpg()))
+    absm, lat, lon, xmpf, tiff, lonok, relm = read_meta(list(build_jpg()))
     check("read_meta: XMP longitude is signed, so no question to ask",
           lonok is True and lon < 0)
 
@@ -773,33 +829,93 @@ def main():
     check("US check accepts Alaska", in_us(64.8, -147.7))
     check("US check rejects western China", not in_us(39.9, 76.9))
 
-    # --- which altitude did the photo actually record? ---
+    # --- the GPS route: which height is the one altitude in the file? ---
+    # (files with no RelativeAltitude only)
     # Dracut MA, from a file with no XMP: EXIF GPSAltitude 37.5 m = 123.0 ft,
     # ground 244.1 ft. Read as sea level that is 121 ft UNDERGROUND, so the tag
     # is holding height above take-off - and 123 ft is an ordinary pool-shoot
     # height. This is the case that produced NON-PHYSICAL HEIGHT.
-    h, mode = pick_altitude(123.0, 244.1, None)
+    h, mode = pick_altitude(123.0, 244.1)
     check("EXIF altitude below ground is read as above-take-off", mode == "REL")
     check("...and gives the flight height directly", approx(h, 123.0))
     check("...which rounds to a sane 123 ft", round_ft(h) == 123)
     # York County PA: 201.179 m = 660.0 ft with ground ~450 ft. As sea level
     # that is 210 ft AGL - legal and plausible; as above-take-off it would be
     # 660 ft, over the 400 ft ceiling. So sea level is the only reading left.
-    h, mode = pick_altitude(660.0, 450.0, None)
-    check("EXIF altitude far above ground is read as sea level", mode == "MSL")
+    h, mode = pick_altitude(660.0, 450.0)
+    check("altitude far above ground is read as sea level", mode == "MSL")
     check("...and the subtraction is used", approx(h, 210.0))
-    # XMP AbsoluteAltitude is never ambiguous, even when both readings fit
-    h, mode = pick_altitude(300.0, 150.0, True)
-    check("XMP AbsoluteAltitude is always taken as sea level", mode == "MSL")
-    check("...even though 300 ft above take-off would also be plausible",
-          approx(h, 150.0))
-    # genuinely ambiguous EXIF: both readings inside the flying range
-    h, mode = pick_altitude(250.0, 100.0, None)
-    check("ambiguous EXIF prefers sea level but is flagged", mode == "MSL?")
+    # genuinely ambiguous: both readings inside the flying range
+    h, mode = pick_altitude(250.0, 100.0)
+    check("ambiguous altitude prefers sea level but is flagged", mode == "MSL?")
     # nothing works: a bad fix well underground and far over the ceiling
-    h, mode = pick_altitude(1500.0, 2000.0, None)
+    h, mode = pick_altitude(1500.0, 2000.0)
     check("impossible either way -> no height, loud failure",
           h is None and mode is None)
+
+    # --- the office's failure: a DJI AbsoluteAltitude that goes negative ---
+    # A Tampa-flat site (ground 12 ft): the file says AbsoluteAltitude -3.81 m
+    # = -12.5 ft, because DJI's "absolute" is the WGS84 ellipsoid height,
+    # 50-115 ft below sea level across the US. v1.2 trusted XMP as sea level
+    # and refused with ALTITUDE DOES NOT MAKE SENSE / Photo altitude -12.5 ft.
+    h, mode = pick_altitude(-12.5, 12.0)
+    check("a negative absolute altitude is impossible either way",
+          h is None and mode is None)
+    absm, lat, lon, xmpf, tiff, lonok, relm = read_meta(
+        list(build_jpg(abs_s=b"-3.81", rel_s=b"+30.00")))
+    check("the sign is the file's: -3.81 m reads as -3.81 m", approx(absm, -3.81))
+    check("RelativeAltitude is read from the same packet", approx(relm, 30.0))
+    check("a file with a RelativeAltitude takes the barometric route",
+          route(relm) == "BARO")
+    check("H = RelativeAltitude + take-off offset, rounded: 98 ft from the deck",
+          h_baro(relm, 0.0) == 98.0)
+    check("...94 ft when the drone took off 4 ft below the deck",
+          h_baro(relm, -4.0) == 94.0)
+    check("...and an offset that puts it underground is refused",
+          h_baro(relm, -200.0) is None)
+    check("classify: RelativeAltitude alone is enough altitude",
+          classify(None, 32.7, -117.2, True, False, 30.0) == "OK")
+    check("classify: neither altitude -> NO_ALTITUDE",
+          classify(None, 32.7, -117.2, True, False, None) == "NO_ALTITUDE")
+    check("classify: RelativeAltitude under a foot -> ON_GROUND",
+          classify(-33.2, 32.7, -117.2, True, False, 0.2) == "ON_GROUND")
+    te = xmp_text(list(build_png(element_form=True, with_exif=False)))
+    check("element-form RelativeAltitude",
+          approx(xmp_num(te, "RelativeAltitude"), 30.5))
+    absm, lat, lon, xmpf, tiff, lonok, relm = read_meta(
+        list(build_jpg(with_xmp=False)))
+    check("an EXIF-only file has no RelativeAltitude and takes the GPS route",
+          relm is None and route(relm) == "GPS")
+
+    # --- EXIF altitude encodings ---
+    # DJI writes a negative ellipsoid height as |alt| with GPSAltitudeRef = 1
+    la, lo, al, tf, lr, nr = exif_gps(list(build_tiff(le=True, alt_below=True)))
+    check("GPSAltitudeRef = 1 negates the altitude", approx(al, -123.456))
+    # some writers use an SRATIONAL with the sign in the numerator; read as
+    # unsigned, -3.81 m came out as 4,294,963 m
+    la, lo, al, tf, lr, nr = exif_gps(
+        list(build_tiff(le=True, alt=(-3810, 1000), alt_signed=True)))
+    check("SRATIONAL GPSAltitude LE reads signed", approx(al, -3.81))
+    la, lo, al, tf, lr, nr = exif_gps(
+        list(build_tiff(le=False, alt=(-3810, 1000), alt_signed=True)))
+    check("SRATIONAL GPSAltitude BE reads signed", approx(al, -3.81))
+    la, lo, al, tf, lr, nr = exif_gps(
+        list(build_tiff(le=True, alt=(3810, 1000), alt_signed=True)))
+    check("a positive SRATIONAL is unchanged", approx(al, 3.81))
+
+    # --- the byte scanner's restart rule ---
+    def rest_of(hay, needle):
+        r = scan_to(list(hay), list(needle))
+        return bytes(r) if r is not None else None
+    check("scan_to: a false start inside a real start is not fatal",
+          rest_of(b"xx drone-drone-dji:YY", b"drone-dji:") == b"YY")
+    check("scan_to: 'ExExif' still finds Exif",
+          rest_of(b"ExExif\x00\x00", b"Exif") == b"\x00\x00")
+    check("scan_to: absent pattern -> None",
+          rest_of(b"nothing here", b"Exif") is None)
+    check("scan_to: signed bytes still match",
+          scan_to([b - 256 if b > 127 else b for b in b"\xff\xd8Exif\x00"],
+                  list(b"Exif")) == [0])
 
     # --- certutil hex-dump parsing (the no-ADODB fallback reader) ---
     # a real "certutil -encodehex" line, ASCII column and all
@@ -842,12 +958,13 @@ def main():
     check("looks_jpeg detects a real JPEG start",
           hexline(ln)[0] == 0xff and hexline(ln)[1] == 0xd8)
 
-    # --- the whole computation, end to end (what DDGPS reports) ---
-    absm, lat, lon, xmpf, tiff, lonok = read_meta(list(build_jpg()))
-    absft = absm * 3.280839895                       # 123.45 m -> 404.99 ft
+    # --- the GPS route's arithmetic, end to end (an EXIF-only file) ---
+    absm, lat, lon, xmpf, tiff, lonok, relm = read_meta(
+        list(build_jpg(with_xmp=False)))
+    absft = absm * 3.280839895                       # 123.456 m -> 405.03 ft
     gft = 296.606                                    # a real USGS EPQS answer
     check("height = drone altitude - ground elevation",
-          approx(absft - gft, 123.45 * 3.280839895 - 296.606))
+          approx(absft - gft, 123.456 * 3.280839895 - 296.606))
     check("height rounds to the nearest foot", round_ft(absft - gft) == 108)
 
     # --- JSON extractor against real response shapes ---

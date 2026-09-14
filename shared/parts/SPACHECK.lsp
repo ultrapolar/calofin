@@ -113,7 +113,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.15")
+(setq *spacheck-version* "v1.16")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1823,14 +1823,14 @@
   (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to " name " (Enter = whole drawing): "))
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to scan.")
@@ -1871,14 +1871,14 @@
   (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to SPACHECK (Enter = whole drawing): "))
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to check.")
@@ -1920,8 +1920,16 @@
                   ((= ans "Skip") (setq k tot))))))))
       (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
-      (command "_.UNDO" "_End")
-      (setq undo-open nil)
+      ;; closed only if one was opened -- the guard the handler above
+      ;; already makes.  With undo recording off (UNDOCTL bit 1 clear)
+      ;; there is no group of this run's, and an _End on nothing is an
+      ;; error of its own: it would land here, with the report written
+      ;; and every flagged item recoloured, and the CMDECHO and sysvar
+      ;; putbacks below it never reached
+      (if undo-open
+        (progn
+          (command "_.UNDO" "_End")
+          (setq undo-open nil)))
       (setvar "CMDECHO" oldecho)
       (cal:sysrestore)
       (princ (strcat "\n--- SPACHECK complete ---"

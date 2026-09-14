@@ -8,6 +8,48 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**The drone's altitude is not sea level.** `DDGPS` refused every
+low-lying site with `ALTITUDE DOES NOT MAKE SENSE` and a negative
+"photo altitude", and it was right about the number and wrong about
+what it meant: a DJI `AbsoluteAltitude` is the WGS84 ellipsoid height
+(or a barometric estimate seeded from it), which across the United
+States sits 50-115 ft BELOW mean sea level -- so a drone 100 ft over a
+Tampa deck records -12 ft, and "altitude minus ground" came out short
+by the same 50-115 ft everywhere else, silently. v1.2 trusted the XMP
+figure as sea level outright. `DDGPS` v1.3 reads the `RelativeAltitude`
+beside it -- barometric, above the take-off point, good to a foot or
+two -- asks the take-off-vs-deck offset as `DDALT` does (Enter = it
+took off from the deck), and never touches the elevation services for
+a file that has it; the ground-elevation route is kept for files with
+no `RelativeAltitude`, labelled rough, with the datum named in the
+failure. Three more things the audit turned up in the same file: the
+last-256-KB scan for PNGs that park their metadata after the image
+took `car` of a byte list it had already been handed and died on "bad
+argument type" (it had never once worked); an `SRATIONAL`
+`GPSAltitude` read as unsigned came out at 4,294,963 m; and the byte
+scanner's restart rule missed a pattern whose real start sat inside a
+false one. `tests/test_ddgps_runtime.py` drives the command end to end
+in the VM over synthetic DJI files -- the first runtime coverage
+`DDGPS` has had -- and `DDGPS` leaves `check_registry`'s UNTESTED list.
+
+**A miss too small to print is a crossing.** `ABPCREATE` decides
+whether two readings meet by arithmetic, and the arithmetic finds gaps
+the drawing cannot print: a pair that missed touching by a
+ten-thousandth of an inch was answered `the two arcs fall 0" short of
+each other` and a table of readings to replace a pair that does meet.
+Worse, `abf:circint` takes a square root that has gone a hair negative
+there, so the crossing came back `nil` and the line after it would have
+taken `(car nil)`. `abf:*touch*` (1/32", half the 1/16" the readings
+print to) is the band, and `abf:closest` solves the touch point on the
+line through the stakes for any pair inside it. Three more from the
+same audit: a label fan with no room inside its own arc hangs outside
+it instead of scattering round the circle; `Pt`, `#` and a line of
+spaces no longer offer to create a point with no number to be looked up
+by; and `abf:click-side` tests a distance rather than a cross product,
+so "on the A-B line" means the same thing at any stake spacing. Where
+v1.13 put the AB-line question in front of the first reading, `Back`
+there re-asks it rather than saying there is nothing behind it.
+
 **Which way the screen reads.** Every colour a tool draws in is an ACI
 number, and a number is only right against one background. ACI `8` was
 serving two OPPOSITE intents across thirteen tools: the review tools
@@ -182,6 +224,64 @@ folded, and no file that accepts the keyword and then only tests for
 `"Back"`. The other half of the same test walks each threaded chain
 backwards through the interpreter, at both tiers.
 
+## v3.11 -- 2026-09-14
+
+An audit of the two passes above, and what it turned up.
+
+**Nothing was broken, and the way it was safe was luck.** The 95
+`lzd:watch` calls went in straight after a `(setq ss (ssget ...))`,
+which in this tree is very often the last form of a `(progn ...)` that
+is the then-branch of an `(if (null ss) ...)`. Thirty of them landed
+exactly there. Every one happened to sit where the value is discarded --
+LINGUTTER's `lg:highlight` ends with a bare `ss`, POINTRENAMER's and
+wcalst's are `cond` clauses with more forms after them -- so nothing
+misbehaved. That is not safety, it is the absence of an accident.
+`lzd:watch` returns its argument now and the injected form carries an
+else branch, `(if lzd:watch (lzd:watch ss) ss)`, so the whole insertion
+evaluates to the variable whether LAZDIAG is loaded or not. The same for
+`lzd:ask`. `check_lazdiag` grew the audit that found it, so a future
+injection cannot land in an `(and ...)`, as an `(if ...)` else branch,
+or last in a body without failing `make check`.
+
+**`enclosing_call` answered 0 for two different questions** -- "the
+enclosing form starts at byte 0" and "there is no enclosing form" -- and
+the new audit read the second meaning, silently skipping any form inside
+a defun that opened at the first byte of a file. It returns -1 for "none"
+now. The audit missed a planted fault until it did.
+
+Four in the engine, each one a path a real drawing can take:
+
+* an LWPOLYLINE with no vertices became a POLYLINE with no VERTEX
+  between it and its SEQEND -- not a degenerate shape, a file AutoCAD
+  argues with. Dropped instead.
+* two failures inside one second took the same file name, and the second
+  report overwrote the first: the drafter would send one file believing
+  it was both. `lzd:free` walks to `-2`, `-3` and so on. (The VM's
+  `findfile` could not see a file the VM itself had written, so the
+  guard could not have been tested either.)
+* `lzd:gather` walks the drawing from an ename snapshotted before the
+  run, and a tool that erased that entity on its way past left `entnext`
+  walking from something gone. Caught per-walk, so a drawing that will
+  not walk costs the geometry and not the whole report.
+* an MTEXT with no group 1 at all reached `(strlen nil)` and was lost to
+  the catch for no reason.
+
+The DXF gained a **STYLE table**. Every TEXT in a report names STANDARD
+by leaving group 7 off, and this file exists to be opened on somebody
+else's machine by somebody who was told to send it; ten lines so it
+cannot argue about a style it never defined. The last resort gained an
+**undo group**, so sixty lines of text placed in a drawing come back out
+with one U rather than sixty.
+
+**`tests/test_lazdiag_sweep.py` is the verification that matters.**
+`check_lazdiag` reads the tree and says the calls are there, which is a
+claim about the text. The sweep drives 63 headline commands to their
+first prompt, hands each a genuine error instead of an answer, and
+checks a DXF came back that parses end to end, carries that error, told
+the drafter to send it, and left no undo group, error mode or entity
+behind. At both tiers. The roster is computed and the exclusions are
+read out of `test_cancel_paths.py`, so a command added later is swept
+by construction.
 ## v3.11 -- 2026-09-11
 
 Three changes to the AB perimeter fitters, all of them about the same

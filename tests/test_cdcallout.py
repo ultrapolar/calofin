@@ -441,6 +441,86 @@ def test_back_and_enter_at_the_pick():
     print("ok  duplicate    -> Back re-asks the number, Enter takes none")
 
 
+def test_both_ends_of_a_tie_doubled():
+    """Every number is asked about on its own: the FROM pick does not
+    settle the TO one."""
+    vm = newvm()
+    ab_pt(vm, 0, 0, 1), ab_pt(vm, 600, 0, 1)
+    ab_pt(vm, 0, 240, 5), ab_pt(vm, 600, 240, 5)
+    run(vm, ['1', 'P1', '5', 'P2', None], 'both ends')
+    ds = dims(vm)
+    assert len(ds) == 1 and ds[0][13] == [0.0, 0.0, 0.0] \
+        and ds[0][14] == [600.0, 240.0, 0.0], ds
+    assert len([q for q, _ in vm.prompts if 'is meant' in q]) == 2, vm.prompts
+    print("ok  duplicate    -> both ends of a tie are asked about apart")
+
+
+def test_labels_run_past_p9():
+    """Twelve shots carrying one number is a drawing to go and fix, but
+    it still has to be answerable."""
+    vm = newvm()
+    for i in range(12):
+        ab_pt(vm, i * 100, 0, 7)
+    ab_pt(vm, 0, 240, 8)
+    run(vm, ['7', 'P11', '8', None], 'twelve')
+    ds = dims(vm)
+    assert len(ds) == 1 and ds[0][13] == [1000.0, 0.0, 0.0], ds
+    assert [d.get(1) for d in rings(vm) if d.get(0) == 'TEXT'][-1] == 'P12'
+    print("ok  duplicate    -> the labels run past P9 without colliding")
+
+
+def test_the_label_picks_the_right_one_when_both_round_the_same():
+    """Two shots a sixty-fourth apart print the same position, so the
+    rings and the label are all there is - and they still have to name
+    the right point, not the text."""
+    vm = newvm()
+    ab_pt(vm, 0, 0, 7), ab_pt(vm, 0.015, 0, 7), ab_pt(vm, 240, 0, 8)
+    run(vm, ['7', 'P2', '8', None], 'a hair apart')
+    ds = dims(vm)
+    assert len(ds) == 1 and ds[0][13] == [0.015, 0.0, 0.0], ds
+    print("ok  duplicate    -> the label picks the exact point, not the text")
+
+
+def test_esc_at_the_pick_sweeps_the_rings():
+    """Esc is the one way out that never reaches the erase, so the error
+    handler sweeps the layer - it has no list to drop."""
+    vm = newvm()
+    vm.handle_errors = True
+    ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7), ab_pt(vm, 100, 0, 8)
+    run(vm, ['7', esc], 'esc at pick')
+    assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+    assert not rings(vm, live_only=True), rings(vm, live_only=True)
+    assert vm.sysvars['CLAYER'] == '0' and vm.sysvars['OSMODE'] == 4133
+    assert not any('error' in m.lower() for m in vm.printed), vm.printed
+    print("ok  duplicate    -> Esc at the pick sweeps the rings away")
+
+
+def test_a_declined_pick_does_not_end_the_run():
+    """Enter takes none, and the run carries straight on to the next
+    pair - a declined pick is not a cancelled command."""
+    vm = newvm()
+    ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7)
+    ab_pt(vm, 100, 0, 8), ab_pt(vm, 200, 0, 9)
+    run(vm, ['7', None, '8', '9', None], 'declined')
+    ds = [d for d in dims(vm) if d.get(13)]
+    assert len(ds) == 1 and ds[0][13] == [100.0, 0.0, 0.0], ds
+    assert not rings(vm, live_only=True)
+    print("ok  duplicate    -> a declined pick does not end the run")
+
+
+def test_the_pick_helpers_are_nil_safe():
+    """They are reached from prompts, so none may assume it was handed
+    anything."""
+    vm = newvm()
+    for form in ('(cdo:matches "1" nil)', '(cdo:settle "7" nil nil)',
+                 '(cdo:show-picks "7" nil nil)', '(cdo:sweep)',
+                 '(cdo:drop nil)', '(cdo:trim "")', '(cdo:pad "" 6)'):
+        vm.loads(form)                       # must not raise
+    assert vm.loads('(cdo:trim "  P1  ")') == 'P1'
+    assert vm.loads('(cdo:pick-tag 12)') == 'P12'
+    print("ok  duplicate    -> every pick helper answers on an empty drawing")
+
+
 def test_a_stray_label_is_refused_and_re_asked():
     vm = newvm()
     ab_pt(vm, 0, 0, 7), ab_pt(vm, 50, 50, 7), ab_pt(vm, 100, 0, 8)
@@ -532,6 +612,12 @@ if __name__ == '__main__':
     test_the_to_prompt_asks_the_same_way()
     test_a_number_only_one_point_carries_is_not_asked_about()
     test_back_and_enter_at_the_pick()
+    test_both_ends_of_a_tie_doubled()
+    test_labels_run_past_p9()
+    test_the_label_picks_the_right_one_when_both_round_the_same()
+    test_esc_at_the_pick_sweeps_the_rings()
+    test_a_declined_pick_does_not_end_the_run()
+    test_the_pick_helpers_are_nil_safe()
     test_a_stray_label_is_refused_and_re_asked()
     test_layer_repaired_and_coloured()
     test_point_classifier()

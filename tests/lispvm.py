@@ -2590,6 +2590,12 @@ def _findfile(vm, a):
     name = a[0]
     if not isinstance(name, str) or not name:
         return NIL
+    # a file this VM wrote counts as existing.  Without it lzd:free
+    # could never see the report it had just written, and two failures
+    # in one second took the same name -- the second overwriting the
+    # first, with the drafter sending one file believing it was both.
+    if name in vm.files:
+        return name
     return os.path.abspath(name) if os.path.isfile(name) else NIL
 
 

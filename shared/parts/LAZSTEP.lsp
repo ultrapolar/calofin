@@ -104,7 +104,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.7")
+(setq *lazstep-version* "v1.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes

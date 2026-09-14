@@ -79,7 +79,7 @@ at a different size:
 | `sf:*layer*` | `"SMART FILLET PREVIEW"` | Layer the previews are drawn on |
 | `sf:*color*` | `3` | The layer's colour, and the fallback index on every preview, so a preview reads as a preview even where a true colour cannot be shown |
 | `sf:*shade-lo*` | `'(190 255 190)` | RGB of the **smallest** preview… |
-| `sf:*shade-hi*` | `'(0 110 0)` | …and of the largest. The fan is graded between the two, so which arc a label belongs to is a matter of shade rather than of tracing it by eye. Both stay green on black; a light-background drawing wants the pair swapped round |
+| `sf:*shade-hi*` | `'(0 110 0)` | …and of the largest. The fan is graded between the two, so which arc a label belongs to is a matter of shade rather than of tracing it by eye. Both stay green on black; a light-background drawing wants the pair swapped round. Either one `nil` = no true colour at all, and the fan reads as the layer's own colour instead — `nil` is what every other knob here takes for *leave it to the drawing*, and this is the pair a drafter is told to touch |
 | `sf:*trans*` | `40` | Per cent transparency on every preview, so an arc crossing another still reads. `0` or `nil` = solid |
 | `sf:*ltype*` | `"DASHED"` | The **extras'** linetype, created at pool scale when the drawing has none by that name. The sixes are solid |
 | `sf:*ltscale*` | `0.25` | Per-arc linetype scale on those. The stock `DASHED` pattern is 18 units long, so a 6" fillet arc would come out as one unbroken dash. `nil` leaves the arcs at the drawing's own `LTSCALE` |
