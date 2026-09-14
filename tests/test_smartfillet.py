@@ -484,6 +484,70 @@ def test_settings_go_back():
     print("ok   OSMODE, CLAYER, FILLETRAD, TRIMMODE and the dim style go back")
 
 
+def test_a_pending_command_is_cancelled():
+    """FILLET does not give up when it refuses a pick -- it asks again.
+    Left asking, it eats whatever is sent next: the radius dimension,
+    the style restore, the undo close.  A bare (command) cancels it, and
+    the drain that sends one is BOUNDED, because one bit of CMDACTIVE
+    means "a dialog is up" and no keystroke from here clears that -- an
+    unbounded loop against it hangs AutoCAD with no Esc out."""
+    vm = newvm()
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    e1p, e2p = [50.0, 0.0, 0.0], [0.0, 50.0, 0.0]
+    # CMDACTIVE that never clears is the worst case: the valve has to
+    # give up rather than spin
+    vm.sysvars['CMDACTIVE'] = 1
+    run(vm, [[e1, e1p], [e2, e2p],
+             clicker(24.0),
+              'No'], 'pending command')
+
+    bare = [c for c in vm.commands if not c]
+    assert bare, "the valve never fired -- a pending FILLET would be" \
+        " answered by the next command instead of cancelled"
+    assert len(bare) <= 30, \
+        f"{len(bare)} cancels: the drain is not bounded, and against the" \
+        " dialog bit that hangs AutoCAD"
+    assert 'SMARTFILLET error' not in said(vm), said(vm)
+    assert 'corner cut' in said(vm), said(vm)
+    print("ok   a command left waiting is cancelled, and boundedly")
+
+
+def test_undo_off_closes_no_group():
+    """An _End on a group that was never opened is an error of its own,
+    and it lands at the END of the run -- the corner cut, the dimension
+    placed, and the settings restore behind it never reached.  With undo
+    recording off neither half is sent."""
+    e1p, e2p = [50.0, 0.0, 0.0], [0.0, 50.0, 0.0]
+
+    vm = newvm()
+    vm.sysvars['UNDOCTL'] = 5                      # AutoCAD's default
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    run(vm, [[e1, e1p], [e2, e2p],
+             clicker(24.0),
+              'No'], 'undo on')
+    assert [c[1] for c in cmds(vm, '_.UNDO')] == ['_Begin', '_End'], \
+        vm.commands
+    print("ok   undo on: the bracket is opened and closed")
+
+    vm = newvm()
+    vm.sysvars['UNDOCTL'] = 4                      # recording bit clear
+    vm.sysvars['OSMODE'] = 39
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    run(vm, [[e1, e1p], [e2, e2p],
+             clicker(24.0),
+              'No'], 'undo off')
+    assert cmds(vm, '_.UNDO') == [], vm.commands
+    assert 'corner cut' in said(vm), said(vm)
+    assert 'SMARTFILLET error' not in said(vm), said(vm)
+    # the restore sits after the close: it is what an error there costs
+    assert vm.sysvars['OSMODE'] == 39, vm.sysvars
+    assert vm.sysvars['CLAYER'] == 'POOL', vm.sysvars
+    print("ok   undo off: no group opened, none closed, settings back")
+
+
 def test_version_banner():
     vm = newvm()
     vm.run('c:SMARTFILLETVER', [])
@@ -498,7 +562,10 @@ TESTS = [test_corner_geometry, test_short_leg_caps_the_radius,
          test_repeat_at_the_same_radius,
          test_cancel_leaves_the_drawing_alone, test_bad_picks_reask,
          test_no_corner_and_no_room, test_first_prompt_can_be_cancelled,
-         test_settings_go_back, test_version_banner]
+         test_settings_go_back,
+         test_a_pending_command_is_cancelled,
+         test_undo_off_closes_no_group,
+         test_version_banner]
 
 
 def main():

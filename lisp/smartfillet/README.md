@@ -127,6 +127,23 @@ at a different size:
 * `OSMODE`, `CMDECHO`, `CLAYER`, `FILLETRAD`, `TRIMMODE` and the current
   dimension style are all put back the way they were, whether the run
   finishes, errors, or is cancelled with Esc.
+* **A command left waiting for input is cancelled.** `FILLET` does not
+  give up when it refuses a pick -- *"Radius is too large"*, two lines it
+  cannot join -- it asks AGAIN, and `DIMRADIUS` does the same with a
+  location it will not take. Left asking, it swallows whatever is sent
+  next as an answer, so the click that was meant to cut the corner took
+  the radius dimension, the style restore and the undo close down with
+  it and the run ended in an error where the rest of the corners should
+  have been. Both commands are now followed by a bounded cancel, the
+  idiom `AUTOBEAD` uses after its `OFFSET`s: a bare `(command)` cancels
+  where an Enter would only answer the prompt in front of it, and the
+  loop is bounded because one bit of `CMDACTIVE` means *a dialog is up*,
+  which no keystroke can clear.
+* **The undo group is closed only if one was opened.** With undo
+  recording off (`UNDOCTL` bit 1 clear) none is, and an `_End` on nothing
+  is an error of its own -- and it landed at the very end of the run,
+  with the corner already cut and the settings restore behind it never
+  reached.
 * Requires the Visual LISP engine, which ships with full AutoCAD.
   **AutoCAD LT has no LISP engine and cannot run this file.**
 

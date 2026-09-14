@@ -160,6 +160,13 @@ check("with undo OFF neither half is sent", undo == [], f"{undo}")
 # driven where the driver for it already lives: the step routines are
 # what call it, and tests/test_steps_settings.py has the scripts that
 # get all three of them to their bead hand-off.
+# The same goes for a command whose close sits past a pick no Enter can
+# make: SMARTFILLET and HONEFILLET want two lines and a clicked preview
+# arc before they reach theirs, and XYPLOT wants a sheet and an origin.
+# All three closed unconditionally, and the sweep above cancelled out at
+# their first prompt without ever seeing it.  Their undo-off runs are
+# driven where their drivers already live -- test_smartfillet.py,
+# test_honefillet.py and test_xyplot.py, each of which has the picks.
 
 if failures:
     print(f"\n{len(failures)} undo check(s) FAILED")
