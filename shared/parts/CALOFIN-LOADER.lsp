@@ -124,7 +124,7 @@
                  "ALTABCDEF.lsp" "abhd.lsp" "ABCURCHECK.lsp" "ABPCHECK.lsp"
                  "CABHD.lsp" "POINTRENAMER.lsp" "LOBF.lsp" "ABLOBF.lsp"
                  "AUTOBEAD.lsp"
-                 "AutoDim.lsp" "BPCALLOUT.lsp" "ccprecheck.lsp"
+                 "AutoDim.lsp" "BPCALLOUT.lsp" "DIMSTAMP.lsp" "ccprecheck.lsp"
                  "CDCALLOUT.lsp" "CDCREATE.lsp" "check_drawing.lsp"
                  "CORNERSTP.lsp" "HEMISTEP.lsp" "NORMIESTEP.lsp"
                  "LAZSTEP.lsp"

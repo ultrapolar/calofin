@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 65 files, 189 commands:
+;;; 66 files, 191 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -22,26 +22,26 @@
 ;;;   DCE  DDALT  DDCAL  DDELEV  DDFIX  DDFIXVER
 ;;;   DDGPS  DDGPSVER  DDINFO  DDSET  DDTEST  DIMARCCHECK
 ;;;   DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER  DIMCONTEND  DIMCONTENDVER  DIMSCAN
-;;;   DRONE  DRONEVER  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM
-;;;   G2MCONV  G2MCONVVER  G2MRECONV  HEMISTEP  HEMISTEPVER  HONEFILLET
-;;;   HONEFILLETVER  LAZASCII  LAZBUTTON  LAZDIAG  LAZDIAGVER  LAZFORM
-;;;   LAZFORMCOVER  LAZFORMVER  LAZICON  LAZPANEL  LAZPANELVER  LAZPIN
-;;;   LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT  LHD
-;;;   LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER
-;;;   LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER
-;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER  NORMIESTEP
-;;;   NORMIESTEPVER  OASIS  OASISVER  PADDLE  PADDLEVER  PERPMARK
-;;;   PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL
-;;;   POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER
-;;;   SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV
-;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE
-;;;   SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER
-;;;   STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK
-;;;   TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK
-;;;   TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA
-;;;   TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER
-;;;   VSRECONV  WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER
-;;;   XFTRECONV  XYPLOT  XYPLOTVER
+;;;   DIMSTAMP  DIMSTAMPVER  DRONE  DRONEVER  FITABHD  FITABHDCOVER
+;;;   FITABHDVER  FLOORDIM  G2MCONV  G2MCONVVER  G2MRECONV  HEMISTEP
+;;;   HEMISTEPVER  HONEFILLET  HONEFILLETVER  LAZASCII  LAZBUTTON  LAZDIAG
+;;;   LAZDIAGVER  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON  LAZPANEL
+;;;   LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER
+;;;   LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK
+;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER
+;;;   LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF
+;;;   LOBFVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  PADDLE
+;;;   PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER
+;;;   POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE
+;;;   POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV
+;;;   SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN
+;;;   SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER
+;;;   STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
+;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
+;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
+;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE
+;;;   VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV
+;;;   XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -44761,6 +44761,318 @@
 
 
 ;;; ======================================================================
+;;; >>> DIMSTAMP.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; DIMSTAMP.lsp  --  click a point, stamp a feet/inch dimension text
+;;;                    there, and repeat
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  DIMSTAMP       stamp dimension text, click after click
+;;;            DIMSTAMPVER    print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; Click a point and type the text once; it lands there as a TEXT
+;;; entity.  Click again and the SAME text is offered by default --
+;;; Enter repeats it -- or pick one of a short menu of nearby values,
+;;; or type New to enter something else entirely; whichever you land
+;;; on becomes what the NEXT click offers.  A listed value cannot be
+;;; the AutoLISP keyword itself (a keyword may not contain a space, a
+;;; quote or a slash), so the menu is numbered and the number's real
+;;; value is printed right above the prompt that takes it.
+;;;
+;;; Every value is one of four forms, exactly -- nothing else parses:
+;;;   34"                     whole inches
+;;;   3'-4"                   feet and whole inches
+;;;   34 1/2"                 inches and a fraction
+;;;   3'- 4 1/2"              feet, inches and a fraction
+;;;
+;;; What the menu offers depends on which of the four the current text
+;;; is:
+;;;   * whole inches (34") -- every eighth of an inch from there up to
+;;;     the next whole inch (34-1/8" ... 35"), simplified;
+;;;   * feet and whole inches (3'-4"), no fraction -- quarter-inch
+;;;     steps up and down (3'-3 3/4" ... 3'-4 3/4"), then whole-inch
+;;;     jumps of 1", 2" and 3" on each side;
+;;;   * either form WITH a fraction already in it (34 1/2" or
+;;;     3'- 4 1/2") -- the same up-and-down-then-jump shape, but in
+;;;     eighth-inch steps instead of quarters, since a value already
+;;;     that precise deserves suggestions that precise.
+;;; A suggestion that would come out at or below zero is dropped.
+;;;
+;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
+;;; *dimstamp-version* below and stamps a dated, REV-numbered twin of
+;;; this file into releases/.
+;;; ======================================================================
+
+;;; -------------------- version ---------------------------------------
+(setq *dimstamp-version* "v1.0")   ; announced on load; release_lisp.py
+                                   ; reads this banner and stamps the
+                                   ; dated twin in releases/ from it
+
+;;; -------------------- tunables --------------------------------------
+(setq ds:*layer* "DIMENSION")       ; layer the stamped text lands on --
+                                    ; the same layer name ABFIND,
+                                    ; CDCREATE and CDCALLOUT use for
+                                    ; their own dimension text
+(setq ds:*layer-color* 7)          ; ACI colour the layer is CREATED
+                                    ; with -- 7 is AutoCAD's own
+                                    ; black-on-white/white-on-black
+                                    ; swap, so it reads on any screen
+                                    ; without a measured 'auto knob.  A
+                                    ; layer already in the drawing
+                                    ; keeps its own colour
+(setq ds:*text-hgt* 6.0)           ; TEXT height of every stamp
+
+;;; -------------------- helpers ----------------------------------------
+
+;; T when every character of S is 0-9 and S is not empty.
+(defun ds:digit-p (c)
+  (and (>= (ascii c) 48) (<= (ascii c) 57)))
+
+(defun ds:digits-p (s / i n ok)
+  (setq n (strlen s) ok (> n 0) i 1)
+  (while (and ok (<= i n))
+    (if (not (ds:digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+;; Parse a measurement string into (EIGHTHS HASFEET HASFRAC), where
+;; EIGHTHS is the total value in eighths of an inch (an integer),
+;; HASFEET is T when the text used feet notation and HASFRAC is T when
+;; it already carried a fraction -- both drive ds:suggestions and are
+;; carried back through so a value renders in the family it came in.
+;; nil when S is not one of the four canonical forms in the header.
+(defun ds:parse (s / n apos feetstr rest hasfeet feetnum spc wholestr
+                    fracstr slash numstr denstr wholenum num den frac
+                    hasfrac ok eighths)
+  (setq ok T)
+  (setq s (vl-string-trim " \t" s))
+  (setq n (strlen s))
+  (if (or (= n 0) (/= (substr s n 1) "\""))
+    (setq ok nil)
+    (setq s (substr s 1 (1- n))))
+  (setq hasfeet nil feetnum 0)
+  (if (and ok (setq apos (vl-string-search "'" s)))
+    (progn
+      (setq feetstr (substr s 1 apos))
+      (setq rest (substr s (+ apos 2)))
+      (if (or (= feetstr "") (not (ds:digits-p feetstr)))
+        (setq ok nil)
+        (setq feetnum (atoi feetstr) hasfeet T))
+      (setq rest (vl-string-trim " " rest))
+      (if (and ok (> (strlen rest) 0) (= (substr rest 1 1) "-"))
+        (setq rest (vl-string-trim " " (substr rest 2)))
+        (setq ok nil)))
+    (setq rest (vl-string-trim " " s)))
+  (setq wholenum 0 frac 0.0 hasfrac nil)
+  (if ok
+    (progn
+      (setq spc (vl-string-search " " rest))
+      (if spc
+        (setq wholestr (substr rest 1 spc)
+              fracstr  (vl-string-trim " " (substr rest (+ spc 2))))
+        (setq wholestr rest fracstr nil))
+      (if (or (= wholestr "") (not (ds:digits-p wholestr)))
+        (setq ok nil)
+        (setq wholenum (atoi wholestr)))
+      (if (and ok fracstr)
+        (progn
+          (setq slash (vl-string-search "/" fracstr))
+          (if (null slash)
+            (setq ok nil)
+            (progn
+              (setq numstr (substr fracstr 1 slash)
+                    denstr (substr fracstr (+ slash 2)))
+              (if (or (not (ds:digits-p numstr)) (not (ds:digits-p denstr))
+                      (= (atoi denstr) 0))
+                (setq ok nil)
+                (setq num (atoi numstr) den (atoi denstr)
+                      frac (/ (float num) (float den))
+                      hasfrac T))))))))
+  (if ok
+    (progn
+      (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feetnum 12.0) wholenum frac)))))
+      (list eighths hasfeet hasfrac))
+    nil))
+
+;; Render TOTAL-EIGHTHS (an integer count of 1/8" units) back to text,
+;; in the HASFEET family the source text used -- feet notation, or
+;; plain inches regardless of magnitude.  The fraction is simplified
+;; and shown only when the remainder is not a whole inch.
+(defun ds:format (total-eighths hasfeet / feet remeighths whole f8 g num den)
+  (if hasfeet
+    (setq feet (/ total-eighths 96)
+          remeighths (- total-eighths (* feet 96)))
+    (setq feet 0 remeighths total-eighths))
+  (setq whole (/ remeighths 8)
+        f8    (- remeighths (* whole 8))
+        num   0
+        den   1)
+  (if (/= f8 0)
+    (progn
+      (setq g (gcd f8 8))
+      (setq num (/ f8 g) den (/ 8 g))))
+  (cond
+    ((and hasfeet (/= num 0))
+     (strcat (itoa feet) "'- " (itoa whole) " " (itoa num) "/" (itoa den)
+             "\""))
+    ((and hasfeet (= num 0))
+     (strcat (itoa feet) "'-" (itoa whole) "\""))
+    ((/= num 0)
+     (strcat (itoa whole) " " (itoa num) "/" (itoa den) "\""))
+    (T
+     (strcat (itoa whole) "\""))))
+
+;; The nearby values to offer, as an ascending list of TOTAL-EIGHTHS
+;; integers (see the header banner for what each family offers); a
+;; result at or below zero is dropped.
+(defun ds:suggestions (total-eighths hasfeet hasfrac / step nearn out i)
+  (setq out nil)
+  (cond
+    ((and (not hasfeet) (not hasfrac))
+     ;; bare inches, no fraction yet: every eighth up to the next
+     ;; whole inch (34" suggests 34-1/8" ... 35")
+     (setq i 1)
+     (while (<= i 8)
+       (setq out (cons (+ total-eighths i) out))
+       (setq i (1+ i))))
+    (T
+     (setq step (if (and hasfeet (not hasfrac)) 2 1))   ; 1/4" or 1/8"
+     (setq nearn (if (= step 2) 3 7))                   ; up to 3/4" or 7/8"
+     (setq i 1)
+     (while (<= i nearn)
+       (setq out (cons (- total-eighths (* i step)) out))
+       (setq out (cons (+ total-eighths (* i step)) out))
+       (setq i (1+ i)))
+     (setq i 1)
+     (while (<= i 3)                                    ; then 1, 2, 3 inches
+       (setq out (cons (- total-eighths (* i 8)) out))
+       (setq out (cons (+ total-eighths (* i 8)) out))
+       (setq i (1+ i)))))
+  (setq out (vl-remove-if '(lambda (x) (<= x 0)) out))
+  (vl-sort out '<))
+
+;; "1 2 3 ... N" -- the numbered keywords the suggestion menu offers,
+;; one per entry in the list ds:suggestions handed back.
+(defun ds:num-keywords (n / s i)
+  (setq s "" i 1)
+  (while (<= i n)
+    (setq s (strcat s (if (= i 1) "" " ") (itoa i)))
+    (setq i (1+ i)))
+  s)
+
+;; Write STR at P.
+(defun ds:draw-text (p str)
+  (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                  (cons 8 ds:*layer*) '(100 . "AcDbText")
+                  (cons 10 (list (car p) (cadr p) 0.0))
+                  (cons 40 ds:*text-hgt*)
+                  (cons 1 str))))
+
+;; One validated free-text answer.  PROMPT already carries its leading
+;; \n and trailing ": ".  Loops on anything that is not one of the
+;; four canonical forms.
+(defun ds:ask-raw (prompt / v)
+  (setq v (getstring T prompt))
+  (if lzd:ask (lzd:ask prompt v))
+  (if (ds:parse v)
+    v
+    (progn
+      (princ (strcat "\nDIMSTAMP: \"" v "\" is not one of the four forms"
+                     " (34\", 3'-4\", 34 1/2\", 3'- 4 1/2\") - try again."))
+      (ds:ask-raw prompt))))
+
+;; The very first text of a run: no default, no suggestions -- nothing
+;; exists yet to compare against.
+(defun ds:ask-first ()
+  (ds:ask-raw "\nText, e.g. 34\", 3'-4\", 34 1/2\" or 3'- 4 1/2\": "))
+
+;; The second-and-later prompt: Enter repeats LASTTEXT, a listed number
+;; picks a nearby value, New asks fresh through ds:ask-raw.  Always
+;; returns a valid measurement string.
+(defun ds:ask-next (lasttext / parsed sugg kws fullkws bracket i v idx
+                             newv)
+  (setq parsed (ds:parse lasttext))
+  (setq sugg (ds:suggestions (car parsed) (cadr parsed) (caddr parsed)))
+  (if sugg
+    (progn
+      (princ "\nNearby values:")
+      (setq i 1)
+      (foreach v sugg
+        (princ (strcat "\n  " (itoa i) "  " (ds:format v (cadr parsed))))
+        (setq i (1+ i)))))
+  (setq kws (ds:num-keywords (length sugg)))
+  (setq fullkws (if (= kws "") "New" (strcat kws " New")))
+  (setq bracket (vl-string-translate " " "/" fullkws))
+  (initget fullkws)
+  (setq idx (getkword (strcat "\nText [" bracket "] <repeat \"" lasttext
+                              "\">: ")))
+  (if lzd:ask (lzd:ask "ds:ask-next" idx))
+  (cond
+    ((null idx) lasttext)
+    ((= idx "New")
+     (ds:ask-raw (strcat "\nNew text, e.g. 34\", 3'-4\", 34 1/2\" or"
+                         " 3'- 4 1/2\": ")))
+    (T
+     (setq newv (nth (1- (atoi idx)) sugg))
+     (ds:format newv (cadr parsed)))))
+
+;;; -------------------- the command ------------------------------------
+;; NOTE: no local here may be named after a function this routine
+;; calls - an AutoLISP local SHADOWS the function of the same name for
+;; the whole call, so a local called "last" turns every (last ...) in
+;; the body into "no function definition: LAST" at runtime.
+(defun c:DIMSTAMP (/ *error* undo-open pk lasttext newtext count)
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDIMSTAMP error: " msg)))
+    (if lzd:report (lzd:report "DIMSTAMP" *dimstamp-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DIMSTAMP" *dimstamp-version*))
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+
+  (princ (strcat "\nDIMSTAMP " *dimstamp-version*
+                 " - click a point, then give the text; Enter when done."))
+  (setq lasttext nil count 0)
+  (while (setq pk (getpoint
+                    "\nClick a point to place text (Enter when done): "))
+    (setq newtext (if lasttext (ds:ask-next lasttext) (ds:ask-first)))
+    (cal:ensure-layer ds:*layer* ds:*layer-color*)
+    (ds:draw-text pk newtext)
+    (setq lasttext newtext count (1+ count))
+    (princ (strcat "\n  \"" newtext "\" placed.")))
+
+  (princ (strcat "\nDIMSTAMP: " (itoa count) " placed."))
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
+  (princ))
+
+(defun c:DIMSTAMPVER ()
+  (princ (strcat "\nDIMSTAMP " *dimstamp-version*))
+  (princ))
+
+;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
+;; the flag while they load their members.  APPLOADed alone the flag
+;; is nil and this prints, which is the one time somebody wants to be
+;; told.  CALVER reports the whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nDIMSTAMP " *dimstamp-version*
+                 " loaded. Command: DIMSTAMP (stamp dimension text,"
+                 " click after click).")))
+(princ)
+
+
+;;; ======================================================================
 ;;; >>> ccprecheck.lsp
 ;;; ======================================================================
 
@@ -78374,6 +78686,10 @@
 ;;; so all offsets accumulate in one consistent direction.  Repeat as
 ;;; many times as you like.
 ;;;
+;;; Every line the routine draws is offered the same width correction
+;;; the selected one is: a course comes out only as wide as the typed
+;;; offsets add up to, and the round after it measures along it.
+;;;
 ;;; Workflow
 ;;;   1. Select a LINE (a polyline is also accepted, so work started in
 ;;;      an earlier session can be resumed).
@@ -78398,28 +78714,36 @@
 ;;;      numbers are arcs -- "1 3-5" -- and leaves the rest straight.
 ;;;      The question is only asked once there are three points or
 ;;;      more, and the answer becomes the default for the next round.
-;;;   7. Choose whether to repeat on the new polyline.  If so, enter a
+;;;   7. Say whether the overall width of the line just drawn has
+;;;      changed -- step 2's question, asked of the course this round
+;;;      built.  It is resized the same way, half the difference at
+;;;      each end, before anything is measured off it.
+;;;   8. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 5 with the new polyline as
 ;;;      the path.
-;;;   8. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
 ;;; The offset side is fixed once from the direction click in step 3 and
 ;;; reused for every round, so all offsets stay on the same side of the
-;;; original line and every dimension stays perpendicular to it.
+;;; original line and every dimension stays perpendicular to it -- until
+;;; a round corrects its width at step 7, which moves its new points
+;;; along the resized line and leaves that round's dimensions reading
+;;; the corrected drawing instead.
 ;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what step 2 asks
-;;;   for -- never the developed length of the OBJECT, which on anything
-;;;   bowed runs further than the width it spans.  Grew and Shrank take
-;;;   the difference, New takes the width itself, and Unchanged (the
-;;;   default, and Enter) leaves everything exactly as it was.
+;;;   distance straight across, end to end.  That is what steps 2 and 7
+;;;   ask for -- never the developed length of the OBJECT, which on
+;;;   anything bowed runs further than the width it spans.  Grew and
+;;;   Shrank take the difference, New takes the width itself, and
+;;;   Unchanged (the default, and Enter) leaves everything exactly as it
+;;;   was.
 ;;;
-;;;   A new width is made true by scaling the selected object about the
-;;;   midpoint of its two ends, so exactly half the difference lands at
-;;;   each end and the shape between them is carried along.  The object
-;;;   in the drawing is resized too, not just the numbers behind it: the
+;;;   A new width is made true by scaling the object about the midpoint
+;;;   of its two ends, so exactly half the difference lands at each end
+;;;   and the shape between them is carried along.  The object in the
+;;;   drawing is resized too, not just the numbers behind it: the
 ;;;   offsets and their dimensions are measured off it, so leaving it at
 ;;;   the old width would put every base point somewhere the drawing
 ;;;   says nothing is.  The base points and dimensions then follow the
@@ -78427,10 +78751,27 @@
 ;;;   The whole thing sits inside the command's undo group, so one U
 ;;;   puts the width back.
 ;;;
+;;;   Every line gets that question, not just the one selected: each
+;;;   round draws the next course out, and a course is re-measured the
+;;;   same way the first one was.  A line the routine draws is only ever
+;;;   as wide as the typed offsets add up to, so ends measured a little
+;;;   long or a little short leave it that much wide or narrow -- and
+;;;   the next round spaces its base points along it, which is the same
+;;;   reason step 2 resizes the selected object rather than only
+;;;   remembering a number.  Step 7 asks after the polyline is drawn,
+;;;   because that is when there is a width to compare against, and
+;;;   before its dimensions are recorded: a round that corrects its
+;;;   width has its new points moved with the line, so each dimension
+;;;   reads the distance the corrected drawing really has rather than
+;;;   the length that was typed into it.  A resize the drawing will not
+;;;   take stops step 2 -- nothing is drawn yet, so re-running costs a
+;;;   click -- but at step 7 it leaves the line at the width it drew and
+;;;   says so, because whole rounds of typed lengths sit behind it.
+;;;
 ;;; Straight lines, arcs, or both
 ;;;   A measured wall is rarely all one or all the other: a radiused
 ;;;   stretch reads as an arc, a straight run reads as a line, and one
-;;;   profile often needs both -- which is why step 5 asks instead of
+;;;   profile often needs both -- which is why step 6 asks instead of
 ;;;   assuming.  An arc segment is a bulge written onto the same
 ;;;   LWPOLYLINE, so whatever the answer the round produces one
 ;;;   editable polyline through the measured points: never a spline and
@@ -78448,7 +78789,7 @@
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the object they were offset from.
 ;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
-;;;     and use the dimension style picked in step 6 when the drawing
+;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
@@ -78471,7 +78812,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.13")
+(setq *perp-version* "v0.14")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -78788,9 +79129,11 @@
 ;; Ask whether the overall width has changed.  Returns the width to work
 ;; to, or nil when it has not -- so an unchanged answer skips the resize
 ;; altogether and the command behaves exactly as it always did.  d is
-;; the width the drawing carries now.
-(defun perp:ask-width (d / kws ans v w out done)
-  (princ (strcat "\nOverall width, end to end: " (rtos d) "."))
+;; the width the drawing carries now, and lbl heads the line that
+;; reports it: the question is asked of the selected object AND of every
+;; line a round draws, so it has to say which one it means.
+(defun perp:ask-width (lbl d / kws ans v w out done)
+  (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" done nil out nil)
   ;; the amount is a second question, so Back at it re-asks the first
   ;; rather than abandoning the resize
@@ -78800,7 +79143,10 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
-    (if lzd:ask (lzd:ask "perp:ask-width" ans))
+    ;; the label, not the helper name: one helper asks this of the
+    ;; selected object and of every line a round draws, and a report
+    ;; that cannot tell them apart cannot say which one died
+    (if lzd:ask (lzd:ask lbl ans))
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -78875,7 +79221,7 @@
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
                     path pathEnt n lastN basePts newPts guideEnts total
                     len lastLen i base np again ans iter p e seg
-                    join lastJoin kws nseg picks reply tangs
+                    join lastJoin kws nseg picks reply tangs plEnt
                     wOld wNew mid fac)
 
   ;; erase one temporary entity and forget it
@@ -78992,7 +79338,7 @@
         ;; a plan projection with no width at all has nothing to
         ;; ask about; the direction click below is where that
         ;; gets reported
-        wNew (if (> wOld 1e-9) (perp:ask-width wOld)))
+        wNew (if (> wOld 1e-9) (perp:ask-width "Overall width" wOld)))
   (if wNew
     (progn
       (setq mid (list (/ (+ (car p1)  (car p2))  2.0)
@@ -79270,8 +79616,9 @@
     ;; dimension still lands on the curve.
     (setq tangs (if (equal join "Straight") nil (perp:tangents newPts)))
     (if tangs (perp:arcs (entlast) newPts tangs picks))
+    (setq plEnt (entlast))
     ;; a round that drew arcs is the next round's curve to measure along
-    (setq pathEnt (if tangs (entlast)))
+    (setq pathEnt (if tangs plEnt))
     (princ (strcat "\nRound " (itoa iter) ": polyline drawn "
                    (cond ((equal join "Straight") "with straight segments")
                          ((equal join "Arcs")     "with arcs through the points")
@@ -79283,11 +79630,57 @@
     (foreach e guideEnts (perp:kill e))
     (setq guideEnts nil)
 
+    ;; --- has the width of the line just drawn changed? ---------------
+    ;; Step 2's question, asked again of the line this round built.  It
+    ;; is the next course out and it was re-measured too, and the typed
+    ;; offsets only reach the width they happen to add up to: a course
+    ;; whose ends were measured a little long or a little short comes
+    ;; out that much wide or narrow, and everything taken off it after
+    ;; -- this round's dimensions, and the base points of every round
+    ;; that follows -- would be measured off a width the wall does not
+    ;; have.  So it is resized here, before any of that: half the
+    ;; difference at each end, scaled about the midpoint of the two, the
+    ;; same correction and the same undo group as step 2.  Unchanged is
+    ;; the default and the Enter answer, which leaves the round exactly
+    ;; as it drew.
+    (setq dx   (- (car  (last newPts)) (car  (car newPts)))
+          dy   (- (cadr (last newPts)) (cadr (car newPts)))
+          wOld (sqrt (+ (* dx dx) (* dy dy)))
+          ;; ends that land on top of each other span no width, so there
+          ;; is nothing to ask about and nothing to scale about either
+          wNew (if (> wOld 1e-9)
+                 (perp:ask-width "Overall width of the new polyline" wOld)))
+    (if wNew
+      (progn
+        (setq mid (list (/ (+ (car  (car newPts)) (car  (last newPts))) 2.0)
+                        (/ (+ (cadr (car newPts)) (cadr (last newPts))) 2.0)
+                        (caddr (car newPts)))
+              fac (/ wNew wOld))
+        ;; A refused resize stops step 2 outright: nothing is drawn yet
+        ;; there, so re-running costs one click.  Here rounds of typed
+        ;; lengths sit behind it and not one dimension is written, so
+        ;; the line is left at the width it drew and the drafter is told
+        ;; which width that is -- nothing is scaled, so the drawing and
+        ;; the numbers measured off it still agree.
+        (if (perp:rescale plEnt mid fac)
+          (progn
+            (setq newPts (perp:scale-pts newPts mid fac))
+            (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
+                           (rtos (/ (abs (- wNew wOld)) 2.0))
+                           (if (> wNew wOld) " added at" " taken off")
+                           " each end.")))
+          (princ (strcat "\nThe new polyline could not be resized - it is"
+                         " most likely on a locked, frozen or switched-off"
+                         " layer.  It is left at the " (rtos wOld)
+                         " it was drawn, and the dimensions follow it.")))))
+
     ;; --- remember the dimensions to draw -----------------------------
     ;; np = base + len*(nx,ny), so each dimension runs along the fixed
     ;; normal, i.e. perpendicular to the ORIGINAL line, no matter which
-    ;; polyline `base` sits on.  They are drawn once at the end, after
-    ;; the dimension style has been chosen.
+    ;; polyline `base` sits on -- until a width correction above moves
+    ;; the new points along it, and then each dimension reads the
+    ;; distance the corrected drawing really has.  They are drawn once
+    ;; at the end, after the dimension style has been chosen.
     (setq i 0)
     (while (< i n)
       (setq dimPairs (cons (list (nth i basePts) (nth i newPts)) dimPairs)
@@ -79394,30 +79787,53 @@
 ;;;      Press Enter to reuse the previous length when it repeats, or
 ;;;      type B (Back) to step back and re-enter the previous point
 ;;;      (U, the old keyword, is still accepted).
-;;;   6. Choose whether to repeat on the new polyline.  If so, enter a
+;;;   6. Say whether the overall width of the curve just drawn has
+;;;      changed -- step 2's question, asked of the course this round
+;;;      built.  It is resized the same way, half the difference at
+;;;      each end, before anything is measured off it.
+;;;   7. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 5 with the new polyline as
 ;;;      the path.
-;;;   7. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   8. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what step 2 asks
-;;;   for -- never the developed length of the CURVE, which on anything
-;;;   bowed runs further than the width it spans.  Grew and Shrank take
-;;;   the difference, New takes the width itself, and Unchanged (the
-;;;   default, and Enter) leaves everything exactly as it was.
+;;;   distance straight across, end to end.  That is what steps 2 and 6
+;;;   ask for -- never the developed length of the CURVE, which on
+;;;   anything bowed runs further than the width it spans.  Grew and
+;;;   Shrank take the difference, New takes the width itself, and
+;;;   Unchanged (the default, and Enter) leaves everything exactly as it
+;;;   was.
 ;;;
-;;;   A new width is made true by scaling the selected curve about the
-;;;   midpoint of its two ends, so exactly half the difference lands at
-;;;   each end and the curve keeps its shape: an arc stays that arc,
-;;;   scaled.  The curve in the drawing is resized too, not just the
-;;;   numbers behind it -- the offsets and their dimensions are measured
-;;;   off it, so leaving it at the old width would put every base point
-;;;   somewhere the drawing says nothing is.  The base points and
-;;;   dimensions then follow the resized curve, since they are spaced
-;;;   along it after the resize.  The whole thing sits inside the
-;;;   command's undo group, so one U puts the width back.
+;;;   A new width is made true by scaling the curve about the midpoint
+;;;   of its two ends, so exactly half the difference lands at each end
+;;;   and the curve keeps its shape: an arc stays that arc, scaled.  The
+;;;   curve in the drawing is resized too, not just the numbers behind
+;;;   it -- the offsets and their dimensions are measured off it, so
+;;;   leaving it at the old width would put every base point somewhere
+;;;   the drawing says nothing is.  The base points and dimensions then
+;;;   follow the resized curve, since they are spaced along it after the
+;;;   resize.  The whole thing sits inside the command's undo group, so
+;;;   one U puts the width back.
+;;;
+;;;   Every curve gets that question, not just the one selected: each
+;;;   round draws the next course out, and a course is re-measured the
+;;;   same way the first one was.  A curve the routine draws is only
+;;;   ever as wide as the typed offsets add up to, so ends measured a
+;;;   little long or a little short leave it that much wide or narrow --
+;;;   and the next round spaces its base points along it and reads its
+;;;   tangents, which is the same reason step 2 resizes the selected
+;;;   curve rather than only remembering a number.  Step 6 asks after
+;;;   the polyline is drawn, because that is when there is a width to
+;;;   compare against, and before its dimensions are recorded: a round
+;;;   that corrects its width has its new points moved with the curve,
+;;;   so each dimension reads the distance the corrected drawing really
+;;;   has rather than the length that was typed into it.  A resize the
+;;;   drawing will not take stops step 2 -- nothing is drawn yet, so
+;;;   re-running costs a click -- but at step 6 it leaves the curve at
+;;;   the width it drew and says so, because whole rounds of typed
+;;;   lengths sit behind it.
 ;;;
 ;;; How the offset direction is found
 ;;;   Every round works from the NEWEST curve.  Round 1 offsets from the
@@ -79426,7 +79842,10 @@
 ;;;   newest curve, and its offset runs along the normal of the curve's
 ;;;   tangent underneath it -- so both the offset and its dimension read
 ;;;   perpendicular to the line the point actually sits on, and each
-;;;   round follows the shape its predecessor took.
+;;;   round follows the shape its predecessor took.  A round that
+;;;   corrects its width at step 6 is the one exception: the correction
+;;;   moves its new points along the resized curve, and that round's
+;;;   dimensions read the corrected drawing instead.
 ;;;
 ;;;   Which side is used is fixed once, from the direction click,
 ;;;   relative to the direction of travel (START -> FINISH), so every
@@ -79437,7 +79856,7 @@
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the curve they were offset from.
 ;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
-;;;     and use the dimension style picked in step 6 when the drawing
+;;;     and use the dimension style picked in step 8 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
@@ -79466,7 +79885,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.12")
+(setq *cperp-version* "v0.13")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -79591,18 +80010,20 @@
 ;; direction of travel and the offset side are left alone, and the shape
 ;; between the ends is carried along with it.
 
-;; Ask whether the overall width has changed.  Returns the width to work
-;; to, or nil when it has not -- so an unchanged answer skips the resize
-;; altogether and the command behaves exactly as it always did.  d is
-;; the width the drawing carries now.
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getdist/getpoint/getint hand a keyword back as
 ;; a string where a value would be a number or a list.
 (defun cperp:back-kw (v)
   (and (= (type v) 'STR) (member v '("Back" "Undo"))))
 
-(defun cperp:ask-width (d / kws ans v w out done)
-  (princ (strcat "\nOverall width, end to end: " (rtos d) "."))
+;; Ask whether the overall width has changed.  Returns the width to work
+;; to, or nil when it has not -- so an unchanged answer skips the resize
+;; altogether and the command behaves exactly as it always did.  d is
+;; the width the drawing carries now, and lbl heads the line that
+;; reports it: the question is asked of the selected curve AND of every
+;; curve a round draws, so it has to say which one it means.
+(defun cperp:ask-width (lbl d / kws ans v w out done)
+  (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" done nil out nil)
   ;; the amount is a second question, so Back at it re-asks the first
   ;; rather than abandoning the resize
@@ -79612,7 +80033,10 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
-    (if lzd:ask (lzd:ask "cperp:ask-width" ans))
+    ;; the label, not the helper name: one helper asks this of the
+    ;; selected object and of every line a round draws, and a report
+    ;; that cannot tell them apart cannot say which one died
+    (if lzd:ask (lzd:ask lbl ans))
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -79655,6 +80079,21 @@
                   (vlax-3d-point (trans ctr 1 0))
                   k)))
   (not (vl-catch-all-error-p r)))
+
+;; p scaled about ctr by k, in plan; z is carried through untouched
+(defun cperp:scale-pt (p ctr k)
+  (list (+ (car ctr)  (* k (- (car p)  (car ctr))))
+        (+ (cadr ctr) (* k (- (cadr p) (cadr ctr))))
+        (caddr p)))
+
+;; every point of pts scaled about ctr by k.  The selected curve is
+;; re-read from the drawing after a resize, but a curve a round draws
+;; has its points in hand -- they are what the dimensions are recorded
+;; from -- so they are scaled with it rather than measured off it again.
+(defun cperp:scale-pts (pts ctr k / out p)
+  (setq out '())
+  (foreach p pts (setq out (cons (cperp:scale-pt p ctr k) out)))
+  (reverse out))
 
 ;; --- command ---------------------------------------------------------
 
@@ -79792,7 +80231,7 @@
         ;; a plan projection with no width at all has nothing to
         ;; ask about; the direction click below is where that
         ;; gets reported
-        wNew (if (> wOld 1e-9) (cperp:ask-width wOld)))
+        wNew (if (> wOld 1e-9) (cperp:ask-width "Overall width" wOld)))
   (if wNew
     (progn
       (setq mid (list (/ (+ (car sp)  (car ep))  2.0)
@@ -80033,9 +80472,56 @@
     (foreach e guideEnts (cperp:kill e))
     (setq guideEnts nil)
 
+    ;; --- has the width of the curve just drawn changed? --------------
+    ;; Step 2's question, asked again of the curve this round built.  It
+    ;; is the next course out and it was re-measured too, and the typed
+    ;; offsets only reach the width they happen to add up to: a course
+    ;; whose ends were measured a little long or a little short comes
+    ;; out that much wide or narrow, and everything taken off it after
+    ;; -- this round's dimensions, and the base points of every round
+    ;; that follows -- would be measured off a width the wall does not
+    ;; have.  So it is resized here, before any of that: half the
+    ;; difference at each end, scaled about the midpoint of the two, the
+    ;; same correction and the same undo group as step 2.  Unchanged is
+    ;; the default and the Enter answer, which leaves the round exactly
+    ;; as it drew.
+    (setq tx   (- (car  (last newPts)) (car  (car newPts)))
+          ty   (- (cadr (last newPts)) (cadr (car newPts)))
+          wOld (sqrt (+ (* tx tx) (* ty ty)))
+          ;; ends that land on top of each other span no width, so there
+          ;; is nothing to ask about and nothing to scale about either
+          wNew (if (> wOld 1e-9)
+                 (cperp:ask-width "Overall width of the new curve" wOld)))
+    (if wNew
+      (progn
+        (setq mid (list (/ (+ (car  (car newPts)) (car  (last newPts))) 2.0)
+                        (/ (+ (cadr (car newPts)) (cadr (last newPts))) 2.0)
+                        (caddr (car newPts)))
+              fac (/ wNew wOld))
+        ;; A refused resize stops step 2 outright: nothing is drawn yet
+        ;; there, so re-running costs one click.  Here rounds of typed
+        ;; lengths sit behind it and not one dimension is written, so
+        ;; the curve is left at the width it drew and the drafter is
+        ;; told which width that is -- nothing is scaled, so the drawing
+        ;; and the numbers measured off it still agree.
+        (if (cperp:rescale curCrv mid fac)
+          (progn
+            (setq newPts (cperp:scale-pts newPts mid fac))
+            (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
+                           (rtos (/ (abs (- wNew wOld)) 2.0))
+                           (if (> wNew wOld) " added at" " taken off")
+                           " each end.")))
+          (princ (strcat "\nThe new curve could not be resized - it is"
+                         " most likely on a locked, frozen or switched-off"
+                         " layer.  It is left at the " (rtos wOld)
+                         " it was drawn, and the dimensions follow it.")))))
+
     ;; --- remember the dimensions to draw -----------------------------
     ;; each pair runs along the normal of the curve the base point sits
-    ;; on, so the dimension reads perpendicular to that curve
+    ;; on, so the dimension reads perpendicular to that curve -- until a
+    ;; width correction above moves the new points along the curve they
+    ;; landed on, and then each dimension reads the distance the
+    ;; corrected drawing really has
     (setq i 0)
     (while (< i (length newPts))
       (setq dimPairs (cons (list (nth i usedBases) (nth i newPts)) dimPairs)
@@ -80126,7 +80612,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.7")
+(setq *tutperp-version* "v0.8")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -80238,6 +80724,12 @@
                   "  * right after the selection you are asked whether the"
                   "    overall width has changed: Grew, Shrank, New, or"
                   "    Unchanged (the default, and Enter)"
+                  "  * EVERY line gets that question, not just the selected"
+                  "    one: each round draws the next course out, and the"
+                  "    line it drew is asked about the moment it appears -"
+                  "    a line built from typed offsets is only as wide as"
+                  "    they add up to, and the next round is spaced along"
+                  "    it"
                   "  * the width meant is the distance straight ACROSS, end"
                   "    to end - never the length of the OBJECT, which on"
                   "    anything bowed runs further than the width it spans"
@@ -80245,10 +80737,14 @@
                   "    EACH end: the OBJECT in the drawing is resized to"
                   "    match, so the base points and their dimensions still"
                   "    land on it.  One U puts the width back"
+                  "  * a corrected round has its new points moved with the"
+                  "    line, so its dimensions read the corrected drawing"
+                  "    rather than the lengths typed into it"
                   "  * shrinking away the whole width is rejected, and a"
                   "    resize the drawing will not take - a locked, frozen"
-                  "    or switched-off layer - stops the command rather"
-                  "    than measuring off geometry that is not there"
+                  "    or switched-off layer - stops the command at the"
+                  "    selection, where nothing is drawn yet; at a round it"
+                  "    leaves the line at the width it drew and says so"
                   ""
                   "Direction click"
                   "  * the end nearest your click becomes START - lengths are"
@@ -80445,12 +80941,15 @@
         (setq i (1+ i)))
       (tutp:say '(""
                   "STAGE 7 - repeating."
-                  "After each polyline PERPPTS asks: Repeat on the new"
-                  "polyline?  Answering Yes spaces a fresh set of points by"
-                  "arc length ALONG that polyline and offsets them again -"
-                  "same side, dimensions still perpendicular to the original"
-                  "line.  Here a second round of 15s was added.  Repeat as"
-                  "many times as you like; a single U undoes the whole run."))
+                  "After each polyline PERPPTS asks whether ITS overall"
+                  "width has changed - the same Grew/Shrank/New/Unchanged"
+                  "question the selected line got, applied the same way -"
+                  "and then: Repeat on the new polyline?  Answering Yes"
+                  "spaces a fresh set of points by arc length ALONG that"
+                  "polyline and offsets them again - same side, dimensions"
+                  "still perpendicular to the original line.  Here a second"
+                  "round of 15s was added.  Repeat as many times as you"
+                  "like; a single U undoes the whole run."))
       (tutp:pause)
 
       ;; keep or erase the demo
@@ -80512,7 +81011,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.7")
+(setq *tutcperp-version* "v0.8")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -80689,6 +81188,12 @@
                   "  * right after the selection you are asked whether the"
                   "    overall width has changed: Grew, Shrank, New, or"
                   "    Unchanged (the default, and Enter)"
+                  "  * EVERY curve gets that question, not just the selected"
+                  "    one: each round draws the next course out, and the"
+                  "    curve it drew is asked about the moment it appears -"
+                  "    a curve built from typed offsets is only as wide as"
+                  "    they add up to, and the next round is spaced along"
+                  "    it and reads its tangents"
                   "  * the width meant is the distance straight ACROSS, end"
                   "    to end - never the length of the CURVE, which on"
                   "    anything bowed runs further than the width it spans"
@@ -80696,10 +81201,14 @@
                   "    EACH end: the CURVE in the drawing is resized to"
                   "    match, so the base points and their dimensions still"
                   "    land on it.  One U puts the width back"
+                  "  * a corrected round has its new points moved with the"
+                  "    curve, so its dimensions read the corrected drawing"
+                  "    rather than the lengths typed into it"
                   "  * shrinking away the whole width is rejected, and a"
                   "    resize the drawing will not take - a locked, frozen"
-                  "    or switched-off layer - stops the command rather"
-                  "    than measuring off geometry that is not there"
+                  "    or switched-off layer - stops the command at the"
+                  "    selection, where nothing is drawn yet; at a round it"
+                  "    leaves the curve at the width it drew and says so"
                   ""
                   "Direction click"
                   "  * the curve end nearest your click becomes START; a red"
@@ -80844,7 +81353,10 @@
       (setq crv (tutc:round crv lens))
       (tutc:say '(""
                   "STAGE 7 - repeating."
-                  "Answering Yes to the repeat prompt runs the next round"
+                  "After each curve CPERPPTS asks whether ITS overall width"
+                  "has changed - the same Grew/Shrank/New/Unchanged question"
+                  "the selected curve got, applied the same way - and then"
+                  "whether to repeat.  Answering Yes runs the next round"
                   "FROM THE NEWEST CURVE: fresh arc-length points along the"
                   "curve just built, offset perpendicular to ITS tangents -"
                   "here a uniform round of 12s.  Each round follows the"
@@ -101389,7 +101901,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.23")
+(setq *lazpanel-version* "v3.24")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -101562,6 +102074,7 @@
     ("DIMCHECK"         "Dimension review")
     ("DIMCONTEND"       "Continue dim chains")
     ("DIMSCAN"          "Dimension scan")
+    ("DIMSTAMP"         "Stamp dimension text")
     ("DRONE"            "Drone cleanup")
     ("FITABHD"          "Typed template fit")
     ("FITABHDCOVER"     "Typed template fit, no bottom")
@@ -101794,6 +102307,7 @@
       "LAZDIAG"
       "LOBF"
       "ABLOBF"
+      "DIMSTAMP"
       )
     )
      ("Layout"
@@ -101862,6 +102376,7 @@
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
+      "DIMSTAMP"
       )
     )
      ("Converters"
@@ -103713,29 +104228,29 @@
   "ABPCHECKRESCUE" "ABPCHECKVER" "CABHDVER" "CABHD" "POINTRENAMER" "POINTRENAMERVER"
   "LOBF" "LOBFVER" "ABLOBF" "ABLOBFVER" "AUTOBEAD" "AUTOBEADVER"
   "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "AUTODIMVER"
-  "BPCALLOUT" "BPCALLOUTVER" "CCPRECHECK" "CCPRECHECKVER" "CDCALLOUT" "CDCALLOUTVER"
-  "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK" "CHECKVER" "CORNERSTP"
-  "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER" "NORMIESTEP"
-  "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK"
-  "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION"
-  "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN"
-  "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DIMCONTENDVER" "DDFIX"
-  "DDSET" "DDCAL" "DDINFO" "DDALT" "DDFIXVER" "DDGPS"
-  "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER" "FITABHD" "FITABHDCOVER"
-  "LHD" "LHDVER" "LINCHECK" "LINCHECKVER" "LINFINCHECKVER" "LINFINCHECKRESCUE"
-  "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK"
-  "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER" "LINGUTTER" "LINGUTTERSCAN"
-  "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS"
-  "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET"
-  "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
-  "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER"
-  "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER"
-  "SOCONV" "SORECONV" "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER"
-  "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV"
-  "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION"
-  "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM"
-  "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON"
-  "CALHELP" "CALSET" "LAZPANELVER"
+  "BPCALLOUT" "BPCALLOUTVER" "DIMSTAMP" "DIMSTAMPVER" "CCPRECHECK" "CCPRECHECKVER"
+  "CDCALLOUT" "CDCALLOUTVER" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
+  "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP"
+  "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER"
+  "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN"
+  "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE"
+  "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE"
+  "DIMCONTENDVER" "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT"
+  "DDFIXVER" "DDGPS" "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER"
+  "FITABHD" "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK" "LINCHECKVER"
+  "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
+  "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER"
+  "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER"
+  "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK" "SMARTFILLET"
+  "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN"
+  "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST"
+  "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN"
+  "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER" "VSCONV"
+  "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST"
+  "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT"
+  "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII"
+  "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN"
+  "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

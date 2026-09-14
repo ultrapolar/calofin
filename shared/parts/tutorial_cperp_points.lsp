@@ -27,7 +27,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.7")
+(setq *tutcperp-version* "v0.8")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -204,6 +204,12 @@
                   "  * right after the selection you are asked whether the"
                   "    overall width has changed: Grew, Shrank, New, or"
                   "    Unchanged (the default, and Enter)"
+                  "  * EVERY curve gets that question, not just the selected"
+                  "    one: each round draws the next course out, and the"
+                  "    curve it drew is asked about the moment it appears -"
+                  "    a curve built from typed offsets is only as wide as"
+                  "    they add up to, and the next round is spaced along"
+                  "    it and reads its tangents"
                   "  * the width meant is the distance straight ACROSS, end"
                   "    to end - never the length of the CURVE, which on"
                   "    anything bowed runs further than the width it spans"
@@ -211,10 +217,14 @@
                   "    EACH end: the CURVE in the drawing is resized to"
                   "    match, so the base points and their dimensions still"
                   "    land on it.  One U puts the width back"
+                  "  * a corrected round has its new points moved with the"
+                  "    curve, so its dimensions read the corrected drawing"
+                  "    rather than the lengths typed into it"
                   "  * shrinking away the whole width is rejected, and a"
                   "    resize the drawing will not take - a locked, frozen"
-                  "    or switched-off layer - stops the command rather"
-                  "    than measuring off geometry that is not there"
+                  "    or switched-off layer - stops the command at the"
+                  "    selection, where nothing is drawn yet; at a round it"
+                  "    leaves the curve at the width it drew and says so"
                   ""
                   "Direction click"
                   "  * the curve end nearest your click becomes START; a red"
@@ -359,7 +369,10 @@
       (setq crv (tutc:round crv lens))
       (tutc:say '(""
                   "STAGE 7 - repeating."
-                  "Answering Yes to the repeat prompt runs the next round"
+                  "After each curve CPERPPTS asks whether ITS overall width"
+                  "has changed - the same Grew/Shrank/New/Unchanged question"
+                  "the selected curve got, applied the same way - and then"
+                  "whether to repeat.  Answering Yes runs the next round"
                   "FROM THE NEWEST CURVE: fresh arc-length points along the"
                   "curve just built, offset perpendicular to ITS tangents -"
                   "here a uniform round of 12s.  Each round follows the"

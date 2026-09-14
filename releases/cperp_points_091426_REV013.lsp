@@ -38,30 +38,53 @@
 ;;;      Press Enter to reuse the previous length when it repeats, or
 ;;;      type B (Back) to step back and re-enter the previous point
 ;;;      (U, the old keyword, is still accepted).
-;;;   6. Choose whether to repeat on the new polyline.  If so, enter a
+;;;   6. Say whether the overall width of the curve just drawn has
+;;;      changed -- step 2's question, asked of the course this round
+;;;      built.  It is resized the same way, half the difference at
+;;;      each end, before anything is measured off it.
+;;;   7. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 5 with the new polyline as
 ;;;      the path.
-;;;   7. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   8. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what step 2 asks
-;;;   for -- never the developed length of the CURVE, which on anything
-;;;   bowed runs further than the width it spans.  Grew and Shrank take
-;;;   the difference, New takes the width itself, and Unchanged (the
-;;;   default, and Enter) leaves everything exactly as it was.
+;;;   distance straight across, end to end.  That is what steps 2 and 6
+;;;   ask for -- never the developed length of the CURVE, which on
+;;;   anything bowed runs further than the width it spans.  Grew and
+;;;   Shrank take the difference, New takes the width itself, and
+;;;   Unchanged (the default, and Enter) leaves everything exactly as it
+;;;   was.
 ;;;
-;;;   A new width is made true by scaling the selected curve about the
-;;;   midpoint of its two ends, so exactly half the difference lands at
-;;;   each end and the curve keeps its shape: an arc stays that arc,
-;;;   scaled.  The curve in the drawing is resized too, not just the
-;;;   numbers behind it -- the offsets and their dimensions are measured
-;;;   off it, so leaving it at the old width would put every base point
-;;;   somewhere the drawing says nothing is.  The base points and
-;;;   dimensions then follow the resized curve, since they are spaced
-;;;   along it after the resize.  The whole thing sits inside the
-;;;   command's undo group, so one U puts the width back.
+;;;   A new width is made true by scaling the curve about the midpoint
+;;;   of its two ends, so exactly half the difference lands at each end
+;;;   and the curve keeps its shape: an arc stays that arc, scaled.  The
+;;;   curve in the drawing is resized too, not just the numbers behind
+;;;   it -- the offsets and their dimensions are measured off it, so
+;;;   leaving it at the old width would put every base point somewhere
+;;;   the drawing says nothing is.  The base points and dimensions then
+;;;   follow the resized curve, since they are spaced along it after the
+;;;   resize.  The whole thing sits inside the command's undo group, so
+;;;   one U puts the width back.
+;;;
+;;;   Every curve gets that question, not just the one selected: each
+;;;   round draws the next course out, and a course is re-measured the
+;;;   same way the first one was.  A curve the routine draws is only
+;;;   ever as wide as the typed offsets add up to, so ends measured a
+;;;   little long or a little short leave it that much wide or narrow --
+;;;   and the next round spaces its base points along it and reads its
+;;;   tangents, which is the same reason step 2 resizes the selected
+;;;   curve rather than only remembering a number.  Step 6 asks after
+;;;   the polyline is drawn, because that is when there is a width to
+;;;   compare against, and before its dimensions are recorded: a round
+;;;   that corrects its width has its new points moved with the curve,
+;;;   so each dimension reads the distance the corrected drawing really
+;;;   has rather than the length that was typed into it.  A resize the
+;;;   drawing will not take stops step 2 -- nothing is drawn yet, so
+;;;   re-running costs a click -- but at step 6 it leaves the curve at
+;;;   the width it drew and says so, because whole rounds of typed
+;;;   lengths sit behind it.
 ;;;
 ;;; How the offset direction is found
 ;;;   Every round works from the NEWEST curve.  Round 1 offsets from the
@@ -70,7 +93,10 @@
 ;;;   newest curve, and its offset runs along the normal of the curve's
 ;;;   tangent underneath it -- so both the offset and its dimension read
 ;;;   perpendicular to the line the point actually sits on, and each
-;;;   round follows the shape its predecessor took.
+;;;   round follows the shape its predecessor took.  A round that
+;;;   corrects its width at step 6 is the one exception: the correction
+;;;   moves its new points along the resized curve, and that round's
+;;;   dimensions read the corrected drawing instead.
 ;;;
 ;;;   Which side is used is fixed once, from the direction click,
 ;;;   relative to the direction of travel (START -> FINISH), so every
@@ -81,7 +107,7 @@
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the curve they were offset from.
 ;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
-;;;     and use the dimension style picked in step 6 when the drawing
+;;;     and use the dimension style picked in step 8 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
@@ -110,7 +136,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.12")
+(setq *cperp-version* "v0.13")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -270,18 +296,20 @@
 ;; direction of travel and the offset side are left alone, and the shape
 ;; between the ends is carried along with it.
 
-;; Ask whether the overall width has changed.  Returns the width to work
-;; to, or nil when it has not -- so an unchanged answer skips the resize
-;; altogether and the command behaves exactly as it always did.  d is
-;; the width the drawing carries now.
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getdist/getpoint/getint hand a keyword back as
 ;; a string where a value would be a number or a list.
 (defun cperp:back-kw (v)
   (and (= (type v) 'STR) (member v '("Back" "Undo"))))
 
-(defun cperp:ask-width (d / kws ans v w out done)
-  (princ (strcat "\nOverall width, end to end: " (rtos d) "."))
+;; Ask whether the overall width has changed.  Returns the width to work
+;; to, or nil when it has not -- so an unchanged answer skips the resize
+;; altogether and the command behaves exactly as it always did.  d is
+;; the width the drawing carries now, and lbl heads the line that
+;; reports it: the question is asked of the selected curve AND of every
+;; curve a round draws, so it has to say which one it means.
+(defun cperp:ask-width (lbl d / kws ans v w out done)
+  (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" done nil out nil)
   ;; the amount is a second question, so Back at it re-asks the first
   ;; rather than abandoning the resize
@@ -291,7 +319,10 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
-    (if lzd:ask (lzd:ask "cperp:ask-width" ans))
+    ;; the label, not the helper name: one helper asks this of the
+    ;; selected object and of every line a round draws, and a report
+    ;; that cannot tell them apart cannot say which one died
+    (if lzd:ask (lzd:ask lbl ans))
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -334,6 +365,21 @@
                   (vlax-3d-point (trans ctr 1 0))
                   k)))
   (not (vl-catch-all-error-p r)))
+
+;; p scaled about ctr by k, in plan; z is carried through untouched
+(defun cperp:scale-pt (p ctr k)
+  (list (+ (car ctr)  (* k (- (car p)  (car ctr))))
+        (+ (cadr ctr) (* k (- (cadr p) (cadr ctr))))
+        (caddr p)))
+
+;; every point of pts scaled about ctr by k.  The selected curve is
+;; re-read from the drawing after a resize, but a curve a round draws
+;; has its points in hand -- they are what the dimensions are recorded
+;; from -- so they are scaled with it rather than measured off it again.
+(defun cperp:scale-pts (pts ctr k / out p)
+  (setq out '())
+  (foreach p pts (setq out (cons (cperp:scale-pt p ctr k) out)))
+  (reverse out))
 
 ;; --- command ---------------------------------------------------------
 
@@ -471,7 +517,7 @@
         ;; a plan projection with no width at all has nothing to
         ;; ask about; the direction click below is where that
         ;; gets reported
-        wNew (if (> wOld 1e-9) (cperp:ask-width wOld)))
+        wNew (if (> wOld 1e-9) (cperp:ask-width "Overall width" wOld)))
   (if wNew
     (progn
       (setq mid (list (/ (+ (car sp)  (car ep))  2.0)
@@ -712,9 +758,56 @@
     (foreach e guideEnts (cperp:kill e))
     (setq guideEnts nil)
 
+    ;; --- has the width of the curve just drawn changed? --------------
+    ;; Step 2's question, asked again of the curve this round built.  It
+    ;; is the next course out and it was re-measured too, and the typed
+    ;; offsets only reach the width they happen to add up to: a course
+    ;; whose ends were measured a little long or a little short comes
+    ;; out that much wide or narrow, and everything taken off it after
+    ;; -- this round's dimensions, and the base points of every round
+    ;; that follows -- would be measured off a width the wall does not
+    ;; have.  So it is resized here, before any of that: half the
+    ;; difference at each end, scaled about the midpoint of the two, the
+    ;; same correction and the same undo group as step 2.  Unchanged is
+    ;; the default and the Enter answer, which leaves the round exactly
+    ;; as it drew.
+    (setq tx   (- (car  (last newPts)) (car  (car newPts)))
+          ty   (- (cadr (last newPts)) (cadr (car newPts)))
+          wOld (sqrt (+ (* tx tx) (* ty ty)))
+          ;; ends that land on top of each other span no width, so there
+          ;; is nothing to ask about and nothing to scale about either
+          wNew (if (> wOld 1e-9)
+                 (cperp:ask-width "Overall width of the new curve" wOld)))
+    (if wNew
+      (progn
+        (setq mid (list (/ (+ (car  (car newPts)) (car  (last newPts))) 2.0)
+                        (/ (+ (cadr (car newPts)) (cadr (last newPts))) 2.0)
+                        (caddr (car newPts)))
+              fac (/ wNew wOld))
+        ;; A refused resize stops step 2 outright: nothing is drawn yet
+        ;; there, so re-running costs one click.  Here rounds of typed
+        ;; lengths sit behind it and not one dimension is written, so
+        ;; the curve is left at the width it drew and the drafter is
+        ;; told which width that is -- nothing is scaled, so the drawing
+        ;; and the numbers measured off it still agree.
+        (if (cperp:rescale curCrv mid fac)
+          (progn
+            (setq newPts (cperp:scale-pts newPts mid fac))
+            (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
+                           (rtos (/ (abs (- wNew wOld)) 2.0))
+                           (if (> wNew wOld) " added at" " taken off")
+                           " each end.")))
+          (princ (strcat "\nThe new curve could not be resized - it is"
+                         " most likely on a locked, frozen or switched-off"
+                         " layer.  It is left at the " (rtos wOld)
+                         " it was drawn, and the dimensions follow it.")))))
+
     ;; --- remember the dimensions to draw -----------------------------
     ;; each pair runs along the normal of the curve the base point sits
-    ;; on, so the dimension reads perpendicular to that curve
+    ;; on, so the dimension reads perpendicular to that curve -- until a
+    ;; width correction above moves the new points along the curve they
+    ;; landed on, and then each dimension reads the distance the
+    ;; corrected drawing really has
     (setq i 0)
     (while (< i (length newPts))
       (setq dimPairs (cons (list (nth i usedBases) (nth i newPts)) dimPairs)
