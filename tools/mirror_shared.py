@@ -220,6 +220,47 @@ TOOLS = {
         # every question in the chain tests for it by name
         'symbols': {'CST-BACK': 'CAL-BACK'},
     },
+    # Written against the library from the start (STANDARDS section 4's
+    # "a NEW tool starts there"), so the swap map is the whole of its
+    # helper layer: the vector set, the two angle helpers, ensure-layer,
+    # the ask trio and block-number.  What stays local is what the
+    # library has no answer for -- the segment walk over the perimeter,
+    # the mark record, the survey-point classifier (BPCALLOUT's and
+    # ABFIND's, which are not in the library either) and pm:askpoint,
+    # the pick-or-type prompt none of the tools before it needed.
+    'PERPMARK': {
+        'src': 'lisp/perpmark/PERPMARK.lsp',
+        'swap': {
+            'pm:2d': 'cal:2d', 'pm:v-': 'cal:v-', 'pm:v+': 'cal:v+',
+            'pm:v*': 'cal:v*', 'pm:dot': 'cal:dot', 'pm:perp': 'cal:perp',
+            'pm:vlen': 'cal:vlen', 'pm:unit': 'cal:unit',
+            'pm:angnorm': 'cal:angnorm', 'pm:tan': 'cal:tan',
+            'pm:ensure-layer': 'cal:ensure-layer',
+            'pm:block-number': 'cal:block-number',
+            'pm:askkw': 'cal:askkw', 'pm:askyn': 'cal:askyn',
+            'pm:askdist': 'cal:askdist',
+            'pm:syssave': 'cal:syssave',
+            'pm:sysrestore': 'cal:sysrestore',
+            'pm:undobegin': 'cal:undobegin',
+            'pm:undoend': 'cal:undoend',
+        },
+        'drop_globals': ['pm:*sysold*'],
+        # cal:syssave takes the sysvars as an argument where pm:syssave
+        # baked them in, so the list travels with the call and
+        # pm:sysvars stays behind to supply it
+        'expand': {
+            '(cal:syssave)': ['(cal:syssave (pm:sysvars))'],
+            # cal:block-number takes the attribute tag as an argument
+            # where pm:block-number read the knob itself
+            '(cal:block-number en)': ['(cal:block-number en pm:*pt-tag*)'],
+        },
+        # pm:askkw already takes the SHOWN bracket third, like the
+        # library's -- so no bracket translation is needed here
+        'askkw_hidden': False,
+        # ...but the two signal Back with different symbols, and every
+        # caller tests for it, so the sentinel moves with the helper
+        'symbols': {'PM-BACK': 'CAL-BACK'},
+    },
     'XYPLOT': {
         'src': 'lisp/xyplot/XYPLOT.lsp',
         'swap': {
@@ -1350,6 +1391,13 @@ TOOLS = {
     'dim_continue': {
         'src': 'lisp/dim_continue/dim_continue.lsp',
         'swap': {},
+        'drop_globals': [],
+    },
+    'DIMSTAMP': {
+        'src': 'lisp/dimstamp/DIMSTAMP.lsp',
+        'swap': {
+            'ds:ensure-layer': 'cal:ensure-layer',
+        },
         'drop_globals': [],
     },
     # One helper: the Back-word test, dash-named dd-back-word.

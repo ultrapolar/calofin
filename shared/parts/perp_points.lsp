@@ -20,6 +20,10 @@
 ;;; so all offsets accumulate in one consistent direction.  Repeat as
 ;;; many times as you like.
 ;;;
+;;; Every line the routine draws is offered the same width correction
+;;; the selected one is: a course comes out only as wide as the typed
+;;; offsets add up to, and the round after it measures along it.
+;;;
 ;;; Workflow
 ;;;   1. Select a LINE (a polyline is also accepted, so work started in
 ;;;      an earlier session can be resumed).
@@ -44,28 +48,36 @@
 ;;;      numbers are arcs -- "1 3-5" -- and leaves the rest straight.
 ;;;      The question is only asked once there are three points or
 ;;;      more, and the answer becomes the default for the next round.
-;;;   7. Choose whether to repeat on the new polyline.  If so, enter a
+;;;   7. Say whether the overall width of the line just drawn has
+;;;      changed -- step 2's question, asked of the course this round
+;;;      built.  It is resized the same way, half the difference at
+;;;      each end, before anything is measured off it.
+;;;   8. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 5 with the new polyline as
 ;;;      the path.
-;;;   8. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
 ;;; The offset side is fixed once from the direction click in step 3 and
 ;;; reused for every round, so all offsets stay on the same side of the
-;;; original line and every dimension stays perpendicular to it.
+;;; original line and every dimension stays perpendicular to it -- until
+;;; a round corrects its width at step 7, which moves its new points
+;;; along the resized line and leaves that round's dimensions reading
+;;; the corrected drawing instead.
 ;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what step 2 asks
-;;;   for -- never the developed length of the OBJECT, which on anything
-;;;   bowed runs further than the width it spans.  Grew and Shrank take
-;;;   the difference, New takes the width itself, and Unchanged (the
-;;;   default, and Enter) leaves everything exactly as it was.
+;;;   distance straight across, end to end.  That is what steps 2 and 7
+;;;   ask for -- never the developed length of the OBJECT, which on
+;;;   anything bowed runs further than the width it spans.  Grew and
+;;;   Shrank take the difference, New takes the width itself, and
+;;;   Unchanged (the default, and Enter) leaves everything exactly as it
+;;;   was.
 ;;;
-;;;   A new width is made true by scaling the selected object about the
-;;;   midpoint of its two ends, so exactly half the difference lands at
-;;;   each end and the shape between them is carried along.  The object
-;;;   in the drawing is resized too, not just the numbers behind it: the
+;;;   A new width is made true by scaling the object about the midpoint
+;;;   of its two ends, so exactly half the difference lands at each end
+;;;   and the shape between them is carried along.  The object in the
+;;;   drawing is resized too, not just the numbers behind it: the
 ;;;   offsets and their dimensions are measured off it, so leaving it at
 ;;;   the old width would put every base point somewhere the drawing
 ;;;   says nothing is.  The base points and dimensions then follow the
@@ -73,10 +85,27 @@
 ;;;   The whole thing sits inside the command's undo group, so one U
 ;;;   puts the width back.
 ;;;
+;;;   Every line gets that question, not just the one selected: each
+;;;   round draws the next course out, and a course is re-measured the
+;;;   same way the first one was.  A line the routine draws is only ever
+;;;   as wide as the typed offsets add up to, so ends measured a little
+;;;   long or a little short leave it that much wide or narrow -- and
+;;;   the next round spaces its base points along it, which is the same
+;;;   reason step 2 resizes the selected object rather than only
+;;;   remembering a number.  Step 7 asks after the polyline is drawn,
+;;;   because that is when there is a width to compare against, and
+;;;   before its dimensions are recorded: a round that corrects its
+;;;   width has its new points moved with the line, so each dimension
+;;;   reads the distance the corrected drawing really has rather than
+;;;   the length that was typed into it.  A resize the drawing will not
+;;;   take stops step 2 -- nothing is drawn yet, so re-running costs a
+;;;   click -- but at step 7 it leaves the line at the width it drew and
+;;;   says so, because whole rounds of typed lengths sit behind it.
+;;;
 ;;; Straight lines, arcs, or both
 ;;;   A measured wall is rarely all one or all the other: a radiused
 ;;;   stretch reads as an arc, a straight run reads as a line, and one
-;;;   profile often needs both -- which is why step 5 asks instead of
+;;;   profile often needs both -- which is why step 6 asks instead of
 ;;;   assuming.  An arc segment is a bulge written onto the same
 ;;;   LWPOLYLINE, so whatever the answer the round produces one
 ;;;   editable polyline through the measured points: never a spline and
@@ -94,7 +123,7 @@
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the object they were offset from.
 ;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
-;;;     and use the dimension style picked in step 6 when the drawing
+;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
@@ -117,7 +146,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.13")
+(setq *perp-version* "v0.14")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -434,9 +463,11 @@
 ;; Ask whether the overall width has changed.  Returns the width to work
 ;; to, or nil when it has not -- so an unchanged answer skips the resize
 ;; altogether and the command behaves exactly as it always did.  d is
-;; the width the drawing carries now.
-(defun perp:ask-width (d / kws ans v w out done)
-  (princ (strcat "\nOverall width, end to end: " (rtos d) "."))
+;; the width the drawing carries now, and lbl heads the line that
+;; reports it: the question is asked of the selected object AND of every
+;; line a round draws, so it has to say which one it means.
+(defun perp:ask-width (lbl d / kws ans v w out done)
+  (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" done nil out nil)
   ;; the amount is a second question, so Back at it re-asks the first
   ;; rather than abandoning the resize
@@ -446,7 +477,10 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
-    (if lzd:ask (lzd:ask "perp:ask-width" ans))
+    ;; the label, not the helper name: one helper asks this of the
+    ;; selected object and of every line a round draws, and a report
+    ;; that cannot tell them apart cannot say which one died
+    (if lzd:ask (lzd:ask lbl ans))
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -521,7 +555,7 @@
                     arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
                     path pathEnt n lastN basePts newPts guideEnts total
                     len lastLen i base np again ans iter p e seg
-                    join lastJoin kws nseg picks reply tangs
+                    join lastJoin kws nseg picks reply tangs plEnt
                     wOld wNew mid fac)
 
   ;; erase one temporary entity and forget it
@@ -638,7 +672,7 @@
         ;; a plan projection with no width at all has nothing to
         ;; ask about; the direction click below is where that
         ;; gets reported
-        wNew (if (> wOld 1e-9) (perp:ask-width wOld)))
+        wNew (if (> wOld 1e-9) (perp:ask-width "Overall width" wOld)))
   (if wNew
     (progn
       (setq mid (list (/ (+ (car p1)  (car p2))  2.0)
@@ -916,8 +950,9 @@
     ;; dimension still lands on the curve.
     (setq tangs (if (equal join "Straight") nil (perp:tangents newPts)))
     (if tangs (perp:arcs (entlast) newPts tangs picks))
+    (setq plEnt (entlast))
     ;; a round that drew arcs is the next round's curve to measure along
-    (setq pathEnt (if tangs (entlast)))
+    (setq pathEnt (if tangs plEnt))
     (princ (strcat "\nRound " (itoa iter) ": polyline drawn "
                    (cond ((equal join "Straight") "with straight segments")
                          ((equal join "Arcs")     "with arcs through the points")
@@ -929,11 +964,57 @@
     (foreach e guideEnts (perp:kill e))
     (setq guideEnts nil)
 
+    ;; --- has the width of the line just drawn changed? ---------------
+    ;; Step 2's question, asked again of the line this round built.  It
+    ;; is the next course out and it was re-measured too, and the typed
+    ;; offsets only reach the width they happen to add up to: a course
+    ;; whose ends were measured a little long or a little short comes
+    ;; out that much wide or narrow, and everything taken off it after
+    ;; -- this round's dimensions, and the base points of every round
+    ;; that follows -- would be measured off a width the wall does not
+    ;; have.  So it is resized here, before any of that: half the
+    ;; difference at each end, scaled about the midpoint of the two, the
+    ;; same correction and the same undo group as step 2.  Unchanged is
+    ;; the default and the Enter answer, which leaves the round exactly
+    ;; as it drew.
+    (setq dx   (- (car  (last newPts)) (car  (car newPts)))
+          dy   (- (cadr (last newPts)) (cadr (car newPts)))
+          wOld (sqrt (+ (* dx dx) (* dy dy)))
+          ;; ends that land on top of each other span no width, so there
+          ;; is nothing to ask about and nothing to scale about either
+          wNew (if (> wOld 1e-9)
+                 (perp:ask-width "Overall width of the new polyline" wOld)))
+    (if wNew
+      (progn
+        (setq mid (list (/ (+ (car  (car newPts)) (car  (last newPts))) 2.0)
+                        (/ (+ (cadr (car newPts)) (cadr (last newPts))) 2.0)
+                        (caddr (car newPts)))
+              fac (/ wNew wOld))
+        ;; A refused resize stops step 2 outright: nothing is drawn yet
+        ;; there, so re-running costs one click.  Here rounds of typed
+        ;; lengths sit behind it and not one dimension is written, so
+        ;; the line is left at the width it drew and the drafter is told
+        ;; which width that is -- nothing is scaled, so the drawing and
+        ;; the numbers measured off it still agree.
+        (if (perp:rescale plEnt mid fac)
+          (progn
+            (setq newPts (perp:scale-pts newPts mid fac))
+            (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
+                           (rtos (/ (abs (- wNew wOld)) 2.0))
+                           (if (> wNew wOld) " added at" " taken off")
+                           " each end.")))
+          (princ (strcat "\nThe new polyline could not be resized - it is"
+                         " most likely on a locked, frozen or switched-off"
+                         " layer.  It is left at the " (rtos wOld)
+                         " it was drawn, and the dimensions follow it.")))))
+
     ;; --- remember the dimensions to draw -----------------------------
     ;; np = base + len*(nx,ny), so each dimension runs along the fixed
     ;; normal, i.e. perpendicular to the ORIGINAL line, no matter which
-    ;; polyline `base` sits on.  They are drawn once at the end, after
-    ;; the dimension style has been chosen.
+    ;; polyline `base` sits on -- until a width correction above moves
+    ;; the new points along it, and then each dimension reads the
+    ;; distance the corrected drawing really has.  They are drawn once
+    ;; at the end, after the dimension style has been chosen.
     (setq i 0)
     (while (< i n)
       (setq dimPairs (cons (list (nth i basePts) (nth i newPts)) dimPairs)

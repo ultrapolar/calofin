@@ -79,7 +79,7 @@ at a different size:
 | `sf:*layer*` | `"SMART FILLET PREVIEW"` | Layer the previews are drawn on |
 | `sf:*color*` | `3` | The layer's colour, and the fallback index on every preview, so a preview reads as a preview even where a true colour cannot be shown |
 | `sf:*shade-lo*` | `'(190 255 190)` | RGB of the **smallest** preview… |
-| `sf:*shade-hi*` | `'(0 110 0)` | …and of the largest. The fan is graded between the two, so which arc a label belongs to is a matter of shade rather than of tracing it by eye. Both stay green on black; a light-background drawing wants the pair swapped round |
+| `sf:*shade-hi*` | `'(0 110 0)` | …and of the largest. The fan is graded between the two, so which arc a label belongs to is a matter of shade rather than of tracing it by eye. Both stay green on black; a light-background drawing wants the pair swapped round. Either one `nil` = no true colour at all, and the fan reads as the layer's own colour instead — `nil` is what every other knob here takes for *leave it to the drawing*, and this is the pair a drafter is told to touch |
 | `sf:*trans*` | `40` | Per cent transparency on every preview, so an arc crossing another still reads. `0` or `nil` = solid |
 | `sf:*ltype*` | `"DASHED"` | The **extras'** linetype, created at pool scale when the drawing has none by that name. The sixes are solid |
 | `sf:*ltscale*` | `0.25` | Per-arc linetype scale on those. The stock `DASHED` pattern is 18 units long, so a 6" fillet arc would come out as one unbroken dash. `nil` leaves the arcs at the drawing's own `LTSCALE` |
@@ -127,6 +127,23 @@ at a different size:
 * `OSMODE`, `CMDECHO`, `CLAYER`, `FILLETRAD`, `TRIMMODE` and the current
   dimension style are all put back the way they were, whether the run
   finishes, errors, or is cancelled with Esc.
+* **A command left waiting for input is cancelled.** `FILLET` does not
+  give up when it refuses a pick -- *"Radius is too large"*, two lines it
+  cannot join -- it asks AGAIN, and `DIMRADIUS` does the same with a
+  location it will not take. Left asking, it swallows whatever is sent
+  next as an answer, so the click that was meant to cut the corner took
+  the radius dimension, the style restore and the undo close down with
+  it and the run ended in an error where the rest of the corners should
+  have been. Both commands are now followed by a bounded cancel, the
+  idiom `AUTOBEAD` uses after its `OFFSET`s: a bare `(command)` cancels
+  where an Enter would only answer the prompt in front of it, and the
+  loop is bounded because one bit of `CMDACTIVE` means *a dialog is up*,
+  which no keystroke can clear.
+* **The undo group is closed only if one was opened.** With undo
+  recording off (`UNDOCTL` bit 1 clear) none is, and an `_End` on nothing
+  is an error of its own -- and it landed at the very end of the run,
+  with the corner already cut and the settings restore behind it never
+  reached.
 * Requires the Visual LISP engine, which ships with full AutoCAD.
   **AutoCAD LT has no LISP engine and cannot run this file.**
 

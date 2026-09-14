@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.7")
+(setq *xyplot-version* "v1.8")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -960,9 +960,16 @@
                 '())
               (princ "\n  View reset to plan (top).")
               ;; close the group before any ABHD handoff - the whole plot
-              ;; is one U, and ABHD grouped separately is ABHD's own U
-              (command "_.UNDO" "_End")
-              (setq undo-open nil)
+              ;; is one U, and ABHD grouped separately is ABHD's own U.
+              ;; Only a group this run opened, though: with undo
+              ;; recording off (UNDOCTL bit 1 clear) none was, and an
+              ;; _End on nothing is an error of its own -- landing here,
+              ;; with every graph already plotted and the report already
+              ;; written
+              (if undo-open
+                (progn
+                  (command "_.UNDO" "_End")
+                  (setq undo-open nil)))
               ;; ---- on to the pool perimeter ------------------------------
               (if (= "Yes" (cal:askkw
                              "Fit a pool perimeter through graph 1's points now?"
