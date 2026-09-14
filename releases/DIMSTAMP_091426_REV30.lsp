@@ -7,28 +7,40 @@
 ;;; Commands:  DIMSTAMP       stamp dimension text, click after click
 ;;;            DIMSTAMPVER    print the loaded version
 ;;;
-;;; Click a point and type the text once; it lands there as a TEXT
-;;; entity.  Beside it, a little vertical RULER appears -- a column of
-;;; nearby values, each drawn as a tick and a label, graded like a real
-;;; ruler: the near eighth-inch steps are the smallest text and the
-;;; shortest ticks, quarters and halves step up from there, and the
-;;; whole-inch jumps (1", 2", 3" either way) are the tallest and
-;;; boldest, exactly where the deepest mark on a tape measure would be.
-;;; A small CIRCLE rides the row that is the CURRENT value.
+;;; What it stamps is an MTEXT written the way this shop's dimension
+;;; text already is: the TEXT layer, the Attributes style, 6" high,
+;;; attached TOP LEFT at the point clicked, unwrapped, ByLayer colour,
+;;; no rotation.  Every one of those is a knob in the block below.
+;;;
+;;; Beside it, a little vertical RULER appears -- a column of nearby
+;;; values, each drawn as a tick and a label, graded like a real ruler:
+;;; the near eighth-inch steps are the smallest text and the shortest
+;;; ticks, quarters and halves step up from there, and the whole-inch
+;;; jumps (1", 2", 3" either way) are the tallest and boldest, exactly
+;;; where the deepest mark on a tape measure would be.  A small CIRCLE
+;;; rides the row that is the CURRENT value.
+;;;
+;;; The ruler is pinned to the SCREEN, not to the drawing: it is drawn
+;;; down a strip near the left of whatever the current view is showing
+;;; and sized as a fraction of that view, so it stays the same size and
+;;; in the same place whether the drawing is zoomed to a whole pool or
+;;; to one step.  It re-pins every time it redraws.  That strip is
+;;; reserved -- a click inside it picks a row, so stamps land outside
+;;; it; ds:*ruler-screen-x* moves it if it is ever in the way.
 ;;;
 ;;; From there, one prompt does three jobs:
-;;;   * click empty space           -- stamps the CURRENT text there,
-;;;                                    and the ruler follows the click;
+;;;   * click empty space           -- stamps the CURRENT text there;
 ;;;   * click a row on the ruler    -- adopts THAT row's value as the
 ;;;                                    new current text (nothing is
 ;;;                                    stamped yet; the ruler redraws
-;;;                                    in place, re-graded around it);
+;;;                                    re-graded around it);
 ;;;   * type something else         -- becomes the new current text,
 ;;;                                    the same way, once it parses.
 ;;; Enter ends the run.  The ruler is scratch, not drawing content: it
-;;; is erased and redrawn every time the current value changes, and
-;;; swept away for good when the command ends or is cancelled -- only
-;;; the TEXT it actually stamped is left behind.
+;;; lives on its own layer, is erased and redrawn every time the
+;;; current value changes, and is swept away for good when the command
+;;; ends or is cancelled -- only the MTEXT it actually stamped is left
+;;; behind.
 ;;;
 ;;; Every value is one of four forms, exactly -- nothing else parses:
 ;;;   34"                     whole inches
@@ -53,47 +65,61 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v2.0")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.0")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
 ;;; -------------------- tunables --------------------------------------
-(setq ds:*layer* "DIMENSION")       ; layer the stamped text (and the
-                                    ; scratch ruler) lands on -- the
-                                    ; same layer name ABFIND, CDCREATE
-                                    ; and CDCALLOUT use for their own
-                                    ; dimension text
-(setq ds:*layer-color* 7)          ; ACI colour the layer is CREATED
+
+;; -- what a stamp IS.  These are the MTEXT properties the shop's own
+;;    dimension text carries; change one and every later stamp takes it.
+(setq ds:*layer* "TEXT")            ; layer the stamped MTEXT lands on.
+                                    ; Created when the drawing lacks it;
+                                    ; thawed, unlocked and switched on
+                                    ; when it is there but unusable
+(setq ds:*layer-color* 7)          ; ACI colour that layer is CREATED
                                     ; with -- 7 is AutoCAD's own
                                     ; black-on-white/white-on-black
-                                    ; swap, so it reads on any screen
-                                    ; without a measured 'auto knob.  A
-                                    ; layer already in the drawing
-                                    ; keeps its own colour
-(setq ds:*text-hgt* 6.0)           ; TEXT height of a stamped value,
-                                    ; and of the ruler's own biggest
-                                    ; (jump-tier) row labels
-(setq ds:*ruler-gap* 24.0)         ; how far right of the anchor point
-                                    ; the ruler's spine sits
-(setq ds:*ruler-row-gap* 9.0)      ; vertical distance between one
-                                    ; ruler row and the next
-(setq ds:*ruler-ticklen* 4.0)      ; tick length for the tallest
-                                    ; (current/jump) rows; smaller
-                                    ; tiers scale it down
-(setq ds:*ruler-txt-gap* 2.0)      ; gap between a tick's outer end
-                                    ; and where its label starts
-(setq ds:*ruler-circle-r* 1.5)     ; radius of the circle marking the
-                                    ; current value's row
-(setq ds:*ruler-click-width* 70.0) ; how far right of the spine a
-                                    ; click still counts as picking a
-                                    ; row rather than an empty-space
-                                    ; stamp -- generous, since a label
-                                    ; is never measured for its real
-                                    ; width
-(setq ds:*ruler-hit-pad* 2.0)      ; how far LEFT of the spine still
-                                    ; counts too, so a click that lands
-                                    ; just shy of it is not read as
-                                    ; empty space
+                                    ; swap.  A layer already in the
+                                    ; drawing keeps its own colour, and
+                                    ; the stamp itself is ByLayer
+(setq ds:*style* "Attributes")      ; text style the stamp is written
+                                    ; in.  A drawing without it gets a
+                                    ; plain variable-height style of
+                                    ; that name made, and is told so
+(setq ds:*text-hgt* 6.0)           ; MTEXT height of a stamp
+(setq ds:*text-width* 0.0)         ; its defined (wrap) width; 0 is no
+                                    ; wrap at all, so a value can never
+                                    ; break across two lines
+(setq ds:*line-space* 1.0)         ; line space factor, at the "at
+                                    ; least" spacing style
+
+;; -- the ruler.  Scratch geometry, and pinned to the SCREEN: every
+;;    size below is a fraction of the current view, so the ruler looks
+;;    the same at any zoom.
+(setq ds:*ruler-layer* "DIMSTAMP RULER")  ; layer the scratch ruler is
+                                    ; drawn on -- its own, so the TEXT
+                                    ; layer never carries scratch
+(setq ds:*ruler-color* 3)          ; ACI colour of the ruler, on the
+                                    ; entities themselves so it reads
+                                    ; the same whatever its layer says
+(setq ds:*ruler-screen-x* 0.12)    ; where the spine sits across the
+                                    ; view: a fraction of the view's
+                                    ; WIDTH in from its left edge.
+                                    ; Raise it to move the ruler right,
+                                    ; out of the way of work at the
+                                    ; left of the screen
+(setq ds:*ruler-row-frac* 0.042)   ; one row's share of the view's
+                                    ; HEIGHT -- the ruler's whole size
+                                    ; knob.  Raise it for a bigger
+                                    ; ruler with fewer rows on screen
+(setq ds:*ruler-txt-frac* 0.5)     ; the biggest row label's height,
+                                    ; as a fraction of the row spacing
+(setq ds:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq ds:*ruler-reach* 6.0)        ; how far right of the spine, in row
+                                    ; spacings, a click still counts as
+                                    ; picking a row rather than as an
+                                    ; empty-space stamp
 
 ;;; -------------------- helpers ----------------------------------------
 
@@ -239,21 +265,39 @@
 ;; Ascending by value -- the comparator ds:draw-ruler sorts rows with.
 (defun ds:val-lt (a b) (< (car a) (car b)))
 
-;; TEXT height for a ruler row of this TIER.
-(defun ds:ruler-hgt (tier)
-  (cond
-    ((eq tier 'half) (* ds:*text-hgt* 0.8))
-    ((eq tier 'quarter) (* ds:*text-hgt* 0.65))
-    ((eq tier 'eighth) (* ds:*text-hgt* 0.5))
-    (T ds:*text-hgt*)))            ; 'current and 'jump
+;; What the screen is showing, as (LEFT BOTTOM WIDTH HEIGHT) in drawing
+;; units.  This is what pins the ruler to the same strip of screen at
+;; any zoom: VIEWSIZE is the view's height, and its width is that times
+;; the viewport's own aspect, which SCREENSIZE reports in pixels.
+(defun ds:view ( / ctr vh ss aspect vw)
+  (setq ctr (getvar "VIEWCTR")
+        vh  (getvar "VIEWSIZE")
+        ss  (getvar "SCREENSIZE"))
+  (setq aspect (if (and ss (listp ss) (numberp (car ss))
+                        (numberp (cadr ss)) (> (cadr ss) 0))
+                 (/ (float (car ss)) (float (cadr ss)))
+                 1.6))                    ; no viewport to measure
+  (setq vw (* vh aspect))
+  (list (- (car ctr) (/ vw 2.0)) (- (cadr ctr) (/ vh 2.0)) vw vh))
 
-;; Tick length for a ruler row of this TIER.
-(defun ds:ruler-tick (tier)
+;; Label height for a ruler row of this TIER, against a row spacing of
+;; GAP.
+(defun ds:ruler-hgt (tier gap / base)
+  (setq base (* gap ds:*ruler-txt-frac*))
   (cond
-    ((eq tier 'half) (* ds:*ruler-ticklen* 0.75))
-    ((eq tier 'quarter) (* ds:*ruler-ticklen* 0.55))
-    ((eq tier 'eighth) (* ds:*ruler-ticklen* 0.35))
-    (T ds:*ruler-ticklen*)))       ; 'current and 'jump
+    ((eq tier 'half) (* base 0.8))
+    ((eq tier 'quarter) (* base 0.65))
+    ((eq tier 'eighth) (* base 0.5))
+    (T base)))                     ; 'current and 'jump
+
+;; Tick length for a ruler row of this TIER, same measure.
+(defun ds:ruler-tick (tier gap / base)
+  (setq base (* gap ds:*ruler-tick-frac*))
+  (cond
+    ((eq tier 'half) (* base 0.75))
+    ((eq tier 'quarter) (* base 0.55))
+    ((eq tier 'eighth) (* base 0.35))
+    (T base)))                     ; 'current and 'jump
 
 ;; Create the output layer, or make sure it is on, thawed, unlocked.
 (defun ds:ensure-layer (name colour / rec ed flags col fixed)
@@ -282,89 +326,141 @@
                          " was off, frozen or locked - restored so the"
                          " result is visible.")))))))
 
-;; Write STR at PT.
-(defun ds:draw-text (pt str)
-  (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                  (cons 8 ds:*layer*) '(100 . "AcDbText")
+;; The text style the stamps are written in.  A drawing that already
+;; has it keeps its own font and settings, untouched; one that does not
+;; gets a plain variable-height style of that name, and is told -- an
+;; entmake naming a style the drawing has not got is refused outright,
+;; so the alternative is a click that silently draws nothing.
+(defun ds:ensure-style (name)
+  (if (not (tblsearch "STYLE" name))
+    (progn
+      (entmakex (list '(0 . "STYLE") '(100 . "AcDbSymbolTableRecord")
+                      '(100 . "AcDbTextStyleTableRecord")
+                      (cons 2 name) '(70 . 0)
+                      '(40 . 0.0)            ; variable height: the
+                                             ; entity's own governs
+                      '(41 . 1.0) '(50 . 0.0) '(71 . 0) '(42 . 2.5)
+                      '(3 . "txt") '(4 . "")))
+      (princ (strcat "\nDIMSTAMP: text style " name
+                     " was not in this drawing - a plain one was made"
+                     " so the stamps have a style to carry."))))
+  name)
+
+;; One MTEXT, written the way the shop's dimension text is: attached
+;; TOP LEFT at PT, the tool's own style, unwrapped, upright.  COL is
+;; an ACI number for the scratch ruler's own colour, or nil for
+;; ByLayer, which is what a real stamp takes.
+(defun ds:mtext (pt hgt str lay col / dxf)
+  (setq dxf (list '(0 . "MTEXT") '(100 . "AcDbEntity") (cons 8 lay)))
+  (if col (setq dxf (append dxf (list (cons 62 col)))))
+  (entmakex
+    (append dxf
+            (list '(100 . "AcDbMText")
                   (cons 10 (list (car pt) (cadr pt) 0.0))
-                  (cons 40 ds:*text-hgt*)
-                  (cons 1 str))))
+                  (cons 40 hgt)
+                  (cons 41 ds:*text-width*)   ; 0 = no wrap
+                  '(71 . 1)                   ; attachment: top left
+                  '(72 . 5)                   ; direction: by style
+                  (cons 1 str)
+                  (cons 7 ds:*style*)
+                  '(50 . 0.0)                 ; rotation
+                  '(73 . 1)                   ; line spacing: at least
+                  (cons 44 ds:*line-space*)))))
+
+;; Stamp STR at PT -- the drawing content this whole tool exists for.
+(defun ds:stamp (pt str)
+  (ds:mtext pt ds:*text-hgt* str ds:*layer* nil))
 
 ;; Erase every entity in ENTS -- how the scratch ruler is swept away,
 ;; before a redraw and for good when the run ends.
 (defun ds:erase-ents (ents / e)
   (foreach e ents (if (and e (entget e)) (entdel e))))
 
-;; Draw the ruler beside AP for the current value (TOTAL-EIGHTHS,
-;; HASFEET), one row per suggestion plus a circled CURRENT row among
-;; them.  Returns (ENTS SPX ROWS): the entities drawn (for
-;; ds:erase-ents), the ruler's spine X (for a click's X test), and
-;; ROWS as a list of (VALUE ROW-Y) pairs (for a click's Y test).
-(defun ds:draw-ruler (ap total-eighths hasfeet / rows n i row val tier y
-                          hgt tl spx ents lbl ty result)
-  (ds:ensure-layer ds:*layer* ds:*layer-color*)
+;; Draw the ruler down its strip of the CURRENT VIEW for the current
+;; value (TOTAL-EIGHTHS, HASFEET), one row per suggestion plus a
+;; circled CURRENT row among them, the whole thing centred vertically
+;; in the view.  Returns (ENTS BOX ROWS): the entities drawn (for
+;; ds:erase-ents), BOX as (XMIN XMAX YTOL) for a click's hit test, and
+;; ROWS as a list of (VALUE ROW-Y) pairs.
+(defun ds:draw-ruler (total-eighths hasfeet / rows n i row val tier y
+                          hgt tl spx ents lbl result view vx vy vw vh
+                          gap base)
+  (ds:ensure-layer ds:*ruler-layer* ds:*ruler-color*)
+  (ds:ensure-style ds:*style*)
   (setq rows (cons (list total-eighths 'current)
                    (ds:suggestions total-eighths hasfeet)))
   (setq rows (vl-sort rows 'ds:val-lt))
-  (setq n (length rows) i 0 ents nil result nil
-        spx (+ (car ap) ds:*ruler-gap*))
+  (setq view (ds:view)
+        vx   (car view)  vy (cadr view)
+        vw   (caddr view) vh (cadddr view))
+  (setq n    (length rows)
+        gap  (* vh ds:*ruler-row-frac*)
+        spx  (+ vx (* vw ds:*ruler-screen-x*))
+        ;; centred on the view's own middle, however many rows there are
+        base (- (+ vy (/ vh 2.0)) (* gap (/ (- n 1) 2.0)))
+        i    0
+        ents nil
+        result nil)
   (foreach row rows
     (setq val (car row) tier (cadr row))
-    (setq y (+ (cadr ap) (* i ds:*ruler-row-gap*)))
-    (setq hgt (ds:ruler-hgt tier))
-    (setq tl  (ds:ruler-tick tier))
+    (setq y (+ base (* i gap)))
+    (setq hgt (ds:ruler-hgt tier gap))
+    (setq tl  (ds:ruler-tick tier gap))
     (setq ents (cons
                 (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                                (cons 8 ds:*layer*) '(100 . "AcDbLine")
+                                (cons 8 ds:*ruler-layer*)
+                                (cons 62 ds:*ruler-color*)
+                                '(100 . "AcDbLine")
                                 (cons 10 (list spx y 0.0))
                                 (cons 11 (list (+ spx tl) y 0.0))))
                 ents))
     (setq lbl (ds:format val hasfeet))
-    (setq ty (- y (/ hgt 2.0)))
-    (setq ents (cons
-                (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                                (cons 8 ds:*layer*) '(100 . "AcDbText")
-                                (cons 10 (list (+ spx tl ds:*ruler-txt-gap*)
-                                              ty 0.0))
-                                (cons 40 hgt)
-                                (cons 1 lbl)))
-                ents))
+    ;; top-left attachment, so half a label's height above the tick
+    ;; puts the label astride its own row
+    (setq ents (cons (ds:mtext (list (+ spx tl (* gap 0.35))
+                                     (+ y (/ hgt 2.0)))
+                               hgt lbl ds:*ruler-layer* ds:*ruler-color*)
+                     ents))
     (if (eq tier 'current)
       (setq ents (cons
                   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                                  (cons 8 ds:*layer*) '(100 . "AcDbCircle")
+                                  (cons 8 ds:*ruler-layer*)
+                                  (cons 62 ds:*ruler-color*)
+                                  '(100 . "AcDbCircle")
                                   (cons 10 (list spx y 0.0))
-                                  (cons 40 ds:*ruler-circle-r*)))
+                                  (cons 40 (* gap 0.18))))
                   ents)))
     (setq result (cons (list val y) result))
     (setq i (1+ i)))
   (setq ents (cons
               (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                              (cons 8 ds:*layer*) '(100 . "AcDbLine")
-                              (cons 10 (list spx (cadr ap) 0.0))
-                              (cons 11 (list spx
-                                             (+ (cadr ap)
-                                                (* (1- n) ds:*ruler-row-gap*))
+                              (cons 8 ds:*ruler-layer*)
+                              (cons 62 ds:*ruler-color*)
+                              '(100 . "AcDbLine")
+                              (cons 10 (list spx base 0.0))
+                              (cons 11 (list spx (+ base (* (- n 1) gap))
                                              0.0))))
               ents))
-  (list ents spx (reverse result)))
+  (list ents
+        (list (- spx (/ gap 2.0)) (+ spx (* gap ds:*ruler-reach*))
+              (/ gap 2.0))
+        (reverse result)))
 
-;; Erase OLDENTS and draw a fresh ruler at AP for PARSED -- the
+;; Erase OLDENTS and draw a fresh ruler for PARSED -- the
 ;; (EIGHTHS HASFEET) pair ds:parse hands back.
-(defun ds:redraw-ruler (ap parsed oldents)
+(defun ds:redraw-ruler (parsed oldents)
   (ds:erase-ents oldents)
-  (ds:draw-ruler ap (car parsed) (cadr parsed)))
+  (ds:draw-ruler (car parsed) (cadr parsed)))
 
-;; The ruler row (if any) that PT lands on, close enough in Y to one
-;; of ROWS and within the ruler's column in X -- nil when PT is empty
+;; The ruler row (if any) that PT lands on: inside the ruler's strip in
+;; X, and close enough in Y to one of ROWS.  nil when PT is empty
 ;; space, meant as a stamp point instead.  Returns the row's VALUE.
-(defun ds:ruler-hit (pt spx rows / r best bd d)
+(defun ds:ruler-hit (pt box rows / r best bd d)
   (setq best nil bd nil)
-  (if (and spx (>= (car pt) (- spx ds:*ruler-hit-pad*))
-                (<= (car pt) (+ spx ds:*ruler-click-width*)))
+  (if (and box (>= (car pt) (car box)) (<= (car pt) (cadr box)))
     (foreach r rows
       (setq d (abs (- (cadr pt) (cadr r))))
-      (if (and (<= d (/ ds:*ruler-row-gap* 2.0)) (or (null bd) (< d bd)))
+      (if (and (<= d (caddr box)) (or (null bd) (< d bd)))
         (setq best (car r) bd d))))
   best)
 
@@ -389,10 +485,10 @@
 ;; The second-and-later prompt: one click or one typed line does every
 ;; job.  Returns nil for Enter (done), (adopt TEXT) for a new current
 ;; value picked off the ruler or typed fresh, or (stamp PT) for a
-;; point to stamp the CURRENT text at.  SPX and ROWS are the live
+;; point to stamp the CURRENT text at.  BOX and ROWS are the live
 ;; ruler's hit-test data from ds:draw-ruler/ds:redraw-ruler; HASFEET is
 ;; the current value's family, for formatting a ruler pick.
-(defun ds:next-action (spx rows hasfeet / pk hitval)
+(defun ds:next-action (box rows hasfeet / pk hitval)
   (initget 128)
   (setq pk (getpoint (strcat "\nClick to place text, click the ruler to"
                              " change it, or type new text (Enter when"
@@ -407,9 +503,9 @@
          (princ (strcat "\nDIMSTAMP: \"" pk "\" is not one of the four"
                         " forms (34\", 3'-4\", 34 1/2\", 3'- 4 1/2\") -"
                         " try again."))
-         (ds:next-action spx rows hasfeet))))
+         (ds:next-action box rows hasfeet))))
     (T
-     (setq hitval (ds:ruler-hit pk spx rows))
+     (setq hitval (ds:ruler-hit pk box rows))
      (if hitval
        (list 'adopt (ds:format hitval hasfeet))
        (list 'stamp pk)))))
@@ -419,8 +515,8 @@
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
-(defun c:DIMSTAMP (/ *error* undo-open pk lasttext count parsed anchor
-                    rulerents rulerx rulerrows action rr)
+(defun c:DIMSTAMP (/ *error* undo-open pk lasttext count parsed
+                    rulerents rulerbox rulerrows action rr)
   (defun *error* (msg)
     (ds:erase-ents rulerents)
     (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -445,22 +541,23 @@
     (progn
       (setq lasttext (ds:ask-first))
       (ds:ensure-layer ds:*layer* ds:*layer-color*)
-      (ds:draw-text pk lasttext)
-      (setq count 1 anchor pk parsed (ds:parse lasttext))
+      (ds:ensure-style ds:*style*)
+      (ds:stamp pk lasttext)
+      (setq count 1 parsed (ds:parse lasttext))
       (princ (strcat "\n  \"" lasttext "\" placed."))
-      (setq rr (ds:redraw-ruler anchor parsed rulerents)
-            rulerents (car rr) rulerx (cadr rr) rulerrows (caddr rr))
-      (while (setq action (ds:next-action rulerx rulerrows (cadr parsed)))
+      (setq rr (ds:redraw-ruler parsed rulerents)
+            rulerents (car rr) rulerbox (cadr rr) rulerrows (caddr rr))
+      (while (setq action (ds:next-action rulerbox rulerrows (cadr parsed)))
         (cond
           ((= (car action) 'stamp)
            (ds:ensure-layer ds:*layer* ds:*layer-color*)
-           (ds:draw-text (cadr action) lasttext)
-           (setq count (1+ count) anchor (cadr action))
+           (ds:stamp (cadr action) lasttext)
+           (setq count (1+ count))
            (princ (strcat "\n  \"" lasttext "\" placed.")))
           (T                                    ; 'adopt
            (setq lasttext (cadr action) parsed (ds:parse lasttext))))
-        (setq rr (ds:redraw-ruler anchor parsed rulerents)
-              rulerents (car rr) rulerx (cadr rr) rulerrows (caddr rr)))
+        (setq rr (ds:redraw-ruler parsed rulerents)
+              rulerents (car rr) rulerbox (cadr rr) rulerrows (caddr rr)))
       (ds:erase-ents rulerents)
       (setq rulerents nil)))
 

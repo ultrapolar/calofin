@@ -103,7 +103,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("DIMCHECK", "Dimension review", "Guided, one-at-a-time dimension review"),
         New Entry("DIMCONTEND", "Continue dim chains", "Chains a seed dimension out to every feature point"),
         New Entry("DIMSCAN", "Dimension scan", "Scan drawing for dimensions"),
-        New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text; a graded ruler picks the next value"),
+        New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch MTEXT; a graded on-screen ruler picks the next value"),
         New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
         New Entry("FITABHD", "Typed template fit", "Fits a typed pool template through surveyed points"),
         New Entry("FITABHDCOVER", "Typed template fit, no bottom", "FITABHD for a cover sheet - skips the bottom question"),
@@ -129,6 +129,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("LITELINFINSCAN", "Liner scan, no dims", "Liner rules only - skips the dimension audit"),
         New Entry("LITESPACHECKSCAN", "Spa scan, no dims", "Spa rules only - skips the dimension audit"),
         New Entry("LOBF", "Line of best fit", "Fits a construction line through points that should be on one line"),
+        New Entry("MOHAMADDLE", "Pads, pick a size", "PADDLE's perimeter pads with a size pick first - 24in or 36in"),
         New Entry("NORMIESTEP", "Normie step", "Normie step layout"),
         New Entry("OASIS", "Freeform pool", "Continuous-tangent pool drawn live from envelope and radii"),
         New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
@@ -188,6 +189,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("LINGUTTER", "Gut to perimeter, then pads", "Guts a highlighted area back to the pool, walking the outer face"),
             New Entry("LINGUTTERSCAN", "Gut scan, changes nothing", "LINGUTTER's report only - reads the drawing, changes nothing"),
             New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
+            New Entry("MOHAMADDLE", "Pads, pick a size", "PADDLE's perimeter pads with a size pick first - 24in or 36in"),
             New Entry("AUTOBEAD", "Bead offsets", "Offsets selected pool lines toward a clicked side"),
             New Entry("LAZSTEP", "Steps from a filled-in drawing", "Say how many steps, then fill in the drawing built for that count"),
             New Entry("CORNERSTP", "Corner step", "Corner step layout"),
@@ -225,7 +227,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"),
             New Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"),
             New Entry("BPCALLOUT", "Bad point callout", "Rings clicked bad points and writes the callout"),
-            New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text; a graded ruler picks the next value")
+            New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch MTEXT; a graded on-screen ruler picks the next value")
         }},
         {"Converters", {
             New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
@@ -284,10 +286,10 @@ Public NotInheritable Class CommandCatalog
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "SPACOVCREATE", "CUSTBLOCK", "AUTODIM", "SPACHECK", "DIMCHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMSCAN"})
         }),
         New Page("Rest", {
-            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP"})
+            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP", "MOHAMADDLE"})
         }),
         New Page("Layout", {
-            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "ABLOBF", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
+            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "ABLOBF", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "MOHAMADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
         }),
         New Page("Points", {
             New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "PERPMARK", "DRONE", "TYDRN", "TYLERDRONESUITE"})
