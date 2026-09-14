@@ -8,6 +8,30 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**The drone's altitude is not sea level.** `DDGPS` refused every
+low-lying site with `ALTITUDE DOES NOT MAKE SENSE` and a negative
+"photo altitude", and it was right about the number and wrong about
+what it meant: a DJI `AbsoluteAltitude` is the WGS84 ellipsoid height
+(or a barometric estimate seeded from it), which across the United
+States sits 50-115 ft BELOW mean sea level -- so a drone 100 ft over a
+Tampa deck records -12 ft, and "altitude minus ground" came out short
+by the same 50-115 ft everywhere else, silently. v1.2 trusted the XMP
+figure as sea level outright. `DDGPS` v1.3 reads the `RelativeAltitude`
+beside it -- barometric, above the take-off point, good to a foot or
+two -- asks the take-off-vs-deck offset as `DDALT` does (Enter = it
+took off from the deck), and never touches the elevation services for
+a file that has it; the ground-elevation route is kept for files with
+no `RelativeAltitude`, labelled rough, with the datum named in the
+failure. Three more things the audit turned up in the same file: the
+last-256-KB scan for PNGs that park their metadata after the image
+took `car` of a byte list it had already been handed and died on "bad
+argument type" (it had never once worked); an `SRATIONAL`
+`GPSAltitude` read as unsigned came out at 4,294,963 m; and the byte
+scanner's restart rule missed a pattern whose real start sat inside a
+false one. `tests/test_ddgps_runtime.py` drives the command end to end
+in the VM over synthetic DJI files -- the first runtime coverage
+`DDGPS` has had -- and `DDGPS` leaves `check_registry`'s UNTESTED list.
+
 **Which way the screen reads.** Every colour a tool draws in is an ACI
 number, and a number is only right against one background. ACI `8` was
 serving two OPPOSITE intents across thirteen tools: the review tools
