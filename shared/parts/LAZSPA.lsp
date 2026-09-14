@@ -83,7 +83,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.6")
+(setq *lazspa-version* "v1.7")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
