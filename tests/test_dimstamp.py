@@ -117,13 +117,50 @@ def test_parse_and_format_round_trip():
     print("ok  parse/format -> all four canonical forms round-trip")
 
 
-def test_rejects_malformed_text():
+def test_reads_the_lazy_spellings():
+    """Nobody types a dimension carefully twice.  The inch mark is
+    optional (or two apostrophes), the dash after the feet mark is
+    optional, inches may be decimal, a fraction may be spaced or
+    dashed -- and whatever comes in, the CANONICAL spelling comes
+    back out."""
     vm = newvm()
-    bad = ['34', "3'4\"", '34 1/0"', '"', 'abc"']
+    same = {
+        "4'- 4 1/2\"": ["4'4.5", "4'-4 1/2\"", "4' 4-1/2", "4'4 1/2",
+                        "4'-4.5\"", "  4'4.5  ", "4'4.50"],
+        "4'-4\"":      ["4'4", "4'-4\"", "4'4''"],
+        "4'-0\"":      ["4'"],
+        '44"':         ['44', '44"', "44''", '44.0'],
+        '44 1/2"':     ['44.5', '44 1/2', '44-1/2', '44 1/2"'],
+    }
+    for canon, spellings in same.items():
+        for s in spellings:
+            esc_s = s.replace('"', '\\"')
+            got = vm.loads(f'(ds:read "{esc_s}")')
+            assert got == canon, (s, got, canon)
+    # feet spelled means feet written; bare inches stay bare inches
+    assert vm.loads('(ds:read "52.5")') == '52 1/2"'
+    assert vm.loads("(ds:read \"4.5'\")") == "4'-6\""
+    print("ok  lazy input   -> 4'4.5, 4' 4-1/2, 44.5 and the rest all"
+          " read, canonically")
+
+
+def test_rounds_to_the_nearest_eighth():
+    vm = newvm()
+    assert vm.loads('(ds:read "44.6")') == '44 5/8"', 'nearest eighth'
+    assert vm.loads('(ds:read "44.05")') == '44"', 'nearest eighth'
+    assert vm.loads('(ds:read "44.44")') == '44 1/2"', 'nearest eighth'
+    print("ok  rounding     -> a decimal lands on the nearest eighth")
+
+
+def test_rejects_what_is_not_a_measurement():
+    vm = newvm()
+    bad = ['abc', '', '"', 'nope', "4'x", '44 1/0', '0', '0"', '-',
+           '4/', '1/2/3']
     for s in bad:
         esc_s = s.replace('"', '\\"')
         assert vm.loads(f'(ds:parse "{esc_s}")') is None, s
-    print("ok  reject       -> malformed text parses to nil")
+    print("ok  reject       -> text that is not a measurement parses to"
+          " nil, zero included")
 
 
 def test_tier_grading():
@@ -135,26 +172,28 @@ def test_tier_grading():
     print("ok  tier         -> eighth/quarter/half/jump graded by offset")
 
 
-def test_suggestions_bare_inches():
-    """34" suggests every eighth up to the next whole inch, one
-    direction -- the literal example in the spec -- each row tagged by
-    tier for the ruler to grade.  ds:suggestions itself is unsorted
-    (ds:draw-ruler sorts once it also has the current row to place),
-    so compare as a set."""
+def test_suggestions_span_an_inch_either_side():
+    """44" offers every eighth from 43" to 45" -- the inch BEFORE as
+    well as the inch after -- each row tagged by tier for the ruler to
+    grade.  ds:suggestions itself is unsorted (ds:draw-ruler sorts once
+    it also has the current row to place), so compare as a set."""
     vm = newvm()
-    sugg = vm.loads('(ds:suggestions 272 nil)')
-    rendered = {(vm.loads(f'(ds:format {v} nil)'), t) for v, t in sugg}
-    assert rendered == {
-        ('34 1/8"', 'eighth'), ('34 1/4"', 'quarter'), ('34 3/8"', 'eighth'),
-        ('34 1/2"', 'half'), ('34 5/8"', 'eighth'), ('34 3/4"', 'quarter'),
-        ('34 7/8"', 'eighth'), ('35"', 'jump')}, rendered
-    print("ok  suggest 34\"  -> eighths up to 35\", graded")
+    sugg = vm.loads('(ds:suggestions 352 nil)')       # 352 eighths = 44"
+    rendered = {vm.loads(f'(ds:format {v} nil)'): t for v, t in sugg}
+    assert len(rendered) == 16, rendered              # 8 each side
+    assert rendered['43"'] == 'jump' and rendered['45"'] == 'jump', rendered
+    assert rendered['43 1/2"'] == 'half', rendered
+    assert rendered['44 1/2"'] == 'half', rendered
+    assert rendered['43 7/8"'] == 'eighth', rendered
+    assert rendered['44 1/4"'] == 'quarter', rendered
+    assert '44"' not in rendered, rendered   # the current row, added by
+    print("ok  suggest 44\"  -> 43\" through 45\" by eighths, graded")   # the ruler
 
 
 def test_suggestions_feet_combine_quarter_and_eighth():
     """3'-4" -- feet involved -- gets BOTH quarter and eighth steps
-    together (told apart by tier, not by switching granularity), plus
-    the 1/2/3" jumps on each side."""
+    together (told apart by tier, not by switching granularity) for an
+    inch either side, plus the 2" and 3" jumps beyond that."""
     vm = newvm()
     sugg = vm.loads("(ds:suggestions 320 t)")
     assert len(sugg) == 20, sugg
@@ -162,11 +201,13 @@ def test_suggestions_feet_combine_quarter_and_eighth():
     assert rendered['3\'- 4 1/4"'] == 'quarter', rendered
     assert rendered['3\'- 4 1/8"'] == 'eighth', rendered
     assert rendered['3\'- 4 1/2"'] == 'half', rendered
-    assert rendered['3\'-5"'] == 'jump' and rendered['3\'-7"'] == 'jump', \
+    assert rendered['3\'- 3 1/8"'] == 'eighth', rendered   # the inch below
+    assert rendered['3\'-5"'] == 'jump' and rendered['3\'-3"'] == 'jump', \
         rendered
-    assert rendered['3\'-1"'] == 'jump', rendered
+    assert rendered['3\'-7"'] == 'jump', rendered          # +3"
+    assert rendered['3\'-1"'] == 'jump', rendered          # -3"
     print("ok  suggest 3'-4\" -> quarter AND eighth steps together, graded,"
-          " plus 1/2/3\" jumps")
+          " plus the 2\"/3\" jumps")
 
 
 def test_suggestions_never_go_non_positive():
@@ -233,12 +274,12 @@ def test_draw_ruler_geometry():
     """The ruler: a spine, one tick+label row per suggestion plus a
     circled CURRENT row, sizes graded by tier."""
     vm = newvm()
-    ents, box, rows = vm.loads('(ds:draw-ruler 272 nil)')
-    assert len(rows) == 9          # 8 suggestions + the current row
-    assert [v for v, y in rows] == list(range(272, 281)), rows
+    ents, box, rows = vm.loads('(ds:draw-ruler 352 nil)')   # 44"
+    assert len(rows) == 17         # 16 suggestions + the current row
+    assert [v for v, y in rows] == list(range(344, 361)), rows  # 43"-45"
     kinds = by_type(vm)
-    assert kinds['LINE'] == 10     # 9 ticks + 1 spine
-    assert kinds['MTEXT'] == 9     # one label per row
+    assert kinds['LINE'] == 18     # 17 ticks + 1 spine
+    assert kinds['MTEXT'] == 17    # one label per row
     assert kinds['CIRCLE'] == 1    # the current row, circled
     heights = sorted({d.get(40) for d in live_entities(vm)
                       if d.get(0) == 'MTEXT'})
@@ -255,11 +296,11 @@ def test_ruler_is_pinned_to_the_view_and_scales_with_it():
     """The ruler holds the same strip of SCREEN at any zoom: centred on
     the view, sized as a fraction of it.  Zoom in 5x and every measure
     comes in 5x smaller, around the new centre."""
-    _, wide_box, wide_rows = probe_ruler(272, False)
-    assert abs(wide_rows[4][1] - 0.0) < 1e-9, wide_rows   # view centre
+    _, wide_box, wide_rows = probe_ruler(352, False)
+    assert abs(wide_rows[8][1] - 0.0) < 1e-9, wide_rows   # view centre
     _, near_box, near_rows = probe_ruler(
-        272, False, VIEWSIZE=20.0, VIEWCTR=[500.0, 300.0, 0.0])
-    assert abs(near_rows[4][1] - 300.0) < 1e-9, near_rows
+        352, False, VIEWSIZE=20.0, VIEWCTR=[500.0, 300.0, 0.0])
+    assert abs(near_rows[8][1] - 300.0) < 1e-9, near_rows
     wide_span = wide_rows[-1][1] - wide_rows[0][1]
     near_span = near_rows[-1][1] - near_rows[0][1]
     assert abs(wide_span / near_span - 5.0) < 1e-9, (wide_span, near_span)
@@ -338,6 +379,28 @@ def test_typed_text_at_the_unified_prompt_is_adopted():
     print("ok  typed text   -> adopted the same way a ruler pick is")
 
 
+def test_a_lazy_answer_is_stamped_canonically_and_echoed():
+    """Type it lazily at either prompt and the CANONICAL spelling is
+    what lands in the drawing -- and the run says what it read, so a
+    mis-type is caught by eye."""
+    vm = newvm()
+    run(vm, [(0.0, 0.0), "4'4.5",    # lazy, at the first prompt
+             "52.5",                 # lazy again, at the unified one
+             FAR,
+             None], 'lazy')
+    t = stamps(vm)
+    assert [x[1] for x in t] == ["4'- 4 1/2\"", '52 1/2"'], t
+    said = [p for p in vm.printed if 'read as' in p]
+    assert len(said) == 2, said
+    assert "4'- 4 1/2\"" in said[0] and '52 1/2"' in said[1], said
+    # and a spelling that was ALREADY canonical says nothing extra
+    vm = newvm()
+    run(vm, [(0.0, 0.0), '34"', None], 'canonical already')
+    assert not any('read as' in p for p in vm.printed), vm.printed
+    print("ok  lazy answer  -> stamped canonically, and echoed as what it"
+          " was read as")
+
+
 def test_chained_adoption():
     """Whatever the last click or type landed on becomes what the
     following stamp uses, repeatedly."""
@@ -359,7 +422,7 @@ def test_reprompts_on_malformed_typed_text():
     run(vm, [(0.0, 0.0), 'not a measurement', '34"', None], 'bad first')
     t = stamps(vm)
     assert [x[1] for x in t] == ['34"'], t
-    assert any('is not one of the four forms' in p for p in vm.printed)
+    assert any('is not a measurement' in p for p in vm.printed)
 
     vm = newvm()
     run(vm, [(0.0, 0.0), '34"', 'nope', "3'-4\"", FAR, None],
@@ -458,9 +521,11 @@ def test_no_local_shadows_a_function():
 
 if __name__ == '__main__':
     test_parse_and_format_round_trip()
-    test_rejects_malformed_text()
+    test_reads_the_lazy_spellings()
+    test_rounds_to_the_nearest_eighth()
+    test_rejects_what_is_not_a_measurement()
     test_tier_grading()
-    test_suggestions_bare_inches()
+    test_suggestions_span_an_inch_either_side()
     test_suggestions_feet_combine_quarter_and_eighth()
     test_suggestions_never_go_non_positive()
     test_stamp_carries_the_shop_mtext_properties()
@@ -474,6 +539,7 @@ if __name__ == '__main__':
     test_click_a_ruler_row_adopts_without_stamping()
     test_a_click_just_off_the_ruler_stamps_instead()
     test_typed_text_at_the_unified_prompt_is_adopted()
+    test_a_lazy_answer_is_stamped_canonically_and_echoed()
     test_chained_adoption()
     test_reprompts_on_malformed_typed_text()
     test_no_clicks()

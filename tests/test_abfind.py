@@ -2542,6 +2542,82 @@ def test_the_ab_line_helpers_are_nil_safe():
     print("ok  every AB line helper answers on a drawing with no lines")
 
 
+# ---- the note on a created point ---------------------------------------
+# A point that was plotted rather than surveyed is not the same thing as
+# one the field sheet placed, so the sheet says which it is looking at -
+# the way it does for a point that moved.
+
+def test_a_created_point_is_noted_like_a_moved_one():
+    """Readings that crossed as they were written down are recorded as
+    they stand, on the same layer and at the same height as the note a
+    move leaves."""
+    vm = newvm()
+    survey(vm)
+    run(vm, 'c:ABPCREATE', [200.0, 180.0, '23', None], 'clean note')
+    notes = [d for _, d in live(vm, 'TEXT', 'FGStep')]
+    assert len(notes) == 1, notes
+    assert notes[0][1] == 'Created Pt.23 - A 16\'-8", B 15\'-0"', notes[0][1]
+    assert notes[0][40] == 6.0, notes[0]          # abf:*note-hgt*
+    # beside the point, the way BPCALLOUT tucks its callout
+    assert pt3(notes[0][10]) == pt3((P200[0] + 10.0, P200[1] - 10.0))
+    print("ok  a created point is noted on FGStep, beside itself")
+
+
+def test_the_note_says_which_tape_was_held_and_which_changed():
+    """The pair could not cross, so one reading was held and the other
+    changed to make it - which is the half worth writing out."""
+    vm = newvm()
+    survey(vm)
+    run(vm, 'c:ABPCREATE', [SHORT[0], SHORT[1], '7A', '23', None], 'held')
+    assert texts(vm, 'FGStep') == \
+        ['Created Pt.23 - B 8\'-4" held, A from 8\'-4" to 15\'-4"'], \
+        texts(vm, 'FGStep')
+    # the tape named as held is the one the tag does NOT name, and the
+    # reading it was held at is the one that was typed
+    got = sugs_for(vm, SHORT[0], SHORT[1])['7A']
+    assert got[1] == 'B' and got[2] == 'A', got[1:3]
+    print("ok  the note names the tape held, and the one from-and-to")
+
+
+def test_a_clean_round_after_a_changed_one_is_noted_clean():
+    """The candidate taken belongs to ONE pair of readings.  A later
+    round whose readings cross unaided must not be written up as though
+    a tape had been held for it."""
+    vm = newvm()
+    survey(vm)
+    run(vm, 'c:ABPCREATE',
+        [SHORT[0], SHORT[1], '7A', '23', 200.0, 180.0, '24', None],
+        'changed then clean')
+    assert texts(vm, 'FGStep') == \
+        ['Created Pt.23 - B 8\'-4" held, A from 8\'-4" to 15\'-4"',
+         'Created Pt.24 - A 16\'-8", B 15\'-0"'], texts(vm, 'FGStep')
+    print("ok  a clean round after a changed one is noted clean")
+
+
+def test_back_takes_the_created_note_with_the_round():
+    """The note is part of the round, so Back takes it away with the
+    point and its ties."""
+    vm = newvm()
+    survey(vm)
+    run(vm, 'c:ABPCREATE', [200.0, 180.0, '23', 'Back', None], 'back note')
+    assert texts(vm, 'FGStep') == [], texts(vm, 'FGStep')
+    assert len(live(vm, 'INSERT')) == 3, live(vm, 'INSERT')
+    print("ok  Back takes the created point's note away with the round")
+
+
+def test_abfind_and_abmove_note_the_points_they_create():
+    """The note belongs to the creation, not to the command that asked
+    for it."""
+    for cmd, script in (('c:ABFIND', ['23', 'Yes', 200.0, 180.0, '', None]),
+                        ('c:ABMOVE', ['23', 'Yes', 200.0, 180.0, ''])):
+        vm = newvm()
+        survey(vm)
+        run(vm, cmd, script, cmd + ' note')
+        assert texts(vm, 'FGStep') == \
+            ['Created Pt.23 - A 16\'-8", B 15\'-0"'], (cmd, texts(vm, 'FGStep'))
+    print("ok  ABFIND and ABMOVE note the points they create")
+
+
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
 
 if __name__ == '__main__':
