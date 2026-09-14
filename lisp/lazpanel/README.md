@@ -354,6 +354,21 @@ height is what stops a dialog opening at all. Both rows pack through the
 same `lzp:packrow`, so neither can be the one that forgets the width
 budget.
 
+**Hiding a tool.** Pin says "always show me this"; `LAZHIDE` (or
+`CALSET`, `Hidden`) says the opposite. It opens the same kind of
+checklist `LAZPIN` does -- every tool as a toggle -- and a ticked one
+stops appearing anywhere the panel shows itself: no grid button, no
+Pinned or Recent chip (even if it is still pinned or was just run --
+storage and display are separate, the same bargain a pinned tool
+already strikes against Recent), no Find hit, and it is no longer
+counted in the status line's total or in `LAZPANELVER`'s count. It is
+not deleted or disabled -- `lzp:has` and `lzp:launch` never look at the
+hidden list, so typing the name still runs it -- and `LAZHIDE` always
+offers the **whole** roster as toggles, so a hidden tool can always be
+found again and un-hidden. The list is stored under its own `Hidden`
+value beside `Pins` and `Recent` in the same registry key, though
+nothing on the VB palette side reads it yet.
+
 Clicking a button closes the panel and runs that command exactly as if
 its name had been typed -- the panel adds nothing in front of a tool and
 nothing behind it. A command that is not loaded in this session shows as
@@ -453,19 +468,21 @@ second file to ship, no support-path entry to add, and no DLL to
 `NETLOAD` -- unlike the VB.NET palette in `ui/`, which needs its
 assembly loaded on every machine.
 
-## The two commands that are not the panel
+## The commands that are not the panel
 
-`CALHELP` and `CALSET` live in this file because this is where their
-answers already were: the captions are here, and so were the only
-settings calofin keeps in the AutoCAD profile. Neither carries a
-panel button -- both are named in `NAMED_SATELLITES` in
-`tools/callib.py`, and a button that told you what buttons do would be
-a joke at the drafter's expense.
+`CALHELP`, `CALSET` and `LAZHIDE` live in this file because this is
+where their answers already were: the captions are here, so is the
+roster `LAZHIDE` edits, and so were the only settings calofin keeps in
+the AutoCAD profile. None carries a panel button -- all three are
+named in `NAMED_SATELLITES` in `tools/callib.py`; `LAZPIN` is there for
+the same reason, and a button that told you what buttons do (or which
+ones to hide) would be a joke at the drafter's expense.
 
 | Command | Answers |
 | --- | --- |
-| `CALHELP` | what a command IS, at the command line. Type any part of a name **or of its caption** -- the same search the Find page runs, so `survey` finds `ABHD` -- and it prints the matches with their captions; Enter lists every tool. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
-| `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
+| `CALHELP` | what a command IS, at the command line. Type any part of a name **or of its caption** -- the same search the Find page runs, so `survey` finds `ABHD` -- and it prints the matches with their captions; Enter lists every tool that is not hidden. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
+| `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it, plus a `Hidden` option that routes straight to `LAZHIDE`. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
+| `LAZHIDE` | opens the checklist of every tool, ticked to match what is currently hidden -- see "Hiding a tool" above. Accept stores the new list; Cancel re-reads the stored one, exactly as `LAZPIN`'s editor does |
 
 ## The icon follows the theme
 
@@ -484,8 +501,9 @@ came from.
 APPLOAD `LAZPANEL.lsp` on its own, or load `shared/LAZPASS.lsp`, which
 carries it along with every tool it lists. The button toolbar appears
 on load; type `LAZPANEL` to open the panel directly, or `LAZBUTTON` to
-re-summon the button, `LAZPIN` to choose the pinned tools, `CALHELP`
-to ask what a command does, or `CALSET` to see the settings.
+re-summon the button, `LAZPIN` to choose the pinned tools, `LAZHIDE` to
+choose which stay off the panel, `CALHELP` to ask what a command does,
+or `CALSET` to see the settings.
 
 ## Tunables
 
