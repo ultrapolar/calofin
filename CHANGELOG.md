@@ -8,6 +8,160 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**The text box was thirty times too small, so CLEARDIM did nothing.**
+v2.1.  A drawing came back with two `CROSS DIMENSIONS` diagonals
+printing on top of each other in the middle of a rectangle, and
+`CLEARDIM` had reported the sheet "6 already clear - left alone".
+
+The measurement was wrong, three times over, and the first one was
+fatal:
+
+* **A text style with a fixed height beats DIMTXT.**  A dimension style
+  is entitled to leave DIMTXT at its 0.18 DXF default and keep the real
+  height on the text style it points at through DIMTXSTY (group 340) --
+  and every style in that drawing did.  Reading DIMTXT alone made a
+  6-unit text measure 0.18.  Every box was a speck, nothing could
+  overlap anything, and the whole sheet was "clear".  The fixed height
+  is used exactly as it stands, DIMSCALE included: that drawing keeps
+  STANDARD at DIMSCALE 1.5 pointing at an 8-unit style, and the MTEXT
+  in the dimension's own block is 8.0 high, not 12.
+* **Markup is not letters.**  150 of the 152 MTEXTs in it carry
+  formatting, and counting `\A1;2{\H1.000000x;\S3/4;}"` as 26 glyphs
+  instead of about 4 does not err on the safe side -- it fills a sheet
+  with obstacles that are not there and leaves every dimension with
+  nowhere clear to go.  `%%d` codes, `\A;` `\H;` `\f;` `{}` markup,
+  the `\L` `\O` `\K` toggles and a stacked `\S1/2;` (as wide as its
+  longer half) are all read for what they DRAW now.  An MTEXT split
+  across group 3 chunks is measured whole rather than by its tail.
+* **A measurement is spelled the way its STYLE says**, off DIMLUNIT
+  (277) and DIMDEC (271), not the drawing's LUNITS and LUPREC.  That
+  drawing reads 1/8" off its styles and 1/16" off its header, and
+  `33'-3"` is half the width of `33'-2 15/16"`.  The text style's own
+  width factor is read too.
+
+Against that drawing's model space the answer is now four dimensions
+left alone and the two diagonals slid apart, which is the whole of what
+was wanted.  Every string the tool works out for those six dimensions
+matches the MTEXT in the dimension's own block character for character
+-- which is the check that says the units reading is right and not just
+different.  `tests/test_cleardim.py` is at 66, the last of them that
+drawing's own geometry, groups and all.
+
+**Every dimension has a track now, not just the straight ones.**
+`CLEARDIM` v2.0. v1.0 moved linear and aligned text and counted the
+other four families in the report as "on a track that is not a straight
+dimension line" -- true, and not much use to a drafter whose angular
+callout is the one sitting on a wall. All four have a track; none of
+them is a straight dimension line:
+
+| Family | Its track |
+| --- | --- |
+| angular, 2-line and 3-point | the dimension ARC, about the angle's vertex |
+| radius, diameter | the radial line it is measured along |
+| ordinate | the leader, along the axis it reads |
+
+The track is an abstraction now rather than a base point and a
+direction, and its parameter is a DISTANCE in every case -- an arc
+length round an arc rather than an angle. That is what lets
+`cd:*step-f*` and `cd:*reach-f*` go on meaning the same thing on a
+dimension arc as on a straight dimension line, instead of needing a
+second pair of knobs kept in step with the first. What "stays on its
+track" means differs by shape and is the same in substance: a linear
+text keeps its offset above the dimension line to the last decimal, an
+angular one keeps the RADIUS it rides at, and the box TURNS as it goes
+round, because text set along a dimension arc turns with it unless
+`DIMTIH` holds it upright.
+
+The vertex is the one thing that has to be right, and the two kinds of
+angular dimension keep it in different places: a 3-point one writes it
+into group 15 outright, while a 2-line one keeps no vertex at all -- it
+is where the two measured lines cross, on the INFINITE lines rather than
+the drawn segments. So it is checked before it is trusted: the sweep
+between the two rays IS the angle the dimension measures, and group 42
+is what it measured, so a vertex those two disagree about is refused and
+the dimension is left alone. A track guessed wrong does not move text
+along the dimension, it moves it OFF it, which is the one thing this
+tool exists not to do. Parallel lines, a missing leader end and a
+missing text point are refused the same way, and every refusal is
+counted in the report.
+
+The radius and diameter layouts are the repo's own: `AutoDim`'s
+`ad:raddimpts` already says a radius dimension puts the CENTRE in group
+10 and a point on the circle in 15, while a diameter writes the two ENDS
+of the diameter and has no centre of its own.
+
+The ordinate is the one family whose text does not travel alone. Its
+leader ends where the text is, so group 14 moves the same step and the
+feature point never moves; writing group 11 by itself would leave the
+text off the end of its own leader. Its preferred direction is simply
+further out, because a leader is made longer to get its text clear and
+never shorter back onto the work.
+
+Two families needed a floor putting under them, which the straight
+ones never did: an ordinate's text slid back past the point it is
+reading turns its leader round the other way, and a radius dimension's
+text on the far side of the centre is measuring from nowhere. A
+diameter's is welcome either side, which is what its centre being the
+MIDDLE of its two points means, and an arc needs no floor at all -- a
+text at a fixed radius can never reach the vertex.
+
+One bug found on the way in: a dimension's own ink was tagged to it by
+first element, which works for a dimension line and not for an arc --
+tagging only the first chord would have had every angular dimension
+fleeing the other thirty-one. What a text RIDES is its own list now,
+separate from what the dimension merely draws.
+
+`tests/test_cleardim.py` is at 66 and runs at both tiers.
+
+**Dimension text that is hard to read, slid until it is not.**
+`CLEARDIM` is new. A dimension's text has one track -- the dimension
+line it belongs to -- and moving along it is free: the dimension still
+measures what it measured and nothing about the drawing changes.
+Moving it OFF the line is not, so `CLEARDIM` never does; the
+across-the-track offset a text goes in with is the one it comes out
+with. Hard to read is anything under the letters -- another
+dimension's text, a wall line, a polyline edge, an arc, a circle, a
+`TEXT` or `MTEXT`, and the dimension lines and extension lines of the
+other dimensions in the sweep, plus its own extension lines, which
+cross its track at right angles. Its own dimension line is the one
+thing that is not ink, because AutoCAD breaks that around the text.
+
+The rule that decides who gives way is the one a drafter would use:
+**the one that is already good does not move.** Text that cannot move
+goes down first and keeps its spot; then text already clear of
+everything fixed keeps its spot too; only then is the text that is on
+something routed around all of it. Each pass runs in reading order, so
+two texts that are each clear of the drawing but not of each other come
+out the same way every run -- the first one read keeps its spot, the
+second slides -- and nothing moves that did not have to. A text that
+must move goes to the nearest clear spot, stepped outward and then
+bisected back so the move is the smallest one that works, trying the
+way back toward the middle of its own dimension line first. A text with
+nowhere clear inside `cd:*reach-f*` is left exactly where it was and
+named in the report: a text parked somewhere arbitrary is worse than
+one the drafter can still see sitting on a line.
+
+Angular, radius, diameter and ordinate dimensions are counted by kind
+and left alone -- their tracks are an arc, a radial line and a leader,
+not the straight dimension line this file knows how to walk -- and so
+is a dimension on a locked layer or with its text suppressed. All of
+them are still ink everything else has to clear. `CLEARDIMSCAN` is the
+same analysis with the writing left out, and the whole run is one undo
+group.
+
+**A created point says so on the sheet.** `ABPCREATE` plots a point the
+survey never placed, and until now the drawing could not tell one from
+a point the field sheet put there.  It gets the note a moved point
+gets, on the same layer -- `Created Pt.23 - A 16'-8", B 15'-0"` -- and
+where the two readings could not cross and one had to be changed to
+make them, the note carries that too: `Created Pt.23 - A 25'-0" held,
+B from 20'-10" to 27'-10"`, which is the half somebody will want to
+check back against the sheet.  Where it goes is not asked: ABMOVE asks
+about its own because that one sits at the spot the point came off,
+away from the point and beside a ring, and because ABMOVE settles one
+point and ends -- a created point's note has one place to be, and
+ABPCREATE is a loop.
+
 **The drone's altitude is not sea level.** `DDGPS` refused every
 low-lying site with `ALTITUDE DOES NOT MAKE SENSE` and a negative
 "photo altitude", and it was right about the number and wrong about

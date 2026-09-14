@@ -210,7 +210,29 @@
 ;;;   be inventing one (abf:*new-atts* keeps them for a drawing whose
 ;;;   second attribute really is the same on every point).
 ;;;
-;;;   Then its two ties are drawn, and it asks for the next pair.
+;;;   Then its two ties are drawn, a NOTE is written on
+;;   abf:*ring-layer* beside it, and it asks for the next pair.  The
+;;   note is the one a moved point gets, for the same reason: a point
+;;   that was plotted rather than surveyed is not the same thing as one
+;;   the field sheet placed, and a sheet that does not say so reads as
+;;   though the field measured it.
+;;
+;;       Created Pt.23 - A 16'-8", B 15'-0"
+;;
+;;   and, where the two readings could NOT cross and one of them had to
+;;   be changed to make them, the note says which was held and what the
+;;   other went from and to -- the half of it somebody will want to
+;;   check back against the sheet:
+;;
+;;       Created Pt.23 - A 25'-0" held, B from 20'-10" to 27'-10"
+;;
+;;   Where it goes is not asked.  ABMOVE asks where to put its own
+;;   because that one belongs at the spot the point came OFF, away from
+;;   the point itself and next to a ring, and because ABMOVE settles one
+;;   point and ends -- so the question is put once.  A created point's
+;;   note has one place to be, beside the point, and ABPCREATE is a
+;;   LOOP: a question per point is a question per point.  It is ordinary
+;;   TEXT and moves like any other.
 ;;;
 ;;; AND WHEN A LOOKUP FINDS NOTHING.  A number typed at ABFIND or
 ;;; ABMOVE that names no point used to be reported and re-asked, full
@@ -370,7 +392,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.16")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.17")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -1484,6 +1506,29 @@
                  (cons 40 abf:*note-hgt*) (cons 1 str)))
   (entlast))
 
+;; What a CREATED point's note says.  A point that was plotted rather
+;; than surveyed is not the same thing as one the field sheet placed,
+;; and the sheet should say which it is looking at - so every created
+;; point gets the note, the way every moved one does.
+;;
+;; Two of them, because there are two ways to get here.  A pair of
+;; readings that crossed as they were written down is recorded as it
+;; stands.  A pair that could NOT cross had one reading held and the
+;; other changed to make it, and that is the one worth writing out: the
+;; note names the tape that was held, at what, and the one that moved,
+;; from the reading on the sheet to the reading used.  SUG is the
+;; candidate that was taken, or nil when the two crossed unaided.
+(defun abf:new-note-text (nm ra rb sug)
+  (strcat "Created Pt." nm " - "
+          (if sug
+            (strcat (cadr sug) " "
+                    (abf:fmt (if (= (cadr sug) abf:*a-name*) ra rb))
+                    " held, " (caddr sug) " from "
+                    (abf:fmt (cadddr sug)) " to "
+                    (abf:fmt (nth 4 sug)))
+            (strcat abf:*a-name* " " (abf:fmt ra) ", "
+                    abf:*b-name* " " (abf:fmt rb)))))
+
 ;; Where the note goes when it is not placed by hand: beside the ring,
 ;; clear of it, the way BPCALLOUT tucks its callout.
 (defun abf:note-spot (ctr)
@@ -2222,7 +2267,8 @@
     ((= (car r) "DIM") (abf:drop (cadr r)))
     ((= (car r) "NEW")
      (abf:drop (cadr r))                   ; the ties to the new point
-     (abf:drop (caddr r)))                 ; and the point itself
+     (abf:drop (caddr r))                  ; the point itself
+     (abf:drop (list (cadddr r))))         ; and the note that says so
     (t
      (abf:drop (caddr r))                  ; the dims to where it moved
      (abf:drop (cadddr r))                 ; the moved point
@@ -3100,8 +3146,13 @@
              ((= stage 9)
               (abf:drop temps)
               (abf:ensure-layer abf:*sug-layer* abf:*sug-color*)
+              ;; sug belongs to ONE attempt at ONE pair of readings:
+              ;; a round that comes back here has new readings, so a
+              ;; candidate chosen for the old pair must not still be
+              ;; standing when the note is written
               (setq why   (abf:reach pa pb ra rb)
                     sugs  nil
+                    sug   nil
                     spots nil
                     temps (append (abf:ghost pa ra) (abf:ghost pb rb)))
               (if (null why)
@@ -3225,8 +3276,22 @@
                  (abf:drop temps)
                  (setq temps nil)
                  (abf:ensure-layer abf:*point-layer* abf:*point-color*)
+                 (abf:ensure-layer abf:*ring-layer* 1)
+                 ;; the note goes beside the point, unasked.  ABMOVE
+                 ;; asks where to put its own because that one belongs
+                 ;; at the spot the point came OFF - away from the point
+                 ;; itself, next to a ring, in whatever the drafter was
+                 ;; already drawing there - and because ABMOVE settles
+                 ;; one point and ends, so the question is asked once.
+                 ;; A created point's note has one place to be, beside
+                 ;; the point, and ABPCREATE is a LOOP: a question per
+                 ;; point is a question per point.  It is ordinary TEXT
+                 ;; on abf:*ring-layer* and moves like any other
                  (setq tmpl  (abf:template newpt cands pa pb)
                        pents (abf:new-point tmpl newpt newnm)
+                       note  (abf:note (abf:note-spot newpt)
+                                       (abf:new-note-text
+                                         newnm ra rb sug))
                        pair  (abf:dim-pair pa pb newpt havestyle)
                        made  (1+ made)
                        built (1+ built)
@@ -3238,7 +3303,8 @@
                                 (abf:fmt (abf:dist pa newpt)) "   "
                                 abf:*b-name* " "
                                 (abf:fmt (abf:dist pb newpt))
-                                "  dimensioned."))
+                                "  dimensioned, and noted on "
+                                abf:*ring-layer* "."))
                  (princ
                    (if tmpl
                      (strcat "\n  Built like the survey point nearest"
@@ -3257,7 +3323,7 @@
                                     " readings put it - run " cmd
                                     " again to move it."))
                      (setq done T))
-                   (setq hist    (cons (list "NEW" pair pents) hist)
+                   (setq hist    (cons (list "NEW" pair pents note) hist)
                          newnm   nil
                          fromfind nil
                          createp (eq mode 'CREATE)

@@ -1567,6 +1567,47 @@ TOOLS = {
                 ['(cal:block-number en bp:*pt-tag*)'],
         },
     },
+    # Written against the library from the start, so the swap is a
+    # straight rename: the 2-D vector set, the two angle helpers the
+    # dimension arc is walked with, cal:plural (whose number-first shape
+    # the report was worded around rather than the other way up), and
+    # the sysvar pair.  cd:sysvars stays behind to supply the list
+    # cal:syssave takes as an argument -- which is why there is no
+    # expand rule here where PERPMARK needs one.  cd:on-track,
+    # cd:layer-locked-p and the whole separating-axis kit are this
+    # tool's own: the library has no convex-polygon overlap test, and
+    # cal:layer-usable-p asks a different question (frozen and off as
+    # well as locked, which is not what entmod refuses).
+    'CLEARDIM': {
+        'src': 'lisp/cleardim/CLEARDIM.lsp',
+        'swap': {
+            'cd:2d': 'cal:2d', 'cd:v-': 'cal:v-', 'cd:v+': 'cal:v+',
+            'cd:v*': 'cal:v*', 'cd:dot': 'cal:dot', 'cd:perp': 'cal:perp',
+            'cd:vlen': 'cal:vlen', 'cd:unit': 'cal:unit',
+            'cd:mid': 'cal:mid',
+            'cd:angnorm': 'cal:angnorm',
+            'cd:signed-dang': 'cal:signed-dang',
+            'cd:plural': 'cal:plural',
+            'cd:syssave': 'cal:syssave',
+            'cd:sysrestore': 'cal:sysrestore',
+        },
+        'drop_globals': [],
+        # the heading over a section the swap empties: what is left under
+        # it is the one helper that is about a dimension rather than a
+        # vector, and "strictly 2-element results" was describing the
+        # nine the library now supplies
+        'replace': [(
+            ";;; -------------------- 2-D vector helpers ---------------"
+            "--------------\n"
+            ";;; Strictly 2-element results; inputs may be 2- or "
+            "3-element.\n",
+            ";;; -------------------- 2-D vector helpers ---------------"
+            "--------------\n"
+            ";;; The set itself is CALOFIN-LIB.lsp's, under cal:.  What is"
+            " left\n"
+            ";;; here is the one that is about a dimension rather than a"
+            " vector.\n")],
+    },
 }
 
 def expand_calls(src, table):
