@@ -1352,6 +1352,13 @@ TOOLS = {
         'swap': {},
         'drop_globals': [],
     },
+    'DIMSTAMP': {
+        'src': 'lisp/dimstamp/DIMSTAMP.lsp',
+        'swap': {
+            'ds:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
     # One helper: the Back-word test, dash-named dd-back-word.
     # [verified: byte-identical except the legacy banner vs the twin on disk]
     'DroneDistortion': {

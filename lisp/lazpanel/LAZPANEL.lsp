@@ -106,7 +106,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.22")
+(setq *lazpanel-version* "v3.23")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -279,6 +279,7 @@
     ("DIMCHECK"         "Dimension review")
     ("DIMCONTEND"       "Continue dim chains")
     ("DIMSCAN"          "Dimension scan")
+    ("DIMSTAMP"         "Stamp dimension text")
     ("DRONE"            "Drone cleanup")
     ("FITABHD"          "Typed template fit")
     ("FITABHDCOVER"     "Typed template fit, no bottom")
@@ -509,6 +510,7 @@
       "LAZDIAG"
       "LOBF"
       "ABLOBF"
+      "DIMSTAMP"
       )
     )
      ("Layout"
@@ -576,6 +578,7 @@
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
+      "DIMSTAMP"
       )
     )
      ("Converters"

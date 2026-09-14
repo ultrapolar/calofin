@@ -64,6 +64,9 @@ lisp/dimcheck/dimcheck.lsp|dchk:review-olap|\n Flag to fix, or Leave as is? [Fla
 lisp/dimcheck/dimcheck.lsp|dchk:review-olap|\n Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>:|first question about one reviewed item
 lisp/dimcheck/dimcheck.lsp|dchk:tut-demo|\n Pick an empty spot for the practice drawing:|demo / tutorial
 lisp/dimcheck/dimcheck.lsp|dchk:tut-pause|\n --- press Enter to continue ---|demo / tutorial
+lisp/dimstamp/DIMSTAMP.lsp|c:DIMSTAMP|\nClick a point to place text (Enter when done):|the run's own click loop - Enter ends it; undoing a stamp already placed is AutoCAD's own U, not a Back this prompt offers
+lisp/dimstamp/DIMSTAMP.lsp|ds:ask-next|\nText [ ] <repeat \" \">:|follows a stamp already placed by this same run - past committed geometry
+lisp/dimstamp/DIMSTAMP.lsp|ds:ask-raw||helper: its callers ask it as the run's first question, or as New's own one-shot follow-up
 lisp/drone_height/DroneDistortion.lsp|c:DDCAL|\nApparent (traced) size in the drawing - type it or pick 2 points:|first of DDCAL's three; the other two back into it
 lisp/drone_height/DroneDistortion.lsp|c:DDSET|\nDrone height ABOVE THE DECK, in FEET < > :|DDSET's only question
 lisp/drone_height/DroneHeightGPS.lsp|c:DDELEV|\nLatitude (decimal degrees, negative = South):|first of DDELEV's two; the longitude backs into it
@@ -118,8 +121,8 @@ lisp/spa/TUTORIALSPA.LSP|c:TUTORIALSPA|\nShow me [Checks/Demo/Both] <Both>:|demo
 lisp/spa/TUTORIALSPA.LSP|tut:demo|\nWhere shall the demo go <0,0>:|demo / tutorial
 lisp/spa/TUTORIALSPA.LSP|tut:pause|\n [Enter to carry on, X to stop]|demo / tutorial
 lisp/spa/TUTORIALSPA.LSP|tut:sheet|\nPoint for the reference sheet <skip>:|demo / tutorial
-lisp/spacheck/SPACHECK.lsp|spachk:demo-say|\n (Enter to go on)|demo / tutorial
 lisp/spacheck/SPACHECK.lsp|spachk:demo|\nPick an empty spot for the practice drawing:|demo / tutorial
+lisp/spacheck/SPACHECK.lsp|spachk:demo-say|\n (Enter to go on)|demo / tutorial
 lisp/standards_checker/src/acady-ui.lsp|acady-ui-highlight|\nPress Enter to return to results...|pause
 lisp/standards_checker/src/acady-ui.lsp|acady-ui-zoom|\nPress Enter to return to results...|pause
 lisp/stockcover/STOCKCOVER.lsp|c:STOCKCOVER|\nStock drawing name < > :|first of its own chain - the which-one pick backs into it
