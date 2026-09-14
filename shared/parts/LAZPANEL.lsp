@@ -109,7 +109,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.26")
+(setq *lazpanel-version* "v3.27")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -289,6 +289,8 @@
     ("CDCALLOUT"        "Point-to-point cross dims")
     ("CDCREATE"         "Lines to cross dims")
     ("CHECK"            "Drawing check")
+    ("CLEARDIM"         "Clear crowded dim text")
+    ("CLEARDIMSCAN"     "Crowded dim text scan")
     ("CONSTELLATION"    "Points from cross dims")
     ("CORNERSTP"        "Corner step")
     ("COVERCHECK"       "Cover review")
@@ -555,6 +557,8 @@
       "LOBF"
       "ABLOBF"
       "DIMSTAMP"
+      "CLEARDIM"
+      "CLEARDIMSCAN"
       )
     )
      ("Layout"
@@ -624,6 +628,8 @@
       "CDCALLOUT"
       "BPCALLOUT"
       "DIMSTAMP"
+      "CLEARDIM"
+      "CLEARDIMSCAN"
       )
     )
      ("Converters"

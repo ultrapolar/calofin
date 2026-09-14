@@ -30,6 +30,8 @@ CCPRECHECK        Walks the Tech Flow Chart decision tree
 CDCALLOUT         Cross-dimensions from Pt.## to Pt.## by typed number
 CDCREATE          Turns every highlighted line into a cross dimension
 CHECK             General drawing check
+CLEARDIM          Slides dimension text along its own dimension line until it is readable
+CLEARDIMSCAN      Names the dimension text CLEARDIM would move, and moves nothing
 CONSTELLATION     Places points from the distances between them, inside a known box
 CORNERSTP         Corner step layout
 COVERCHECK        Cover check

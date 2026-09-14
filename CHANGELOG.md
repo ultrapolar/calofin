@@ -8,6 +8,42 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**Dimension text that is hard to read, slid until it is not.**
+`CLEARDIM` is new. A dimension's text has one track -- the dimension
+line it belongs to -- and moving along it is free: the dimension still
+measures what it measured and nothing about the drawing changes.
+Moving it OFF the line is not, so `CLEARDIM` never does; the
+across-the-track offset a text goes in with is the one it comes out
+with. Hard to read is anything under the letters -- another
+dimension's text, a wall line, a polyline edge, an arc, a circle, a
+`TEXT` or `MTEXT`, and the dimension lines and extension lines of the
+other dimensions in the sweep, plus its own extension lines, which
+cross its track at right angles. Its own dimension line is the one
+thing that is not ink, because AutoCAD breaks that around the text.
+
+The rule that decides who gives way is the one a drafter would use:
+**the one that is already good does not move.** Text that cannot move
+goes down first and keeps its spot; then text already clear of
+everything fixed keeps its spot too; only then is the text that is on
+something routed around all of it. Each pass runs in reading order, so
+two texts that are each clear of the drawing but not of each other come
+out the same way every run -- the first one read keeps its spot, the
+second slides -- and nothing moves that did not have to. A text that
+must move goes to the nearest clear spot, stepped outward and then
+bisected back so the move is the smallest one that works, trying the
+way back toward the middle of its own dimension line first. A text with
+nowhere clear inside `cd:*reach-f*` is left exactly where it was and
+named in the report: a text parked somewhere arbitrary is worse than
+one the drafter can still see sitting on a line.
+
+Angular, radius, diameter and ordinate dimensions are counted by kind
+and left alone -- their tracks are an arc, a radial line and a leader,
+not the straight dimension line this file knows how to walk -- and so
+is a dimension on a locked layer or with its text suppressed. All of
+them are still ink everything else has to clear. `CLEARDIMSCAN` is the
+same analysis with the writing left out, and the whole run is one undo
+group.
+
 **The drone's altitude is not sea level.** `DDGPS` refused every
 low-lying site with `ALTITUDE DOES NOT MAKE SENSE` and a negative
 "photo altitude", and it was right about the number and wrong about

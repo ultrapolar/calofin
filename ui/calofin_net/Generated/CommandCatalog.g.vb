@@ -93,6 +93,8 @@ Public NotInheritable Class CommandCatalog
         New Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"),
         New Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"),
         New Entry("CHECK", "Drawing check", "General drawing check"),
+        New Entry("CLEARDIM", "Clear crowded dim text", "Slides dimension text along its own dimension line until it is readable"),
+        New Entry("CLEARDIMSCAN", "Crowded dim text scan", "Names the dimension text CLEARDIM would move, and moves nothing"),
         New Entry("CONSTELLATION", "Points from cross dims", "Places points from the distances between them, inside a known box"),
         New Entry("CORNERSTP", "Corner step", "Corner step layout"),
         New Entry("COVERCHECK", "Cover review", "Cover check"),
@@ -225,7 +227,9 @@ Public NotInheritable Class CommandCatalog
             New Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"),
             New Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"),
             New Entry("BPCALLOUT", "Bad point callout", "Rings clicked bad points and writes the callout"),
-            New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text; a graded ruler picks the next value")
+            New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text; a graded ruler picks the next value"),
+            New Entry("CLEARDIM", "Clear crowded dim text", "Slides dimension text along its own dimension line until it is readable"),
+            New Entry("CLEARDIMSCAN", "Crowded dim text scan", "Names the dimension text CLEARDIM would move, and moves nothing")
         }},
         {"Converters", {
             New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
@@ -284,7 +288,7 @@ Public NotInheritable Class CommandCatalog
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "SPACOVCREATE", "CUSTBLOCK", "AUTODIM", "SPACHECK", "DIMCHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMSCAN"})
         }),
         New Page("Rest", {
-            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP"})
+            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP", "CLEARDIM", "CLEARDIMSCAN"})
         }),
         New Page("Layout", {
             New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "ABLOBF", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
@@ -293,7 +297,7 @@ Public NotInheritable Class CommandCatalog
             New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "PERPMARK", "DRONE", "TYDRN", "TYLERDRONESUITE"})
         }),
         New Page("Dimensions", {
-            New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT", "DIMSTAMP"})
+            New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT", "DIMSTAMP", "CLEARDIM", "CLEARDIMSCAN"})
         }),
         New Page("Converters", {
             New Column("", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"})
