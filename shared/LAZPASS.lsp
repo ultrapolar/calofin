@@ -38174,7 +38174,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.1")
+(setq *lobf-version* "v1.2")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -38390,8 +38390,11 @@
               syy (+ syy (* dy dy))
               sxy (+ sxy (* dx dy))))
       ;; every point on one spot: there is no direction to return, and
-      ;; returning the X axis would be an answer the points never gave
-      (if (< (+ sxx syy) lobf:*tiny*)
+      ;; returning the X axis would be an answer the points never gave.
+      ;; <=, not <: the case being guarded is an exact zero, and with <
+      ;; the guard would fall through the moment lobf:*tiny* was set to
+      ;; one - which is a knob, so it can be
+      (if (<= (+ sxx syy) lobf:*tiny*)
         nil
         (progn
           (setq th (* 0.5 (atan (* 2.0 sxy) (- sxx syy))))
@@ -38572,8 +38575,10 @@
       (setq w (lobf:cand-worst c))
       ;; the held points are exactly on the line: the ratio is infinite
       ;; and there is no number to print, which lobf:outlier-p reads as
-      ;; "drastic" and the report reads as "say it without one"
-      (if (< w lobf:*tiny*) nil (/ (lobf:cand-off c) w)))))
+      ;; "drastic" and the report reads as "say it without one".  <=,
+      ;; not <, because this guard stands in front of a division: at
+      ;; lobf:*tiny* 0 a < would let an exact zero through to it
+      (if (<= w lobf:*tiny*) nil (/ (lobf:cand-off c) w)))))
 
 ;; T when fit 2 is the one to offer.
 (defun lobf:outlier-p (c / r)
@@ -38711,6 +38716,23 @@
                                  lobf:*ign-layer* col)
                       fur))))
   (cons xl (reverse fur)))
+
+;; Erase only LOBF's own objects on a layer; anything the user drew
+;; there is left alone.  Returns how many went.  (abp:purge-mine.)
+(defun lobf:purge-mine (name / ss i en n)
+  (setq n 0)
+  (if (tblsearch "LAYER" name)
+    (progn
+      (setq ss (ssget "_X" (list (cons 8 name))))
+      (if ss
+        (progn
+          (setq i 0)
+          (repeat (sslength ss)
+            (setq en (ssname ss i))
+            (if (assoc -3 (entget en (list lobf:*appid*)))
+              (progn (entdel en) (setq n (1+ n))))
+            (setq i (1+ i)))))))
+  n)
 
 (defun lobf:erase (en)
   (if (and en (entget en)) (entdel en))
@@ -38877,10 +38899,25 @@
          (princ "\n  All three erased - nothing was added to the drawing.")
          (setq res nil))
         ((= pick "All")
-         (princ (strcat "\n  Keeping all of them on layer "
-                        lobf:*preview-layer* ", in their preview colours"
-                        " - with any set-aside point still ringed on "
-                        lobf:*ign-layer* "."))
+         ;; Kept is kept: these move OFF the scaffolding layer with the
+         ;; rest of the results, so LOBF-PREVIEW means one thing only --
+         ;; candidates being chosen right now -- and the sweep at the top
+         ;; of the next run can clear it without eating an answer
+         ;; somebody asked to keep.  The colours stay: they are what
+         ;; tells three near-identical lines apart, which is the whole
+         ;; reason for keeping all three.
+         (cal:ensure-layer lobf:*layer* lobf:*color*)
+         (foreach c draws
+           (if c
+             (progn
+               (lobf:relayer (car c) lobf:*layer*)
+               (foreach e (cdr c)
+                 (if (and e (entget e)
+                          (/= "CIRCLE" (cdr (assoc 0 (entget e)))))
+                   (lobf:relayer e lobf:*layer*))))))
+         (princ (strcat "\n  Keeping all of them on layer " lobf:*layer*
+                        ", in their preview colours - with any set-aside"
+                        " point still ringed on " lobf:*ign-layer* "."))
          (princ "\n  (the numbers and their stalks are kept too - erase them when done)")
          (setq res nil))
         (T
@@ -38924,7 +38961,7 @@
 
 ;;; -------------------- the commands ------------------------------------
 
-(defun c:LOBF ( / *error* undo-open ss pts again line)
+(defun c:LOBF ( / *error* undo-open ss pts again line stale)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -38939,6 +38976,16 @@
   (if lzd:begin (lzd:begin "LOBF" *lobf-version*))
   (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
+  ;; Candidates left standing by a run that was Esc'd out of.  Only
+  ;; LOBF's own stamped objects go, and only off the scaffolding layer:
+  ;; a kept line and the ring beside it are results, not leftovers.
+  ;; This runs OUTSIDE the undo group below, the way ABPCHECK's stale
+  ;; sweep does -- inside it, one U would put the wreckage back.
+  (setq stale (lobf:purge-mine lobf:*preview-layer*))
+  (if (> stale 0)
+    (princ (strcat "\nLOBF: cleared " (itoa stale)
+                   " candidate object(s) from a run that did not finish,"
+                   " off layer " lobf:*preview-layer* ".")))
   ;; a pickfirst selection if there is one - probed BEFORE the undo
   ;; group opens, because that command clears the set (the convention
   ;; ABPCHECK and abhd already carry)
@@ -39090,7 +39137,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.1")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.2")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -39506,7 +39553,18 @@
 ;; an end can be named by typing that number instead of hunting for the
 ;; point.  Points with no number of their own get the next count.
 (defun abl:add-point (p nm / num)
-  (setq num         (abl:num-in nm)
+  ;; REALS, always.  AutoLISP divides two integers as integers, and the
+  ;; segment math turns on one such division: abl:seg-dist projects a
+  ;; point onto a span with (/ (dot w v) len2), which on all-integer
+  ;; coordinates collapses to 0 and reports a point sitting EXACTLY on
+  ;; the middle of a span as a whole half-span away.  Five collinear
+  ;; points written (10 0 0) rather than (10 0.0 0.0) then come back as
+  ;; four stubs instead of one line.  AutoCAD's own DXF carries reals,
+  ;; so this is only reachable from geometry another routine entmade -
+  ;; but one float here is cheaper than trusting every producer, and it
+  ;; is the ONLY door points come in by.
+  (setq p           (list (float (car p)) (float (cadr p)))
+        num         (abl:num-in nm)
         npt         (1+ npt)
         pts         (cons p pts)
         abl-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
@@ -39544,12 +39602,22 @@
   (if lo (cons lo hi)))
 
 ;; The point in QS whose survey number is N, or nil when no point
-;; carries it.  Two points cannot share a number in a sane survey; if
-;; they do, the first one read wins and the caller says which it took.
+;; carries it.  The first one read wins -- see abl:count-key, which is
+;; what stops that being a silent choice.
 (defun abl:pt-of-key (n qs / out q)
   (foreach q qs
     (if (and (null out) (= (abl:pt-key q) n)) (setq out q)))
   out)
+
+;; How many points in QS carry survey number N.  Two points sharing one
+;; is a mistake in the SURVEY, not in the drawing, and typing that
+;; number is the moment it becomes visible -- so it is counted and said
+;; rather than resolved quietly in favour of whichever was read first.
+(defun abl:count-key (n qs / c q)
+  (setq c 0)
+  (foreach q qs
+    (if (= (abl:pt-key q) n) (setq c (1+ c))))
+  c)
 
 ;; What to call the survey point at Q.
 (defun abl:pt-name (q / nm p)
@@ -40705,7 +40773,15 @@
          ((null v) (setq done nil))               ; Enter: back to the pick
          ((setq q (abl:pt-of-key v dpts))
           (setq out q)
-          (princ (strcat "  - Pt." (abl:pt-name q))))
+          (princ (strcat "  - Pt." (abl:pt-name q)))
+          (if (> (abl:count-key v dpts) 1)
+            (princ (strcat "\n    (WARNING: " (itoa (abl:count-key v dpts))
+                           " selected points carry the number " (itoa v)
+                           " - taking the one at "
+                           (rtos (car q) 2 2) "," (rtos (cadr q) 2 2)
+                           ".  Two points with one number is a fault in"
+                           " the survey; click the end instead to be"
+                           " sure of it.)"))))
          (T
           (princ (strcat "\n  No selected point carries the number "
                          (itoa v) " - try again."))
