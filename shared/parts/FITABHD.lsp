@@ -4575,7 +4575,7 @@
        (initget 6 "Back Undo")
        (setq v (getdist (strcat "\nMaximum distance from a point <"
                                 (rtos tol 2 3) "> [Back]: ")))
-       (if lzd:ask (lzd:ask "fit:ask-settings" v))
+       (if lzd:ask (lzd:ask "fit:ask-settings" v) v)
        (cond
          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
           (princ "\nStepping back one step.")
@@ -4770,7 +4770,7 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq fit-pick (ssget "_I" '((0 . "POINT,INSERT"))))
-  (if lzd:watch (lzd:watch fit-pick))
+  (if lzd:watch (lzd:watch fit-pick) fit-pick)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -4795,7 +4795,7 @@
                      "\n  " fit:*point-block* " blocks)."))
       (princ "\n  Select objects: ")
       (setq ss (ssget '((0 . "POINT,INSERT"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (cond
     ((null ss)
      (princ (strcat "\nNothing usable selected (POINT entities on layer "

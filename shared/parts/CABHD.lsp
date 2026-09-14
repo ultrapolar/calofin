@@ -1089,7 +1089,7 @@
     (setq ans (getint (strcat "\n  Include points up to [Pick/All"
                               (if back "/Back" "") "] <"
                               (if out (itoa out) "All") ">: ")))
-    (if lzd:ask (lzd:ask "cab:ask-cut" ans))
+    (if lzd:ask (lzd:ask "cab:ask-cut" ans) ans)
     (cond
       ((null ans) (setq cut out))                     ; Enter: unchanged
       ;; the only question in front of this one is the selection, so
@@ -2466,7 +2466,7 @@
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
                                     dflt "): ")))
-          (if lzd:watch (lzd:watch sel))
+          (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -2570,7 +2570,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *CAB-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "cab:ask-tol" tol))
+  (if lzd:ask (lzd:ask "cab:ask-tol" tol) tol)
   (cond
     ((cab:back-kw tol) 'CAB-BACK)
     (T
@@ -2592,7 +2592,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "cab:ask-pct" pct))
+  (if lzd:ask (lzd:ask "cab:ask-pct" pct) pct)
   (cond
     ((cab:back-kw pct) 'CAB-BACK)
     ((null pct) def)
@@ -2608,7 +2608,7 @@
                            (if *CAB-MAX-ARCS* (itoa *CAB-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "cab:ask-cap" mx))
+  (if lzd:ask (lzd:ask "cab:ask-cap" mx) mx)
   (cond
     ((cab:back-kw mx) 'CAB-BACK)
     (T
@@ -2950,7 +2950,7 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq cab-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-  (if lzd:watch (lzd:watch cab-pick))
+  (if lzd:watch (lzd:watch cab-pick) cab-pick)
 
   ;; one undo group around the whole fit - a U after CABHD takes back
   ;; the edge, the markers and the previews in one step (the stale
@@ -3146,7 +3146,7 @@
         (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
         (princ "\n  Select objects: ")
         (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-        (if lzd:watch (lzd:watch ss))))
+        (if lzd:watch (lzd:watch ss) ss)))
     (if (null ss)
       (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
       (progn

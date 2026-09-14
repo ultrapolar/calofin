@@ -930,12 +930,12 @@
   ;; so there is nothing left to step back to.  a selection made before
   ;; the command was typed (pickfirst) skips even that prompt.
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (not ss)
     (progn
       (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -1221,12 +1221,12 @@
 
   ;; ---- selection, the same three ways XFTCONV takes it ------------
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (not ss)
     (progn
       (princ "\nSelect the converted survey (Enter = everything in this space): ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )

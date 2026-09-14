@@ -499,6 +499,13 @@ python3 tests/test_lazdiag.py         # LAZDIAG - the DXF read back
                                       #   the geometry and prompts it
                                       #   carries, and the paths where
                                       #   the reporter itself fails
+python3 tests/test_lazdiag_sweep.py   # every headline command failed
+                                      #   for REAL, not statically: 63
+                                      #   of them driven to their first
+                                      #   prompt and handed an error
+                                      #   instead of an answer, each one
+                                      #   checked for a report that
+                                      #   parses and carries its message
 python3 tests/test_pool_lisp.py       # POOL geometry
 python3 tests/test_pool_runtime.py    # POOL loaded and run in lispvm
 python3 tests/test_tutorialpool.py    # TUTORIALPOOL, run in lispvm

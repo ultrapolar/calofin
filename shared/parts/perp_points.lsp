@@ -446,7 +446,7 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
-    (if lzd:ask (lzd:ask "perp:ask-width" ans))
+    (if lzd:ask (lzd:ask "perp:ask-width" ans) ans)
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -603,7 +603,7 @@
   (setq ent nil)
   (while (null ent)
     (setq sel (entsel "\nSelect a line or polyline: "))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))

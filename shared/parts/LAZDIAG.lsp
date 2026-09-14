@@ -103,7 +103,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.1")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -300,6 +300,17 @@
 ;; Register geometry the tool did not draw but is working ON -- the
 ;; selection it was handed, the entity it was asked to measure.  Takes an
 ;; ename, a selection set, or a list of either.
+;;
+;; RETURNS X, and that is load-bearing.  The call site this is wired
+;; into sits straight after a (setq ss (ssget ...)), which in this tree
+;; is very often the last form of a (progn ...) that is the then-branch
+;; of an (if (null ss) ...).  A helper that returned nil there would
+;; quietly change what that progn evaluates to.  Nothing depended on it
+;; when the calls went in -- every one of those thirty sites discards
+;; the value -- but "safe because of what happens to surround it" is not
+;; safe, it is a bug waiting for the next tool.  Returning X, and
+;; wiring the call as (if lzd:watch (lzd:watch ss) ss), makes the whole
+;; insertion value-transparent whether LAZDIAG is loaded or not.
 (defun lzd:watch (x / i e)
   (cond
     ((null x) nil)
@@ -309,7 +320,7 @@
      (while (< i (sslength x))
        (setq lzd:*watch* (cons (ssname x i) lzd:*watch*) i (1+ i))))
     ((listp x) (foreach e x (lzd:watch e))))
-  nil)
+  x)
 
 ;; A point the user picked, with the prompt it answered.  These are
 ;; drawn into the report as labelled points: for half the tools here the
@@ -344,6 +355,10 @@
 ;; then draws is two hundred entities in a file somebody has to mail,
 ;; and one that selects a thousand is a report nobody can open.  The
 ;; count is in the report, and it says when it truncated.
+(defun lzd:gather-safe ( / r)
+  (setq r (vl-catch-all-apply 'lzd:gather '()))
+  (if (vl-catch-all-error-p r) nil r))
+
 (defun lzd:gather ( / out e n)
   (setq n 0)
   (foreach e (reverse lzd:*watch*)
@@ -379,6 +394,7 @@
 ;; \f \H \A runs go; \P is the line break MTEXT uses, and becomes a
 ;; space so the whole string stays one DXF line.
 (defun lzd:demtext (s / out i n c)
+  (if (/= (type s) 'STR) (setq s ""))   ; an MTEXT with no group 1 at all
   (setq out "" i 1 n (strlen s))
   (while (<= i n)
     (setq c (substr s i 1))
@@ -597,6 +613,18 @@
   (lzd:g fp 3 "Solid line") (lzd:gi fp 72 65) (lzd:gi fp 73 0)
   (lzd:gn fp 40 0.0)
   (lzd:g fp 0 "ENDTAB")
+  ;; Every TEXT below carries no group 7, so each one names the STANDARD
+  ;; text style by omission.  A reader that opens this as a new drawing
+  ;; has STANDARD already and a missing table costs nothing -- but this
+  ;; file exists to be opened on somebody else's machine, by somebody
+  ;; who was told to send it, and the one thing it must not do is
+  ;; argue about a style it never defined.  Ten lines of insurance.
+  (lzd:g fp 0 "TABLE") (lzd:g fp 2 "STYLE") (lzd:gi fp 70 1)
+  (lzd:g fp 0 "STYLE") (lzd:g fp 2 "STANDARD") (lzd:gi fp 70 0)
+  (lzd:gn fp 40 0.0) (lzd:gn fp 41 1.0) (lzd:gn fp 50 0.0)
+  (lzd:gi fp 71 0) (lzd:gn fp 42 0.2)
+  (lzd:g fp 3 "txt") (lzd:g fp 4 "")
+  (lzd:g fp 0 "ENDTAB")
   (lzd:g fp 0 "TABLE") (lzd:g fp 2 "LAYER") (lzd:gi fp 70 (length layers))
   (foreach l layers
     (lzd:g fp 0 "LAYER") (lzd:gs fp 2 l) (lzd:gi fp 70 0)
@@ -629,6 +657,11 @@
                        (cadddr pr) 1.0))
      (lzd:gs fp 1 (nth 4 pr))
      (lzd:gn fp 50 (if (nth 5 pr) (nth 5 pr) 0.0)))
+    ;; A POLYLINE with no VERTEX between it and its SEQEND is not a
+    ;; degenerate shape, it is a file AutoCAD argues with -- and an
+    ;; LWPOLYLINE whose group 90 says 0, or one whose vertices were all
+    ;; non-numeric, produces exactly that.  Dropped rather than written.
+    ((and (= ty "PLINE") (null (nth 3 pr))) nil)
     ((= ty "PLINE")
      (lzd:g fp 0 "POLYLINE") (lzd:gs fp 8 lay)
      (lzd:gi fp 66 1) (lzd:gi fp 70 (if (caddr pr) (caddr pr) 0))
@@ -738,10 +771,28 @@
       (progn
         (vl-mkdir d)    ; a profile that has never downloaded anything
         (setq path (vl-catch-all-apply 'lzd:dxfwrite
-                                       (list (lzd:join d name) prims)))
+                                       (list (lzd:free (lzd:join d name))
+                                             prims)))
         (if (and (not (vl-catch-all-error-p path)) path)
           (setq got path)))))
   got)
+
+;; PATH, or the first "-2", "-3" ... beside it that is not taken.  The
+;; stamp in a name runs to seconds, which is not fine enough: a script
+;; that runs two commands and fails in both inside one second would
+;; write the second report over the first, and the drafter would send
+;; one file believing it was both.  Ten tries is plenty -- nothing here
+;; fails that fast for longer than that -- and running out is not an
+;; error, it just takes the name and accepts the overwrite.
+(defun lzd:free (path / base ext try i)
+  (setq base (if (> (strlen path) 4) (substr path 1 (- (strlen path) 4)) path)
+        ext  (if (> (strlen path) 4) (substr path (- (strlen path) 3)) ".dxf")
+        try  path
+        i    1)
+  (while (and (< i 10) (findfile try))
+    (setq i (1+ i)
+          try (strcat base "-" (itoa i) ext)))
+  try)
 
 ;;; -------------------- the report text ---------------------------------
 
@@ -885,7 +936,13 @@
 
 (defun lzd:build-prims (tool ver msg / geo pts ext h nents e)
   (setq geo nil nents 0)
-  (foreach e (lzd:gather)
+  ;; lzd:gather walks the drawing from an ename snapshotted before the
+  ;; run; a tool that erased that entity on its way past leaves entnext
+  ;; walking from something that no longer exists.  Caught here so a
+  ;; drawing that will not walk costs the GEOMETRY and not the whole
+  ;; report -- the transcript and the error are the half that always
+  ;; survives.
+  (foreach e (lzd:gather-safe)
     (setq geo (append geo (lzd:flatten-safe e)) nents (1+ nents)))
   (setq pts (lzd:pickpts)
         ext (lzd:extent (append geo pts))
@@ -984,6 +1041,18 @@
 
 ;;; -------------------- LAZDIAG, the command ----------------------------
 
+;; One undo group per command, in the one casing (STANDARDS section 5).
+;; Opens only while undo is recording -- _Begin in a drawing with UNDO
+;; off errors out of the command -- and returns nil then, so the caller
+;; skips the close it does not own.
+(defun lzd:undobegin ()
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") T)))
+
+(defun lzd:undoend ()
+  (command "_.UNDO" "_End")
+  nil)
+
 ;; THE LAST RESORT.  Only reached by typing LAZDIAG after a report that
 ;; could not be written to any folder -- never automatically, and never
 ;; from inside an error handler.  This is the one path that asks the user
@@ -1068,9 +1137,11 @@
   (lzd:disown)
   (princ))
 
-(defun c:LAZDIAG ( / *error* oce)
+(defun c:LAZDIAG ( / *error* oce undo-open)
   (defun *error* (m)
     (if oce (setvar "CMDECHO" oce))
+    (if undo-open
+      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and m (not (lzd:cancel-p m)))
       (princ (strcat "\nLAZDIAG error: " m)))
     (if lzd:report (lzd:report "LAZDIAG" *lazdiag-version* m))
@@ -1078,7 +1149,14 @@
   (if lzd:begin (lzd:begin "LAZDIAG" *lazdiag-version*))
   (setq oce (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
+  ;; One group, because the last resort can put sixty lines of text into
+  ;; the drawing and one U should take all sixty back.  Around the whole
+  ;; command rather than around lzd:paste alone: the paste is the only
+  ;; path that draws, and a group opened and closed over nothing costs
+  ;; nothing.
+  (setq undo-open (lzd:undobegin))
   (if lzd:*last* (lzd:again) (lzd:selftest))
+  (if undo-open (setq undo-open (lzd:undoend)))
   (setvar "CMDECHO" oce)
   (princ))
 

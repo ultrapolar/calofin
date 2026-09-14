@@ -496,7 +496,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'NS-BACK)
         ((null v) (if dflt dflt (ns-askkw msg kws shown dflt back)))
         (t v)))
@@ -999,13 +999,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the two lines of a corner,"
                      " or a U-shaped step perimeter:"))
       (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)

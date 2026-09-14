@@ -1173,7 +1173,7 @@
                             (t " (or NA if not measured)"))
                       (if back " [Back]" "")
                       ": ")))
-    (if lzd:ask (lzd:ask msg v))
+    (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
@@ -1231,7 +1231,7 @@
                                    (back " [Back]")
                                    (t ""))
                              ": ")))
-    (if lzd:ask (lzd:ask msg v))
+    (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
@@ -2203,7 +2203,7 @@
 (defun spa:readblock ( / sel ed bn att v got)
   (cal:osup)
   (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
-  (if lzd:watch (lzd:watch sel))
+  (if lzd:watch (lzd:watch sel) sel)
   (cal:osdown)
   (if sel
       (progn
@@ -2240,7 +2240,7 @@
   ;; -- B, BACK, U or UNDO alone, any case -- as the prompt says
   (while (null spa:*taper*)
     (setq v (getstring "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8) [type B to go Back]: "))
-    (if lzd:ask (lzd:ask "spa:askdetails" v))
+    (if lzd:ask (lzd:ask "spa:askdetails" v) v)
     (if (spa:backstr v)
         (setq spa:*taper* 'CAL-BACK)
         (progn

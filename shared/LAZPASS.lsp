@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.10, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.11, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -101,7 +101,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) (if dflt dflt (cal:askkw msg kws shown dflt back)))
         (t v)))
@@ -140,7 +140,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -174,7 +174,7 @@
 (defun cal:ask-yn (msg dflt / ans)
   (initget "Yes No")
   (setq ans (getkword (strcat msg " [Yes/No] <" dflt ">: ")))
-  (if lzd:ask (lzd:ask msg ans))
+  (if lzd:ask (lzd:ask msg ans) ans)
   (if (null ans) (setq ans dflt))
   (= ans "Yes"))
 
@@ -187,7 +187,7 @@
   ;; 1): a click sends the bracket text, and "Skip rest" was a click
   ;; the initget list could not accept
   (setq ans (getkword (strcat msg " [Yes/No/Back/Skip] <Yes>: ")))
-  (if lzd:ask (lzd:ask msg ans))
+  (if lzd:ask (lzd:ask msg ans) ans)
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)
@@ -207,7 +207,7 @@
   (setq v (getstring T (strcat "\n" msg
                                (if dflt (strcat " <" dflt ">") "")
                                (if back " (B = back)" "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((and back (cal:back-word-p v)) 'CAL-BACK)
         ((= v "") (if dflt dflt v))
         (t v)))
@@ -957,7 +957,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.0")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.1")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -1154,6 +1154,17 @@
 ;; Register geometry the tool did not draw but is working ON -- the
 ;; selection it was handed, the entity it was asked to measure.  Takes an
 ;; ename, a selection set, or a list of either.
+;;
+;; RETURNS X, and that is load-bearing.  The call site this is wired
+;; into sits straight after a (setq ss (ssget ...)), which in this tree
+;; is very often the last form of a (progn ...) that is the then-branch
+;; of an (if (null ss) ...).  A helper that returned nil there would
+;; quietly change what that progn evaluates to.  Nothing depended on it
+;; when the calls went in -- every one of those thirty sites discards
+;; the value -- but "safe because of what happens to surround it" is not
+;; safe, it is a bug waiting for the next tool.  Returning X, and
+;; wiring the call as (if lzd:watch (lzd:watch ss) ss), makes the whole
+;; insertion value-transparent whether LAZDIAG is loaded or not.
 (defun lzd:watch (x / i e)
   (cond
     ((null x) nil)
@@ -1163,7 +1174,7 @@
      (while (< i (sslength x))
        (setq lzd:*watch* (cons (ssname x i) lzd:*watch*) i (1+ i))))
     ((listp x) (foreach e x (lzd:watch e))))
-  nil)
+  x)
 
 ;; A point the user picked, with the prompt it answered.  These are
 ;; drawn into the report as labelled points: for half the tools here the
@@ -1198,6 +1209,10 @@
 ;; then draws is two hundred entities in a file somebody has to mail,
 ;; and one that selects a thousand is a report nobody can open.  The
 ;; count is in the report, and it says when it truncated.
+(defun lzd:gather-safe ( / r)
+  (setq r (vl-catch-all-apply 'lzd:gather '()))
+  (if (vl-catch-all-error-p r) nil r))
+
 (defun lzd:gather ( / out e n)
   (setq n 0)
   (foreach e (reverse lzd:*watch*)
@@ -1233,6 +1248,7 @@
 ;; \f \H \A runs go; \P is the line break MTEXT uses, and becomes a
 ;; space so the whole string stays one DXF line.
 (defun lzd:demtext (s / out i n c)
+  (if (/= (type s) 'STR) (setq s ""))   ; an MTEXT with no group 1 at all
   (setq out "" i 1 n (strlen s))
   (while (<= i n)
     (setq c (substr s i 1))
@@ -1451,6 +1467,18 @@
   (lzd:g fp 3 "Solid line") (lzd:gi fp 72 65) (lzd:gi fp 73 0)
   (lzd:gn fp 40 0.0)
   (lzd:g fp 0 "ENDTAB")
+  ;; Every TEXT below carries no group 7, so each one names the STANDARD
+  ;; text style by omission.  A reader that opens this as a new drawing
+  ;; has STANDARD already and a missing table costs nothing -- but this
+  ;; file exists to be opened on somebody else's machine, by somebody
+  ;; who was told to send it, and the one thing it must not do is
+  ;; argue about a style it never defined.  Ten lines of insurance.
+  (lzd:g fp 0 "TABLE") (lzd:g fp 2 "STYLE") (lzd:gi fp 70 1)
+  (lzd:g fp 0 "STYLE") (lzd:g fp 2 "STANDARD") (lzd:gi fp 70 0)
+  (lzd:gn fp 40 0.0) (lzd:gn fp 41 1.0) (lzd:gn fp 50 0.0)
+  (lzd:gi fp 71 0) (lzd:gn fp 42 0.2)
+  (lzd:g fp 3 "txt") (lzd:g fp 4 "")
+  (lzd:g fp 0 "ENDTAB")
   (lzd:g fp 0 "TABLE") (lzd:g fp 2 "LAYER") (lzd:gi fp 70 (length layers))
   (foreach l layers
     (lzd:g fp 0 "LAYER") (lzd:gs fp 2 l) (lzd:gi fp 70 0)
@@ -1483,6 +1511,11 @@
                        (cadddr pr) 1.0))
      (lzd:gs fp 1 (nth 4 pr))
      (lzd:gn fp 50 (if (nth 5 pr) (nth 5 pr) 0.0)))
+    ;; A POLYLINE with no VERTEX between it and its SEQEND is not a
+    ;; degenerate shape, it is a file AutoCAD argues with -- and an
+    ;; LWPOLYLINE whose group 90 says 0, or one whose vertices were all
+    ;; non-numeric, produces exactly that.  Dropped rather than written.
+    ((and (= ty "PLINE") (null (nth 3 pr))) nil)
     ((= ty "PLINE")
      (lzd:g fp 0 "POLYLINE") (lzd:gs fp 8 lay)
      (lzd:gi fp 66 1) (lzd:gi fp 70 (if (caddr pr) (caddr pr) 0))
@@ -1592,10 +1625,28 @@
       (progn
         (vl-mkdir d)    ; a profile that has never downloaded anything
         (setq path (vl-catch-all-apply 'lzd:dxfwrite
-                                       (list (lzd:join d name) prims)))
+                                       (list (lzd:free (lzd:join d name))
+                                             prims)))
         (if (and (not (vl-catch-all-error-p path)) path)
           (setq got path)))))
   got)
+
+;; PATH, or the first "-2", "-3" ... beside it that is not taken.  The
+;; stamp in a name runs to seconds, which is not fine enough: a script
+;; that runs two commands and fails in both inside one second would
+;; write the second report over the first, and the drafter would send
+;; one file believing it was both.  Ten tries is plenty -- nothing here
+;; fails that fast for longer than that -- and running out is not an
+;; error, it just takes the name and accepts the overwrite.
+(defun lzd:free (path / base ext try i)
+  (setq base (if (> (strlen path) 4) (substr path 1 (- (strlen path) 4)) path)
+        ext  (if (> (strlen path) 4) (substr path (- (strlen path) 3)) ".dxf")
+        try  path
+        i    1)
+  (while (and (< i 10) (findfile try))
+    (setq i (1+ i)
+          try (strcat base "-" (itoa i) ext)))
+  try)
 
 ;;; -------------------- the report text ---------------------------------
 
@@ -1739,7 +1790,13 @@
 
 (defun lzd:build-prims (tool ver msg / geo pts ext h nents e)
   (setq geo nil nents 0)
-  (foreach e (lzd:gather)
+  ;; lzd:gather walks the drawing from an ename snapshotted before the
+  ;; run; a tool that erased that entity on its way past leaves entnext
+  ;; walking from something that no longer exists.  Caught here so a
+  ;; drawing that will not walk costs the GEOMETRY and not the whole
+  ;; report -- the transcript and the error are the half that always
+  ;; survives.
+  (foreach e (lzd:gather-safe)
     (setq geo (append geo (lzd:flatten-safe e)) nents (1+ nents)))
   (setq pts (lzd:pickpts)
         ext (lzd:extent (append geo pts))
@@ -1838,6 +1895,18 @@
 
 ;;; -------------------- LAZDIAG, the command ----------------------------
 
+;; One undo group per command, in the one casing (STANDARDS section 5).
+;; Opens only while undo is recording -- _Begin in a drawing with UNDO
+;; off errors out of the command -- and returns nil then, so the caller
+;; skips the close it does not own.
+(defun lzd:undobegin ()
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn (command "_.UNDO" "_Begin") T)))
+
+(defun lzd:undoend ()
+  (command "_.UNDO" "_End")
+  nil)
+
 ;; THE LAST RESORT.  Only reached by typing LAZDIAG after a report that
 ;; could not be written to any folder -- never automatically, and never
 ;; from inside an error handler.  This is the one path that asks the user
@@ -1922,9 +1991,11 @@
   (lzd:disown)
   (princ))
 
-(defun c:LAZDIAG ( / *error* oce)
+(defun c:LAZDIAG ( / *error* oce undo-open)
   (defun *error* (m)
     (if oce (setvar "CMDECHO" oce))
+    (if undo-open
+      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if (and m (not (lzd:cancel-p m)))
       (princ (strcat "\nLAZDIAG error: " m)))
     (if lzd:report (lzd:report "LAZDIAG" *lazdiag-version* m))
@@ -1932,7 +2003,14 @@
   (if lzd:begin (lzd:begin "LAZDIAG" *lazdiag-version*))
   (setq oce (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
+  ;; One group, because the last resort can put sixty lines of text into
+  ;; the drawing and one U should take all sixty back.  Around the whole
+  ;; command rather than around lzd:paste alone: the paste is the only
+  ;; path that draws, and a group opened and closed over nothing costs
+  ;; nothing.
+  (setq undo-open (lzd:undobegin))
   (if lzd:*last* (lzd:again) (lzd:selftest))
+  (if undo-open (setq undo-open (lzd:undoend)))
   (setvar "CMDECHO" oce)
   (princ))
 
@@ -2787,7 +2865,7 @@
   (cal:osup)
   (initget 7)                           ; no null, no zero, no negative
   (setq v (getdist (strcat "\n" msg ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cal:osdown)
   v)
 
@@ -3028,7 +3106,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cal:osdown)
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -6171,7 +6249,7 @@
                                         (if dflt (strcat " <" (rtos dflt) ">")
                                             "")
                                         ": ")))
-              (if lzd:ask (lzd:ask subject sz))
+              (if lzd:ask (lzd:ask subject sz) sz)
               (if (null sz) (setq sz dflt))))
         ;; how far this treatment eats along each wall, at the real
         ;; corner angle -- so the cap holds on a 135-degree bend or a
@@ -11098,7 +11176,7 @@
   (cal:osup)
   (initget 7)                           ; no null, no zero, no negative
   (setq v (getdist (strcat "\n" msg ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cal:osdown)
   v)
 
@@ -11122,7 +11200,7 @@
                     (if (eq kind 'REQ) "" " (or NA if not measured)")
                     (if back " [Back]" "")
                     ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cal:osdown)
   (mapcar '(lambda (e c) (psd:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -12798,7 +12876,7 @@
                             (t " (or NA if not measured)"))
                       (if back " [Back]" "")
                       ": ")))
-    (if lzd:ask (lzd:ask msg v))
+    (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
@@ -12856,7 +12934,7 @@
                                    (back " [Back]")
                                    (t ""))
                              ": ")))
-    (if lzd:ask (lzd:ask msg v))
+    (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
@@ -13828,7 +13906,7 @@
 (defun spa:readblock ( / sel ed bn att v got)
   (cal:osup)
   (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
-  (if lzd:watch (lzd:watch sel))
+  (if lzd:watch (lzd:watch sel) sel)
   (cal:osdown)
   (if sel
       (progn
@@ -13865,7 +13943,7 @@
   ;; -- B, BACK, U or UNDO alone, any case -- as the prompt says
   (while (null spa:*taper*)
     (setq v (getstring "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8) [type B to go Back]: "))
-    (if lzd:ask (lzd:ask "spa:askdetails" v))
+    (if lzd:ask (lzd:ask "spa:askdetails" v) v)
     (if (spa:backstr v)
         (setq spa:*taper* 'CAL-BACK)
         (progn
@@ -16786,7 +16864,7 @@
       (setq v (getkword (strcat "\n" msg " [" shown
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
-      (if lzd:ask (lzd:ask msg v))
+      (if lzd:ask (lzd:ask msg v) v)
       (cond ((member v '("Back" "Undo")) 'OASIS-BACK)
             ((null v) (if dflt dflt (oasis:askkw msg kws shown dflt back)))
             (t v)))))
@@ -16824,7 +16902,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -17954,7 +18032,7 @@
   (if back (initget "Back Undo"))
   (setq v (getpoint (strcat "\nInsertion base point <0,0>"
                             (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "oasis:askbase" v))
+  (if lzd:ask (lzd:ask "oasis:askbase" v) v)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
@@ -18065,7 +18143,7 @@
     (t
      (initget 7 "Line Back Undo")
      (setq v (getdist (strcat "\n" msg " [Line/Back]: ")))
-     (if lzd:ask (lzd:ask msg v))
+     (if lzd:ask (lzd:ask msg v) v)
      (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
            ((= (type v) 'STR) "LINE")
            (t v)))))
@@ -18082,7 +18160,7 @@
     (progn
       (initget 0 "Back Undo")
       (setq v (getdist (strcat "\n" msg " [Back] <0>: ")))
-      (if lzd:ask (lzd:ask msg v))
+      (if lzd:ask (lzd:ask msg v) v)
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
             ((null v) 0.0)
             (t v)))))
@@ -18152,7 +18230,7 @@
     (progn
       (initget 0 "Tie Back Undo")
       (setq v (getdist (strcat "\n" msg " [Tie/Back] <0>: ")))
-      (if lzd:ask (lzd:ask msg v))
+      (if lzd:ask (lzd:ask msg v) v)
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
             ((= (type v) 'STR) "TIE")
             ((null v) 0.0)
@@ -18769,7 +18847,7 @@
     (initget 7 "Back Undo")
     (setq v (getint (strcat "\n" msg " -- tangency change 1-" (itoa n)
                             " [Back]: ")))
-    (if lzd:ask (lzd:ask msg v))
+    (if lzd:ask (lzd:ask msg v) v)
     (cond ((and (= (type v) 'STR) (member v '("Back" "Undo")))
            (setq v 'OASIS-BACK))
           ((and (= (type v) 'INT) (<= v n)))
@@ -18783,7 +18861,7 @@
 (defun oasis:asknear (msg arcs base / v)
   (initget 1 "Back Undo")
   (setq v (getpoint (strcat "\n" msg " [Back]: ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (if (and (= (type v) 'STR) (member v '("Back" "Undo")))
       'OASIS-BACK
       (oasis:ringnear arcs (list (- (car v) (car base))
@@ -19059,7 +19137,7 @@
                 (strcat "\nHopper offset in from the wall [Back] <"
                         (rtos (cond (oasis:*hopoff-last*) (oasis:*hopoff*)))
                         ">: ")))
-    (if lzd:ask (lzd:ask "oasis:askhopoff" off))
+    (if lzd:ask (lzd:ask "oasis:askhopoff" off) off)
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
        (setq bot 'OASIS-BACK))
@@ -21848,7 +21926,7 @@
 (defun abf:askfirst (msg endtext / v)
   (initget 6 "Back Undo")
   (setq v (getdist (strcat "\n" msg " [Back] <Enter = " endtext ">: ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK v))
 
 ;;; ---------------------- layers ----------------------------------------
@@ -27454,7 +27532,7 @@
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
                                     " Enter for " *PF-DEFAULT-FIT*
                                     "): ")))
-          (if lzd:watch (lzd:watch sel))
+          (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -28236,7 +28314,7 @@
   (setq ans (getkword (strcat
               "\n  Slope line from the offset at Pt." nm
               " [Straight/Guided/Points/Back] <Straight>: ")))
-  (if lzd:ask (lzd:ask "pf:ask-slope" ans))
+  (if lzd:ask (lzd:ask "pf:ask-slope" ans) ans)
   (setq slopemarks nil)     ; the caller's register of this side's rings
   (cond
     ((member ans '("Back" "Undo")) 'PF-BACK)
@@ -28495,7 +28573,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *PF-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "pf:ask-tol" tol))
+  (if lzd:ask (lzd:ask "pf:ask-tol" tol) tol)
   (cond
     ((pf:back-kw tol) 'PF-BACK)
     (T
@@ -28517,7 +28595,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "pf:ask-pct" pct))
+  (if lzd:ask (lzd:ask "pf:ask-pct" pct) pct)
   (cond
     ((pf:back-kw pct) 'PF-BACK)
     ((null pct) def)
@@ -28533,7 +28611,7 @@
                            (if *PF-MAX-ARCS* (itoa *PF-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "pf:ask-cap" mx))
+  (if lzd:ask (lzd:ask "pf:ask-cap" mx) mx)
   (cond
     ((pf:back-kw mx) 'PF-BACK)
     (T
@@ -28869,7 +28947,7 @@
   ;; here, before the undo group opens: the typed prompts between here
   ;; and step 7 leave a pickfirst set alone, a command call would not
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-  (if lzd:watch (lzd:watch pf-pick))
+  (if lzd:watch (lzd:watch pf-pick) pf-pick)
 
   ;; one undo group around the whole fit - a U after ABHD takes back
   ;; the perimeter, the bottom and the markers in one step (the stale
@@ -29051,7 +29129,7 @@
       (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
       (princ "\n  Select objects: ")
       (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn
@@ -29415,7 +29493,7 @@
   ;; a pickfirst selection if there is one, otherwise ask for it -
   ;; probed before the undo group opens, which would clear the set
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
-  (if lzd:watch (lzd:watch pf-pick))
+  (if lzd:watch (lzd:watch pf-pick) pf-pick)
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -29433,7 +29511,7 @@
       (princ "\n  themselves; select them too only if they live somewhere unusual.")
       (princ "\n  Select objects: ")
       (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (princ "\nNothing usable selected (survey points and the perimeter geometry).")
     (progn
@@ -31038,13 +31116,13 @@
 (defun acc:select ( / ss)
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (princ "\n\nSelect the closed perimeter - one polyline, or the same")
       (princ "\nshape exploded into lines and arcs.")
       (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (progn (princ "\nABCURCHECK: nothing selected.") nil)
     ss))
@@ -31876,7 +31954,7 @@
 (defun abp:asklimit (msg dflt / v)
   (initget 6)
   (setq v (getdist (strcat "\n" msg " <" (abp:dstr dflt) ">: ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (if v v dflt))
 
 ;;; -------------------- the commands ------------------------------------
@@ -31899,7 +31977,7 @@
   ;; group opens, because that command clears the set (the convention
   ;; FITABHD and abhd already carry)
   (setq ss (ssget "_I" abp:*filter*))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -31911,7 +31989,7 @@
     (progn
       (princ "\nHighlight the drawing to ABPCHECK (Enter = whole drawing): ")
       (setq ss (ssget abp:*filter*))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss) (setq ss (ssget "_X" abp:*filter*)))
   (if (null ss)
     (princ "\nNothing to check - no points or lines in the drawing.")
@@ -33104,7 +33182,7 @@
     (setq ans (getint (strcat "\n  Include points up to [Pick/All"
                               (if back "/Back" "") "] <"
                               (if out (itoa out) "All") ">: ")))
-    (if lzd:ask (lzd:ask "cab:ask-cut" ans))
+    (if lzd:ask (lzd:ask "cab:ask-cut" ans) ans)
     (cond
       ((null ans) (setq cut out))                     ; Enter: unchanged
       ;; the only question in front of this one is the selection, so
@@ -34481,7 +34559,7 @@
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
                                     dflt "): ")))
-          (if lzd:watch (lzd:watch sel))
+          (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -34585,7 +34663,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *CAB-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "cab:ask-tol" tol))
+  (if lzd:ask (lzd:ask "cab:ask-tol" tol) tol)
   (cond
     ((cab:back-kw tol) 'CAB-BACK)
     (T
@@ -34607,7 +34685,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "cab:ask-pct" pct))
+  (if lzd:ask (lzd:ask "cab:ask-pct" pct) pct)
   (cond
     ((cab:back-kw pct) 'CAB-BACK)
     ((null pct) def)
@@ -34623,7 +34701,7 @@
                            (if *CAB-MAX-ARCS* (itoa *CAB-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "cab:ask-cap" mx))
+  (if lzd:ask (lzd:ask "cab:ask-cap" mx) mx)
   (cond
     ((cab:back-kw mx) 'CAB-BACK)
     (T
@@ -34965,7 +35043,7 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq cab-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-  (if lzd:watch (lzd:watch cab-pick))
+  (if lzd:watch (lzd:watch cab-pick) cab-pick)
 
   ;; one undo group around the whole fit - a U after CABHD takes back
   ;; the edge, the markers and the previews in one step (the stale
@@ -35161,7 +35239,7 @@
         (princ "\n  Take the whole survey - step 8 says how much of it is the pool.")
         (princ "\n  Select objects: ")
         (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-        (if lzd:watch (lzd:watch ss))))
+        (if lzd:watch (lzd:watch ss) ss)))
     (if (null ss)
       (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
       (progn
@@ -35811,7 +35889,7 @@
   (if back (initget 6 "Back Undo") (initget 6))
   (setq v (getdist (strcat "\n" msg (if back " [Back]" "")
                            " <" (ptr:dstr dflt) ">: ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) dflt)
         (t v)))
@@ -35822,7 +35900,7 @@
   (if back (initget 6 "Back Undo") (initget 6))
   (setq v (getint (strcat "\n" msg (if back " [Back]" "")
                           " <" (itoa dflt) ">: ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) dflt)
         (t v)))
@@ -36262,7 +36340,7 @@
                         (cdr (assoc 8 (entget cand))) ") [Back]: ")
                 (strcat "\nSelect the perimeter (a polyline, circle,"
                         " line or arc) [Back]: "))))
-    (if lzd:watch (lzd:watch v))
+    (if lzd:watch (lzd:watch v) v)
     (cond
       ((member v '("Back" "Undo")) (setq done T res 'CAL-BACK))
       ;; entsel answers nil for Enter AND for a click that hit nothing.
@@ -36310,7 +36388,7 @@
   ;; before the undo group's command clears it - step 1 takes it once,
   ;; so coming Back re-asks interactively
   (setq pick1 (ssget "_I" ptr:*filter*))
-  (if lzd:watch (lzd:watch pick1))
+  (if lzd:watch (lzd:watch pick1) pick1)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -36329,7 +36407,7 @@
          (progn
            (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
            (setq ss (ssget ptr:*filter*))
-           (if lzd:watch (lzd:watch ss))))
+           (if lzd:watch (lzd:watch ss) ss)))
        ;; "whole drawing" is the tab you are looking at, the same scope
        ;; the clash check sweeps and the same one COVERCHECK and XFTCONV
        ;; use for this prompt: renumbering points in a layout you cannot
@@ -37163,14 +37241,14 @@
   (initget "1 2 3 All None Redo")
   (setq pick (getkword (strcat "\n  Keep which fit - click one, or"
                                " [1/2/3/All/None/Redo] <" dflt ">: ")))
-  (if lzd:ask (lzd:ask "lobf:askfit" pick))
+  (if lzd:ask (lzd:ask "lobf:askfit" pick) pick)
   (if (null pick)
     ;; no keyword typed: give them a click, and fall back to the
     ;; default this run worked out
     (progn
       (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
                                 dflt "): ")))
-      (if lzd:watch (lzd:watch sel))
+      (if lzd:watch (lzd:watch sel) sel)
       (if sel
         (progn
           (setq picked (car sel) i 1)
@@ -37360,7 +37438,7 @@
   ;; group opens, because that command clears the set (the convention
   ;; ABPCHECK and abhd already carry)
   (setq ss (ssget "_I" lobf:*filter*))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -37375,7 +37453,7 @@
       (progn
         (princ "\nHighlight the points to fit (Enter = every point in the drawing): ")
         (setq ss (ssget lobf:*filter*))
-        (if lzd:watch (lzd:watch ss))))
+        (if lzd:watch (lzd:watch ss) ss)))
     (if (null ss) (setq ss (ssget "_X" lobf:*filter*)))
     (if (null ss)
       (princ "\nNothing to fit - no points in the drawing.")
@@ -38037,7 +38115,7 @@
   ;; still lands on the interactive selection, never a re-probe
   (setq ss (ssget "_I" (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   ;; staged: Back (or Undo) at any later prompt re-opens the stage before
   (setq stage (if ss 2 1) done nil)
   (while (not done)
@@ -38047,7 +38125,7 @@
                        *autobead-filter* "): "))
        (setq ss (ssget (list '(0 . "LINE,ARC,LWPOLYLINE,POLYLINE")
                              (cons 8 *autobead-filter*))))
-       (if lzd:watch (lzd:watch ss))
+       (if lzd:watch (lzd:watch ss) ss)
        (if (null ss)
          (progn
            (prompt (strcat "\nNothing selected on a " *autobead-filter*
@@ -40039,7 +40117,7 @@
   (if lzd:begin (lzd:begin "AUTODIM" *autodim-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq plan (ssget "_I" (ad:geomfilter)))
-  (if lzd:watch (lzd:watch plan))
+  (if lzd:watch (lzd:watch plan) plan)
   (if (null plan)
     (progn
       (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
@@ -40050,7 +40128,7 @@
                       " instead and it is recognised as one: the depth of"
                       " every step gets dimensioned rather than a plan."))
       (setq plan (ssget (ad:geomfilter)))
-      (if lzd:watch (lzd:watch plan))))
+      (if lzd:watch (lzd:watch plan) plan)))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
@@ -40101,7 +40179,7 @@
   ;; a pickfirst selection if there is one, grabbed before the undo
   ;; group's command clears it - nil makes ad:dimstairs ask
   (setq ss0 (ssget "_I" (ad:stairfilter)))
-  (if lzd:watch (lzd:watch ss0))
+  (if lzd:watch (lzd:watch ss0) ss0)
   (setvar "CMDECHO" 0)
   (ad:begin)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -40185,7 +40263,7 @@
   (if lzd:begin (lzd:begin "AUTODIMSIDEPOV" *autodim-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" (ad:stairfilter)))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side"
@@ -40194,7 +40272,7 @@
                       "\nHighlight the side view of the steps, then press"
                       " Enter."))
       (setq ss (ssget (ad:stairfilter)))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (prompt "\nNothing highlighted - AUTODIMSIDEPOV cancelled.")
     (progn
@@ -40708,7 +40786,7 @@
                                 (vl-string-translate " " "/" kwlist)
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
-    (if lzd:ask (lzd:ask prompt ans))
+    (if lzd:ask (lzd:ask prompt ans) ans)
     (if (and (null ans) dflt) (setq ans dflt))
   )
   (if (member ans '("Back" "Undo"))
@@ -41979,12 +42057,12 @@
   ;; -- 1. the highlighted lines: a pickfirst selection if there is
   ;;       one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (princ "\nHighlight the lines to cross-dimension: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
 
   (if (null ss)
     (princ "\nNothing highlighted -- nothing to dimension.")
@@ -42544,12 +42622,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to CHECK: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (cond
     ((null ss)
      (prompt "\nNothing selected - CHECK cancelled."))
@@ -43470,13 +43548,13 @@
   ;; ---- 1. selection ---------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (princ "\nSelect the two walls forming the corner ")
       (princ "(a corner diagonal or fillet arc may be included):")
       (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
 
@@ -45539,13 +45617,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the base curve (arc, circle"
                      " or polyline), or the curve plus its axis line:"))
       (setq ss (ssget '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -47394,13 +47472,13 @@
   ;; ---- 1. selection ----------------------------------------------------
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (princ (strcat "\nSelect the base line, the two lines of a corner,"
                      " or a U-shaped step perimeter:"))
       (setq ss (ssget '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (progn (princ "\nNothing selected.") (exit)))
   (setq i 0)
@@ -52947,7 +53025,7 @@
          (setq replp T)
          (setq pk (entsel (strcat "\nPick the '" *cchk-repl-block*
                                   "' block <it is not placed>: ")))
-         (if lzd:watch (lzd:watch pk))
+         (if lzd:watch (lzd:watch pk) pk)
          (cond
            ((and pk
                  (= "INSERT" (cdr (assoc 0 (entget (car pk)))))
@@ -53060,12 +53138,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to COVERCHECK: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (cond
     ((null ss)
      (prompt "\nNothing selected - COVERCHECK cancelled."))
@@ -53452,13 +53530,13 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the drawing to " name
                       " (Enter = whole drawing): "))
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -54084,7 +54162,7 @@
       (if back (initget 6 "Back Undo") (initget 6))
       (setq v (getdist (strcat "\n" msg (if back " [Back]" "")
                                " <" (rtos last) ">: ")))
-      (if lzd:ask (lzd:ask msg v))
+      (if lzd:ask (lzd:ask msg v) v)
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
             ((null v) last)
             (t v)))))
@@ -54100,7 +54178,7 @@
   ;; section 1 -- the wording itself is section 3's Placement question
   (setq v (getpoint (strcat "\nInsertion base point"
                             (if back " [Back]" "") " <0,0>: ")))
-  (if lzd:ask (lzd:ask "cbk:askbase" v))
+  (if lzd:ask (lzd:ask "cbk:askbase" v) v)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))
@@ -55769,12 +55847,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to DIMCHECK: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (cond
     ((null ss)
      (prompt "\nNothing selected - DIMCHECK cancelled."))
@@ -56172,12 +56250,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -56745,7 +56823,7 @@
     (setq en nil ss nil pl nil kept nil)
     (while (null en)
       (setq tref (entsel "\nSelect the dimension to continue: "))
-      (if lzd:watch (lzd:watch tref))
+      (if lzd:watch (lzd:watch tref) tref)
       (cond
         ((null tref)                                 ; Enter / miss -> quit
            ;; a quoted symbol, not :none - a colon symbol evaluates to
@@ -56770,7 +56848,7 @@
         ;; -- 2. highlight the drawing to dimension -----------------
         (princ "\nHighlight the drawing to dimension (window/crossing): ")
         (setq ss (ssget))
-        (if lzd:watch (lzd:watch ss))
+        (if lzd:watch (lzd:watch ss) ss)
 
         (if (null ss)
           (princ "\nNothing highlighted -- nothing to do.")
@@ -57029,7 +57107,7 @@
   ;; selection - skip straight to the height question; Back from there
   ;; re-opens an interactive pick.
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (setq stage (if ss 2 1) done nil)
   (while (not done)
     (cond
@@ -57038,7 +57116,7 @@
       ((= stage 1)
        (princ "\nSelect the spa / obstacle to correct (one or more objects), then Enter.")
        (setq ss (ssget))
-       (if lzd:watch (lzd:watch ss))
+       (if lzd:watch (lzd:watch ss) ss)
        (if (null ss)
          (progn (princ "\nNothing selected.") (setq done T))
          (setq stage 2)))
@@ -63234,7 +63312,7 @@
        (initget 6 "Back Undo")
        (setq v (getdist (strcat "\nMaximum distance from a point <"
                                 (rtos tol 2 3) "> [Back]: ")))
-       (if lzd:ask (lzd:ask "fit:ask-settings" v))
+       (if lzd:ask (lzd:ask "fit:ask-settings" v) v)
        (cond
          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
           (princ "\nStepping back one step.")
@@ -63429,7 +63507,7 @@
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
   (setq fit-pick (ssget "_I" '((0 . "POINT,INSERT"))))
-  (if lzd:watch (lzd:watch fit-pick))
+  (if lzd:watch (lzd:watch fit-pick) fit-pick)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -63454,7 +63532,7 @@
                      "\n  " fit:*point-block* " blocks)."))
       (princ "\n  Select objects: ")
       (setq ss (ssget '((0 . "POINT,INSERT"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (cond
     ((null ss)
      (princ (strcat "\nNothing usable selected (POINT entities on layer "
@@ -65568,7 +65646,7 @@
       (if (null pick)
         (progn
           (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
-          (if lzd:watch (lzd:watch sel))
+          (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -65641,7 +65719,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *LH-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "lh:ask-tol" tol))
+  (if lzd:ask (lzd:ask "lh:ask-tol" tol) tol)
   (cond
     ((lh:back-kw tol) 'LH-BACK)
     (T
@@ -65663,7 +65741,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "lh:ask-pct" pct))
+  (if lzd:ask (lzd:ask "lh:ask-pct" pct) pct)
   (cond
     ((lh:back-kw pct) 'LH-BACK)
     ((null pct) def)
@@ -65679,7 +65757,7 @@
                            (if *LH-MAX-ARCS* (itoa *LH-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "lh:ask-cap" mx))
+  (if lzd:ask (lzd:ask "lh:ask-cap" mx) mx)
   (cond
     ((lh:back-kw mx) 'LH-BACK)
     (T
@@ -65696,7 +65774,7 @@
               "\n  Closed outline or Open polyline? [Closed/Open"
               (if back "/Back" "") "] <"
               *LH-SHAPE* ">: ")))
-  (if lzd:ask (lzd:ask "lh:ask-shape" ans))
+  (if lzd:ask (lzd:ask "lh:ask-shape" ans) ans)
   (cond
     ((member ans '("Back" "Undo")) 'LH-BACK)
     (T (if ans (setq *LH-SHAPE* ans))
@@ -65711,7 +65789,7 @@
               "\n  Draw the outline at which height - [Top/Bottom/Average/Zero"
               (if back "/Back" "") "] <"
               *LH-ZMODE* ">: ")))
-  (if lzd:ask (lzd:ask "lh:ask-zmode" ans))
+  (if lzd:ask (lzd:ask "lh:ask-zmode" ans) ans)
   (cond
     ((member ans '("Back" "Undo")) 'LH-BACK)
     (T (if ans (setq *LH-ZMODE* ans))
@@ -65968,7 +66046,7 @@
   ;; a pickfirst selection if there is one - kept for step 6, probed
   ;; before the undo group opens, which would clear the set
   (setq lh-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
-  (if lzd:watch (lzd:watch lh-pick))
+  (if lzd:watch (lzd:watch lh-pick) lh-pick)
 
   ;; one undo group around the whole fit - a U after LHD takes back
   ;; the outline, the labels and the markers in one step (the stale
@@ -66153,7 +66231,7 @@
         (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
         (princ "\n  Select objects: ")
         (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
-        (if lzd:watch (lzd:watch ss))))
+        (if lzd:watch (lzd:watch ss) ss)))
     (if (null ss)
       (princ "\nNothing usable selected (points, and optionally a sketch on the POOL layer).")
       (progn
@@ -66673,7 +66751,7 @@
                                 (vl-string-translate " " "/" kwlist)
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
-    (if lzd:ask (lzd:ask prompt ans))
+    (if lzd:ask (lzd:ask prompt ans) ans)
     (if (and (null ans) dflt) (setq ans dflt))
   )
   (if (member ans '("Back" "Undo"))
@@ -69741,12 +69819,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to LINFINCHECK: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (cond
     ((null ss)
      (prompt "\nNothing selected - LINFINCHECK cancelled."))
@@ -70707,13 +70785,13 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the drawing to " name
                       " (Enter = whole drawing): "))
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
@@ -72302,12 +72380,12 @@
   ;; loop -- being handed the loop beats guessing at it beside a title
   ;; block border.
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
       (progn
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
         (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
-        (if lzd:watch (lzd:watch ss))))
+        (if lzd:watch (lzd:watch ss) ss)))
   (setq perims (paddle--perimeters ss))
 
   (if (not perims)
@@ -73341,12 +73419,12 @@
 ;; it, and nothing outside the highlight is read, kept or erased.
 (defun lg:highlight ( / ss)
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (princ "\nHighlight the area to gut: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   ss)
 
 ;; the highlighted set as a list of enames
@@ -74104,7 +74182,7 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
-    (if lzd:ask (lzd:ask "perp:ask-width" ans))
+    (if lzd:ask (lzd:ask "perp:ask-width" ans) ans)
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -74261,7 +74339,7 @@
   (setq ent nil)
   (while (null ent)
     (setq sel (entsel "\nSelect a line or polyline: "))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))
@@ -74908,7 +74986,7 @@
     (setq ans (getkword (strcat "\nHas that width changed? ["
                                 (vl-string-translate " " "/" kws)
                                 "] <Unchanged>: ")))
-    (if lzd:ask (lzd:ask "cperp:ask-width" ans))
+    (if lzd:ask (lzd:ask "cperp:ask-width" ans) ans)
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -75050,7 +75128,7 @@
   (setq crv nil)
   (while (null crv)
     (setq sel (entsel "\nSelect a curve (polyline, arc, spline...): "))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))
@@ -76663,7 +76741,7 @@
   (while (not ans)
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel) (setq ans 'SF-NONE))
@@ -76686,7 +76764,7 @@
   (while (not ans)
     (initget "Cancel")
     (setq sel (entsel "\nClick the rounded corner you want [Cancel]: "))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel)
@@ -77542,7 +77620,7 @@
   (while (not ans)
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel) (setq ans 'HN-NONE))
@@ -77567,7 +77645,7 @@
   (while (not ans)
     (initget "Cancel")
     (setq sel (entsel (strcat "\n" msg " [Cancel]: ")))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel)
@@ -79732,14 +79810,14 @@
   (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to " name " (Enter = whole drawing): "))
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to scan.")
@@ -79780,14 +79858,14 @@
   (if lzd:begin (lzd:begin "SPACHECK" *spacheck-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the spa drawing and its "
                       spachk:*details-block*
                       " block to SPACHECK (Enter = whole drawing): "))
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss) (setq ss (ssget "_X")))
   (if (null ss)
     (prompt "\nNothing to check.")
@@ -80548,12 +80626,12 @@
       ;; a highlight made before the command was typed (pickfirst) is
       ;; the perimeter - only ask when there is none
       (setq ss-old (ssget "_I"))
-      (if lzd:watch (lzd:watch ss-old))
+      (if lzd:watch (lzd:watch ss-old) ss-old)
       (if (null ss-old)
         (progn
           (princ "\nHighlight the perimeter to be replaced: ")
           (setq ss-old (ssget))
-          (if lzd:watch (lzd:watch ss-old))))
+          (if lzd:watch (lzd:watch ss-old) ss-old)))
       (if (null ss-old)
         (stock:say "nothing highlighted - nothing to replace.")
         (progn
@@ -80914,12 +80992,12 @@
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
   (setq ss-text (ssget "_I" '((0 . "TEXT"))))
-  (if lzd:watch (lzd:watch ss-text))
+  (if lzd:watch (lzd:watch ss-text) ss-text)
   (if (null ss-text)
     (progn
       (prompt "\nSelect text to update <Enter = all text in drawing>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
-      (if lzd:watch (lzd:watch ss-text))
+      (if lzd:watch (lzd:watch ss-text) ss-text)
       (if (null ss-text)
         (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
 
@@ -81217,12 +81295,12 @@
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
   (setq ss-text (ssget "_I" '((0 . "TEXT"))))
-  (if lzd:watch (lzd:watch ss-text))
+  (if lzd:watch (lzd:watch ss-text) ss-text)
   (if (null ss-text)
     (progn
       (prompt "\nSelect text to update <Enter = all text in drawing>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
-      (if lzd:watch (lzd:watch ss-text))
+      (if lzd:watch (lzd:watch ss-text) ss-text)
       (if (null ss-text)
         (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
 
@@ -82008,12 +82086,12 @@
   ;; IS the whole drawing, which is why Enter means that; highlight
   ;; first when two surveys share one drawing.
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt "\nSelect the survey import to convert <Enter = whole drawing>: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))
+      (if lzd:watch (lzd:watch ss) ss)
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -82089,12 +82167,12 @@
   ;; carrying a record move either way, so Enter is as safe here as it
   ;; is there.
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))
+      (if lzd:watch (lzd:watch ss) ss)
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -82662,7 +82740,7 @@
           (prompt (strcat "\nSelect the VS import <Enter = every VS layer"
                           " in the drawing>: "))
           (setq ss (ssget filter))
-          (if lzd:watch (lzd:watch ss))
+          (if lzd:watch (lzd:watch ss) ss)
           (if (null ss) (setq ss (ssget "_X" filter)))))
 
       ;; The destinations have to exist, and be usable, before anything
@@ -82805,12 +82883,12 @@
   ;; drawing lives too -- so the record is what says which objects came
   ;; from an export, and nothing else is touched whatever is selected.
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt "\nSelect the converted import to put back <Enter = whole drawing>: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))
+      (if lzd:watch (lzd:watch ss) ss)
       (if (null ss)
         (setq ss (ssget "_X")))))
 
@@ -83562,12 +83640,12 @@
 ;; highlight first when two plans share one sheet.
 (defun g2m:scope (msg / ss)
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\n" msg " <Enter = whole drawing>: "))
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))
+      (if lzd:watch (lzd:watch ss) ss)
       (if (null ss) (setq ss (ssget "_X")))))
   ss)
 
@@ -84415,7 +84493,7 @@
   ;; the first pass through stage 1 takes them; a too-small band or Back
   ;; re-asks interactively.
   (setq wc-pick (ssget "_I" '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
-  (if lzd:watch (lzd:watch wc-pick))
+  (if lzd:watch (lzd:watch wc-pick) wc-pick)
   (setq stage 1)
   (while (< stage 6)
     (cond
@@ -84427,7 +84505,7 @@
          (progn
            (princ "\nSelect the band of lines (two long sides + rungs): ")
            (setq ss (ssget '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
-           (if lzd:watch (lzd:watch ss))))
+           (if lzd:watch (lzd:watch ss) ss)))
        (if (not ss) (progn (princ "\nNothing selected.") (exit)))
        (setq segs (wc:build-segs ss))
        (if (< (length segs) wc:*min-segs*)
@@ -84442,7 +84520,7 @@
       ((= stage 2)
        (initget "Back Undo")
        (setq pick (entsel "\nClick the long side to STRAIGHTEN [Back]: "))
-       (if lzd:watch (lzd:watch pick))
+       (if lzd:watch (lzd:watch pick) pick)
        (cond
          ((= (type pick) 'STR) (setq stage 1))
          ((not pick)
@@ -84656,7 +84734,7 @@
   ;; equal steps up and down stay equal)
   (princ "\nWindow the STAIR section(s) if any (Enter = none): ")
   (setq ssstairs (ssget))
-  (if lzd:watch (lzd:watch ssstairs))
+  (if lzd:watch (lzd:watch ssstairs) ssstairs)
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a
@@ -86159,12 +86237,12 @@
   ;; so there is nothing left to step back to.  a selection made before
   ;; the command was typed (pickfirst) skips even that prompt.
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (not ss)
     (progn
       (princ "\nSelect the imported survey objects (Enter = everything in this space): ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -86450,12 +86528,12 @@
 
   ;; ---- selection, the same three ways XFTCONV takes it ------------
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (not ss)
     (progn
       (princ "\nSelect the converted survey (Enter = everything in this space): ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (not ss)
     (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
   )
@@ -88930,7 +89008,7 @@
   (setq dflt (fix (max cst:*minpts* (min cst:*maxpts* cst:*defcount*))))
   (initget 6 "Back Undo")
   (setq v (getint (strcat "\nHow many points? [Back] <" (itoa dflt) ">: ")))
-  (if lzd:ask (lzd:ask "cst:askcount" v))
+  (if lzd:ask (lzd:ask "cst:askcount" v) v)
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) dflt)
         ((or (< v cst:*minpts*) (> v cst:*maxpts*))
@@ -88943,7 +89021,7 @@
 (defun cst:askbase ( / v)
   (initget "Back Undo")
   (setq v (getpoint "\nInsertion base point [Back] <0,0>: "))
-  (if lzd:ask (lzd:ask "cst:askbase" v))
+  (if lzd:ask (lzd:ask "cst:askbase" v) v)
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) '(0.0 0.0))
         (t (cal:2d v))))
@@ -95695,7 +95773,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.10 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.11 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

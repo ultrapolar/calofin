@@ -415,7 +415,7 @@
 (defun abf:askfirst (msg endtext / v)
   (initget 6 "Back Undo")
   (setq v (getdist (strcat "\n" msg " [Back] <Enter = " endtext ">: ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK v))
 
 ;;; ---------------------- layers ----------------------------------------

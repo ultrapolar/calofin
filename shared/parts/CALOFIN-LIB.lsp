@@ -42,7 +42,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) (if dflt dflt (cal:askkw msg kws shown dflt back)))
         (t v)))
@@ -81,7 +81,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -115,7 +115,7 @@
 (defun cal:ask-yn (msg dflt / ans)
   (initget "Yes No")
   (setq ans (getkword (strcat msg " [Yes/No] <" dflt ">: ")))
-  (if lzd:ask (lzd:ask msg ans))
+  (if lzd:ask (lzd:ask msg ans) ans)
   (if (null ans) (setq ans dflt))
   (= ans "Yes"))
 
@@ -128,7 +128,7 @@
   ;; 1): a click sends the bracket text, and "Skip rest" was a click
   ;; the initget list could not accept
   (setq ans (getkword (strcat msg " [Yes/No/Back/Skip] <Yes>: ")))
-  (if lzd:ask (lzd:ask msg ans))
+  (if lzd:ask (lzd:ask msg ans) ans)
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)
@@ -148,7 +148,7 @@
   (setq v (getstring T (strcat "\n" msg
                                (if dflt (strcat " <" dflt ">") "")
                                (if back " (B = back)" "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((and back (cal:back-word-p v)) 'CAL-BACK)
         ((= v "") (if dflt dflt v))
         (t v)))

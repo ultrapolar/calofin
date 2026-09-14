@@ -834,7 +834,7 @@
   (cal:osup)
   (initget 7)                           ; no null, no zero, no negative
   (setq v (getdist (strcat "\n" msg ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cal:osdown)
   v)
 
@@ -1075,7 +1075,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cal:osdown)
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -4218,7 +4218,7 @@
                                         (if dflt (strcat " <" (rtos dflt) ">")
                                             "")
                                         ": ")))
-              (if lzd:ask (lzd:ask subject sz))
+              (if lzd:ask (lzd:ask subject sz) sz)
               (if (null sz) (setq sz dflt))))
         ;; how far this treatment eats along each wall, at the real
         ;; corner angle -- so the cap holds on a 135-degree bend or a
