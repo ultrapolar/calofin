@@ -122,6 +122,7 @@
                  "SPA.lsp" "TUTORIALSPA.lsp"
                  "OASIS.lsp" "abcdef.lsp" "ABFIND.lsp"
                  "ALTABCDEF.lsp" "abhd.lsp" "ABCURCHECK.lsp" "ABPCHECK.lsp"
+                 "OLAUTO.lsp"
                  "CABHD.lsp" "POINTRENAMER.lsp" "LOBF.lsp" "ABLOBF.lsp"
                  "AUTOBEAD.lsp"
                  "AutoDim.lsp" "BPCALLOUT.lsp" "DIMSTAMP.lsp" "ccprecheck.lsp"

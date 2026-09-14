@@ -69,6 +69,7 @@ LOBF              Fits a construction line through points that should be on one 
 MOHAMADDLE        PADDLE's perimeter pads with a size pick first - 24in or 36in
 NORMIESTEP        Normie step layout
 OASIS             Continuous-tangent pool drawn live from envelope and radii
+OLAUTO            Best-fit overlay of a new perimeter on the original, worst error dimensioned
 PADDLE            Paddle perimeter pads
 PERPMARK          Name a survey point, type what it measured: circle, perpendicular, dimension
 PERPPTS           Perpendicular offset points along a line or curve
