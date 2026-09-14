@@ -145,6 +145,58 @@ def rect(w, h):
     return [(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)]
 
 
+def heavypoly(vm, verts, closed=True, layer='POOL'):
+    """Old-style POLYLINE.  The VM's entnext walks vm.entities in
+    creation order, so the header, its vertices and the SEQEND simply
+    have to be made in a row."""
+    h = Ent()
+    vm.entities.append(h)
+    vm.entdata[h] = [Dot(0, 'POLYLINE'), Dot(8, layer), Dot(66, 1),
+                     [10, 0.0, 0.0, 0.0], Dot(70, 1 if closed else 0)]
+    for v in verts:
+        w = Ent()
+        vm.entities.append(w)
+        vm.entdata[w] = [Dot(0, 'VERTEX'), Dot(8, layer),
+                         [10, float(v[0]), float(v[1]), 0.0],
+                         Dot(42, float(v[2]) if len(v) > 2 else 0.0),
+                         Dot(70, 0)]
+    q = Ent()
+    vm.entities.append(q)
+    vm.entdata[q] = [Dot(0, 'SEQEND'), Dot(8, layer)]
+    return h
+
+
+def walked(pts, per_side=40):
+    """A closed outline walked out into many short straight steps --
+    what a traced perimeter looks like next to a drawn one."""
+    out = []
+    n = len(pts)
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        for k in range(per_side):
+            f = k / float(per_side)
+            out.append((a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])))
+    return out
+
+
+def explode(vm, pts, layer='POOL', gap=0.0):
+    """A closed outline as loose LINEs, with GAP opened at one joint."""
+    out = []
+    n = len(pts)
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        if i == 0 and gap:
+            ux, uy = b[0] - a[0], b[1] - a[1]
+            L = math.hypot(ux, uy)
+            a = (a[0] + ux / L * gap, a[1] + uy / L * gap)
+        out.append(line(vm, a, b, layer=layer))
+    return out
+
+
+def said(vm):
+    return ' '.join(vm.printed)
+
+
 def bind(vm, ents):
     for i, e in enumerate(ents):
         vm.set(Sym(f'_e{i}'), e)
@@ -620,6 +672,244 @@ def test_version_command():
     vm.run('c:OLAUTOVER', [])
     assert 'OLAUTO v' in ' '.join(vm.printed)
     print("ok  OLAUTOVER reports the loaded version")
+
+
+# ---- a gap is a drawing defect, not an open run ------------------------
+
+def test_a_gap_in_the_perimeter_still_reads_closed():
+    """A perimeter exploded and rejoined by hand is riddled with tiny
+    gaps.  CLOSED is what puts the cyclic half of the phase search in
+    play, so an absolute tolerance would drop a sloppily drawn loop into
+    the open path -- where the two walks have to START at corresponding
+    points or no alignment can be found at all."""
+    base = rect(200.0, 120.0)
+    for gap in (0.0, 0.001, 0.05, 1.0):
+        vm = newvm()
+        segs(vm, explode(vm, base, gap=gap), '_fix')
+        assert vm.loads('(ola:closed-p _fix)') is not NIL, \
+            f"a {gap} gap read as an open run"
+    print("ok  gaps up to 1\" in a 640\" outline still read as closed")
+
+
+def test_a_real_open_run_still_reads_open():
+    """...and the relative tolerance must not swallow a bead track that
+    genuinely stops at the steps."""
+    per = walked(rect(200.0, 120.0))
+    for frac, want_closed in ((0.995, True), (0.98, False), (0.75, False)):
+        vm = newvm()
+        segs(vm, [lwpoly(vm, per[:int(len(per) * frac)], closed=False)], '_fix')
+        got = vm.loads('(ola:closed-p _fix)') is not NIL
+        assert got == want_closed, \
+            f"{frac:.1%} of the loop read {'closed' if got else 'open'}"
+    print("ok  a run missing 2% or more of the loop still reads open")
+
+
+def test_reversed_and_gapped_still_fits():
+    """The regression this tolerance exists for.  A 0.05\" gap in a 640\"
+    outline that was ALSO drawn the other way round fitted 55.7 units
+    out under an absolute tolerance -- the gap put it in the open path,
+    and the open path cannot search the cyclic alignment the reversal
+    needed.  Same pair, cyclic search running: 0.002."""
+    vm = newvm()
+    base = rect(200.0, 120.0)
+    segs(vm, explode(vm, pose(list(reversed(base)), 50.0, 700.0, -300.0),
+                     gap=0.05), '_mov')
+    segs(vm, explode(vm, base), '_fix')
+    fit(vm)
+    worst = stats(profile(vm))[0]
+    assert worst < 0.01, f"worst {worst} - the cyclic search did not run"
+    print(f"ok  reversed AND gapped fits to {worst:.4f}, not 55.7")
+
+
+def test_trace_density_does_not_matter():
+    """600 micro-segments against the same shape drawn as four lines:
+    the arc-length walk is what makes the density irrelevant."""
+    vm = newvm()
+    base = rect(200.0, 120.0)
+    segs(vm, [lwpoly(vm, pose(walked(base, 150), 29.0, 600.0, -250.0))], '_mov')
+    segs(vm, [lwpoly(vm, base)], '_fix')
+    fit(vm)
+    assert stats(profile(vm))[0] < 1e-3
+    print("ok  a 600-segment trace fits a 4-line draw exactly")
+
+
+def test_a_square_is_stable_under_its_own_symmetry():
+    """Four overlays are equally right; it has to pick one and not
+    wobble between them."""
+    seen = set()
+    for deg in (0.0, 17.0, 91.0, 183.0, 271.0):
+        vm = newvm()
+        segs(vm, [lwpoly(vm, pose(rect(150.0, 150.0), deg, 400.0, -100.0))],
+             '_mov')
+        segs(vm, [lwpoly(vm, rect(150.0, 150.0))], '_fix')
+        fit(vm)
+        seen.add(round(stats(profile(vm))[0], 9))
+    assert max(seen) < 1e-6, seen
+    print("ok  a square's four-fold symmetry does not unsettle the fit")
+
+
+# ---- the picks OLAUTO refuses ------------------------------------------
+
+def test_the_same_perimeter_picked_twice_is_refused():
+    """The most dangerous mis-pick there is: a curve fitted to itself
+    reports a perfect overlay and nothing to dimension, which is the one
+    answer nobody questions."""
+    vm = newvm()
+    a = lwpoly(vm, rect(80.0, 50.0), layer='POOL')
+    b = lwpoly(vm, pose(rect(80.0, 50.0), 20.0, 300.0, 0.0), layer='Bead Track')
+    run(vm, [[a], [a], [a], [b], 'First', 'New'])
+    assert 'same perimeter twice' in said(vm), said(vm)[-300:]
+    assert 'best overlay' in said(vm), "the re-pick after the refusal never ran"
+    print("ok  one perimeter picked twice is refused, and the re-pick runs")
+
+
+def test_overlapping_picks_are_refused_before_anything_moves():
+    vm = newvm()
+    a = lwpoly(vm, rect(80.0, 50.0), layer='POOL')
+    b = lwpoly(vm, pose(rect(80.0, 50.0), 25.0, 400.0, -90.0),
+               layer='Bead Track')
+    before = corners(vm, b)
+    run(vm, [[a, b], [b], None])
+    assert 'share 1 object' in said(vm), said(vm)[-300:]
+    shift = max(math.dist(p, q) for p, q in zip(before, corners(vm, b)))
+    assert shift < 1e-9, f"the shared entity moved {shift}"
+    print("ok  a pick that shares an object is refused, and nothing moves")
+
+
+def test_a_mirrored_polyline_is_refused():
+    """An LWPOLYLINE keeps its points in the OBJECT plane.  Read a
+    mirrored one (extrusion 0,0,-1) as world and the outline comes out
+    mirrored -- so the fit would be computed on geometry that is not
+    what is on the screen."""
+    vm = newvm()
+    a = lwpoly(vm, rect(80.0, 50.0), layer='POOL')
+    vm.entdata[a].append([210, 0.0, 0.0, -1.0])
+    b = lwpoly(vm, pose(rect(80.0, 50.0), 25.0, 400.0, -90.0),
+               layer='Bead Track')
+    before = corners(vm, a)
+    run(vm, [[a], [b], None])
+    assert 'world XY plane' in said(vm), said(vm)[-300:]
+    assert max(math.dist(p, q) for p, q in zip(before, corners(vm, a))) < 1e-9
+    print("ok  a mirrored polyline is refused rather than fitted backwards")
+
+
+def test_a_line_is_not_refused_for_its_extrusion():
+    """A LINE keeps WORLD points whatever its extrusion says, so the
+    flatness guard must not catch one."""
+    vm = newvm()
+    ents = explode(vm, rect(80.0, 50.0), layer='POOL')
+    vm.entdata[ents[0]].append([210, 0.0, 0.0, -1.0])
+    b = lwpoly(vm, pose(rect(80.0, 50.0), 25.0, 400.0, -90.0),
+               layer='Bead Track')
+    run(vm, [ents, [b], 'First', 'New'])
+    assert 'world XY plane' not in said(vm), "a LINE was refused"
+    print("ok  a LINE with a flipped extrusion is read, not refused")
+
+
+# ---- the fits OLAUTO does not believe -----------------------------------
+
+def test_a_wrong_pick_is_called_out():
+    """OLAUTO has no idea what a pool looks like and will fit any two
+    curves.  A 400x30 slot against a round spa has to come back with
+    the numbers AND the caution."""
+    vm = newvm()
+    a = lwpoly(vm, rect(400.0, 30.0), layer='POOL')
+    b = circle(vm, (0, 0), 60.0, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'])
+    assert 'check the pick' in said(vm), said(vm)[-400:]
+    assert "of the pool's own size" in said(vm), said(vm)[-400:]
+    # and it has to survive to where a drafter actually looks
+    assert '***' in ' '.join(vm.printed[-6:]), "the warning scrolled away"
+    print("ok  a slot fitted to a circle is reported AND doubted")
+
+
+def test_a_real_fault_raises_no_false_alarm():
+    """The other half of that: a genuine 5\" fault on a 200\" pool is
+    exactly what this command is for, and must come back quietly."""
+    vm = newvm()
+    a = lwpoly(vm, pose(bumped(200.0, 200.0, {20: (0.0, -5.0)}),
+                        13.0, 500.0, -200.0), layer='POOL')
+    b = lwpoly(vm, bumped(200.0, 200.0, {}), layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'])
+    assert 'check the pick' not in said(vm) and "own size" not in said(vm), \
+        said(vm)[-400:]
+    print("ok  a real 5\" fault on a 200\" pool sets off no alarm")
+
+
+def test_closed_against_open_is_called_out():
+    vm = newvm()
+    per = walked(rect(200.0, 120.0))
+    a = lwpoly(vm, pose(per, 20.0, 500.0, -100.0), layer='POOL')
+    b = lwpoly(vm, per[:110], closed=False, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'])
+    assert 'closes and the' in said(vm), said(vm)[-400:]
+    print("ok  a closed perimeter fitted to an open run says so")
+
+
+# ---- entity flavours ----------------------------------------------------
+
+def test_heavy_polyline_is_read_moved_and_relayered():
+    """The old-style POLYLINE keeps its points in VERTEX sub-entities --
+    and a layer on every one of them, which has to follow the header or
+    a later sweep reads the old answer."""
+    vm = newvm()
+    h = heavypoly(vm, rect(80.0, 50.0), layer='SCRATCH')
+    og = lwpoly(vm, pose(rect(80.0, 50.0), 25.0, 400.0, -90.0),
+                layer='Bead Track')
+    vm.set(Sym('_h'), h)
+    assert vm.loads('(length (ola:ent-segs _h))') == 4
+    assert near(vm.loads('(ola:chain-len (ola:ent-segs _h))'), 260.0, 1e-9)
+    vx = lambda: [(g[1], g[2]) for e in vm.entities
+                  if _alist_dict(vm.entdata[e]).get(0) == 'VERTEX'
+                  for g in vm.entdata[e] if isinstance(g, list) and g[0] == 10]
+    before = vx()
+    run(vm, [[h], [og], 'First', 'New'])
+    assert max(math.dist(a, b) for a, b in zip(before, vx())) > 1.0, \
+        "the heavy POLYLINE's vertices did not move"
+    lays = {_alist_dict(vm.entdata[e])[8] for e in vm.entities
+            if _alist_dict(vm.entdata[e]).get(0) in ('POLYLINE', 'VERTEX',
+                                                     'SEQEND')}
+    assert lays == {'POOL'}, f"header and vertices disagree: {lays}"
+    print("ok  a heavy POLYLINE is read, moved, and relayered to its last vertex")
+
+
+def test_z_survives_the_move():
+    vm = newvm()
+    a = Ent()
+    vm.entities.append(a)
+    vm.entdata[a] = [Dot(0, 'LINE'), Dot(8, 'POOL'),
+                     [10, 0.0, 0.0, 7.5], [11, 10.0, 0.0, 7.5]]
+    vm.set(Sym('_a'), a)
+    vm.loads("(setq _x (list 0.5 3.0 4.0))")
+    vm.loads("(ola:xform-ent _x _a)")
+    d = _alist_dict(vm.entdata[a])
+    assert d[10][2] == 7.5 and d[11][2] == 7.5, f"Z dropped: {d[10]}, {d[11]}"
+    print("ok  a perimeter drawn off Z zero keeps its elevation")
+
+
+def test_far_from_the_origin():
+    """Pool drawings sit where the survey put them, which can be a long
+    way out; the fit is centroid-relative so it must not lose precision
+    there."""
+    vm = newvm()
+    B = 1.0e8
+    segs(vm, [lwpoly(vm, pose(rect(100.0, 60.0), 0.0, B, B))], '_mov')
+    segs(vm, [lwpoly(vm, pose(rect(100.0, 60.0), 17.0, -B, B / 2))], '_fix')
+    fit(vm)
+    worst = stats(profile(vm))[0]
+    assert worst < 1e-4, f"worst {worst} at 1e8 from the origin"
+    print(f"ok  a fit 1e8 units from the origin holds to {worst:.1e}")
+
+
+def test_a_duplicate_vertex_costs_nothing():
+    vm = newvm()
+    pts = list(rect(50.0, 30.0))
+    pts.insert(2, (50.0, 0.0))
+    segs(vm, [lwpoly(vm, pts)], '_mov')
+    segs(vm, [lwpoly(vm, pose(rect(50.0, 30.0), 20.0, 300.0, -100.0))], '_fix')
+    fit(vm)
+    assert stats(profile(vm))[0] < 1e-4
+    print("ok  a zero-length segment in the perimeter costs the fit nothing")
 
 
 # ---- run them ----------------------------------------------------------

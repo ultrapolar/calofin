@@ -42,6 +42,50 @@ selection cannot be armed with `initget`, so Back cannot be typed at
 one. Re-selecting throws away everything the first pass worked out, so
 the second starts clean.
 
+### What it refuses
+
+Three picks send you straight back to the picking rather than producing
+an answer, because each of them would produce a *confident* answer that
+is wrong:
+
+* **The same perimeter picked twice.** A curve fitted to itself reports
+  a perfect overlay and nothing to dimension — which is the one answer
+  nobody questions. Any shared object between the two picks is refused
+  for the same reason: a shared entity gets moved by the fit while still
+  being read as the thing that held still, so the reference the
+  dimensions hang off is quietly wrong.
+* **Geometry that is not drawn in the world XY plane.** An `ARC`,
+  `CIRCLE` or polyline keeps its points in the *object's* plane, and a
+  mirrored one (extrusion `0,0,-1`) has its X axis reversed against the
+  world. Read as world, the outline comes out mirrored — so the fit
+  would be computed on geometry that is not what is on the screen, and
+  the move written back through the same mistake. (A `LINE` keeps world
+  points whatever its extrusion says, so it is not caught by this.)
+
+### What it doubts
+
+OLAUTO has no idea what a pool looks like and will happily fit any two
+curves. A mis-pick — the deck edge instead of the bead track — otherwise
+comes back as a confident set of dimensions off a meaningless overlay.
+Two checks say so instead. Both only ever *print*; neither stops a run,
+because a pool really can be measured wrong by a lot and that is exactly
+the run somebody needs the numbers from.
+
+* The two **perimeter lengths** differ by more than `ola:*len-warn*`
+  (10%). Two measurements of one pool agree far closer than that.
+* The **worst error** exceeds `ola:*fit-warn*` (5%) of the diagonal of
+  the original's bounding box. An overlay that far out is not two
+  measurements of one pool.
+
+A third is printed when one perimeter closes and the other does not:
+they cannot be walked against each other end for end, so the fit is the
+best of a bad job.
+
+The cautions are printed where they are found **and repeated after the
+numbers**, because a drafter reads the last few lines of a run and a
+warning printed before a twenty-second fit has scrolled off by the time
+the result lands.
+
 ### The fit is RIGID -- it never scales
 
 The fit may turn and slide a perimeter and nothing else. This is the
@@ -154,7 +198,10 @@ Every knob is read when the command runs, not when the file loads, so
 | `ola:*icp-win*` | `6` | how far along the curve the polish may look for a better match. Widening costs time and buys nothing; under about 3 can pin the fit before it has settled |
 | `ola:*fit-tol*` | `0.001` | the polish stops when no point moved further than this |
 | `ola:*fit-max*` | `60` | ...or after this many passes, whichever comes first |
-| `ola:*fuzz*` | `1.0e-4` | closer than this and two ends are the same point (ABHD's `*PF-CHAIN-FUZZ*`); it also decides whether a chain came out closed |
+| `ola:*fuzz*` | `1.0e-4` | closer than this and two ends are the same point (ABHD's `*PF-CHAIN-FUZZ*`) |
+| `ola:*close-frac*` | `0.01` | ...and the gap that still counts as closed, as a fraction of the chain's own length. Raise it to forgive a rougher rejoin; lower it if a genuinely open run of yours comes back on itself far enough to read as a loop |
+| `ola:*len-warn*` | `0.10` | how far apart the two perimeter lengths may be before the pick itself looks wrong |
+| `ola:*fit-warn*` | `0.05` | ...and how big the worst error may be, against the original's bounding diagonal, before the overlay stops meaning anything |
 
 ## Notes & limitations
 
@@ -175,6 +222,18 @@ Every knob is read when the command runs, not when the file loads, so
   percent, against the 20-to-40-unit error a fit with no direction
   search would have reported. Raising `ola:*fitpts*` shrinks it
   quadratically if a job ever needs it to.
+* **A gap is a drawing defect, not an open run.** Closure is judged
+  against the chain's own length (`ola:*close-frac*`, 1%), not against
+  an absolute tolerance. This matters more than it sounds: CLOSED is
+  what puts the cyclic half of the phase search in play, and without
+  that half the two walks have to *start* at corresponding points or no
+  alignment can be found at all. Measured, with an absolute `1e-4`
+  tolerance: a 0.05" gap in a 640" outline that was also drawn the other
+  way round fitted **55.7 units out**, where the same pair with the
+  cyclic search running fitted to 0.002. A perimeter exploded and
+  rejoined by hand is riddled with sub-1/16" gaps, so this is the common
+  case, not a corner. The relative test still reads a run that really
+  stops at the steps — ends 2% or more of the loop apart — as open.
 * **Open perimeters work**, and are fitted end to end with no cyclic
   search -- a bead track that stops at the steps is still a perimeter to
   overlay. Both have to be open, or both closed, for the cyclic half of
@@ -189,9 +248,14 @@ Every knob is read when the command runs, not when the file loads, so
   (`LWPOLYLINE`, `POLYLINE`, `LINE`, `ARC`, `CIRCLE`) are read and
   moved. A perimeter drawn as a `SPLINE` or an `ELLIPSE` is not picked
   up, and geometry inside a block is not reached.
-* Everything is read and written in WCS, 2-D. A perimeter drawn on a
-  tilted UCS or with a non-`(0,0,1)` extrusion is outside what this
-  reads, as it is for the rest of the tree's geometry tools.
+* Everything is read and written in WCS, 2-D. A perimeter drawn with a
+  non-`(0,0,1)` extrusion is refused rather than misread (above); one
+  drawn on a tilted UCS is still outside what this reads, as it is for
+  the rest of the tree's geometry tools. A perimeter's own Z is carried
+  through the move untouched.
+* An old-style heavy `POLYLINE` carries a layer on every `VERTEX` as
+  well as on its header, and OLAUTO moves all of them together — left
+  behind, they say one thing where the polyline says another.
 * **The fit takes a moment.** The polish is the cost -- on the order of
   forty passes over the sampled perimeter -- and it is the reason
   `ola:*fitpts*` is worth knowing about if you run this on spas.

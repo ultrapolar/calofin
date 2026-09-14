@@ -33843,7 +33843,7 @@
 ;;; layer everything landed on.
 ;;; ======================================================================
 
-(setq *olauto-version* "v1.0")       ; announced on load; release_lisp.py
+(setq *olauto-version* "v1.1")       ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -33946,6 +33946,31 @@
 ;; there.  It is also what decides whether a chain came out CLOSED,
 ;; which is what puts the cyclic half of the phase search in play.
 (setq ola:*fuzz*        1.0e-4)        ; drawing units
+
+;; ...and the gap that still counts as closed, as a fraction of the
+;; chain's own length.  Raise it to forgive a rougher rejoin; lower it
+;; if a genuinely open run of yours comes back on itself so far that
+;; OLAUTO reads it as a loop.  1% is 14" on a forty-foot pool: bigger
+;; than any accidental gap, smaller than a break left at the steps.
+(setq ola:*close-frac*  0.01)          ; fraction of the chain length
+
+;; -- sanity: is this fit worth believing? --------------------------------
+;;
+;; OLAUTO will fit ANY two curves -- it has no idea what a pool looks
+;; like -- so a mis-pick (the deck edge instead of the bead track) comes
+;; back as a confident set of dimensions off a meaningless overlay.
+;; These two say so instead.  Both only ever print; neither stops a run,
+;; because a pool really can be measured wrong by a lot and that is
+;; exactly the run somebody needs the numbers from.
+
+;; How far apart the two PERIMETER LENGTHS may be before the pick itself
+;; looks wrong.  Two measurements of one pool agree to a few percent;
+;; ten percent is a different outline.
+(setq ola:*len-warn*    0.10)          ; fraction of the longer perimeter
+
+;; ...and how big the worst error may be, against the diagonal of the
+;; original's bounding box, before the overlay stops meaning anything.
+(setq ola:*fit-warn*    0.05)          ; fraction of the bbox diagonal
 
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
@@ -34203,16 +34228,31 @@
               rest (ola:remove orig rest)))
       (reverse loop))))
 
-;; T when the chain comes back to where it started.
-(defun ola:closed-p (segs)
-  (and segs
-       (< (cal:dist (car (car segs)) (cadr (last segs))) ola:*fuzz*)))
-
 ;; Total length of a chain.
 (defun ola:chain-len (segs / L s)
   (setq L 0.0)
   (foreach s segs (setq L (+ L (ola:seg-len s))))
   L)
+
+;; T when the chain comes back to where it started -- judged against the
+;; chain's OWN length, not against an absolute fuzz.
+;;
+;; This is not fussiness.  A perimeter exploded and rejoined by hand is
+;; riddled with sub-1/16" gaps (ABCURCHECK exists to find them), and a
+;; gap of a twentieth of an inch on a fifty-foot pool is a drawing
+;; defect, not an open run.  But CLOSED is what puts the cyclic half of
+;; the phase search in play, and without that half the two walks have to
+;; start at corresponding points or no alignment can be found at all.
+;; Measured, with an absolute 1e-4 tolerance: a 0.05" gap in a 640"
+;; outline that was also drawn the other way round fitted 55.7 units
+;; out, where the same pair with the cyclic search running fitted to
+;; 0.002.  So the test is relative, and an accidental gap stays closed
+;; while a bead track that really stops at the steps -- ends a good
+;; fraction of the loop apart -- still reads open.
+(defun ola:closed-p (segs / L)
+  (and segs
+       (< (cal:dist (car (car segs)) (cadr (last segs)))
+          (max ola:*fuzz* (* ola:*close-frac* (ola:chain-len segs))))))
 
 ;; ---- walking a chain out into evenly spaced points --------------------
 ;; Evenly spaced BY ARC LENGTH, which is the whole trick behind the
@@ -34566,15 +34606,74 @@
 
 ;; ---- layers and drawing ------------------------------------------------
 
-;; Put a whole selection onto a layer.
-(defun ola:relayer (ss name / i en ed)
+;; Put one entity onto a layer.
+(defun ola:relayer-ent (en name / ed)
+  (setq ed (entget en))
+  (if (assoc 8 ed)
+    (entmod (subst (cons 8 name) (assoc 8 ed) ed))))
+
+;; Put a whole selection onto a layer.  A heavy POLYLINE carries a layer
+;; on every VERTEX as well as on its header, so those move too -- left
+;; behind, they say one thing where the polyline says another, and a
+;; later sweep that reads vertices rather than headers reads the old
+;; answer.
+(defun ola:relayer (ss name / i en sub)
   (setq i 0)
   (repeat (sslength ss)
-    (setq en (ssname ss i)
-          ed (entget en))
-    (if (assoc 8 ed)
-      (entmod (subst (cons 8 name) (assoc 8 ed) ed)))
+    (setq en (ssname ss i))
+    (ola:relayer-ent en name)
+    (if (= "POLYLINE" (cdr (assoc 0 (entget en))))
+      (progn
+        (setq sub (entnext en))
+        (while (and sub (member (cdr (assoc 0 (entget sub)))
+                                '("VERTEX" "SEQEND")))
+          (ola:relayer-ent sub name)
+          (setq sub (entnext sub)))
+        (entupd en)))
     (setq i (1+ i))))
+
+;; How many entities the two selections have in common.
+;;
+;; Worth counting, because picking one perimeter twice is a mis-pick
+;; that LOOKS like the best possible news: a curve fitted to itself
+;; reports a perfect overlay and nothing to dimension, which is the one
+;; answer a drafter will not question.  And where the sets only overlap
+;; in part, the shared entity is moved by the fit while still being
+;; read as the thing that held still, so the reference the dimensions
+;; hang off is quietly wrong.
+(defun ola:ss-shared (ssa ssb / i n en)
+  (setq i 0 n 0)
+  (repeat (sslength ssa)
+    (setq en (ssname ssa i))
+    (if (ssmemb en ssb) (setq n (1+ n)))
+    (setq i (1+ i)))
+  n)
+
+;; The first entity in SS that is NOT drawn in the world XY plane, or
+;; nil when they all are.
+;;
+;; Everything below reads group 10 as a world coordinate.  For a LINE
+;; that is true whatever its extrusion, but an ARC, CIRCLE or POLYLINE
+;; keeps its points in the OBJECT plane, and a mirrored one (extrusion
+;; 0,0,-1) has its X axis reversed against the world.  Read that as
+;; world and the outline comes out mirrored -- so the fit would be
+;; computed on geometry that is not what is on the screen, and the move
+;; written back through the same mistake.  Nothing downstream can
+;; notice, which is why it is caught here.
+(defun ola:ss-not-flat (ss / i en ed ex typ)
+  (setq i 0)
+  (while (and (< i (sslength ss)) (not typ))
+    (setq ed  (entget (setq en (ssname ss i)))
+          ex  (cdr (assoc 210 ed)))
+    (if (and ex
+             (member (cdr (assoc 0 ed))
+                     '("ARC" "CIRCLE" "LWPOLYLINE" "POLYLINE"))
+             (not (and (equal (car ex) 0.0 1e-8)
+                       (equal (cadr ex) 0.0 1e-8)
+                       (equal (caddr ex) 1.0 1e-8))))
+      (setq typ (cdr (assoc 0 ed))))
+    (setq i (1+ i)))
+  typ)
 
 ;; The dominant layer of a selection -- what the new/original question
 ;; is answered with before it is asked.
@@ -34680,7 +34779,7 @@
 
 (defun ola:rtos1 (v) (rtos v 2 3))
 
-(defun ola:report (prof drawn / n worst sum rms d p)
+(defun ola:report (prof drawn span warn / n worst sum rms d p w)
   (setq n (length prof) worst 0.0 sum 0.0 rms 0.0)
   (foreach p prof
     (setq d     (car p)
@@ -34699,13 +34798,28 @@
                    "\" at the worst spots."))
     (princ (strcat "\n        Nothing over " (ola:rtos1 ola:*peak-min*)
                    " to dimension - the two agree everywhere.")))
+  ;; The warnings go HERE as well as where they were found.  A drafter
+  ;; reads the last four lines of a run; a caution printed before a
+  ;; twenty-second fit has scrolled off by the time the numbers land,
+  ;; and an unbelievable number that looks believable is the whole
+  ;; failure this command has to avoid.
+  (if (and (> span 0.0) (> worst (* ola:*fit-warn* span)))
+    (setq warn
+          (cons (strcat "the worst error is "
+                        (itoa (fix (+ 0.5 (* 100.0 (/ worst span)))))
+                        "% of the pool's own size.  An overlay that far"
+                        " out is not two measurements of one pool - check"
+                        " that the right two outlines were picked.")
+                warn)))
+  (foreach w (reverse warn)
+    (princ (strcat "\n\nOLAUTO: *** " w)))
   (list worst sum rms))
 
 ;; ---- the command ---------------------------------------------------------
 
 (defun ola:run ( / ssa ssb newss ogss movss fixss laya layb qstep ans
                    whichnew whichmove segnew segog x prof pk drawn push
-                   havestyle p dimlist mid)
+                   havestyle p dimlist mid shared flat lnew log_ warn w)
   ;; The selections and the two questions are ONE chain, walked with a
   ;; step counter (STANDARDS section 3).  A selection cannot be armed
   ;; with initget, so Back cannot be typed AT one -- which is why Back
@@ -34717,9 +34831,37 @@
   (while (and qstep (< qstep 3))
     (cond
       ((= qstep 0)
-       (if (and (setq ssa (ola:select "FIRST"))
-                (setq ssb (ola:select "SECOND")))
-         (setq laya (ola:ss-layer ssa)
+       ;; Two picks, then two refusals that leave QSTEP where it is --
+       ;; which sends the run straight back to the picking, because that
+       ;; is where the mistake was made and nothing has been drawn yet.
+       (cond
+         ((not (and (setq ssa (ola:select "FIRST"))
+                    (setq ssb (ola:select "SECOND"))))
+          (setq qstep nil))                    ; nothing picked - done
+         ((> (setq shared (ola:ss-shared ssa ssb)) 0)
+          (princ (strcat "\nOLAUTO: those two picks share "
+                         (itoa shared) " object(s)"
+                         (if (= shared (sslength ssa))
+                           " - that is the same perimeter twice, and"
+                           " -")
+                         " a perimeter cannot be overlaid on itself."
+                         "  It would report a perfect overlay and"
+                         " nothing to dimension.  Pick the two"
+                         " separately.")))
+         ((setq flat (ola:ss-not-flat ssa))
+          (princ (strcat "\nOLAUTO: the FIRST pick has a " flat
+                         " that is not drawn in the world XY plane."
+                         "  Its points are kept in the object's own"
+                         " plane, so reading them as world would fit a"
+                         " mirrored outline.  Flatten it first.")))
+         ((setq flat (ola:ss-not-flat ssb))
+          (princ (strcat "\nOLAUTO: the SECOND pick has a " flat
+                         " that is not drawn in the world XY plane."
+                         "  Its points are kept in the object's own"
+                         " plane, so reading them as world would fit a"
+                         " mirrored outline.  Flatten it first.")))
+         (T
+          (setq laya (ola:ss-layer ssa)
                layb (ola:ss-layer ssb)
                ;; the layers answer the next question before it is
                ;; asked: the selection already sitting on the pool
@@ -34738,8 +34880,7 @@
                                             (strcase ola:*og-layer*)))
                                "Second")
                               (T "First"))
-               qstep 1)
-         (setq qstep nil)))                    ; nothing picked - done
+               qstep 1))))
       ((= qstep 1)
        (setq ans (cal:askkw
                    (strcat "Which selection is the NEW perimeter?"
@@ -34771,6 +34912,35 @@
       (if (or (< (length segnew) 1) (< (length segog) 1))
         (princ "\nOLAUTO: one of those selections has no curve in it.")
         (progn
+          ;; Before anything moves: do these two even look like the same
+          ;; pool?  OLAUTO has no idea what a pool is and will fit any
+          ;; two curves, so a mis-pick comes back as a confident set of
+          ;; dimensions off a meaningless overlay unless something says
+          ;; otherwise.  Warnings, not refusals -- a pool really can be
+          ;; measured wrong by a lot, and that is the run somebody needs
+          ;; the numbers from.
+          (setq lnew (ola:chain-len segnew)
+                log_ (ola:chain-len segog)
+                warn nil)
+          (if (and (> (max lnew log_) 0.0)
+                   (> (/ (abs (- lnew log_)) (max lnew log_)) ola:*len-warn*))
+            (setq warn
+                  (cons (strcat "the two perimeters are "
+                                (ola:rtos1 lnew) " and " (ola:rtos1 log_)
+                                " round - "
+                                (itoa (fix (+ 0.5 (* 100.0 (/ (abs (- lnew log_))
+                                                              (max lnew log_))))))
+                                "% apart.  Two measurements of one pool"
+                                " agree far closer than that: check the pick.")
+                        warn)))
+          (if (not (eq (not (ola:closed-p segnew)) (not (ola:closed-p segog))))
+            (setq warn
+                  (cons (strcat "one of these perimeters closes and the"
+                                " other does not, so they cannot be walked"
+                                " against each other end for end.  The fit"
+                                " below is the best of a bad job.")
+                        warn)))
+          (foreach w (reverse warn) (princ (strcat "\nOLAUTO: " w)))
           (princ "\n\nFitting...")
           (setq x (ola:fit (if (= whichmove "New") segnew segog)
                            (if (= whichmove "New") segog segnew)))
@@ -34820,7 +34990,7 @@
                     (setq dimlist (ola:dim (cadr p) (caddr p) push mid))
                     (if dimlist (setq drawn (cons dimlist drawn))))
                   (cal:dimstyrestore)))
-              (ola:report prof drawn)))))))
+              (ola:report prof drawn (ola:span segog) warn)))))))
   (princ))
 
 (defun c:OLAUTO ( / *error* undo-open)
