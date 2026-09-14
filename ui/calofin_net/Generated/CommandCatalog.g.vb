@@ -131,6 +131,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("LOBF", "Line of best fit", "Fits a construction line through points that should be on one line"),
         New Entry("NORMIESTEP", "Normie step", "Normie step layout"),
         New Entry("OASIS", "Freeform pool", "Continuous-tangent pool drawn live from envelope and radii"),
+        New Entry("OLAUTO", "Overlay two perimeters", "Best-fit overlay of a new perimeter on the original, worst error dimensioned"),
         New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
         New Entry("PERPMARK", "Measured wall offsets", "Name a survey point, type what it measured: circle, perpendicular, dimension"),
         New Entry("PERPPTS", "Perpendicular points", "Perpendicular offset points along a line or curve"),
@@ -244,6 +245,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("DIMSCAN", "Dimension scan", "Scan drawing for dimensions"),
             New Entry("ABCURCHECK", "Perimeter continuity", "Grades how continuous a drawn perimeter is"),
             New Entry("ABCURCHECKSCAN", "Perimeter continuity, no marks", "ABCURCHECK without marking the drawing"),
+            New Entry("OLAUTO", "Overlay two perimeters", "Best-fit overlay of a new perimeter on the original, worst error dimensioned"),
             New Entry("ABPCHECK", "Survey point offsets", "ABHD's measuring half as a checker - how far each point is off the line"),
             New Entry("LINCHECK", "Line checklist", "Line / text check"),
             New Entry("LINFINCHECK", "Liner finish review", "Full liner-finish drawing QA, guided"),
@@ -284,7 +286,7 @@ Public NotInheritable Class CommandCatalog
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "SPACOVCREATE", "CUSTBLOCK", "AUTODIM", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMCHECK", "DIMSCAN"})
         }),
         New Page("Rest", {
-            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP"})
+            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP", "OLAUTO"})
         }),
         New Page("Layout", {
             New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "ABLOBF", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
@@ -299,7 +301,7 @@ Public NotInheritable Class CommandCatalog
             New Column("", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"})
         }),
         New Page("Checking", {
-            New Column("", {"CHECK", "DIMARCCHECK", "DIMCHECK", "DIMSCAN", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "LINTXTCHK", "CCPRECHECK", "LAZDIAG"})
+            New Column("", {"CHECK", "DIMARCCHECK", "DIMCHECK", "DIMSCAN", "ABCURCHECK", "ABCURCHECKSCAN", "OLAUTO", "ABPCHECK", "LINCHECK", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "LINTXTCHK", "CCPRECHECK", "LAZDIAG"})
         })
     }
 
