@@ -65,8 +65,8 @@ lisp/dimcheck/dimcheck.lsp|dchk:review-olap|\n Merge into one line, Flag to fix,
 lisp/dimcheck/dimcheck.lsp|dchk:tut-demo|\n Pick an empty spot for the practice drawing:|demo / tutorial
 lisp/dimcheck/dimcheck.lsp|dchk:tut-pause|\n --- press Enter to continue ---|demo / tutorial
 lisp/dimstamp/DIMSTAMP.lsp|c:DIMSTAMP|\nClick a point to place text (Enter when done):|the run's own click loop - Enter ends it; undoing a stamp already placed is AutoCAD's own U, not a Back this prompt offers
-lisp/dimstamp/DIMSTAMP.lsp|ds:ask-next|\nText [ ] <repeat \" \">:|follows a stamp already placed by this same run - past committed geometry
-lisp/dimstamp/DIMSTAMP.lsp|ds:ask-raw||helper: its callers ask it as the run's first question, or as New's own one-shot follow-up
+lisp/dimstamp/DIMSTAMP.lsp|ds:ask-raw||helper: its callers ask it as the run's first question, or as the unified prompt's own one-shot typed-text branch
+lisp/dimstamp/DIMSTAMP.lsp|ds:next-action|\nClick to place text, click the ruler to change it, or type new text (Enter when done):|follows a stamp already placed by this same run - past committed geometry; a click or typed value here is taken and acted on immediately, same as the ruler pick it stands beside
 lisp/drone_height/DroneDistortion.lsp|c:DDCAL|\nApparent (traced) size in the drawing - type it or pick 2 points:|first of DDCAL's three; the other two back into it
 lisp/drone_height/DroneDistortion.lsp|c:DDSET|\nDrone height ABOVE THE DECK, in FEET < > :|DDSET's only question
 lisp/drone_height/DroneHeightGPS.lsp|c:DDELEV|\nLatitude (decimal degrees, negative = South):|first of DDELEV's two; the longitude backs into it

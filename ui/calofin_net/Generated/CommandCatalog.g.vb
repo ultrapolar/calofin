@@ -103,7 +103,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("DIMCHECK", "Dimension review", "Guided, one-at-a-time dimension review"),
         New Entry("DIMCONTEND", "Continue dim chains", "Chains a seed dimension out to every feature point"),
         New Entry("DIMSCAN", "Dimension scan", "Scan drawing for dimensions"),
-        New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text, and repeat"),
+        New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text; a graded ruler picks the next value"),
         New Entry("DRONE", "Drone cleanup", "Drone cleanup routine"),
         New Entry("FITABHD", "Typed template fit", "Fits a typed pool template through surveyed points"),
         New Entry("FITABHDCOVER", "Typed template fit, no bottom", "FITABHD for a cover sheet - skips the bottom question"),
@@ -225,7 +225,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"),
             New Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"),
             New Entry("BPCALLOUT", "Bad point callout", "Rings clicked bad points and writes the callout"),
-            New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text, and repeat")
+            New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, stamp feet/inch text; a graded ruler picks the next value")
         }},
         {"Converters", {
             New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
