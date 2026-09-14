@@ -79470,24 +79470,58 @@
 ;;;          FINISH, fixing the order the lengths are entered in;
 ;;;        - the side of the curve the click lands on is the side the
 ;;;          new points are offset toward.
-;;;   4. Enter how many values (points) are required  (>= 2).
-;;;   5. Enter a length for each point, in order START -> FINISH.
+;;;   4. Optionally select a BOUNDARY the offsets may not cross -- a
+;;;      property line, a house wall, a deck edge already drawn.  Enter
+;;;      takes None and nothing is capped.
+;;;   5. Enter how many values (points) are required  (>= 2).
+;;;   6. Enter a length for each point, in order START -> FINISH.
 ;;;      Press Enter to reuse the previous length when it repeats, or
 ;;;      type B (Back) to step back and re-enter the previous point
-;;;      (U, the old keyword, is still accepted).
-;;;   6. Say whether the overall width of the curve just drawn has
+;;;      (U, the old keyword, is still accepted).  With a boundary in
+;;;      force the prompt names the distance to it and takes M (Max) to
+;;;      go exactly that far; a longer length is brought back to it.
+;;;   7. Say whether the overall width of the curve just drawn has
 ;;;      changed -- step 2's question, asked of the course this round
 ;;;      built.  It is resized the same way, half the difference at
 ;;;      each end, before anything is measured off it.
-;;;   7. Choose whether to repeat on the new polyline.  If so, enter a
-;;;      new point count and repeat from step 5 with the new polyline as
+;;;   8. Choose whether to repeat on the new polyline.  If so, enter a
+;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
-;;;   8. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
+;;;
+;;; The boundary
+;;;   A wall is not always free to run as far as the tape says: there
+;;;   is a property line, a house, a deck edge already drawn, and the
+;;;   course being built has to stop at it.  Step 4 takes that object
+;;;   once and turns it into the maximum for every offset in every
+;;;   round -- per point, not one number for the run, because a
+;;;   boundary at an angle to the curve is nearer at one end than at
+;;;   the other.
+;;;
+;;;   At each point a ray is cast from the base point along the offset
+;;;   normal and the nearest crossing ahead of it is that point's
+;;;   maximum.  The length prompt names it, M (Max) takes it exactly,
+;;;   and a longer length is brought back to it and said so -- the
+;;;   number typed is still what Enter repeats at the next point, since
+;;;   the tape has not changed, only where this one point may reach.
+;;;   Where the ray never meets the boundary -- it is behind the offset
+;;;   side, or stops short of that end of the run -- the point has no
+;;;   maximum and the prompt is the one it always was.
+;;;
+;;;   Two things the cap is not.  It holds the measured POINTS inside
+;;;   the boundary, and the arcs between them are fitted to the curve's
+;;;   tangents: where a boundary bends away between two points, the arc
+;;;   joining them can still bow past it, and the answer is a point
+;;;   there rather than a different arc.  And it is not re-applied by
+;;;   the width correction at step 7, which scales the whole curve
+;;;   about the midpoint of its ends: that is the drafter's own
+;;;   measurement and is not second-guessed, but a correction that
+;;;   carries points past the boundary says how many.
 ;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what steps 2 and 6
+;;;   distance straight across, end to end.  That is what steps 2 and 7
 ;;;   ask for -- never the developed length of the CURVE, which on
 ;;;   anything bowed runs further than the width it spans.  Grew and
 ;;;   Shrank take the difference, New takes the width itself, and
@@ -79512,14 +79546,14 @@
 ;;;   little long or a little short leave it that much wide or narrow --
 ;;;   and the next round spaces its base points along it and reads its
 ;;;   tangents, which is the same reason step 2 resizes the selected
-;;;   curve rather than only remembering a number.  Step 6 asks after
+;;;   curve rather than only remembering a number.  Step 7 asks after
 ;;;   the polyline is drawn, because that is when there is a width to
 ;;;   compare against, and before its dimensions are recorded: a round
 ;;;   that corrects its width has its new points moved with the curve,
 ;;;   so each dimension reads the distance the corrected drawing really
 ;;;   has rather than the length that was typed into it.  A resize the
 ;;;   drawing will not take stops step 2 -- nothing is drawn yet, so
-;;;   re-running costs a click -- but at step 6 it leaves the curve at
+;;;   re-running costs a click -- but at step 7 it leaves the curve at
 ;;;   the width it drew and says so, because whole rounds of typed
 ;;;   lengths sit behind it.
 ;;;
@@ -79531,7 +79565,7 @@
 ;;;   tangent underneath it -- so both the offset and its dimension read
 ;;;   perpendicular to the line the point actually sits on, and each
 ;;;   round follows the shape its predecessor took.  A round that
-;;;   corrects its width at step 6 is the one exception: the correction
+;;;   corrects its width at step 7 is the one exception: the correction
 ;;;   moves its new points along the resized curve, and that round's
 ;;;   dimensions read the corrected drawing instead.
 ;;;
@@ -79544,7 +79578,7 @@
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the curve they were offset from.
 ;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
-;;;     and use the dimension style picked in step 8 when the drawing
+;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
@@ -79573,7 +79607,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.13")
+(setq *cperp-version* "v0.14")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -79783,6 +79817,92 @@
   (foreach p pts (setq out (cons (cperp:scale-pt p ctr k) out)))
   (reverse out))
 
+;; --- the boundary a run may not cross --------------------------------
+;; A wall is not always free to run as far as the tape says: there is a
+;; property line, a house, a deck edge already drawn, and the course
+;; being built has to stop at it.  Selecting that object once turns it
+;; into the maximum for EVERY offset -- per point, since a boundary
+;; that runs at an angle to the curve is nearer at one end than the
+;; other, and one number could not say where.
+
+;; How far p may travel along the unit vector u before it meets bnd:
+;; the nearest crossing strictly ahead of p, or nil when the ray never
+;; reaches the boundary -- it lies behind the offset side, or off the
+;; end of the run, and that point simply has no maximum.
+;;
+;; A ray is not something AutoCAD can intersect, so one is drawn.  The
+;; temporary line is made long enough to reach any point of bnd -- the
+;; distance to the nearest point of it plus its own length, which no
+;; point on it can be further off than -- and IntersectWith reports the
+;; crossings.  The line is erased before this returns, whatever came
+;; back, so a run cannot litter the drawing one probe at a time.
+(defun cperp:capdist (bnd p u / near far prev ln rtn lst q d best)
+  ;; the nearest point of bnd may not be readable on a degenerate
+  ;; curve; its own length alone still reaches a boundary that crosses
+  ;; the run, which is the case a cap is wanted for
+  (setq near (vlax-curve-getClosestPointTo bnd (trans p 1 0))
+        far  (+ (if near (distance p (trans near 0 1)) 0.0)
+                (cperp:curvelen bnd)))
+  (if (< far 1e-9) (setq far 1.0))
+  (setq prev (entlast))
+  (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP")
+                 (cons 10 (trans p 1 0))
+                 (cons 11 (trans (list (+ (car p)  (* far (car u)))
+                                       (+ (cadr p) (* far (cadr u)))
+                                       (caddr p))
+                                 1 0))))
+  (setq ln (entlast))
+  ;; entlast is unmoved when entmake was refused, and erasing on that
+  ;; would take whatever WAS last out of the drawing.  No ray, no cap.
+  (if (eq ln prev)
+    nil
+    (progn
+      (setq rtn (vl-catch-all-apply
+                  'vlax-invoke
+                  (list (vlax-ename->vla-object ln) 'IntersectWith
+                        (vlax-ename->vla-object bnd)
+                        ;; acExtendNone: neither object is stretched to
+                        ;; reach the other.  The symbol is AutoCAD's own
+                        ;; and is nil where it was never loaded, so the
+                        ;; number it stands for is spelled out behind it.
+                        (cond (acExtendNone) (0)))))
+      (entdel ln)
+      (if (or (vl-catch-all-error-p rtn) (null rtn))
+        nil
+        (progn
+          ;; a flat list of WCS x y z, one triple per crossing
+          (setq lst rtn best nil)
+          (while (>= (length lst) 3)
+            (setq q (trans (list (car lst) (cadr lst) (caddr lst)) 0 1)
+                  d (+ (* (- (car q)  (car p))  (car u))
+                       (* (- (cadr q) (cadr p)) (cadr u))))
+            (if (and (> d 1e-8) (or (null best) (< d best))) (setq best d))
+            (setq lst (cdddr lst)))
+          best)))))
+
+;; How many of pts sit past bnd, each measured along the ray from the
+;; base it was offset from.  Every length was capped as it was typed,
+;; so this can only come back above zero after a width correction: that
+;; scales the whole curve about the midpoint of its ends and can carry
+;; a point that was sitting ON the boundary out beyond it.  A curve
+;; that quietly crosses a boundary the drafter asked it to respect is
+;; worth a line of its own.
+(defun cperp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
+  (setq i 0 n (min (length bases) (length pts)) out 0)
+  (while (< i n)
+    (setq a  (nth i bases)
+          b  (nth i pts)
+          dx (- (car b)  (car a))
+          dy (- (cadr b) (cadr a))
+          d  (sqrt (+ (* dx dx) (* dy dy))))
+    (if (> d 1e-9)
+      (progn
+        (setq u   (list (/ dx d) (/ dy d))
+              cap (cperp:capdist bnd a u))
+        (if (and cap (> d (+ cap 1e-8))) (setq out (1+ out)))))
+    (setq i (1+ i)))
+  out)
+
 ;; --- command ---------------------------------------------------------
 
 ;; ahead of the command on purpose: the structural tests scan from
@@ -79803,7 +79923,7 @@
                      curCrv curRev n lastN basePts newPts usedBases idxs
                      tangs tg guideEnts total len lastLen i base np again
                      ans iter plt p e seg
-                     wOld wNew mid fac)
+                     wOld wNew mid fac bnd cap over)
 
   ;; erase one temporary entity and forget it
   (defun cperp:kill (e)
@@ -79985,8 +80105,41 @@
   (setq side (if (>= cross 0.0) 1.0 -1.0))
 
   ;; --- prepare the layers ---------------------------------------------
+  ;; PERPPTS-TEMP first: the boundary probe below draws its ray on that
+  ;; layer, and the question that picks the boundary comes after it
   (cal:ensure-layer "PERPPTS-TEMP" 1)
   (cal:ensure-layer "DIMENSIONS"   4)
+
+  ;; --- 4. the boundary the offsets may not cross (optional) -----------
+  ;; Asked after the direction click because the click is what fixes
+  ;; which way the offsets run, and a boundary is only a boundary on the
+  ;; side they run toward.  Enter takes None and the command behaves
+  ;; exactly as it did before there was one.
+  (setq bnd 'RETRY)
+  (while (eq bnd 'RETRY)
+    (initget "None")
+    (setq sel (entsel (strcat "\nSelect a boundary the offsets may not"
+                              " cross [None] <None>: ")))
+    (if lzd:watch (lzd:watch sel))
+    (cond
+      ;; entsel answers nil for Enter AND for a click that hit nothing.
+      ;; ERRNO 7 is what tells them apart, and without asking, a click
+      ;; that missed would quietly drop the boundary the drafter was
+      ;; reaching for and cap nothing all run.
+      ((and (null sel) (= 7 (getvar "ERRNO")))
+       (princ "\nNothing there - click the boundary itself, or press Enter for none."))
+      ((or (null sel) (= (type sel) 'STR)) (setq bnd nil))
+      ((not (cperp:curve-p (car sel)))
+       (princ (strcat "\nA " (cdr (assoc 0 (entget (car sel))))
+                      " cannot be crossed - pick a curve, or press Enter"
+                      " for none.")))
+      ((eq (car sel) crv)
+       (princ (strcat "\nThat is the curve being offset from - a run"
+                      " cannot be bounded by where it starts.")))
+      (t (setq bnd (car sel)))))
+  (if bnd
+    (princ (strcat "\nBoundary set: no offset will cross that "
+                   (cdr (assoc 0 (entget bnd))) ".")))
 
   ;; --- draw an arrow pointing at the START end ------------------------
   ;; The shaft runs back from START along the curve's tangent there, so
@@ -80087,14 +80240,36 @@
                         ": the curve direction cannot be read there."))
          (setq i (1+ i)))
         (t
-         (initget 6 "Back Undo")     ; Undo kept as a hidden synonym
+         ;; How far this point may go before it meets the boundary.
+         ;; Measured per point along its own normal: a boundary running
+         ;; at an angle to the curve is nearer at one end than at the
+         ;; other, and one number could not say where.  nil when the ray
+         ;; never reaches it, and then nothing below changes.
+         (setq cap (if bnd (cperp:capdist bnd base nrm)))
+         ;; Undo kept as a hidden synonym; Max is offered only where
+         ;; there is a boundary ahead of this point to reach
+         (initget 6 (if cap "Back Undo Max" "Back Undo"))
          (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
                                     " of " (itoa n)
+                                    (if cap
+                                      (strcat ", boundary at " (rtos cap))
+                                      "")
                                     (if lastLen
                                       (strcat " <" (rtos lastLen) ">")
                                       "")
-                                    " [Back]: ")))
+                                    (if cap " [Back/Max]: " " [Back]: "))))
          (if (null len) (setq len lastLen))
+         (if (equal len "Max") (setq len cap))
+         ;; The typed number is what Enter repeats, not the capped one:
+         ;; the tape still says what it says, and the next point has its
+         ;; own boundary to meet it against.
+         (if (numberp len) (setq lastLen len))
+         (if (and cap (numberp len) (> len cap))
+           (progn
+             (princ (strcat "\n" (rtos len) " would cross the boundary -"
+                            " point " (itoa (1+ i)) " is capped at "
+                            (rtos cap) "."))
+             (setq len cap)))
          (cond
            ((eq (type len) 'STR)
             (if newPts
@@ -80111,8 +80286,7 @@
            ((null len)
             (princ "\nA length is required."))
            (t
-            (setq lastLen len
-                  np      (list (+ (car base)  (* len (car nrm)))
+            (setq np      (list (+ (car base)  (* len (car nrm)))
                                 (+ (cadr base) (* len (cadr nrm)))
                                 (caddr base)))
             (setq newPts    (cons np newPts)
@@ -80198,7 +80372,22 @@
             (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
                            (rtos (/ (abs (- wNew wOld)) 2.0))
                            (if (> wNew wOld) " added at" " taken off")
-                           " each end.")))
+                           " each end."))
+            ;; every length was capped as it was typed, but this scales
+            ;; the whole curve about the midpoint of its ends and can
+            ;; carry a point that was sitting ON the boundary out past
+            ;; it.  The correction is the drafter's measurement and is
+            ;; not second-guessed -- but a curve that crosses a boundary
+            ;; it was told to respect does not go without saying.
+            (if bnd
+              (progn
+                (setq over (cperp:past-bnd bnd usedBases newPts))
+                (if (> over 0)
+                  (princ (strcat "\n" (itoa over) " of "
+                                 (itoa (length newPts)) " points now sit"
+                                 " past the boundary - the width"
+                                 " correction carried the curve beyond"
+                                 " it."))))))
           (princ (strcat "\nThe new curve could not be resized - it is"
                          " most likely on a locked, frozen or switched-off"
                          " layer.  It is left at the " (rtos wOld)
@@ -80699,7 +80888,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.8")
+(setq *tutcperp-version* "v0.9")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -80897,6 +81086,31 @@
                   "    or switched-off layer - stops the command at the"
                   "    selection, where nothing is drawn yet; at a round it"
                   "    leaves the curve at the width it drew and says so"
+                  ""
+                  "The boundary (optional)"
+                  "  * after the direction click you may select a curve"
+                  "    already in the drawing - a property line, a house"
+                  "    wall, a deck edge - that the offsets may not cross;"
+                  "    Enter takes None and nothing is capped"
+                  "  * the cap is measured PER POINT: a ray from each base"
+                  "    point along its own normal, and the nearest crossing"
+                  "    ahead of it is that point's maximum.  A boundary at"
+                  "    an angle to the run is nearer at one end than the"
+                  "    other, which one number could never say"
+                  "  * the length prompt names the distance to it, M (Max)"
+                  "    takes it exactly, and a longer length is brought back"
+                  "    to it and said so - the number TYPED is still what"
+                  "    Enter repeats at the next point"
+                  "  * where the ray never reaches the boundary that point"
+                  "    has no maximum, so a boundary covering part of a run"
+                  "    caps only the part it covers"
+                  "  * it holds the measured POINTS inside the boundary:"
+                  "    where the boundary bends away between two of them the"
+                  "    arc joining them can still bow past it, and the"
+                  "    answer is a point there.  The width correction is not"
+                  "    re-capped either - it is your measurement - but a"
+                  "    correction that carries points past the boundary says"
+                  "    how many"
                   ""
                   "Direction click"
                   "  * the curve end nearest your click becomes START; a red"
