@@ -8,8 +8,8 @@ else it was shown.
 
 An as-built sheet carries far more than the next station needs: the
 hopper and its slope lines, steps, survey points and their labels, the
-notes. LINGUTTER guts one pool back in a single pass, and asks before it
-does.
+notes. LINGUTTER guts one pool back in a single pass, straight through
+— it does not ask first.
 
 > **It works only inside the highlight.** Window the pool — before
 > typing the command or at its prompt — and everything below happens to
@@ -103,9 +103,9 @@ Before erasing anything it prints exactly what it found in the
 highlight — how many
 vertices the perimeter has and how far round it is, how many dimensions
 are kept under each rule, and **how many are dropped, counted by
-reason** — then asks, defaulting to `No`. Nothing disappears silently:
-a `STANDARD INCHES` dim sitting on the perimeter is reported as
-`3 x STANDARD INCHES - style not kept`, not quietly deleted.
+reason** — then erases it, without asking first. Nothing disappears
+silently: a `STANDARD INCHES` dim sitting on the perimeter is reported
+as `3 x STANDARD INCHES - style not kept`, not quietly deleted.
 
 The whole run is one undo group, so a single `U` puts the drawing back.
 
@@ -134,9 +134,10 @@ The whole run is one undo group, so a single `U` puts the drawing back.
    sweeps, so it sweeps only what you showed it — highlight nothing and
    it says so and stops.
 
-**Run `LINGUTTERSCAN` first on a sheet you care about.** It answers the
-one question worth knowing in advance: did it find the right loop, and
-is it about to drop a dimension you wanted?
+**Run `LINGUTTERSCAN` first on a sheet you care about.** LINGUTTER does
+not ask before it erases, so this is the one chance to see what it
+would keep and drop beforehand: did it find the right loop, and is it
+about to drop a dimension you wanted?
 
 ## Tunables
 
@@ -239,8 +240,8 @@ that has to survive as a bulge, traces with a 3" gap and a 24" one,
 dimensions in all four styles on and off the perimeter, a radius dim, a
 dim with only one end on the edge, a viewport, `lg:*keeplayers*`, and
 the whole command end to end — the redrawn polyline, the five surviving
-dimensions, the undo group, the restored `OSMODE`, `No` meaning no, and
-`LINGUTTERSCAN` changing nothing.
+dimensions, the undo group, the restored `OSMODE`, that it erases
+without asking, and `LINGUTTERSCAN` changing nothing.
 
 The scoping has a section of its own: a pool beside a *bigger* closed
 rectangle with its own clutter — a title block border is exactly this
