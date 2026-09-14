@@ -273,17 +273,17 @@ Public NotInheritable Class CommandCatalog
             New Column("Points", {"ABFIND", "ABMOVE", "ABPCREATE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
             New Column("Steps", {"LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "AUTOBEAD", "PERPPTS", "CPERPPTS", "PERPMARK"}),
             New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
-            New Column("Dims & check", {"AUTODIM", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "DIMCHECK", "DIMSCAN"})
+            New Column("Dims & check", {"AUTODIM", "LINFINCHECK", "DIMCHECK", "LINFINSCAN", "LITELINFINSCAN", "DIMSCAN"})
         }),
         New Page("Cover", {
             New Column("Shape", {"POOLCOVER", "LAZFORMCOVER", "OASIS", "ABHDCOVER", "FITABHDCOVER", "STOCKCOVER", "CUSTBLOCK"}),
             New Column("Points", {"ABFIND", "ABMOVE", "ABPCREATE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
             New Column("Converters", {"XFTCONV", "XFTRECONV"}),
-            New Column("Pads, dims & check", {"LINGUTTER", "LINGUTTERSCAN", "PADDLE", "AUTODIM", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "DIMCHECK", "DIMSCAN"})
+            New Column("Pads, dims & check", {"LINGUTTER", "PADDLE", "AUTODIM", "COVERCHECK", "DIMCHECK", "LINGUTTERSCAN", "COVERSCAN", "LITECOVERSCAN", "DIMSCAN"})
         }),
         New Page("Spa", {
             New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
-            New Column("Shape, dims & check", {"SPA", "LAZSPA", "SPACOVCREATE", "CUSTBLOCK", "AUTODIM", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMCHECK", "DIMSCAN"})
+            New Column("Shape, dims & check", {"SPA", "LAZSPA", "SPACOVCREATE", "CUSTBLOCK", "AUTODIM", "SPACHECK", "DIMCHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMSCAN"})
         }),
         New Page("Rest", {
             New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP", "MOHAMADDLE"})
