@@ -759,6 +759,69 @@ def install_curve_builtins():
     VM_BUILTINS[Sym('vlax-curve-getpointatdist')] = point_at_dist
 
 
+def seg_hit(p1, p2, q1, q2):
+    """Where segment p1-p2 crosses q1-q2, or None.  Endpoints count as
+    crossings, which is what AutoCAD's IntersectWith reports too."""
+    rx, ry = p2[0] - p1[0], p2[1] - p1[1]
+    sx, sy = q2[0] - q1[0], q2[1] - q1[1]
+    den = rx * sy - ry * sx
+    if abs(den) < 1e-15:
+        return None
+    t = ((q1[0] - p1[0]) * sy - (q1[1] - p1[1]) * sx) / den
+    u = ((q1[0] - p1[0]) * ry - (q1[1] - p1[1]) * rx) / den
+    if -1e-12 <= t <= 1 + 1e-12 and -1e-12 <= u <= 1 + 1e-12:
+        return (p1[0] + t * rx, p1[1] + t * ry)
+    return None
+
+
+def install_intersect_builtins():
+    """vlax-invoke for the one method cperp:capdist calls: IntersectWith
+    between the ray it casts and the boundary, over straight segments.
+    AutoCAD answers a FLAT list of x y z per crossing and nil when there
+    is none, and capdist reads it as triples, so this does the same."""
+    def ent_segs(vm, e):
+        d = vm.entdata[e]
+        if dxf(d, 0) == 'LINE':
+            return [(tuple(dxf(d, 10)[:2]), tuple(dxf(d, 11)[:2]))]
+        vs = poly_verts(vm, e)
+        return [(vs[i], vs[i + 1]) for i in range(len(vs) - 1)]
+
+    def invoke(vm, a):
+        assert str(a[1]) == 'intersectwith', "unexpected method %r" % (a[1],)
+        out = []
+        for p1, p2 in ent_segs(vm, a[0]):
+            for q1, q2 in ent_segs(vm, a[2]):
+                hit = seg_hit(p1, p2, q1, q2)
+                if hit is not None:
+                    out += [hit[0], hit[1], 0.0]
+        return out or NIL
+
+    VM_BUILTINS[Sym('vlax-invoke')] = invoke
+
+
+def boundary_vm(verts):
+    """A VM holding cperp_points.lsp and one open polyline to be the
+    boundary, bound in the VM as B (an ename is not a literal a script
+    can be written with, and capdist makes entities of its own, so
+    (entlast) would not stay pointed at it)."""
+    install_entity_builtins()
+    install_intersect_builtins()
+    vm = VM()
+    vm.load(CPERP_LSP)
+    vm.script = []
+    e = Ent()
+    vm.entities.append(e)
+    vm.entdata[e] = [Dot(0, 'LWPOLYLINE'), Dot(100, 'AcDbPolyline'),
+                     Dot(8, '0'), Dot(90, len(verts)), Dot(70, 0),
+                     Dot(38, 0.0)] + \
+        [g for p in verts for g in ([10, p[0], p[1]], Dot(42, 0.0))]
+    vm.loads("(setq B (entlast))")
+    # the ray capdist casts goes on the guide layer, which the command
+    # itself makes before the first round
+    vm.tables['LAYER'].add('PERPPTS-TEMP')
+    return vm, e
+
+
 def run_perppts(script, width=None, source=None):
     """One scripted PERPPTS run, by default on a 100-unit line running
     left to right.  width answers the overall-width question that comes
@@ -1078,6 +1141,103 @@ def test_cperppts_asks_the_same_of_the_curve_it_just_drew():
           "correction")
 
 
+def test_cperppts_caps_an_offset_at_the_boundary():
+    """The cap is measured per point, along that point's own normal: the
+    nearest crossing strictly ahead of the base point.  A boundary that
+    the ray never reaches leaves the point with no maximum at all, which
+    is how a boundary covering only part of a run behaves."""
+    # a boundary straight across the run, 30 above it
+    vm, bnd = boundary_vm([(-100.0, 30.0), (100.0, 30.0)])
+    got = vm.loads("(cperp:capdist B (list 0.0 0.0 0.0) (list 0.0 1.0))")
+    assert got is not None and abs(float(got) - 30.0) < 1e-9, got
+    # the same boundary from a point already past it, and from one
+    # aiming along it: no crossing ahead, so no maximum
+    assert vm.loads("(cperp:capdist B (list 0.0 0.0 0.0)"
+                    " (list 0.0 -1.0))") is None, \
+        "a boundary behind the offset side must not cap it"
+    assert vm.loads("(cperp:capdist B (list 0.0 0.0 0.0)"
+                    " (list 1.0 0.0))") is None, \
+        "a ray that never reaches the boundary must not cap it"
+    print("cperppts boundary: the crossing ahead of the point is its max")
+
+    # slanted: nearer at one end of the run than at the other, which is
+    # why one number for the whole run could not say where
+    vm, bnd = boundary_vm([(-100.0, 20.0), (100.0, 60.0)])
+    near = vm.loads("(cperp:capdist B (list -50.0 0.0 0.0)"
+                    " (list 0.0 1.0))")
+    far = vm.loads("(cperp:capdist B (list 50.0 0.0 0.0)"
+                   " (list 0.0 1.0))")
+    assert abs(float(near) - 30.0) < 1e-9, near
+    assert abs(float(far) - 50.0) < 1e-9, far
+    print("cperppts boundary: a slanted boundary caps each point apart")
+
+    # a boundary the ray crosses twice stops at the FIRST one
+    vm, bnd = boundary_vm([(-40.0, 60.0), (0.0, 10.0), (40.0, 60.0)])
+    got = vm.loads("(cperp:capdist B (list 0.0 0.0 0.0) (list 0.0 1.0))")
+    assert abs(float(got) - 10.0) < 1e-9, got
+    print("cperppts boundary: the nearest crossing is the one that caps")
+
+    # the ray is a temporary line and has to leave with the probe: a
+    # run casts one per point per round, and a drawing full of them is
+    # the drafter's to clean up
+    before = [e for e in vm.entities if e not in vm.deleted]
+    vm.loads("(cperp:capdist B (list 0.0 0.0 0.0) (list 0.0 1.0))")
+    assert [e for e in vm.entities if e not in vm.deleted] == before, \
+        "the probe must erase the ray it cast"
+    print("cperppts boundary: the ray it casts leaves with it")
+
+
+def test_cperppts_counts_points_carried_past_the_boundary():
+    """Every length is capped as it is typed, so a point can only end up
+    past the boundary through the width correction -- which scales the
+    whole curve about the midpoint of its ends.  That is the drafter's
+    own measurement and is left alone, but the count is reported."""
+    vm, bnd = boundary_vm([(-100.0, 30.0), (100.0, 30.0)])
+    bases = "(list (list -50.0 0.0 0.0) (list 0.0 0.0 0.0)" \
+            " (list 50.0 0.0 0.0))"
+    inside = "(list (list -50.0 20.0 0.0) (list 0.0 25.0 0.0)" \
+             " (list 50.0 20.0 0.0))"
+    past = "(list (list -50.0 40.0 0.0) (list 0.0 25.0 0.0)" \
+           " (list 50.0 40.0 0.0))"
+    assert int(vm.loads("(cperp:past-bnd B %s %s)" % (bases, inside))) \
+        == 0, "points short of the boundary are not past it"
+    assert int(vm.loads("(cperp:past-bnd B %s %s)" % (bases, past))) \
+        == 2, "both scaled-out points must be counted"
+    print("cperppts boundary: a width correction past it is counted")
+
+
+def test_cperppts_boundary_is_optional_and_wired_through():
+    """Structural pins for the parts of the boundary the VM cannot run:
+    the question is optional and tells Enter from a missed click, the
+    cap is taken from the base point along that point's own normal, Max
+    is offered only where there is a cap, and a longer length is brought
+    back to it before the point is drawn."""
+    code = load(CPERP_LSP)
+    ask = code.index("Select a boundary the offsets may not")
+    assert '[None] <None>: ' in code[ask:ask + 200], \
+        "the boundary question must offer None and default to it"
+    assert re.search(r'\(initget "None"\)', code[:ask]), \
+        "None has to be an initget keyword for a click on it to work"
+    assert "(= 7 (getvar \"ERRNO\"))" in code, \
+        "a missed click must be told from Enter, or it drops the boundary"
+    # the source curve is not a boundary for itself
+    assert "(eq (car sel) crv)" in code, \
+        "picking the curve being offset from must be refused"
+    loop = code[code.index("(setq newPts '() usedBases"):]
+    cap = loop.index("(cperp:capdist bnd base nrm)")
+    ask2 = loop.index("(setq len (getdist")
+    draw = loop.index("(setq np      (list")
+    assert cap < ask2 < draw, (cap, ask2, draw)
+    assert '(initget 6 (if cap "Back Undo Max" "Back Undo"))' in loop, \
+        "Max is only an answer where there is a boundary ahead"
+    clip = loop.index("(setq len cap)")
+    assert ask2 < clip < draw, \
+        "a length past the boundary must be brought back before it draws"
+    assert 'boundary at ' in loop[:ask2 + 600], \
+        "the prompt must name the distance to the boundary"
+    print("cperppts boundary: optional, per point, and capped before it draws")
+
+
 def test_scale_pts_moves_points_with_the_resized_object():
     """The points in hand are scaled by the same centre and factor the
     drawing was, so the dimensions recorded from them land on the object
@@ -1201,6 +1361,9 @@ def main():
     test_perppts_next_round_measures_the_corrected_line()
     test_perppts_keeps_going_when_the_new_line_will_not_resize()
     test_cperppts_asks_the_same_of_the_curve_it_just_drew()
+    test_cperppts_caps_an_offset_at_the_boundary()
+    test_cperppts_counts_points_carried_past_the_boundary()
+    test_cperppts_boundary_is_optional_and_wired_through()
     test_scale_pts_moves_points_with_the_resized_object()
     test_the_width_question_reads_the_same_in_both_routines()
     test_rescale_says_whether_the_drawing_took_it()
