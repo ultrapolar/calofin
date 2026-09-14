@@ -1145,7 +1145,7 @@
                              (if dflt (strcat " <" (rtos dflt) ">") "")
                              (if back " [Back]" "")
                              ": ")))
-    (if lzd:ask (lzd:ask msg v))
+    (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'SCV-BACK))
       ((and (null v) dflt) (setq out dflt))
@@ -1165,7 +1165,7 @@
   (while (null out)
     (setq v (getstring
               "\nTaper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8) [type B to go Back]: "))
-    (if lzd:ask (lzd:ask "Taper" v))
+    (if lzd:ask (lzd:ask "Taper" v) v)
     (cond
       ((scv:backstr v) (setq out 'SCV-BACK))
       ((setq out (scv:tapernorm v)))
@@ -1185,8 +1185,8 @@
   (initget (if back "Type Skip Back Undo" "Type Skip"))
   (setq v (entsel (strcat "\nSelect the block that gives the taper [Type/Skip"
                           (if back "/Back" "") "] <Skip>: ")))
-  (if lzd:watch (lzd:watch v))
-  (if lzd:ask (lzd:ask "Block that gives the taper" v))
+  (if lzd:watch (lzd:watch v) v)
+  (if lzd:ask (lzd:ask "Block that gives the taper" v) v)
   (scv:osdown)
   (cond
     ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'SCV-BACK)
@@ -1352,7 +1352,7 @@
   ;; BEFORE the undo group opens, because _.UNDO _Begin clears the
   ;; pickfirst set (the convention LOBF and ABPCHECK already carry)
   (setq pre (ssget "_I" scv:*filter*))
-  (if lzd:watch (lzd:watch pre))
+  (if lzd:watch (lzd:watch pre) pre)
 
   (princ (strcat "\n\nSPACOVCREATE " *spacovcreate-version*
                  " - the cover for a spa that is already drawn."))
@@ -1368,7 +1368,7 @@
            (progn
              (princ "\nSelect the geometry that is the spa: ")
              (setq ss (ssget scv:*filter*))
-             (if lzd:watch (lzd:watch ss))))
+             (if lzd:watch (lzd:watch ss) ss)))
        (if (null ss)
            (progn (scv:say "Nothing selected - nothing to cover.")
                   (setq qstep nil))

@@ -1649,7 +1649,7 @@
       (if (null pick)
         (progn
           (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
-          (if lzd:watch (lzd:watch sel))
+          (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -1722,7 +1722,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *ABL-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "abl:ask-tol" tol))
+  (if lzd:ask (lzd:ask "abl:ask-tol" tol) tol)
   (cond
     ((abl:back-kw tol) 'ABL-BACK)
     (T
@@ -1744,7 +1744,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "abl:ask-pct" pct))
+  (if lzd:ask (lzd:ask "abl:ask-pct" pct) pct)
   (cond
     ((abl:back-kw pct) 'ABL-BACK)
     ((null pct) def)
@@ -1760,7 +1760,7 @@
                            (if *ABL-MAX-ARCS* (itoa *ABL-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "abl:ask-cap" mx))
+  (if lzd:ask (lzd:ask "abl:ask-cap" mx) mx)
   (cond
     ((abl:back-kw mx) 'ABL-BACK)
     (T
@@ -1791,7 +1791,7 @@
     (setq v (getpoint (strcat "\n  " msg " [Number"
                               (if back "/Back" "") "] <Pt."
                               (abl:pt-name dflt) ">: ")))
-    (if lzd:ask (lzd:ask msg v))
+    (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((abl:back-kw v) (setq out 'ABL-BACK))
       ((null v) (setq out dflt))                  ; Enter: the offer
@@ -2062,7 +2062,7 @@
   ;; letting some in here would spend the pickfirst set on objects the
   ;; classifier goes on to ignore
   (setq abl-pick (ssget "_I" '((0 . "POINT,INSERT"))))
-  (if lzd:watch (lzd:watch abl-pick))
+  (if lzd:watch (lzd:watch abl-pick) abl-pick)
 
   ;; one undo group around the whole fit - a U after ABLOBF takes back
   ;; the outline, the labels and the markers in one step (the stale
@@ -2236,7 +2236,7 @@
                        *ABL-POINT-LAYER* ")."))
         (princ "\n  Select objects: ")
         (setq ss (ssget '((0 . "POINT,INSERT"))))
-        (if lzd:watch (lzd:watch ss))))
+        (if lzd:watch (lzd:watch ss) ss)))
     (if (null ss)
       (princ "\nNo points selected - there is nothing to fit a run through.")
       (progn

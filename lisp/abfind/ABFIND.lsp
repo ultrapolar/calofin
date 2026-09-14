@@ -604,7 +604,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'ABF-BACK)
         ((null v) (if dflt dflt (abf:askkw msg kws shown dflt back)))
         (t v)))
@@ -647,7 +647,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'ABF-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -663,7 +663,7 @@
 (defun abf:askfirst (msg endtext / v)
   (initget 6 "Back Undo")
   (setq v (getdist (strcat "\n" msg " [Back] <Enter = " endtext ">: ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'ABF-BACK v))
 
 ;; Free-text entry (the new point's number).  The prompt says how to
@@ -673,7 +673,7 @@
   (setq v (getstring T (strcat "\n" msg
                                (if dflt (strcat " <" dflt ">") "")
                                (if back " (B = back)" "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((and back (abf:back-word-p v)) 'ABF-BACK)
         ((= v "") (if dflt dflt v))
         (t v)))
@@ -1961,7 +1961,7 @@
   (initget 128)
   (setq ans (getpoint (strcat msg (if back " [Back]" "")
                               " <Enter = none>: ")))
-  (if lzd:ask (lzd:ask msg ans))
+  (if lzd:ask (lzd:ask msg ans) ans)
   (cond
     ((null ans) nil)
     ((and (not (listp ans)) (abf:back-word-p ans))
