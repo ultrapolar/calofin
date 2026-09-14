@@ -310,6 +310,16 @@ answer is on the sheet either way instead of only in a sentence.
 (see below), it is marked in yellow, and the only thing left to settle
 is what the point is called.
 
+A pair that only just reaches touches at one spot and counts as
+crossing — and so does one that misses by less than `abf:*touch*`
+(1/32", half the 1/16" `abf:*prec*` prints to as shipped). Without
+that band the
+arithmetic finds gaps the drawing cannot print, and the command answers
+a pair of readings that *do* meet with `the two arcs fall 0" short of
+each other` and a table of readings to replace them with — noise in
+place of an answer. Raise `abf:*touch*` and a real gap gets silently
+closed; lower it and a miss too small to print gets reported.
+
 **They cannot cross.** Two circles miss each other two ways round, and
 they are different mistakes:
 
@@ -375,6 +385,19 @@ radial; on a reading barely longer than the label itself it is tens of
 degrees and the leaders do slant across each other, which is the right
 way round to fail — an untidy leader can be read past, two labels on
 top of each other cannot.
+
+One limit, and it is a fallback rather than a fix: an **inward** fan
+needs room between its arc and its stake for the text to lie in, and a
+reading no longer than the label itself has none — the spokes would
+meet at the stake, and the spacing that keeps them apart there would
+fling them right round the circle. Such a fan goes **outward** instead,
+and where both are forced out (two readings under about eight feet,
+from stakes far apart) the two point towards each other and their
+labels can cross. A point taped from five feet away is a rare thing to
+fail to place, the markers are still where they are, and the table on
+the command line still says which is which; what is not acceptable at
+any radius is a fan scattered round its own circle, and that is what
+the fallback stops.
 
 ### If none of them is right
 
@@ -613,6 +636,8 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*prec*         4)             ; rtos precision, 4 = 1/16"
 (setq abf:*same-eps*     0.125)         ; two suggestions this close
                                         ; are one place
+(setq abf:*touch*        0.03125)       ; a pair that misses by less
+                                        ; than this is taken as crossing
 ```
 
 `abf:*tag-gap*` is measured *across* the tags; along the arc they
