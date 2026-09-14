@@ -63,9 +63,19 @@ can still be clicked, it just cannot be typed.
    zero and the run starts on the wall itself -- which is how a step
    that dies back into the wall is drawn. The two can be named in
    either order: the marks say which way round the run goes (below).
-6. The polyline goes in on the perimeter's own layer and properties,
-   every circle is erased, and every line becomes a `SIDE STANDARD`
-   dimension on layer `DIMENSION`.
+6. **The dimension style**, last, and only when there is a polyline to
+   draw:
+
+   ```
+   Dimension style - STANDARD INCHES or SIDE STANDARD? [STandard/SIde/Back] <STandard>:
+   ```
+
+   `PERPPTS` and `CPERPPTS` ask this in exactly these words -- one
+   question, one vocabulary. A pair of ends with nothing between them is
+   reported instead of being asked a question it would throw away.
+7. The polyline goes in on the perimeter's own layer and properties,
+   every circle is erased, and every line becomes a dimension in that
+   style on layer `DIMENSION`.
 
 ### How the direction is found
 
@@ -150,7 +160,8 @@ At the top of the file, between the version banner and the first
 | `pm:*markcolor*` | `1` | The ACI that layer is CREATED with, on a drawing that lacks it. A number, not `'auto`: these marks are the measurement record and are meant to be seen, not to recede |
 | `pm:*dimlayer*` | `"DIMENSION"` | Where the dimensions land |
 | `pm:*dimcolor*` | `7` | The ACI that layer is created with |
-| `pm:*dimstyle*` | `"SIDE STANDARD"` | The dimension style to draw in. A drawing without it keeps its current style and is told so |
+| `pm:*dimstyle-std*` | `"STANDARD INCHES"` | The style the `STandard` answer draws in -- the Enter answer. The question is built from this name, so renaming it renames what the prompt offers; the KEYWORD stays `STandard`, which is the vocabulary all three perp tools share |
+| `pm:*dimstyle-side*` | `"SIDE STANDARD"` | The same for the `SIde` answer. A drawing that has neither style keeps its current one and is told so |
 | `pm:*point-block*` | `"ab_pt"` | The block whose INSERTs are survey points wherever they sit. Shared with `BPCALLOUT`, `CDCALLOUT`, `ABFIND` and `LHD` -- change it in all of them or the tools disagree about what the drawing holds |
 | `pm:*point-layer*` | `"POINTS"` | The layer whose POINTs and INSERTs are survey points whatever block they are |
 | `pm:*pt-tag*` | `"number"` | The attribute tag that names a point. A block without it lends its first attribute that reads as a number instead |
@@ -206,6 +217,7 @@ the right point, a typed number finding it, the five spellings meeting
 in the middle, a bad number and a duplicate number re-asked), the
 projection, the direction, the stations, the wall order, the seam wrap,
 the ends being nameable in either order, the tie click and what it
-leaves out, the run ends deciding by identity, the six `Back` steps and
-the session the command hands back are all measured against the file
-that actually ships.
+leaves out, the run ends deciding by identity, the dimension style with
+both its answers and its Enter, the seven `Back` steps and the session
+the command hands back are all measured against the file that actually
+ships.
