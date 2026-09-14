@@ -939,7 +939,7 @@
   ;; T = yes (Enter or Y), nil = no (N)
   (initget "Yes No")
   (setq ans (getkword (strcat msg " [Yes/No] <Yes>: ")))
-  (if lzd:ask (lzd:ask msg ans))
+  (if lzd:ask (lzd:ask msg ans) ans)
   (or (null ans) (= ans "Yes")))
 
 (defun lfc:ask-yn-nav (msg / ans)
@@ -951,7 +951,7 @@
   ;; 1): a click sends the bracket text, and "Skip rest" was a click
   ;; the initget list could not accept
   (setq ans (getkword (strcat msg " [Yes/No/Back/Skip] <Yes>: ")))
-  (if lzd:ask (lzd:ask msg ans))
+  (if lzd:ask (lzd:ask msg ans) ans)
   (cond ((null ans)      'yes)
         ((= ans "Yes")   'yes)
         ((= ans "No")    'no)
@@ -2965,12 +2965,12 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt "\nHighlight the drawing to LINFINCHECK: ")
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (cond
     ((null ss)
      (prompt "\nNothing selected - LINFINCHECK cancelled."))
@@ -3933,13 +3933,13 @@
 
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\nHighlight the drawing to " name
                       " (Enter = whole drawing): "))
       (setq ss (ssget))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss) (setq ss (ssget "_X")))
   (cond
     ((null ss) (prompt "\nNothing to scan."))

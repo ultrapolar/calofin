@@ -635,12 +635,12 @@
   ;; loop -- being handed the loop beats guessing at it beside a title
   ;; block border.
   (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
       (progn
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
         (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
-        (if lzd:watch (lzd:watch ss))))
+        (if lzd:watch (lzd:watch ss) ss)))
   (setq perims (paddle--perimeters ss))
 
   (if (not perims)

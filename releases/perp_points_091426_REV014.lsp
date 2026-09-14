@@ -530,7 +530,7 @@
     ;; the label, not the helper name: one helper asks this of the
     ;; selected object and of every line a round draws, and a report
     ;; that cannot tell them apart cannot say which one died
-    (if lzd:ask (lzd:ask lbl ans))
+    (if lzd:ask (lzd:ask lbl ans) ans)
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -687,7 +687,7 @@
   (setq ent nil)
   (while (null ent)
     (setq sel (entsel "\nSelect a line or polyline: "))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))

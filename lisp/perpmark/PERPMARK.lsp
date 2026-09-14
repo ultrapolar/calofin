@@ -680,7 +680,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'PM-BACK)
         ((null v) (if dflt dflt (pm:askkw msg kws shown dflt back)))
         (t v)))
@@ -715,7 +715,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'PM-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -728,7 +728,7 @@
 (defun pm:askpt (msg back / v)
   (if back (initget 1 "Back Undo") (initget 1))
   (setq v (getpoint (strcat "\n" msg (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'PM-BACK v))
 
 ;; A survey point, clicked or typed.  One prompt takes both: (initget
@@ -750,7 +750,7 @@
                               (if back " [Back]" "")
                               (if tail (strcat " <" tail ">") "")
                               ": ")))
-    (if lzd:ask (lzd:ask msg v))
+    (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((null v)
        (if tail
@@ -1004,7 +1004,7 @@
       ;; --- 1. the perimeter the distances were taped off ---------------
       ((= stage 1)
        (setq sel (entsel "\nSelect the pool perimeter: "))
-       (if lzd:watch (lzd:watch sel))
+       (if lzd:watch (lzd:watch sel) sel)
        (cond
          ((null sel)
           (princ "\nNothing selected - try again, or press Esc to quit."))
