@@ -82322,9 +82322,14 @@
 ;;;      two may be named in either order -- the marks say which way
 ;;;      round the run goes (below) -- and a tie, and only a tie, asks
 ;;;      for one click to settle it.
-;;;   6. The polyline goes in on the perimeter's own layer and properties,
-;;;      every circle is erased, and every line becomes a
-;;;      "SIDE STANDARD" dimension on layer "DIMENSION".
+;;;   6. Last, the dimension style -- STANDARD INCHES or SIDE STANDARD,
+;;;      the question PERPPTS and CPERPPTS ask in the same words.  It is
+;;;      put only when there is a polyline to draw, so a pair of ends
+;;;      with nothing between them is reported instead of being asked a
+;;;      question it would throw away.
+;;;   7. The polyline goes in on the perimeter's own layer and properties,
+;;;      every circle is erased, and every line becomes a dimension in
+;;;      that style on layer "DIMENSION".
 ;;;
 ;;; How the direction is found
 ;;;   Each mark's base point is the point of the perimeter closest to the
@@ -82382,7 +82387,7 @@
 ;;;     or let step 5 clear them.
 ;;;   * The joined polyline takes the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the perimeter it was measured off.
-;;;   * Dimensions go on layer "DIMENSION" in the "SIDE STANDARD" style
+;;;   * Dimensions go on layer "DIMENSION" in the style picked at step 6
 ;;;     when the drawing has it; otherwise the current style is used and
 ;;;     a note is printed.
 ;;;
@@ -82405,7 +82410,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.2")
+(setq *perpmark-version* "v1.3")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -82425,9 +82430,14 @@
 (setq pm:*dimlayer* "DIMENSION")
 (setq pm:*dimcolor* 7)
 
-;; Dimension style those dimensions are drawn in.  A drawing without it
-;; keeps its current style and is told so.
-(setq pm:*dimstyle* "SIDE STANDARD")
+;; The two dimension styles step 6 offers, and their order in the
+;; question: STandard is the Enter answer.  PERPPTS and CPERPPTS ask the
+;; same question in the same words, so a shop that renames a style
+;; renames it here and the prompt follows -- the two KEYWORDS stay
+;; STandard and SIde, which is the vocabulary all three share.  A
+;; drawing that has neither keeps its current style and is told so.
+(setq pm:*dimstyle-std*  "STANDARD INCHES")
+(setq pm:*dimstyle-side* "SIDE STANDARD")
 
 ;; What counts as a survey point.  The classifier is the one BPCALLOUT,
 ;; CDCALLOUT, ABFIND and LHD share: change it in all of them or the
@@ -83134,15 +83144,16 @@
       (setq out (cons p out))))
   (reverse out))
 
-;; Every mark that measured something, dimensioned where its line was.
-;; Returns how many went in.  The dimension style is restored by the
-;; caller -- it is one of the settings the *error* handler owes the user.
-(defun pm:dimension (marks / n m)
+;; Every mark that measured something, dimensioned where its line was,
+;; in the STYLE the drafter picked.  Returns how many went in.  The
+;; style is restored by the caller -- it is one of the settings the
+;; *error* handler owes the user.
+(defun pm:dimension (marks style / n m)
   (setq n 0)
   (setvar "CLAYER" (cal:ensure-layer pm:*dimlayer* pm:*dimcolor*))
-  (if (tblsearch "DIMSTYLE" pm:*dimstyle*)
-    (command "_.-DIMSTYLE" "_Restore" pm:*dimstyle*)
-    (princ (strcat "\nDimension style \"" pm:*dimstyle*
+  (if (tblsearch "DIMSTYLE" style)
+    (command "_.-DIMSTYLE" "_Restore" style)
+    (princ (strcat "\nDimension style \"" style
                    "\" is not in this drawing - using the current style"
                    " instead.")))
   (foreach m (reverse marks)
@@ -83171,7 +83182,7 @@
 (defun c:PERPMARK (/ *error* undo-open
                      sel en ed segs tot closed ctr pick cand cands loc
                      base tg nrm d ans marks stage done pts run s0 s1
-                     m0 m1 way miss lay odim ndims npts m)
+                     m0 m1 way wayasked miss sty lay odim ndims npts m)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -83363,7 +83374,11 @@
              (setq way (if closed
                          (pm:whichway marks s0 s1 tot m0 m1)
                          nil))
-             (if (eq way 'ASK) (setq stage 7) (setq stage 8)))))))
+             ;; the style question sits behind whichever of these two was
+             ;; the last one actually put (STANDARDS section 3: a chain
+             ;; with a conditional step carries its direction)
+             (setq wayasked (eq way 'ASK))
+             (if wayasked (setq stage 7) (setq stage 8)))))))
 
       ;; --- 7. the two arcs hold the same number of marks, so only the
       ;;        drafter can say which way the run passes ---------------
@@ -83382,7 +83397,10 @@
             (setq way   (pm:far-side-p (caddr loc) s0 s1 tot)
                   stage 8)))))
 
-      ;; --- 8. draw it ------------------------------------------------
+      ;; --- 8. which dimension style, the question PERPPTS and CPERPPTS
+      ;;        ask in the same words.  The run is worked out FIRST, so a
+      ;;        pair of ends with nothing between them is reported
+      ;;        instead of being asked a question it would throw away ---
       ((= stage 8)
        (setq run  (pm:span (append (list m0 m1) marks) s0 s1 closed tot way)
              pts  (pm:dedupe (mapcar 'pm:m-offs run))
@@ -83394,30 +83412,40 @@
                          " erased."))
           (setq done T))
          (t
-          (pm:pline pts ed)
-          (setq npts (length pts))
-          ;; --- the circles go, the lines become dimensions ------------
-          (foreach m marks
-            (pm:erase (pm:m-circle m))
-            (pm:erase (pm:m-line m)))
-          (setq ndims (pm:dimension marks))
-          ;; a measurement left off the polyline is SAID, never dropped
-          ;; quietly: it is still marked and still dimensioned, and the
-          ;; drafter is the one who decides whether that is what they
-          ;; meant
-          (if miss
-            (princ (strcat "\n" (pm:andjoin miss T)
-                           (if (= 1 (length miss)) " sits" " sit")
-                           " outside the run - still dimensioned, but not"
-                           " joined.")))
-          (princ (strcat "\nDone: a " (itoa npts)
-                         "-point polyline on layer \""
-                         (cdr (assoc 8 ed)) "\", "
-                         (itoa (length marks))
-                         " circle(s) erased and " (itoa ndims)
-                         " dimension(s) on layer \"" pm:*dimlayer*
-                         "\"."))
-          (setq done T))))))
+          (setq ans (cal:askkw (strcat "Dimension style - " pm:*dimstyle-std*
+                                      " or " pm:*dimstyle-side* "?")
+                              "STandard SIde" "STandard/SIde" "STandard" T))
+          (cond
+            ((eq ans 'CAL-BACK) (setq stage (if wayasked 7 6)))
+            (t (setq sty   (if (= ans "SIde") pm:*dimstyle-side*
+                             pm:*dimstyle-std*)
+                     stage 9))))))
+
+      ;; --- 9. draw it ------------------------------------------------
+      ((= stage 9)
+       (pm:pline pts ed)
+       (setq npts (length pts))
+       ;; --- the circles go, the lines become dimensions ---------------
+       (foreach m marks
+         (pm:erase (pm:m-circle m))
+         (pm:erase (pm:m-line m)))
+       (setq ndims (pm:dimension marks sty))
+       ;; a measurement left off the polyline is SAID, never dropped
+       ;; quietly: it is still marked and still dimensioned, and the
+       ;; drafter is the one who decides whether that is what they meant
+       (if miss
+         (princ (strcat "\n" (pm:andjoin miss T)
+                        (if (= 1 (length miss)) " sits" " sit")
+                        " outside the run - still dimensioned, but not"
+                        " joined.")))
+       (princ (strcat "\nDone: a " (itoa npts)
+                      "-point polyline on layer \""
+                      (cdr (assoc 8 ed)) "\", "
+                      (itoa (length marks))
+                      " circle(s) erased and " (itoa ndims)
+                      " dimension(s) on layer \"" pm:*dimlayer*
+                      "\" in \"" sty "\"."))
+       (setq done T))))
 
   ;; only when pm:dimension moved it: a run answered No never touched the
   ;; style, and restoring it to itself is a command line nobody asked for
