@@ -97,11 +97,11 @@ lisp/paddle/PADDLE.lsp|paddle--pause|\n [ press ENTER to continue ]|pause
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nClick to pick direction / offset side:|follows a resize already applied to the drawing
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
-lisp/perp_points/cperp_points.lsp|cperp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|first question of the command; only the selection is in front
+lisp/perp_points/cperp_points.lsp|cperp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|asked of the selected curve, where only the selection is in front of it, and of each curve a round draws, where the curve is drawn already
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nClick to pick direction / offset side:|follows a resize already applied to the drawing
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
-lisp/perp_points/perp_points.lsp|perp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|first question of the command; only the selection is in front
+lisp/perp_points/perp_points.lsp|perp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|asked of the selected line, where only the selection is in front of it, and of each line a round draws, where the line is drawn already
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\n --- press Enter to continue ---|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nA point is required - insertion point:|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nDemo size <100>:|demo / tutorial
