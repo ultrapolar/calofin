@@ -6,14 +6,31 @@ one on top of the dimension below it, one halfway under the step
 detail. Nothing is wrong with the dimensions -- the text is just in the
 wrong spot along them.
 
-`CLEARDIM` slides it. A dimension's text has one **track**, the
-dimension line it belongs to, and moving along that track is free: the
-dimension still measures what it measured, the extension lines still
-say between which two points, and nothing about the drawing changes.
-Moving the text **off** the line is not free -- it stops sitting on the
-thing it measures, and AutoCAD draws a leader to explain where it went
--- so `CLEARDIM` never does it. The across-the-track offset a text goes
-in with is the one it comes out with, to the last decimal.
+`CLEARDIM` slides it. Every dimension's text has one **track**, and it
+is made of the dimension itself:
+
+| Family | Its track |
+| --- | --- |
+| linear, aligned | the dimension line, a straight run |
+| angular (2-line and 3-point) | the dimension **arc**, about the angle's vertex |
+| radius, diameter | the radial line it is measured along |
+| ordinate | the leader, along the axis it reads |
+
+Moving along that track is free: the dimension still measures what it
+measured, the extension lines still say between which two points, and
+nothing about the drawing changes. Moving the text **off** the track is
+not free -- it stops sitting on the thing it measures, and AutoCAD draws
+a leader to explain where it went -- so `CLEARDIM` never does it. What
+staying on means differs by shape and is the same in substance: a linear
+text keeps its offset above the dimension line to the last decimal, an
+angular one keeps the **radius** it rides at, and both come out of the
+run on the track they went in on.
+
+The track's parameter is a **distance** in every case -- an arc length
+round an arc rather than an angle. That is what lets `cd:*step-f*` and
+`cd:*reach-f*` mean the same thing on a dimension arc as on a straight
+dimension line, instead of needing a second pair of knobs kept in step
+with the first.
 
 **The one that is already good does not move.** That is the whole
 policy. A text that is clear of everything has earned its spot and
@@ -29,29 +46,55 @@ keeps it; the ones that are on something go around it.
    the dimension itself: group 11 is the middle of the text, the height
    is the style's `DIMTXT` times `DIMSCALE` with the dimension's own
    overrides laid over the top, and the width is the glyph count at
-   `cd:*charwidth*` of that height. The track is the dimension line --
-   group 50 on a rotated dimension, the run between the two extension
-   line origins on an aligned one.
+   `cd:*charwidth*` of that height. On an arc the box **turns** as it
+   slides, because text set along a dimension arc turns with it unless
+   the style holds it upright (`DIMTIH`).
+
+   Then its track, which each family answers for itself:
+
+   - **linear and aligned** -- group 50's direction on a rotated
+     dimension, the run between the two extension line origins (13 and
+     14) on an aligned one.
+   - **angular** -- an arc about the angle's vertex. A 3-point
+     dimension writes that vertex into group 15; a 2-line one keeps no
+     vertex at all, so it is found where the two measured lines (13-14
+     and 15-10) cross, on the *infinite* lines rather than the drawn
+     segments.
+   - **radius and diameter** -- the line through groups 10 and 15.
+     `AutoDim`'s `ad:raddimpts` is the repo's own reading of those two:
+     a radius dimension puts the **centre** in 10 and a point on the
+     circle in 15, while a diameter writes the two **ends** of the
+     diameter and has no centre of its own, so its centre is the middle
+     of them.
+   - **ordinate** -- the leader. Group 13 is the feature and 14 is where
+     the leader ends; bit 64 of group 70 says which coordinate is being
+     read and with it which axis the leader runs along, and the sign
+     comes from the leader as drawn.
 
 3. **Everything else is reduced to ink.** Lines, polyline edges, arcs,
    circles, `TEXT` and `MTEXT`, plus what every dimension in the sweep
-   draws for itself: its dimension line and its two extension lines.
-   A text box is tested against all of it by a separating-axis test,
-   grown first by `cd:*gap-f*` so "clear" means readable rather than
-   merely not crossed.
+   draws for itself -- its dimension line, arc, radial line or leader,
+   and a linear one's two extension lines. A text box is tested against
+   all of it by a separating-axis test, grown first by `cd:*gap-f*` so
+   "clear" means readable rather than merely not crossed.
 
    Two things are deliberately not ink: anything on `cd:*skip-layers*`
-   (`DEFPOINTS`, which does not plot), and a dimension's **own**
-   dimension line -- AutoCAD breaks that around the text, which is what
-   a dimension is. Its own extension lines *are* ink: they cross the
-   track at right angles and are what a text slid too far ends up on.
+   (`DEFPOINTS`, which does not plot), and the piece of itself a text
+   **rides** -- its own dimension line, its own arc. AutoCAD breaks that
+   around the text, which is what a dimension is. Its own extension
+   lines *are* ink: they cross the track at right angles and are what a
+   text slid too far ends up on.
+
+   An arc is many polygons, so what a dimension rides is kept as its own
+   list rather than as the first item of one. Tagging only the first
+   chord would have an angular dimension fleeing the other thirty-one.
 
 4. **They are placed in three passes**, and this is where the policy
    lives:
 
    | Pass | Who | What happens |
    | --- | --- | --- |
-   | 1 | text that CANNOT move | placed where it is, and it keeps that spot: a locked layer, a suppressed text, a track that is not a straight dimension line |
+   | 1 | text that CANNOT move | placed where it is, and it keeps that spot: a locked layer, a suppressed text, a track that cannot be read (below) |
    | 2 | text already clear of every fixed thing | it keeps its spot too |
    | 3 | everything left | slid to the nearest clear spot, routed around all of the above |
 
@@ -64,10 +107,12 @@ keeps it; the ones that are on something go around it.
 5. **A text that has to move goes to the nearest clear spot on its
    track**, found by stepping outward in `cd:*step-f*` steps and then
    bisecting back toward where it started, so the move is the smallest
-   one that still works. The two directions are not equal: the one
-   that takes the text back toward the middle of its own dimension line
-   is tried first, because the middle is where a dimension's text
-   belongs.
+   one that still works. The two directions are not equal: the one that
+   takes the text back toward where its family says it belongs is tried
+   first -- the middle of the dimension line, the middle of the arc's
+   sweep, the circle a radius measures to, and for an ordinate simply
+   **further out**, because a leader is made longer to get its text
+   clear and never shorter back onto the work.
 
    A text with nowhere clear inside `cd:*reach-f*` is **left where it
    was** and named in the report. A text parked somewhere arbitrary is
@@ -75,15 +120,20 @@ keeps it; the ones that are on something go around it.
    see the second one.
 
 6. **What moved is marked user-positioned** (group 70 bit 128), which
-   is what stops AutoCAD putting it back at the next regen, and the
-   report says what happened:
+   is what stops AutoCAD putting it back at the next regen. The ordinate
+   is the one family whose text does not travel alone: its leader ends
+   where the text is, so group 14 moves the same step and the feature
+   point never moves -- writing group 11 by itself would leave the text
+   off the end of its own leader.
+
+   Then the report says what happened:
 
    ```
    CLEARDIM: 14 dimensions.
      9 already clear - left alone.
-     3 slid clear along their own dimension lines.
+     3 slid clear without leaving their dimensions.
      1 with nowhere clear on the track - left as drawn.
-     1 skipped: 1 on a track that is not a straight dimension line.
+     1 skipped: 1 whose track could not be read.
    ```
 
    Each moved, stuck or skipped dimension gets its own line above the
@@ -122,14 +172,38 @@ Every knob is read when the command runs, not when the file loads, so a
 
 ## Notes & limitations
 
-- **Only linear and aligned dimensions are moved.** Angular, radius,
-  diameter and ordinate dimensions each have a track -- an arc, a
-  radial line, a leader -- and not one of them is the straight
-  dimension line this file knows how to walk. They are counted in the
-  report by kind, left exactly as drawn, and their text is still ink
-  everything else has to clear. Their box is measured as if the text
-  were horizontal, which is an approximation for an angular dimension
-  whose text follows its arc.
+- **A track that cannot be read is left alone, never guessed at.** A
+  2-line angular dimension keeps no vertex -- it is where its two
+  measured lines cross, and parallel lines cross nowhere. An ordinate
+  with no leader end has no axis to run along. And the vertex an
+  angular dimension does yield is checked before it is trusted: the
+  sweep between its two rays **is** the angle it measures, so a vertex
+  that group 42 disagrees with (by more than 0.02 radians) is refused.
+  A track guessed wrong does not move text along the dimension, it
+  moves it **off** it, which is the one thing this tool exists not to
+  do. Every such dimension is counted in the report and its text is
+  still ink everything else has to clear.
+- **A dimension's own arc is read from its own groups, not from its
+  block.** The arc a text rides is centred on the vertex at the radius
+  the text already sits at, so the radius never has to be inferred; the
+  arc drawn as *ink* is at its own radius, taken from the arc point
+  (group 10 on a 3-point dimension, group 16 on a 2-line one). A
+  dimension carrying no arc point still slides -- it simply contributes
+  no arc to the obstacle list.
+- **Two families have a floor under them.** An ordinate's text slid
+  back past the point it is reading turns its leader round the other
+  way, and a radius dimension's text on the far side of the centre is
+  measuring from nowhere -- so neither is allowed there, and a text that
+  cannot get clear above the floor is left where it was. An arc needs no
+  floor (a text at a fixed radius can never reach the vertex) and a
+  diameter's text is welcome anywhere along the diameter, which is what
+  its centre being the **middle** of its two points means.
+- **Only a linear dimension gets a default text point.** Every
+  dimension AutoCAD writes carries group 11. A linear one without it
+  gets AutoCAD's own default computed for it (the middle of the
+  dimension line, a gap above); no other family does, because inventing
+  a point on an arc or a leader is putting the text somewhere rather
+  than finding where it is.
 - **The width of a text box is an estimate.** A stroke font's glyphs
   are not all one width, and the text style's own width factor is
   reached through a handle this file does not follow. `cd:*charwidth*`
@@ -145,9 +219,14 @@ Every knob is read when the command runs, not when the file loads, so a
   claim a sheet was cleared when it was not.
 - Moving text with group 70 bit 128 set is what a drafter does by
   dragging its grip, so a style whose `DIMTMOVE` adds a leader on a
-  moved text will add one here too. Since the move is along the
-  dimension line and the across-the-track offset does not change, that
+  moved text will add one here too. Since the move is along the track
+  and the across-the-track offset (or radius) does not change, that
   leader has nowhere to go and does not appear in practice.
+- **Angular text is measured tangent to its arc.** `DIMTIH` is read, so
+  a style that holds text upright gets an upright box that does not turn
+  as it slides; anything else turns with the arc. `DIMTOH` -- upright
+  only when the text is *outside* the extension lines -- is not read,
+  so a style that sets those two differently is measured by the first.
 - The whole run is one UNDO group: a single `U` puts every text back.
   Esc at the selection prompt restores `OSMODE` and `CMDECHO` and
   closes the group; there is no prompt after the group opens, so there
@@ -170,6 +249,15 @@ and an aligned dimension, the `DIMTXT` override out of xdata, the
 three-pass policy (including the case the tool exists for -- one text
 on a line and one clear, overlapping each other, and only the first
 moves), the reach and gap knobs, what is ink and what is not, Fit text
-measured between its own two ends rather than as a justification, the
-four skip reasons, a second run doing nothing, the undo group and Esc
-are all measured against the file that actually ships.
+measured between its own two ends rather than as a justification, a
+second run doing nothing, the undo group and Esc are all measured
+against the file that actually ships.
+
+The other four families have their own: the angular track read as an arc
+in arc length about a vertex found two different ways, the box turning
+with the arc and staying upright when `DIMTIH` says so, the whole arc
+counting as ridden rather than just its first chord, the radius and
+diameter centres, the ordinate's axis read off bit 64 and its leader end
+travelling with its text, and every way a track can fail to be read --
+parallel lines, a missing leader, a missing text point, and a vertex
+group 42 disagrees with.

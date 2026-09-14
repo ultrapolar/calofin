@@ -1,7 +1,7 @@
 ;;; ======================================================================
-;;; CLEARDIM.lsp  --  slide dimension text along its own dimension line
-;;;                    until it is readable, and leave the readable ones
-;;;                    where they are
+;;; CLEARDIM.lsp  --  slide dimension text along its own dimension until
+;;;                    it is readable, and leave the readable ones where
+;;;                    they are
 ;;; ----------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
@@ -9,35 +9,51 @@
 ;;;            CLEARDIMSCAN   the same pass, read-only: report, move nothing
 ;;;            CLEARDIMVER    print the loaded version
 ;;;
-;;; A dimension's text has ONE TRACK: the dimension line it belongs to.
-;;; Sliding the text along that line is free -- it still reads as the
+;;; Every dimension's text has ONE TRACK, and it is made of the dimension
+;;; itself:
+;;;
+;;;   linear and aligned    the dimension line, a straight run
+;;;   angular               the dimension ARC, about the angle's vertex
+;;;   radius and diameter   the radial line it is measured along
+;;;   ordinate              the leader, along the axis it reads
+;;;
+;;; Sliding the text along that track is free -- it still reads as the
 ;;; same dimension, the extension lines still say what was measured, and
-;;; nothing about the drawing changes.  Lifting it OFF the line is not
+;;; nothing about the drawing changes.  Lifting it OFF the track is not
 ;;; free: the text stops sitting on the thing it measures and AutoCAD
 ;;; starts drawing a leader to explain where it went.  So CLEARDIM only
-;;; ever slides ALONG, never across: the text's perpendicular offset from
-;;; its dimension line comes out of the run exactly as it went in.
+;;; ever slides ALONG, never across.  What that means is different for
+;;; each shape of track and the same in substance: a linear text keeps
+;;; its offset above the dimension line to the last decimal, an angular
+;;; one keeps the RADIUS it rides at, and both come out of the run on the
+;;; track they went in on.
+;;;
+;;; The track's parameter is a DISTANCE in every case, an arc length
+;;; round an arc rather than an angle.  That is what lets cd:*step-f*
+;;; and cd:*reach-f* mean the same thing on a dimension arc as on a
+;;; straight dimension line instead of needing a second pair of knobs
+;;; kept in step with the first.
 ;;;
 ;;; What counts as hard to read is anything under the text:
 ;;;
 ;;;   * another dimension's text sitting on top of it;
 ;;;   * any other drawing ink -- lines, polyline edges, arcs, circles,
 ;;;     TEXT, MTEXT -- crossing the letters;
-;;;   * the dimension lines and the extension lines of the OTHER
+;;;   * the dimension lines, arcs, radial lines and leaders of the OTHER
 ;;;     dimensions in the sweep, which are ink like any other;
 ;;;   * this dimension's OWN extension lines, which cross its track at
 ;;;     right angles and are the thing text slid too far ends up on.
 ;;;
-;;; Its own dimension line is the one thing that is not an obstacle:
-;;; AutoCAD breaks it around the text, which is what a dimension is.
+;;; The one thing that is not an obstacle is the piece of itself the text
+;;; RIDES -- its own dimension line, its own arc.  AutoCAD breaks that
+;;; around the text, which is what a dimension is.
 ;;;
 ;;; THE ONE THAT IS ALREADY GOOD DOES NOT MOVE.  That is the whole
 ;;; policy, and it decides who gives way when two texts want one spot:
 ;;;
 ;;;   1. Text that CANNOT move goes down first and keeps its spot --
 ;;;      a dimension on a locked layer, a dimension with no text, and
-;;;      every dimension whose track is not a straight line (angular,
-;;;      radius, diameter, ordinate; see "What it will not touch").
+;;;      one whose track cannot be read off it (below).
 ;;;   2. Then the text that is clear of every fixed thing in the
 ;;;      drawing.  It has earned its spot, so it keeps it.
 ;;;   3. Only then the text that is on top of something.  It is routed
@@ -52,28 +68,39 @@
 ;;; A text that has to move goes to the NEAREST clear spot on its track,
 ;;; found by stepping outward from where it sits and then bisecting back
 ;;; toward it, so the move is the smallest one that works.  The two
-;;; directions are not equal: the one that takes the text back toward the
-;;; middle of its own dimension line is tried first, because the middle
-;;; is where a dimension's text belongs.  A text with nowhere clear
-;;; within reach (cd:*reach-f*) is LEFT WHERE IT WAS and named in the
-;;; report -- a text parked somewhere arbitrary is worse than a text
-;;; still sitting on a line, because the drafter can see the second one.
+;;; directions are not equal: the one that takes the text back toward
+;;; where its family says it belongs is tried first -- the middle of the
+;;; dimension line, the middle of the arc's sweep, the circle a radius
+;;; measures to, and for an ordinate simply further out, because a
+;;; leader is made longer to get its text clear and never shorter back
+;;; onto the work.  A text with nowhere clear within reach
+;;; (cd:*reach-f*) is LEFT WHERE IT WAS and named in the report -- a text
+;;; parked somewhere arbitrary is worse than a text still sitting on a
+;;; line, because the drafter can see the second one.
 ;;;
 ;;; What it will not touch, and says so rather than guessing:
 ;;;
-;;;   * ANGULAR, RADIUS, DIAMETER and ORDINATE dimensions.  Every one
-;;;     of them has a track -- an arc, a radial line, a leader -- and
-;;;     not one of them is the straight dimension line this file knows
-;;;     how to walk.  Sliding text along a straight line that is not
-;;;     the track would take it off the dimension, which is the one
-;;;     thing the tool exists not to do.  They are counted in the
-;;;     report by kind, and their text is an obstacle everything else
-;;;     has to clear.
+;;;   * a dimension whose TRACK CANNOT BE READ off it.  A 2-line angular
+;;;     dimension keeps no vertex: it is where the two measured lines
+;;;     cross, and parallel lines cross nowhere.  An ordinate with no
+;;;     leader end has no axis to run along.  And the vertex an angular
+;;;     dimension does yield is checked before it is trusted -- the
+;;;     sweep between its two rays IS the angle it measures, so a vertex
+;;;     group 42 disagrees with is refused.  A track guessed wrong does
+;;;     not move text along the dimension, it moves it OFF it, which is
+;;;     the one thing this tool exists not to do.
 ;;;   * a dimension on a LOCKED layer.  entmod would be refused, and a
 ;;;     run that silently skipped it would claim a sheet was cleared
 ;;;     when it was not.
 ;;;   * a dimension whose text is suppressed (DIMENSION group 1 is a
 ;;;     single space).  There is no text to be hard to read.
+;;;
+;;; Each of those is still ink everything else has to clear.
+;;;
+;;; The ordinate is the one family whose text does not travel alone: its
+;;; leader ends where the text is, so group 14 moves the same step and
+;;; the feature point never moves.  Writing group 11 by itself would
+;;; leave the text off the end of its own leader.
 ;;;
 ;;; The whole run is one UNDO group, so a single U puts every text back.
 ;;; CLEARDIMSCAN is the same analysis with the entmod left out: it says
@@ -87,7 +114,9 @@
 ;;; overrides applied over the top), and the width is the glyph count at
 ;;; cd:*charwidth* of that height.  That last one is an ESTIMATE -- a
 ;;; stroke font's glyphs are not all one width -- so it is a knob, and
-;;; raising it makes every box wider and the tool more cautious.
+;;; raising it makes every box wider and the tool more cautious.  On an
+;;; arc the box TURNS as it slides, because text set along a dimension
+;;; arc turns with it unless the style holds it upright.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *cleardim-version* below and stamps a dated, REV-numbered twin of
@@ -95,7 +124,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v2.0")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -174,6 +203,7 @@
 (defun cd:v+ (a b) (mapcar '+ (cd:2d a) (cd:2d b)))
 (defun cd:v* (v s) (list (* (car v) s) (* (cadr v) s)))
 (defun cd:dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
+(defun cd:mid (a b) (cd:v* (cd:v+ a b) 0.5))
 (defun cd:perp (v) (list (- (cadr v)) (car v)))   ; rotate 90 deg CCW
 (defun cd:vlen (v) (sqrt (cd:dot v v)))
 
@@ -184,9 +214,76 @@
         l (cd:vlen v))
   (if (> l 1e-12) (cd:v* v (/ 1.0 l))))
 
-;; The point S along U from BASE -- one line, but it is the whole idea
-;; of a track and it reads better named.
-(defun cd:on-track (base u s) (cd:v+ base (cd:v* u s)))
+(defun cd:angnorm (a)
+  (while (< a 0.0) (setq a (+ a pi pi)))
+  (while (>= a (+ pi pi)) (setq a (- a pi pi)))
+  a)
+
+;; smallest signed angular difference (to - from), in (-pi, pi]
+(defun cd:signed-dang (from to / d)
+  (setq d (cd:angnorm (- to from)))
+  (if (> d pi) (- d (* 2.0 pi)) d))
+
+;;; -------------------- the track --------------------------------------
+;;; What a text may slide along, and there are two shapes of it:
+;;;
+;;;   ('line BASE U OFF)        the point at s is BASE + s*U + OFF
+;;;   ('arc  CENTRE RAD ROT)    the point at s is CENTRE at radius RAD,
+;;;                             s being an ARC LENGTH round it
+;;;
+;;; s is a DISTANCE in both, never an angle.  That is the whole reason
+;;; the arc is parameterised by arc length: cd:*step-f* and
+;;; cd:*reach-f* are lengths, and they go on meaning the same thing on
+;;; a dimension arc as on a straight dimension line without a second
+;;; pair of knobs to keep in step with the first.
+;;;
+;;; OFF is the across-the-track offset a straight track preserves; RAD
+;;; is the same invariant on an arc -- the radius the text rides at,
+;;; which an angular dimension's text keeps exactly as a linear one
+;;; keeps its distance above the dimension line.  ROT says whether the
+;;; text turns with the arc as it goes round, which it does unless the
+;;; style holds it upright.
+
+(defun cd:trk-line (base u off) (list 'line base u off))
+(defun cd:trk-arc (centre rad rot) (list 'arc centre rad rot))
+(defun cd:trk-arc-p (trk) (eq (car trk) 'arc))
+(defun cd:trk-base (trk) (cadr trk))     ; the base point, or the centre
+
+;; Where TRK is at S.
+(defun cd:trk-pt (trk s)
+  (if (cd:trk-arc-p trk)
+    (polar (cadr trk) (/ s (caddr trk)) (caddr trk))
+    (cd:v+ (cd:v+ (cadr trk) (cd:v* (caddr trk) s)) (cadddr trk))))
+
+;; The parameter of the point P on TRK.  On an arc this is only right
+;; up to a whole turn -- the seam at angle zero is real -- so a caller
+;; comparing it against another parameter goes through cd:trk-near.
+(defun cd:trk-s (trk p)
+  (if (cd:trk-arc-p trk)
+    (* (caddr trk) (angle (cadr trk) p))
+    (cd:dot (cd:v- p (cadr trk)) (caddr trk))))
+
+;; S expressed near S0, the short way round: an arc's parameter wraps,
+;; and "is the text before or after this spot" has to be asked about
+;; the short way or a text just past the seam answers backwards.
+(defun cd:trk-near (trk s s0)
+  (if (cd:trk-arc-p trk)
+    (+ s0 (* (caddr trk)
+             (cd:signed-dang (/ s0 (caddr trk)) (/ s (caddr trk)))))
+    s))
+
+;; The text's own angle at S, given that it was ANG at S0.  On an arc
+;; that turns with it, the text keeps the angle it held to the tangent.
+(defun cd:trk-ang (trk s s0 ang)
+  (if (and (cd:trk-arc-p trk) (cadddr trk))
+    (+ ang (/ (- s s0) (caddr trk)))
+    ang))
+
+;; REACH, capped at half a turn on an arc: further than that and the
+;; search is coming back round the other side to spots it has already
+;; tried, which is time spent to no purpose.
+(defun cd:trk-reach (trk reach)
+  (if (cd:trk-arc-p trk) (min reach (* pi (caddr trk))) reach))
 
 ;;; -------------------- convex polygons and the clash test -------------
 ;;; Everything in the drawing is reduced to one of two shapes: a SEGMENT
@@ -611,28 +708,39 @@
 ;;; because every field is read from three or four places and (nth 7 r)
 ;;; at each of them is how a field quietly becomes the wrong field.
 
-(defun cd:rec (idx en dtype base u s0 off ang w h own why)
-  (list idx en dtype base u s0 off ang w h own why))
+(defun cd:rec (idx en dtype trk s0 ang w h own pins home lo why)
+  (list idx en dtype trk s0 ang w h own pins home lo why))
 
 (defun cd:r-idx  (r) (nth 0 r))    ; also the obstacle OWNER tag
 (defun cd:r-en   (r) (nth 1 r))
 (defun cd:r-type (r) (nth 2 r))    ; DXF 70's low three bits
-(defun cd:r-base (r) (nth 3 r))    ; a point on the dimension line
-(defun cd:r-u    (r) (nth 4 r))    ; the unit vector along it: the TRACK
-(defun cd:r-s0   (r) (nth 5 r))    ; where the text sits on the track now
-(defun cd:r-off  (r) (nth 6 r))    ; the across-the-track offset, kept
-(defun cd:r-ang  (r) (nth 7 r))    ; the angle the text itself is set at
-(defun cd:r-w    (r) (nth 8 r))
-(defun cd:r-h    (r) (nth 9 r))
-(defun cd:r-own  (r) (nth 10 r))   ; (dimline ext1 ext2), dim line FIRST
-(defun cd:r-why  (r) (nth 11 r))   ; nil, or why it cannot slide
+(defun cd:r-trk  (r) (nth 3 r))    ; the TRACK: what it may slide along
+(defun cd:r-s0   (r) (nth 4 r))    ; where the text sits on the track now
+(defun cd:r-ang  (r) (nth 5 r))    ; the angle the text is set at, there
+(defun cd:r-w    (r) (nth 6 r))
+(defun cd:r-h    (r) (nth 7 r))
+(defun cd:r-own  (r) (nth 8 r))    ; (RIDDEN OTHER) -- see the families
+(defun cd:r-pins (r) (nth 9 r))    ; the DXF point groups that travel
+                                   ; with the text -- (11), and (11 14)
+                                   ; for an ordinate, whose leader ends
+                                   ; where the text does
+(defun cd:r-home (r) (nth 10 r))   ; the spot on the track the text would
+                                   ; rather be near; the search tries
+                                   ; the way toward it first
+(defun cd:r-lo   (r) (nth 11 r))   ; the smallest s it may take, or nil
+(defun cd:r-why  (r) (nth 12 r))   ; nil, or why it cannot slide
+
+;; Where R's text sits when it is slid to S.
+(defun cd:r-pt (r s) (cd:trk-pt (cd:r-trk r) s))
 
 ;; The text box of R with its text slid to S along the track, grown by
 ;; cd:*gap-f* so "clear" means readable rather than merely not crossed.
-(defun cd:r-box (r s / centre pad)
-  (setq centre (cd:v+ (cd:on-track (cd:r-base r) (cd:r-u r) s) (cd:r-off r))
-        pad    (* cd:*gap-f* (cd:r-h r)))
-  (cd:grow centre (cd:r-ang r) (cd:r-w r) (cd:r-h r) pad))
+;; On an arc the box turns as it goes, because the text does.
+(defun cd:r-box (r s / pad)
+  (setq pad (* cd:*gap-f* (cd:r-h r)))
+  (cd:grow (cd:r-pt r s)
+           (cd:trk-ang (cd:r-trk r) s (cd:r-s0 r) (cd:r-ang r))
+           (cd:r-w r) (cd:r-h r) pad))
 
 ;; The kind of dimension DTYPE is, in the words the report uses.
 (defun cd:typename (dtype)
@@ -642,11 +750,238 @@
         ((= dtype 6) "ordinate")
         (T "linear")))
 
+;;; Each family answers the same four questions about itself, and
+;;; nothing below this line cares which family it was:
+;;;
+;;;   TRACK  what the text may slide along
+;;;   OWN    the ink the dimension draws, as (RIDDEN OTHER).  RIDDEN
+;;;          is what the text sits ON -- the dimension line, or the
+;;;          dimension arc -- and is tagged to the dimension so it
+;;;          alone ignores it, the way AutoCAD breaks that around the
+;;;          text.  OTHER is the rest, ink to everyone including the
+;;;          dimension itself.  An arc is MANY polygons, which is why
+;;;          the two are separate lists and not a first element and a
+;;;          tail: tagging only the first chord of its own arc would
+;;;          have an angular dimension fleeing the other thirty-one
+;;;   HOME   a point the text would rather be near, so a tie in the
+;;;          search goes the way a drafter would send it; nil for no
+;;;          preference
+;;;   PINS   the DXF point groups that travel with the text
+;;;   LO     the smallest s the text may take, or nil for none.  Two
+;;;          families have a floor under them and the rest do not: an
+;;;          ordinate's text slid back past its own feature point turns
+;;;          its leader round the other way, and a radius dimension's
+;;;          text on the far side of the centre is measuring from
+;;;          nowhere.  An arc needs none -- a text at a fixed radius
+;;;          can never reach the vertex -- and a diameter's text is
+;;;          welcome anywhere along the diameter, which is what the
+;;;          centre being the MIDDLE of its two points means
+;;;
+;;; A family answers nil when it cannot read its own track off the
+;;; dimension -- two parallel lines with no vertex between them, an
+;;; ordinate with no leader.  That dimension is reported and left
+;;; alone, which is the only honest answer: a track guessed wrong does
+;;; not move text along the dimension, it moves it off it.
+
+;; LINEAR and ALIGNED (type 0 and 1).  The track is the dimension line:
+;; group 50's direction on a rotated dimension, the run between the two
+;; extension line origins on an aligned one.  Home is the middle of the
+;; dimension line, and the ink is that line plus the two extension
+;; lines, which cross the track at right angles and are what a text slid
+;; too far ends up on.
+(defun cd:fam-linear (ed dtype p10 p11 p13 p14 sty ang / base u exe
+                         s13 s14 f13 f14 own)
+  (setq base (if p10 (cd:2d p10) '(0.0 0.0))
+        u    (list (cos ang) (sin ang)))
+  (if (and p13 p14)
+    (setq exe (* (cd:num 44 sty 0.18) (cd:dimscale ed sty))
+          s13 (cd:dot (cd:v- p13 base) u)
+          s14 (cd:dot (cd:v- p14 base) u)
+          f13 (cd:v+ base (cd:v* u s13))
+          f14 (cd:v+ base (cd:v* u s14))
+          own (list (list (list f13 f14))
+                    (list (list (cd:2d p13)
+                                (cd:v+ f13 (cd:ext-tip p13 f13 exe)))
+                          (list (cd:2d p14)
+                                (cd:v+ f14 (cd:ext-tip p14 f14 exe)))))))
+  (list (cd:trk-line base u
+                     (cd:v- (cd:v- p11 base)
+                            (cd:v* u (cd:dot (cd:v- p11 base) u))))
+        own
+        (if own (cd:mid f13 f14))
+        '(11)
+        nil))
+
+;; ANGULAR (type 2, off two lines; type 5, off three points).  The
+;; track is an ARC about the angle's vertex, and the radius the text
+;; rides at is the invariant -- exactly what the offset above the
+;; dimension line is for a linear one.
+;;
+;; The vertex is the one thing that has to be right, and the two kinds
+;; keep it in different places: a 3-point dimension writes it into group
+;; 15 outright, while a 2-line one has no vertex stored at all -- it is
+;; where the two measured lines (13-14 and 15-10) cross, which is what
+;; inters with an explicit nil finds on the INFINITE lines rather than
+;; the drawn segments.  Two parallel lines cross nowhere and the
+;; dimension is left alone.
+(defun cd:ang-vertex (dtype p10 p13 p14 p15)
+  (if (= dtype 5)
+    (if p15 (cd:2d p15))
+    (if (and p10 p13 p14 p15)
+      ;; inters hands back a 3-element point; every track is 2-D
+      (if (setq p15 (inters (cd:2d p13) (cd:2d p14)
+                            (cd:2d p15) (cd:2d p10) nil))
+        (cd:2d p15)))))
+
+;; The two ray directions the dimension arc runs between, as angles from
+;; the vertex, or nil when they cannot be read.  A 3-point dimension
+;; points them straight at groups 13 and 14.  A 2-line one has four
+;; candidate rays -- each measured line runs both ways out of the vertex
+;; -- and the pair that is the arc is the pair whose short sweep the
+;; dimension's own arc point falls inside, which is what the arc point
+;; is there to say.
+(defun cd:ang-rays (dtype vtx p10 p13 p14 p15 arcpt / a b d1 d2 best sw)
+  (cond
+    ((= dtype 5)
+     (if (and p13 p14) (list (angle vtx (cd:2d p13)) (angle vtx (cd:2d p14)))))
+    ((null arcpt) nil)
+    (T
+     (setq d1   (angle (cd:2d p13) (cd:2d p14))
+           d2   (angle (cd:2d p15) (cd:2d p10))
+           best nil)
+     (foreach a (list d1 (+ d1 pi))
+       (foreach b (list d2 (+ d2 pi))
+         ;; the sweep from a to b that is under half a turn, with the
+         ;; arc point's own bearing measured against it.  A pair the
+         ;; arc point falls outside is one of the other three angles
+         ;; those two lines make, which this dimension is not about
+         (setq sw (cd:signed-dang a b))
+         (if (and (> (abs sw) 1e-9) (null best)
+                  (cd:between-p a b (angle vtx arcpt)))
+           (setq best (list (cd:angnorm a) (cd:angnorm b))))))
+     best)))
+
+;; T when the bearing C lies inside the sweep from A to B that is under
+;; half a turn -- the sweep an angular dimension's arc actually draws.
+(defun cd:between-p (a b c / sw sc)
+  (setq sw (cd:signed-dang a b)
+        sc (cd:signed-dang a c))
+  (if (> sw 0.0) (and (>= sc 0.0) (<= sc sw))
+    (and (<= sc 0.0) (>= sc sw))))
+
+(defun cd:fam-angular (ed dtype p10 p11 p13 p14 p15 sty / vtx arcpt rad
+                          rays arad own meas swept)
+  (setq vtx   (cd:ang-vertex dtype p10 p13 p14 p15)
+        arcpt (if (= dtype 5) (if p10 (cd:2d p10)) (cd:dxf 16 ed)))
+  (if arcpt (setq arcpt (cd:2d arcpt)))
+  (if (or (null vtx) (< (distance vtx (cd:2d p11)) 1e-9))
+    nil
+    (progn
+      (setq rad  (distance vtx (cd:2d p11))
+            rays (cd:ang-rays dtype vtx p10 p13 p14 p15 arcpt)
+            meas (cd:dxf 42 ed))
+      ;; the check that says the vertex really is the vertex: the sweep
+      ;; between the two rays IS the angle the dimension measures, and
+      ;; group 42 is what it measured.  A vertex read off the wrong
+      ;; groups does not survive it.
+      (if rays
+        (progn
+          (setq swept (abs (cd:signed-dang (car rays) (cadr rays))))
+          (if (and (numberp meas) (> meas 0.0)
+                   (> (abs (- swept meas)) 0.02))
+            (setq rays nil vtx nil))))
+      (if (null vtx) nil
+        (progn
+          ;; the arc it draws, at its own radius rather than the text's
+          (if (and rays arcpt (> (distance vtx arcpt) 1e-9))
+            (setq arad (distance vtx arcpt)
+                  own  (list (cd:arc-chain vtx arad (car rays)
+                                           (cd:signed-dang (car rays)
+                                                           (cadr rays)))
+                             nil)))
+          (list (cd:trk-arc vtx rad
+                            (zerop (cd:num 73 sty 0)))  ; upright text does
+                                                        ; not turn with it
+                own
+                ;; home is the middle of the sweep, at the text's own
+                ;; radius -- where an angular dimension's text belongs
+                (if rays
+                  (polar vtx (+ (car rays)
+                                (* 0.5 (cd:signed-dang (car rays)
+                                                       (cadr rays))))
+                         rad))
+                '(11)
+                nil))))))
+
+;; RADIUS (type 4) and DIAMETER (type 3).  Both slide along the line
+;; through the two points the dimension is built on, which is the
+;; leader a drafter drags the text in and out along.  The two families
+;; put different things in those groups and AutoDim's ad:raddimpts says
+;; which: a radius dimension writes the CENTRE into group 10 and a point
+;; on the circle into 15, while a diameter writes the two ends of the
+;; diameter and has no centre of its own -- so its centre is the middle
+;; of them, and that is where its text belongs.
+(defun cd:fam-radial (dtype p10 p11 p15 / a b u base)
+  (if (or (null p10) (null p15)) nil
+    (progn
+      (setq a (cd:2d p10)
+            b (cd:2d p15)
+            u (cd:unit (cd:v- b a)))
+      (if (null u) nil
+        (progn
+          (setq base (if (= dtype 3) (cd:mid a b) a))
+          (list (cd:trk-line base u
+                             (cd:v- (cd:v- p11 base)
+                                    (cd:v* u (cd:dot (cd:v- p11 base) u))))
+                (list (list (list a b)) nil)
+                (if (= dtype 3) base b)   ; the centre, or the circle it
+                                          ; measures to
+                '(11)
+                ;; a radius runs OUT from its centre and its text has no
+                ;; business on the far side of it; a diameter's centre is
+                ;; the middle of its two points, so both sides are its own
+                (if (= dtype 3) nil 0.0)))))))
+
+;; ORDINATE (type 6).  Group 13 is the feature being measured and 14 is
+;; where its leader ends; the text hangs off that end.  Bit 64 of group
+;; 70 says which coordinate is being read, and with it which way the
+;; leader runs: an X-type ordinate reads across and leads AWAY in Y, a
+;; Y-type the other way about.  The sign comes from the leader itself,
+;; so the track runs the way the leader was actually drawn.
+;;
+;; This is the one family whose text does not travel alone: the leader
+;; ends where the text is, so group 14 is pinned to it and moves the
+;; same step.  Moving the text off the end of its own leader is what
+;; writing group 11 by itself would do.  The feature point never moves.
+(defun cd:fam-ordinate (ed p11 p13 p14 h / xtype d u base)
+  (if (or (null p13) (null p14)) nil
+    (progn
+      (setq xtype (= 64 (logand 64 (cd:num 70 ed 0)))
+            d     (cd:v- p14 p13)
+            u     (if xtype
+                    (list 0.0 (if (< (cadr d) 0.0) -1.0 1.0))
+                    (list (if (< (car d) 0.0) -1.0 1.0) 0.0))
+            base  (cd:2d p13))
+      (list (cd:trk-line base u
+                         (cd:v- (cd:v- p11 base)
+                                (cd:v* u (cd:dot (cd:v- p11 base) u))))
+            (list (list (list base (cd:2d p14))) nil)
+            ;; further out, always: an ordinate's leader is made longer
+            ;; to get its text clear, never shorter back onto the work
+            (cd:v+ (cd:v+ base (cd:v* u (cd:dot (cd:v- p11 base) u)))
+                   (cd:v* u 1.0))
+            '(11 14)
+            ;; and it stops clear of the feature it is reading.  Slid
+            ;; back past that the leader turns round and points the
+            ;; other way, which is a drawing error rather than a
+            ;; crowded one
+            (* (+ 0.5 cd:*gap-f*) h)))))
+
 ;; The record for one DIMENSION.  Returns nil only for an entity that
 ;; is not a dimension at all; everything else comes back as a record,
 ;; with cd:r-why saying why it will not be moved when it will not.
-(defun cd:read-dim (idx en / ed dtype sty hgt s wh w h p10 p11 p13 p14
-                        ang u base s0 off s13 s14 f13 f14 exe own why txtang)
+(defun cd:read-dim (idx en / ed dtype sty hgt s wh w h p10 p11 p13 p14 p15
+                        ang fam trk own home pins lo s0 txtang why)
   (setq ed (entget en))
   ;; an entity that is not a dimension, and an ename that no longer
   ;; names one, both come back nil rather than half a record
@@ -662,50 +997,72 @@
             p10   (cd:dxf 10 ed)
             p11   (cd:dxf 11 ed)
             p13   (cd:dxf 13 ed)
-            p14   (cd:dxf 14 ed))
-      ;; the track: the direction of the dimension line, which is group
-      ;; 50 on a rotated dimension and the run between the two extension
-      ;; line origins on an aligned one
+            p14   (cd:dxf 14 ed)
+            p15   (cd:dxf 15 ed))
+      ;; the direction a linear dimension's line runs, which is also the
+      ;; angle its text is set at
       (setq ang (if (= dtype 1)
                   (if (and p13 p14) (angle (cd:2d p13) (cd:2d p14)) 0.0)
-                  (cd:num 50 ed 0.0))
-            u   (list (cos ang) (sin ang)))
-      ;; the text reads along the dimension line unless the style turns
-      ;; it upright (DIMTIH), and group 53 turns it further either way
-      (setq txtang (+ (if (and sty (/= 0 (cd:num 73 sty 0))) 0.0 ang)
-                      (cd:num 53 ed 0.0)))
-      (setq base (if p10 (cd:2d p10) '(0.0 0.0)))
-      ;; where the text is now, split into along-track and across-track:
-      ;; only the first of the two is ever written back
-      (if (null p11)
-        ;; no stored text point: AutoCAD's default, the middle of the
-        ;; dimension line with the text sitting a gap above it
-        (setq p11 (cd:v+ base
-                         (cd:v+ (cd:v* u (if (and p13 p14)
-                                           (* 0.5 (+ (cd:dot (cd:v- p13 base) u)
-                                                     (cd:dot (cd:v- p14 base) u)))
-                                           0.0))
-                                (cd:v* (cd:perp u) (* 0.5 h))))))
-      (setq s0  (cd:dot (cd:v- p11 base) u)
-            off (cd:v- (cd:v- p11 base) (cd:v* u s0)))
-      ;; the ink this dimension itself draws: the dimension line first
-      ;; -- the one thing it never has to clear -- then the two
-      ;; extension lines, which cross its track and which it does
-      (setq own nil)
-      (if (and p13 p14)
-        (progn
-          (setq exe (* (cd:num 44 sty 0.18) (cd:dimscale ed sty))
-                s13 (cd:dot (cd:v- p13 base) u)
-                s14 (cd:dot (cd:v- p14 base) u)
-                f13 (cd:on-track base u s13)
-                f14 (cd:on-track base u s14))
-          (setq own (list (list f13 f14)
-                          (list (cd:2d p13) (cd:v+ f13 (cd:ext-tip p13 f13 exe)))
-                          (list (cd:2d p14) (cd:v+ f14 (cd:ext-tip p14 f14 exe)))))))
-      (setq why (cond ((not (member dtype '(0 1))) 'curve)
+                  (cd:num 50 ed 0.0)))
+      ;; A linear dimension with no stored text point gets AutoCAD's own
+      ;; default: the middle of the dimension line, the text sitting a
+      ;; gap above it.  No other family gets a guess -- every dimension
+      ;; AutoCAD writes carries group 11, and inventing one for an arc
+      ;; or a leader would be putting the text somewhere rather than
+      ;; finding where it already is.
+      (if (and (null p11) (member dtype '(0 1)))
+        (setq p11 (cd:v+ (if p10 (cd:2d p10) '(0.0 0.0))
+                         (cd:v+ (cd:v* (list (cos ang) (sin ang))
+                                       (if (and p10 p13 p14)
+                                         (* 0.5 (+ (cd:dot (cd:v- p13 p10)
+                                                           (list (cos ang)
+                                                                 (sin ang)))
+                                                   (cd:dot (cd:v- p14 p10)
+                                                           (list (cos ang)
+                                                                 (sin ang)))))
+                                         0.0))
+                                (cd:v* (cd:perp (list (cos ang) (sin ang)))
+                                       (* 0.5 h))))))
+      (setq fam (if (null p11) nil
+                  (cond
+                    ((member dtype '(0 1))
+                     (cd:fam-linear ed dtype p10 p11 p13 p14 sty
+                                    (+ ang (cd:num 53 ed 0.0))))
+                    ((member dtype '(2 5))
+                     (cd:fam-angular ed dtype p10 p11 p13 p14 p15 sty))
+                    ((member dtype '(3 4)) (cd:fam-radial dtype p10 p11 p15))
+                    ((= dtype 6) (cd:fam-ordinate ed p11 p13 p14 h)))))
+      (if fam
+        (setq trk  (car fam)
+              own  (cadr fam)
+              home (caddr fam)
+              pins (cadddr fam)
+              lo   (nth 4 fam)
+              s0   (cd:trk-s trk (cd:2d p11))))
+      ;; the text reads along whatever it is set on -- the dimension
+      ;; line, or the tangent of the arc -- unless the style turns it
+      ;; upright (DIMTIH), and group 53 turns it further either way
+      (setq txtang
+            (+ (cond ((and sty (/= 0 (cd:num 73 sty 0))) 0.0)
+                     ((and trk (cd:trk-arc-p trk))
+                      (+ (angle (cd:trk-base trk) (cd:2d p11)) (* 0.5 pi)))
+                     (T ang))
+               (cd:num 53 ed 0.0)))
+      (setq why (cond ((null fam) 'track)
                       ((<= w 0.0) 'notext)
                       ((cd:layer-locked-p (cond ((cd:dxf 8 ed)) ("0"))) 'locked)))
-      (cd:rec idx en dtype base u s0 off txtang w h own why))))
+      ;; a dimension that will not move still needs a track to hold its
+      ;; text box on, so an unreadable one gets a standing-still stub
+      (if (null trk)
+        (setq trk  (cd:trk-line (if p11 (cd:2d p11)
+                                  (if p10 (cd:2d p10) '(0.0 0.0)))
+                                '(1.0 0.0) '(0.0 0.0))
+              s0   0.0
+              own  nil
+              pins '(11)))
+      (cd:rec idx en dtype trk s0 txtang w h own pins
+              (if home (cd:trk-near trk (cd:trk-s trk home) s0) s0)
+              lo why))))
 
 ;; How far an extension line runs PAST the dimension line: DIMEXE along
 ;; the direction it was already going.  A zero-length run -- the
@@ -724,12 +1081,14 @@
 ;; when nothing inside reach is clear: the caller leaves the text alone
 ;; and says so, which is worth more to a drafter than a text parked in
 ;; an arbitrary spot.
-(defun cd:find-slide (r obs smid / s0 step reach owner k s found blocked
-                          dirs d lo hi mid i)
+(defun cd:find-slide (r obs / s0 smid step reach owner floor k s found
+                         blocked dirs d lo hi mid i)
   (setq s0    (cd:r-s0 r)
+        smid  (cd:r-home r)
         owner (cd:r-idx r)
+        floor (cd:r-lo r)
         step  (max 1e-6 (* cd:*step-f* (cd:r-h r)))
-        reach (* cd:*reach-f* (cd:r-w r)))
+        reach (cd:trk-reach (cd:r-trk r) (* cd:*reach-f* (cd:r-w r))))
   (if (not (cd:hits-p (cd:r-box r s0) obs owner))
     s0
     (progn
@@ -744,13 +1103,19 @@
           (if (not found)
             (progn
               (setq s (+ s0 (* d k step)))
-              (if (not (cd:hits-p (cd:r-box r s) obs owner))
+              (if (and (or (null floor) (>= s floor))
+                       (not (cd:hits-p (cd:r-box r s) obs owner)))
                 (setq found   s
                       blocked (+ s0 (* d (1- k) step)))))))
         (setq k (1+ k)))
       (if (and found (> cd:*refine* 0))
         (progn
-          (setq lo blocked hi found i 0)
+          ;; the bisection runs between a spot that was blocked and the
+          ;; one that was not, and the floor is the one place the
+          ;; blocked end may not be allowed to sit
+          (setq lo (if (and floor (< blocked floor)) floor blocked)
+                hi found
+                i  0)
           (while (< i cd:*refine*)
             (setq mid (* 0.5 (+ lo hi)))
             (if (cd:hits-p (cd:r-box r mid) obs owner)
@@ -760,25 +1125,13 @@
           (setq found hi)))
       found)))
 
-;; The middle of R's own dimension line on its own track -- where the
-;; text would sit if nothing were in the way.  Its current spot when
-;; the dimension has no extension line origins to take a middle from.
-(defun cd:home (r / own)
-  (setq own (cd:r-own r))
-  (if own
-    (* 0.5 (+ (cd:dot (cd:v- (caar own) (cd:r-base r)) (cd:r-u r))
-              (cd:dot (cd:v- (cadar own) (cd:r-base r)) (cd:r-u r))))
-    (cd:r-s0 r)))
-
 ;;; -------------------- reading order ----------------------------------
 
 ;; Row index of R, counting down the sheet: rows ROWTOL tall, so two
 ;; dimensions within one row sort left to right rather than by a
 ;; hairsbreadth of height.
 (defun cd:row (r rowtol)
-  (fix (/ (cadr (cd:v+ (cd:on-track (cd:r-base r) (cd:r-u r) (cd:r-s0 r))
-                       (cd:r-off r)))
-          rowtol)))
+  (fix (/ (cadr (cd:r-pt r (cd:r-s0 r))) rowtol)))
 
 ;; Reading order, as a comparator: down the sheet, then left to right,
 ;; then by index so no two records ever compare equal.  vl-sort DROPS
@@ -790,10 +1143,8 @@
   (cond
     ((/= ra rb) (> ra rb))
     (T
-     (setq xa (car (cd:v+ (cd:on-track (cd:r-base a) (cd:r-u a) (cd:r-s0 a))
-                          (cd:r-off a)))
-           xb (car (cd:v+ (cd:on-track (cd:r-base b) (cd:r-u b) (cd:r-s0 b))
-                          (cd:r-off b))))
+     (setq xa (car (cd:r-pt a (cd:r-s0 a)))
+           xb (car (cd:r-pt b (cd:r-s0 b))))
      (cond ((/= xa xb) (< xa xb))
            (T (< (cd:r-idx a) (cd:r-idx b)))))))
 
@@ -830,7 +1181,7 @@
 ;; index so that dimension alone ignores it; the extension lines are
 ;; tagged nil, because a text over one of those is unreadable whoever
 ;; drew it.
-(defun cd:static-obs (ss recs / out i n en ed typ lay own first p r)
+(defun cd:static-obs (ss recs / out i n en ed typ lay own p r)
   (setq out nil i 0 n (if ss (sslength ss) 0))
   (while (< i n)
     (setq en  (ssname ss i)
@@ -842,11 +1193,13 @@
         (setq out (cons (cd:ob nil p) out))))
     (setq i (1+ i)))
   (foreach r recs
-    (setq own   (cd:r-own r)
-          first T)
-    (foreach p own
-      (setq out   (cons (cd:ob (if first (cd:r-idx r) nil) p) out)
-            first nil)))
+    (setq own (cd:r-own r))
+    ;; what it RIDES is tagged to it, so it alone passes through it
+    (foreach p (car own)
+      (setq out (cons (cd:ob (cd:r-idx r) p) out)))
+    ;; and what it merely draws is ink to everyone, itself included
+    (foreach p (cadr own)
+      (setq out (cons (cd:ob nil p) out))))
   out)
 
 ;; The three buckets, in the order they get to claim a spot: what cannot
@@ -879,7 +1232,7 @@
   (foreach r order
     (setq s (if (cd:r-why r)
               (cd:r-s0 r)                 ; cannot move: it keeps its spot
-              (cd:find-slide r obs (cd:home r))))
+              (cd:find-slide r obs)))
     (if (null s) (setq s (cd:r-s0 r)))    ; nowhere clear: left as drawn
     (setq res (list r s
                     (> (abs (- s (cd:r-s0 r))) 1e-9)
@@ -898,24 +1251,46 @@
 
 ;;; -------------------- writing it back --------------------------------
 
-;; Slide RES's text to where the plan put it: group 11, and the bit in
-;; group 70 that tells AutoCAD the text sits where it was put rather
-;; than where the style would have put it.  Only the along-track part
-;; of group 11 changes -- the across-track offset is added back exactly
-;; as it was read -- so the text comes out on the same track it went in
-;; on.  T when the drawing changed.
-(defun cd:apply (res / r ed p flags)
+;; XY from P, Z from the point OLD that is being replaced -- a drawing
+;; that works at an elevation keeps it rather than having every text it
+;; touches quietly flattened to zero.
+(defun cd:pt-at (p old)
+  (list (car p) (cadr p)
+        (cond ((and old (caddr old)) (caddr old)) (0.0))))
+
+;; Slide RES's text to where the plan put it, and with it every DXF
+;; point group pinned to it: group 11 always, plus an ordinate's leader
+;; end, which is where its text hangs from and would otherwise be left
+;; behind.  Group 11 goes to the track point; the rest move by the same
+;; step, so the shape of the dimension is carried along rather than
+;; rebuilt.  Then the bit in group 70 that tells AutoCAD the text sits
+;; where it was put rather than where the style would have put it.
+;;
+;; Only the along-track part of the position changes -- the across-track
+;; offset of a straight track, and the radius of an arc, are what
+;; cd:trk-pt puts back exactly as they were read -- so the text comes
+;; out on the same track it went in on.  T when the drawing changed.
+(defun cd:apply (res / r ed p0 p1 d flags code g)
   (setq r (cd:res-rec res))
   (if (not (cd:res-moved res))
     nil
     (progn
       (setq ed    (entget (cd:r-en r))
-            p     (cd:v+ (cd:on-track (cd:r-base r) (cd:r-u r) (cd:res-s res))
-                         (cd:r-off r))
+            p0    (cd:r-pt r (cd:r-s0 r))
+            p1    (cd:r-pt r (cd:res-s res))
+            d     (cd:v- p1 p0)
             flags (cd:num 70 ed 0))
-      (setq ed (if (assoc 11 ed)
-                 (subst (cons 11 (list (car p) (cadr p) 0.0)) (assoc 11 ed) ed)
-                 (append ed (list (cons 11 (list (car p) (cadr p) 0.0))))))
+      (foreach code (cd:r-pins r)
+        (setq g (assoc code ed))
+        (if g
+          (setq ed (subst (cons code
+                                (cd:pt-at (if (= code 11) p1
+                                            (cd:v+ (cdr g) d))
+                                          (cdr g)))
+                          g ed))
+          ;; group 11 is written even onto a dimension that carried none
+          (if (= code 11)
+            (setq ed (append ed (list (cons 11 (cd:pt-at p1 nil))))))))
       (setq ed (if (assoc 70 ed)
                  (subst (cons 70 (logior 128 flags)) (assoc 70 ed) ed)
                  (append ed (list (cons 70 (logior 128 flags))))))
@@ -951,8 +1326,8 @@
          (princ (strcat "\n  " (cd:handle-of r) ": "
                         (if moving "slid " "would slide ")
                         (rtos (abs d)) " "
-                        (if (< d 0.0) "back along" "along")
-                        " its dimension line.")))
+                        (if (< d 0.0) "back " "")
+                        (cd:trackword r) ".")))
         ((not (cd:res-clear res))
          (setq nstuck (1+ nstuck))
          (princ (strcat "\n  " (cd:handle-of r)
@@ -962,12 +1337,18 @@
   (princ (strcat "\n" what ": "
                  (cd:plural (length results) "dimension" "dimensions") "."))
   (princ (strcat "\n  " (itoa nclear) " already clear - left alone."))
+  ;; "along its own dimension line" was true while only the straight
+  ;; ones moved; an angular dimension's text goes round an arc.  What
+  ;; holds for every family is that it did not leave its dimension --
+  ;; which is the thing a drafter wants told, and the per-dimension
+  ;; lines above say which of the two it was
   (princ (strcat "\n  "
                  (if moving
-                   (cd:plural nmove "slid clear along its own dimension line"
-                              "slid clear along their own dimension lines")
-                   (cd:plural nmove "to slide clear along its own dimension line"
-                              "to slide clear along their own dimension lines"))
+                   (cd:plural nmove "slid clear without leaving its dimension"
+                              "slid clear without leaving their dimensions")
+                   (cd:plural nmove
+                              "to slide clear without leaving its dimension"
+                              "to slide clear without leaving their dimensions"))
                  "."))
   (if (> nstuck 0)
     (princ (strcat "\n  " (itoa nstuck) " with nowhere clear on the track"
@@ -984,8 +1365,14 @@
   (cond ((and ed (cd:dxf 5 ed)) (strcat "handle " (cd:dxf 5 ed)))
         (T (strcat (cd:typename (cd:r-type r)) " dimension"))))
 
+;; What R's text slides along, in the words the report uses.
+(defun cd:trackword (r)
+  (if (cd:trk-arc-p (cd:r-trk r))
+    "round its dimension arc"
+    "along its dimension line"))
+
 (defun cd:why-text (why)
-  (cond ((eq why 'curve) "its track is not a straight dimension line")
+  (cond ((eq why 'track) "its track could not be read off the dimension")
         ((eq why 'locked) "its layer is locked")
         (T "it has no text")))
 
@@ -994,12 +1381,13 @@
 (defun cd:skip-text (skip / nc nl nt out w)
   (setq nc 0 nl 0 nt 0 out nil)
   (foreach w skip
-    (cond ((eq w 'curve) (setq nc (1+ nc)))
+    (cond ((eq w 'track) (setq nc (1+ nc)))
           ((eq w 'locked) (setq nl (1+ nl)))
           (T (setq nt (1+ nt)))))
   (if (> nc 0)
-    (setq out (cons (strcat (itoa nc) " on a track that is not a straight"
-                            " dimension line") out)))
+    (setq out (cons (if (= nc 1) "1 whose track could not be read"
+                      (strcat (itoa nc) " whose tracks could not be read"))
+                    out)))
   (if (> nl 0)
     (setq out (cons (if (= nl 1) "1 on a locked layer"
                       (strcat (itoa nl) " on locked layers")) out)))
@@ -1155,6 +1543,7 @@
 (if (not *calofin-quiet*)
   (princ (strcat "\nCLEARDIM " *cleardim-version*
                  " loaded. Commands: CLEARDIM (slide crowded dimension"
-                 " text clear along its own dimension line),"
-                 " CLEARDIMSCAN (say what it would do, change nothing).")))
+                 " text clear along its own dimension, without leaving"
+                 " it), CLEARDIMSCAN (say what it would do, change"
+                 " nothing).")))
 (princ)

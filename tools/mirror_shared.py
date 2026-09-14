@@ -1568,9 +1568,10 @@ TOOLS = {
         },
     },
     # Written against the library from the start, so the swap is a
-    # straight rename: the 2-D vector set, cal:plural (whose number-first
-    # shape the report was worded around rather than the other way up),
-    # and the sysvar pair.  cd:sysvars stays behind to supply the list
+    # straight rename: the 2-D vector set, the two angle helpers the
+    # dimension arc is walked with, cal:plural (whose number-first shape
+    # the report was worded around rather than the other way up), and
+    # the sysvar pair.  cd:sysvars stays behind to supply the list
     # cal:syssave takes as an argument -- which is why there is no
     # expand rule here where PERPMARK needs one.  cd:on-track,
     # cd:layer-locked-p and the whole separating-axis kit are this
@@ -1583,6 +1584,9 @@ TOOLS = {
             'cd:2d': 'cal:2d', 'cd:v-': 'cal:v-', 'cd:v+': 'cal:v+',
             'cd:v*': 'cal:v*', 'cd:dot': 'cal:dot', 'cd:perp': 'cal:perp',
             'cd:vlen': 'cal:vlen', 'cd:unit': 'cal:unit',
+            'cd:mid': 'cal:mid',
+            'cd:angnorm': 'cal:angnorm',
+            'cd:signed-dang': 'cal:signed-dang',
             'cd:plural': 'cal:plural',
             'cd:syssave': 'cal:syssave',
             'cd:sysrestore': 'cal:sysrestore',

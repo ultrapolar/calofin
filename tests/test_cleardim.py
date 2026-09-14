@@ -47,7 +47,7 @@ GAPF = 0.4         # cd:*gap-f*
 # fixtures
 # ------------------------------------------------------------------
 
-def newvm(txt=TXT, scale=1.0, exe=EXE):
+def newvm(txt=TXT, scale=1.0, exe=EXE, tih=0):
     """A VM with CLEARDIM loaded and a DIMSTYLE record that carries a
     real text height.  The record is installed straight into the VM's
     symbol table rather than entmade: entmake has no branch for a
@@ -57,8 +57,11 @@ def newvm(txt=TXT, scale=1.0, exe=EXE):
     vm = VM()
     vm.load(LSP)
     rec = Ent()
+    # 73 is DIMTIH: non-zero holds the text upright instead of setting
+    # it along whatever it is dimensioning
     vm.recdata[rec] = [Dot(0, 'DIMSTYLE'), Dot(2, 'STANDARD'),
-                       Dot(140, txt), Dot(40, scale), Dot(44, exe)]
+                       Dot(140, txt), Dot(40, scale), Dot(44, exe),
+                       Dot(73, tih)]
     vm.tables.setdefault('DIMSTYLE', set()).add('STANDARD')
     vm.tablerecs.setdefault('DIMSTYLE', {})['STANDARD'] = rec
     return vm
@@ -76,6 +79,44 @@ def dim(vm, p13, p14, p10, p11=None, text='', layer='0', flags=0, ang=0.0):
              % (layer, flags, ang, p13[0], p13[1], p14[0], p14[1],
                 p10[0], p10[1], g11, text))
     return vm.entities[-1]
+
+
+def anydim(vm, groups, flags, layer='0'):
+    """A DIMENSION with exactly the groups given, for the families whose
+    points do not sit where a linear one's do.  FLAGS is group 70 whole,
+    so the ordinate's bit 64 rides in it alongside the type."""
+    parts = ['(cons 0 "DIMENSION")', '(cons 8 "%s")' % layer,
+             '(cons 3 "STANDARD")', '(cons 70 %d)' % flags]
+    for code, v in sorted(groups.items()):
+        if isinstance(v, tuple):
+            parts.append('(list %d %r %r 0.0)' % (code, v[0], v[1]))
+        elif isinstance(v, str):
+            parts.append('(cons %d "%s")' % (code, v))
+        else:
+            parts.append('(cons %d %r)' % (code, v))
+    vm.loads('(entmakex (list %s))' % ' '.join(parts))
+    return vm.entities[-1]
+
+
+def angdim(vm, vtx=(0.0, 0.0), a=0.0, b=math.pi / 2, arc=50.0, tang=None,
+           trad=None, layer='0'):
+    """A 3-point angular dimension: the vertex in group 15, a point down
+    each ray in 13 and 14, the arc point in 10, and the text at TANG on
+    a circle of TRAD about the vertex."""
+    if tang is None:
+        tang = 0.5 * (a + b)
+    if trad is None:
+        trad = arc
+    mid = 0.5 * (a + b)
+    return anydim(vm, {
+        13: (vtx[0] + 80 * math.cos(a), vtx[1] + 80 * math.sin(a)),
+        14: (vtx[0] + 80 * math.cos(b), vtx[1] + 80 * math.sin(b)),
+        15: vtx,
+        10: (vtx[0] + arc * math.cos(mid), vtx[1] + arc * math.sin(mid)),
+        11: (vtx[0] + trad * math.cos(tang), vtx[1] + trad * math.sin(tang)),
+        42: abs(b - a),
+        1: 'ANG',
+    }, 5, layer)
 
 
 def line(vm, a, b, layer='0'):
@@ -214,48 +255,86 @@ def test_text_size_splits_hard_line_breaks():
 # reading a dimension
 # ------------------------------------------------------------------
 
+def field(vm, name, expr='R'):
+    """One field of a record, through the file's own accessor -- the
+    record is positional and the tests have no business knowing which
+    position."""
+    return vm.loads('(cd:r-%s %s)' % (name, expr))
+
+
+def track(vm, expr='R'):
+    """(kind base u-or-rad off-or-rot) of a record's track."""
+    return vm.loads('(cd:r-trk %s)' % expr)
+
+
 def test_track_of_a_rotated_dimension():
     vm = newvm()
     dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='A-TEXT')
-    r = vm.loads('(cd:read-dim 0 (entlast))')
-    assert r[2] == 0, r                                   # rotated
-    assert [round(x, 6) for x in r[4]] == [1.0, 0.0], r    # track along X
-    assert abs(r[5] - 50.0) < 1e-9, r                     # 50 along it
-    assert [round(x, 6) for x in r[6]] == [0.0, 6.0], r   # 6 above it
-    assert abs(r[8] - box_w('A-TEXT')) < 1e-9, r
-    assert abs(r[9] - TXT) < 1e-9, r
-    assert r[11] is NIL, "a plain linear dimension cannot slide?"
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert field(vm, 'type') == 0                           # rotated
+    kind, base, u, off = track(vm)
+    assert str(kind).lower() == 'line', kind
+    assert [round(x, 6) for x in u] == [1.0, 0.0], u        # track along X
+    assert abs(field(vm, 's0') - 50.0) < 1e-9               # 50 along it
+    assert [round(x, 6) for x in off] == [0.0, 6.0], off    # 6 above it
+    assert abs(field(vm, 'w') - box_w('A-TEXT')) < 1e-9
+    assert abs(field(vm, 'h') - TXT) < 1e-9
+    assert field(vm, 'why') is NIL, "a plain linear dimension cannot slide?"
+    assert field(vm, 'pins') == [11], field(vm, 'pins')
     print("ok  track        -> a rotated dim's track is its own dim line")
 
 
 def test_track_of_an_aligned_dimension():
     vm = newvm()
     dim(vm, (0, 0), (100, 100), (0, 20), None, text='DIAG', flags=1)
-    r = vm.loads('(cd:read-dim 0 (entlast))')
-    assert r[2] == 1, r
-    u = [round(x, 6) for x in r[4]]
-    assert u == [round(math.sqrt(0.5), 6)] * 2, u
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert field(vm, 'type') == 1
+    kind, base, u, off = track(vm)
+    assert str(kind).lower() == 'line', kind
+    assert [round(x, 6) for x in u] == [round(math.sqrt(0.5), 6)] * 2, u
     # with no stored text point the text sits at the middle of the
     # dimension line, half its own height clear of it
-    off = math.hypot(r[6][0], r[6][1])
-    assert abs(off - TXT / 2.0) < 1e-6, r[6]
+    assert abs(math.hypot(off[0], off[1]) - TXT / 2.0) < 1e-6, off
     print("ok  track        -> an aligned dim's track runs 13 to 14")
 
 
-def test_own_segments_are_the_dim_line_then_the_extension_lines():
+def test_own_ink_splits_what_it_rides_from_what_it_merely_draws():
     vm = newvm()
     dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='A-TEXT')
-    own = vm.loads('(cd:r-own (cd:read-dim 0 (entlast)))')
-    assert len(own) == 3, own
-    # the dimension line first -- it is the one thing the dimension
-    # never has to clear, so its place in the list is load-bearing
-    assert [round(v, 6) for v in own[0][0]] == [0.0, 20.0], own
-    assert [round(v, 6) for v in own[0][1]] == [100.0, 20.0], own
-    # then an extension line per definition point, run DIMEXE past the
-    # dimension line
-    assert [round(v, 6) for v in own[1][1]] == [0.0, 20.0 + EXE], own
-    assert [round(v, 6) for v in own[2][1]] == [100.0, 20.0 + EXE], own
-    print("ok  own ink      -> dim line first, then the extension lines")
+    ridden, other = vm.loads('(cd:r-own (cd:read-dim 0 (entlast)))')
+    # RIDDEN is the dimension line: the one thing the dimension never
+    # has to clear, because AutoCAD breaks it around the text
+    assert len(ridden) == 1, ridden
+    assert [round(v, 6) for v in ridden[0][0]] == [0.0, 20.0], ridden
+    assert [round(v, 6) for v in ridden[0][1]] == [100.0, 20.0], ridden
+    # OTHER is an extension line per definition point, run DIMEXE past
+    # the dimension line -- ink to everyone, this dimension included
+    assert len(other) == 2, other
+    assert [round(v, 6) for v in other[0][1]] == [0.0, 20.0 + EXE], other
+    assert [round(v, 6) for v in other[1][1]] == [100.0, 20.0 + EXE], other
+    print("ok  own ink      -> the dim line it rides, then the extension "
+          "lines it does not")
+
+
+def test_all_of_an_arc_is_ridden_not_just_its_first_chord():
+    """An arc is many polygons.  If only the first chord counted as the
+    dimension's own, the other thirty-one would be obstacles it had to
+    flee -- so an angular dimension would slide off a clear drawing."""
+    vm = newvm()
+    angdim(vm)
+    ridden, other = vm.loads('(cd:r-own (cd:read-dim 0 (entlast)))')
+    # a quarter turn is a quarter of cd:*arcsegs*, and every chord of
+    # it is the dimension's own
+    assert len(ridden) == 8, "a 90-degree arc at 32 a turn: %d" % len(ridden)
+    assert not other, other
+    # and it shows: nothing is near this dimension, so nothing moves
+    e = vm.entities[-1]
+    before = p11(vm, e)
+    run(vm, 'c:CLEARDIM', [None, None], 'angular alone')
+    assert p11(vm, e) == before, \
+        "an angular dimension fled its own arc: %r -> %r" % (before,
+                                                             p11(vm, e))
+    print("ok  own ink      -> the whole arc is ridden, not its first chord")
 
 
 def test_text_override_expands_the_measurement_marker():
@@ -273,8 +352,8 @@ def test_text_override_expands_the_measurement_marker():
 def test_text_height_follows_dimscale_and_an_override():
     vm = newvm(txt=4.0, scale=3.0)
     dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='A')
-    r = vm.loads('(cd:read-dim 0 (entlast))')
-    assert abs(r[9] - 12.0) < 1e-9, "DIMTXT x DIMSCALE is the height"
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert abs(field(vm, 'h') - 12.0) < 1e-9, "DIMTXT x DIMSCALE is the height"
     # ... unless the dimension carries its own override of DIMTXT, which
     # is exactly what a drafter does to one loud dimension on a sheet
     vm2 = newvm(txt=4.0, scale=3.0)
@@ -284,9 +363,10 @@ def test_text_height_follows_dimscale_and_an_override():
               ' (list 10 0.0 20.0 0.0) (list 11 50.0 26.0 0.0) (cons 1 "A")'
               ' (list -3 (list "ACAD" (cons 1000 "DSTYLE") (cons 1002 "{")'
               ' (cons 1070 140) (cons 1040 2.0) (cons 1002 "}")))))')
-    r2 = vm2.loads('(cd:read-dim 0 (entlast))')
-    assert abs(r2[9] - 6.0) < 1e-9, ("the dimension's own DIMTXT override "
-                                     "wins over the style's: %r" % (r2[9],))
+    vm2.loads('(setq R (cd:read-dim 0 (entlast)))')
+    h2 = field(vm2, 'h')
+    assert abs(h2 - 6.0) < 1e-9, ("the dimension's own DIMTXT override "
+                                  "wins over the style's: %r" % (h2,))
     print("ok  height       -> DIMTXT x DIMSCALE, and the dim's own override")
 
 
@@ -547,32 +627,303 @@ def test_fit_text_is_measured_between_its_two_ends():
     print("ok  ink          -> Fit text is measured between its own ends")
 
 
-def test_a_curved_track_is_skipped_but_still_blocks():
+def test_an_angular_track_is_an_arc_about_the_vertex():
+    vm = newvm()
+    angdim(vm)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    kind, centre, rad, rot = track(vm)
+    assert str(kind).lower() == 'arc', kind
+    assert [round(v, 6) for v in centre] == [0.0, 0.0], centre
+    assert abs(rad - 50.0) < 1e-6, rad
+    assert rot is not NIL, "text on an arc turns with it unless held upright"
+    # the parameter is an ARC LENGTH, not an angle, which is what lets
+    # cd:*step-f* and cd:*reach-f* mean the same thing here as on a line
+    assert abs(field(vm, 's0') - 50.0 * math.pi / 4) < 1e-6, field(vm, 's0')
+    # and the text reads along the tangent: 45 degrees round, plus 90
+    assert abs(math.degrees(field(vm, 'ang')) - 135.0) < 1e-6
+    print("ok  track        -> an angular dim's track is an arc, "
+          "measured in arc length")
+
+
+def test_a_two_line_angular_finds_its_vertex_by_intersection():
+    """A 3-point angular dimension writes its vertex into group 15; a
+    2-line one has no vertex stored at all -- it is where the two
+    measured lines cross, on the INFINITE lines, not the drawn ones."""
+    vm = newvm()
+    # two segments that would not cross if the test were bounded: one
+    # along X from x=10, one along Y from y=10, meeting back at (0,0)
+    anydim(vm, {13: (10.0, 0.0), 14: (100.0, 0.0),
+                15: (0.0, 10.0), 10: (0.0, 100.0),
+                16: (35.355, 35.355), 11: (35.355, 35.355),
+                42: math.pi / 2, 1: 'ANG'}, 2)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    kind, centre, rad, rot = track(vm)
+    assert str(kind).lower() == 'arc', kind
+    assert [round(v, 6) for v in centre] == [0.0, 0.0], \
+        "the vertex is where the two lines cross extended: %r" % (centre,)
+    assert field(vm, 'why') is NIL
+    print("ok  track        -> a 2-line angular's vertex is the crossing")
+
+
+def test_angular_text_slides_round_the_arc_at_its_own_radius():
+    """The radius the text rides at is the invariant, exactly as the
+    offset above the dimension line is for a linear one."""
+    vm = newvm()
+    e = angdim(vm)
+    line(vm, (30.0, 30.0), (42.0, 42.0))     # through the text at 45 deg
+    run(vm, 'c:CLEARDIM', [None, None], 'angular slide')
+    x, y = p11(vm, e)
+    assert abs(math.hypot(x, y) - 50.0) < 1e-3, \
+        "it left the arc: radius %r" % (math.hypot(x, y),)
+    assert abs(math.degrees(math.atan2(y, x)) - 45.0) > 1.0, \
+        "it did not move off the line at all"
+    assert 'round its dimension arc' in said(vm), said(vm)
+    print("ok  slide        -> round the arc, at the radius it came in on")
+
+
+def test_the_text_box_turns_as_it_goes_round():
+    """Text on a dimension arc is set along the tangent, so the box has
+    to turn with it -- one held at the angle it started at would test
+    the wrong rectangle everywhere but where it began."""
+    vm = newvm()
+    angdim(vm)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    s0 = field(vm, 's0')
+    a0 = vm.loads('(cd:trk-ang (cd:r-trk R) %r %r (cd:r-ang R))' % (s0, s0))
+    # a quarter of the way further round is another 45 degrees of turn
+    s1 = s0 + 50.0 * math.pi / 4
+    a1 = vm.loads('(cd:trk-ang (cd:r-trk R) %r %r (cd:r-ang R))' % (s1, s0))
+    assert abs(math.degrees(a1 - a0) - 45.0) < 1e-6, math.degrees(a1 - a0)
+    print("ok  box          -> it turns with the arc as it slides")
+
+
+def test_upright_text_does_not_turn_with_the_arc():
+    """DIMTIH holds the text upright, and then it stays upright all the
+    way round."""
+    vm = newvm(tih=1)
+    angdim(vm)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    kind, centre, rad, rot = track(vm)
+    assert rot is NIL, "DIMTIH text was left turning with the arc"
+    s0 = field(vm, 's0')
+    a1 = vm.loads('(cd:trk-ang (cd:r-trk R) %r %r (cd:r-ang R))'
+                  % (s0 + 30.0, s0))
+    assert abs(a1 - field(vm, 'ang')) < 1e-12
+    print("ok  box          -> upright text stays upright round the arc")
+
+
+def test_a_radius_track_runs_out_from_the_centre():
+    """AutoDim's ad:raddimpts is the repo's own reading of these two
+    groups: a radius dimension puts the CENTRE in group 10 and a point
+    on the circle in 15."""
+    vm = newvm()
+    anydim(vm, {10: (0.0, 0.0), 15: (100.0, 0.0), 11: (60.0, 0.0),
+                42: 100.0, 1: 'R100'}, 4)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    kind, base, u, off = track(vm)
+    assert str(kind).lower() == 'line', kind
+    assert [round(v, 6) for v in base] == [0.0, 0.0], base
+    assert [round(v, 6) for v in u] == [1.0, 0.0], u
+    assert abs(field(vm, 's0') - 60.0) < 1e-9
+    # home is the circle it measures to, so a tie sends the text outward
+    assert abs(field(vm, 'home') - 100.0) < 1e-9, field(vm, 'home')
+    print("ok  track        -> a radius slides out along its own radius")
+
+
+def test_a_diameter_is_centred_between_its_two_points():
+    """A diameter dimension has no centre of its own: groups 10 and 15
+    are the two ENDS of the diameter, so the centre is the middle of
+    them -- and that is where its text belongs."""
+    vm = newvm()
+    anydim(vm, {10: (-100.0, 0.0), 15: (100.0, 0.0), 11: (0.0, 0.0),
+                42: 200.0, 1: 'D200'}, 3)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    kind, base, u, off = track(vm)
+    assert [round(v, 6) for v in base] == [0.0, 0.0], \
+        "the centre is the middle of the two ends: %r" % (base,)
+    assert abs(field(vm, 's0')) < 1e-9
+    assert abs(field(vm, 'home')) < 1e-9, "a diameter's text belongs at the centre"
+    print("ok  track        -> a diameter's centre is between its two points")
+
+
+def test_a_radial_text_slides_and_keeps_its_offset():
+    vm = newvm()
+    e = anydim(vm, {10: (0.0, 0.0), 15: (100.0, 0.0), 11: (60.0, 3.0),
+                    42: 100.0, 1: 'R100'}, 4)
+    line(vm, (60.0, -10.0), (60.0, 10.0))
+    run(vm, 'c:CLEARDIM', [None, None], 'radius slide')
+    x, y = p11(vm, e)
+    assert y == 3.0, "it left the radial line: %r" % (y,)
+    assert x != 60.0, "it did not move"
+    print("ok  slide        -> a radial text slides along its own radius")
+
+
+def test_an_ordinate_leads_along_the_axis_its_bit_says():
+    """Bit 64 of group 70 says which coordinate the ordinate reads, and
+    with it which way its leader runs: an X-type reads across and leads
+    away in Y, a Y-type the other way about.  The sign comes from the
+    leader as drawn."""
+    vm = newvm()
+    anydim(vm, {13: (50.0, 0.0), 14: (50.0, 40.0), 11: (50.0, 44.0),
+                1: '50'}, 6 + 64)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert [round(v, 6) for v in track(vm)[2]] == [0.0, 1.0], track(vm)
+    assert field(vm, 'pins') == [11, 14], field(vm, 'pins')
+
+    vm = newvm()
+    anydim(vm, {13: (0.0, 50.0), 14: (-40.0, 50.0), 11: (-44.0, 50.0),
+                1: '50'}, 6)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert [round(v, 6) for v in track(vm)[2]] == [-1.0, 0.0], track(vm)
+    print("ok  track        -> an ordinate leads along the axis its bit "
+          "names, the way it was drawn")
+
+
+def test_an_ordinate_leader_travels_with_its_text():
+    """The one family whose text does not move alone: the leader ends
+    where the text is, so group 14 moves the same step.  Writing group
+    11 by itself would leave the text off the end of its own leader."""
+    vm = newvm()
+    e = anydim(vm, {13: (50.0, 0.0), 14: (50.0, 40.0), 11: (50.0, 44.0),
+                    1: '50'}, 6 + 64)
+    line(vm, (40.0, 44.0), (60.0, 44.0))
+    before = grp(vm, e, 14)[1]
+    run(vm, 'c:CLEARDIM', [None, None], 'ordinate leader')
+    moved = p11(vm, e)[1] - 44.0
+    assert moved > 0, "it pulled the text back onto the work: %r" % (moved,)
+    assert abs((grp(vm, e, 14)[1] - before) - moved) < 1e-9, \
+        "the leader end did not travel with the text"
+    assert grp(vm, e, 13)[1] == 0.0, "the feature point moved"
+    print("ok  write        -> an ordinate's leader end moves with its text")
+
+
+def test_an_ordinate_never_slides_back_past_its_feature():
+    """Slid back past the point it is reading, an ordinate's leader turns
+    round and points the other way -- a drawing error rather than a
+    crowded one.  The floor stops it, and a text that cannot get clear
+    above the floor is left where it was."""
+    vm = newvm()
+    e = anydim(vm, {13: (50.0, 0.0), 14: (50.0, 30.0), 11: (50.0, 34.0),
+                    1: '50'}, 6 + 64)
+    # a picket fence over everything from well below the feature to well
+    # above the text, so the only way out would be through the feature
+    for y in range(-60, 60, 3):
+        line(vm, (40.0, float(y)), (60.0, float(y)))
+    run(vm, 'c:CLEARDIM', [None, None], 'ordinate floor')
+    y = p11(vm, e)[1]
+    assert y > 0.0, "the text crossed its own feature point: %r" % (y,)
+    assert grp(vm, e, 14)[1] > 0.0, "the leader turned round"
+    print("ok  floor        -> an ordinate stops clear of the feature "
+          "it reads")
+
+
+def test_a_radius_text_never_crosses_its_centre():
+    """A radius runs OUT from its centre; its text on the far side is
+    measuring from nowhere."""
+    vm = newvm()
+    e = anydim(vm, {10: (0.0, 0.0), 15: (100.0, 0.0), 11: (20.0, 0.0),
+                    42: 100.0, 1: 'R100'}, 4)
+    for x in range(-120, 120, 3):
+        line(vm, (float(x), -10.0), (float(x), 10.0))
+    run(vm, 'c:CLEARDIM', [None, None], 'radius floor')
+    assert p11(vm, e)[0] >= 0.0, \
+        "the text crossed the centre: %r" % (p11(vm, e),)
+    print("ok  floor        -> a radius text stays on its own side of "
+          "the centre")
+
+
+def test_a_diameter_has_no_floor_under_it():
+    """A diameter's centre is the MIDDLE of its two points, so both
+    sides of it are the dimension's own and the text is welcome
+    anywhere along it."""
+    vm = newvm()
+    e = anydim(vm, {10: (-100.0, 0.0), 15: (100.0, 0.0), 11: (0.0, 0.0),
+                    42: 200.0, 1: 'D200'}, 3)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert field(vm, 'lo') is NIL, field(vm, 'lo')
+    line(vm, (-6.0, -10.0), (6.0, 10.0))        # straight through the text
+    run(vm, 'c:CLEARDIM', [None, None], 'diameter both ways')
+    assert p11(vm, e)[0] < 0.0, \
+        "it was not allowed the near side of the centre: %r" % (p11(vm, e),)
+    print("ok  floor        -> a diameter's text may sit either side of "
+          "the centre")
+
+
+def test_an_ordinate_with_no_leader_is_skipped():
+    vm = newvm()
+    e = anydim(vm, {13: (50.0, 0.0), 11: (50.0, 44.0), 1: '50'}, 6 + 64)
+    line(vm, (40.0, 44.0), (60.0, 44.0))
+    run(vm, 'c:CLEARDIM', [None, None], 'ordinate with no leader')
+    assert p11(vm, e) == (50.0, 44.0)
+    assert 'track could not be read' in said(vm), said(vm)
+    print("ok  skip         -> an ordinate with no leader has no track")
+
+
+def test_a_non_linear_dimension_with_no_text_point_is_skipped():
+    """Every dimension AutoCAD writes carries group 11.  A linear one
+    without it gets AutoCAD's own default computed for it; no other
+    family does, because inventing a point on an arc or a leader is
+    putting the text somewhere rather than finding where it is."""
+    vm = newvm()
+    e = anydim(vm, {13: (80.0, 0.0), 14: (0.0, 80.0), 15: (0.0, 0.0),
+                    10: (35.0, 35.0), 42: math.pi / 2, 1: 'ANG'}, 5)
+    run(vm, 'c:CLEARDIM', [None, None], 'no text point')
+    assert grp(vm, e, 11) is None, "it invented a text point on an arc"
+    assert 'track could not be read' in said(vm), said(vm)
+    print("ok  skip         -> no text point on an arc is not guessed at")
+
+
+def test_an_unreadable_track_is_skipped_and_still_blocks():
+    """A dimension whose track cannot be read off it is left exactly as
+    drawn -- a track guessed wrong does not move text along the
+    dimension, it moves it off it.  Its text is still ink.
+
+    The angular dimension here carries no vertex and no arc point, which
+    is what a hand-built entity looks like; AutoCAD writes both."""
     vm = newvm()
     a = dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='A-TEXT')
     g = dim(vm, (0, 50), (100, 50), (0, 36), (50, 28), text='ANGLE', flags=2)
-    run(vm, 'c:CLEARDIM', [None, None], 'angular')
+    run(vm, 'c:CLEARDIM', [None, None], 'unreadable track')
     assert p11(vm, g) == (50.0, 28.0), \
-        "an angular dimension's text was slid along a straight line"
+        "a dimension whose track could not be read was moved anyway"
     assert p11(vm, a) != (50.0, 26.0), \
-        "the angular text did not block the linear one"
-    assert 'not a straight dimension line' in said(vm), said(vm)
-    print("ok  skip         -> a curved track is left alone and still "
-          "blocks")
+        "the unreadable dimension's text did not block the linear one"
+    assert 'track could not be read' in said(vm), said(vm)
+    print("ok  skip         -> a track that cannot be read is left alone "
+          "and still blocks")
 
 
-def test_every_curved_kind_is_named_by_kind():
+def test_two_parallel_lines_have_no_vertex():
+    """A 2-line angular dimension's vertex is where its two measured
+    lines cross.  Parallel lines cross nowhere, so there is no arc to
+    slide round and the dimension is left alone."""
     vm = newvm()
-    for flags in (2, 3, 4, 5, 6):
-        dim(vm, (0, flags * 200), (100, flags * 200), (0, flags * 200 + 20),
-            (50, flags * 200 + 26), text='X')
-        e = vm.entities[-1]
-        vm.entdata[e] = [Dot(70, flags) if (isinstance(g, Dot) and g.a == 70)
-                         else g for g in vm.entdata[e]]
-    res = plan(vm)
-    whys = [r[0][11] for r in res]
-    assert all(str(w).upper() == 'CURVE' for w in whys), whys
-    print("ok  skip         -> angular, diameter, radius and ordinate all")
+    e = anydim(vm, {13: (0.0, 0.0), 14: (100.0, 0.0),
+                    15: (0.0, 50.0), 10: (100.0, 50.0),
+                    16: (50.0, 25.0), 11: (50.0, 25.0), 1: 'ANG'}, 2)
+    line(vm, (45.0, 20.0), (55.0, 30.0))
+    run(vm, 'c:CLEARDIM', [None, None], 'parallel lines')
+    assert p11(vm, e) == (50.0, 25.0), "it invented a vertex"
+    assert 'track could not be read' in said(vm), said(vm)
+    print("ok  skip         -> parallel lines make no vertex, so no arc")
+
+
+def test_a_vertex_that_does_not_match_the_measured_angle_is_refused():
+    """The check that says the vertex really is the vertex: the sweep
+    between the two rays IS the angle the dimension measures, and group
+    42 is what it measured.  Points read off the wrong groups do not
+    survive it."""
+    vm = newvm()
+    e = angdim(vm)
+    # the same dimension with a measurement that its own points cannot
+    # produce -- 90 degrees of geometry claiming to be 30
+    vm.entdata[e] = [Dot(42, math.pi / 6)
+                     if (isinstance(g, Dot) and g.a == 42) else g
+                     for g in vm.entdata[e]]
+    line(vm, (30.0, 30.0), (42.0, 42.0))
+    run(vm, 'c:CLEARDIM', [None, None], 'vertex mismatch')
+    assert 'track could not be read' in said(vm), said(vm)
+    print("ok  skip         -> a vertex group 42 disagrees with is refused")
 
 
 def test_a_locked_layer_is_skipped_and_said_so():
@@ -744,7 +1095,8 @@ if __name__ == '__main__':
     test_text_size_splits_hard_line_breaks()
     test_track_of_a_rotated_dimension()
     test_track_of_an_aligned_dimension()
-    test_own_segments_are_the_dim_line_then_the_extension_lines()
+    test_own_ink_splits_what_it_rides_from_what_it_merely_draws()
+    test_all_of_an_arc_is_ridden_not_just_its_first_chord()
     test_text_override_expands_the_measurement_marker()
     test_text_height_follows_dimscale_and_an_override()
     test_a_lone_clear_text_does_not_move()
@@ -762,8 +1114,24 @@ if __name__ == '__main__':
     test_a_circle_is_flattened_into_ink()
     test_a_drawing_text_is_ink()
     test_fit_text_is_measured_between_its_two_ends()
-    test_a_curved_track_is_skipped_but_still_blocks()
-    test_every_curved_kind_is_named_by_kind()
+    test_an_angular_track_is_an_arc_about_the_vertex()
+    test_a_two_line_angular_finds_its_vertex_by_intersection()
+    test_angular_text_slides_round_the_arc_at_its_own_radius()
+    test_the_text_box_turns_as_it_goes_round()
+    test_upright_text_does_not_turn_with_the_arc()
+    test_a_radius_track_runs_out_from_the_centre()
+    test_a_diameter_is_centred_between_its_two_points()
+    test_a_radial_text_slides_and_keeps_its_offset()
+    test_an_ordinate_leads_along_the_axis_its_bit_says()
+    test_an_ordinate_leader_travels_with_its_text()
+    test_an_ordinate_never_slides_back_past_its_feature()
+    test_a_radius_text_never_crosses_its_centre()
+    test_a_diameter_has_no_floor_under_it()
+    test_an_ordinate_with_no_leader_is_skipped()
+    test_a_non_linear_dimension_with_no_text_point_is_skipped()
+    test_an_unreadable_track_is_skipped_and_still_blocks()
+    test_two_parallel_lines_have_no_vertex()
+    test_a_vertex_that_does_not_match_the_measured_angle_is_refused()
     test_a_locked_layer_is_skipped_and_said_so()
     test_suppressed_text_is_skipped_and_is_not_ink()
     test_the_scan_changes_nothing()

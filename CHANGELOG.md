@@ -8,6 +8,72 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**Every dimension has a track now, not just the straight ones.**
+`CLEARDIM` v2.0. v1.0 moved linear and aligned text and counted the
+other four families in the report as "on a track that is not a straight
+dimension line" -- true, and not much use to a drafter whose angular
+callout is the one sitting on a wall. All four have a track; none of
+them is a straight dimension line:
+
+| Family | Its track |
+| --- | --- |
+| angular, 2-line and 3-point | the dimension ARC, about the angle's vertex |
+| radius, diameter | the radial line it is measured along |
+| ordinate | the leader, along the axis it reads |
+
+The track is an abstraction now rather than a base point and a
+direction, and its parameter is a DISTANCE in every case -- an arc
+length round an arc rather than an angle. That is what lets
+`cd:*step-f*` and `cd:*reach-f*` go on meaning the same thing on a
+dimension arc as on a straight dimension line, instead of needing a
+second pair of knobs kept in step with the first. What "stays on its
+track" means differs by shape and is the same in substance: a linear
+text keeps its offset above the dimension line to the last decimal, an
+angular one keeps the RADIUS it rides at, and the box TURNS as it goes
+round, because text set along a dimension arc turns with it unless
+`DIMTIH` holds it upright.
+
+The vertex is the one thing that has to be right, and the two kinds of
+angular dimension keep it in different places: a 3-point one writes it
+into group 15 outright, while a 2-line one keeps no vertex at all -- it
+is where the two measured lines cross, on the INFINITE lines rather than
+the drawn segments. So it is checked before it is trusted: the sweep
+between the two rays IS the angle the dimension measures, and group 42
+is what it measured, so a vertex those two disagree about is refused and
+the dimension is left alone. A track guessed wrong does not move text
+along the dimension, it moves it OFF it, which is the one thing this
+tool exists not to do. Parallel lines, a missing leader end and a
+missing text point are refused the same way, and every refusal is
+counted in the report.
+
+The radius and diameter layouts are the repo's own: `AutoDim`'s
+`ad:raddimpts` already says a radius dimension puts the CENTRE in group
+10 and a point on the circle in 15, while a diameter writes the two ENDS
+of the diameter and has no centre of its own.
+
+The ordinate is the one family whose text does not travel alone. Its
+leader ends where the text is, so group 14 moves the same step and the
+feature point never moves; writing group 11 by itself would leave the
+text off the end of its own leader. Its preferred direction is simply
+further out, because a leader is made longer to get its text clear and
+never shorter back onto the work.
+
+Two families needed a floor putting under them, which the straight
+ones never did: an ordinate's text slid back past the point it is
+reading turns its leader round the other way, and a radius dimension's
+text on the far side of the centre is measuring from nowhere. A
+diameter's is welcome either side, which is what its centre being the
+MIDDLE of its two points means, and an arc needs no floor at all -- a
+text at a fixed radius can never reach the vertex.
+
+One bug found on the way in: a dimension's own ink was tagged to it by
+first element, which works for a dimension line and not for an arc --
+tagging only the first chord would have had every angular dimension
+fleeing the other thirty-one. What a text RIDES is its own list now,
+separate from what the dimension merely draws.
+
+`tests/test_cleardim.py` is at 56 and runs at both tiers.
+
 **Dimension text that is hard to read, slid until it is not.**
 `CLEARDIM` is new. A dimension's text has one track -- the dimension
 line it belongs to -- and moving along it is free: the dimension still
