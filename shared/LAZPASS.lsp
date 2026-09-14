@@ -46635,7 +46635,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.9")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -47062,8 +47062,15 @@
           (cond ((eq res 'fixed)   (setq naf (1+ naf)))
                 ((eq res 'skipped) (setq nas (1+ nas)))
                 (t                 (setq nao (1+ nao)))))
-        (command "_.UNDO" "_End")
-        (setq undo-open nil)
+        ;; closed only if one was opened -- the same guard the handler
+        ;; above makes.  With undo recording off (UNDOCTL bit 1 clear)
+        ;; there is no group of this run's, and an _End on nothing is an
+        ;; error of its own: it would land here, with every dimension
+        ;; and arc already fixed and the CMDECHO putback below it
+        (if undo-open
+          (progn
+            (command "_.UNDO" "_End")
+            (setq undo-open nil)))
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n--- CHECK complete (attachment tolerance "
                        (rtos *cfchk-tol* *cfchk-dist-mode* *cfchk-tol-prec*)
@@ -81001,7 +81008,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.4")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.5")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -81036,7 +81043,10 @@
                              ; a label belongs to is a matter of shade
                              ; rather than of tracing it by eye.  Both
                              ; stay green on black; a light-background
-                             ; drawing wants the pair swapped round
+                             ; drawing wants the pair swapped round.
+                             ; Either one nil = no true colour at all,
+                             ; and the fan reads as the layer's own
+                             ; colour above
 (setq sf:*trans*      40)    ; per cent transparency on every preview,
                              ; so an arc crossing another still reads.
                              ; 0 or nil = solid; over 90 is a preview
@@ -81122,9 +81132,16 @@
   (setq lo sf:*shade-lo*
         hi sf:*shade-hi*
         f  (if (> n 1) (/ (float i) (float (1- n))) 0.0))
-  (list (sf:mix (float (car   lo)) (float (car   hi)) f)
-        (sf:mix (float (cadr  lo)) (float (cadr  hi)) f)
-        (sf:mix (float (caddr lo)) (float (caddr hi)) f)))
+  ;; Either end set to nil means "no true colour" -- the fan reads as
+  ;; the layer's own sf:*color* instead, which is what sf:colgroups
+  ;; already does with a nil shade.  nil is the value every other knob
+  ;; in the SETTINGS block takes for "leave it to the drawing", and the
+  ;; pair is the one a light-background drawing is told to touch, so it
+  ;; is the one somebody empties rather than swaps.
+  (if (and lo hi)
+    (list (sf:mix (float (car   lo)) (float (car   hi)) f)
+          (sf:mix (float (cadr  lo)) (float (cadr  hi)) f)
+          (sf:mix (float (caddr lo)) (float (caddr hi)) f))))
 
 ;; The DXF 440 value for sf:*trans*: 0x02000000 flags the word as a
 ;; transparency and the low byte is the ALPHA, so 255 is opaque and the
@@ -81907,7 +81924,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.2")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.3")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -81955,7 +81972,10 @@
                              ; a label belongs to is a matter of shade
                              ; rather than of tracing it by eye.  Both
                              ; stay green on black; a light-background
-                             ; drawing wants the pair swapped round
+                             ; drawing wants the pair swapped round.
+                             ; Either one nil = no true colour at all,
+                             ; and the fan reads as the layer's own
+                             ; colour above
 (setq hn:*trans*      40)    ; per cent transparency on every preview,
                              ; so an arc crossing another still reads.
                              ; 0 or nil = solid; over 90 is a preview
@@ -82045,9 +82065,16 @@
   (setq lo hn:*shade-lo*
         hi hn:*shade-hi*
         f  (if (> n 1) (/ (float i) (float (1- n))) 0.0))
-  (list (hn:mix (float (car   lo)) (float (car   hi)) f)
-        (hn:mix (float (cadr  lo)) (float (cadr  hi)) f)
-        (hn:mix (float (caddr lo)) (float (caddr hi)) f)))
+  ;; Either end set to nil means "no true colour" -- the fan reads as
+  ;; the layer's own hn:*color* instead, which is what hn:colgroups
+  ;; already does with a nil shade.  nil is the value every other knob
+  ;; in the SETTINGS block takes for "leave it to the drawing", and the
+  ;; pair is the one a light-background drawing is told to touch, so it
+  ;; is the one somebody empties rather than swaps.
+  (if (and lo hi)
+    (list (hn:mix (float (car   lo)) (float (car   hi)) f)
+          (hn:mix (float (cadr  lo)) (float (cadr  hi)) f)
+          (hn:mix (float (caddr lo)) (float (caddr hi)) f))))
 
 ;; The DXF 440 value for hn:*trans*: 0x02000000 flags the word as a
 ;; transparency and the low byte is the ALPHA, so 255 is opaque and the
@@ -82902,7 +82929,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.15")
+(setq *spacheck-version* "v1.16")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -84709,8 +84736,16 @@
                   ((= ans "Skip") (setq k tot))))))))
       (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
-      (command "_.UNDO" "_End")
-      (setq undo-open nil)
+      ;; closed only if one was opened -- the guard the handler above
+      ;; already makes.  With undo recording off (UNDOCTL bit 1 clear)
+      ;; there is no group of this run's, and an _End on nothing is an
+      ;; error of its own: it would land here, with the report written
+      ;; and every flagged item recoloured, and the CMDECHO and sysvar
+      ;; putbacks below it never reached
+      (if undo-open
+        (progn
+          (command "_.UNDO" "_End")
+          (setq undo-open nil)))
       (setvar "CMDECHO" oldecho)
       (cal:sysrestore)
       (princ (strcat "\n--- SPACHECK complete ---"
@@ -86616,7 +86651,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.8") ; printed on load and at command
+(setq *stockcover-version* "v1.9") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -87031,8 +87066,15 @@
                                         " object(s) in, "
                                         (itoa (sslength ss-old))
                                         " out."))))))))
-                  (command "_.UNDO" "_End")
-                  (setq undone nil)))))))))
+                  ;; closed only if one was opened, as the handler
+                  ;; above is: with undo recording off (UNDOCTL bit 1
+                  ;; clear) there is none, and an _End on nothing is an
+                  ;; error of its own -- here, with the cover already
+                  ;; placed on the anchor
+                  (if undone
+                    (progn
+                      (command "_.UNDO" "_End")
+                      (setq undone nil)))))))))))
 
   (stock:restore)
   (princ))
@@ -91693,7 +91735,7 @@
 
 
 
-(setq *xft-version* "v1.15") ; printed on load and at command start so a
+(setq *xft-version* "v1.16") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -92938,8 +92980,15 @@
                         (rtos scale 2 4) " about the conversion's own base ..."))
          (command "_.SCALE" keep "" (trans base 0 1) (/ 1.0 scale))))
 
-     (command "_.UNDO" "_End")
-     (setq undone nil)
+     ;; closed only if one was opened, as the handler and XFTCONV's own
+     ;; close both are: with undo recording off (UNDOCTL bit 1 clear)
+     ;; there is none, and an _End on nothing is an error of its own --
+     ;; here, with every block already converted back and the sysvar
+     ;; restore below it
+     (if undone
+       (progn
+         (command "_.UNDO" "_End")
+         (setq undone nil)))
      (xft:restore)
 
      ;; ---- report -------------------------------------------------

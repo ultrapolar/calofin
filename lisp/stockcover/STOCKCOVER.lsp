@@ -48,7 +48,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.8") ; printed on load and at command
+(setq *stockcover-version* "v1.9") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -477,8 +477,15 @@
                                         " object(s) in, "
                                         (itoa (sslength ss-old))
                                         " out."))))))))
-                  (command "_.UNDO" "_End")
-                  (setq undone nil)))))))))
+                  ;; closed only if one was opened, as the handler
+                  ;; above is: with undo recording off (UNDOCTL bit 1
+                  ;; clear) there is none, and an _End on nothing is an
+                  ;; error of its own -- here, with the cover already
+                  ;; placed on the anchor
+                  (if undone
+                    (progn
+                      (command "_.UNDO" "_End")
+                      (setq undone nil)))))))))))
 
   (stock:restore)
   (princ))

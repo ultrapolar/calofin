@@ -132,7 +132,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.2")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.3")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -180,7 +180,10 @@
                              ; a label belongs to is a matter of shade
                              ; rather than of tracing it by eye.  Both
                              ; stay green on black; a light-background
-                             ; drawing wants the pair swapped round
+                             ; drawing wants the pair swapped round.
+                             ; Either one nil = no true colour at all,
+                             ; and the fan reads as the layer's own
+                             ; colour above
 (setq hn:*trans*      40)    ; per cent transparency on every preview,
                              ; so an arc crossing another still reads.
                              ; 0 or nil = solid; over 90 is a preview
@@ -270,9 +273,16 @@
   (setq lo hn:*shade-lo*
         hi hn:*shade-hi*
         f  (if (> n 1) (/ (float i) (float (1- n))) 0.0))
-  (list (hn:mix (float (car   lo)) (float (car   hi)) f)
-        (hn:mix (float (cadr  lo)) (float (cadr  hi)) f)
-        (hn:mix (float (caddr lo)) (float (caddr hi)) f)))
+  ;; Either end set to nil means "no true colour" -- the fan reads as
+  ;; the layer's own hn:*color* instead, which is what hn:colgroups
+  ;; already does with a nil shade.  nil is the value every other knob
+  ;; in the SETTINGS block takes for "leave it to the drawing", and the
+  ;; pair is the one a light-background drawing is told to touch, so it
+  ;; is the one somebody empties rather than swaps.
+  (if (and lo hi)
+    (list (hn:mix (float (car   lo)) (float (car   hi)) f)
+          (hn:mix (float (cadr  lo)) (float (cadr  hi)) f)
+          (hn:mix (float (caddr lo)) (float (caddr hi)) f))))
 
 ;; The DXF 440 value for hn:*trans*: 0x02000000 flags the word as a
 ;; transparency and the low byte is the ALPHA, so 255 is opaque and the

@@ -89,7 +89,7 @@ at a different size:
 | `hn:*layer*` | `"HONE FILLET PREVIEW"` | Layer the previews are drawn on |
 | `hn:*color*` | `3` | The layer's colour, and the fallback index on every preview, so a preview reads as a preview even where a true colour cannot be shown |
 | `hn:*shade-lo*` | `'(190 255 190)` | RGB of the **smallest** preview… |
-| `hn:*shade-hi*` | `'(0 110 0)` | …and of the largest. Both stay green on black; a light-background drawing wants the pair swapped round |
+| `hn:*shade-hi*` | `'(0 110 0)` | …and of the largest. Both stay green on black; a light-background drawing wants the pair swapped round. Either one `nil` = no true colour at all, and the fan reads as the layer's own colour instead — `nil` is what every other knob here takes for *leave it to the drawing*, and this is the pair a drafter is told to touch |
 | `hn:*trans*` | `40` | Per cent transparency on every preview, so an arc crossing another still reads. `0` or `nil` = solid |
 | `hn:*ltype*` | `"DASHED"` | The dashed previews' linetype, created at pool scale when the drawing has none by that name |
 | `hn:*ltscale*` | `0.25` | Per-arc linetype scale on those. The stock `DASHED` pattern is 18 units long, so a short fillet arc would come out as one unbroken dash. `nil` leaves the arcs at the drawing's own `LTSCALE` |
