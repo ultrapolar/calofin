@@ -155,6 +155,7 @@
     )
     (princ "\nLINTXTCHK cancelled.")
   )
+  (if lzd:end (lzd:end "LINTXTCHK"))
   (princ)
 )
 

@@ -549,6 +549,7 @@
                                  *cfchk-constr-layer* ".")
                          "")
                        "\nOne UNDO reverts everything CHECK changed."))))))
+  (if lzd:end (lzd:end "CHECK"))
   (princ))
 
 (defun c:DIMARCCHECK () (c:CHECK))

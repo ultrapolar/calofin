@@ -3616,6 +3616,7 @@
   (princ (strcat "\nCABHD done (last step: "
                  (if cab-phase cab-phase "start") ")."))
   (setq *error* cab-old-err)   ; restore the previous error handler
+  (if lzd:end (lzd:end "CABHD"))
   (princ))
 
 ;; ----------------------------------------------------------------------

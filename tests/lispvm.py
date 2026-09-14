@@ -2731,6 +2731,21 @@ def _vl_file_directory_p(vm, a):
     return T if d in vm.dirs else NIL
 
 
+@bi('vl-file-size')
+def _vl_file_size(vm, a):
+    """(vl-file-size path) -- bytes, or nil when there is no such file.
+    Reads vm.files for the same reason findfile does: the log LAZDIAG
+    rolls when it outgrows its cap is a file the VM itself wrote, and a
+    size of nil would mean it never rolled."""
+    name = str(a[0]) if a else ""
+    if name in vm.files:
+        return len(vm.files[name].encode("utf-8", "replace"))
+    try:
+        return os.path.getsize(name)
+    except OSError:
+        return NIL
+
+
 @bi('vl-file-systime')
 def _vl_file_systime(vm, a):
     return NIL

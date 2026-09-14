@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.13, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.14, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 66 files, 191 commands:
+;;; 66 files, 192 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -25,23 +25,23 @@
 ;;;   DIMSTAMP  DIMSTAMPVER  DRONE  DRONEVER  FITABHD  FITABHDCOVER
 ;;;   FITABHDVER  FLOORDIM  G2MCONV  G2MCONVVER  G2MRECONV  HEMISTEP
 ;;;   HEMISTEPVER  HONEFILLET  HONEFILLETVER  LAZASCII  LAZBUTTON  LAZDIAG
-;;;   LAZDIAGVER  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON  LAZPANEL
-;;;   LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER
-;;;   LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK
-;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER
-;;;   LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF
-;;;   LOBFVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  PADDLE
-;;;   PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER
-;;;   POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE
-;;;   POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV
-;;;   SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN
-;;;   SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER
-;;;   STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
-;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
-;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
-;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE
-;;;   VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV
-;;;   XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
+;;;   LAZDIAGVER  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZICON  LAZLOG
+;;;   LAZPANEL  LAZPANELVER  LAZPIN  LAZSPA  LAZSPAVER  LAZSTEP
+;;;   LAZSTEPVER  LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER
+;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN
+;;;   LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN
+;;;   LOBF  LOBFVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER
+;;;   PADDLE  PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER
+;;;   POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER
+;;;   POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER
+;;;   SOCONV  SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE
+;;;   SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM
+;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB
+;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
+;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
+;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER
+;;;   TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER
+;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -1160,7 +1160,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.1")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.2")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -1213,6 +1213,10 @@
 ;; drawing, which is not a number and would not load.
 (defun lzd:num (v)
   (if (numberp v) (rtos (float v) 2 8) "0.0"))
+
+(defun lzd:pad (s w)
+  (while (< (strlen s) w) (setq s (strcat s " ")))
+  s)
 
 ;; Group codes are conventionally right-justified in three columns.  No
 ;; reader needs it; an editor showing the file to a human does.
@@ -1292,6 +1296,14 @@
 ;;   transcript that does span two runs of one tool says so rather than
 ;;   running them together.
 (defun lzd:begin (tool ver)
+  ;; A context still standing when a DIFFERENT tool begins belongs to a
+  ;; run that finished without failing -- lzd:report and lzd:end both
+  ;; clear it -- so this is where that run gets its "ok" line.  The
+  ;; lazy half of the logging: lzd:end is the direct one, and this
+  ;; catches the commands that do not end in a (princ) for it to sit
+  ;; before, and the session where AutoCAD was closed on the last one.
+  (if (and lzd:*tool* (not (lzd:mine-p tool)))
+    (lzd:log "ok" nil nil))
   (if (not (lzd:mine-p tool))
     (setq lzd:*tool*    (lzd:str tool)
           lzd:*started* (cal:datestr)
@@ -1320,6 +1332,8 @@
 ;; and case-insensitively -- a tool that ended a context it did not own
 ;; would throw away the prompts of the run still going on around it.
 (defun lzd:end (tool)
+  (if (and lzd:*tool* (or (null tool) (lzd:mine-p tool)))
+    (lzd:log "ok" nil nil))
   (if (or (null tool) (null lzd:*tool*) (lzd:mine-p tool))
     (lzd:disown))
   nil)
@@ -1868,7 +1882,7 @@
     (strcat "LAZPASS / shared build (CALOFIN-LIB " cal:*version* ")")
     "standalone file from lisp/"))
 
-(defun lzd:report-lines (tool ver msg nents / out)
+(defun lzd:report-lines (tool ver msg nents / out tail)
   (setq out
     (list
       "CALOFIN ERROR REPORT"
@@ -1926,8 +1940,24 @@
                       (list "  (nothing recorded - the tool does not call"
                             "   lzd:begin, or it failed before its first"
                             "   prompt)"))))
+  ;; What the drafter ran BEFORE this is often the cause and is
+  ;; otherwise gone the moment AutoCAD closes.  It rides in the one file
+  ;; they were told to send, so nobody has to ask them for a second one.
+  (setq out (append out
+                    (list ""
+                          "WHAT ELSE HAS RUN, NEWEST LAST"
+                          "  (from the calofin log -- the whole month of it"
+                          "   is in the file the last line below names)")))
+  (setq out (append out
+                    (if (setq tail (lzd:logtail-safe lzd:*logtail*))
+                      (mapcar '(lambda (l) (strcat "  " l)) tail)
+                      (list "  (nothing logged before this - the first"
+                            "   run recorded, or no folder would take a"
+                            "   log; LAZLOG says which)"))))
   (append out
           (list ""
+                (lzd:pair "log file" (lzd:str (lzd:logpath-safe)))
+                ""
                 "Send this file to whoever maintains calofin.  It holds"
                 "the failure and no more of your drawing than the failure"
                 "needed; your own drawing was not changed.")))
@@ -2007,6 +2037,171 @@
   (append geo pts (lzd:picklabels h)
           (lzd:textblock (lzd:report-lines tool ver msg nents) ext h)))
 
+;;; -------------------- the run log -------------------------------------
+;;;
+;;;  A report is written when something BREAKS.  The log is written on
+;;;  every run, and it answers the questions a report cannot:
+;;;
+;;;    which tool fails, and how often, against how many clean runs
+;;;    what the drafter ran in the ten minutes BEFORE the failure
+;;;    which prompt they back out of, over and over, without ever
+;;;      reporting it as a bug -- because backing out is not a bug, it
+;;;      is a question somebody could not answer
+;;;
+;;;  None of that survives a session otherwise.  A failure report is one
+;;;  moment; the log is the shape around it, and the shape is what says
+;;;  whether a bug is rare, constant, or only ever after SPA.
+;;;
+;;;  IT NEEDS NO WIRING OF ITS OWN.  Every command already calls
+;;;  lzd:begin at the top and lzd:report from its handler, and every ask
+;;;  helper already calls lzd:ask -- so the log rides on those.  The one
+;;;  call added for it is lzd:end, before a command's trailing (princ),
+;;;  which is where a clean run passes; a command that ends some other
+;;;  way is caught by the lazy flush in lzd:begin instead, which closes
+;;;  out whatever the last run left behind.
+;;;
+;;;  Three outcomes, and the record's size follows how much anybody will
+;;;  ever want from it:
+;;;
+;;;    ok    one line.  A clean run is a count, not a story.
+;;;    quit  one line and the prompt they stopped at.
+;;;    FAIL  the error, the report it wrote, and the last prompts --
+;;;          uppercase so it greps out of a month of runs.
+
+(setq lzd:*logdir* "calofin")    ; the folder the log lives in
+(setq lzd:*logmax* 2000000)      ; bytes before it rolls to a new file
+(setq lzd:*logasks* 12)          ; prompts a FAIL record carries
+(setq lzd:*logtail* 40)          ; lines a report carries back
+
+;; "2026-09-14 14:32:07" -- seconds, because two runs in one minute is
+;; ordinary and a log that cannot order them is a log you cannot read.
+(defun lzd:logtime ( / d dd tt)
+  (setq d  (getvar "CDATE")
+        dd (fix d)
+        tt (- d dd))
+  (strcat (itoa (fix (/ dd 10000))) "-"
+          (cal:zeropad2 (rem (fix (/ dd 100)) 100)) "-"
+          (cal:zeropad2 (rem dd 100)) " "
+          (cal:zeropad2 (fix (+ (* tt 100) 1e-6))) ":"
+          (cal:zeropad2 (rem (fix (+ (* tt 10000) 1e-4)) 100)) ":"
+          (cal:zeropad2 (rem (fix (+ (* tt 1000000) 1e-2)) 100))))
+
+;; "calofin-2026-09.log" -- one file a month.  Rotation by month rather
+;; than by size alone because "send me September" is a thing somebody
+;; asks for and "send me the third rollover" is not.
+(defun lzd:logmonth ( / dd)
+  (setq dd (fix (getvar "CDATE")))
+  (strcat "calofin-" (itoa (fix (/ dd 10000))) "-"
+          (cal:zeropad2 (rem (fix (/ dd 100)) 100)) ".log"))
+
+;; Where the log lives: a calofin folder beside the profile if there is
+;; one, else wherever a report would go.  Its own folder on purpose --
+;; Downloads is for the one file you send, and a log that accumulated
+;; there would be mistaken for one of them every month.
+(defun lzd:logfolder ( / u)
+  (cond
+    ((setq u (getenv "CalofinLogDir")) u)
+    ((setq u (getenv "USERPROFILE")) (strcat u "\\" lzd:*logdir*))
+    ((setq u (getenv "LOCALAPPDATA")) (strcat u "\\" lzd:*logdir*))
+    ((car (lzd:candidates)))))
+
+;; The month's file, rolled when it has outgrown lzd:*logmax*.  A log
+;; that grew without bound would eventually be the thing that made a
+;; drafter's AutoCAD slow, which is a worse bug than any it recorded.
+(defun lzd:logpath ( / dir base try i sz)
+  (setq dir (lzd:logfolder))
+  (if (null dir)
+    nil
+    (progn
+      (vl-mkdir dir)
+      (setq base (lzd:join dir (lzd:logmonth))
+            try  base
+            i    1)
+      (while (and (< i 20)
+                  (setq sz (vl-file-size try))
+                  (> sz lzd:*logmax*))
+        (setq i (1+ i)
+              try (strcat (substr base 1 (- (strlen base) 4))
+                          "-" (itoa i) ".log")))
+      try)))
+
+;; One record's lines, for an outcome.  Everything comes off the run
+;; context, so a caller passes only what the context cannot know.
+(defun lzd:logrec (outcome msg file / out n asks)
+  (setq out (list (strcat (lzd:logtime) "  "
+                          (lzd:pad (lzd:str outcome) 5) "  "
+                          (lzd:str (if lzd:*tool* lzd:*tool* "?"))
+                          (if lzd:*ver* (strcat " " (lzd:str lzd:*ver*)) "")
+                          "  " (lzd:buildshort)
+                          "  " (lzd:str (getvar "DWGNAME")))))
+  (if (and lzd:*step* (/= outcome "ok"))
+    (setq out (append out (list (strcat "    step  " lzd:*step*)))))
+  (if (and msg (/= outcome "ok"))
+    (setq out (append out (list (strcat "    err   " (lzd:str msg))))))
+  (if file
+    (setq out (append out (list (strcat "    file  " (lzd:str file))))))
+  ;; the prompts, newest last, only where somebody will read them
+  (if (= outcome "FAIL")
+    (progn
+      (setq asks (reverse (lzd:firstn lzd:*log* lzd:*logasks*)))
+      (foreach n asks
+        (if (= (substr n 1 4) "  ? ")
+          (setq out (append out (list (strcat "    " (substr n 3)))))))))
+  out)
+
+(defun lzd:buildshort ()
+  (if cal:*version* "LAZPASS" "standalone"))
+
+;; Append a record.  CAUGHT, and silent about its own failures: this is
+;; called from inside *error*, and a log that could not be written is
+;; not worth a second message on top of the one the drafter is already
+;; reading.  The report they send says everything the log would have.
+(defun lzd:log (outcome msg file / r)
+  (setq r (vl-catch-all-apply 'lzd:log-1 (list outcome msg file)))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:log-1 (outcome msg file / path fp l)
+  (setq path (lzd:logpath))
+  (if (null path)
+    nil
+    (progn
+      (setq fp (open path "a"))
+      (if (null fp)
+        nil
+        (progn
+          (foreach l (lzd:logrec outcome msg file) (write-line l fp))
+          (close fp)
+          path)))))
+
+;; The last N lines of this month's log, oldest first.  Read with a
+;; rolling window rather than into a list and trimmed: a month of runs
+;; is a file worth not holding twice.
+;; The two the REPORT calls, caught.  The log is a convenience; the
+;; report is the thing the drafter was told to send.  A log folder that
+;; has gone read-only, a path that will not build, a file that will not
+;; open -- none of that may cost the report, and before these were here
+;; it cost all of it: lzd:report-lines asked for the tail, the tail
+;; raised, and the outer catch turned a diagnosable failure into "could
+;; not be written".
+(defun lzd:logtail-safe (n / r)
+  (setq r (vl-catch-all-apply 'lzd:logtail (list n)))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:logpath-safe ( / r)
+  (setq r (vl-catch-all-apply 'lzd:logpath '()))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:logtail (n / path fp line buf)
+  (setq path (lzd:logpath))
+  (if (or (null path) (null (setq fp (open path "r"))))
+    nil
+    (progn
+      (while (setq line (read-line fp))
+        (setq buf (cons line buf))
+        (if (> (length buf) n) (setq buf (lzd:firstn buf n))))
+      (close fp)
+      (reverse buf))))
+
 ;;; -------------------- what the user is told ---------------------------
 
 (defun lzd:announce (tool ver path)
@@ -2076,14 +2271,25 @@
         lzd:*last* (list tool ver msg prims name)
         lzd:*lastfile* path)
   (if path (lzd:announce tool ver path) (lzd:nofile tool ver msg nil))
-  (lzd:end tool)
+  ;; logged BEFORE lzd:end, which clears the context this reads
+  (lzd:log "FAIL" msg path)
+  (lzd:disown)
   path)
 
 (defun lzd:report (tool ver msg / r)
   (cond
     ;; Esc is not a bug.  A drafter who backs out of POOL twenty times a
-    ;; day must not find twenty DXFs in Downloads.
-    ((lzd:cancel-p msg) nil)
+    ;; day must not find twenty DXFs in Downloads -- but they should
+    ;; find twenty lines in the log, because twenty backings-out of the
+    ;; same prompt is the clearest thing anybody ever says about a
+    ;; question that cannot be answered.
+    ((lzd:cancel-p msg)
+     (if (lzd:mine-p tool) (lzd:log "quit" nil nil))
+     ;; disown, NOT lzd:end -- end logs an "ok" of its own, and a run
+     ;; the drafter backed out of would have gone into the log twice,
+     ;; once as the quit it was and once as a clean run it was not
+     (lzd:disown)
+     nil)
     (lzd:*inside*
      (princ "\n[calofin] The error reporter failed while reporting an")
      (princ "\n[calofin] error -- no file written.  The original error was:")
@@ -2173,7 +2379,11 @@
   (princ "\n[calofin] Nothing has failed in this session, so this is a")
   (princ "\n[calofin] self test: a report written exactly where a real")
   (princ "\n[calofin] one would go.")
-  (lzd:disown)
+  ;; NOT a disown here.  c:LAZDIAG opened a context of its own at the
+  ;; top like every other command, and throwing it away meant the one
+  ;; command in the build that never appeared in the log was the one
+  ;; whose whole job is the log.  The context is LAZDIAG's already;
+  ;; the self test just adds a line to it.
   (lzd:say "--- LAZDIAG self test: no failure, nothing wrong")
   (setq prims (lzd:build-prims "LAZDIAG" *lazdiag-version*
                                "(self test - no failure has occurred)")
@@ -2191,7 +2401,6 @@
       (princ "\n[calofin] Set the AutoCAD environment string")
       (princ "\n[calofin] CalofinErrorDir to a folder you can write to:")
       (princ "\n[calofin]   (setenv \"CalofinErrorDir\" \"C:\\\\temp\")")))
-  (lzd:disown)
   (princ))
 
 (defun c:LAZDIAG ( / *error* oce undo-open)
@@ -2215,6 +2424,48 @@
   (if lzd:*last* (lzd:again) (lzd:selftest))
   (if undo-open (setq undo-open (lzd:undoend)))
   (setvar "CMDECHO" oce)
+  (if lzd:end (lzd:end "LAZDIAG"))
+  (princ))
+
+;;; -------------------- LAZLOG, the command -----------------------------
+
+;; What the log is for, said where somebody meets it.  Not a second
+;; diagnostic surface: the same records LAZDIAG's reports carry, shown
+;; without needing a failure first.
+(defun c:LAZLOG ( / *error* oce path sz tail l n)
+  (defun *error* (msg)
+    (if oce (setvar "CMDECHO" oce))
+    (if (and msg (not (lzd:cancel-p msg)))
+      (princ (strcat "\nLAZLOG error: " msg)))
+    (if lzd:report (lzd:report "LAZLOG" *lazdiag-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZLOG" *lazdiag-version*))
+  (setq oce (getvar "CMDECHO"))
+  (setvar "CMDECHO" 0)
+  (setq path (lzd:logpath))
+  (cond
+    ((null path)
+     (princ "\n[calofin] No folder will take a log.  Set the AutoCAD")
+     (princ "\n[calofin] environment string CalofinLogDir to one you can")
+     (princ "\n[calofin] write to:  (setenv \"CalofinLogDir\" \"C:\\\\temp\")"))
+    ((null (setq tail (lzd:logtail 60)))
+     (princ (strcat "\n[calofin] Nothing logged yet.  From now on every"
+                    " calofin command"))
+     (princ "\n[calofin] writes one line here when it finishes, backs out")
+     (princ "\n[calofin] or fails:")
+     (princ (strcat "\n[calofin]     " path)))
+    (t
+     (setq sz (vl-file-size path) n 0)
+     (princ "\n[calofin] The calofin run log -- every command that")
+     (princ "\n[calofin] finished, was backed out of, or FAILED:\n")
+     (foreach l tail (princ (strcat "\n  " l)) (setq n (1+ n)))
+     (princ (strcat "\n\n[calofin] " (itoa n) " line(s) shown, out of"))
+     (princ (strcat "\n[calofin]     " path))
+     (if sz (princ (strcat "  (" (itoa (/ sz 1024)) " KB)")))
+     (princ "\n[calofin] Send that file in with a report and the failure")
+     (princ "\n[calofin] arrives with everything you ran around it.")))
+  (setvar "CMDECHO" oce)
+  (if lzd:end (lzd:end "LAZLOG"))
   (princ))
 
 (defun c:LAZDIAGVER ()
@@ -10356,6 +10607,7 @@
   (pool:fclear)
   (setq pool:*nobottom* nil pool:*hasbottom* nil)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "POOL"))
   (princ))
 
 
@@ -10755,6 +11007,7 @@
   (if (not (member 'pool:hopcalc (atoms-family 0)))
       (princ "\nPOOL.LSP is not loaded -- APPLOAD it first, then run POOLDEMO.")
       (pooldemo:run))
+  (if lzd:end (lzd:end "POOLDEMO"))
   (princ))
 
 (defun pooldemo:run ( / *error* undo-open cells k org)
@@ -10809,6 +11062,7 @@
   (princ (strcat "\nPOOLDEMO complete -- " (itoa (length cells))
                  " cells drawn.  If every cell looks right, POOL.LSP is"
                  " working in this drawing."))
+  (if lzd:end (lzd:end "POOLDEMO"))
   (princ))
 
 ;; Which build is loaded - the first thing to check when a run does
@@ -11188,6 +11442,7 @@
         (princ "\nhelpers, so it cannot run without it.")
         (princ))
       (tutorial:run))
+  (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 
 (defun tutorial:run ( / *error* undo-open topics textonly k org going fn)
@@ -11244,6 +11499,7 @@
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
@@ -11923,6 +12179,7 @@
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "POOLSIDE"))
   (princ))
 
 ;; The question list: the run chain, then the depths.  ONE sequence, so
@@ -15823,6 +16080,7 @@
   (cal:dimstyrestore)
   (spa:fclear)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "SPA"))
   (princ))
 
 
@@ -19867,6 +20125,7 @@
   ;; refuses command-s inside every later handler in the session
   ;; (AutoLISP reference, *push-error-using-command*)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "OASIS"))
   (princ))
 
 (defun c:OASISVER ()
@@ -21837,6 +22096,7 @@
           (princ)))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "ABCDEF"))
   (princ))
 
 ;; Print the loaded version.
@@ -24950,6 +25210,7 @@
                           (if (= built 1) "" "s") " created from "
                           (if (= built 1) "its" "their")
                           " two readings.")))))))
+  (if lzd:end (lzd:end "ABFIND"))
   (princ))
 
 ;;; ---------------------- commands --------------------------------------
@@ -26139,6 +26400,7 @@
           (princ)))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "ALTABCDEF"))
   (princ))
 
 ;; format a real to 3 decimals, left-padded into WIDTH
@@ -30878,6 +31140,7 @@
   (setq undo-open nil)
   (setq *error* pf-old-err)   ; restore the previous error handler
   (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
+  (if lzd:end (lzd:end "ABHD"))
   (princ))
 
 ;; ---- SIMPABHD: the same fit with nothing to decide first -------------
@@ -30971,6 +31234,7 @@
   (setq undo-open nil)
   (setq *error* pf-old-err)   ; restore the previous error handler
   (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
+  (if lzd:end (lzd:end "SIMPABHD"))
   (princ))
 
 ;; ABHD for a cover sheet: the same fit, with the pool-bottom question
@@ -31164,6 +31428,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setq *error* pf-old-err)
+  (if lzd:end (lzd:end "ADAB"))
   (princ))
 
 ;; ---- TUTORIALABHD ----------------------------------------------------
@@ -31486,6 +31751,7 @@
         (t (pf:tut-checks) (pf:tut-demo)))
   (pf:temp-clear)
   (setq *error* pf-old-err)
+  (if lzd:end (lzd:end "TUTORIALABHD"))
   (princ))
 
 ;; The same tutorial under the bottom command's name, for whoever
@@ -32763,6 +33029,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "ABCURCHECK"))
   (princ))
 
 (defun c:ABCURCHECKSCAN ( / *error* undo-open)
@@ -32787,6 +33054,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "ABCURCHECKSCAN"))
   (princ))
 
 ;; Sweep the marks away again.  Findings and the comb go; the
@@ -32823,6 +33091,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "ABCURCHECKRESCUE"))
   (princ))
 
 (defun c:ABCURCHECKVER ()
@@ -33623,6 +33892,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "ABPCHECK"))
   (princ))
 
 ;; Take the report and the rings away again, leaving the drawing as it
@@ -33654,6 +33924,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "ABPCHECKRESCUE"))
   (princ))
 
 (defun c:ABPCHECKVER ()
@@ -37295,6 +37566,7 @@
   (princ (strcat "\nCABHD done (last step: "
                  (if cab-phase cab-phase "start") ")."))
   (setq *error* cab-old-err)   ; restore the previous error handler
+  (if lzd:end (lzd:end "CABHD"))
   (princ))
 
 ;; ----------------------------------------------------------------------
@@ -38283,6 +38555,7 @@
   (if undo-open
     (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (cal:sysrestore)
+  (if lzd:end (lzd:end "POINTRENAMER"))
   (princ))
 
 (defun c:POINTRENAMERVER ()
@@ -39243,6 +39516,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "LOBF"))
   (princ))
 
 (defun c:LOBFVER ()
@@ -41736,6 +42010,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setq *error* abl-old-err)   ; restore the previous error handler
+  (if lzd:end (lzd:end "ABLOBF"))
   (princ))
 
 (defun c:ABLOBFVER ()
@@ -42447,6 +42722,7 @@
               ;; know about
               (autobead-build ss dirpt sidewalls treadpts nil)
               (setq done T))))))))
+  (if lzd:end (lzd:end "AUTOBEAD"))
   (princ))
 
 ;; ---- AUTOBEADVER -----------------------------------------------------------
@@ -44535,6 +44811,7 @@
           (ad:paddle plan)
           (setvar "PICKFIRST" oldpick)
           (setq oldpick nil)))))
+  (if lzd:end (lzd:end "AUTODIM"))
   (princ))
 
 (defun c:STAIRDIM (/ *error* oldcmd olddim oldlay n ss0 undo-open)
@@ -44575,6 +44852,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
+  (if lzd:end (lzd:end "STAIRDIM"))
   (princ))
 
 (defun c:FLOORDIM (/ *error* oldcmd olddim oldlay n undo-open)
@@ -44612,6 +44890,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
+  (if lzd:end (lzd:end "FLOORDIM"))
   (princ))
 
 ;; AUTODIMSIDEPOV - dimension steps drawn in side view (elevation):
@@ -44683,6 +44962,7 @@
       (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
       (setvar "CMDECHO" oldcmd)))
+  (if lzd:end (lzd:end "AUTODIMSIDEPOV"))
   (princ))
 
 (defun c:AUTODIMVER ()
@@ -45016,6 +45296,7 @@
                         ";  \"" phrase "\"")))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "BPCALLOUT"))
   (princ))
 
 (defun c:BPCALLOUTVER ()
@@ -45485,6 +45766,7 @@
   (princ (strcat "\nDIMSTAMP: " (itoa count) " placed."))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "DIMSTAMP"))
   (princ))
 
 (defun c:DIMSTAMPVER ()
@@ -46157,6 +46439,7 @@
     (princ (strcat "\n" chk:*sum-indent* line))
   )
   (princ chk:*sum-close*)
+  (if lzd:end (lzd:end "CCPRECHECK"))
   (princ)
 )
 
@@ -46820,6 +47103,7 @@
                        " (current style).")))))
 
   (setq *error* olderr)
+  (if lzd:end (lzd:end "CDCALLOUT"))
   (princ))
 
 (defun c:CDCALLOUTVER ()
@@ -47311,6 +47595,7 @@
   ;; settings back to what they were two commands ago
   (cal:sysrestore)
   (setq *error* olderr)
+  (if lzd:end (lzd:end "CDCREATE"))
   (princ))
 
 (defun c:CDCREATEVER ()
@@ -47834,6 +48119,7 @@
                                  *cfchk-constr-layer* ".")
                          "")
                        "\nOne UNDO reverts everything CHECK changed."))))))
+  (if lzd:end (lzd:end "CHECK"))
   (princ))
 
 (defun c:DIMARCCHECK () (c:CHECK))
@@ -49647,6 +49933,7 @@
                       ;; it is named here so AUTOBEAD leaves it unbeaded
                       (list (cs-entmid (cdr (last btreads)))))))))))))))
   (cs-fclear)                       ; both exits clear the form store
+  (if lzd:end (lzd:end "CORNERSTP"))
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
@@ -49829,6 +50116,7 @@
   (princ "\n[5] Done.  One U removes this whole demo.  Now try it for")
   (princ "\n    real: type CORNERSTP, select two wall lines of a corner,")
   (princ "\n    and follow the same prompts you just watched.")
+  (if lzd:end (lzd:end "TUTORIALCORNERSTP"))
   (princ))
 
 (defun c:CORNERSTPVER ()
@@ -51475,6 +51763,7 @@
                       ;; it is named here so AUTOBEAD leaves it unbeaded
                       (list (hs-entmid (cdr (last btreads)))))))))))))))
   (hs-fclear)                       ; both exits clear the form store
+  (if lzd:end (lzd:end "HEMISTEP"))
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
@@ -51648,6 +51937,7 @@
   (princ "\n    an arc and run HEMISTEP selecting it (plus an axis line if")
   (princ "\n    you have one) - Enter at any width fits that step to the")
   (princ "\n    curve exactly.")
+  (if lzd:end (lzd:end "TUTORIALHEMISTEP"))
   (princ))
 
 (defun c:HEMISTEPVER ()
@@ -53481,6 +53771,7 @@
                       ;; it is named here so AUTOBEAD leaves it unbeaded
                       (list (ns-entmid (cdr (last btreads)))))))))))))))
   (ns-fclear)                       ; both exits clear the form store
+  (if lzd:end (lzd:end "NORMIESTEP"))
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
@@ -53667,6 +53958,7 @@
   (princ "\n[6] Done.  One U removes the demo.  Try the other modes too:")
   (princ "\n    two lines of a corner, or a U outline (even one with")
   (princ "\n    rounded or diagonal back corners) - NORMIESTEP fills it in.")
+  (if lzd:end (lzd:end "TUTORIALNORMIESTEP"))
   (princ))
 
 (defun c:NORMIESTEPVER ()
@@ -55874,6 +56166,7 @@
     (princ (strcat "\nCOVERCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nCOVERCHECKRESCUE: nothing to restore - no COVERCHECK markers in the drawing."))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
+  (if lzd:end (lzd:end "COVERCHECKRESCUE"))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -58690,6 +58983,7 @@
                                  *cchk-constr-layer* ".")
                          "")
                        "\nOne UNDO reverts everything COVERCHECK changed (including the report)."))))))
+  (if lzd:end (lzd:end "COVERCHECK"))
   (princ))
 
 ;; --- COVERSCAN / LITECOVERSCAN: the read-only twins -------------------
@@ -58911,6 +59205,7 @@
      (foreach l (car cres) (princ (strcat "\n" l)))
      (princ (strcat "\nReport written on layer " *cchk-report-layer*
                     "; nothing else was changed."))))
+  (if lzd:end (lzd:end "COVERCHECK"))
   (princ))
 
 
@@ -59185,6 +59480,7 @@
       (princ "\nWhen you're done, type TUTORIALCOVERCHECKCLEAN to erase the demo -")
       (princ "\nit only removes what the tutorial built (tagged), plus whatever")
       (princ "\nreport and markers COVERCHECK/COVERSCAN left behind on it.")))
+  (if lzd:end (lzd:end "TUTORIALCOVERCHECK"))
   (princ))
 
 (defun c:TUTORIALCOVERCHECKCLEAN ( / *error* undo-open ss i e xd n)
@@ -59220,6 +59516,7 @@
                    " demo item(s), plus any report/markers left on them."))
     (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found."))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
+  (if lzd:end (lzd:end "TUTORIALCOVERCHECKCLEAN"))
   (princ))
 
 (defun c:COVERCHECKVER ()
@@ -59621,6 +59918,7 @@
           go (eq v T)))
 
   (setq *error* olderr)
+  (if lzd:end (lzd:end "CUSTBLOCK"))
   (princ))
 
 (defun c:CUSTBLOCKVER ()
@@ -60087,6 +60385,7 @@
     (princ (strcat "\nDIMCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nDIMCHECKRESCUE: nothing to restore - no DIMCHECK markers in the drawing."))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
+  (if lzd:end (lzd:end "DIMCHECKRESCUE"))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -61446,6 +61745,7 @@
                                  *dchk-constr-layer* ".")
                          "")
                        "\nOne UNDO reverts everything DIMCHECK changed (including the report)."))))))
+  (if lzd:end (lzd:end "DIMCHECK"))
   (princ))
 
 ;; --- DIMSCAN: the read-only twin -----------------------------------
@@ -61640,6 +61940,7 @@
                     "\nOverlapping line pairs: " (itoa (length olaps))
                     "\nReport written on layer " *dchk-report-layer*
                     "; nothing else was changed."))))
+  (if lzd:end (lzd:end "DIMSCAN"))
   (princ))
 
 ;; --- TUTORIALDIMCHECK: learn it two ways ---------------------------
@@ -61913,6 +62214,7 @@
                  "\n  DIMSCAN first if you want to look without touching anything;"
                  "\n  DIMCHECK to review and fix; DIMCHECKRESCUE to undo the marks."
                  "\n  One U undoes everything this tutorial drew."))
+  (if lzd:end (lzd:end "TUTORIALDIMCHECK"))
   (princ))
 
 (defun c:TUTORIALDIMSCAN () (c:TUTORIALDIMCHECK))
@@ -62151,6 +62453,7 @@
     (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
 
   (setq *error* olderr)
+  (if lzd:end (lzd:end "DIMCONTEND"))
   (princ))
 
 ;; short alias
@@ -62410,6 +62713,7 @@
             (princ "\nSCALE did not run - are the objects on a locked layer?"))))
        (setq done T))))
   (setvar "CMDECHO" cmd)
+  (if lzd:end (lzd:end "DDFIX"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -62440,6 +62744,7 @@
       (princ (strcat "\nSaved drone height  H = " (dd-num h)))
       (princ (strcat "\nDistortion rate: ~" (dd-num (/ 100.0 h))
                      "% size change per unit of height."))))
+  (if lzd:end (lzd:end "DDSET"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -62492,6 +62797,7 @@
         (princ (strcat "\nGot a non-physical H = " (dd-num h)
                        "\nCheck the sign of the height and that apparent/true sizes "
                        "match a raised (app>true) or sunken (app<true) feature.")))))
+  (if lzd:end (lzd:end "DDCAL"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -62518,6 +62824,7 @@
                      "% size change per unit of height")))
     (princ "\n  Drone height (H)           : NOT SET  (run DDSET or DDFIX)"))
   (princ "\n------------------------------------------------")
+  (if lzd:end (lzd:end "DDINFO"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -62664,6 +62971,7 @@
                (princ (strcat "\nDistortion rate: ~" (dd-num (/ 100.0 h))
                               "% size change per unit of height."))))
            (setq done T))))))
+  (if lzd:end (lzd:end "DDALT"))
   (princ))
 
 (defun c:DDFIXVER ()
@@ -63821,6 +64129,7 @@
                                   "% size change per unit of height."))
                    (setq done T))
                   (t (princ "\nH unchanged.") (setq done T))))))))))))
+  (if lzd:end (lzd:end "DDGPS"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -63867,6 +64176,7 @@
            (cadr g)
            (list ""
                  "Check the internet connection / firewall, then try again."))))))
+  (if lzd:end (lzd:end "DDELEV"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -63962,6 +64272,7 @@
                          (ddg-yn (nth 0 m)))))))
        (setq out (append out (list "Could not get ANY bytes out of this file."))))
      (ddg-report "DDGPS READ TEST" out)))
+  (if lzd:end (lzd:end "DDTEST"))
   (princ))
 
 (defun c:DDGPSVER ()
@@ -68927,6 +69238,7 @@
   (setq undo-open nil)
   (cal:sysrestore)
   (setq fit:*nobottom* nil)
+  (if lzd:end (lzd:end "FITABHD"))
   (princ))
 
 ;; FITABHD for a cover sheet: the same template fit, with the
@@ -71894,6 +72206,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setq *error* lh-old-err)   ; restore the previous error handler
+  (if lzd:end (lzd:end "LHD"))
   (princ))
 
 (defun c:LHDVER ()
@@ -72321,6 +72634,7 @@
     (cons nil  'lin:st-final)
   ))
   (lin:report)
+  (if lzd:end (lzd:end "LINCHECK"))
   (princ)
 )
 
@@ -73063,6 +73377,7 @@
     (princ (strcat "\nLINFINCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nLINFINCHECKRESCUE: nothing to restore - no LINFINCHECK markers in the drawing."))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
+  (if lzd:end (lzd:end "LINFINCHECKRESCUE"))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -76078,6 +76393,7 @@
                                  *lfc-constr-layer* ".")
                          "")
                        "\nOne UNDO reverts everything LINFINCHECK changed (including the report)."))))))
+  (if lzd:end (lzd:end "LINFINCHECK"))
   (princ))
 
 ;; --- LINFINSCAN / LITELINFINSCAN: the read-only twins -----------------
@@ -76528,6 +76844,7 @@
                     (if datesum (strcat "\nDate: " datesum) "")
                     "\nReport written on layer " *lfc-report-layer*
                     "; nothing else was changed."))))
+  (if lzd:end (lzd:end "LINFINCHECK"))
   (princ))
 
 
@@ -76888,6 +77205,7 @@
                  "\n  LINFINSCAN first if you want to look without touching anything;"
                  "\n  LINFINCHECK to review and fix; LINFINCHECKRESCUE to undo the marks."
                  "\n  One U undoes everything this tutorial drew."))
+  (if lzd:end (lzd:end "TUTORIALLINFINCHECK"))
   (princ))
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))
@@ -77070,6 +77388,7 @@
     )
     (princ "\nLINTXTCHK cancelled.")
   )
+  (if lzd:end (lzd:end "LINTXTCHK"))
   (princ)
 )
 
@@ -77771,6 +78090,7 @@
                                  " overlapping pad(s) merged into their"
                                  " neighbours where features crowd together."))))
             (princ "\nPADDLE: perimeter checked - no concave features need pads."))))
+  (if lzd:end (lzd:end "PADDLE"))
   (princ))
 
 ;; --------------------------- tutorial ------------------------------
@@ -77921,6 +78241,7 @@
   (princ "\nEnd of tutorial. Type PADDLE to run it on a real drawing.")
   (vla-EndUndoMark doc)
   (setq mark-open nil)
+  (if lzd:end (lzd:end "TUTORIALPADDLE"))
   (princ))
 
 (defun c:PADDLEVER ()
@@ -79057,6 +79378,7 @@
           (lg:paddle perim)))))
 
   (cal:sysrestore)
+  (if lzd:end (lzd:end "LINGUTTER"))
   (princ))
 
 (defun c:LINGUTTERSCAN ( / *error* ss)
@@ -79075,6 +79397,7 @@
     (progn
       (lg:report (lg:analyze ss))
       (princ "\nLINGUTTERSCAN: nothing changed.  Type LINGUTTER to do it.")))
+  (if lzd:end (lzd:end "LINGUTTERSCAN"))
   (princ))
 
 (defun c:LINGUTTERVER ()
@@ -80162,6 +80485,7 @@
                  (itoa total) " points, "
                  (itoa iter) " polyline(s) on layer \"" srcLayer "\" and "
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
+  (if lzd:end (lzd:end "PERPPTS"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
@@ -81189,6 +81513,7 @@
                  (itoa total) " points, "
                  (itoa iter) " polyline(s) on layer \"" srcLayer "\" and "
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
+  (if lzd:end (lzd:end "CPERPPTS"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
@@ -81589,6 +81914,7 @@
   (tutp:finish)
   (tutp:say '(""
               "Tutorial finished.  Type PERPPTS to try it for real."))
+  (if lzd:end (lzd:end "TUTORIALPERPPTS"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
@@ -82026,6 +82352,7 @@
   (tutc:finish)
   (tutc:say '(""
               "Tutorial finished.  Type CPERPPTS to try it for real."))
+  (if lzd:end (lzd:end "TUTORIALCPERPPTS"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
@@ -83081,6 +83408,7 @@
     (command "_.-DIMSTYLE" "_Restore" odim))
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
+  (if lzd:end (lzd:end "PERPMARK"))
   (princ))
 
 (if (not *calofin-quiet*)
@@ -83970,6 +84298,7 @@
   ;; command-s inside every later handler in the session (AutoLISP
   ;; reference, *push-error-using-command*)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "SMARTFILLET"))
   (princ))
 
 (defun c:SMARTFILLETVER ()
@@ -84993,6 +85322,7 @@
   ;; command-s inside every later handler in the session (AutoLISP
   ;; reference, *push-error-using-command*)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "HONEFILLET"))
   (princ))
 
 (defun c:HONEFILLETVER ()
@@ -86874,6 +87204,7 @@
                          "")
                      "\nReport written on layer " spachk:*report-layer*
                      "; nothing else was changed."))))
+  (if lzd:end (lzd:end "SPACHECK"))
   (princ))
 
 ;;; --- SPACHECK: the audits, then a walk of what they flagged ------------
@@ -86961,6 +87292,7 @@
                      (if (= 1 marked) "" "s") " marked red"
                      "\nReport written on layer " spachk:*report-layer*
                      ".  SPACHECKRESCUE puts the colours back."))))
+  (if lzd:end (lzd:end "SPACHECK"))
   (princ))
 
 ;;; --- SPACHECKRESCUE: put every colour back -----------------------------
@@ -86990,6 +87322,7 @@
   (setvar "CMDECHO" oldecho)
   (princ (strcat "\nSPACHECKRESCUE: " (itoa n) " colour"
                  (if (= 1 n) "" "s") " put back, report removed."))
+  (if lzd:end (lzd:end "SPACHECKRESCUE"))
   (princ))
 
 ;;; --- TUTORIALSPACHECK: every check spelled out -------------------------
@@ -87329,6 +87662,7 @@
     (spachk:demo))
   (setvar "CLAYER" oldlay)
   (setvar "CMDECHO" oldecho)
+  (if lzd:end (lzd:end "TUTORIALSPACHECK"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
@@ -88776,6 +89110,7 @@
         (setq undo-open nil)))
 
   (cal:sysrestore)
+  (if lzd:end (lzd:end "SPACOVCREATE"))
   (princ))
 
 ;; Which build is loaded -- the first thing to check when a run does
@@ -89068,6 +89403,7 @@
       (stock:say (strcat "stock folder set to " new))
       (stock:say (strcat (itoa (length (stock:files new))) " DWG(s) there.")))
     (stock:say "unchanged."))
+  (if lzd:end (lzd:end "STOCKCOVER-CFG"))
   (princ))
 
 ;;; -------------------------------------------------------------------
@@ -89281,6 +89617,7 @@
                       (setq undone nil)))))))))))
 
   (stock:restore)
+  (if lzd:end (lzd:end "STOCKCOVER"))
   (princ))
 
 ;; Which build is loaded - the first thing to check when a run does
@@ -89616,6 +89953,7 @@
                  (itoa n-perim) " perimeter -> " *drone-perim-layer*
                  ", "
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
+  (if lzd:end (lzd:end "DRONE"))
   (princ))
 
 (defun c:DRONEVER ()
@@ -89906,6 +90244,7 @@
                  (itoa n-pool) " point(s) POOL -> " *tydrn-dest-layer*
                  ", "
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
+  (if lzd:end (lzd:end "TYDRN"))
   (princ))
 
 ;;; ===================================================================
@@ -90178,6 +90517,7 @@
       (setq oldpick nil)
       (princ (strcat "\n\nTYLERDRONESUITE done - all "
                      (itoa (length stages)) " stages ran."))))
+  (if lzd:end (lzd:end "TYLERDRONESUITE"))
   (princ))
 
 
@@ -90672,6 +91012,7 @@
       (princ "\nSOCONV: nothing here is on the export's layers - nothing moved.")
       (princ (strcat "\n  It converts " (soconv:namelist (soconv:sources))
                      "."))))
+  (if lzd:end (lzd:end "SOCONV"))
   (princ))
 
 (defun c:SORECONV (/ *error* doc unlocked mark-open ss recs r ent obj
@@ -90775,6 +91116,7 @@
       (princ "\n  leaves on every object it moves.  A drawing converted with")
       (princ "\n  *soconv-record* off, or by hand, carries none - U is the")
       (princ "\n  only way back from those.")))
+  (if lzd:end (lzd:end "SORECONV"))
   (princ))
 
 (defun c:SOCONVVER ()
@@ -91395,6 +91737,7 @@
   ;; A mark is still open on the "nothing to convert" path above.
   (if mark-open
     (progn (vla-EndUndoMark doc) (setq mark-open nil)))
+  (if lzd:end (lzd:end "VSCONV"))
   (princ))
 
 (defun c:VSRECONV (/ *error* doc unlocked mark-open ss recs r ent obj ed
@@ -91517,6 +91860,7 @@
       (princ "\n  leaves on every object it moves.  A drawing converted with")
       (princ "\n  *vsconv-record* off, or by hand, carries none - U is the")
       (princ "\n  only way back from those.")))
+  (if lzd:end (lzd:end "VSRECONV"))
   (princ))
 
 (defun c:VSCONVVER ()
@@ -92332,6 +92676,7 @@
       (princ "\nG2MCONV: nothing here is on the export's layers - nothing moved.")
       (princ (strcat "\n  It converts " (g2m:namelist (g2m:sources))
                      "."))))
+  (if lzd:end (lzd:end "G2MCONV"))
   (princ))
 
 (defun c:G2MRECONV (/ *error* doc unlocked mark-open ss recs r ent obj
@@ -92441,6 +92786,7 @@
                        " object(s) kept their record - put it back and run"
                        " G2MRECONV again to finish them."))))
     (princ "\nG2MRECONV: nothing here carries a G2MCONV record - nothing moved."))
+  (if lzd:end (lzd:end "G2MRECONV"))
   (princ))
 
 (defun c:G2MCONVVER ()
@@ -93847,6 +94193,7 @@
   (if (> nmk 0)
     (princ (strcat " " (itoa (/ nmk 2)) " reference mark(s) carried along."))
   )
+  (if lzd:end (lzd:end "WCALST"))
   (princ)
 )
 
@@ -94993,6 +95340,7 @@
       )
     )
   )
+  (if lzd:end (lzd:end "XFTCONV"))
   (princ)
 )
 
@@ -95206,6 +95554,7 @@
      (princ)
     )
   )
+  (if lzd:end (lzd:end "XFTRECONV"))
   (princ)
 )
 
@@ -95229,6 +95578,7 @@
   (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
   (xft:ensure-block)
   (princ (strcat "\nLayer \"" *xft-block-layer* "\" and block \"" *xft-block* "\" are ready."))
+  (if lzd:end (lzd:end "XFTCONV-SETUP"))
   (princ)
 )
 
@@ -96233,6 +96583,7 @@
                 (xyp:to-abhd ss)
                 (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
               (princ)))))))
+  (if lzd:end (lzd:end "XYPLOT"))
   (princ))
 
 ;; Print the loaded version.
@@ -98206,6 +98557,7 @@
   ;; _End then would be closing a group that is not there
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
+  (if lzd:end (lzd:end "CONSTELLATION"))
   (princ))
 
 ;; Print the loaded version.
@@ -101544,6 +101896,7 @@
      (princ (strcat "\nLAZASCII: if sections 1-3 lined up, the chart can be"
                     " drawn in characters -- and a text tile, unlike an"
                     " image tile, is never wiped by a repaint."))))
+  (if lzd:end (lzd:end "LAZASCII"))
   (princ))
 
 ;;; -------------------- the text view -----------------------------------
@@ -102824,7 +103177,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.25")
+(setq *lazpanel-version* "v3.26")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -103008,6 +103361,7 @@
     ("HONEFILLET"       "Corner radius, honed")
     ("LAZDIAG"          "Error report for the last failure")
     ("LAZFORM"          "Pool from a filled-in chart")
+    ("LAZLOG"           "What every command has done lately")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
     ("LAZSPA"           "Spa from a filled-in chart")
@@ -103231,6 +103585,7 @@
       "LOBF"
       "ABLOBF"
       "DIMSTAMP"
+      "LAZLOG"
       )
     )
      ("Layout"
@@ -103336,6 +103691,7 @@
       "LINTXTCHK"
       "CCPRECHECK"
       "LAZDIAG"
+      "LAZLOG"
       )
     )))
 
@@ -104856,6 +105212,7 @@
      (vl-file-delete f)
      (princ (strcat "\nLAZPANEL: "
                     (itoa (length lzp:*pins*)) " tools pinned."))))
+  (if lzd:end (lzd:end "LAZPIN"))
   (princ))
 
 (defun c:LAZBUTTON ( / *error* tb)
@@ -104880,6 +105237,7 @@
                     " dock it, click it to open the panel.")))
     (t
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
+  (if lzd:end (lzd:end "LAZBUTTON"))
   (princ))
 
 (defun c:LAZICON ( / *error* paths tb btn r w)
@@ -104971,6 +105329,7 @@
        (princ "\n  MSXML      : carried it, so the array is not the story"))
      (princ (strcat "\n  written    : NO - "
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
+  (if lzd:end (lzd:end "LAZICON"))
   (princ))
 
 ;;; -------------------- the two front-desk commands ---------------------
@@ -105010,6 +105369,7 @@
      (foreach n hits
        (princ (strcat "\n  " (if (lzp:has n) (strcat n) (strcat "(" n ")"))
                       "  " (lzp:caption n))))))
+  (if lzd:end (lzd:end "CALHELP"))
   (princ))
 
 ;; The settings calofin keeps in the AutoCAD PROFILE, which is the one
@@ -105095,6 +105455,7 @@
         (princ (strcat "\n" key " cleared.")))
        (t (setenv key v)
           (princ (strcat "\n" key " is now " v "."))))))
+  (if lzd:end (lzd:end "CALSET"))
   (princ))
 
 (defun c:LAZPANELVER ()
@@ -105145,38 +105506,38 @@
 ;;; ======================================================================
 ;;; -------------------- what actually arrived ---------------------------
 (setq lazpass:*want* '(
-  "CALVER" "LAZDIAG" "LAZDIAGVER" "POOL" "POOLCOVER" "POOLVER"
-  "POOLDEMO" "POOLDEMOVER" "TUTORIALPOOL" "POOLSIDE" "POOLSIDEVER" "SPA"
-  "SPAVER" "TUTORIALSPA" "OASIS" "OASISVER" "ABCDEF" "ABCDEFVER"
-  "ABFIND" "ABMOVE" "ABPCREATE" "ABFINDVER" "ALTABCDEF" "ALTABCDEFVER"
-  "ABHD" "SIMPABHD" "ABHDCOVER" "ADAB" "TUTORIALABHD" "TUTORIALADAB"
-  "ABHDVER" "ABCURCHECK" "ABCURCHECKSCAN" "ABCURCHECKRESCUE" "ABCURCHECKVER" "ABPCHECK"
-  "ABPCHECKRESCUE" "ABPCHECKVER" "CABHDVER" "CABHD" "POINTRENAMER" "POINTRENAMERVER"
-  "LOBF" "LOBFVER" "ABLOBF" "ABLOBFVER" "AUTOBEAD" "AUTOBEADVER"
-  "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "AUTODIMVER"
-  "BPCALLOUT" "BPCALLOUTVER" "DIMSTAMP" "DIMSTAMPVER" "CCPRECHECK" "CCPRECHECKVER"
-  "CDCALLOUT" "CDCALLOUTVER" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
-  "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP"
-  "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER"
-  "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN"
-  "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER" "DIMCHECKRESCUE"
-  "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE"
-  "DIMCONTENDVER" "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT"
-  "DDFIXVER" "DDGPS" "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER"
-  "FITABHD" "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK" "LINCHECKVER"
-  "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
-  "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER"
-  "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER"
-  "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK" "SMARTFILLET"
-  "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN"
-  "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST"
-  "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN"
-  "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER" "VSCONV"
-  "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST"
-  "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT"
-  "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII"
-  "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN"
-  "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZPANELVER"
+  "CALVER" "LAZDIAG" "LAZLOG" "LAZDIAGVER" "POOL" "POOLCOVER"
+  "POOLVER" "POOLDEMO" "POOLDEMOVER" "TUTORIALPOOL" "POOLSIDE" "POOLSIDEVER"
+  "SPA" "SPAVER" "TUTORIALSPA" "OASIS" "OASISVER" "ABCDEF"
+  "ABCDEFVER" "ABFIND" "ABMOVE" "ABPCREATE" "ABFINDVER" "ALTABCDEF"
+  "ALTABCDEFVER" "ABHD" "SIMPABHD" "ABHDCOVER" "ADAB" "TUTORIALABHD"
+  "TUTORIALADAB" "ABHDVER" "ABCURCHECK" "ABCURCHECKSCAN" "ABCURCHECKRESCUE" "ABCURCHECKVER"
+  "ABPCHECK" "ABPCHECKRESCUE" "ABPCHECKVER" "CABHDVER" "CABHD" "POINTRENAMER"
+  "POINTRENAMERVER" "LOBF" "LOBFVER" "ABLOBF" "ABLOBFVER" "AUTOBEAD"
+  "AUTOBEADVER" "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV"
+  "AUTODIMVER" "BPCALLOUT" "BPCALLOUTVER" "DIMSTAMP" "DIMSTAMPVER" "CCPRECHECK"
+  "CCPRECHECKVER" "CDCALLOUT" "CDCALLOUTVER" "CDCREATE" "CDCREATEVER" "CHECK"
+  "DIMARCCHECK" "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP"
+  "TUTORIALHEMISTEP" "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP"
+  "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK"
+  "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "DIMCHECKVER"
+  "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND"
+  "DCE" "DIMCONTENDVER" "DDFIX" "DDSET" "DDCAL" "DDINFO"
+  "DDALT" "DDFIXVER" "DDGPS" "DDELEV" "DDTEST" "DDGPSVER"
+  "FITABHDVER" "FITABHD" "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK"
+  "LINCHECKVER" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN"
+  "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE"
+  "PADDLEVER" "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS"
+  "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK"
+  "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN"
+  "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER"
+  "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER"
+  "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER"
+  "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER"
+  "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER"
+  "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER"
+  "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
+  "LAZPIN" "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
@@ -105193,7 +105554,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.13 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.14 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

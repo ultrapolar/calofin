@@ -1126,6 +1126,7 @@
                                   "% size change per unit of height."))
                    (setq done T))
                   (t (princ "\nH unchanged.") (setq done T))))))))))))
+  (if lzd:end (lzd:end "DDGPS"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -1172,6 +1173,7 @@
            (cadr g)
            (list ""
                  "Check the internet connection / firewall, then try again."))))))
+  (if lzd:end (lzd:end "DDELEV"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -1267,6 +1269,7 @@
                          (ddg-yn (nth 0 m)))))))
        (setq out (append out (list "Could not get ANY bytes out of this file."))))
      (ddg-report "DDGPS READ TEST" out)))
+  (if lzd:end (lzd:end "DDTEST"))
   (princ))
 
 (defun c:DDGPSVER ()

@@ -2468,6 +2468,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setq *error* abl-old-err)   ; restore the previous error handler
+  (if lzd:end (lzd:end "ABLOBF"))
   (princ))
 
 (defun c:ABLOBFVER ()

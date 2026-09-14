@@ -56,133 +56,63 @@ in one place only, the panel, on whichever page the tool was filed on.
 the one place a setting survives a rebuild, since `releases/` and
 `LAZPASS.lsp` are generated.
 
-## v3.12 -- 2026-09-11
+## v3.14 -- 2026-09-14
 
-**A dialog that does not fit does not open.** DCL does not scroll in
-either direction: a page wider or taller than the screen is not
-clipped and is not scrolled -- AutoCAD refuses it outright, with
-`Dialog too large to fit on screen. Requested Size = (436, 1085)
-Maximum Size = (1920, 1080)`, and the command dies where it stands.
-LAZPANEL's **Rest** page had reached exactly that, so clicking Rest did
-nothing but raise the error. Rest is the page that could least afford
-it: it is COMPUTED -- every tool not on Pool, Cover or Spa lands there
--- so the page that stopped opening is the page every newly registered
-tool joins, and it would have broken again at the next one regardless.
+A report is written when something breaks. That is one moment, and a
+moment does not tell you whether a bug is rare, constant, or only ever
+after SPA. **Every run is logged now**, and the log answers what a
+report cannot: how often a tool fails against how many clean runs, what
+the drafter ran in the ten minutes before, and which prompt they quietly
+back out of over and over -- because backing out is not a bug, it is a
+question somebody could not answer.
 
-Nothing in the tree could have caught it, because a dialog's size is
-written down nowhere: it is the sum of whatever the generator emitted.
-So it is computed now. `tools/dclsize.py` reads generated DCL as a tile
-tree and measures it; its constants are fitted to the report above and
-reproduce both of that report's numbers exactly. `tools/check_dcl.py`
-drives every generator to its tallest REACHABLE state -- pins and
-recents full, every chart, every step count -- and fails the build on
-anything within 60px of the limit. It is in `make check`, and
-`tests/test_dcl_size.py` puts the same measurement in `make test`.
+One line per run, into `<profile>\calofin\calofin-YYYY-MM.log`:
 
-Five dialogs were over, only one of which anyone had clicked:
+    2026-09-14 14:30:02  ok     POOL v2.7  LAZPASS  job1234.dwg
+    2026-09-14 14:31:40  quit   SPA v1.4  LAZPASS  job1234.dwg
+        step  How should the deep end be treated?
+    2026-09-14 14:33:07  FAIL   ABHD 091026 REV18  LAZPASS  job1234.dwg
+        step  Maximum curves
+        err   bad argument type: numberp: nil
+        file  C:\Users\dm\Downloads\ABHD-...-error-....dxf
+        ? Maximum curves   -> 6
 
-- **Rest** (1085px) and **Layout** (1189px) now wrap into balanced
-  columns at `lzp:*colbudget*`, captions and all -- a category page is
-  where you go to find out what a tool IS, so losing the captions to
-  gain the width would have cost the page its purpose.
-- **LAZFORM's Roman and Grecian** charts (1141px each) pack the boxes
-  beside the picture into two columns instead of one stack. Four more
-  charts were within 20px of the line and came down with them. The
-  picture is only ~260px tall, so the room was always there, sideways.
-- **LAZASCII** (1557px), whose whole job is to be looked at, lays its
-  five sections out in three columns.
+The record's size follows what anybody will want from it: a clean run is
+a count, not a story; a quit is the prompt they stopped at; a FAIL is
+the error, the report it wrote and the last prompts, in caps so it greps
+out of a month of runs.
 
-And the two strips whose height a DRAFTER sets are capped. The note
-beside the pinned row said "pin thirty tools and you get a tall panel,
-never a broken one"; that was true at 56 tools in three columns and is
-not true at 82 -- thirty pins is 1053px, 27px under the wall, and the
-next pin goes through it. Pinned is held to `lzp:*pinrowmax*` rows, at
-the tick and again on the way in from the registry, where a list stored
-by an older build has never been through the cap. Recent was capped
-only as it was WRITTEN, so a stored value that predates the limit came
-back whole onto every page at once; it is trimmed on read as well.
+**It needed no new wiring.** Every command already calls `lzd:begin` at
+the top and `lzd:report` from its handler, so the log rides on those.
+The one call added is `lzd:end`, before a command's trailing `(princ)` --
+which catches every clean exit, because AutoLISP has no early return:
+a command either falls out of the bottom of its defun or raises, and
+raising is the handler's business. A command that ends some other way
+is closed out by the lazy flush at the next `lzd:begin` instead.
 
-The pin editor had the same fault from the other end -- three fixed
-columns was 28 rows at 82 tools, the same 1085px, on the one dialog
-that grows every time ANY tool is added. It shares the page budget now,
-so it cannot drift out of step again.
+**Every failure report now carries the runs around it.** What the
+drafter did before a crash is often the cause and is otherwise gone the
+moment AutoCAD closes; it rides in the one file they were already told
+to send, so nobody has to ask them for a second one. `LAZLOG` shows the
+log and names the file.
 
-Worst page a drafter can build, pins and recents full: 941px.
+Four things the edge tests found, all of them paths a real machine takes:
 
-## v3.7 -- 2026-09-10
+* a broken log destroyed the REPORT. `lzd:report-lines` asked the log
+  for its tail, the tail raised on a read-only folder, and the outer
+  catch turned a diagnosable failure into "could not be written". The
+  log is a convenience; the report is the thing the drafter was told to
+  send, and it does not depend on the log working any more.
+* a cancel was logged twice, once as the `quit` it was and once as a
+  clean run it was not -- `lzd:end` logs, and the cancel path was
+  calling it.
+* the one command that never appeared in the log was `LAZDIAG`, whose
+  whole job is the log: its self test threw away the context `c:LAZDIAG`
+  had just opened.
+* a tool with a handler in two places (`c:COVERCHECK` and `cchk:scan`)
+  would have logged one run as two.
 
-One pass, one idea: a question you can answer is a question you should
-be able to un-answer. `Back` (with `U` for `Undo` beside it) was already
-the repo-wide convention and already worked at most measurement
-prompts -- but a lot of the questions that decide what a run even IS
-were still one-way. Getting the pool shape wrong meant quitting POOL;
-mistyping ABHD's miss percentage meant quitting ABHD; picking the wrong
-side to bead meant Escape and a re-selection.
-
-**Every question chain that had a predecessor now has a way back to
-it.** ABHD, CABHD and LHD walk their settings chains (seven, eight and
-six announced steps) in both directions, declaration loops included --
-Back there takes back the wall, corner or held point declared last,
-dashed marker and all, and off the first item it re-opens the Yes/No
-that started the loop. CORNERSTP's six options do the same, and because
-two of them are only asked when the corner has a diagonal, the chain
-carries a DIRECTION: a question this run never put is stepped over on
-the way back rather than stopped on. POOL, SPA and POOLSIDE open with
-their shape and their base point as one chain. PERPPTS and CPERPPTS
-grew Back at the width amount, the join and the dimension style;
-NORMIESTEP at its corner-treatment sizes; the three step tools at their
-bead questions; DIMCHECK, COVERCHECK and LINFINCHECK at the Move/Keep/
-Pick pick and their reference sheet; AUTOBEAD at its clicked steps;
-ABCURCHECK at its declarations; BPCALLOUT at its callout text;
-STOCKCOVER at "which one?".
-
-**A first question that opens a sub-block backs out of it.** FITABHD's
-pool bottom asks for the deep end and then four measurements; the four
-stepped backwards through each other and the pick did not, so a Yes you
-did not mean was Escape or nothing. It re-opens the "add the bottom?"
-question now, and the first break re-opens the pick. CORNERSTP's
-outside-in runs ask a width for the outermost step - a setting, not a
-tread - and it moved in front of the undo group to join the option
-chain, where Back at it lands on the dimension question (outside in
-never asks about a bench, so that step is passed over).
-
-**A question straight after a selection re-opens that selection.**
-`WCALST`, `XFTCONV`, `AUTOBEAD` and `AUTODIM` already did this; CABHD's
-point cutoff and LHD's output height do it now, which means the two
-questions that decide what a fit even IS are reachable again without
-quitting. Nothing is drawn at that point and the classifier rebuilds
-every list it fills, so the second pass starts clean. HEMISTEP's width
-at the wall was in the same position for a different reason -- it was
-asked after the undo group opened -- so it moved in front of it and
-now re-opens the dimension question.
-
-**Two more pairs closed on the way out.** ABFIND ties two stakes and
-asks for them in order; Back at the second re-asks the first, but only
-when the first was CLICKED - a drawing that numbers it makes the
-re-ask find the same point and walk forward, which is a deadlock rather
-than a way back. DIMCHECK's and LINFINCHECK's reference sheet is three
-questions and now chains all three.
-
-**What still has no Back has a reason, and the reasons are written
-down.** The root `README.md` names four: a selection cannot be typed
-at, a question past committed geometry answers to the draw-as-you-go
-rule instead (Back at the prompt inside the loop takes the last step
-back, drawing and all), a re-ask that is itself the correction of a
-failed range check, and a question the run would answer the same way
-twice. Of 338 prompt sites in the tree, the 119 that offer no Back all
-fall into one of those, plus the pauses, the demos and the first
-question of each command.
-
-**`U` works wherever `B` does**, which was already true and is now
-proven rather than trusted: `tests/test_back_nav.py` reads every `.lsp`
-in the tier for the invariant the prompt text cannot show you -- Undo
-beside every Back in every `initget` list, the typed `B`/`BACK`/`U`/
-`UNDO` predicate spelled the same way everywhere and matched case-
-folded, and no file that accepts the keyword and then only tests for
-`"Back"`. The other half of the same test walks each threaded chain
-backwards through the interpreter, at both tiers.
-
-## v3.11 -- 2026-09-14
+## v3.13 -- 2026-09-14
 
 An audit of the two passes above, and what it turned up.
 
@@ -240,6 +170,60 @@ the drafter to send it, and left no undo group, error mode or entity
 behind. At both tiers. The roster is computed and the exclusions are
 read out of `test_cancel_paths.py`, so a command added later is swept
 by construction.
+
+## v3.12 -- 2026-09-11
+
+**A dialog that does not fit does not open.** DCL does not scroll in
+either direction: a page wider or taller than the screen is not
+clipped and is not scrolled -- AutoCAD refuses it outright, with
+`Dialog too large to fit on screen. Requested Size = (436, 1085)
+Maximum Size = (1920, 1080)`, and the command dies where it stands.
+LAZPANEL's **Rest** page had reached exactly that, so clicking Rest did
+nothing but raise the error. Rest is the page that could least afford
+it: it is COMPUTED -- every tool not on Pool, Cover or Spa lands there
+-- so the page that stopped opening is the page every newly registered
+tool joins, and it would have broken again at the next one regardless.
+
+Nothing in the tree could have caught it, because a dialog's size is
+written down nowhere: it is the sum of whatever the generator emitted.
+So it is computed now. `tools/dclsize.py` reads generated DCL as a tile
+tree and measures it; its constants are fitted to the report above and
+reproduce both of that report's numbers exactly. `tools/check_dcl.py`
+drives every generator to its tallest REACHABLE state -- pins and
+recents full, every chart, every step count -- and fails the build on
+anything within 60px of the limit. It is in `make check`, and
+`tests/test_dcl_size.py` puts the same measurement in `make test`.
+
+Five dialogs were over, only one of which anyone had clicked:
+
+- **Rest** (1085px) and **Layout** (1189px) now wrap into balanced
+  columns at `lzp:*colbudget*`, captions and all -- a category page is
+  where you go to find out what a tool IS, so losing the captions to
+  gain the width would have cost the page its purpose.
+- **LAZFORM's Roman and Grecian** charts (1141px each) pack the boxes
+  beside the picture into two columns instead of one stack. Four more
+  charts were within 20px of the line and came down with them. The
+  picture is only ~260px tall, so the room was always there, sideways.
+- **LAZASCII** (1557px), whose whole job is to be looked at, lays its
+  five sections out in three columns.
+
+And the two strips whose height a DRAFTER sets are capped. The note
+beside the pinned row said "pin thirty tools and you get a tall panel,
+never a broken one"; that was true at 56 tools in three columns and is
+not true at 82 -- thirty pins is 1053px, 27px under the wall, and the
+next pin goes through it. Pinned is held to `lzp:*pinrowmax*` rows, at
+the tick and again on the way in from the registry, where a list stored
+by an older build has never been through the cap. Recent was capped
+only as it was WRITTEN, so a stored value that predates the limit came
+back whole onto every page at once; it is trimmed on read as well.
+
+The pin editor had the same fault from the other end -- three fixed
+columns was 28 rows at 82 tools, the same 1085px, on the one dialog
+that grows every time ANY tool is added. It shares the page budget now,
+so it cannot drift out of step again.
+
+Worst page a drafter can build, pins and recents full: 941px.
+
 ## v3.11 -- 2026-09-11
 
 Three changes to the AB perimeter fitters, all of them about the same
@@ -453,6 +437,79 @@ adding a second word for one answer is a worse prompt, not a kinder
 one. That rule, and the two conditions that have to hold before `Same`
 appears at all, are now in STANDARDS' keyword table beside Yes/No and
 the rest -- it had been an ad-hoc word in three files until now.
+
+## v3.7 -- 2026-09-10
+
+One pass, one idea: a question you can answer is a question you should
+be able to un-answer. `Back` (with `U` for `Undo` beside it) was already
+the repo-wide convention and already worked at most measurement
+prompts -- but a lot of the questions that decide what a run even IS
+were still one-way. Getting the pool shape wrong meant quitting POOL;
+mistyping ABHD's miss percentage meant quitting ABHD; picking the wrong
+side to bead meant Escape and a re-selection.
+
+**Every question chain that had a predecessor now has a way back to
+it.** ABHD, CABHD and LHD walk their settings chains (seven, eight and
+six announced steps) in both directions, declaration loops included --
+Back there takes back the wall, corner or held point declared last,
+dashed marker and all, and off the first item it re-opens the Yes/No
+that started the loop. CORNERSTP's six options do the same, and because
+two of them are only asked when the corner has a diagonal, the chain
+carries a DIRECTION: a question this run never put is stepped over on
+the way back rather than stopped on. POOL, SPA and POOLSIDE open with
+their shape and their base point as one chain. PERPPTS and CPERPPTS
+grew Back at the width amount, the join and the dimension style;
+NORMIESTEP at its corner-treatment sizes; the three step tools at their
+bead questions; DIMCHECK, COVERCHECK and LINFINCHECK at the Move/Keep/
+Pick pick and their reference sheet; AUTOBEAD at its clicked steps;
+ABCURCHECK at its declarations; BPCALLOUT at its callout text;
+STOCKCOVER at "which one?".
+
+**A first question that opens a sub-block backs out of it.** FITABHD's
+pool bottom asks for the deep end and then four measurements; the four
+stepped backwards through each other and the pick did not, so a Yes you
+did not mean was Escape or nothing. It re-opens the "add the bottom?"
+question now, and the first break re-opens the pick. CORNERSTP's
+outside-in runs ask a width for the outermost step - a setting, not a
+tread - and it moved in front of the undo group to join the option
+chain, where Back at it lands on the dimension question (outside in
+never asks about a bench, so that step is passed over).
+
+**A question straight after a selection re-opens that selection.**
+`WCALST`, `XFTCONV`, `AUTOBEAD` and `AUTODIM` already did this; CABHD's
+point cutoff and LHD's output height do it now, which means the two
+questions that decide what a fit even IS are reachable again without
+quitting. Nothing is drawn at that point and the classifier rebuilds
+every list it fills, so the second pass starts clean. HEMISTEP's width
+at the wall was in the same position for a different reason -- it was
+asked after the undo group opened -- so it moved in front of it and
+now re-opens the dimension question.
+
+**Two more pairs closed on the way out.** ABFIND ties two stakes and
+asks for them in order; Back at the second re-asks the first, but only
+when the first was CLICKED - a drawing that numbers it makes the
+re-ask find the same point and walk forward, which is a deadlock rather
+than a way back. DIMCHECK's and LINFINCHECK's reference sheet is three
+questions and now chains all three.
+
+**What still has no Back has a reason, and the reasons are written
+down.** The root `README.md` names four: a selection cannot be typed
+at, a question past committed geometry answers to the draw-as-you-go
+rule instead (Back at the prompt inside the loop takes the last step
+back, drawing and all), a re-ask that is itself the correction of a
+failed range check, and a question the run would answer the same way
+twice. Of 338 prompt sites in the tree, the 119 that offer no Back all
+fall into one of those, plus the pauses, the demos and the first
+question of each command.
+
+**`U` works wherever `B` does**, which was already true and is now
+proven rather than trusted: `tests/test_back_nav.py` reads every `.lsp`
+in the tier for the invariant the prompt text cannot show you -- Undo
+beside every Back in every `initget` list, the typed `B`/`BACK`/`U`/
+`UNDO` predicate spelled the same way everywhere and matched case-
+folded, and no file that accepts the keyword and then only tests for
+`"Back"`. The other half of the same test walks each threaded chain
+backwards through the interpreter, at both tiers.
 
 ## v3.6 -- 2026-09-08
 

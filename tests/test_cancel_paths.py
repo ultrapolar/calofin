@@ -87,6 +87,10 @@ NO_PROMPT = {
     # a VM whose TEMPPREFIX is writable never gets there.  It is in
     # QUIET below, where that silence is asserted rather than assumed.
     'LAZDIAG',
+    # LAZLOG prints the run log and stops.  Nothing to ask: the log is
+    # either there or it is not, and either way it says so.  In QUIET
+    # below, where that silence is asserted rather than assumed.
+    'LAZLOG',
     # an empty drawing carries none of the VS layers, so its layer check
     # runs before its first question: it says which layers it looked for
     # and stops.  tests/test_vsconv.py drives the prompt, and the Esc at
@@ -101,7 +105,7 @@ NEEDS_ACTIVEX = set()
 
 #: commands that ask nothing: they run to completion on an empty drawing
 QUIET = ['COVERCHECKRESCUE', 'DIMCHECKRESCUE', 'LINFINCHECKRESCUE',
-         'TUTORIALCOVERCHECKCLEAN', 'XFTCONV-SETUP', 'LAZDIAG']
+         'TUTORIALCOVERCHECKCLEAN', 'XFTCONV-SETUP', 'LAZDIAG', 'LAZLOG']
 
 #: commands whose first act is a file dialog, or a look for a folder no
 #: setting names: Cancel there, or nothing there, ends the run

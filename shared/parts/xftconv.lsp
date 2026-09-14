@@ -1120,6 +1120,7 @@
       )
     )
   )
+  (if lzd:end (lzd:end "XFTCONV"))
   (princ)
 )
 
@@ -1333,6 +1334,7 @@
      (princ)
     )
   )
+  (if lzd:end (lzd:end "XFTRECONV"))
   (princ)
 )
 
@@ -1356,6 +1358,7 @@
   (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
   (xft:ensure-block)
   (princ (strcat "\nLayer \"" *xft-block-layer* "\" and block \"" *xft-block* "\" are ready."))
+  (if lzd:end (lzd:end "XFTCONV-SETUP"))
   (princ)
 )
 

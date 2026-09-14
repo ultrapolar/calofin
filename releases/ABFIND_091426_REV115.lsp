@@ -3287,6 +3287,7 @@
                           (if (= built 1) "" "s") " created from "
                           (if (= built 1) "its" "their")
                           " two readings.")))))))
+  (if lzd:end (lzd:end "ABFIND"))
   (princ))
 
 ;;; ---------------------- commands --------------------------------------

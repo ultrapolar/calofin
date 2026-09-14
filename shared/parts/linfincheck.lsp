@@ -671,6 +671,7 @@
     (princ (strcat "\nLINFINCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nLINFINCHECKRESCUE: nothing to restore - no LINFINCHECK markers in the drawing."))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
+  (if lzd:end (lzd:end "LINFINCHECKRESCUE"))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -3686,6 +3687,7 @@
                                  *lfc-constr-layer* ".")
                          "")
                        "\nOne UNDO reverts everything LINFINCHECK changed (including the report)."))))))
+  (if lzd:end (lzd:end "LINFINCHECK"))
   (princ))
 
 ;; --- LINFINSCAN / LITELINFINSCAN: the read-only twins -----------------
@@ -4136,6 +4138,7 @@
                     (if datesum (strcat "\nDate: " datesum) "")
                     "\nReport written on layer " *lfc-report-layer*
                     "; nothing else was changed."))))
+  (if lzd:end (lzd:end "LINFINCHECK"))
   (princ))
 
 
@@ -4496,6 +4499,7 @@
                  "\n  LINFINSCAN first if you want to look without touching anything;"
                  "\n  LINFINCHECK to review and fix; LINFINCHECKRESCUE to undo the marks."
                  "\n  One U undoes everything this tutorial drew."))
+  (if lzd:end (lzd:end "TUTORIALLINFINCHECK"))
   (princ))
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))

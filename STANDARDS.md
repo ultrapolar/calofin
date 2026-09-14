@@ -597,8 +597,19 @@ a command that is missing any of them cannot ship:
 | --- | --- | --- |
 | top of the command | `(if lzd:begin (lzd:begin "TOOL" *tool-version*))` | which tool, which version, and where the drawing stood before it ran |
 | in the `*error*` handler | `(if lzd:report (lzd:report "TOOL" *tool-version* msg))` | the report itself: the DXF, and the words telling the drafter to send it |
-| after a selection | `(if lzd:watch (lzd:watch ss))` | the geometry the run was HANDED, not just what it drew |
-| in an ask helper | `(if lzd:ask (lzd:ask msg v))` | the transcript -- which question it died on |
+| before the command's `(princ)` | `(if lzd:end (lzd:end "TOOL"))` | the run LOG's "ok" line: a clean run, counted |
+| after a selection | `(if lzd:watch (lzd:watch ss) ss)` | the geometry the run was HANDED, not just what it drew |
+| in an ask helper | `(if lzd:ask (lzd:ask msg v) v)` | the transcript -- which question it died on |
+
+The else branch on the last two is load-bearing, not decoration: it
+makes the whole form evaluate to the variable whether LAZDIAG is loaded
+or not, so a call dropped after a `(setq ss (ssget ...))` cannot change
+what the enclosing `progn` or `cond` clause returns.
+
+Those four also feed the **run log** -- one line per run into
+`<profile>\calofin\calofin-YYYY-MM.log`, `ok` / `quit` / `FAIL` -- which
+is what turns a failure from an event into a rate, and what carries the
+runs either side of it into the report. `LAZLOG` shows it.
 
 The one thing `--fix` will NOT write is the `*error*` handler itself,
 because what belongs in one is the editorial part: which sysvars this

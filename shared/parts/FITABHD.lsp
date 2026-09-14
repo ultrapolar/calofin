@@ -4938,6 +4938,7 @@
   (setq undo-open nil)
   (cal:sysrestore)
   (setq fit:*nobottom* nil)
+  (if lzd:end (lzd:end "FITABHD"))
   (princ))
 
 ;; FITABHD for a cover sheet: the same template fit, with the

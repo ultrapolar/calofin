@@ -3036,6 +3036,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setq *error* lh-old-err)   ; restore the previous error handler
+  (if lzd:end (lzd:end "LHD"))
   (princ))
 
 (defun c:LHDVER ()

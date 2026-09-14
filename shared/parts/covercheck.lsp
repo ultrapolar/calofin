@@ -618,6 +618,7 @@
     (princ (strcat "\nCOVERCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nCOVERCHECKRESCUE: nothing to restore - no COVERCHECK markers in the drawing."))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
+  (if lzd:end (lzd:end "COVERCHECKRESCUE"))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -3434,6 +3435,7 @@
                                  *cchk-constr-layer* ".")
                          "")
                        "\nOne UNDO reverts everything COVERCHECK changed (including the report)."))))))
+  (if lzd:end (lzd:end "COVERCHECK"))
   (princ))
 
 ;; --- COVERSCAN / LITECOVERSCAN: the read-only twins -------------------
@@ -3655,6 +3657,7 @@
      (foreach l (car cres) (princ (strcat "\n" l)))
      (princ (strcat "\nReport written on layer " *cchk-report-layer*
                     "; nothing else was changed."))))
+  (if lzd:end (lzd:end "COVERCHECK"))
   (princ))
 
 
@@ -3929,6 +3932,7 @@
       (princ "\nWhen you're done, type TUTORIALCOVERCHECKCLEAN to erase the demo -")
       (princ "\nit only removes what the tutorial built (tagged), plus whatever")
       (princ "\nreport and markers COVERCHECK/COVERSCAN left behind on it.")))
+  (if lzd:end (lzd:end "TUTORIALCOVERCHECK"))
   (princ))
 
 (defun c:TUTORIALCOVERCHECKCLEAN ( / *error* undo-open ss i e xd n)
@@ -3964,6 +3968,7 @@
                    " demo item(s), plus any report/markers left on them."))
     (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found."))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
+  (if lzd:end (lzd:end "TUTORIALCOVERCHECKCLEAN"))
   (princ))
 
 (defun c:COVERCHECKVER ()

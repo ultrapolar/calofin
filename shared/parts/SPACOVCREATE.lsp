@@ -1426,6 +1426,7 @@
         (setq undo-open nil)))
 
   (cal:sysrestore)
+  (if lzd:end (lzd:end "SPACOVCREATE"))
   (princ))
 
 ;; Which build is loaded -- the first thing to check when a run does

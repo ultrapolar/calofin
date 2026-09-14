@@ -1943,6 +1943,7 @@
                          "")
                      "\nReport written on layer " spachk:*report-layer*
                      "; nothing else was changed."))))
+  (if lzd:end (lzd:end "SPACHECK"))
   (princ))
 
 ;;; --- SPACHECK: the audits, then a walk of what they flagged ------------
@@ -2030,6 +2031,7 @@
                      (if (= 1 marked) "" "s") " marked red"
                      "\nReport written on layer " spachk:*report-layer*
                      ".  SPACHECKRESCUE puts the colours back."))))
+  (if lzd:end (lzd:end "SPACHECK"))
   (princ))
 
 ;;; --- SPACHECKRESCUE: put every colour back -----------------------------
@@ -2059,6 +2061,7 @@
   (setvar "CMDECHO" oldecho)
   (princ (strcat "\nSPACHECKRESCUE: " (itoa n) " colour"
                  (if (= 1 n) "" "s") " put back, report removed."))
+  (if lzd:end (lzd:end "SPACHECKRESCUE"))
   (princ))
 
 ;;; --- TUTORIALSPACHECK: every check spelled out -------------------------
@@ -2398,6 +2401,7 @@
     (spachk:demo))
   (setvar "CLAYER" oldlay)
   (setvar "CMDECHO" oldecho)
+  (if lzd:end (lzd:end "TUTORIALSPACHECK"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and

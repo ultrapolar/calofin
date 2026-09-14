@@ -439,6 +439,7 @@
     (princ (strcat "\nDIMCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nDIMCHECKRESCUE: nothing to restore - no DIMCHECK markers in the drawing."))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
+  (if lzd:end (lzd:end "DIMCHECKRESCUE"))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -1798,6 +1799,7 @@
                                  *dchk-constr-layer* ".")
                          "")
                        "\nOne UNDO reverts everything DIMCHECK changed (including the report)."))))))
+  (if lzd:end (lzd:end "DIMCHECK"))
   (princ))
 
 ;; --- DIMSCAN: the read-only twin -----------------------------------
@@ -1992,6 +1994,7 @@
                     "\nOverlapping line pairs: " (itoa (length olaps))
                     "\nReport written on layer " *dchk-report-layer*
                     "; nothing else was changed."))))
+  (if lzd:end (lzd:end "DIMSCAN"))
   (princ))
 
 ;; --- TUTORIALDIMCHECK: learn it two ways ---------------------------
@@ -2265,6 +2268,7 @@
                  "\n  DIMSCAN first if you want to look without touching anything;"
                  "\n  DIMCHECK to review and fix; DIMCHECKRESCUE to undo the marks."
                  "\n  One U undoes everything this tutorial drew."))
+  (if lzd:end (lzd:end "TUTORIALDIMCHECK"))
   (princ))
 
 (defun c:TUTORIALDIMSCAN () (c:TUTORIALDIMCHECK))

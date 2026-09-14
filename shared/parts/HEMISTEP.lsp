@@ -1620,6 +1620,7 @@
                       ;; it is named here so AUTOBEAD leaves it unbeaded
                       (list (hs-entmid (cdr (last btreads)))))))))))))))
   (hs-fclear)                       ; both exits clear the form store
+  (if lzd:end (lzd:end "HEMISTEP"))
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
@@ -1793,6 +1794,7 @@
   (princ "\n    an arc and run HEMISTEP selecting it (plus an axis line if")
   (princ "\n    you have one) - Enter at any width fits that step to the")
   (princ "\n    curve exactly.")
+  (if lzd:end (lzd:end "TUTORIALHEMISTEP"))
   (princ))
 
 (defun c:HEMISTEPVER ()

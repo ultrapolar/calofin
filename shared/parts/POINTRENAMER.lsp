@@ -962,6 +962,7 @@
   (if undo-open
     (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (cal:sysrestore)
+  (if lzd:end (lzd:end "POINTRENAMER"))
   (princ))
 
 (defun c:POINTRENAMERVER ()
