@@ -75,15 +75,19 @@ check("the palette writes LAZPANEL's own registry key",
       vb_literal(pinkey) in MEM, pinkey)
 
 values = set(re.findall(r'lzp:\*pinkey\*\s+"([A-Za-z]+)"', PANEL_SRC))
-check("the panel keeps exactly three values there",
-      values == {'Pins', 'Recent', 'Theme'}, repr(sorted(values)))
-for v in sorted(values - {'Theme'}):
+check("the panel keeps exactly four values there",
+      values == {'Pins', 'Recent', 'Theme', 'Hidden'}, repr(sorted(values)))
+for v in sorted(values - {'Theme', 'Hidden'}):
     check("the palette reads and writes %r too" % v,
           ('"%s"' % v) in MEM)
 # Theme is the third thing the two surfaces share, and it is read on
 # the palette side by PaletteTheme rather than PaletteMemory: CALSET
 # writes it here so a drafter who has said which way their screen
-# reads has said it to both surfaces, exactly as a pin does.
+# reads has said it to both surfaces, exactly as a pin does.  Hidden
+# is NOT shared: LAZHIDE is a Lisp-only settings command, and nothing
+# on the VB side reads or writes its list yet -- the day the palette
+# grows its own hide feature this exemption comes out and the loop
+# above starts holding it to the same bargain Pins and Recent keep.
 check("the palette reads 'Theme' out of the same key",
       '"Theme"' in THEME and vb_literal(pinkey) in THEME)
 check("...and CALSET is what writes it",
