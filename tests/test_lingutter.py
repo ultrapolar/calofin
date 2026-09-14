@@ -520,7 +520,7 @@ print("== P5. the command: strip, redraw, hand over ==")
 vm, d = keepvm()
 vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
 try:
-    vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+    vm.run('c:LINGUTTER', [alive(vm)])
     ran = True
 except LispError as e:
     ran = False
@@ -565,7 +565,7 @@ line(vm, (250, 200), (0, 200))
 line(vm, (0, 200), (0, 0))
 vm.loads('(setq lg:*runpaddle* nil)')
 before = analyze(vm)['vts']
-vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+vm.run('c:LINGUTTER', [alive(vm)])
 after = vm.loads("(lg:lwverts (ssname (ssget \"_X\" '((0 . \"LWPOLYLINE\")))"
                  " 0))")
 check("P5 the redrawn polyline is closed", after[0] is not NIL)
@@ -574,29 +574,29 @@ check("P5 ...and carries the same vertices and bulges",
       f"{flat(list(after[1:]))} != {flat([list(v) for v in before])}")
 
 
-# ---------------------------------------------------- P6. it asks first
+# ------------------------------------------------- P6. no confirmation asked
 
-print("== P6. it asks before erasing, and No means no ==")
+print("== P6. it erases without asking ==")
 
 vm, d = keepvm()
 vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
 n = len(alive(vm))
-vm.run('c:LINGUTTER', [alive(vm), "No"])
+vm.run('c:LINGUTTER', [alive(vm)])
 out = "".join(str(x) for x in vm.printed)
-check("P6 No erases nothing", len(alive(vm)) == n, len(alive(vm)))
-check("P6 ...and draws nothing", not alive_of(vm, 'LWPOLYLINE'))
-check("P6 ...and does not run PADDLE", "STUB-PADDLE-RAN" not in out)
-check("P6 the question defaults to No",
-      any("<No>" in str(p[0]) for p in vm.prompts), vm.prompts)
-check("P6 the bracket is the keyword list",
-      any("[Yes/No]" in str(p[0]) for p in vm.prompts), vm.prompts)
+check("P6 it erases the objects it did not keep, unasked",
+      len(alive(vm)) < n, len(alive(vm)))
+check("P6 ...and draws the perimeter", len(alive_of(vm, 'LWPOLYLINE')) == 1)
+check("P6 ...and hands off to PADDLE", "STUB-PADDLE-RAN" in out)
+check("P6 it asks nothing but which objects to gut",
+      vm.prompts and all('ssget' in str(p[0]) for p in vm.prompts),
+      vm.prompts)
 
-# no perimeter, no question at all
+# no perimeter, nothing erased either
 vm = newvm()
 line(vm, (0, 0), (300, 0))
 n = len(alive(vm))
 vm.run('c:LINGUTTER', [alive(vm)])
-check("P6 with no perimeter it never asks", len(alive(vm)) == n)
+check("P6 with no perimeter nothing is erased", len(alive(vm)) == n)
 
 
 # ------------------------------------------------------ P7. the dry run
@@ -622,7 +622,7 @@ check("P7 it asks nothing", vm.prompts and all(
 print("== P8. PADDLE missing is reported, not fatal ==")
 
 vm, d = keepvm()
-vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+vm.run('c:LINGUTTER', [alive(vm)])
 out = "".join(str(x) for x in vm.printed)
 check("P8 the gut still happens", len(alive_of(vm, 'LWPOLYLINE')) == 1)
 check("P8 ...and it says PADDLE is not loaded",
@@ -651,7 +651,7 @@ def twoareas():
 vm, inside, outside = twoareas()
 vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
 n_before = len(alive(vm))
-vm.run('c:LINGUTTER', [inside, "Yes"])
+vm.run('c:LINGUTTER', [inside])
 left = set(alive(vm))
 check("P9 the perimeter is the pool, not the bigger loop outside it",
       len(alive_of(vm, 'LWPOLYLINE')) == 1
@@ -701,7 +701,7 @@ vm.loads('(defun c:PADDLE ( / ss)'
          ' (setq ss (ssget "_I" \'((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))'
          ' (princ (strcat "\\nSTUB-PADDLE-GOT " (if ss (itoa (sslength ss)) "0")))'
          ' (princ))')
-vm.run('c:LINGUTTER', [inside, "Yes"])
+vm.run('c:LINGUTTER', [inside])
 out = "".join(str(x) for x in vm.printed)
 check("P10 PADDLE's pickfirst probe finds exactly the new perimeter",
       "STUB-PADDLE-GOT 1" in out, out[-300:])
@@ -732,7 +732,7 @@ vm, d = keepvm()
 vm.loads('(setq lg:*runpaddle* nil)')
 vm.sysvars['UNDOCTL'] = 0
 try:
-    vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+    vm.run('c:LINGUTTER', [alive(vm)])
     check("P11 undo control off: the command still finishes", True)
     check("P11 ...the gut still happens",
           len(alive_of(vm, 'LWPOLYLINE')) == 1, alive_of(vm, 'LWPOLYLINE'))
@@ -745,7 +745,7 @@ except LispError as e:
 # have cost the undo group the tool promises
 vm, d = keepvm()
 vm.loads('(setq lg:*runpaddle* nil)')
-vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+vm.run('c:LINGUTTER', [alive(vm)])
 pairs = [c[:2] for c in vm.commands]
 check("P11 undo recording: still exactly one group",
       pairs.count(['_.UNDO', '_Begin']) == 1
@@ -819,7 +819,7 @@ check("P11 ...and the styled-anywhere ones are still kept",
 vm, d = keepvm()
 vm.loads('(setq lg:*runpaddle* nil)')
 vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
-vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+vm.run('c:LINGUTTER', [alive(vm)])
 out = "".join(str(x) for x in vm.printed)
 check("P11 lg:*runpaddle* nil guts without padding",
       len(alive_of(vm, 'LWPOLYLINE')) == 1 and "STUB-PADDLE-RAN" not in out)

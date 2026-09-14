@@ -64,11 +64,12 @@
 ;;;       its largest closed loop, which after a scoped gut may well be
 ;;;       a title block border rather than the pool.
 ;;;
-;;;  LINGUTTER erases a great deal of what you highlight, so it asks
-;;;  first -- after printing exactly what it found, and defaulting to
-;;;  No.  LINGUTTERSCAN prints the same report and stops without
-;;;  touching the drawing; run it first on a sheet you care about.  The
-;;;  whole run is one undo group: a single U puts the drawing back.
+;;;  LINGUTTER erases a great deal of what you highlight, and does so
+;;;  straight through -- no confirmation asked, just the report of
+;;;  exactly what it found before it erases it.  LINGUTTERSCAN prints
+;;;  the same report and stops without touching the drawing; run it
+;;;  first on a sheet you care about.  The whole run is one undo
+;;;  group: a single U puts the drawing back.
 ;;;  (In a drawing with undo control off there is no group to open, so
 ;;;  the gut still happens but a U will not take it back in one step.)
 ;;;
@@ -136,7 +137,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.4")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.5")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -1035,7 +1036,7 @@
 ;;; -------------------- the commands ------------------------------------
 
 (defun c:LINGUTTER ( / *error* undo-open ss res vts kill
-                       locked en ask perim)
+                       locked en perim)
 
   ;; The user's settings come back FIRST so nothing below can skip them,
   ;; then the undo group is closed - or the next U would swallow the
@@ -1065,50 +1066,44 @@
             kill (nth 2 res))
       (lg:report res)))
 
-  ;; no perimeter, no question: without one there is no telling which of
-  ;; the highlighted lines was the pool, so nothing is erased
+  ;; no perimeter, nothing to erase: without one there is no telling
+  ;; which of the highlighted lines was the pool
   (if vts
     (progn
-      (setq ask (strcat "Erase the " (itoa (length kill))
-                        " highlighted object" (lg:s (length kill))
-                        " LINGUTTER did not keep?"))
-      (if (not (cal:askyn ask "No" nil))
-        (princ "\nLINGUTTER: nothing erased - the drawing is as you left it.")
+      (setvar "CMDECHO" 0)
+      (setvar "OSMODE" 0)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
         (progn
-          (setvar "CMDECHO" 0)
-          (setvar "OSMODE" 0)
-          ;; only when undo is recording - _Begin in a drawing with UNDO
-          ;; off (bit 1 of UNDOCTL clear) errors out of the command
-          (if (= 1 (logand 1 (getvar "UNDOCTL")))
-            (progn
-              (command "_.UNDO" "_Begin")
-              (setq undo-open T)))
-          ;; entdel refuses an entity on a locked layer, so open the ones
-          ;; this erase has to reach and shut them again afterwards
-          (setq locked (lg:unlock (lg:kill-layers kill)))
-          (foreach en kill (if (entget en) (entdel en)))
-          (setvar "CLAYER" (cal:ensure-layer lg:*poollayer* lg:*poolcolor*))
-          (setq perim (lg:draw-perim vts lg:*poollayer*))
-          (lg:relock locked)
-          (setq locked nil)
-          ;; closed only if one was opened: with undo control off there
-          ;; is no group of this command's to end, and closing one it
-          ;; never opened is an error out of the command -- the same
-          ;; guard the handler above already makes
-          (if undo-open
-            (progn
-              (command "_.UNDO" "_End")
-              (setq undo-open nil)))
-          (princ (strcat "\nLINGUTTER: " (itoa (length kill))
-                         " highlighted object" (lg:s (length kill))
-                         " erased; the perimeter is one closed polyline"
-                         " on layer " lg:*poollayer*
-                         ".  Nothing outside the highlight was touched."))
-          ;; the sysvars go back BEFORE PADDLE runs: it is a command in its
-          ;; own right and must start from the user's settings, not this
-          ;; one's zeroed OSMODE
-          (cal:sysrestore)
-          (lg:paddle perim)))))
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
+      ;; entdel refuses an entity on a locked layer, so open the ones
+      ;; this erase has to reach and shut them again afterwards
+      (setq locked (lg:unlock (lg:kill-layers kill)))
+      (foreach en kill (if (entget en) (entdel en)))
+      (setvar "CLAYER" (cal:ensure-layer lg:*poollayer* lg:*poolcolor*))
+      (setq perim (lg:draw-perim vts lg:*poollayer*))
+      (lg:relock locked)
+      (setq locked nil)
+      ;; closed only if one was opened: with undo control off there
+      ;; is no group of this command's to end, and closing one it
+      ;; never opened is an error out of the command -- the same
+      ;; guard the handler above already makes
+      (if undo-open
+        (progn
+          (command "_.UNDO" "_End")
+          (setq undo-open nil)))
+      (princ (strcat "\nLINGUTTER: " (itoa (length kill))
+                     " highlighted object" (lg:s (length kill))
+                     " erased; the perimeter is one closed polyline"
+                     " on layer " lg:*poollayer*
+                     ".  Nothing outside the highlight was touched."))
+      ;; the sysvars go back BEFORE PADDLE runs: it is a command in its
+      ;; own right and must start from the user's settings, not this
+      ;; one's zeroed OSMODE
+      (cal:sysrestore)
+      (lg:paddle perim)))
 
   (cal:sysrestore)
   (if lzd:end (lzd:end "LINGUTTER"))

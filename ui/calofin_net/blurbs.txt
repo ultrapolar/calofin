@@ -30,6 +30,8 @@ CCPRECHECK        Walks the Tech Flow Chart decision tree
 CDCALLOUT         Cross-dimensions from Pt.## to Pt.## by typed number
 CDCREATE          Turns every highlighted line into a cross dimension
 CHECK             General drawing check
+CLEARDIM          Slides dimension text along its own dimension line until it is readable
+CLEARDIMSCAN      Names the dimension text CLEARDIM would move, and moves nothing
 CONSTELLATION     Places points from the distances between them, inside a known box
 CORNERSTP         Corner step layout
 COVERCHECK        Cover check
@@ -40,7 +42,7 @@ DIMARCCHECK       Dim arc endpoint check
 DIMCHECK          Guided, one-at-a-time dimension review
 DIMCONTEND        Chains a seed dimension out to every feature point
 DIMSCAN           Scan drawing for dimensions
-DIMSTAMP          Click a point, stamp feet/inch text; a graded ruler picks the next value
+DIMSTAMP          Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next
 DRONE             Drone cleanup routine
 FITABHD           Fits a typed pool template through surveyed points
 FITABHDCOVER      FITABHD for a cover sheet - skips the bottom question
@@ -67,8 +69,10 @@ LITECOVERSCAN     Cover rules only - skips the dimension audit
 LITELINFINSCAN    Liner rules only - skips the dimension audit
 LITESPACHECKSCAN  Spa rules only - skips the dimension audit
 LOBF              Fits a construction line through points that should be on one line
+MOHAMADDLE        PADDLE's perimeter pads with a size pick first - 24in or 36in
 NORMIESTEP        Normie step layout
 OASIS             Continuous-tangent pool drawn live from envelope and radii
+OLAUTO            Best-fit overlay of a new perimeter on the original, worst error dimensioned
 PADDLE            Paddle perimeter pads
 PERPMARK          Name a survey point, type what it measured: circle, perpendicular, dimension
 PERPPTS           Perpendicular offset points along a line or curve

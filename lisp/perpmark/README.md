@@ -61,10 +61,21 @@ can still be clicked, it just cannot be typed.
    same way. A point that was taped is the mark made at it, so the run
    starts where the tape reached; a point that was NOT taped measures
    zero and the run starts on the wall itself -- which is how a step
-   that dies back into the wall is drawn.
-6. The polyline goes in on the perimeter's own layer and properties,
-   every circle is erased, and every line becomes a `SIDE STANDARD`
-   dimension on layer `DIMENSION`.
+   that dies back into the wall is drawn. The two can be named in
+   either order: the marks say which way round the run goes (below).
+6. **The dimension style**, last, and only when there is a polyline to
+   draw:
+
+   ```
+   Dimension style - STANDARD INCHES or SIDE STANDARD? [STandard/SIde/Back] <STandard>:
+   ```
+
+   `PERPPTS` and `CPERPPTS` ask this in exactly these words -- one
+   question, one vocabulary. A pair of ends with nothing between them is
+   reported instead of being asked a question it would throw away.
+7. The polyline goes in on the perimeter's own layer and properties,
+   every circle is erased, and every line becomes a dimension in that
+   style on layer `DIMENSION`.
 
 ### How the direction is found
 
@@ -83,19 +94,55 @@ measured from and it does not have to be the true centroid.
 Marks are kept with their STATION -- how far along the perimeter,
 measured from its start, the base point sits -- so the polyline runs
 along the wall in the order the wall does, whatever order the points
-were named in. On a closed perimeter the run goes forward from the start
-station to the end station, wrapping past the polyline's own seam if
-that is the way round the two ends point. On an open one it is the
-stretch between them, read from the start toward the end, so a run named
-right-to-left comes out right-to-left.
+were named in. On an open perimeter it is the stretch between the two
+ends, read from the start toward the end, so a run named right-to-left
+comes out right-to-left.
 
 What decides whether a run end IS one of the marks is the survey point's
 own identity, never how close the two landed. That is the whole reason
 the pick is a point rather than a place: two shots a quarter inch apart
 are still two shots, and the sheet says which one the run starts at.
 
-Marks outside the two ends keep their dimension -- the measurement was
-still taken -- but stay off the polyline.
+### Which way round a closed wall, and why it is not asked
+
+Two ends cut a closed perimeter into two arcs, and the run is one of
+them. Which one is decided by the MARKS, not by the order the two ends
+were named: every mark sits on exactly one arc, so the arc carrying more
+of them is the run that was measured. Naming the ends the other way
+round therefore gives the same run, read from whichever end was named
+first.
+
+> Before v1.2 the run went forward from the start station whatever was
+> on the way, so naming the ends the other way round sent it round the
+> empty side of the pool and handed back a two-point line straight
+> across, with every measurement left off it.
+
+The one case the marks cannot settle is a genuine tie -- the same number
+on each arc -- and that is the only time the question is put:
+
+```
+The run's two ends cut the wall in half and each half carries the same
+number of marks, so which way round it goes is yours to say.
+Click a spot the run passes through [Back]:
+```
+
+One click, on a spot the run passes through. Like the centre click it is
+a DIRECTION and not a datum: it is projected onto the wall only to ask
+which arc it fell on. A tie needs at least two marks to be a tie, and
+marks that ARE the two ends do not vote (an end sits on both arcs), so
+an ordinary run never sees this question.
+
+### A mark the run does not reach
+
+It is NAMED, before the drawing is finished:
+
+```
+Pt.7 and Pt.9 sit outside the run - still dimensioned, but not joined.
+```
+
+and it keeps its dimension, because the measurement was still taken. A
+partial run is a perfectly ordinary thing to want; a measurement going
+quietly missing is not.
 
 ## Install & run
 
@@ -113,7 +160,8 @@ At the top of the file, between the version banner and the first
 | `pm:*markcolor*` | `1` | The ACI that layer is CREATED with, on a drawing that lacks it. A number, not `'auto`: these marks are the measurement record and are meant to be seen, not to recede |
 | `pm:*dimlayer*` | `"DIMENSION"` | Where the dimensions land |
 | `pm:*dimcolor*` | `7` | The ACI that layer is created with |
-| `pm:*dimstyle*` | `"SIDE STANDARD"` | The dimension style to draw in. A drawing without it keeps its current style and is told so |
+| `pm:*dimstyle-std*` | `"STANDARD INCHES"` | The style the `STandard` answer draws in -- the Enter answer. The question is built from this name, so renaming it renames what the prompt offers; the KEYWORD stays `STandard`, which is the vocabulary all three perp tools share |
+| `pm:*dimstyle-side*` | `"SIDE STANDARD"` | The same for the `SIde` answer. A drawing that has neither style keeps its current one and is told so |
 | `pm:*point-block*` | `"ab_pt"` | The block whose INSERTs are survey points wherever they sit. Shared with `BPCALLOUT`, `CDCALLOUT`, `ABFIND` and `LHD` -- change it in all of them or the tools disagree about what the drawing holds |
 | `pm:*point-layer*` | `"POINTS"` | The layer whose POINTs and INSERTs are survey points whatever block they are |
 | `pm:*pt-tag*` | `"number"` | The attribute tag that names a point. A block without it lends its first attribute that reads as a number instead |
@@ -124,6 +172,11 @@ At the top of the file, between the version banner and the first
 
 ## Notes & limitations
 
+- **A run cannot pass through marks on both sides of its own ends.**
+  Two ends cut the wall in two, so if marks fall on each side no run
+  between those ends can reach them all -- the arc with more of them is
+  taken and the rest are named. If that is not what you meant, the ends
+  are what to change.
 - **The centre click has to be unambiguously inside.** Which way a mark
   runs is decided by the sign of one dot product, so on a deeply
   notched shape -- a narrow L, a keyhole -- a centre clicked in one
@@ -163,6 +216,8 @@ Runtime tests: the real file is loaded into `tests/lispvm.py` and
 the right point, a typed number finding it, the five spellings meeting
 in the middle, a bad number and a duplicate number re-asked), the
 projection, the direction, the stations, the wall order, the seam wrap,
-the run ends deciding by identity, the five `Back` steps and the session
+the ends being nameable in either order, the tie click and what it
+leaves out, the run ends deciding by identity, the dimension style with
+both its answers and its Enter, the seven `Back` steps and the session
 the command hands back are all measured against the file that actually
 ships.

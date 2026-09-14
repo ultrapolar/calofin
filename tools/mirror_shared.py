@@ -392,6 +392,45 @@ TOOLS = {
         # acc:run tests for it by name
         'symbols': {'ACC-BACK': 'CAL-BACK'},
     },
+    # OLAUTO was written against the library from the start (STANDARDS
+    # section 6): its ask helper, the sysvar and dim-style pairs,
+    # ensure-layer and the vector set are the CALOFIN-LIB bodies under
+    # ola:, so all of that comes back out here.  What stays local is the
+    # tool: the arc-length walk, the phase search, the ICP polish and
+    # the error profile.
+    #
+    # ola:circumcenter is NOT in here, for the same reason
+    # acc:circumcenter is not: it is ABHD's 2-element form, and the
+    # library's carries p1's Z through as a third ordinate, so on the
+    # 2D points ola:arc-geom hands it the library would return
+    # (x y nil) -- which the (angle ...) and (polar ...) right after it
+    # cannot read.  tests/test_cal_parity.py is what says so.
+    'OLAUTO': {
+        'src': 'lisp/olauto/OLAUTO.lsp',
+        'swap': {
+            'ola:askkw': 'cal:askkw',
+            'ola:syssave': 'cal:syssave',
+            'ola:sysrestore': 'cal:sysrestore',
+            'ola:dimstysave': 'cal:dimstysave',
+            'ola:dimstyrestore': 'cal:dimstyrestore',
+            'ola:ensure-layer': 'cal:ensure-layer',
+            'ola:2d': 'cal:2d', 'ola:dist': 'cal:dist',
+            'ola:v-': 'cal:v-', 'ola:v+': 'cal:v+', 'ola:v*': 'cal:v*',
+            'ola:dot': 'cal:dot', 'ola:vlen': 'cal:vlen',
+            'ola:unit': 'cal:unit', 'ola:angnorm': 'cal:angnorm',
+            'ola:tan': 'cal:tan',
+        },
+        'drop_globals': ['ola:*sysold*', 'ola:*odstyle*'],
+        # ola:askkw is the STANDARDS section 4 REFERENCE helper: it takes
+        # the hidden-keyword list third and derives the bracket from the
+        # keywords.  cal:askkw is the older shape and takes the bracket
+        # there, so the call sites are translated rather than renamed.
+        'askkw_hidden': True,
+        # ...and the Back sentinel travels with the helper, because
+        # ola:run tests for it by name.  Miss this and Back silently
+        # stops working in the grouped build while every check passes.
+        'symbols': {'OLA-BACK': 'CAL-BACK'},
+    },
     # ABLOBF is LHD's OPEN half forked onto ABHD's survey classifier, so
     # it takes the same helpers from the library that LHD does -- the
     # vector set, the angle pair, ceil/nthcdr/sublist, dedupe, pad,
@@ -1185,6 +1224,19 @@ TOOLS = {
         },
         'drop_globals': [],
     },
+    # MOHAMADDLE ports PADDLE's own 2D vector kit under its own prefix
+    # (every lisp/ tool has to load alone), so the same eight names come
+    # out here for the same reason.
+    'MOHAMADDLE': {
+        'src': 'lisp/mohamaddle/MOHAMADDLE.lsp',
+        'swap': {
+            'mohamaddle--sub': 'cal:v-', 'mohamaddle--add': 'cal:v+',
+            'mohamaddle--scl': 'cal:v*', 'mohamaddle--len': 'cal:vlen',
+            'mohamaddle--unit': 'cal:unit', 'mohamaddle--cross': 'cal:cross',
+            'mohamaddle--dot': 'cal:dot', 'mohamaddle--2d': 'cal:2d',
+        },
+        'drop_globals': [],
+    },
     # CORNERSTP's one generic helper is the layer gate.  REAL DRIFT in
     # the hand twin: it dropped cs-layerok but renamed only three of
     # the four call sites -- cs-dimv still calls cs-layerok, which
@@ -1514,6 +1566,47 @@ TOOLS = {
             '(cal:block-number en)':
                 ['(cal:block-number en bp:*pt-tag*)'],
         },
+    },
+    # Written against the library from the start, so the swap is a
+    # straight rename: the 2-D vector set, the two angle helpers the
+    # dimension arc is walked with, cal:plural (whose number-first shape
+    # the report was worded around rather than the other way up), and
+    # the sysvar pair.  cd:sysvars stays behind to supply the list
+    # cal:syssave takes as an argument -- which is why there is no
+    # expand rule here where PERPMARK needs one.  cd:on-track,
+    # cd:layer-locked-p and the whole separating-axis kit are this
+    # tool's own: the library has no convex-polygon overlap test, and
+    # cal:layer-usable-p asks a different question (frozen and off as
+    # well as locked, which is not what entmod refuses).
+    'CLEARDIM': {
+        'src': 'lisp/cleardim/CLEARDIM.lsp',
+        'swap': {
+            'cd:2d': 'cal:2d', 'cd:v-': 'cal:v-', 'cd:v+': 'cal:v+',
+            'cd:v*': 'cal:v*', 'cd:dot': 'cal:dot', 'cd:perp': 'cal:perp',
+            'cd:vlen': 'cal:vlen', 'cd:unit': 'cal:unit',
+            'cd:mid': 'cal:mid',
+            'cd:angnorm': 'cal:angnorm',
+            'cd:signed-dang': 'cal:signed-dang',
+            'cd:plural': 'cal:plural',
+            'cd:syssave': 'cal:syssave',
+            'cd:sysrestore': 'cal:sysrestore',
+        },
+        'drop_globals': [],
+        # the heading over a section the swap empties: what is left under
+        # it is the one helper that is about a dimension rather than a
+        # vector, and "strictly 2-element results" was describing the
+        # nine the library now supplies
+        'replace': [(
+            ";;; -------------------- 2-D vector helpers ---------------"
+            "--------------\n"
+            ";;; Strictly 2-element results; inputs may be 2- or "
+            "3-element.\n",
+            ";;; -------------------- 2-D vector helpers ---------------"
+            "--------------\n"
+            ";;; The set itself is CALOFIN-LIB.lsp's, under cal:.  What is"
+            " left\n"
+            ";;; here is the one that is about a dimension rather than a"
+            " vector.\n")],
     },
 }
 

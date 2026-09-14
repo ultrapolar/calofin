@@ -58,10 +58,18 @@
 ;;;      named the same way.  A point that was taped is the mark made at
 ;;;      it, so the run starts where the tape reached; a point that was
 ;;;      NOT taped measures zero and the run starts on the wall itself,
-;;;      which is how a step that dies back into the wall is drawn.
-;;;   6. The polyline goes in on the perimeter's own layer and properties,
-;;;      every circle is erased, and every line becomes a
-;;;      "SIDE STANDARD" dimension on layer "DIMENSION".
+;;;      which is how a step that dies back into the wall is drawn.  The
+;;;      two may be named in either order -- the marks say which way
+;;;      round the run goes (below) -- and a tie, and only a tie, asks
+;;;      for one click to settle it.
+;;;   6. Last, the dimension style -- STANDARD INCHES or SIDE STANDARD,
+;;;      the question PERPPTS and CPERPPTS ask in the same words.  It is
+;;;      put only when there is a polyline to draw, so a pair of ends
+;;;      with nothing between them is reported instead of being asked a
+;;;      question it would throw away.
+;;;   7. The polyline goes in on the perimeter's own layer and properties,
+;;;      every circle is erased, and every line becomes a dimension in
+;;;      that style on layer "DIMENSION".
 ;;;
 ;;; How the direction is found
 ;;;   Each mark's base point is the point of the perimeter closest to the
@@ -81,14 +89,37 @@
 ;;;   Marks are kept with their STATION -- how far along the perimeter,
 ;;;   measured from its start, the base point sits -- so the polyline runs
 ;;;   along the wall in the order the wall does, whatever order the points
-;;;   were named in.  On a closed perimeter the run goes forward from
-;;;   the start station to the end station, wrapping past the polyline's
-;;;   own seam if that is the way round the two ends point.
+;;;   were named in.
 ;;;
 ;;;   What decides whether a run end IS one of the marks is the survey
 ;;;   point's own identity, never how close the two landed.  That is the
 ;;;   whole reason the pick is a point rather than a place: two shots a
 ;;;   quarter inch apart are still two shots, and the sheet says which.
+;;;
+;;; Which way round a closed wall -- and why it is not asked
+;;;   Two ends cut a closed perimeter into two arcs, and the run is one
+;;;   of them.  Which one is decided by the MARKS, not by the order the
+;;;   two ends were named: every mark sits on exactly one arc, so the arc
+;;;   carrying more of them is the run that was measured.  Naming the
+;;;   ends the other way round therefore gives the same run, read from
+;;;   whichever end was named first.
+;;;
+;;;   It used to go forward from the start station whatever was on the
+;;;   way, so naming the ends the other way round sent the run round the
+;;;   empty side of the pool and handed back a two-point line straight
+;;;   across it, with every measurement left off.
+;;;
+;;;   The one case the marks cannot settle is a genuine tie -- the same
+;;;   number on each arc -- and that is the only time the question is
+;;;   put: one click on a spot the run passes through, which is a
+;;;   direction like the centre click and not a datum.  A tie needs at
+;;;   least two marks to be a tie, and marks that ARE the two ends do not
+;;;   vote (an end sits on both arcs), so an ordinary run never sees it.
+;;;
+;;;   A mark the run does not reach is NAMED before the drawing is done
+;;;   -- "Pt.7 and Pt.9 sit outside the run" -- and is still marked and
+;;;   still dimensioned.  A measurement is the one thing that may never
+;;;   go quietly missing.
 ;;;
 ;;; Properties
 ;;;   * Circles and lines land on layer "PERPMARK" (created if missing).
@@ -96,7 +127,7 @@
 ;;;     or let step 5 clear them.
 ;;;   * The joined polyline takes the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the perimeter it was measured off.
-;;;   * Dimensions go on layer "DIMENSION" in the "SIDE STANDARD" style
+;;;   * Dimensions go on layer "DIMENSION" in the style picked at step 6
 ;;;     when the drawing has it; otherwise the current style is used and
 ;;;     a note is printed.
 ;;;
@@ -119,7 +150,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.1")
+(setq *perpmark-version* "v1.3")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -139,9 +170,14 @@
 (setq pm:*dimlayer* "DIMENSION")
 (setq pm:*dimcolor* 7)
 
-;; Dimension style those dimensions are drawn in.  A drawing without it
-;; keeps its current style and is told so.
-(setq pm:*dimstyle* "SIDE STANDARD")
+;; The two dimension styles step 6 offers, and their order in the
+;; question: STandard is the Enter answer.  PERPPTS and CPERPPTS ask the
+;; same question in the same words, so a shop that renames a style
+;; renames it here and the prompt follows -- the two KEYWORDS stay
+;; STandard and SIde, which is the vocabulary all three share.  A
+;; drawing that has neither keeps its current style and is told so.
+(setq pm:*dimstyle-std*  "STANDARD INCHES")
+(setq pm:*dimstyle-side* "SIDE STANDARD")
 
 ;; What counts as a survey point.  The classifier is the one BPCALLOUT,
 ;; CDCALLOUT, ABFIND and LHD share: change it in all of them or the
@@ -712,25 +748,94 @@
       (while (>= d tot) (setq d (- d tot)))
       d)))
 
-;; The marks between two stations, in the order the wall runs.  s0 and s1
-;; are the run's ends; on a closed perimeter the run goes FORWARD from s0
-;; and wraps past the seam when that is the way the two picks point, on an
-;; open one it is simply the stretch between them, read from s0 toward s1.
-(defun pm:span (marks s0 s1 closed tot / out m k span)
+;; The marks the run passes through, in the order the wall runs.
+;;
+;; s0 and s1 are the run's ends.  On an OPEN perimeter there is one
+;; stretch between them and that is the run, read from s0 toward s1.  On
+;; a CLOSED one there are two arcs, and BACK says which: nil walks
+;; forward from s0 (wrapping past the polyline's own seam if that is the
+;; way the ends point), T walks the other way round.  Either way the run
+;; is handed back starting at s0, because that is the end the drafter
+;; named first.
+(defun pm:span (marks s0 s1 closed tot back / out m k span)
   (setq out '())
-  (if closed
-    (progn
-      (setq span (pm:wrap (- s1 s0) tot))
-      (foreach m marks
-        (setq k (pm:wrap (- (pm:m-station m) s0) tot))
-        (if (<= k (+ span pm:*fuzz*)) (setq out (cons (cons k m) out)))))
-    (foreach m marks
-      (setq k (- (pm:m-station m) s0))
-      (if (< s1 s0) (setq k (- k)))
-      (if (and (>= k (- pm:*fuzz*))
-               (<= k (+ (abs (- s1 s0)) pm:*fuzz*)))
-        (setq out (cons (cons k m) out)))))
+  (cond
+    ((and closed back)
+     ;; the far arc: how far each mark sits FORWARD of s1, turned round
+     ;; so the run still reads from s0
+     (setq span (pm:wrap (- s0 s1) tot))
+     (foreach m marks
+       (setq k (pm:wrap (- (pm:m-station m) s1) tot))
+       (if (<= k (+ span pm:*fuzz*))
+         (setq out (cons (cons (- span k) m) out)))))
+    (closed
+     (setq span (pm:wrap (- s1 s0) tot))
+     (foreach m marks
+       (setq k (pm:wrap (- (pm:m-station m) s0) tot))
+       (if (<= k (+ span pm:*fuzz*)) (setq out (cons (cons k m) out)))))
+    (t
+     (foreach m marks
+       (setq k (- (pm:m-station m) s0))
+       (if (< s1 s0) (setq k (- k)))
+       (if (and (>= k (- pm:*fuzz*))
+                (<= k (+ (abs (- s1 s0)) pm:*fuzz*)))
+         (setq out (cons (cons k m) out))))))
   (mapcar 'cdr (pm:sortkey out)))
+
+;; Which way round a CLOSED perimeter the run goes, decided by the MARKS
+;; rather than by the order the two ends happened to be named.
+;;
+;; Two ends cut a closed wall into two arcs and every mark sits on
+;; exactly one of them, so the arc carrying more of them is the run the
+;; drafter measured: naming the ends the other way round used to send the
+;; run the other way and quietly leave every mark off it.  Returns nil
+;; for the near arc (forward from s0), T for the far one, and 'ASK when
+;; the two arcs hold the same number and nothing here can choose.
+;;
+;; A mark AT one of the ends is the end, not a vote: it sits on both
+;; arcs and would only ever pad the count.
+(defun pm:whichway (marks s0 s1 tot m0 m1 / near far span m k)
+  (setq span (pm:wrap (- s1 s0) tot) near 0 far 0)
+  (foreach m marks
+    (if (not (or (eq (pm:m-ent m) (pm:m-ent m0))
+                 (eq (pm:m-ent m) (pm:m-ent m1))))
+      (progn
+        (setq k (pm:wrap (- (pm:m-station m) s0) tot))
+        (if (<= k (+ span pm:*fuzz*))
+          (setq near (1+ near))
+          (setq far (1+ far))))))
+  (cond ((> near far) nil)
+        ((> far near) T)
+        ;; nothing to place: every mark IS one of the two ends, so both
+        ;; arcs give the same two-point run and there is nothing to ask
+        ((= 0 near) nil)
+        (t 'ASK)))
+
+;; T when station ST sits on the FAR arc -- the answer the middle click
+;; gives when the marks could not.
+(defun pm:far-side-p (st s0 s1 tot)
+  (> (pm:wrap (- st s0) tot) (+ (pm:wrap (- s1 s0) tot) pm:*fuzz*)))
+
+;; The marks the run does not pass through, named in the order they were
+;; taped, so a measurement is never quietly left off the drawing.
+(defun pm:left-out (marks run / out m r hit)
+  (setq out '())
+  (foreach m (reverse marks)
+    (setq hit nil)
+    (foreach r run
+      (if (eq (pm:m-ent r) (pm:m-ent m)) (setq hit T)))
+    (if (not hit) (setq out (cons (pm:ptname (pm:m-name m)) out))))
+  (reverse out))
+
+;; "Pt.7", "Pt.7 and Pt.9", "Pt.7, Pt.9 and Pt.12".
+(defun pm:andjoin (l last / n i out k)
+  (setq n (length l) i 0 out "")
+  (foreach k l
+    (setq i (1+ i)
+          out (cond ((= i 1) k)
+                    ((and last (= i n)) (strcat out " and " k))
+                    (t (strcat out ", " k)))))
+  out)
 
 ;; What a run end names.  A point that was taped is the mark that was
 ;; made at it, so the run starts where the tape reached; a point that
@@ -779,15 +884,16 @@
       (setq out (cons p out))))
   (reverse out))
 
-;; Every mark that measured something, dimensioned where its line was.
-;; Returns how many went in.  The dimension style is restored by the
-;; caller -- it is one of the settings the *error* handler owes the user.
-(defun pm:dimension (marks / n m)
+;; Every mark that measured something, dimensioned where its line was,
+;; in the STYLE the drafter picked.  Returns how many went in.  The
+;; style is restored by the caller -- it is one of the settings the
+;; *error* handler owes the user.
+(defun pm:dimension (marks style / n m)
   (setq n 0)
   (setvar "CLAYER" (cal:ensure-layer pm:*dimlayer* pm:*dimcolor*))
-  (if (tblsearch "DIMSTYLE" pm:*dimstyle*)
-    (command "_.-DIMSTYLE" "_Restore" pm:*dimstyle*)
-    (princ (strcat "\nDimension style \"" pm:*dimstyle*
+  (if (tblsearch "DIMSTYLE" style)
+    (command "_.-DIMSTYLE" "_Restore" style)
+    (princ (strcat "\nDimension style \"" style
                    "\" is not in this drawing - using the current style"
                    " instead.")))
   (foreach m (reverse marks)
@@ -816,7 +922,7 @@
 (defun c:PERPMARK (/ *error* undo-open
                      sel en ed segs tot closed ctr pick cand cands loc
                      base tg nrm d ans marks stage done pts run s0 s1
-                     m0 m1 lay odim ndims npts m)
+                     m0 m1 way wayasked miss sty lay odim ndims npts m)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -995,38 +1101,91 @@
          ((eq cand 'CAL-BACK) (setq stage 5))
          (t
           (setq m1 (pm:runend en segs marks cand))
-          (if (null m1)
-            (princ (strcat "\nThe perimeter cannot be read under "
-                           (pm:ptname (pm:cd-nm cand))
-                           " - pick a point nearer the wall."))
-            (progn
-              ;; --- the run, in the order the wall goes ----------------
-              (setq s0  (pm:m-station m0)
-                    s1  (pm:m-station m1)
-                    run (pm:span (append (list m0 m1) marks) s0 s1 closed tot)
-                    pts (pm:dedupe (mapcar 'pm:m-offs run)))
-              (if (< (length pts) 2)
-                (progn
-                  (princ (strcat "\nThose two picks enclose fewer than two"
-                                 " marks, so there is no polyline to draw"
-                                 " - nothing was erased."))
-                  (setq done T))
-                (progn
-                  (pm:pline pts ed)
-                  (setq npts (length pts))
-                  ;; --- the circles go, the lines become dimensions ----
-                  (foreach m marks
-                    (pm:erase (pm:m-circle m))
-                    (pm:erase (pm:m-line m)))
-                  (setq ndims (pm:dimension marks))
-                  (princ (strcat "\nDone: a " (itoa npts)
-                                 "-point polyline on layer \""
-                                 (cdr (assoc 8 ed)) "\", "
-                                 (itoa (length marks))
-                                 " circle(s) erased and " (itoa ndims)
-                                 " dimension(s) on layer \"" pm:*dimlayer*
-                                 "\"."))
-                  (setq done T))))))))))
+          (cond
+            ((null m1)
+             (princ (strcat "\nThe perimeter cannot be read under "
+                            (pm:ptname (pm:cd-nm cand))
+                            " - pick a point nearer the wall.")))
+            (t
+             (setq s0 (pm:m-station m0)
+                   s1 (pm:m-station m1))
+             ;; which way round: the marks decide it wherever they can,
+             ;; so the two ends can be named in either order
+             (setq way (if closed
+                         (pm:whichway marks s0 s1 tot m0 m1)
+                         nil))
+             ;; the style question sits behind whichever of these two was
+             ;; the last one actually put (STANDARDS section 3: a chain
+             ;; with a conditional step carries its direction)
+             (setq wayasked (eq way 'ASK))
+             (if wayasked (setq stage 7) (setq stage 8)))))))
+
+      ;; --- 7. the two arcs hold the same number of marks, so only the
+      ;;        drafter can say which way the run passes ---------------
+      ((= stage 7)
+       (princ (strcat "\nThe run's two ends cut the wall in half and each"
+                      " half carries the same number of marks, so which"
+                      " way round it goes is yours to say."))
+       (setq pick (pm:askpt "Click a spot the run passes through" T))
+       (cond
+         ((eq pick 'CAL-BACK) (setq stage 6))
+         (t
+          (setq loc (pm:locate en segs (cal:2d (trans pick 1 0))))
+          (if (null loc)
+            (princ (strcat "\nThe perimeter cannot be read there - click"
+                           " nearer the wall, on the side the run runs."))
+            (setq way   (pm:far-side-p (caddr loc) s0 s1 tot)
+                  stage 8)))))
+
+      ;; --- 8. which dimension style, the question PERPPTS and CPERPPTS
+      ;;        ask in the same words.  The run is worked out FIRST, so a
+      ;;        pair of ends with nothing between them is reported
+      ;;        instead of being asked a question it would throw away ---
+      ((= stage 8)
+       (setq run  (pm:span (append (list m0 m1) marks) s0 s1 closed tot way)
+             pts  (pm:dedupe (mapcar 'pm:m-offs run))
+             miss (pm:left-out marks run))
+       (cond
+         ((< (length pts) 2)
+          (princ (strcat "\nThose two ends enclose fewer than two marks,"
+                         " so there is no polyline to draw - nothing was"
+                         " erased."))
+          (setq done T))
+         (t
+          (setq ans (cal:askkw (strcat "Dimension style - " pm:*dimstyle-std*
+                                      " or " pm:*dimstyle-side* "?")
+                              "STandard SIde" "STandard/SIde" "STandard" T))
+          (cond
+            ((eq ans 'CAL-BACK) (setq stage (if wayasked 7 6)))
+            (t (setq sty   (if (= ans "SIde") pm:*dimstyle-side*
+                             pm:*dimstyle-std*)
+                     stage 9))))))
+
+      ;; --- 9. draw it ------------------------------------------------
+      ((= stage 9)
+       (pm:pline pts ed)
+       (setq npts (length pts))
+       ;; --- the circles go, the lines become dimensions ---------------
+       (foreach m marks
+         (pm:erase (pm:m-circle m))
+         (pm:erase (pm:m-line m)))
+       (setq ndims (pm:dimension marks sty))
+       ;; a measurement left off the polyline is SAID, never dropped
+       ;; quietly: it is still marked and still dimensioned, and the
+       ;; drafter is the one who decides whether that is what they meant
+       (if miss
+         (princ (strcat "\n" (pm:andjoin miss T)
+                        (if (= 1 (length miss)) " sits" " sit")
+                        " outside the run - still dimensioned, but not"
+                        " joined.")))
+       (princ (strcat "\nDone: a " (itoa npts)
+                      "-point polyline on layer \""
+                      (cdr (assoc 8 ed)) "\", "
+                      (itoa (length marks))
+                      " circle(s) erased and " (itoa ndims)
+                      " dimension(s) on layer \"" pm:*dimlayer*
+                      "\" in \"" sty "\"."))
+       (setq done T))))
 
   ;; only when pm:dimension moved it: a run answered No never touched the
   ;; style, and restoring it to itself is a command line nobody asked for
