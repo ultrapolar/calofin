@@ -59,6 +59,11 @@ and SPLINE, open only. Differences from PERPPTS:
 * The width question is asked of every curve the command draws, as it
   is in PERPPTS: right after the arc polyline appears and before the
   repeat question (there is no join question in between here).
+* **A boundary can cap the offsets.** After the direction click,
+  `Select a boundary the offsets may not cross [None] <None>` takes any
+  curve already in the drawing -- a property line, a house wall, a deck
+  edge -- and makes it the maximum for every offset in every round.
+  Enter takes `None` and nothing is capped.
 * The joined result is always an arc polyline (no
   Straight/Arcs/Mixed question), each arc matched to the curve's
   tangent at its start -- a smooth LWPOLYLINE through every offset
@@ -82,6 +87,32 @@ and SPLINE, open only. Differences from PERPPTS:
 | `TUTORIALPERPPTS` | `tutorial_perp_points.lsp` | `[Checks/Demo/Both] <Both>`: the rules up front, a narrated worked example, or both; ends with `Keep the demo drawing? [Keep/Erase] <Keep>` |
 | `TUTORIALCPERPPTS` | `tutorial_cperp_points.lsp` | The same, for CPERPPTS |
 
+### The boundary (CPERPPTS)
+
+The cap is measured **per point**, not once for the run: a ray is cast
+from each base point along that point's own offset normal, and the
+nearest crossing ahead of it is that point's maximum. A boundary at an
+angle to the curve is therefore nearer at one end than the other, which
+one number could never say.
+
+| At the length prompt | What happens |
+| --- | --- |
+| a cap exists | the prompt names it -- `Length for point 3 of 5, boundary at 18.375 <12> [Back/Max]` |
+| `M` (Max) | takes the boundary exactly; offered only where there is one ahead |
+| a longer length | is brought back to the boundary and said so; the number **typed** is still what Enter repeats at the next point, since the tape has not changed -- only how far this one point may reach |
+| no crossing ahead | that point has no maximum and the prompt is the one it always was -- a boundary covering part of a run caps only the part it covers |
+
+Two things the cap is not:
+
+* It holds the measured **points** inside the boundary. The arcs
+  between them are fitted to the curve's tangents, so where a boundary
+  bends away between two points the arc joining them can still bow past
+  it -- the answer is a point there, not a different arc.
+* It is not re-applied by the width correction, which scales the whole
+  curve about the midpoint of its ends. That is the drafter's own
+  measurement and is not second-guessed, but a correction that carries
+  points past the boundary reports how many.
+
 ## Assumptions
 
 * Dimensions go on the `DIMENSIONS` layer (created if missing) in the
@@ -92,6 +123,9 @@ and SPLINE, open only. Differences from PERPPTS:
   and linetype scale of the object they were offset from.
 * CPERPPTS needs an OPEN curve -- a closed loop has no two ends to
   span a width between.
+* A boundary is only read, never moved or changed, and the ray cast at
+  it lives and dies inside the probe -- nothing is left in the drawing.
+  The curve being offset from cannot be its own boundary.
 * There are no tunable globals; the 2"-style constants of other tools
   have no counterpart here because every length is typed per point.
 

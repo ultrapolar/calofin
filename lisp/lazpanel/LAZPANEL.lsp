@@ -106,7 +106,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.23")
+(setq *lazpanel-version* "v3.24")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -308,6 +308,7 @@
     ("LINGUTTER"        "Gut to perimeter, then pads")
     ("LINGUTTERSCAN"    "Gut scan, changes nothing")
     ("PADDLE"           "Paddle pads")
+    ("PERPMARK"         "Measured wall offsets")
     ("PERPPTS"          "Perpendicular points")
     ("POINTRENAMER"     "Renumber points in order")
     ("POOL"             "Pool layout")
@@ -393,6 +394,7 @@
       "AUTOBEAD"
       "PERPPTS"
       "CPERPPTS"
+      "PERPMARK"
       )
      ("Converters"
       ("Convert"
@@ -563,6 +565,7 @@
       "POINTRENAMER"
       "PERPPTS"
       "CPERPPTS"
+      "PERPMARK"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"

@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 65 files, 189 commands:
+;;; 66 files, 191 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -31,17 +31,17 @@
 ;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER
 ;;;   LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF
 ;;;   LOBFVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  PADDLE
-;;;   PADDLEVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL
-;;;   POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER
-;;;   SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV
-;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE
-;;;   SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER
-;;;   STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK
-;;;   TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK
-;;;   TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA
-;;;   TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER
-;;;   VSRECONV  WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER
-;;;   XFTRECONV  XYPLOT  XYPLOTVER
+;;;   PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER
+;;;   POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE
+;;;   POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV
+;;;   SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN
+;;;   SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER
+;;;   STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
+;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
+;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
+;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE
+;;;   VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV
+;;;   XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -79936,24 +79936,58 @@
 ;;;          FINISH, fixing the order the lengths are entered in;
 ;;;        - the side of the curve the click lands on is the side the
 ;;;          new points are offset toward.
-;;;   4. Enter how many values (points) are required  (>= 2).
-;;;   5. Enter a length for each point, in order START -> FINISH.
+;;;   4. Optionally select a BOUNDARY the offsets may not cross -- a
+;;;      property line, a house wall, a deck edge already drawn.  Enter
+;;;      takes None and nothing is capped.
+;;;   5. Enter how many values (points) are required  (>= 2).
+;;;   6. Enter a length for each point, in order START -> FINISH.
 ;;;      Press Enter to reuse the previous length when it repeats, or
 ;;;      type B (Back) to step back and re-enter the previous point
-;;;      (U, the old keyword, is still accepted).
-;;;   6. Say whether the overall width of the curve just drawn has
+;;;      (U, the old keyword, is still accepted).  With a boundary in
+;;;      force the prompt names the distance to it and takes M (Max) to
+;;;      go exactly that far; a longer length is brought back to it.
+;;;   7. Say whether the overall width of the curve just drawn has
 ;;;      changed -- step 2's question, asked of the course this round
 ;;;      built.  It is resized the same way, half the difference at
 ;;;      each end, before anything is measured off it.
-;;;   7. Choose whether to repeat on the new polyline.  If so, enter a
-;;;      new point count and repeat from step 5 with the new polyline as
+;;;   8. Choose whether to repeat on the new polyline.  If so, enter a
+;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
-;;;   8. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
+;;;
+;;; The boundary
+;;;   A wall is not always free to run as far as the tape says: there
+;;;   is a property line, a house, a deck edge already drawn, and the
+;;;   course being built has to stop at it.  Step 4 takes that object
+;;;   once and turns it into the maximum for every offset in every
+;;;   round -- per point, not one number for the run, because a
+;;;   boundary at an angle to the curve is nearer at one end than at
+;;;   the other.
+;;;
+;;;   At each point a ray is cast from the base point along the offset
+;;;   normal and the nearest crossing ahead of it is that point's
+;;;   maximum.  The length prompt names it, M (Max) takes it exactly,
+;;;   and a longer length is brought back to it and said so -- the
+;;;   number typed is still what Enter repeats at the next point, since
+;;;   the tape has not changed, only where this one point may reach.
+;;;   Where the ray never meets the boundary -- it is behind the offset
+;;;   side, or stops short of that end of the run -- the point has no
+;;;   maximum and the prompt is the one it always was.
+;;;
+;;;   Two things the cap is not.  It holds the measured POINTS inside
+;;;   the boundary, and the arcs between them are fitted to the curve's
+;;;   tangents: where a boundary bends away between two points, the arc
+;;;   joining them can still bow past it, and the answer is a point
+;;;   there rather than a different arc.  And it is not re-applied by
+;;;   the width correction at step 7, which scales the whole curve
+;;;   about the midpoint of its ends: that is the drafter's own
+;;;   measurement and is not second-guessed, but a correction that
+;;;   carries points past the boundary says how many.
 ;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what steps 2 and 6
+;;;   distance straight across, end to end.  That is what steps 2 and 7
 ;;;   ask for -- never the developed length of the CURVE, which on
 ;;;   anything bowed runs further than the width it spans.  Grew and
 ;;;   Shrank take the difference, New takes the width itself, and
@@ -79978,14 +80012,14 @@
 ;;;   little long or a little short leave it that much wide or narrow --
 ;;;   and the next round spaces its base points along it and reads its
 ;;;   tangents, which is the same reason step 2 resizes the selected
-;;;   curve rather than only remembering a number.  Step 6 asks after
+;;;   curve rather than only remembering a number.  Step 7 asks after
 ;;;   the polyline is drawn, because that is when there is a width to
 ;;;   compare against, and before its dimensions are recorded: a round
 ;;;   that corrects its width has its new points moved with the curve,
 ;;;   so each dimension reads the distance the corrected drawing really
 ;;;   has rather than the length that was typed into it.  A resize the
 ;;;   drawing will not take stops step 2 -- nothing is drawn yet, so
-;;;   re-running costs a click -- but at step 6 it leaves the curve at
+;;;   re-running costs a click -- but at step 7 it leaves the curve at
 ;;;   the width it drew and says so, because whole rounds of typed
 ;;;   lengths sit behind it.
 ;;;
@@ -79997,7 +80031,7 @@
 ;;;   tangent underneath it -- so both the offset and its dimension read
 ;;;   perpendicular to the line the point actually sits on, and each
 ;;;   round follows the shape its predecessor took.  A round that
-;;;   corrects its width at step 6 is the one exception: the correction
+;;;   corrects its width at step 7 is the one exception: the correction
 ;;;   moves its new points along the resized curve, and that round's
 ;;;   dimensions read the corrected drawing instead.
 ;;;
@@ -80010,7 +80044,7 @@
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the curve they were offset from.
 ;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
-;;;     and use the dimension style picked in step 8 when the drawing
+;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
@@ -80039,7 +80073,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.13")
+(setq *cperp-version* "v0.14")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -80249,6 +80283,92 @@
   (foreach p pts (setq out (cons (cperp:scale-pt p ctr k) out)))
   (reverse out))
 
+;; --- the boundary a run may not cross --------------------------------
+;; A wall is not always free to run as far as the tape says: there is a
+;; property line, a house, a deck edge already drawn, and the course
+;; being built has to stop at it.  Selecting that object once turns it
+;; into the maximum for EVERY offset -- per point, since a boundary
+;; that runs at an angle to the curve is nearer at one end than the
+;; other, and one number could not say where.
+
+;; How far p may travel along the unit vector u before it meets bnd:
+;; the nearest crossing strictly ahead of p, or nil when the ray never
+;; reaches the boundary -- it lies behind the offset side, or off the
+;; end of the run, and that point simply has no maximum.
+;;
+;; A ray is not something AutoCAD can intersect, so one is drawn.  The
+;; temporary line is made long enough to reach any point of bnd -- the
+;; distance to the nearest point of it plus its own length, which no
+;; point on it can be further off than -- and IntersectWith reports the
+;; crossings.  The line is erased before this returns, whatever came
+;; back, so a run cannot litter the drawing one probe at a time.
+(defun cperp:capdist (bnd p u / near far prev ln rtn lst q d best)
+  ;; the nearest point of bnd may not be readable on a degenerate
+  ;; curve; its own length alone still reaches a boundary that crosses
+  ;; the run, which is the case a cap is wanted for
+  (setq near (vlax-curve-getClosestPointTo bnd (trans p 1 0))
+        far  (+ (if near (distance p (trans near 0 1)) 0.0)
+                (cperp:curvelen bnd)))
+  (if (< far 1e-9) (setq far 1.0))
+  (setq prev (entlast))
+  (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP")
+                 (cons 10 (trans p 1 0))
+                 (cons 11 (trans (list (+ (car p)  (* far (car u)))
+                                       (+ (cadr p) (* far (cadr u)))
+                                       (caddr p))
+                                 1 0))))
+  (setq ln (entlast))
+  ;; entlast is unmoved when entmake was refused, and erasing on that
+  ;; would take whatever WAS last out of the drawing.  No ray, no cap.
+  (if (eq ln prev)
+    nil
+    (progn
+      (setq rtn (vl-catch-all-apply
+                  'vlax-invoke
+                  (list (vlax-ename->vla-object ln) 'IntersectWith
+                        (vlax-ename->vla-object bnd)
+                        ;; acExtendNone: neither object is stretched to
+                        ;; reach the other.  The symbol is AutoCAD's own
+                        ;; and is nil where it was never loaded, so the
+                        ;; number it stands for is spelled out behind it.
+                        (cond (acExtendNone) (0)))))
+      (entdel ln)
+      (if (or (vl-catch-all-error-p rtn) (null rtn))
+        nil
+        (progn
+          ;; a flat list of WCS x y z, one triple per crossing
+          (setq lst rtn best nil)
+          (while (>= (length lst) 3)
+            (setq q (trans (list (car lst) (cadr lst) (caddr lst)) 0 1)
+                  d (+ (* (- (car q)  (car p))  (car u))
+                       (* (- (cadr q) (cadr p)) (cadr u))))
+            (if (and (> d 1e-8) (or (null best) (< d best))) (setq best d))
+            (setq lst (cdddr lst)))
+          best)))))
+
+;; How many of pts sit past bnd, each measured along the ray from the
+;; base it was offset from.  Every length was capped as it was typed,
+;; so this can only come back above zero after a width correction: that
+;; scales the whole curve about the midpoint of its ends and can carry
+;; a point that was sitting ON the boundary out beyond it.  A curve
+;; that quietly crosses a boundary the drafter asked it to respect is
+;; worth a line of its own.
+(defun cperp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
+  (setq i 0 n (min (length bases) (length pts)) out 0)
+  (while (< i n)
+    (setq a  (nth i bases)
+          b  (nth i pts)
+          dx (- (car b)  (car a))
+          dy (- (cadr b) (cadr a))
+          d  (sqrt (+ (* dx dx) (* dy dy))))
+    (if (> d 1e-9)
+      (progn
+        (setq u   (list (/ dx d) (/ dy d))
+              cap (cperp:capdist bnd a u))
+        (if (and cap (> d (+ cap 1e-8))) (setq out (1+ out)))))
+    (setq i (1+ i)))
+  out)
+
 ;; --- command ---------------------------------------------------------
 
 ;; ahead of the command on purpose: the structural tests scan from
@@ -80269,7 +80389,7 @@
                      curCrv curRev n lastN basePts newPts usedBases idxs
                      tangs tg guideEnts total len lastLen i base np again
                      ans iter plt p e seg
-                     wOld wNew mid fac)
+                     wOld wNew mid fac bnd cap over)
 
   ;; erase one temporary entity and forget it
   (defun cperp:kill (e)
@@ -80451,8 +80571,41 @@
   (setq side (if (>= cross 0.0) 1.0 -1.0))
 
   ;; --- prepare the layers ---------------------------------------------
+  ;; PERPPTS-TEMP first: the boundary probe below draws its ray on that
+  ;; layer, and the question that picks the boundary comes after it
   (cal:ensure-layer "PERPPTS-TEMP" 1)
   (cal:ensure-layer "DIMENSIONS"   4)
+
+  ;; --- 4. the boundary the offsets may not cross (optional) -----------
+  ;; Asked after the direction click because the click is what fixes
+  ;; which way the offsets run, and a boundary is only a boundary on the
+  ;; side they run toward.  Enter takes None and the command behaves
+  ;; exactly as it did before there was one.
+  (setq bnd 'RETRY)
+  (while (eq bnd 'RETRY)
+    (initget "None")
+    (setq sel (entsel (strcat "\nSelect a boundary the offsets may not"
+                              " cross [None] <None>: ")))
+    (if lzd:watch (lzd:watch sel))
+    (cond
+      ;; entsel answers nil for Enter AND for a click that hit nothing.
+      ;; ERRNO 7 is what tells them apart, and without asking, a click
+      ;; that missed would quietly drop the boundary the drafter was
+      ;; reaching for and cap nothing all run.
+      ((and (null sel) (= 7 (getvar "ERRNO")))
+       (princ "\nNothing there - click the boundary itself, or press Enter for none."))
+      ((or (null sel) (= (type sel) 'STR)) (setq bnd nil))
+      ((not (cperp:curve-p (car sel)))
+       (princ (strcat "\nA " (cdr (assoc 0 (entget (car sel))))
+                      " cannot be crossed - pick a curve, or press Enter"
+                      " for none.")))
+      ((eq (car sel) crv)
+       (princ (strcat "\nThat is the curve being offset from - a run"
+                      " cannot be bounded by where it starts.")))
+      (t (setq bnd (car sel)))))
+  (if bnd
+    (princ (strcat "\nBoundary set: no offset will cross that "
+                   (cdr (assoc 0 (entget bnd))) ".")))
 
   ;; --- draw an arrow pointing at the START end ------------------------
   ;; The shaft runs back from START along the curve's tangent there, so
@@ -80553,14 +80706,36 @@
                         ": the curve direction cannot be read there."))
          (setq i (1+ i)))
         (t
-         (initget 6 "Back Undo")     ; Undo kept as a hidden synonym
+         ;; How far this point may go before it meets the boundary.
+         ;; Measured per point along its own normal: a boundary running
+         ;; at an angle to the curve is nearer at one end than at the
+         ;; other, and one number could not say where.  nil when the ray
+         ;; never reaches it, and then nothing below changes.
+         (setq cap (if bnd (cperp:capdist bnd base nrm)))
+         ;; Undo kept as a hidden synonym; Max is offered only where
+         ;; there is a boundary ahead of this point to reach
+         (initget 6 (if cap "Back Undo Max" "Back Undo"))
          (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
                                     " of " (itoa n)
+                                    (if cap
+                                      (strcat ", boundary at " (rtos cap))
+                                      "")
                                     (if lastLen
                                       (strcat " <" (rtos lastLen) ">")
                                       "")
-                                    " [Back]: ")))
+                                    (if cap " [Back/Max]: " " [Back]: "))))
          (if (null len) (setq len lastLen))
+         (if (equal len "Max") (setq len cap))
+         ;; The typed number is what Enter repeats, not the capped one:
+         ;; the tape still says what it says, and the next point has its
+         ;; own boundary to meet it against.
+         (if (numberp len) (setq lastLen len))
+         (if (and cap (numberp len) (> len cap))
+           (progn
+             (princ (strcat "\n" (rtos len) " would cross the boundary -"
+                            " point " (itoa (1+ i)) " is capped at "
+                            (rtos cap) "."))
+             (setq len cap)))
          (cond
            ((eq (type len) 'STR)
             (if newPts
@@ -80577,8 +80752,7 @@
            ((null len)
             (princ "\nA length is required."))
            (t
-            (setq lastLen len
-                  np      (list (+ (car base)  (* len (car nrm)))
+            (setq np      (list (+ (car base)  (* len (car nrm)))
                                 (+ (cadr base) (* len (cadr nrm)))
                                 (caddr base)))
             (setq newPts    (cons np newPts)
@@ -80664,7 +80838,22 @@
             (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
                            (rtos (/ (abs (- wNew wOld)) 2.0))
                            (if (> wNew wOld) " added at" " taken off")
-                           " each end.")))
+                           " each end."))
+            ;; every length was capped as it was typed, but this scales
+            ;; the whole curve about the midpoint of its ends and can
+            ;; carry a point that was sitting ON the boundary out past
+            ;; it.  The correction is the drafter's measurement and is
+            ;; not second-guessed -- but a curve that crosses a boundary
+            ;; it was told to respect does not go without saying.
+            (if bnd
+              (progn
+                (setq over (cperp:past-bnd bnd usedBases newPts))
+                (if (> over 0)
+                  (princ (strcat "\n" (itoa over) " of "
+                                 (itoa (length newPts)) " points now sit"
+                                 " past the boundary - the width"
+                                 " correction carried the curve beyond"
+                                 " it."))))))
           (princ (strcat "\nThe new curve could not be resized - it is"
                          " most likely on a locked, frozen or switched-off"
                          " layer.  It is left at the " (rtos wOld)
@@ -81165,7 +81354,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.8")
+(setq *tutcperp-version* "v0.9")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -81364,6 +81553,31 @@
                   "    selection, where nothing is drawn yet; at a round it"
                   "    leaves the curve at the width it drew and says so"
                   ""
+                  "The boundary (optional)"
+                  "  * after the direction click you may select a curve"
+                  "    already in the drawing - a property line, a house"
+                  "    wall, a deck edge - that the offsets may not cross;"
+                  "    Enter takes None and nothing is capped"
+                  "  * the cap is measured PER POINT: a ray from each base"
+                  "    point along its own normal, and the nearest crossing"
+                  "    ahead of it is that point's maximum.  A boundary at"
+                  "    an angle to the run is nearer at one end than the"
+                  "    other, which one number could never say"
+                  "  * the length prompt names the distance to it, M (Max)"
+                  "    takes it exactly, and a longer length is brought back"
+                  "    to it and said so - the number TYPED is still what"
+                  "    Enter repeats at the next point"
+                  "  * where the ray never reaches the boundary that point"
+                  "    has no maximum, so a boundary covering part of a run"
+                  "    caps only the part it covers"
+                  "  * it holds the measured POINTS inside the boundary:"
+                  "    where the boundary bends away between two of them the"
+                  "    arc joining them can still bow past it, and the"
+                  "    answer is a point there.  The width correction is not"
+                  "    re-capped either - it is your measurement - but a"
+                  "    correction that carries points past the boundary says"
+                  "    how many"
+                  ""
                   "Direction click"
                   "  * the curve end nearest your click becomes START; a red"
                   "    arrow marks it for the whole run"
@@ -81541,6 +81755,824 @@
 (if (not *calofin-quiet*)
   (princ (strcat "\ntutorial_cperp_points.lsp " *tutcperp-version*
                  " loaded.  Type TUTORIALCPERPPTS to run.")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> PERPMARK.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; PERPMARK.lsp  --  measured distances marked square off the pool wall,
+;;;                   then joined into one polyline and dimensioned
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  PERPMARK     mark measured distances off the perimeter
+;;;            PERPMARKVER  print the loaded version
+;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; What it is for
+;;;   A bench, a step, a tanning ledge and a gutter are all measured the
+;;;   same way in the field: stand at a spot on the wall, run the tape
+;;;   square off it, and write the number down.  PERPMARK is that, at the
+;;;   keyboard.  Click the spot, type the number, and the spot gets a
+;;;   circle of that radius -- the swing of the tape -- and a line of that
+;;;   length running square off the wall into the pool.  Click the next
+;;;   spot, type the next number, and so on for as long as the sheet
+;;;   lasts.  Enter ends it.
+;;;
+;;;   Then, if the marks are meant to BE something, it will join them up:
+;;;   one polyline through the far end of every line between the two ends
+;;;   you pick, the circles cleared away, and each line replaced by the
+;;;   dimension that says what it measured.
+;;;
+;;; Workflow
+;;;   1. Select the perimeter -- the wall the distances were taped off.
+;;;      Any curve: a polyline (arc segments included), a line, an arc, a
+;;;      circle, and anything else AutoCAD can measure along.
+;;;   2. Click the centre of the pool.  That is the whole of the direction
+;;;      question: a mark runs square off the wall toward the side the
+;;;      centre is on, so nothing has to be answered per point.
+;;;   3. Pick a point, give the distance, and repeat:
+;;;        - the point may be clicked or typed as a coordinate;
+;;;        - a point that is not ON the perimeter is projected onto it,
+;;;          and the mark is drawn from where it landed, so a snap that
+;;;          missed still marks the right spot on the wall;
+;;;        - Back takes the last mark away again;
+;;;        - Enter ends the round.
+;;;   4. Draw a polyline through the marks?  No leaves every circle and
+;;;      every line exactly where they are, for you to do as you see fit.
+;;;   5. Yes asks where the run starts and where it ends.  Those two picks
+;;;      are stations on the wall like any other: land on a mark and the
+;;;      run starts at that mark's measured end, land anywhere else and
+;;;      the distance there is taken as zero -- which is how a step that
+;;;      dies back into the wall is drawn.
+;;;   6. The polyline goes in on the perimeter's own layer and properties,
+;;;      every circle is erased, and every line becomes a
+;;;      "SIDE STANDARD" dimension on layer "DIMENSION".
+;;;
+;;; How the direction is found
+;;;   Each mark's base point is the point of the perimeter closest to the
+;;;   pick.  The perimeter's tangent there, turned 90 degrees, gives the
+;;;   two ways a mark could run; the one whose direction agrees with
+;;;   "toward the centre click" is the one used.  It is measured per mark
+;;;   rather than fixed once, so a run of marks around a corner or along
+;;;   a radius each come off their own piece of wall square.
+;;;
+;;;   That makes the centre click a direction, not a datum: it is never
+;;;   measured from and it does not have to be the true centroid.  What it
+;;;   has to be is unambiguously INSIDE, which on a deeply notched shape
+;;;   (a narrow L, a keyhole) is worth a thought before clicking -- see
+;;;   the README's limitations.
+;;;
+;;; The order the polyline runs in
+;;;   Marks are kept with their STATION -- how far along the perimeter,
+;;;   measured from its start, the base point sits -- so the polyline runs
+;;;   along the wall in the order the wall does, whatever order the marks
+;;;   were clicked in.  On a closed perimeter the run goes forward from
+;;;   the start station to the end station, wrapping past the polyline's
+;;;   own seam if that is the way round the two picks point.
+;;;
+;;; Properties
+;;;   * Circles and lines land on layer "PERPMARK" (created if missing).
+;;;     They are the run's working marks: keep them, turn the layer off,
+;;;     or let step 5 clear them.
+;;;   * The joined polyline takes the layer, colour, linetype, lineweight
+;;;     and linetype scale of the perimeter it was measured off.
+;;;   * Dimensions go on layer "DIMENSION" in the "SIDE STANDARD" style
+;;;     when the drawing has it; otherwise the current style is used and
+;;;     a note is printed.
+;;;
+;;; Robustness
+;;;   * The whole run is one UNDO group: a single U reverses all of it.
+;;;   * Esc or an error at any prompt restores every system variable the
+;;;     command changed (OSMODE, CMDECHO, CLAYER and the dimension style)
+;;;     and closes the UNDO group.
+;;;   * A pick the perimeter cannot be read at, and a centre click that
+;;;     leaves the direction ambiguous, re-prompt instead of guessing.
+;;;   * All geometry is worked in WCS and converted at the edges, so the
+;;;     command behaves under a rotated or shifted UCS.
+;;;
+;;; License: GPL-3.0-or-later
+;;; ----------------------------------------------------------------------
+
+(vl-load-com)
+
+;; Version banner: tools/release_lisp.py reads it to stamp the dated
+;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
+(setq *perpmark-version* "v1.0")
+
+;;; ----------------------------------------------------------------------
+;;;  Tunables
+;;; ----------------------------------------------------------------------
+
+;; Layer the circles and the perpendicular lines are drawn on.  Change it
+;; to put the run's working marks somewhere a plot style already hides.
+(setq pm:*marklayer* "PERPMARK")
+
+;; ACI colour that layer is CREATED with, on a drawing that lacks it.  A
+;; number, not 'auto: these marks are the measurement record and are
+;; meant to be seen, so they take a colour that reads on any background
+;; rather than one that recedes into it.
+(setq pm:*markcolor* 1)
+
+;; Layer and creation colour for the dimensions step 6 leaves behind.
+(setq pm:*dimlayer* "DIMENSION")
+(setq pm:*dimcolor* 7)
+
+;; Dimension style those dimensions are drawn in.  A drawing without it
+;; keeps its current style and is told so.
+(setq pm:*dimstyle* "SIDE STANDARD")
+
+;; How close along the wall a start/end click has to land to count as an
+;; existing mark rather than as a new station measuring zero.  Raise it
+;; for a drafter who picks the run's ends by eye; drop it to 0 to make
+;; every end pick a zero-distance station unless it is snapped exactly.
+(setq pm:*snap* 2.0)
+
+;; Two points closer than this are one point: it keeps a zero-length
+;; segment out of the joined polyline and a zero-length normal out of
+;; the direction test.
+(setq pm:*fuzz* 1e-6)
+
+;;; ----------------------------------------------------------------------
+;;;  Vectors and angles
+;;;  Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
+;;;  standalone file loads alone -- see STANDARDS.md section 4.
+;;; ----------------------------------------------------------------------
+
+;;; ----------------------------------------------------------------------
+;;;  The perimeter, as segments
+;;;
+;;;  The wall is walked as a list of segments read off the entity itself
+;;;  rather than through vlax-curve-*, for one reason: the polyline step 6
+;;;  builds has to run along the wall in the wall's own order, and that
+;;;  order is each mark's STATION -- the distance along the perimeter of
+;;;  its base point.  A segment walk hands that back as a by-product of
+;;;  the projection it is doing anyway, where vlax-curve-getDistAtPoint
+;;;  would be a second COM round trip per mark with its own failure mode.
+;;;
+;;;  LINE, ARC, CIRCLE and LWPOLYLINE are what a pool perimeter is drawn
+;;;  as in this tree -- ABHD, POOL and ADAB all leave an LWPOLYLINE, arc
+;;;  segments and all.  Anything else (a SPLINE traced off a drone photo,
+;;;  an ELLIPSE, an old heavy POLYLINE) is measured through vlax-curve-*
+;;;  instead, by pm:project-com below.
+;;;
+;;;  A segment is one of:
+;;;     (S p1 p2)              a straight run from p1 to p2
+;;;     (A ctr rad a0 sweep)   an arc of rad about ctr, starting at angle
+;;;                            a0 and sweeping SIGNED sweep radians --
+;;;                            positive counterclockwise, which is the
+;;;                            sign a positive bulge carries
+;;;  Every point in one is WCS, because that is what entget hands back.
+;;; ----------------------------------------------------------------------
+
+;; The segment p1 -> p2 carrying polyline bulge b.  A bulge is
+;; tan(included/4), so the included angle is 4*atan(b) and its sign is
+;; the direction of travel; the centre sits half a chord away along the
+;; chord's normal, by (chord/2)/tan(included/2).
+(defun pm:mkseg (p1 p2 b / inc ch r th d cx cy ctr)
+  (setq inc (* 4.0 (atan b))
+        ch  (distance (cal:2d p1) (cal:2d p2)))
+  (if (or (< (abs b) 1e-12)
+          (< ch 1e-12)
+          (< (abs (sin (/ inc 2.0))) 1e-12))
+    (list 'S (cal:2d p1) (cal:2d p2))
+    (progn
+      (setq r   (abs (/ ch (* 2.0 (sin (/ inc 2.0)))))
+            th  (angle (cal:2d p1) (cal:2d p2))
+            d   (/ (/ ch 2.0) (cal:tan (/ inc 2.0)))
+            cx  (+ (/ (+ (car p1) (car p2)) 2.0)
+                   (* d (cos (+ th (/ pi 2.0)))))
+            cy  (+ (/ (+ (cadr p1) (cadr p2)) 2.0)
+                   (* d (sin (+ th (/ pi 2.0)))))
+            ctr (list cx cy))
+      (list 'A ctr r (angle ctr (cal:2d p1)) inc))))
+
+;; The vertices of an LWPOLYLINE as (point bulge), in order.  entget
+;; hands the groups back in order, so a 42 belongs to the 10 in front of
+;; it; a vertex with no 42 carries no bulge.
+(defun pm:lwverts (ed / vs g)
+  (setq vs '())
+  (foreach g ed
+    (cond
+      ((= 10 (car g)) (setq vs (cons (list (cal:2d (cdr g)) 0.0) vs)))
+      ((and (= 42 (car g)) vs)
+       (setq vs (cons (list (car (car vs)) (cdr g)) (cdr vs))))))
+  (reverse vs))
+
+;; EN as a list of segments, or nil when nothing here can read it.
+(defun pm:segs (en / ed typ vs closed n i out a0 a1 sw v1 v2)
+  (setq ed  (entget en)
+        typ (cdr (assoc 0 ed))
+        out '())
+  (cond
+    ((= typ "LINE")
+     (list (list 'S (cal:2d (cdr (assoc 10 ed))) (cal:2d (cdr (assoc 11 ed))))))
+    ((= typ "ARC")
+     (setq a0 (cdr (assoc 50 ed))
+           a1 (cdr (assoc 51 ed))
+           sw (cal:angnorm (- a1 a0)))
+     (if (< sw 1e-12) (setq sw (+ pi pi)))
+     (list (list 'A (cal:2d (cdr (assoc 10 ed))) (cdr (assoc 40 ed)) a0 sw)))
+    ((= typ "CIRCLE")
+     (list (list 'A (cal:2d (cdr (assoc 10 ed))) (cdr (assoc 40 ed))
+                 0.0 (+ pi pi))))
+    ((= typ "LWPOLYLINE")
+     (setq vs     (pm:lwverts ed)
+           n      (length vs)
+           closed (= 1 (logand 1 (cond ((cdr (assoc 70 ed))) (0))))
+           i      0)
+     (if (< n 2)
+       nil
+       (progn
+         (while (< i (if closed n (1- n)))
+           (setq v1  (nth i vs)
+                 v2  (nth (rem (1+ i) n) vs)
+                 out (cons (pm:mkseg (car v1) (car v2) (cadr v1)) out)
+                 i   (1+ i)))
+         (reverse out))))
+    (t nil)))
+
+(defun pm:seg-len (s)
+  (if (eq (car s) 'S)
+    (distance (cadr s) (caddr s))
+    (* (caddr s) (abs (nth 4 s)))))
+
+(defun pm:seg-start (s / ctr)
+  (if (eq (car s) 'S)
+    (cadr s)
+    (progn
+      (setq ctr (cadr s))
+      (list (+ (car ctr)  (* (caddr s) (cos (nth 3 s))))
+            (+ (cadr ctr) (* (caddr s) (sin (nth 3 s))))))))
+
+(defun pm:seg-end (s / ctr a)
+  (if (eq (car s) 'S)
+    (caddr s)
+    (progn
+      (setq ctr (cadr s)
+            a   (+ (nth 3 s) (nth 4 s)))
+      (list (+ (car ctr)  (* (caddr s) (cos a)))
+            (+ (cadr ctr) (* (caddr s) (sin a)))))))
+
+;; The point of S closest to P.  A straight segment clamps the projection
+;; to its ends; an arc takes the radial point when the direction of P
+;; falls inside the sweep and the nearer end when it does not.
+(defun pm:seg-closest (s p / a b d l t01 ctr r rel u)
+  (setq p (cal:2d p))
+  (if (eq (car s) 'S)
+    (progn
+      (setq a (cadr s)
+            b (caddr s)
+            d (cal:v- b a)
+            l (cal:dot d d))
+      (if (< l 1e-24)
+        a
+        (progn
+          (setq t01 (/ (cal:dot (cal:v- p a) d) l))
+          (cond ((< t01 0.0) (setq t01 0.0))
+                ((> t01 1.0) (setq t01 1.0)))
+          (cal:v+ a (cal:v* d t01)))))
+    (progn
+      (setq ctr (cadr s)
+            r   (caddr s)
+            u   (cal:unit (cal:v- p ctr)))
+      (if (null u)
+        (pm:seg-start s)
+        (progn
+          ;; how far into the sweep the direction of P lies, measured
+          ;; the way the sweep runs
+          (setq rel (cal:angnorm (* (if (< (nth 4 s) 0.0) -1.0 1.0)
+                                   (- (angle ctr p) (nth 3 s)))))
+          (if (<= rel (abs (nth 4 s)))
+            (cal:v+ ctr (cal:v* u r))
+            (if (< (distance p (pm:seg-start s))
+                   (distance p (pm:seg-end s)))
+              (pm:seg-start s)
+              (pm:seg-end s))))))))
+
+;; Unit tangent of S at Q (a point already on it), pointing the way the
+;; segment travels.  nil on a segment with no length.
+(defun pm:seg-tangent (s q / ctr rad)
+  (if (eq (car s) 'S)
+    (cal:unit (cal:v- (caddr s) (cadr s)))
+    (progn
+      (setq ctr (cadr s)
+            rad (cal:unit (cal:v- q ctr)))
+      (if (null rad)
+        nil
+        (cal:v* (cal:perp rad) (if (< (nth 4 s) 0.0) -1.0 1.0))))))
+
+;; Arc length from the start of S to Q.
+(defun pm:seg-station (s q / ctr rel)
+  (if (eq (car s) 'S)
+    (distance (cadr s) (cal:2d q))
+    (progn
+      (setq ctr (cadr s)
+            rel (cal:angnorm (* (if (< (nth 4 s) 0.0) -1.0 1.0)
+                               (- (angle ctr q) (nth 3 s)))))
+      (if (> rel (abs (nth 4 s)))
+        ;; past the far end: the clamp landed on one end or the other
+        (if (< (distance (cal:2d q) (pm:seg-start s))
+               (distance (cal:2d q) (pm:seg-end s)))
+          0.0
+          (pm:seg-len s))
+        (* (caddr s) rel)))))
+
+(defun pm:total (segs / tot s)
+  (setq tot 0.0)
+  (foreach s segs (setq tot (+ tot (pm:seg-len s))))
+  tot)
+
+;; T when the walk closes back on itself -- a circle, a closed polyline,
+;; or a shape drawn open but ending where it started.
+(defun pm:closed-p (segs)
+  (and segs
+       (< (distance (pm:seg-start (car segs))
+                    (pm:seg-end (last segs)))
+          1e-9)))
+
+;; (base tangent station) for the point of SEGS closest to P, all WCS.
+(defun pm:project (segs p / acc best bd s q d)
+  (setq acc 0.0 best nil bd nil)
+  (foreach s segs
+    (setq q (pm:seg-closest s p)
+          d (distance (cal:2d p) q))
+    (if (or (null best) (< d bd))
+      (setq best (list q (pm:seg-tangent s q) (+ acc (pm:seg-station s q)))
+            bd   d))
+    (setq acc (+ acc (pm:seg-len s))))
+  (if (and best (cadr best)) best))
+
+;;; ----------------------------------------------------------------------
+;;;  The perimeter AutoCAD can measure but this file cannot read
+;;;
+;;;  A SPLINE, an ELLIPSE or a heavy POLYLINE has no segment list here,
+;;;  so the same three numbers are asked of AutoCAD instead: the closest
+;;;  point, the distance along to it, and the first derivative there for
+;;;  the tangent.  Every call is caught -- a curve AutoCAD will not answer
+;;;  for comes back nil and the pick is re-prompted, never half-measured.
+;;; ----------------------------------------------------------------------
+
+(defun pm:comcall (fn args / r)
+  (setq r (vl-catch-all-apply fn args))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun pm:project-com (en p / q prm st dv tg)
+  (setq q (pm:comcall 'vlax-curve-getClosestPointTo (list en (cal:2d p))))
+  (if (null q)
+    nil
+    (progn
+      (setq st  (pm:comcall 'vlax-curve-getDistAtPoint (list en q))
+            prm (pm:comcall 'vlax-curve-getParamAtPoint (list en q)))
+      (if (null prm)
+        nil
+        (progn
+          (setq dv (pm:comcall 'vlax-curve-getFirstDeriv (list en prm))
+                tg (if dv (cal:unit dv)))
+          (if (or (null tg) (null st))
+            nil
+            (list (cal:2d q) tg st)))))))
+
+;; Either reader, whichever this perimeter answers to.
+(defun pm:locate (en segs p)
+  (if segs (pm:project segs p) (pm:project-com en p)))
+
+(defun pm:runlen (en segs / prm r)
+  (if segs
+    (pm:total segs)
+    (progn
+      (setq prm (pm:comcall 'vlax-curve-getEndParam (list en))
+            r   (if prm (pm:comcall 'vlax-curve-getDistAtParam
+                          (list en prm))))
+      (if (numberp r) r 0.0))))
+
+(defun pm:isclosed (en segs)
+  (if segs
+    (pm:closed-p segs)
+    (if (pm:comcall 'vlax-curve-isClosed (list en)) T)))
+
+;;; ----------------------------------------------------------------------
+;;;  Lists
+;;; ----------------------------------------------------------------------
+
+;; LST sorted ascending on the car of each element, stably.  vl-sort is
+;; not used on purpose: it DROPS items that compare equal, which here
+;; would silently lose a mark that shares a station with another.
+(defun pm:sortkey (lst / out e head)
+  (setq out '())
+  (foreach e lst
+    (setq head '())
+    (while (and out (<= (car (car out)) (car e)))
+      (setq head (cons (car out) head)
+            out  (cdr out)))
+    (setq out (cons e out))
+    (while head
+      (setq out  (cons (car head) out)
+            head (cdr head))))
+  out)
+
+;;; ----------------------------------------------------------------------
+;;;  Layers and drawing
+;;; ----------------------------------------------------------------------
+
+(defun pm:circle (ctr r lay)
+  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity") (cons 8 lay)
+                  '(100 . "AcDbCircle")
+                  (cons 10 (list (car ctr) (cadr ctr) 0.0))
+                  (cons 40 r))))
+
+(defun pm:line (a b lay)
+  (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity") (cons 8 lay)
+                  '(100 . "AcDbLine")
+                  (cons 10 (list (car a) (cadr a) 0.0))
+                  (cons 11 (list (car b) (cadr b) 0.0)))))
+
+;; The groups that carry an entity's look, for the joined polyline to
+;; inherit from the perimeter it was measured off.
+(defun pm:props (ed / out g)
+  (setq out '())
+  (foreach g '(62 420 6 370 48)
+    (if (assoc g ed) (setq out (cons (assoc g ed) out))))
+  (reverse out))
+
+(defun pm:pline (pts ed / e p)
+  (setq e (append (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
+                        (cons 8 (cdr (assoc 8 ed))))
+                  (pm:props ed)
+                  (list '(100 . "AcDbPolyline")
+                        (cons 90 (length pts)) '(70 . 0))))
+  (foreach p pts
+    (setq e (append e (list (cons 10 (list (car p) (cadr p)))))))
+  (entmakex e))
+
+(defun pm:erase (e)
+  (if (and e (entget e)) (entdel e)))
+
+;;; ----------------------------------------------------------------------
+;;;  Ask helpers
+;;;  Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
+;;;  standalone file loads alone -- see STANDARDS.md section 4.
+;;;  Back sentinel: CAL-BACK.
+;;; ----------------------------------------------------------------------
+
+;; Point pick, in the current UCS.  tail is the prose inside the angle
+;; brackets on a loop prompt whose Enter ends the loop (nil = a point is
+;; required and Enter re-asks).  Returns the point, nil for Enter, or
+;; CAL-BACK.
+(defun pm:askpt (msg tail back / v)
+  (if back
+    (initget (if tail 0 1) "Back Undo")
+    (initget (if tail 0 1)))
+  (setq v (getpoint (strcat "\n" msg
+                            (if back " [Back]" "")
+                            (if tail (strcat " <" tail ">") "")
+                            ": ")))
+  (if lzd:ask (lzd:ask msg v))
+  (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK v))
+
+;;; ----------------------------------------------------------------------
+;;;  System variables
+;;; ----------------------------------------------------------------------
+
+
+(defun pm:sysvars () '("OSMODE" "CMDECHO" "CLAYER"))
+
+;;; ----------------------------------------------------------------------
+;;;  The marks
+;;;
+;;;  One mark is (station base offs dist circle line):
+;;;    station  how far along the perimeter its base point sits
+;;;    base     the point ON the perimeter the tape was run from
+;;;    offs     where the tape reached -- base + dist square off the wall
+;;;    dist     the measurement (0.0 for a run end that was never taped)
+;;;    circle   the swing of the tape, an ename (nil on a zero station)
+;;;    line     the measurement itself, an ename (nil on a zero station)
+;;; ----------------------------------------------------------------------
+
+(defun pm:mk-station (station base) (list station base base 0.0 nil nil))
+
+(defun pm:m-station (m) (car m))
+(defun pm:m-base (m) (cadr m))
+(defun pm:m-offs (m) (caddr m))
+(defun pm:m-dist (m) (nth 3 m))
+(defun pm:m-circle (m) (nth 4 m))
+(defun pm:m-line (m) (nth 5 m))
+
+;; Which way a mark at BASE runs: square off the wall, on the side CTR is.
+;; nil when the tangent is unreadable or the centre click leaves the two
+;; sides tied -- both are re-prompts, never a guess.
+(defun pm:inward (tg base ctr / n side)
+  (setq n (if tg (cal:unit (cal:perp tg))))
+  (if (null n)
+    nil
+    (progn
+      (setq side (cal:dot n (cal:v- ctr base)))
+      (cond ((> side  pm:*fuzz*) n)
+            ((< side (- pm:*fuzz*)) (cal:v* n -1.0))
+            (t nil)))))
+
+;; d wrapped into [0, tot) -- how far FORWARD along a closed perimeter,
+;; so a run that crosses the polyline's own seam is one stretch and not
+;; two.
+(defun pm:wrap (d tot)
+  (if (< tot 1e-12)
+    0.0
+    (progn
+      (while (< d 0.0) (setq d (+ d tot)))
+      (while (>= d tot) (setq d (- d tot)))
+      d)))
+
+;; The marks between two stations, in the order the wall runs.  s0 and s1
+;; are the run's ends; on a closed perimeter the run goes FORWARD from s0
+;; and wraps past the seam when that is the way the two picks point, on an
+;; open one it is simply the stretch between them, read from s0 toward s1.
+(defun pm:span (marks s0 s1 closed tot / out m k span)
+  (setq out '())
+  (if closed
+    (progn
+      (setq span (pm:wrap (- s1 s0) tot))
+      (foreach m marks
+        (setq k (pm:wrap (- (pm:m-station m) s0) tot))
+        (if (<= k (+ span pm:*fuzz*)) (setq out (cons (cons k m) out)))))
+    (foreach m marks
+      (setq k (- (pm:m-station m) s0))
+      (if (< s1 s0) (setq k (- k)))
+      (if (and (>= k (- pm:*fuzz*))
+               (<= k (+ (abs (- s1 s0)) pm:*fuzz*)))
+        (setq out (cons (cons k m) out)))))
+  (mapcar 'cdr (pm:sortkey out)))
+
+;; Which mark a run-end click means.  Landing within pm:*snap* ALONG THE
+;; WALL of one that was measured is that mark, so a run starts where the
+;; tape said it did; landing anywhere else is a station of its own
+;; measuring zero, which is how a step that dies back into the wall is
+;; drawn.  nil when the perimeter cannot be read at the pick at all.
+(defun pm:runend (en segs marks p / loc st best bd m d)
+  (setq loc (pm:locate en segs p))
+  (if (null loc)
+    nil
+    (progn
+      (setq st   (caddr loc)
+            best nil
+            bd   nil)
+      (foreach m marks
+        (setq d (abs (- (pm:m-station m) st)))
+        (if (and (<= d pm:*snap*) (or (null best) (< d bd)))
+          (setq best m bd d)))
+      (if best best (pm:mk-station st (car loc))))))
+
+;; PTS with each point that repeats its predecessor dropped, so the
+;; joined polyline never carries a zero-length segment.  Consecutive-only
+;; on purpose: two marks the same distance apart at opposite ends of the
+;; pool are two marks, and cal:dedupe's any-kept-one test would drop one
+;; of them.
+(defun pm:dedupe (pts / out p)
+  (setq out '())
+  (foreach p pts
+    (if (or (null out) (> (distance p (car out)) pm:*fuzz*))
+      (setq out (cons p out))))
+  (reverse out))
+
+;; Every mark that measured something, dimensioned where its line was.
+;; Returns how many went in.  The dimension style is restored by the
+;; caller -- it is one of the settings the *error* handler owes the user.
+(defun pm:dimension (marks / n m)
+  (setq n 0)
+  (setvar "CLAYER" (cal:ensure-layer pm:*dimlayer* pm:*dimcolor*))
+  (if (tblsearch "DIMSTYLE" pm:*dimstyle*)
+    (command "_.-DIMSTYLE" "_Restore" pm:*dimstyle*)
+    (princ (strcat "\nDimension style \"" pm:*dimstyle*
+                   "\" is not in this drawing - using the current style"
+                   " instead.")))
+  (foreach m (reverse marks)
+    (if (> (pm:m-dist m) pm:*fuzz*)
+      (progn
+        ;; command arguments are read in the CURRENT UCS, and every mark
+        ;; has been carried in WCS since the pick that made it
+        (command "_.DIMALIGNED"
+                 (trans (pm:m-base m) 0 1)
+                 (trans (pm:m-offs m) 0 1)
+                 (trans (pm:m-offs m) 0 1))
+        (setq n (1+ n)))))
+  n)
+
+;;; ----------------------------------------------------------------------
+;;;  Commands
+;;; ----------------------------------------------------------------------
+
+;; ahead of the command on purpose: the structural test scans from
+;; c:PERPMARK to end-of-file for leaked variables, and a defun name there
+;; would read as one
+(defun c:PERPMARKVER ()
+  (princ (strcat "\nPERPMARK " *perpmark-version*))
+  (princ))
+
+(defun c:PERPMARK (/ *error* undo-open
+                     sel en ed segs tot closed ctr pick loc base tg nrm
+                     d ans marks stage done pts run s0 s1 m0 m1 lay
+                     odim ndims npts m)
+
+  (defun *error* (msg)
+    ;; user settings come back FIRST so nothing below can skip them
+    (cal:sysrestore)
+    ;; DIMSTYLE cannot be setvar'd back
+    (if (and odim (tblsearch "DIMSTYLE" odim))
+      (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
+    ;; command-s, never plain command: 2015+ engines reject (command)
+    ;; inside *error* unless the error mode was pushed beforehand
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nPERPMARK error: " msg)))
+    (if lzd:report (lzd:report "PERPMARK" *perpmark-version* msg))
+    (princ))
+
+  (if lzd:begin (lzd:begin "PERPMARK" *perpmark-version*))
+  (cal:syssave (pm:sysvars))
+  (setvar "CMDECHO" 0)
+  ;; one group for the whole run -- the marks are drawn as they are
+  ;; answered, so anything less would take one U per circle
+  (setq undo-open (cal:undobegin)
+        odim      (getvar "DIMSTYLE")
+        marks     '()
+        stage     1
+        done      nil)
+
+  (while (not done)
+    (cond
+
+      ;; --- 1. the perimeter the distances were taped off ---------------
+      ((= stage 1)
+       (setq sel (entsel "\nSelect the pool perimeter: "))
+       (if lzd:watch (lzd:watch sel))
+       (cond
+         ((null sel)
+          (princ "\nNothing selected - try again, or press Esc to quit."))
+         (t
+          (setq en   (car sel)
+                ed   (entget en)
+                segs (pm:segs en)
+                tot  (pm:runlen en segs))
+          (cond
+            ((and (null segs)
+                  (null (pm:project-com en (cal:2d (trans (cadr sel) 1 0)))))
+             (princ (strcat "\nA " (cdr (assoc 0 ed))
+                            " is not something PERPMARK can measure along"
+                            " - select the pool wall.")))
+            ((< tot 1e-9)
+             (princ "\nThat perimeter has no length."))
+            (t
+             (setq closed (pm:isclosed en segs)
+                   stage  2))))))
+
+      ;; --- 2. the centre, which is the whole direction question --------
+      ((= stage 2)
+       (princ (strcat "\nA mark runs square off the wall, toward the side"
+                      " the centre is on."))
+       (setq pick (pm:askpt "Click the centre of the pool" nil T))
+       (cond
+         ((eq pick 'CAL-BACK) (setq stage 1))
+         ((null pick)
+          (princ "\nA point is required - click inside the pool."))
+         (t (setq ctr   (cal:2d (trans pick 1 0))
+                  stage 3))))
+
+      ;; --- 3. pick a point.  Enter ends the round; Back takes the last
+      ;;        mark away again, and at the first one re-opens the
+      ;;        centre click ------------------------------------------
+      ((= stage 3)
+       (setq pick (pm:askpt "Pick a point on or near the perimeter"
+                            "Enter = done" T))
+       (cond
+         ((eq pick 'CAL-BACK)
+          (cond
+            ((null marks)
+             (princ "\nStepping back one question.")
+             (setq stage 2))
+            (t
+             (pm:erase (pm:m-circle (car marks)))
+             (pm:erase (pm:m-line (car marks)))
+             (setq marks (cdr marks))
+             (princ "\nStepping back one point."))))
+         ((null pick)
+          (if (null marks)
+            (progn (princ "\nNothing marked.") (setq done T))
+            (setq stage 4)))
+         (t
+          (setq loc (pm:locate en segs (cal:2d (trans pick 1 0))))
+          (cond
+            ((null loc)
+             (princ (strcat "\nThe perimeter cannot be read there - pick"
+                            " a point nearer the wall.")))
+            (t
+             (setq base (car loc)
+                   tg   (cadr loc)
+                   nrm  (pm:inward tg base ctr))
+             (if (null nrm)
+               (princ (strcat "\nWhich side the mark runs to is a tie here"
+                              " - the centre lines up with the wall at that"
+                              " spot.  Back at the first point re-opens the"
+                              " centre click."))
+               (setq stage 31)))))))
+
+      ;; --- 3b. and the distance taped off it --------------------------
+      ((= stage 31)
+       (setq d (cal:askdist 'REQ "Distance from the perimeter at that point"
+                           nil T))
+       (cond
+         ((or (eq d 'CAL-BACK) (null d)) (setq stage 3))
+         (t
+          (if (null lay)
+            (setq lay (cal:ensure-layer pm:*marklayer* pm:*markcolor*)))
+          (setq marks (cons (list (caddr loc) base
+                                  (cal:v+ base (cal:v* nrm d)) d
+                                  (pm:circle base d lay)
+                                  (pm:line base (cal:v+ base (cal:v* nrm d))
+                                           lay))
+                            marks)
+                stage 3))))
+
+      ;; --- 4. join them up? -------------------------------------------
+      ((= stage 4)
+       (setq ans (cal:askyn "Draw a polyline through the marks?" "Yes" T))
+       (cond
+         ((eq ans 'CAL-BACK) (setq stage 3))
+         ((null ans)
+          (princ (strcat "\n" (itoa (length marks)) " mark(s) left on layer"
+                         " \"" pm:*marklayer* "\" - circles and lines both."))
+          (setq done T))
+         (t (setq stage 5))))
+
+      ;; --- 5 and 6. where the run starts, and where it ends ------------
+      ((= stage 5)
+       (setq pick (pm:askpt "Pick where the run starts" nil T))
+       (cond
+         ((eq pick 'CAL-BACK) (setq stage 4))
+         ((null pick) (princ "\nA point is required."))
+         (t
+          (setq m0 (pm:runend en segs marks (cal:2d (trans pick 1 0))))
+          (if (null m0)
+            (princ (strcat "\nThe perimeter cannot be read there - pick"
+                           " a point nearer the wall."))
+            (setq stage 6)))))
+
+      ((= stage 6)
+       (setq pick (pm:askpt "Pick where the run ends" nil T))
+       (cond
+         ((eq pick 'CAL-BACK) (setq stage 5))
+         ((null pick) (princ "\nA point is required."))
+         (t
+          (setq m1 (pm:runend en segs marks (cal:2d (trans pick 1 0))))
+          (if (null m1)
+            (princ (strcat "\nThe perimeter cannot be read there - pick"
+                           " a point nearer the wall."))
+            (progn
+              ;; --- the run, in the order the wall goes ----------------
+              (setq s0  (pm:m-station m0)
+                    s1  (pm:m-station m1)
+                    run (pm:span (append (list m0 m1) marks) s0 s1 closed tot)
+                    pts (pm:dedupe (mapcar 'pm:m-offs run)))
+              (if (< (length pts) 2)
+                (progn
+                  (princ (strcat "\nThose two picks enclose fewer than two"
+                                 " marks, so there is no polyline to draw"
+                                 " - nothing was erased."))
+                  (setq done T))
+                (progn
+                  (pm:pline pts ed)
+                  (setq npts (length pts))
+                  ;; --- the circles go, the lines become dimensions ----
+                  (foreach m marks
+                    (pm:erase (pm:m-circle m))
+                    (pm:erase (pm:m-line m)))
+                  (setq ndims (pm:dimension marks))
+                  (princ (strcat "\nDone: a " (itoa npts)
+                                 "-point polyline on layer \""
+                                 (cdr (assoc 8 ed)) "\", "
+                                 (itoa (length marks))
+                                 " circle(s) erased and " (itoa ndims)
+                                 " dimension(s) on layer \"" pm:*dimlayer*
+                                 "\"."))
+                  (setq done T))))))))))
+
+  ;; only when pm:dimension moved it: a run answered No never touched the
+  ;; style, and restoring it to itself is a command line nobody asked for
+  (if (and odim (/= odim (getvar "DIMSTYLE")) (tblsearch "DIMSTYLE" odim))
+    (command "_.-DIMSTYLE" "_Restore" odim))
+  (if undo-open (setq undo-open (cal:undoend)))
+  (cal:sysrestore)
+  (princ))
+
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPERPMARK " *perpmark-version*
+                 " loaded.  Type PERPMARK to run.")))
 (princ)
 
 
@@ -101237,7 +102269,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.23")
+(setq *lazpanel-version* "v3.24")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -101439,6 +102471,7 @@
     ("LINGUTTER"        "Gut to perimeter, then pads")
     ("LINGUTTERSCAN"    "Gut scan, changes nothing")
     ("PADDLE"           "Paddle pads")
+    ("PERPMARK"         "Measured wall offsets")
     ("PERPPTS"          "Perpendicular points")
     ("POINTRENAMER"     "Renumber points in order")
     ("POOL"             "Pool layout")
@@ -101524,6 +102557,7 @@
       "AUTOBEAD"
       "PERPPTS"
       "CPERPPTS"
+      "PERPMARK"
       )
      ("Converters"
       ("Convert"
@@ -101694,6 +102728,7 @@
       "POINTRENAMER"
       "PERPPTS"
       "CPERPPTS"
+      "PERPMARK"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -103574,16 +104609,16 @@
   "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
   "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER"
   "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER"
-  "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET"
-  "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
-  "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER"
-  "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER"
-  "SOCONV" "SORECONV" "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER"
-  "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV"
-  "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION"
-  "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM"
-  "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON"
-  "CALHELP" "CALSET" "LAZPANELVER"
+  "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK" "SMARTFILLET"
+  "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN"
+  "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST"
+  "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN"
+  "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER" "VSCONV"
+  "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST"
+  "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT"
+  "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII"
+  "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN"
+  "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

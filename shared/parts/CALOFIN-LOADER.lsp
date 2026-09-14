@@ -136,6 +136,7 @@
                  "LINGUTTER.lsp"
                  "perp_points.lsp" "cperp_points.lsp"
                  "tutorial_perp_points.lsp" "tutorial_cperp_points.lsp"
+                 "PERPMARK.lsp"
                  "SMARTFILLET.lsp" "HONEFILLET.lsp" "SPACHECK.lsp"
                  "SPACOVCREATE.lsp"
                  "STOCKCOVER.lsp" "drone.lsp" "tydrn.lsp"
