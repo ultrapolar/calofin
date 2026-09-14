@@ -69,7 +69,7 @@ LOBF              Fits a construction line through points that should be on one 
 NORMIESTEP        Normie step layout
 OASIS             Continuous-tangent pool drawn live from envelope and radii
 PADDLE            Paddle perimeter pads
-PERPMARK          Click a spot on the wall, type what it measured: circle, perpendicular, dimension
+PERPMARK          Name a survey point, type what it measured: circle, perpendicular, dimension
 PERPPTS           Perpendicular offset points along a line or curve
 POINTRENAMER      Hands the survey point numbers back out in perimeter order
 POOL              Full pool layout tool
