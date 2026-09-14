@@ -1944,6 +1944,239 @@ def test_the_field_side_is_read_off_one_line_only():
     print("ok  the field side is read off the chosen line's own points")
 
 
+# ---- the AB lines: edge cases ------------------------------------------
+# Each of these was a live defect once.  The comment on each says which.
+
+def test_a_doubled_number_with_the_stakes_clicked():
+    """A drawing that names NO stake still has a pair - the one just
+    clicked - and a doubled number there has to be answerable off it.
+    It used to ask abf:line-of a question with no lines to answer from
+    and hand (distance ...) a nil stake: a hard crash."""
+    vm = newvm()
+    ab_pt(vm, L1P1[0], L1P1[1], 1)
+    ab_pt(vm, L2P1[0], L2P1[1], 1)
+    run(vm, 'c:ABFIND',
+        [list(A) + [0.0], list(B) + [0.0], '1', 'L1b', 'No', None],
+        'clicked stakes')
+    # both ringed, and labelled off the ONE line the clicks make
+    assert [d.get(1) for d in ever(vm, 'TEXT', 'ABMOVE-POINTS')] \
+        == ['L1', 'L1b'], ever(vm, 'TEXT', 'ABMOVE-POINTS')
+    assert tie_ends(vm) == [(pt3(A), pt3(L2P1)), (pt3(B), pt3(L2P1))], \
+        tie_ends(vm)
+    print("ok  a doubled number is answerable with the stakes clicked")
+
+
+def test_a_point_on_another_line_moves_the_run_to_it():
+    """Assuming the settled line is a CONVENIENCE.  Measuring from it
+    when the point was taped off the other pair is the wrong answer the
+    whole question exists to prevent - it drew Pt.9 a 106-foot tie off
+    stakes nobody had a tape on."""
+    vm = newvm()
+    two_surveys(vm)
+    ab_pt(vm, L2P2[0], L2P2[1], 9)          # only L2 carries a Pt.9
+    run(vm, 'c:ABFIND', ['1', 'L1', 'No', '9', 'No', None], 'moves')
+    assert any('is on AB line L2, not L1' in m for m in vm.printed), \
+        vm.printed
+    # Pt.1 off L1's stakes, Pt.9 off L2's
+    assert tie_ends(vm) == [(pt3(A), pt3(L1P1)), (pt3(B), pt3(L1P1)),
+                            (pt3(A2), pt3(L2P2)), (pt3(B2), pt3(L2P2))], \
+        tie_ends(vm)
+    print("ok  a point on another AB line moves the run to that line")
+
+
+def test_a_click_on_another_line_moves_the_run_too():
+    """A click is never asked about - but it still says which line."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABFIND',
+        ['1', 'L1', 'No', list(L2P2) + [0.0], 'No', None], 'clicked move')
+    assert any('is on AB line L2, not L1' in m for m in vm.printed), \
+        vm.printed
+    assert tie_ends(vm)[2:] == [(pt3(A2), pt3(L2P2)),
+                                (pt3(B2), pt3(L2P2))], tie_ends(vm)
+    print("ok  a clicked point on another AB line moves the run too")
+
+
+def test_the_ties_measure_from_the_PAIRED_stake():
+    """Three As and two Bs - or two As and one B - and abf:stake takes
+    the FIRST A by name, which is not the A the pairing put with B.  The
+    tie then measured 190 feet off a stake the pairing had rejected."""
+    vm = newvm()
+    ab_pt(vm, 2400.0, 0.0, 'A')              # first in the drawing, far
+    ab_pt(vm, A[0], A[1], 'A')               # the one that goes with B
+    ab_pt(vm, B[0], B[1], 'B')
+    ab_pt(vm, L1P1[0], L1P1[1], 7)
+    run(vm, 'c:ABFIND', ['7', 'No', None], 'paired stake')
+    assert tie_ends(vm) == [(pt3(A), pt3(L1P1)), (pt3(B), pt3(L1P1))], \
+        tie_ends(vm)
+    assert any('pair with nothing' in m for m in vm.printed), vm.printed
+    print("ok  the ties measure from the stake the pairing chose")
+
+
+def test_a_doubled_stake_with_no_pair_is_reported():
+    """Two As and no B at all: nothing can say which A is meant, so the
+    first is taken - and said out loud, rather than every tie in the run
+    quietly coming off the wrong stake."""
+    vm = newvm()
+    ab_pt(vm, 2400.0, 0.0, 'A')
+    ab_pt(vm, A[0], A[1], 'A')
+    ab_pt(vm, L1P1[0], L1P1[1], 7)
+    run(vm, 'c:ABFIND', [list(B) + [0.0], '7', 'No', None], 'two As')
+    assert any('2 points are numbered "A"' in m and 'the first was taken'
+               in m for m in vm.printed), vm.printed
+    print("ok  a stake name used twice with no pair says the first was taken")
+
+
+def test_a_stray_label_at_the_duplicate_pick_is_re_asked():
+    """A typo must not cost the round and send the drafter back to the
+    number - it re-asks with the rings still up, the way ABPCREATE's
+    line pick always did."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABFIND', ['1', 'L9', 'L2', 'No', None], 'stray')
+    assert any('is not one of the labels' in m for m in vm.printed), \
+        vm.printed
+    assert tie_ends(vm) == [(pt3(A2), pt3(L2P1)), (pt3(B2), pt3(L2P1))], \
+        tie_ends(vm)
+    # asked twice, and the number was never re-asked
+    assert len([q for q, _ in vm.prompts if 'Which AB line' in q]) == 2
+    assert len([q for q, _ in vm.prompts if 'type its number' in q]) == 2
+    print("ok  a stray label at the duplicate pick is re-asked")
+
+
+def test_a_stray_label_at_the_line_pick_is_re_asked():
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABPCREATE', ['Q1', 'L1', 160.0, 160.0, '9', None], 'stray')
+    assert any('is not one of the labels' in m for m in vm.printed), \
+        vm.printed
+    assert [e[0] for e in tie_ends(vm)] == [pt3(A), pt3(B)], tie_ends(vm)
+    print("ok  a stray label at the AB line pick is re-asked")
+
+
+def test_a_click_along_a_tie_picks_that_line():
+    """The lines are picked between by their TIE, not their stakes, so a
+    click anywhere along one takes it."""
+    vm = newvm()
+    two_surveys(vm)
+    mid = [(A2[0] + B2[0]) * 0.5 + 10.0, 3.0, 0.0]   # on L2's tie
+    run(vm, 'c:ABPCREATE', [mid, 160.0, 160.0, '9', None], 'click tie')
+    assert [e[0] for e in tie_ends(vm)] == [pt3(A2), pt3(B2)], tie_ends(vm)
+    print("ok  a click anywhere along an AB line's tie picks that line")
+
+
+def test_three_ab_lines():
+    """Nothing in the pairing or the labelling caps out at two."""
+    vm = newvm()
+    for x in (0.0, 1200.0, 2400.0):
+        ab_pt(vm, x, 0.0, 'A')
+        ab_pt(vm, x + 240.0, 0.0, 'B')
+        ab_pt(vm, x + 120.0, 100.0, 1)
+    run(vm, 'c:ABFIND', ['1', 'L3', 'No', None], 'three')
+    assert [d.get(1) for d in ever(vm, 'TEXT', 'ABMOVE-POINTS')] \
+        == ['L1', 'L2', 'L3'], ever(vm, 'TEXT', 'ABMOVE-POINTS')
+    assert tie_ends(vm) == [((2400.0, 0.0), (2520.0, 100.0)),
+                            ((2640.0, 0.0), (2520.0, 100.0))], tie_ends(vm)
+    print("ok  three AB lines pair, label and pick like two")
+
+
+def test_the_pairing_does_not_depend_on_drawing_order():
+    """Both As drawn before either B, and the Bs drawn in the other
+    order: the pairing is by shortest tie, so it still comes out right -
+    and the LABELS still run in A-stake drawing order."""
+    vm = newvm()
+    ab_pt(vm, A[0], A[1], 'A')
+    ab_pt(vm, A2[0], A2[1], 'A')
+    ab_pt(vm, B2[0], B2[1], 'B')             # the far B first
+    ab_pt(vm, B[0], B[1], 'B')
+    ab_pt(vm, L1P1[0], L1P1[1], 1)
+    ab_pt(vm, L2P1[0], L2P1[1], 1)
+    run(vm, 'c:ABFIND', ['1', 'L2', 'No', None], 'order')
+    assert tie_ends(vm) == [(pt3(A2), pt3(L2P1)), (pt3(B2), pt3(L2P1))], \
+        tie_ends(vm)
+    print("ok  the pairing is by shortest tie, not by drawing order")
+
+
+def test_abmove_moves_a_point_on_the_line_it_was_given():
+    """The suggestions are swept off THAT line's stakes, and the moved
+    point is tied back to them."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABMOVE', ['1', 'L2', '1B', None], 'abmove L2')
+    assert [e[0] for e in tie_ends(vm)] == [pt3(A2), pt3(B2)], tie_ends(vm)
+    assert [d[1] for _, d in live(vm, 'ATTRIB')][-1] == '1m'
+    print("ok  ABMOVE moves its point off the stakes of the line given")
+
+
+def test_abpcreate_keeps_the_line_for_every_round():
+    """Asked once per run, not once per point."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABPCREATE',
+        ['L2', 160.0, 160.0, '8', 170.0, 170.0, '9', None], 'two rounds')
+    assert len([q for q, _ in vm.prompts if 'Which AB line' in q]) == 1
+    assert all(e[0] in (pt3(A2), pt3(B2)) for e in tie_ends(vm)), \
+        tie_ends(vm)
+    print("ok  ABPCREATE asks the line once and keeps it for every round")
+
+
+def test_back_undoes_a_round_that_moved_the_line():
+    vm = newvm()
+    two_surveys(vm)
+    ab_pt(vm, L2P2[0], L2P2[1], 9)
+    run(vm, 'c:ABFIND',
+        ['1', 'L1', 'No', '9', 'No', 'b', '9', 'No', None], 'back')
+    assert any('Stepping back one point' in m for m in vm.printed)
+    assert tie_ends(vm) == [(pt3(A), pt3(L1P1)), (pt3(B), pt3(L1P1)),
+                            (pt3(A2), pt3(L2P2)), (pt3(B2), pt3(L2P2))], \
+        tie_ends(vm)
+    print("ok  Back takes away a round that moved the run's AB line")
+
+
+def test_none_of_them_is_on_only_when_it_is_true():
+    """Two candidates on the SETTLED line say so through their own
+    labels (L1, L1b); printing "none of them is on L1" beside a row
+    labelled L1 is simply wrong."""
+    vm = newvm()
+    two_surveys(vm)
+    ab_pt(vm, L1P1[0] + 1.0, L1P1[1] + 1.0, 1)   # a third Pt.1, on L1
+    run(vm, 'c:ABFIND', ['1', 'L1', 'No', None], 'wording')
+    assert not any('None of them is on' in m for m in vm.printed), \
+        vm.printed
+    # and where it IS true it is said
+    vm = newvm()
+    two_surveys(vm)
+    ab_pt(vm, L1P1[0] + 1.0, L1P1[1] + 1.0, 7)
+    ab_pt(vm, L2P2[0], L2P2[1], 3)
+    ab_pt(vm, L2P2[0] + 1.0, L2P2[1] + 1.0, 3)
+    run(vm, 'c:ABFIND', ['7', 'No', '3', 'L2b', 'No', None], 'wording 2')
+    assert any('None of them is on L1' in m for m in vm.printed), vm.printed
+    print("ok  \"none of them is on L1\" is printed only when it is true")
+
+
+def test_the_ab_line_helpers_are_nil_safe():
+    """Every one of them is reached on a drawing that makes no lines at
+    all, so none may assume there is one."""
+    vm = newvm()
+    for form, want in (
+            ('(abf:lines nil)', None),
+            ('(abf:spare-stakes nil nil)', 0),
+            ('(abf:line-of (list 0.0 0.0 0.0) nil)', None),
+            ('(abf:on-line-p (list 0.0 0.0 0.0) nil nil)', None),
+            ('(abf:line-pts nil nil nil)', None),
+            ('(abf:dupe-tags nil nil)', None),
+            ('(abf:line-by-tag "L1" nil)', None),
+            ('(abf:dupe-by-tag "L1" nil)', None),
+            ('(abf:tag-used-p "L1" nil)', None)):
+        got = vm.loads(form)
+        assert (got is NIL if want is None else got == want), (form, got)
+    # two stakes on one spot make no line, and no line is not an error
+    assert vm.loads('(abf:lines (list (list (list 0.0 0.0 0.0) "A" nil)'
+                    '                 (list (list 0.0 0.0 0.0) "B" nil)))') \
+        in (NIL, None)
+    print("ok  every AB line helper answers on a drawing with no lines")
+
+
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
 
 if __name__ == '__main__':

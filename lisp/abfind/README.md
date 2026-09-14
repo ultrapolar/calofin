@@ -551,19 +551,60 @@ reported —
   2 points are numbered "2" - the one on L2 taken.
 ```
 
-— and the ties are measured from that line's stakes. Only a number
-whose points include **none** on that line asks again, because then the
+— and the ties are measured from that line's stakes. A number whose
+points include **none** on that line asks again, because then the
 assumption has nothing to stand on.
 
-A **click** is never asked about either way: it names the point it
-landed on, whatever that point is numbered.
+### But the assumption is only a convenience
+
+A point that turns out **not** to be on the settled line moves the run
+to its own:
+
+```
+  Pt.9 is on AB line L2, not L1 - the run moves to it, and its ties are
+  measured from that pair.
+```
+
+Measuring from the settled line when the point was taped off the other
+pair is the wrong answer this whole question exists to prevent, and it
+is not worth asking about: the point says which pair it belongs to. It
+drew `Pt.9` a **106-foot tie** off stakes nobody had a tape on, and said
+nothing.
+
+A **click** is never asked about either way — it names the point it
+landed on, whatever that point is numbered — but it moves the line just
+the same, and says so.
 
 Two points numbered the same **on one line** is a fault in the drawing
 rather than a second survey, and it is still answerable: the second
-takes a letter after the label (`L1`, `L1b`).
+takes a letter after the label (`L1`, `L1b`). A label that names none of
+them is re-asked with the rings still up, so a typo costs a keystroke
+and not the round.
 
 The rings and labels are scaffolding — they go the moment the question
 is answered, like every other marker this tool draws.
+
+### Where there is no pair to name
+
+A drawing that names **neither** stake is clicked, the way it always
+was — and the pair just clicked becomes the run's one line, so a doubled
+number there is asked about off those two clicks like any other. (Before
+`v1.15` that case asked `abf:line-of` a question with no lines to answer
+from and handed `distance` a `nil` stake: a hard crash.)
+
+Where a stake name is used twice and **no pair can be made from it at
+all** — two `A`s and no `B` — nothing can say which `A` is meant, so the
+first is taken and the run says so:
+
+```
+  2 points are numbered "A" and no A/B pair could be made to say which
+  - the first was taken.
+```
+
+And where the drawing *does* name a pair, the ties are measured from the
+**paired** two, not from the first of each name. On a sheet with a spare
+stake those are different points, and the first `A` measured 190 feet off
+a stake the pairing had already rejected.
 
 ## Naming the point
 
@@ -703,14 +744,20 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*tag-width*    0.8)           ; a character's width, as a
                                         ; fraction of the tag height, for
                                         ; the strip a click on a tag hits
-(setq abf:*locus-color*  8)             ; guide-line colour: grey
+(setq abf:*locus-color*  'auto)         ; guide-line colour: 'auto asks
+                                        ; abf:ink for the grey that
+                                        ; suits the background; a
+                                        ; number is used as given
 (setq abf:*locus-ltype*  "DASHED")      ; and its linetype
 (setq abf:*ghost-color*  1)             ; ABPCREATE's two whole reading
                                         ; circles: red, dashed
 (setq abf:*dupe-color*   4)             ; the ring round a point a
                                         ; doubled number names, and
                                         ; round an AB line's stakes:
-                                        ; cyan
+                                        ; cyan.  A number, not 'auto -
+                                        ; a ring that asks a question
+                                        ; has to stand out - but read
+                                        ; through abf:ink all the same
 (setq abf:*dupe-radius*  9.0)           ; and its radius
 (setq abf:*line-prefix*  "L")           ; what an AB line is called:
                                         ; L1, L2, ...
@@ -793,9 +840,28 @@ one of the two answers.
 ## Versioning
 
 `tools/release_lisp.py` reads the `*abfind-version*` banner and stamps
-`releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
+`releases/ABFIND_MMDDYY_REV115.lsp`; run it after any change and bump
 the banner.
 
+* **v1.15** — the edge cases of the AB line question, each of them a
+  live defect: a doubled number in a drawing whose stakes are **clicked**
+  crashed (no line to answer from, a `nil` stake into `distance`) and now
+  reads off the clicked pair, which becomes the run's one line; a point
+  that is **not** on the settled line now **moves** the run to its own
+  instead of being measured from the settled one (that drew a 106-foot
+  tie off stakes nobody had a tape on, silently); the ties are measured
+  from the **paired** stake rather than the first of each name (a spare
+  stake made those different points, and the first `A` was 190 feet out);
+  a **stray label** at the duplicate pick is re-asked with the rings up
+  instead of costing the round; a stake name used twice with no pair to
+  be made from it says the first was taken; and `None of them is on L1`
+  is printed only where it is true. `abf:*dupe-color*` reads through
+  `abf:ink`.
+* **v1.14** — `abf:*locus-color*` is `'auto`: the guide arcs ask
+  `abf:ink` for the grey that suits the background they will be seen
+  against, rather than assuming a near-black model space. A knob set to
+  a number is used exactly as given, so a shop that has picked its own
+  colours keeps them. (Part of the tree-wide ink change.)
 * **v1.13** — **more than one AB line on the sheet**. Two surveys
   merged onto one drawing carry two points named `A`, two named `B`,
   and two of every `Pt.##` after them; the stakes are paired into

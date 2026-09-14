@@ -22062,15 +22062,39 @@
 ;;;
 ;;;     2 points are numbered "2" - the one on L2 taken.
 ;;;
-;;; - and the ties are measured from that line's stakes.  Only a number
-;;; whose points include none on that line asks again, because then the
-;;; assumption has nothing to stand on.  A CLICK is never asked about
-;;; either way: it names the point it landed on, whatever that point is
-;;; numbered.
+;;; - and the ties are measured from that line's stakes.  A number whose
+;;; points include none on that line asks again, because then the
+;;; assumption has nothing to stand on.
+;;;
+;;; BUT THE ASSUMPTION IS ONLY A CONVENIENCE.  A point that turns out
+;;; NOT to be on the settled line MOVES the run to its own:
+;;;
+;;;     Pt.9 is on AB line L2, not L1 - the run moves to it, and its
+;;;     ties are measured from that pair.
+;;;
+;;; Measuring from the settled line when the point was taped off the
+;;; other pair is the wrong answer this whole question exists to
+;;; prevent, and it is not a question worth asking: the point says
+;;; which pair it belongs to.  It drew Pt.9 a 106-foot tie off stakes
+;;; nobody had a tape on, and said nothing.  A CLICK is never asked
+;;; about either way - it names the point it landed on, whatever that
+;;; point is numbered - but it moves the line just the same, and says
+;;; so.
 ;;;
 ;;; Two points numbered the same ON ONE LINE is a fault in the drawing
 ;;; rather than a second survey, and it is still answerable: the second
-;;; takes a letter after the label (L1, L1b).
+;;; takes a letter after the label (L1, L1b).  A label that names none
+;;; of them is re-asked with the rings still up, so a typo costs a
+;;; keystroke and not the round.
+;;;
+;;; AND WHERE THERE IS NO PAIR TO NAME.  A drawing that names NEITHER
+;;; stake is clicked, the way it always was - and the pair just clicked
+;;; becomes the run's one line, so a doubled number there is asked about
+;;; off those two clicks like any other.  Where a stake name is used
+;;; twice and no pair can be made from it at all - two As and no B -
+;;; nothing can say which A is meant, so the first is taken and the run
+;;; says so rather than measuring every tie from the wrong stake in
+;;; silence.
 ;;;
 ;;; THE STAKES.  A and B are looked up by name among the survey points,
 ;;; the same way any other point is: an "ab_pt" INSERT anywhere or any
@@ -22078,6 +22102,10 @@
 ;;; (the classifier BPCALLOUT, CDCALLOUT and LHD all share).  A drawing
 ;;; that does not name them asks you to click each one instead, once
 ;;; per run, snapping to the nearest survey point within abf:*snap*.
+;;; Where the drawing DOES name them the ties are measured from the
+;;; PAIRED two, not from the first of each name: on a sheet with a
+;;; spare stake those are different points, and the first A measured
+;;; 190 feet off a stake the pairing had already rejected.
 ;;;
 ;;; NAMING THE POINT.  Type its number the way it reads in the drawing
 ;;; -- "35", "Pt.35", "pt 35", "#35" and "035" all name the same point
@@ -22125,7 +22153,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.14")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.15")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -22216,7 +22244,13 @@
                                     ; so a real point being chosen
                                     ; between never reads as a
                                     ; suggestion (abf:*sug-color*) or
-                                    ; as a point already ringed
+                                    ; as a point already ringed.  Read
+                                    ; through abf:ink like every other
+                                    ; colour knob, but it ships as a
+                                    ; NUMBER rather than 'auto: a ring
+                                    ; that asks a question has to stand
+                                    ; out, and 'auto's answer for guide
+                                    ; geometry is a grey
 (setq abf:*dupe-radius*  9.0)       ; radius of that ring - wider than
                                     ; abf:*sug-radius* and than the
                                     ; ring round a moved point, so the
@@ -23433,7 +23467,8 @@
 (defun abf:dupe-ring (p)
   (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 abf:*dupe-color*) '(100 . "AcDbCircle")
+                 (cons 62 (cal:ink abf:*dupe-color* 'guide))
+                 '(100 . "AcDbCircle")
                  (list 10 (car p) (cadr p) 0.0)
                  (cons 40 abf:*dupe-radius*)))
   (list (entlast)))
@@ -23443,7 +23478,8 @@
 (defun abf:dupe-tag (p tag)
   (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 abf:*dupe-color*) '(100 . "AcDbText")
+                 (cons 62 (cal:ink abf:*dupe-color* 'guide))
+                 '(100 . "AcDbText")
                  (list 10 (+ (car  p) abf:*dupe-radius*)
                           (+ (cadr p) abf:*dupe-radius*) 0.0)
                  (cons 40 abf:*sug-hgt*) (cons 1 tag)))
@@ -23467,7 +23503,7 @@
                     (abf:dupe-ring (abf:ln-b l))))
   (entmake (list '(0 . "LINE") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 abf:*dupe-color*)
+                 (cons 62 (cal:ink abf:*dupe-color* 'guide))
                  (cons 6 abf:*locus-ltype*) '(100 . "AcDbLine")
                  (list 10 (car (abf:ln-a l)) (cadr (abf:ln-a l)) 0.0)
                  (list 11 (car (abf:ln-b l)) (cadr (abf:ln-b l)) 0.0)))
@@ -23719,7 +23755,7 @@
                        np newpt newnm tried lasthold ments ring note
                        npair spots hits h astep movep createp near ra rb
                        why fromfind built deft tmpl pents mk
-                       lines curln pend lsel dtag dupes l)
+                       lines curln pend lsel dtag dupes l oldln snm)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -23808,7 +23844,44 @@
                      (progn (princ "\n  Stepping back one stake.")
                             (setq pb nil astep 1))
                      (setq astep 3)))))))
-          (setq curln (car lines)))
+          ;; a stake name the drawing uses TWICE with no pair made from
+          ;; it at all - two As and no B.  Nothing can say which A is
+          ;; meant, so abf:stake took the first; say so, rather than let
+          ;; the run measure every tie from the wrong stake in silence.
+          ;; This has to come BEFORE the clicked pair becomes a line
+          ;; below, or there is no longer a "no pair" to test for.
+          ;; Where a pair WAS made the pairing has answered it already,
+          ;; and the spare-stake count further up covers the leftovers.
+          (if (null lines)
+            (foreach snm (list abf:*a-name* abf:*b-name*)
+              (if (> (length (abf:matches snm cands)) 1)
+                (princ (strcat "\n  "
+                               (itoa (length (abf:matches snm cands)))
+                               " points are numbered \"" snm "\" and no "
+                               abf:*a-name* "/" abf:*b-name* " pair could"
+                               " be made to say which - the first was"
+                               " taken.")))))
+          (cond
+            ;; a drawing that NAMES its stakes has them PAIRED already,
+            ;; so take the pair: the line a doubled number is told apart
+            ;; by and the stakes the ties are measured from have to be
+            ;; the same two points.  abf:stake takes the first A by
+            ;; name, which on a sheet with a spare stake - three As and
+            ;; two Bs - is not the A that goes with B, and the tie then
+            ;; measured 190 feet off a stake the pairing had rejected
+            (lines
+             (setq curln (car lines)
+                   pa    (abf:ln-a curln)
+                   pb    (abf:ln-b curln)))
+            ;; and a drawing that names NEITHER stake still has a pair -
+            ;; the one just clicked.  Making it the run's line is what
+            ;; gives a doubled number here readings to be told apart by,
+            ;; and abf:line-of something to answer with: without it the
+            ;; table asked for a distance from a stake that was nil
+            ((and pa pb (> (cal:dist pa pb) abf:*fuzz*))
+             (setq lines (list (list 1 pa pb
+                                     (strcat abf:*line-prefix* "1")))
+                   curln (car lines)))))
         ;; more than one survey on the sheet.  Which line the run is on
         ;; is not settled here, because the drafter cannot answer it
         ;; here: ABFIND and ABMOVE read it off the first point they are
@@ -23982,10 +24055,17 @@
                                                              (car c)))))
                         (princ (strcat "\n  " (itoa (length dupes))
                                        " points are numbered \""
-                                       (abf:as-number ans) "\" - one per"
-                                       " AB line, ringed and labelled on"
-                                       " screen."
-                                       (if curln
+                                       (abf:as-number ans)
+                                       "\" - ringed and labelled on"
+                                       " screen by the AB line each"
+                                       " belongs to."
+                                       ;; only where it is TRUE: several
+                                       ;; of them on the settled line
+                                       ;; says so through its own labels
+                                       ;; (L1, L1b), and saying "none of
+                                       ;; them is on L1" beside a row
+                                       ;; labelled L1 is simply wrong
+                                       (if (and curln (null lsel))
                                          (strcat "  None of them is on "
                                                  (abf:ln-tag curln) ".")
                                          "")))
@@ -24004,12 +24084,18 @@
                                            14)
                                          (abf:fmt (cal:dist (abf:ln-b l)
                                                             (cadr c))))))
-                        (setq lsel (abf:ask-tag
-                                     (strcat "\n  Which AB line is Pt."
-                                             (abf:as-number ans)
-                                             " on - click the one you"
-                                             " mean, or type its label")
-                                     dtag T))
+                        ;; a label that names none of them is re-asked
+                        ;; with the rings still up - a typo must not
+                        ;; cost the round and send the drafter back to
+                        ;; the number
+                        (setq lsel 'ABF-AGAIN)
+                        (while (eq lsel 'ABF-AGAIN)
+                          (setq lsel (abf:ask-tag
+                                       (strcat "\n  Which AB line is Pt."
+                                               (abf:as-number ans)
+                                               " on - click the one you"
+                                               " mean, or type its label")
+                                       dtag T)))
                         (abf:drop temps)
                         (setq temps nil)
                         (cond
@@ -24017,7 +24103,7 @@
                           ;; question in front of this one
                           ((eq lsel 'CAL-BACK)
                            (princ "\n  Back to the point number."))
-                          ((or (null lsel) (eq lsel 'ABF-AGAIN))
+                          ((null lsel)
                            (princ (strcat "\n  None taken - nothing"
                                           " drawn.")))
                           (t
@@ -24026,21 +24112,41 @@
                  ;; the AB line is settled by the first point the run
                  ;; handles, and every point after it is taken to be on
                  ;; the same one - that is what lets the answer above be
-                 ;; assumed rather than asked a second time
-                 (if (and hit pend)
+                 ;; assumed rather than asked a second time.
+                 ;;
+                 ;; A point that is NOT on the settled line MOVES the
+                 ;; run to its own.  Assuming the line is a convenience;
+                 ;; measuring from it when the point was taped off the
+                 ;; other pair is the wrong answer this whole question
+                 ;; exists to prevent - it drew Pt.9 a 106-foot tie
+                 ;; across the sheet, off stakes nobody had a tape on.
+                 ;; Either way the answer is read back before the ties
+                 ;; are drawn.
+                 (if (and hit lines
+                          (or pend
+                              (not (abf:on-line-p (abf:cd-pt hit)
+                                                  curln lines))))
                    (progn
-                     (setq curln (abf:line-of (abf:cd-pt hit) lines)
+                     (setq oldln (if pend nil curln)
+                           curln (abf:line-of (abf:cd-pt hit) lines)
                            pa    (abf:ln-a curln)
                            pb    (abf:ln-b curln)
                            pend  nil
                            near  (abf:field-ref
                                    pa pb
                                    (abf:line-pts curln lines cands)))
-                     (princ (strcat "\n  On AB line " (abf:ln-tag curln)
-                                    " (" abf:*a-name* " to " abf:*b-name*
-                                    " " (abf:fmt (cal:dist pa pb))
-                                    ") - the rest of the run stays on"
-                                    " it."))))
+                     (princ
+                       (if oldln
+                         (strcat "\n  Pt." (abf:cd-nm hit) " is on AB"
+                                 " line " (abf:ln-tag curln) ", not "
+                                 (abf:ln-tag oldln) " - the run moves to"
+                                 " it, and its ties are measured from"
+                                 " that pair.")
+                         (strcat "\n  On AB line " (abf:ln-tag curln)
+                                 " (" abf:*a-name* " to " abf:*b-name*
+                                 " " (abf:fmt (cal:dist pa pb))
+                                 ") - the rest of the run stays on"
+                                 " it.")))))
                  (cond
                    ;; a click on nothing is a stray click and is simply
                    ;; reported; a NUMBER that names nothing is far more
