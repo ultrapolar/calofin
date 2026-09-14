@@ -109,7 +109,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.25")
+(setq *lazpanel-version* "v3.26")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -122,7 +122,11 @@
 ;;;    lzp:*captions*   one caption per command -- the only place they live
 ;;;    lzp:*groups*     the pages, as columns of command names -- an
 ;;;                     entry may be a headed run, ("Revert" "X" ...),
-;;;                     which labels part of a column from inside it
+;;;                     which labels part of a column from inside it.
+;;;                     A column is all runs or all bare commands, never
+;;;                     a mix: the renderer labels the column or its
+;;;                     runs, and both would be two frames saying one
+;;;                     thing
 ;;;  tools/check_registry.py --fix maintains both; the VB palette's
 ;;;  catalog is generated from them (tools/gen_ui_data.py).
 
@@ -210,7 +214,20 @@
 ;;  the points, build the steps, convert what somebody sent you, then
 ;;  dimension and check.  A command
 ;;  that serves two jobs appears on both; AUTODIM and DIMCHECK are on
-;;  all three, because every job ends the same way.  The last five are
+;;  all three, because every job ends the same way.
+;;
+;;  THE END OF EVERY JOB IS TWO DIFFERENT THINGS, and the column that
+;;  ends each job page says so under two labels.  A CHECK walks you
+;;  through the drawing one item at a time and changes it as you
+;;  answer; a SCAN reads the same drawing and reports, touching
+;;  nothing.  Which one a drafter wants depends on how much time they
+;;  have and whether they are ready to commit, and the names alone did
+;;  not carry it -- COVERCHECK above COVERSCAN above LITECOVERSCAN in
+;;  one undifferentiated run reads as three spellings of one tool.
+;;  Same shape as Convert above Revert, and the same reason: the split
+;;  is what the command DOES to your drawing, not which tool family it
+;;  came from, so LINGUTTERSCAN files under Scan beside COVERSCAN
+;;  rather than under Pads beside LINGUTTER.  The last five are
 ;;  the CATEGORIES -- the whole roster filed by what each tool is
 ;;  rather than when you reach for it -- so a tool you cannot place in
 ;;  a job is still one tab away.  Converters is the newest of them and
@@ -414,12 +431,18 @@
        )
       )
      ("Dims & check"
-      "AUTODIM"
-      "LINFINCHECK"
-      "LINFINSCAN"
-      "LITELINFINSCAN"
-      "DIMCHECK"
-      "DIMSCAN"
+      ("Dims"
+       "AUTODIM"
+       )
+      ("Check"
+       "LINFINCHECK"
+       "DIMCHECK"
+       )
+      ("Scan"
+       "LINFINSCAN"
+       "LITELINFINSCAN"
+       "DIMSCAN"
+       )
       )
     )
      ("Cover"
@@ -445,15 +468,23 @@
       "XFTRECONV"
       )
      ("Pads, dims & check"
-      "LINGUTTER"
-      "LINGUTTERSCAN"
-      "PADDLE"
-      "AUTODIM"
-      "COVERCHECK"
-      "COVERSCAN"
-      "LITECOVERSCAN"
-      "DIMCHECK"
-      "DIMSCAN"
+      ("Pads"
+       "LINGUTTER"
+       "PADDLE"
+       )
+      ("Dims"
+       "AUTODIM"
+       )
+      ("Check"
+       "COVERCHECK"
+       "DIMCHECK"
+       )
+      ("Scan"
+       "LINGUTTERSCAN"
+       "COVERSCAN"
+       "LITECOVERSCAN"
+       "DIMSCAN"
+       )
       )
     )
      ("Spa"
@@ -472,16 +503,24 @@
        )
       )
      ("Shape, dims & check"
-      "SPA"
-      "LAZSPA"
-      "SPACOVCREATE"
-      "CUSTBLOCK"
-      "AUTODIM"
-      "SPACHECK"
-      "SPACHECKSCAN"
-      "LITESPACHECKSCAN"
-      "DIMCHECK"
-      "DIMSCAN"
+      ("Shape"
+       "SPA"
+       "LAZSPA"
+       "SPACOVCREATE"
+       "CUSTBLOCK"
+       )
+      ("Dims"
+       "AUTODIM"
+       )
+      ("Check"
+       "SPACHECK"
+       "DIMCHECK"
+       )
+      ("Scan"
+       "SPACHECKSCAN"
+       "LITESPACHECKSCAN"
+       "DIMSCAN"
+       )
       )
     )
      ("Rest"
