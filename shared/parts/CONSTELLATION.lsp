@@ -92,7 +92,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.5")
+(setq *constellation-version* "v1.6")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;

@@ -93,6 +93,25 @@ go.
    a point, the ring round that point stays, on `LOBF-IGNORED` -- that
    is the finding, not the furniture.
 
+   `All` moves all three onto `LOBF` as well, and there alone keeps the
+   preview colours, because telling three near-identical lines apart is
+   the whole reason for keeping all of them. **Nothing a run keeps is
+   left on `LOBF-PREVIEW`**: that layer means "candidates being chosen
+   right now" and nothing else, which is what lets the next run sweep
+   it (below) without eating an answer somebody asked for.
+
+### What one run leaves for the next
+
+Everything LOBF draws carries a piece of extended data naming the
+command, so only its own work is ever erased again. A run escaped out of
+partway leaves its candidates standing -- the undo group is closed on
+the way out, so one `U` takes them back, but a drafter who does not
+press `U` would meet them on the next run: three lines numbered 1, 2 and
+3 with three more drawn over them, which is exactly what the stalks
+exist to prevent. So each run starts by sweeping LOBF's **own** stamped
+objects off `LOBF-PREVIEW` and says how many went. Anything else on that
+layer -- including anything you drew there -- is left alone.
+
 ### Telling three near-identical lines apart
 
 Three fits through one row of points sit nearly on top of each other,

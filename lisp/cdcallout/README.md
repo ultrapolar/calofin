@@ -135,11 +135,15 @@ DIMENSION layer.
 ## Revisions
 
 `CDCALLOUT.lsp` carries the auto-stamped banner
-`(setq *cdcallout-version* "v1.10")` that `tools/release_lisp.py`
+`(setq *cdcallout-version* "v1.11")` that `tools/release_lisp.py`
 reads; run it after any change and the dated twin
-`releases/CDCALLOUT_MMDDYY_REV110.lsp` regenerates itself. Bump the
+`releases/CDCALLOUT_MMDDYY_REV111.lsp` regenerates itself. Bump the
 banner with every revision.
 
+* **v1.11** — the load greeting is silent inside the whole build
+  (`*calofin-quiet*`, set by `LAZPASS.lsp` and `CALOFIN-LOADER.lsp`);
+  `APPLOAD`ed alone it still prints, which is the one time somebody
+  wants to be told.
 * **v1.10** — a number the drawing carries **twice** is asked about
   instead of silently taking the first match: every point that carries
   it is ringed and labelled `P1`, `P2`, … and the table says how long

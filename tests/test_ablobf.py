@@ -545,6 +545,135 @@ check('so the kept run never reaches the omitted point',
           for v in vs4), (HOOK[9], vs4))
 
 # ----------------------------------------------------------------------
+print('ablobf -- integer coordinates fit the same as real ones')
+# ----------------------------------------------------------------------
+# AutoLISP divides two integers as INTEGERS, and the segment math turns
+# on one such division: abl:seg-dist projects a point onto a span with
+# (/ (dot w v) len2).  On all-integer coordinates that collapses to 0,
+# so a point sitting exactly on the middle of a span measures a whole
+# half-span away - and five collinear points came back as four stubs
+# instead of one line.  AutoCAD's own DXF carries reals, so this is only
+# reachable from geometry another routine entmade; abl:add-point makes
+# every point a real on the way in, which is the only door they use.
+
+
+def int_points(vm, pts):
+    """Points written the way an entmake with integer literals leaves
+    them - (10 0 0), not (10 0.0 0.0)."""
+    made = []
+    for x, y in pts:
+        before = len(vm.entities)
+        vm.loads('(entmake (list \'(0 . "POINT") \'(8 . "POINTS")'
+                 ' (list 10 %d %d 0)))' % (x, y))
+        made += vm.entities[before:]
+    return made
+
+
+STRAIGHT = [(0, 0), (50, 0), (100, 0), (150, 0), (200, 0)]
+
+vm = newvm()
+vm.pickfirst = ['<ss>'] + int_points(vm, STRAIGHT)
+run(vm, WIZARD + [None, None, '1'])
+d_int = live(vm, 'LWPOLYLINE', 'POOL')[0][1]
+
+vm = newvm()
+vm.pickfirst = ['<ss>'] + points(vm, [(float(x), float(y))
+                                      for x, y in STRAIGHT])
+run(vm, WIZARD + [None, None, '1'])
+d_real = live(vm, 'LWPOLYLINE', 'POOL')[0][1]
+
+check('five collinear points are ONE segment however they were written',
+      len(verts(d_int)) - 1 == 1 and len(verts(d_real)) - 1 == 1,
+      'integer %d seg, real %d seg' % (len(verts(d_int)) - 1,
+                                       len(verts(d_real)) - 1))
+check('and the two fits are the same line',
+      all(abs(a[0] - b[0]) < 1e-9 and abs(a[1] - b[1]) < 1e-9
+          for a, b in zip(verts(d_int), verts(d_real))),
+      (verts(d_int), verts(d_real)))
+vm = newvm()
+check('the midpoint of a span measures zero off it, not half of it',
+      abs(float(vm.loads("(abl:seg-dist '(100.0 0.0)"
+                         " '((0.0 0.0) (200.0 0.0) 0.0))"))) < 1e-12)
+
+# ----------------------------------------------------------------------
+print('ablobf -- the edges')
+# ----------------------------------------------------------------------
+EDGES = [
+    ('two points',            [(0.0, 0.0), (200.0, 0.0)]),
+    ('a run one unit long',   [(0.0, 0.0), (0.25, 0.02), (0.5, 0.03),
+                               (0.75, 0.02), (1.0, 0.0)]),
+    ('a million from origin', [(1.0e6 + x, 1.0e6 + x * (200.0 - x) / 1000.0)
+                               for x in range(0, 201, 25)]),
+    ('doubled shots',         [(0.0, 0.0), (0.0, 0.0), (100.0, 1.0),
+                               (100.0, 1.0), (200.0, 0.0)]),
+    ('nearly a closed loop',  [(120 * math.cos(math.radians(a)),
+                               120 * math.sin(math.radians(a)))
+                              for a in range(0, 350, 20)]),
+]
+for label, pts in EDGES:
+    vm = newvm()
+    vm.pickfirst = ['<ss>'] + points(vm, pts)
+    txt = run(vm, WIZARD + [None, None, '1'])
+    kept = live(vm, 'LWPOLYLINE', 'POOL')
+    check('%s: one OPEN run comes back' % label,
+          len(kept) == 1 and grp(kept[0][1], 70) == 0, len(kept))
+    check('%s: nothing is left on the candidate layer' % label,
+          live(vm, layer='ABLOBF-FIT') == [],
+          [grp(d, 0) for _, d in live(vm, layer='ABLOBF-FIT')])
+
+for label, pts in [('one point',       [(5.0, 5.0)]),
+                   ('all on one spot', [(5.0, 5.0)] * 4),
+                   ('a hair apart',    [(0.0, 0.0), (1e-6, 0.0)])]:
+    vm = newvm()
+    vm.pickfirst = ['<ss>'] + points(vm, pts)
+    txt = run(vm, WIZARD)
+    check('%s is refused by name, and draws nothing' % label,
+          'At least 2 distinct points' in txt and live(vm, 'LWPOLYLINE') == [],
+          txt[-160:])
+
+for label, wiz in [('tolerance 0.001', [0.001, None, None, 'Done']),
+                   ('tolerance past the ceiling', [999.0, None, None, 'Done']),
+                   ('0 percent may miss', [1.0, 0, None, 'Done']),
+                   ('100 percent may miss', [1.0, 100, None, 'Done']),
+                   ('a cap of one curve', [1.0, None, 1, 'Done']),
+                   ('a cap of no curves', [1.0, None, 0, 'Done'])]:
+    vm = newvm()
+    vm.pickfirst = ['<ss>'] + points(vm, BOW)
+    txt = run(vm, list(wiz) + [None, None, '1'])
+    check('%s still produces a run' % label,
+          len(live(vm, 'LWPOLYLINE', 'POOL')) == 1
+          and 'ABLOBF stopped while' not in txt, txt[-200:])
+
+# ----------------------------------------------------------------------
+print('ablobf -- a survey number two points share')
+# ----------------------------------------------------------------------
+# Typing a number is the moment a duplicate becomes visible, and about
+# the only one: nothing else in the toolset asks you for a point number.
+# five points, but the fourth carries 3 like the third does
+dup_pts = [(0.0, 0.0), (50.0, 0.0), (100.0, 0.0), (150.0, 0.0), (200.0, 0.0)]
+vm = newvm()
+made = []
+for n, (x, y) in zip([1, 2, 3, 3, 5], dup_pts):
+    before = len(vm.entities)
+    vm.loads("(entmake (list '(0 . \"INSERT\") '(100 . \"AcDbEntity\")"
+             " '(8 . \"POINTS\") '(100 . \"AcDbBlockReference\")"
+             " '(2 . \"ab_pt\") (list 10 %r %r 0.0) '(66 . 1)))"
+             "(entmake (list '(0 . \"ATTRIB\") '(8 . \"POINTS\")"
+             " '(2 . \"number\") (cons 1 \"%d\")))"
+             "(entmake (list '(0 . \"SEQEND\") '(8 . \"POINTS\")))"
+             % (x, y, n))
+    made += vm.entities[before:]
+vm.pickfirst = ['<ss>'] + made
+dup = run(vm, WIZARD + ['Number', 3, None, '1'])
+check('a number two points share is warned about, not resolved quietly',
+      '2 selected points carry the number 3' in dup,
+      dup[dup.find('STARTS'):][:400])
+check('...and the warning says which one it took',
+      'taking the one at' in dup, dup[dup.find('WARNING'):][:200])
+check('...and the run is still fitted', 'written to layer POOL' in dup,
+      dup[-200:])
+
+# ----------------------------------------------------------------------
 print('ablobf -- the README quotes the values the code actually holds')
 # ----------------------------------------------------------------------
 # A knob table is only worth having if its middle column is the value in

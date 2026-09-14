@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091226 REV26")
+(setq pool:*version* "091226 REV27")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
