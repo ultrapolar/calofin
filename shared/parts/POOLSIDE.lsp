@@ -58,7 +58,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.4")
+(setq *poolside-version* "v1.5")
 
 ;;; -------------------- adjustable constants ---------------------------
 
