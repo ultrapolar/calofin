@@ -61,7 +61,8 @@ can still be clicked, it just cannot be typed.
    same way. A point that was taped is the mark made at it, so the run
    starts where the tape reached; a point that was NOT taped measures
    zero and the run starts on the wall itself -- which is how a step
-   that dies back into the wall is drawn.
+   that dies back into the wall is drawn. The two can be named in
+   either order: the marks say which way round the run goes (below).
 6. The polyline goes in on the perimeter's own layer and properties,
    every circle is erased, and every line becomes a `SIDE STANDARD`
    dimension on layer `DIMENSION`.
@@ -83,19 +84,55 @@ measured from and it does not have to be the true centroid.
 Marks are kept with their STATION -- how far along the perimeter,
 measured from its start, the base point sits -- so the polyline runs
 along the wall in the order the wall does, whatever order the points
-were named in. On a closed perimeter the run goes forward from the start
-station to the end station, wrapping past the polyline's own seam if
-that is the way round the two ends point. On an open one it is the
-stretch between them, read from the start toward the end, so a run named
-right-to-left comes out right-to-left.
+were named in. On an open perimeter it is the stretch between the two
+ends, read from the start toward the end, so a run named right-to-left
+comes out right-to-left.
 
 What decides whether a run end IS one of the marks is the survey point's
 own identity, never how close the two landed. That is the whole reason
 the pick is a point rather than a place: two shots a quarter inch apart
 are still two shots, and the sheet says which one the run starts at.
 
-Marks outside the two ends keep their dimension -- the measurement was
-still taken -- but stay off the polyline.
+### Which way round a closed wall, and why it is not asked
+
+Two ends cut a closed perimeter into two arcs, and the run is one of
+them. Which one is decided by the MARKS, not by the order the two ends
+were named: every mark sits on exactly one arc, so the arc carrying more
+of them is the run that was measured. Naming the ends the other way
+round therefore gives the same run, read from whichever end was named
+first.
+
+> Before v1.2 the run went forward from the start station whatever was
+> on the way, so naming the ends the other way round sent it round the
+> empty side of the pool and handed back a two-point line straight
+> across, with every measurement left off it.
+
+The one case the marks cannot settle is a genuine tie -- the same number
+on each arc -- and that is the only time the question is put:
+
+```
+The run's two ends cut the wall in half and each half carries the same
+number of marks, so which way round it goes is yours to say.
+Click a spot the run passes through [Back]:
+```
+
+One click, on a spot the run passes through. Like the centre click it is
+a DIRECTION and not a datum: it is projected onto the wall only to ask
+which arc it fell on. A tie needs at least two marks to be a tie, and
+marks that ARE the two ends do not vote (an end sits on both arcs), so
+an ordinary run never sees this question.
+
+### A mark the run does not reach
+
+It is NAMED, before the drawing is finished:
+
+```
+Pt.7 and Pt.9 sit outside the run - still dimensioned, but not joined.
+```
+
+and it keeps its dimension, because the measurement was still taken. A
+partial run is a perfectly ordinary thing to want; a measurement going
+quietly missing is not.
 
 ## Install & run
 
@@ -124,6 +161,11 @@ At the top of the file, between the version banner and the first
 
 ## Notes & limitations
 
+- **A run cannot pass through marks on both sides of its own ends.**
+  Two ends cut the wall in two, so if marks fall on each side no run
+  between those ends can reach them all -- the arc with more of them is
+  taken and the rest are named. If that is not what you meant, the ends
+  are what to change.
 - **The centre click has to be unambiguously inside.** Which way a mark
   runs is decided by the sign of one dot product, so on a deeply
   notched shape -- a narrow L, a keyhole -- a centre clicked in one
@@ -163,6 +205,7 @@ Runtime tests: the real file is loaded into `tests/lispvm.py` and
 the right point, a typed number finding it, the five spellings meeting
 in the middle, a bad number and a duplicate number re-asked), the
 projection, the direction, the stations, the wall order, the seam wrap,
-the run ends deciding by identity, the five `Back` steps and the session
-the command hands back are all measured against the file that actually
-ships.
+the ends being nameable in either order, the tie click and what it
+leaves out, the run ends deciding by identity, the six `Back` steps and
+the session the command hands back are all measured against the file
+that actually ships.

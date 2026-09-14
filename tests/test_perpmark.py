@@ -463,6 +463,87 @@ def test_a_run_picked_backwards_comes_out_backwards():
     print("ok  backwards   -> start -> end, down the wall the other way")
 
 
+def test_the_marks_decide_which_way_round_a_closed_wall_the_run_goes():
+    """The two ends cut a closed wall into two arcs, and the marks are on
+    one of them.  Naming the ends in either order has to give the same
+    run -- reading from whichever end was named first.  It did not: the
+    other order used to send the run round the empty side and hand back a
+    two-point line straight across, every mark left off it."""
+    wanted = [(5, 0), (20, 12), (60, 18), (100, 12), (115, 0)]
+    for ends, want in (("15", wanted), ("51", list(reversed(wanted)))):
+        vm = newvm()
+        rect(vm)
+        bottom_wall_points(vm, 5, 20, 60, 100, 115)
+        run(vm, [vm.entities[0], [60., 30., 0.],
+                 "2", 12.0, "3", 18.0, "4", 12.0,
+                 None, "Yes", ends[0], ends[1]])
+        assert pts_near(verts(vm, drawn_pline(vm)), want), \
+            (ends, verts(vm, drawn_pline(vm)))
+        assert not said(vm, "outside the run"), vm.printed
+    print("ok  either way  -> the ends can be named in either order")
+
+
+def test_a_tie_asks_which_way_the_run_passes():
+    """Two marks on each arc: nothing but the drafter can choose, so one
+    click on the side the run passes through settles it -- and the marks
+    on the other side are NAMED, never quietly dropped."""
+    for click, want, missed in (
+            ([60., 2., 0.], [(5, 0), (20, 12), (60, 18), (115, 60)],
+             "Pt.5 and Pt.6"),
+            ([40., 58., 0.], [(5, 0), (20, 54), (60, 51), (115, 60)],
+             "Pt.2 and Pt.3")):
+        vm = newvm()
+        rect(vm)                       # 120 x 60, so 360 all the way round
+        ab_pt(vm, 5, 0, 1)             # station   5 - the run's start
+        ab_pt(vm, 20, 0, 2)            # station  20 - the near arc
+        ab_pt(vm, 60, 0, 3)            # station  60 - the near arc
+        ab_pt(vm, 115, 60, 4)          # station 185 - the run's end
+        ab_pt(vm, 60, 60, 5)           # station 240 - the far arc
+        ab_pt(vm, 20, 60, 6)           # station 280 - the far arc
+        run(vm, [vm.entities[0], [60., 30., 0.],
+                 "2", 12.0, "3", 18.0, "5", 9.0, "6", 6.0,
+                 None, "Yes", "1", "4", click])
+        assert pts_near(verts(vm, drawn_pline(vm)), want), \
+            (click, verts(vm, drawn_pline(vm)))
+        assert said(vm, missed + " sit outside the run"), vm.printed
+    print("ok  tie         -> one click says which way, the rest is named")
+
+
+def test_a_tie_is_only_asked_about_when_it_is_really_a_tie():
+    """Every mark on one arc, or every mark AT one of the two ends: the
+    question is not put, because nothing is in doubt."""
+    vm = newvm()
+    rect(vm)
+    bottom_wall_points(vm, 20, 60)
+    run(vm, [vm.entities[0], [60., 30., 0.],
+             "1", 6.0, "2", 18.0, None, "Yes", "1", "2"])
+    assert not any('passes through' in p[0] for p in vm.prompts), vm.prompts
+    assert pts_near(verts(vm, drawn_pline(vm)), [(20, 6), (60, 18)])
+    print("ok  no tie      -> the question is only put when it has to be")
+
+
+def test_back_at_the_which_way_click_re_opens_the_end():
+    vm = newvm()
+    rect(vm)
+    ab_pt(vm, 5, 0, 1)
+    ab_pt(vm, 20, 0, 2)
+    ab_pt(vm, 60, 0, 3)
+    ab_pt(vm, 115, 60, 4)
+    ab_pt(vm, 60, 60, 5)
+    ab_pt(vm, 20, 60, 6)
+    run(vm, [vm.entities[0], [60., 30., 0.],
+             "2", 12.0, "3", 18.0, "5", 9.0, "6", 6.0,
+             None, "Yes", "1", "4",
+             "Back",                   # the tie click -> back to the end
+             "5"])                     # ending AT Pt.5 breaks the tie: two
+                                       # marks near, one far, no question
+    assert pts_near(verts(vm, drawn_pline(vm)),
+                    [(5, 0), (20, 12), (60, 18), (60, 51)]), \
+        verts(vm, drawn_pline(vm))
+    assert said(vm, "Pt.6 sits outside the run"), vm.printed
+    print("ok  back at tie -> the end point is re-asked and replaced")
+
+
 def test_the_run_stops_at_the_points_that_end_it():
     """A mark outside the two ends keeps its dimension but stays off the
     polyline -- the ends say where the feature is, not where the tape was
@@ -477,7 +558,8 @@ def test_the_run_stops_at_the_points_that_end_it():
                     [(10, 0), (20, 6), (60, 18), (70, 0)]), \
         verts(vm, drawn_pline(vm))
     assert len(live(vm, 'DIMENSION')) == 3, "every mark is still dimensioned"
-    print("ok  run extent  -> the far mark is dimensioned but not joined")
+    assert said(vm, "Pt.4 sits outside the run"), vm.printed
+    print("ok  run extent  -> the far mark is dimensioned, not joined, SAID")
 
 
 def test_a_run_wraps_past_a_closed_polylines_seam():
@@ -810,6 +892,10 @@ if __name__ == '__main__':
     test_a_curve_this_file_cannot_read_is_measured_through_vlax_curve()
     test_the_polyline_runs_in_wall_order_not_naming_order()
     test_a_run_picked_backwards_comes_out_backwards()
+    test_the_marks_decide_which_way_round_a_closed_wall_the_run_goes()
+    test_a_tie_asks_which_way_the_run_passes()
+    test_a_tie_is_only_asked_about_when_it_is_really_a_tie()
+    test_back_at_the_which_way_click_re_opens_the_end()
     test_the_run_stops_at_the_points_that_end_it()
     test_a_run_wraps_past_a_closed_polylines_seam()
     test_a_run_end_at_a_taped_point_takes_its_distance()
