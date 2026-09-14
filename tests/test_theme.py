@@ -132,6 +132,62 @@ check('and so does an empty one -- "" is not an answer',
 ev(vm, '(setenv "NoSuchCalofinKey" "set")')
 check('a set key wins', ev(vm, '(cal:setting "NoSuchCalofinKey" "x")') == 'set')
 
+print('== the edges: what a knob can hold, and what it must never return ==')
+# A knob used to be a number and nothing else.  It can hold a SYMBOL
+# now, which invites hand-editing, and the failure mode of a mistyped
+# one is the worst kind: the symbol travels to entmake as DXF group 62
+# and dies there, a long way from the knob that caused it.  So the
+# guard is numberp -- a number is used exactly as given, and anything
+# else is resolved.
+vm = libvm()
+ev(vm, '(setenv "CalofinTheme" "dark")')
+for bad, why in (("'auot", 'a mistyped auto'),
+                 ('nil', 'a knob someone emptied'),
+                 ("'AUTO", 'auto in caps -- AutoLISP has no case here'),
+                 ("'Auto", 'and mixed case')):
+    got = ev(vm, "(cal:ink %s 'fade)" % bad)
+    check('%-32s -> %s' % (why, got),
+          isinstance(got, int) and got == 251, repr(got))
+check('...while a real number still passes through untouched',
+      all(ev(vm, "(cal:ink %d 'guide)" % n) == n for n in (0, 1, 8, 256)))
+
+print('== the edges: an override typed by a person ==')
+vm = libvm()
+for spelling in ('dark', 'DARK', ' dark', 'dark ', '  Dark  ', '\tdark'):
+    ev(vm, '(setenv "CalofinTheme" "%s")' % spelling)
+    check('%-12r is dark' % spelling, ev(vm, '(cal:bg)') == 'dark',
+          repr(ev(vm, '(cal:bg)')))
+for spelling in ('drk', '0', 'darkish', ''):
+    ev(vm, '(setenv "CalofinTheme" "%s")' % spelling)
+    check('%-12r is not an answer, so it measures instead' % spelling,
+          ev(vm, '(cal:bg)') in (None, []), repr(ev(vm, '(cal:bg)')))
+
+print('== the edges: CALVER cannot drop a file ==')
+# vl-sort REMOVES elements its comparison calls equal.  Sorting the
+# roster on the label alone lost one of two files whose banner globals
+# reduce to the same name -- and losing one silently is the single
+# thing this command exists not to do.
+vm = libvm()
+vm.loads('(setq *cchk-version* "v1.15") (setq cchk:*version* "v9.9")'
+         '(setq *pool-version* "v9.1") (setq spa:*version* "091126 REV19")')
+vm.printed.clear()
+vm.loads('(c:CALVER)')
+out = ''.join(str(x) for x in vm.printed)
+check('both files that read CCHK are listed',
+      out.count('CCHK') == 2 and 'v1.15' in out and 'v9.9' in out, out)
+check('the count agrees with the rows',
+      ('%d calofin file(s)' % out.count('\n  ')) in out, out)
+check('and the rows are in order',
+      out.index('CCHK') < out.index('POOL') < out.index('SPA'), out)
+
+vm = libvm()
+vm.loads('(setq *a-version* 1.0) (setq *b-version* nil)')
+vm.printed.clear()
+vm.loads('(c:CALVER)')
+out = ''.join(str(x) for x in vm.printed)
+check('a version global that is not a string is left out',
+      '\n  A ' not in out and '\n  B ' not in out, out)
+
 print('== every standalone copy answers what the library answers ==')
 #: the tools whose swap map says their ink/ui helper IS the library's.
 #: Read from the mirror, so a tool that gains a copy tomorrow is

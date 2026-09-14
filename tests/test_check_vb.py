@@ -320,6 +320,61 @@ bites("a Function closed by End Sub", WRAP % '''
 ''', "closes a Sub")
 
 
+print("== a framework type named without its namespace ==")
+# The miss this rule was written for: PaletteTheme.vb named
+# SystemColors, which lives in System.Windows, while importing only
+# System.Windows.Media -- and every other rule in check_vb passed it,
+# because the members they resolve are the ASSEMBLY's own.  A missing
+# framework import looks like nothing at all to them, and the first
+# thing that would have said so was somebody's build machine.
+
+bites("SystemColors without System.Windows", """Imports System.Windows.Media
+
+Public Class Fixture
+    Public Shared Function Ink() As Brush
+        Return New SolidColorBrush(SystemColors.ControlColor)
+    End Function
+End Class
+""", "needs `Imports System.Windows`")
+
+clean("...and with it", """Imports System.Windows
+Imports System.Windows.Media
+
+Public Class Fixture
+    Public Shared Function Ink() As Brush
+        Return New SolidColorBrush(SystemColors.ControlColor)
+    End Function
+End Class
+""")
+
+clean("a fully qualified name needs no import", """Imports System
+
+Public Class Fixture
+    Public Shared Function N() As Integer
+        Return System.Windows.SystemColors.ControlColor.R
+    End Function
+End Class
+""")
+
+clean("and a name inside a string is not a use", """Imports System
+
+Public Class Fixture
+    Public Shared Function Say() As String
+        Return "SystemColors and Registry and TextBox"
+    End Function
+End Class
+""")
+
+bites("Registry without Microsoft.Win32", """Imports System
+
+Public Class Fixture
+    Public Shared Function Get1() As Object
+        Return Registry.GetValue("k", "v", Nothing)
+    End Function
+End Class
+""", "needs `Imports Microsoft.Win32`")
+
+
 print("== a problem inside a long table is reported where it is ==")
 
 # One statement, many lines.  Reported at the `= {` above it, the line

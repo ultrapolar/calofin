@@ -106,7 +106,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.24")
+(setq *lazpanel-version* "v3.25")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1348,8 +1348,10 @@
 ;; guess without editing anything.  CALOFIN-LIB.lsp's cal:ui is this
 ;; function; the copy is here because a standalone file loads alone.
 (defun lzp:ui ( / v c)
+  ;; trimmed, as cal:themeset is: " dark " typed into the profile
+  ;; meaning nothing at all would be a silent no-op to stare at
   (setq v (getenv "CalofinTheme")
-        v (if (and v (/= v "")) (strcase v) "AUTO"))
+        v (if (and v (/= v "")) (strcase (vl-string-trim " \t" v)) "AUTO"))
   (cond ((= v "DARK") 'dark)
         ((= v "LIGHT") 'light)
         ((null (setq c (getvar "COLORTHEME"))) nil)
@@ -2357,20 +2359,23 @@
      (if lzd:ask (lzd:ask "Theme" v))
      (cond
        ((member v '("Back" "Undo")) (c:CALSET))
-       (t (setenv "CalofinTheme" (if v (strcase v) "Auto"))
+       (t (setq v (if v (strcase v) "AUTO"))
+          (setenv "CalofinTheme" v)
           ;; ...and beside the pins, where the VB palette reads it
           ;; (ui/calofin_net/PaletteTheme.vb).  The profile is what the
           ;; Lisp side reads and the registry is what the palette can
           ;; reach, and a drafter who has said which way their screen
           ;; reads has said it to both surfaces -- the same bargain the
-          ;; pinned row already strikes.
+          ;; pinned row already strikes.  Auto is written as empty:
+          ;; the palette's own probe is what "auto" means there.
+          ;;
+          ;; Read from V and not back out of getenv -- a strcase on the
+          ;; nil a failed setenv would leave is an error thrown from
+          ;; inside the line that reports success.
           (vl-catch-all-apply
             'vl-registry-write
-            (list lzp:*pinkey* "Theme"
-                  (if (= (strcase (getenv "CalofinTheme")) "AUTO") ""
-                      (strcase (getenv "CalofinTheme")))))
-          (princ (strcat "\nCalofinTheme is now "
-                         (getenv "CalofinTheme")
+            (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+          (princ (strcat "\nCalofinTheme is now " v
                          ".  Every tool reads it on the next colour it"
                          " picks; the toolbar icon takes it at the next"
                          " LAZBUTTON or LAZICON, and the VB palette at"

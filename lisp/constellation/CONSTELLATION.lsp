@@ -89,7 +89,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.5")
+(setq *constellation-version* "v1.6")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -335,11 +335,19 @@
 ;;  CALOFIN-LIB.lsp's cal:ink is this function; the copy is here
 ;;  because a standalone file has to load alone.
 (defun cst:ink (knob role / v th c lum)
-  (if (not (eq knob 'auto))
+  ;; numberp, not (eq knob 'auto): a knob is a colour NUMBER used
+  ;; exactly as given, or it is resolved.  Testing for 'auto instead
+  ;; would hand back whatever a mistyped knob holds -- nil, or the
+  ;; symbol AUOT -- and that reaches entmake as a DXF group 62, where
+  ;; it dies a long way from the line that caused it.
+  (if (numberp knob)
     knob
     (progn
+      ;; trimmed: this is typed by a person, and " dark " meaning
+      ;; nothing at all would be a silent no-op to stare at
       (setq v  (getenv "CalofinTheme")
-            v  (if (and v (/= v "")) (strcase v) "AUTO")
+            v  (if (and v (/= v "")) (strcase (vl-string-trim " \t" v))
+                   "AUTO")
             th (cond
                  ((= v "DARK") 'dark)
                  ((= v "LIGHT") 'light)
