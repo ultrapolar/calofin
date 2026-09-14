@@ -553,14 +553,34 @@ save/restore, one undo group, `(princ)` exit:
   (if lzd:begin (lzd:begin "TOOLNAME" *toolname-version*))
   (tool:syssave)
   (setvar "CMDECHO" 0)
-  (command "_.UNDO" "_Begin")
-  (setq undo-open T)
+  ;; opened only when undo is recording: _Begin in a drawing whose
+  ;; UNDOCTL has bit 1 clear errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
   ;; ... the tool ...
-  (command "_.UNDO" "_End")
-  (setq undo-open nil)
+  ;; and closed only if one was opened -- the same question the handler
+  ;; asks.  An _End on no group is an error of its own, and it lands
+  ;; HERE, after everything has been drawn, with the restore below it
+  ;; never reached
+  (if undo-open
+    (progn
+      (command "_.UNDO" "_End")
+      (setq undo-open nil)))
   (tool:sysrestore)
   (princ))
 ```
+
+Both halves of that bracket are conditional, and on the same fact.
+`check_lisp.py` rule 3 fails an unguarded `_Begin` and rule 3c an
+unguarded `_End`; this skeleton showed both flat until 2026-09-14, and
+seven commands had copied it -- `SMARTFILLET`, `HONEFILLET`, `XYPLOT`,
+`CHECK`, `XFTRECONV`, `SPACHECK` and `STOCKCOVER`. The `_End` is the
+worse half to get wrong: the `_Begin` fails at the top of a run that has
+done nothing yet, while the `_End` fails at the bottom of one that has
+drawn everything, and it takes the sysvar restore behind it down too --
+so the drafter is left with snap off and a borrowed layer current.
 
 **EVERY COMMAND REPORTS ITS FAILURES.  This is not optional, and the
 lines are not yours to write.**  A tool is not finished when it draws

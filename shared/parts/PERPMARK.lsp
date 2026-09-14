@@ -13,18 +13,25 @@
 ;;;
 ;;; What it is for
 ;;;   A bench, a step, a tanning ledge and a gutter are all measured the
-;;;   same way in the field: stand at a spot on the wall, run the tape
-;;;   square off it, and write the number down.  PERPMARK is that, at the
-;;;   keyboard.  Click the spot, type the number, and the spot gets a
-;;;   circle of that radius -- the swing of the tape -- and a line of that
-;;;   length running square off the wall into the pool.  Click the next
-;;;   spot, type the next number, and so on for as long as the sheet
+;;;   same way in the field: stand at a survey point on the wall, run the
+;;;   tape square off it, and write the number down beside that point's
+;;;   number.  PERPMARK is that, at the keyboard.  Name the point -- click
+;;;   it or type its number -- give the distance, and the point gets a
+;;;   circle of that radius, the swing of the tape, and a line of that
+;;;   length running square off the wall into the pool.  Name the next
+;;;   point, type the next number, and so on for as long as the sheet
 ;;;   lasts.  Enter ends it.
 ;;;
 ;;;   Then, if the marks are meant to BE something, it will join them up:
-;;;   one polyline through the far end of every line between the two ends
-;;;   you pick, the circles cleared away, and each line replaced by the
-;;;   dimension that says what it measured.
+;;;   one polyline through the far end of every line between the two
+;;;   points you name, the circles cleared away, and each line replaced
+;;;   by the dimension that says what it measured.
+;;;
+;;;   The points are the ones the rest of the family reads -- ABHD,
+;;;   CABHD, ABFIND, BPCALLOUT, CDCALLOUT and LHD all classify a survey
+;;;   point the same way, and this uses their classifier: an "ab_pt"
+;;;   INSERT wherever it sits, any other INSERT on the POINTS layer, and
+;;;   a plain POINT on that layer, numbered by its "number" attribute.
 ;;;
 ;;; Workflow
 ;;;   1. Select the perimeter -- the wall the distances were taped off.
@@ -32,32 +39,37 @@
 ;;;      circle, and anything else AutoCAD can measure along.
 ;;;   2. Click the centre of the pool.  That is the whole of the direction
 ;;;      question: a mark runs square off the wall toward the side the
-;;;      centre is on, so nothing has to be answered per point.
-;;;   3. Pick a point, give the distance, and repeat:
-;;;        - the point may be clicked or typed as a coordinate;
+;;;      centre is on, so nothing has to be answered per point.  It is the
+;;;      one pick in the command that is a place rather than a point.
+;;;   3. Name a survey point, give the distance, and repeat:
+;;;        - click the point, or type its number; "17", "Pt.17", "#17"
+;;;          and "017" all name the same one;
 ;;;        - a point that is not ON the perimeter is projected onto it,
-;;;          and the mark is drawn from where it landed, so a snap that
-;;;          missed still marks the right spot on the wall;
+;;;          and the mark is drawn from where it landed, so a shot that
+;;;          sits an inch off the fitted wall still marks the wall;
+;;;        - naming a point already marked REPLACES its mark -- the sheet
+;;;          has one distance at a point, so the second answer is a
+;;;          correction rather than a second mark;
 ;;;        - Back takes the last mark away again;
 ;;;        - Enter ends the round.
 ;;;   4. Draw a polyline through the marks?  No leaves every circle and
 ;;;      every line exactly where they are, for you to do as you see fit.
-;;;   5. Yes asks where the run starts and where it ends.  Those two picks
-;;;      are stations on the wall like any other: land on a mark and the
-;;;      run starts at that mark's measured end, land anywhere else and
-;;;      the distance there is taken as zero -- which is how a step that
-;;;      dies back into the wall is drawn.
+;;;   5. Yes asks which point the run starts at and which it ends at,
+;;;      named the same way.  A point that was taped is the mark made at
+;;;      it, so the run starts where the tape reached; a point that was
+;;;      NOT taped measures zero and the run starts on the wall itself,
+;;;      which is how a step that dies back into the wall is drawn.
 ;;;   6. The polyline goes in on the perimeter's own layer and properties,
 ;;;      every circle is erased, and every line becomes a
 ;;;      "SIDE STANDARD" dimension on layer "DIMENSION".
 ;;;
 ;;; How the direction is found
 ;;;   Each mark's base point is the point of the perimeter closest to the
-;;;   pick.  The perimeter's tangent there, turned 90 degrees, gives the
-;;;   two ways a mark could run; the one whose direction agrees with
-;;;   "toward the centre click" is the one used.  It is measured per mark
-;;;   rather than fixed once, so a run of marks around a corner or along
-;;;   a radius each come off their own piece of wall square.
+;;;   survey point.  The perimeter's tangent there, turned 90 degrees,
+;;;   gives the two ways a mark could run; the one whose direction agrees
+;;;   with "toward the centre click" is the one used.  It is measured per
+;;;   mark rather than fixed once, so a run of marks around a corner or
+;;;   along a radius each come off their own piece of wall square.
 ;;;
 ;;;   That makes the centre click a direction, not a datum: it is never
 ;;;   measured from and it does not have to be the true centroid.  What it
@@ -68,10 +80,15 @@
 ;;; The order the polyline runs in
 ;;;   Marks are kept with their STATION -- how far along the perimeter,
 ;;;   measured from its start, the base point sits -- so the polyline runs
-;;;   along the wall in the order the wall does, whatever order the marks
-;;;   were clicked in.  On a closed perimeter the run goes forward from
+;;;   along the wall in the order the wall does, whatever order the points
+;;;   were named in.  On a closed perimeter the run goes forward from
 ;;;   the start station to the end station, wrapping past the polyline's
-;;;   own seam if that is the way round the two picks point.
+;;;   own seam if that is the way round the two ends point.
+;;;
+;;;   What decides whether a run end IS one of the marks is the survey
+;;;   point's own identity, never how close the two landed.  That is the
+;;;   whole reason the pick is a point rather than a place: two shots a
+;;;   quarter inch apart are still two shots, and the sheet says which.
 ;;;
 ;;; Properties
 ;;;   * Circles and lines land on layer "PERPMARK" (created if missing).
@@ -88,8 +105,10 @@
 ;;;   * Esc or an error at any prompt restores every system variable the
 ;;;     command changed (OSMODE, CMDECHO, CLAYER and the dimension style)
 ;;;     and closes the UNDO group.
-;;;   * A pick the perimeter cannot be read at, and a centre click that
-;;;     leaves the direction ambiguous, re-prompt instead of guessing.
+;;;   * A number nothing carries, a number two points share, a click on
+;;;     nothing, a point the perimeter cannot be read under, and a centre
+;;;     click that leaves the direction ambiguous all re-prompt where
+;;;     they stand instead of guessing.
 ;;;   * All geometry is worked in WCS and converted at the edges, so the
 ;;;     command behaves under a rotated or shifted UCS.
 ;;;
@@ -100,7 +119,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.0")
+(setq *perpmark-version* "v1.1")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -124,11 +143,28 @@
 ;; keeps its current style and is told so.
 (setq pm:*dimstyle* "SIDE STANDARD")
 
-;; How close along the wall a start/end click has to land to count as an
-;; existing mark rather than as a new station measuring zero.  Raise it
-;; for a drafter who picks the run's ends by eye; drop it to 0 to make
-;; every end pick a zero-distance station unless it is snapped exactly.
-(setq pm:*snap* 2.0)
+;; What counts as a survey point.  The classifier is the one BPCALLOUT,
+;; CDCALLOUT, ABFIND and LHD share: change it in all of them or the
+;; tools disagree about what the drawing holds.
+(setq pm:*point-block* "ab_pt")    ; block name whose INSERTs mark
+                                   ; points wherever they sit
+(setq pm:*point-layer* "POINTS")   ; layer whose POINTs and INSERTs are
+                                   ; always points, whatever block
+(setq pm:*pt-tag* "number")        ; attribute tag on the point block
+                                   ; naming the point.  A block without
+                                   ; it lends its first attribute that
+                                   ; reads as a number instead
+(setq pm:*unknown* "?")            ; what a point with no readable
+                                   ; number is called.  It can still be
+                                   ; clicked; only a number can be typed
+(setq pm:*pt-prefix* "Pt.")        ; how a point is named in the prompts
+                                   ; and the report
+
+;; A click within this of a survey point picks that point.  The number
+;; typed at the same prompt never uses it -- a name is exact.  12.0 is
+;; what BPCALLOUT and ABFIND snap at, so a drafter's aim carries between
+;; the three.
+(setq pm:*snap* 12.0)
 
 ;; Two points closer than this are one point: it keeps a zero-length
 ;; segment out of the joined polyline and a zero-length normal out of
@@ -451,26 +487,169 @@
   (if (and e (entget e)) (entdel e)))
 
 ;;; ----------------------------------------------------------------------
+;;;  The survey points
+;;;
+;;;  A distance off the wall is taped AT a point -- one of the numbered
+;;;  shots ABHD, CABHD and the rest of the family read -- so a point is
+;;;  what this command marks, and its number is what names it.  The
+;;;  classifier below is BPCALLOUT's, shared with CDCALLOUT, ABFIND and
+;;;  LHD: an ab_pt INSERT wherever it sits, any other INSERT on the
+;;;  POINTS layer, and a plain POINT on that layer.
+;;;
+;;;  A point with no readable number is carried as "?" rather than
+;;;  dropped: it can be clicked like any other, it just cannot be typed.
+;;; ----------------------------------------------------------------------
+
+;; What the routine knows about one survey point: where it is, what it
+;; is called, and the entity it is.  The entity is its IDENTITY -- it is
+;; how a second pick of the same point is known to be a re-mark, and how
+;; a run end is known to be a mark already made.
+(defun pm:cd-pt (c) (car c))        ; (x y)
+(defun pm:cd-nm (c) (cadr c))       ; "17"
+(defun pm:cd-en (c) (caddr c))      ; the INSERT (or POINT) it was read from
+
+;; "Pt.17", the way the prompts and the report name a point.
+(defun pm:ptname (nm) (strcat pm:*pt-prefix* nm))
+
+;; Every survey point in the drawing, as (position name entity).
+(defun pm:collect-points ( / ss i en ed typ p nm out)
+  (setq out nil
+        ss  (ssget "_X" '((0 . "INSERT,POINT"))))
+  (if ss
+    (progn
+      (setq i 0)
+      (repeat (sslength ss)
+        (setq en  (ssname ss i)
+              ed  (entget en)
+              typ (cdr (assoc 0 ed))
+              p   (cdr (assoc 10 ed))
+              nm  nil)
+        (cond
+          ((= typ "INSERT")
+           (if (or (= (strcase (cdr (assoc 2 ed)))
+                      (strcase pm:*point-block*))
+                   (= (strcase (cdr (assoc 8 ed)))
+                      (strcase pm:*point-layer*)))
+             (progn
+               (setq nm (cal:block-number en pm:*pt-tag*))
+               (setq out (cons (list (list (car p) (cadr p))
+                                     (if (and nm (/= nm "")) nm pm:*unknown*)
+                                     en)
+                               out)))))
+          ((= typ "POINT")
+           (if (= (strcase (cdr (assoc 8 ed)))
+                  (strcase pm:*point-layer*))
+             (setq out (cons (list (list (car p) (cadr p)) pm:*unknown* en)
+                             out)))))
+        (setq i (1+ i)))))
+  (reverse out))
+
+;; The NUMBER a typed point name carries: the spelling with the spaces,
+;; the hashes and the "Pt." prefix taken off, and nothing else touched.
+;; Only the dot right after PT is a prefix dot - a point genuinely named
+;; "40.5" keeps its decimal.  (ABFIND's abf:as-number.)
+(defun pm:as-number (s / out i ch)
+  (setq out "" i 1)
+  (while (<= i (strlen s))
+    (setq ch (substr s i 1))
+    (if (not (member ch '(" " "#")))
+      (setq out (strcat out ch)))
+    (setq i (1+ i)))
+  (if (and (>= (strlen out) 2) (= (strcase (substr out 1 2)) "PT"))
+    (progn
+      (setq out (substr out 3))
+      (if (= (substr out 1 1) ".") (setq out (substr out 2)))))
+  out)
+
+;; One comparable form for a point number, so "35", "Pt.35", "pt 35",
+;; "#35" and "035" all meet in the middle.  (ABFIND's abf:canon.)
+(defun pm:canon (s)
+  (setq s (pm:as-number (strcase s)))
+  (if (distof s 2)
+    (rtos (distof s 2) 2 8)
+    s))
+
+;; The survey point nearest PK, when one sits within pm:*snap* of it.
+(defun pm:nearest (pk cands / best bd c d)
+  (setq best nil bd nil)
+  (foreach c cands
+    (setq d (distance (cal:2d pk) (pm:cd-pt c)))
+    (if (and (<= d pm:*snap*) (or (null bd) (< d bd)))
+      (setq best c bd d)))
+  best)
+
+;; Every point whose number is the one typed.  More than one is a sheet
+;; that numbers two points the same, and is asked about rather than
+;; guessed at.
+(defun pm:matches (s cands / want out c)
+  (setq want (pm:canon s) out nil)
+  (foreach c cands
+    (if (= (pm:canon (pm:cd-nm c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;;; ----------------------------------------------------------------------
 ;;;  Ask helpers
 ;;;  Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
 ;;;  standalone file loads alone -- see STANDARDS.md section 4.
 ;;;  Back sentinel: CAL-BACK.
 ;;; ----------------------------------------------------------------------
 
-;; Point pick, in the current UCS.  tail is the prose inside the angle
-;; brackets on a loop prompt whose Enter ends the loop (nil = a point is
-;; required and Enter re-asks).  Returns the point, nil for Enter, or
-;; CAL-BACK.
-(defun pm:askpt (msg tail back / v)
-  (if back
-    (initget (if tail 0 1) "Back Undo")
-    (initget (if tail 0 1)))
-  (setq v (getpoint (strcat "\n" msg
-                            (if back " [Back]" "")
-                            (if tail (strcat " <" tail ">") "")
-                            ": ")))
+;; A PLACE, in the current UCS -- the centre click, and nothing else in
+;; this command.  Always required: Enter re-asks.  Returns the point or
+;; CAL-BACK.  (A survey point is pm:askpoint below, which is a different
+;; question: it names one of the drawing's own points.)
+(defun pm:askpt (msg back / v)
+  (if back (initget 1 "Back Undo") (initget 1))
+  (setq v (getpoint (strcat "\n" msg (if back " [Back]" "") ": ")))
   (if lzd:ask (lzd:ask msg v))
   (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK v))
+
+;; A survey point, clicked or typed.  One prompt takes both: (initget
+;; 128) is arbitrary input, which hands typed text back from getpoint as
+;; the string it is where a click comes back as the point it is.  The
+;; misses are re-asked HERE rather than unwinding the caller's chain --
+;; a number nothing carries and a click on nothing are typos, not
+;; answers, and the question they belong to is this one.  tail is the
+;; prose inside the angle brackets on a loop prompt whose Enter ends the
+;; loop (nil = a point is required).  Returns the candidate, nil for
+;; Enter, or CAL-BACK.
+(defun pm:askpoint (msg tail back cands / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (if lzd:ask (lzd:ask msg v))
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'CAL-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (pm:matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (pm:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (pm:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (pm:nearest v cands))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
 
 ;;; ----------------------------------------------------------------------
 ;;;  System variables
@@ -482,16 +661,23 @@
 ;;; ----------------------------------------------------------------------
 ;;;  The marks
 ;;;
-;;;  One mark is (station base offs dist circle line):
+;;;  One mark is (station base offs dist circle line name ent):
 ;;;    station  how far along the perimeter its base point sits
 ;;;    base     the point ON the perimeter the tape was run from
 ;;;    offs     where the tape reached -- base + dist square off the wall
 ;;;    dist     the measurement (0.0 for a run end that was never taped)
 ;;;    circle   the swing of the tape, an ename (nil on a zero station)
 ;;;    line     the measurement itself, an ename (nil on a zero station)
+;;;    name     the survey point's number, for the prompts and the report
+;;;    ent      the survey point itself, which is the mark's IDENTITY:
+;;;             picking that point again is a re-mark, and naming it at
+;;;             a run end is naming this mark
 ;;; ----------------------------------------------------------------------
 
-(defun pm:mk-station (station base) (list station base base 0.0 nil nil))
+;; A run end at a point that was never taped: it sits ON the wall, so
+;; its offset is its base and it carries no circle and no line.
+(defun pm:mk-station (station base name ent)
+  (list station base base 0.0 nil nil name ent))
 
 (defun pm:m-station (m) (car m))
 (defun pm:m-base (m) (cadr m))
@@ -499,6 +685,8 @@
 (defun pm:m-dist (m) (nth 3 m))
 (defun pm:m-circle (m) (nth 4 m))
 (defun pm:m-line (m) (nth 5 m))
+(defun pm:m-name (m) (nth 6 m))
+(defun pm:m-ent (m) (nth 7 m))
 
 ;; Which way a mark at BASE runs: square off the wall, on the side CTR is.
 ;; nil when the tangent is unreadable or the centre click leaves the two
@@ -544,24 +732,40 @@
         (setq out (cons (cons k m) out)))))
   (mapcar 'cdr (pm:sortkey out)))
 
-;; Which mark a run-end click means.  Landing within pm:*snap* ALONG THE
-;; WALL of one that was measured is that mark, so a run starts where the
-;; tape said it did; landing anywhere else is a station of its own
-;; measuring zero, which is how a step that dies back into the wall is
-;; drawn.  nil when the perimeter cannot be read at the pick at all.
-(defun pm:runend (en segs marks p / loc st best bd m d)
-  (setq loc (pm:locate en segs p))
-  (if (null loc)
-    nil
+;; What a run end names.  A point that was taped is the mark that was
+;; made at it, so the run starts where the tape reached; a point that
+;; was NOT taped is a station of its own measuring zero, which is how a
+;; step that dies back into the wall is drawn.  It is the point's own
+;; identity that decides which, never how close the two landed -- that
+;; is the whole reason the pick is a point rather than a place.  nil
+;; when the perimeter cannot be read under it at all.
+;; The mark made at survey point ENT, when one was made.
+(defun pm:marked-at (marks ent / hit m)
+  (setq hit nil)
+  (foreach m marks
+    (if (eq (pm:m-ent m) ent) (setq hit m)))
+  hit)
+
+(defun pm:runend (en segs marks cand / hit loc)
+  (setq hit (pm:marked-at marks (pm:cd-en cand)))
+  (if hit
+    hit
     (progn
-      (setq st   (caddr loc)
-            best nil
-            bd   nil)
-      (foreach m marks
-        (setq d (abs (- (pm:m-station m) st)))
-        (if (and (<= d pm:*snap*) (or (null best) (< d bd)))
-          (setq best m bd d)))
-      (if best best (pm:mk-station st (car loc))))))
+      (setq loc (pm:locate en segs (pm:cd-pt cand)))
+      (if loc
+        (pm:mk-station (caddr loc) (car loc)
+                       (pm:cd-nm cand) (pm:cd-en cand))))))
+
+;; MARKS with the one made at ENT taken out, its circle and its line
+;; erased with it.  Picking a point a second time is a correction, not a
+;; second mark: the sheet has one distance at that point.
+(defun pm:unmark (marks ent / out m)
+  (setq out '())
+  (foreach m marks
+    (if (eq (pm:m-ent m) ent)
+      (progn (pm:erase (pm:m-circle m)) (pm:erase (pm:m-line m)))
+      (setq out (cons m out))))
+  (reverse out))
 
 ;; PTS with each point that repeats its predecessor dropped, so the
 ;; joined polyline never carries a zero-length segment.  Consecutive-only
@@ -610,9 +814,9 @@
   (princ))
 
 (defun c:PERPMARK (/ *error* undo-open
-                     sel en ed segs tot closed ctr pick loc base tg nrm
-                     d ans marks stage done pts run s0 s1 m0 m1 lay
-                     odim ndims npts m)
+                     sel en ed segs tot closed ctr pick cand cands loc
+                     base tg nrm d ans marks stage done pts run s0 s1
+                     m0 m1 lay odim ndims npts m)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -666,13 +870,24 @@
              (princ "\nThat perimeter has no length."))
             (t
              (setq closed (pm:isclosed en segs)
-                   stage  2))))))
+                   cands  (pm:collect-points))
+             (if (null cands)
+               (progn
+                 (princ (strcat "\nNo survey points in this drawing -"
+                                " PERPMARK marks the distances taped at"
+                                " the numbered points ABHD and its family"
+                                " read."))
+                 (setq done T))
+               (progn
+                 (princ (strcat "\n" (itoa (length cands))
+                                " survey point(s) found."))
+                 (setq stage 2))))))))
 
       ;; --- 2. the centre, which is the whole direction question --------
       ((= stage 2)
        (princ (strcat "\nA mark runs square off the wall, toward the side"
                       " the centre is on."))
-       (setq pick (pm:askpt "Click the centre of the pool" nil T))
+       (setq pick (pm:askpt "Click the centre of the pool" T))
        (cond
          ((eq pick 'CAL-BACK) (setq stage 1))
          ((null pick)
@@ -680,58 +895,69 @@
          (t (setq ctr   (cal:2d (trans pick 1 0))
                   stage 3))))
 
-      ;; --- 3. pick a point.  Enter ends the round; Back takes the last
-      ;;        mark away again, and at the first one re-opens the
-      ;;        centre click ------------------------------------------
+      ;; --- 3. name a survey point.  Enter ends the round; Back takes
+      ;;        the last mark away again, and at the first one re-opens
+      ;;        the centre click ---------------------------------------
       ((= stage 3)
-       (setq pick (pm:askpt "Pick a point on or near the perimeter"
-                            "Enter = done" T))
+       (setq cand (pm:askpoint "Pick a survey point, or type its number"
+                               "Enter = done" T cands))
        (cond
-         ((eq pick 'CAL-BACK)
+         ((eq cand 'CAL-BACK)
           (cond
             ((null marks)
              (princ "\nStepping back one question.")
              (setq stage 2))
             (t
-             (pm:erase (pm:m-circle (car marks)))
-             (pm:erase (pm:m-line (car marks)))
-             (setq marks (cdr marks))
-             (princ "\nStepping back one point."))))
-         ((null pick)
+             (princ (strcat "\nStepping back one point - "
+                            (pm:ptname (pm:m-name (car marks))) " undone."))
+             (setq marks (pm:unmark marks (pm:m-ent (car marks)))))))
+         ((null cand)
           (if (null marks)
             (progn (princ "\nNothing marked.") (setq done T))
             (setq stage 4)))
          (t
-          (setq loc (pm:locate en segs (cal:2d (trans pick 1 0))))
+          (setq loc (pm:locate en segs (pm:cd-pt cand)))
           (cond
             ((null loc)
-             (princ (strcat "\nThe perimeter cannot be read there - pick"
-                            " a point nearer the wall.")))
+             (princ (strcat "\nThe perimeter cannot be read under "
+                            (pm:ptname (pm:cd-nm cand))
+                            " - pick a point nearer the wall.")))
             (t
              (setq base (car loc)
                    tg   (cadr loc)
                    nrm  (pm:inward tg base ctr))
              (if (null nrm)
-               (princ (strcat "\nWhich side the mark runs to is a tie here"
-                              " - the centre lines up with the wall at that"
-                              " spot.  Back at the first point re-opens the"
+               (princ (strcat "\nWhich side the mark runs to is a tie at "
+                              (pm:ptname (pm:cd-nm cand))
+                              " - the centre lines up with the wall there."
+                              "  Back at the first point re-opens the"
                               " centre click."))
                (setq stage 31)))))))
 
       ;; --- 3b. and the distance taped off it --------------------------
       ((= stage 31)
-       (setq d (cal:askdist 'REQ "Distance from the perimeter at that point"
-                           nil T))
+       (setq d (cal:askdist 'REQ
+                 (strcat "Distance from the perimeter at "
+                         (pm:ptname (pm:cd-nm cand)))
+                 nil T))
        (cond
          ((or (eq d 'CAL-BACK) (null d)) (setq stage 3))
          (t
           (if (null lay)
             (setq lay (cal:ensure-layer pm:*marklayer* pm:*markcolor*)))
+          ;; a point picked twice is the sheet being corrected, not two
+          ;; marks at one shot: the older one goes
+          (if (pm:marked-at marks (pm:cd-en cand))
+            (progn
+              (princ (strcat "\n" (pm:ptname (pm:cd-nm cand))
+                             " re-marked - the first distance goes."))
+              (setq marks (pm:unmark marks (pm:cd-en cand)))))
           (setq marks (cons (list (caddr loc) base
                                   (cal:v+ base (cal:v* nrm d)) d
                                   (pm:circle base d lay)
                                   (pm:line base (cal:v+ base (cal:v* nrm d))
-                                           lay))
+                                           lay)
+                                  (pm:cd-nm cand) (pm:cd-en cand))
                             marks)
                 stage 3))))
 
@@ -748,27 +974,31 @@
 
       ;; --- 5 and 6. where the run starts, and where it ends ------------
       ((= stage 5)
-       (setq pick (pm:askpt "Pick where the run starts" nil T))
+       (setq cand (pm:askpoint
+                    "The point the run starts at, or type its number"
+                    nil T cands))
        (cond
-         ((eq pick 'CAL-BACK) (setq stage 4))
-         ((null pick) (princ "\nA point is required."))
+         ((eq cand 'CAL-BACK) (setq stage 4))
          (t
-          (setq m0 (pm:runend en segs marks (cal:2d (trans pick 1 0))))
+          (setq m0 (pm:runend en segs marks cand))
           (if (null m0)
-            (princ (strcat "\nThe perimeter cannot be read there - pick"
-                           " a point nearer the wall."))
+            (princ (strcat "\nThe perimeter cannot be read under "
+                           (pm:ptname (pm:cd-nm cand))
+                           " - pick a point nearer the wall."))
             (setq stage 6)))))
 
       ((= stage 6)
-       (setq pick (pm:askpt "Pick where the run ends" nil T))
+       (setq cand (pm:askpoint
+                    "The point the run ends at, or type its number"
+                    nil T cands))
        (cond
-         ((eq pick 'CAL-BACK) (setq stage 5))
-         ((null pick) (princ "\nA point is required."))
+         ((eq cand 'CAL-BACK) (setq stage 5))
          (t
-          (setq m1 (pm:runend en segs marks (cal:2d (trans pick 1 0))))
+          (setq m1 (pm:runend en segs marks cand))
           (if (null m1)
-            (princ (strcat "\nThe perimeter cannot be read there - pick"
-                           " a point nearer the wall."))
+            (princ (strcat "\nThe perimeter cannot be read under "
+                           (pm:ptname (pm:cd-nm cand))
+                           " - pick a point nearer the wall."))
             (progn
               ;; --- the run, in the order the wall goes ----------------
               (setq s0  (pm:m-station m0)

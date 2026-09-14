@@ -63,7 +63,7 @@
 
 
 
-(setq *xft-version* "v1.15") ; printed on load and at command start so a
+(setq *xft-version* "v1.16") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -1348,8 +1348,15 @@
                         (rtos scale 2 4) " about the conversion's own base ..."))
          (command "_.SCALE" keep "" (trans base 0 1) (/ 1.0 scale))))
 
-     (command "_.UNDO" "_End")
-     (setq undone nil)
+     ;; closed only if one was opened, as the handler and XFTCONV's own
+     ;; close both are: with undo recording off (UNDOCTL bit 1 clear)
+     ;; there is none, and an _End on nothing is an error of its own --
+     ;; here, with every block already converted back and the sysvar
+     ;; restore below it
+     (if undone
+       (progn
+         (command "_.UNDO" "_End")
+         (setq undone nil)))
      (xft:restore)
 
      ;; ---- report -------------------------------------------------
