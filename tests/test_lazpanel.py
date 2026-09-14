@@ -59,11 +59,28 @@ def fresh():
     return vm
 
 
+def col_commands(col):
+    """The command names in one column, flat.
+
+    A column entry is either a command name or a HEADED RUN of them --
+    ("Revert" "XFTRECONV" ...) -- which is how the Converters column
+    labels its two halves without becoming two columns side by side.
+    The run's heading is a label, not a command.
+    """
+    out = []
+    for e in col[1:]:
+        if isinstance(e, list):
+            out.extend(str(x) for x in e[1:])
+        else:
+            out.append(str(e))
+    return out
+
+
 def columns(vm, page):
     """One page's columns as (heading, [command, ...])."""
     for g in vm.globals.get('lzp:*groups*') or []:
         if str(g[0]) == page:
-            return [(str(c[0]), [str(x) for x in c[1:]]) for c in g[1:]]
+            return [(str(c[0]), col_commands(c)) for c in g[1:]]
     raise AssertionError("no such page: %r" % page)
 
 
@@ -72,7 +89,7 @@ def roster(vm):
     out = []
     for g in vm.globals.get('lzp:*groups*') or []:
         for col in g[1:]:
-            out.extend(str(x) for x in col[1:])
+            out.extend(col_commands(col))
     return out
 
 
@@ -95,7 +112,7 @@ PANEL = sorted(set(BUTTONS))               # every command, once
 # duplicate DCL key.  (The per-page key check below catches that too;
 # this one names the offender in roster terms.)
 for _g in vm.globals.get('lzp:*groups*') or []:
-    _names = [str(x) for _c in _g[1:] for x in _c[1:]]
+    _names = [x for _c in _g[1:] for x in col_commands(_c)]
     assert len(_names) == len(set(_names)), \
         "%s lists a command twice: %r" % (_g[0], _names)
 
@@ -384,6 +401,72 @@ for gname in GROUPS:
           % (gname, len(cols), wide,
              '  [' + ' | '.join(h for h, _ in cols) + ']'
              if len(cols) > 1 else ''))
+
+# --------------------------------------------------------------------
+# Headed runs: two labels inside one column.
+# --------------------------------------------------------------------
+# The Converters column carries eight tools that split cleanly in two,
+# and the drafter wanted the halves labelled.  Two columns side by side
+# is what that normally means and there is no width for it: a column
+# costs its widest button plus six cells, G2MRECONV is nine characters,
+# and Pool is already 81 of the 90 budget.  So a column entry may be a
+# RUN -- ("Revert" "XFTRECONV" ...) -- which renders as its own labelled
+# box inside the one column.
+#
+# The heading of a run is a LABEL, not a command.  Everything that walks
+# a column for its commands has to drop it, or "Convert" lands on the
+# roster and is then looked up for a caption, a blurb and a probe entry
+# that will never exist.
+print("== headed runs: the Converters column labels its two halves ==")
+
+
+def raw_columns(vm_, page_):
+    """One page's columns with their entries UNflattened."""
+    for g in vm_.globals.get('lzp:*groups*') or []:
+        if str(g[0]) == page_:
+            return [(str(c[0]), list(c[1:])) for c in g[1:]]
+    raise AssertionError("no such page: %r" % page_)
+
+
+runs_seen = 0
+for gname in GROUPS:
+    text = '\n'.join(page(gname))
+    # standalone label lines only -- a container's name.  The tab strip
+    # writes its labels INSIDE a button line, and one of those tabs is
+    # called Converters too.
+    labels = re.findall(r'^\s*label = "([^"]*)";\s*$', text, re.M)
+    for heading, entries in raw_columns(vm, gname):
+        runs = [e for e in entries if isinstance(e, list)]
+        if not runs:
+            continue
+        assert len(runs) == len(entries), (
+            "%s: the %s column mixes bare commands with headed runs -- the "
+            "renderer labels the column or its runs, not both"
+            % (gname, heading))
+        # the column itself goes unlabelled: "Converters" above "Convert"
+        # above "Revert" is three frames saying one thing
+        assert heading not in labels, (
+            "%s: the %s column is all headed runs and should carry no label "
+            "of its own" % (gname, heading))
+        for run in runs:
+            rname = str(run[0])
+            assert rname in labels, (
+                "%s: the run %r is not labelled on the page" % (gname, rname))
+            assert rname not in CAPTIONS, (
+                "%s: %r is a run heading and a command name -- one of them "
+                "has to give" % (gname, rname))
+            assert rname not in roster(vm), (
+                "%s: the run heading %r reached the roster; it is a label, "
+                "not a button" % (gname, rname))
+            for c in run[1:]:
+                assert ': button { label = "%s"; key = "%s"; }' % (c, c) \
+                    in text, "%s: %s is in a run but draws no button" \
+                    % (gname, c)
+            runs_seen += 1
+        print("   %-11s %s: %s"
+              % (gname, heading,
+                 ' | '.join('%s (%d)' % (str(r[0]), len(r) - 1) for r in runs)))
+assert runs_seen, "no headed run anywhere -- the shape is unused"
 
 # --------------------------------------------------------------------
 # Pins: the row that follows you across every page.
@@ -1740,5 +1823,84 @@ vm.run('c:LAZPANELVER', [])
 out = ''.join(str(p) for p in vm.printed)
 assert str(ver) in out and str(len(PANEL)) in out, out
 print("   reports %s and the %d-tool roster" % (ver, len(PANEL)))
+
+print("== CALHELP: the captions, at the command line ==")
+# The captions were readable in one place only -- the panel, on
+# whichever page the tool happened to be filed on.  That is the same
+# complaint the Find page answers INSIDE the dialog, and outside it
+# nothing answered it at all.
+vm = fresh()
+vm.run('c:CALHELP', ['survey'])
+out = ''.join(str(p) for p in vm.printed)
+hits = [n for n in PANEL if callib.read(LSP).count('"%s"' % n)
+        and n in out]
+assert 'ABHD' in out, out
+assert callib.read(LSP).find('survey') > 0
+print("   a word in a CAPTION finds the tool whose name never says it")
+
+vm = fresh()
+vm.run('c:CALHELP', ['oasis'])
+out = ''.join(str(p) for p in vm.printed)
+assert 'OASIS' in out, out
+assert vm.globals.get('lzp:*captions*'), 'captions gone'
+cap = [c for c in vm.globals['lzp:*captions*'] if str(c[0]) == 'OASIS']
+assert cap and str(cap[0][1]) in out, (cap, out)
+print("   ...and prints that tool's caption, not a second copy of it")
+
+vm = fresh()
+vm.run('c:CALHELP', [''])
+out = ''.join(str(p) for p in vm.printed)
+assert out.count('\n  ') >= len(set(PANEL)), (out.count('\n  '), len(PANEL))
+print("   Enter lists every tool on the panel")
+
+vm = fresh()
+vm.run('c:CALHELP', ['zznotathing'])
+out = ''.join(str(p) for p in vm.printed)
+assert 'Nothing here matches' in out, out
+print("   and a word nothing matches says so instead of listing nothing")
+
+print("== CALSET: the settings, and the one that is shared ==")
+# CALSET writes the theme to the AutoCAD profile for the Lisp side AND
+# to LAZPANEL's registry key for the VB palette, which is the same
+# bargain the pinned row already strikes.
+vm = fresh()
+vm.run('c:CALSET', ['Theme', 'Dark'])
+out = ''.join(str(p) for p in vm.printed)
+assert vm.env.get('CalofinTheme', '').upper() == 'DARK', vm.env
+assert 'CalofinTheme is now' in out, out
+print("   Theme -> Dark lands in the profile, where every tool reads it")
+
+vm = fresh()
+vm.run('c:CALSET', ['Quit'])
+out = ''.join(str(p) for p in vm.printed)
+assert 'CalofinTheme' in out and 'CalofinErrorDir' in out, out
+assert 'Nothing changed' in out, out
+print("   Quit shows the table and changes nothing")
+
+vm = fresh()
+vm.run('c:CALSET', ['Errordir', 'C:\\reports'])
+assert vm.env.get('CalofinErrorDir') == 'C:\\reports', vm.env
+print("   a folder setting is taken as typed -- LAZDIAG reads this one")
+
+vm = fresh()
+vm.env['CalofinErrorDir'] = 'C:\\old'
+vm.run('c:CALSET', ['Errordir', '.'])
+assert vm.env.get('CalofinErrorDir') == '', vm.env
+print("   ...and . clears it, back to LAZDIAG's own candidate walk")
+
+# A settings command that writes a key nothing reads is worse than no
+# settings command at all, so each one it offers is checked against
+# the file that reads it rather than against this file's own idea.
+vm = fresh()
+vm.run('c:CALSET', ['Stockdir', 'F:\\Tech'])
+stock = VM()
+stock.load(os.path.join(HERE, '..', 'lisp', 'stockcover', 'STOCKCOVER.lsp'))
+skey = str(stock.globals['*stock-env-folder*'])
+assert vm.env.get(skey) == 'F:\\Tech', (skey, vm.env)
+print("   the stock folder lands under %s, the key STOCKCOVER reads" % skey)
+
+DIAG = os.path.join(HERE, '..', 'lisp', 'lazdiag', 'LAZDIAG.lsp')
+assert '(getenv "CalofinErrorDir")' in callib.read(DIAG), DIAG
+print("   ...and CalofinErrorDir is the one LAZDIAG walks to first")
 
 print("ALL LAZPANEL TESTS PASSED")

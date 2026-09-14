@@ -7,6 +7,8 @@
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
+;;;            CALHELP        what a command does, at the command line
+;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -107,7 +109,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.20")
+(setq *lazpanel-version* "v3.22")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -118,7 +120,9 @@
 ;;;  Also editable, but living beside the code that reads them because
 ;;;  they ARE the panel rather than settings of it:
 ;;;    lzp:*captions*   one caption per command -- the only place they live
-;;;    lzp:*groups*     the pages, as columns of command names
+;;;    lzp:*groups*     the pages, as columns of command names -- an
+;;;                     entry may be a headed run, ("Revert" "X" ...),
+;;;                     which labels part of a column from inside it
 ;;;  tools/check_registry.py --fix maintains both; the VB palette's
 ;;;  catalog is generated from them (tools/gen_ui_data.py).
 
@@ -250,6 +254,7 @@
     ("ABCDEF"           "Rectangle plot")
     ("ABCURCHECK"       "Perimeter continuity")
     ("ABCURCHECKSCAN"   "Perimeter continuity, no marks")
+    ("ABLOBF"           "Open best-fit run")
     ("ABPCHECK"         "Survey point offsets")
     ("ABPCREATE"        "Create a missing point")
     ("ABFIND"           "A/B stake ties")
@@ -392,14 +397,18 @@
       "CPERPPTS"
       )
      ("Converters"
-      "XFTCONV"
-      "SOCONV"
-      "VSCONV"
-      "G2MCONV"
-      "XFTRECONV"
-      "SORECONV"
-      "VSRECONV"
-      "G2MRECONV"
+      ("Convert"
+       "XFTCONV"
+       "SOCONV"
+       "VSCONV"
+       "G2MCONV"
+       )
+      ("Revert"
+       "XFTRECONV"
+       "SORECONV"
+       "VSRECONV"
+       "G2MRECONV"
+       )
       )
      ("Dims & check"
       "AUTODIM"
@@ -446,14 +455,18 @@
     )
      ("Spa"
      ("Converters"
-      "XFTCONV"
-      "SOCONV"
-      "VSCONV"
-      "G2MCONV"
-      "XFTRECONV"
-      "SORECONV"
-      "VSRECONV"
-      "G2MRECONV"
+      ("Convert"
+       "XFTCONV"
+       "SOCONV"
+       "VSCONV"
+       "G2MCONV"
+       )
+      ("Revert"
+       "XFTRECONV"
+       "SORECONV"
+       "VSRECONV"
+       "G2MRECONV"
+       )
       )
      ("Shape, dims & check"
       "SPA"
@@ -498,6 +511,7 @@
       "TYLERDRONESUITE"
       "LAZDIAG"
       "LOBF"
+      "ABLOBF"
       )
     )
      ("Layout"
@@ -521,6 +535,7 @@
       "ADAB"
       "CABHD"
       "LHD"
+      "ABLOBF"
       "LINGUTTER"
       "LINGUTTERSCAN"
       "PADDLE"
@@ -645,10 +660,38 @@
   (foreach g lzp:*groups*
     (if (= (car g) name)
         (foreach col (cdr g)
-          (foreach c (cdr col) (setq out (cons c out))))))
+          (foreach c (lzp:col-commands col) (setq out (cons c out))))))
   (reverse out))
 
-;; A page's columns: (heading cmd ...) each.
+;; T when every entry in COL is a headed run rather than a bare command
+;; -- the Converters column, and nothing else today.  Such a column
+;; carries its own labels inside it, so the renderer gives it a plain
+;; wrapper instead of a labelled box: "Converters" above "Convert"
+;; above "Revert" is three frames saying one thing.
+(defun lzp:col-runs-p (col / e out)
+  (setq out (and (cdr col) T))
+  (foreach e (cdr col)
+    (if (not (listp e)) (setq out nil)))
+  out)
+
+;; The commands in one column, flat.
+;;
+;; A column entry is EITHER a command name or a headed run of them --
+;; ("Revert" "XFTRECONV" ...) -- which is how the Converters column
+;; carries its two halves under their own labels without becoming two
+;; columns side by side (there is no width for that; see the panel
+;; README).  Everything that walks a column for the commands in it goes
+;; through here, so the two shapes are read in one place rather than in
+;; every caller.
+(defun lzp:col-commands (col / e c out)
+  (foreach e (cdr col)
+    (if (listp e)
+      (foreach c (cdr e) (setq out (cons c out)))    ; a headed run
+      (setq out (cons e out))))                      ; a plain command
+  (reverse out))
+
+;; A page's columns: (heading cmd ...) each, where a cmd may itself be
+;; a headed run -- lzp:col-commands is what flattens one.
 (defun lzp:group-columns (name / g out)
   (foreach g lzp:*groups*
     (if (= (car g) name) (setq out (cdr g))))
@@ -660,7 +703,7 @@
 (defun lzp:commands ( / g col c out)
   (foreach g lzp:*groups*
     (foreach col (cdr g)
-      (foreach c (cdr col)
+      (foreach c (lzp:col-commands col)
         (if (not (member c out))
           (setq out (cons c out))))))
   (reverse out))
@@ -1005,7 +1048,7 @@
       (if row (setq out (cons (reverse row) out)))
       (reverse out))))
 
-(defun lzp:dcl-one (g / out c col cols)
+(defun lzp:dcl-one (g / out c n col cols)
   ;; consed newest-first and reversed at the end, so this seed list
   ;; reads BACKWARDS: the dialog line last here comes out first
   (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
@@ -1055,12 +1098,32 @@
      (setq out (cons "  : boxed_row {" out))
      (setq out (cons (strcat "    label = \"" (car g) "\";") out))
      (foreach col (cdr g)
-       (setq out (cons "    : boxed_column {" out))
-       (setq out (cons (strcat "      label = \"" (car col) "\";") out))
+       ;; a column that is nothing but headed runs labels itself from
+       ;; the inside, so the outer box carries no name of its own
+       (if (lzp:col-runs-p col)
+         (setq out (cons "    : column {" out))
+         (progn
+           (setq out (cons "    : boxed_column {" out))
+           (setq out (cons (strcat "      label = \"" (car col) "\";")
+                           out))))
        (foreach c (cdr col)
-         (setq out (cons (strcat "      : button { label = \"" c
-                                 "\"; key = \"" c "\"; }")
-                         out)))
+         (if (listp c)
+           ;; a HEADED RUN inside the column: its own labelled box, so
+           ;; the Converters column can say Convert above one half and
+           ;; Revert above the other without being two columns -- there
+           ;; is no width on Pool for a sixth column.
+           (progn
+             (setq out (cons "      : boxed_column {" out))
+             (setq out (cons (strcat "        label = \"" (car c) "\";")
+                             out))
+             (foreach n (cdr c)
+               (setq out (cons (strcat "        : button { label = \"" n
+                                       "\"; key = \"" n "\"; }")
+                               out)))
+             (setq out (cons "      }" out)))
+           (setq out (cons (strcat "      : button { label = \"" c
+                                   "\"; key = \"" c "\"; }")
+                           out))))
        (setq out (cons "    }" out)))
      (setq out (cons "  }" out))))
   (setq out (cons "  spacer;" out))
@@ -1343,12 +1406,17 @@
 ;; The complete .bmp as a byte list: 24bpp, bottom-up rows (a positive
 ;; height means the FIRST row in the file is the BOTTOM row of the
 ;; image, hence the reverse).  "X" pixels are orange -- stored B,G,R,
-;; so 0 165 255 -- and the rest panel grey.  Both sizes give a row
-;; width that is a multiple of 4 (48 and 96), so there is no row
-;; padding to get wrong.
+;; so 0 165 255 -- and the rest is PANEL GREY, which is two different
+;; greys: a .bmp has no alpha channel, so the square around the
+;; hexagon is painted, and painting it 54 54 54 on the light theme is
+;; a dark tile in a light toolbar.  It was, for every drafter not on
+;; the dark theme, from the day the button shipped.  The theme is read
+;; rather than assumed, and an unreadable one keeps the dark grey that
+;; was always here.  Both sizes give a row width that is a multiple of
+;; 4 (48 and 96), so there is no row padding to get wrong.
 (defun lzp:bmp-bytes (size grid / fg bg rowbytes out row s i)
   (setq fg '(0 165 255)
-        bg '(54 54 54)
+        bg (if (eq (cal:ui) 'light) '(240 240 240) '(54 54 54))
         rowbytes (* 3 size))
   (setq out (append
               (list 66 77)                      ; "BM"
@@ -2116,6 +2184,17 @@
   (princ (strcat "\n  TEMPPREFIX : "
                  (if (= (type (getvar "TEMPPREFIX")) 'STR)
                      (getvar "TEMPPREFIX") "(not a string)")))
+  ;; which grey went behind the hexagon, and why.  A .bmp has no
+  ;; transparency, so this square is painted and the wrong one shows.
+  (princ (strcat "\n  theme      : "
+                 (cond ((eq (cal:ui) 'light) "light - icon ground 240 240 240")
+                       ((eq (cal:ui) 'dark)  "dark - icon ground 54 54 54")
+                       (t "cannot tell - icon ground 54 54 54, as it always was"))
+                 (if (and (getenv "CalofinTheme")
+                          (/= (getenv "CalofinTheme") ""))
+                     (strcat "  (CalofinTheme says "
+                             (getenv "CalofinTheme") ")")
+                     "  (COLORTHEME; CALSET overrides it)")))
   (setq paths (lzp:write-bmps))
   (cond
     (paths
@@ -2173,6 +2252,127 @@
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
   (princ))
 
+;;; -------------------- the two front-desk commands ---------------------
+;;  CALHELP and CALSET are machinery rather than drafting tools, which
+;;  is why they are here and not files of their own: this is where the
+;;  captions live, and where calofin's profile settings were already
+;;  being read and written (lzp:*poskey*, lzp:*pinkey*).  Both are in
+;;  NAMED_SATELLITES in tools/callib.py, so neither asks for a panel
+;;  button it has no use for.
+
+;; What a command IS, at the command line.  The captions have been
+;; here all along and the only way to read one was to open the panel
+;; and find the page the tool was filed on -- which is the same
+;; complaint the Find page answered inside the dialog, unanswered
+;; outside it.  Enter lists the lot.
+(defun c:CALHELP ( / *error* s hits n)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALHELP error: " msg)))
+    (if lzd:report (lzd:report "CALHELP" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALHELP" *lazpanel-version*))
+  (setq s (getstring T "\nCommand, or any part of one <Enter = all>: "))
+  (if lzd:ask (lzd:ask "Command, or any part of one" s))
+  (setq hits (if (= s "") (lzp:commands) (lzp:matches s)))
+  (cond
+    ((null hits)
+     (princ (strcat "\nNothing here matches \"" s "\".  CALHELP on its"
+                    " own lists every tool.")))
+    (t
+     (princ (strcat "\n" (itoa (length hits)) " tool"
+                    (if (= (length hits) 1) "" "s")
+                    (if (= s "") "" (strcat " matching \"" s "\""))
+                    " -- a name in brackets is not loaded in this"
+                    " session:"))
+     (foreach n hits
+       (princ (strcat "\n  " (if (lzp:has n) (strcat n) (strcat "(" n ")"))
+                      "  " (lzp:caption n))))))
+  (princ))
+
+;; The settings calofin keeps in the AutoCAD PROFILE, which is the one
+;; place a setting survives a rebuild: releases/ and LAZPASS.lsp are
+;; generated, so a number edited into either is gone at the next
+;; regeneration.  Each row is (key default what-it-does).
+(setq lzp:*settings*
+  '(("CalofinTheme"
+     "auto"
+     "dark / light / auto.  Which way the ink is picked: auto measures the drawing's background and AutoCAD's theme, and the other two say so outright when a measurement comes out wrong")
+    ("CalofinErrorDir"
+     ""
+     "the folder LAZDIAG writes its error report to.  Empty = the candidate walk, which starts at Downloads")
+    ("StockCover_Folder"
+     ""
+     "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
+
+(defun lzp:setshow ( / r v)
+  (princ "\ncalofin settings, as this session reads them:")
+  (foreach r lzp:*settings*
+    (setq v (getenv (car r)))
+    (princ (strcat "\n  " (car r)
+                   "\n      now: " (if (and v (/= v "")) v
+                                       (strcat "(unset -- " (cadr r) ")"))
+                   "\n      " (caddr r))))
+  (princ))
+
+(defun c:CALSET ( / *error* pick key v)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALSET error: " msg)))
+    (if lzd:report (lzd:report "CALSET" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALSET" *lazpanel-version*))
+  (lzp:setshow)
+  (initget "Theme Errordir Stockdir Quit")
+  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Quit] <Quit>: "))
+  (if lzd:ask (lzd:ask "Change which?" pick))
+  (setq key (cond ((= pick "Theme") "CalofinTheme")
+                  ((= pick "Errordir") "CalofinErrorDir")
+                  ((= pick "Stockdir") "StockCover_Folder")))
+  (cond
+    ((null key) (princ "\nNothing changed."))
+    ((= key "CalofinTheme")
+     ;; Undo is accepted everywhere Back is, unlisted (STANDARDS 1)
+     (initget "Dark Light Auto Back Undo")
+     (setq v (getkword "\nTheme [Dark/Light/Auto/Back] <Auto>: "))
+     (if lzd:ask (lzd:ask "Theme" v))
+     (cond
+       ((member v '("Back" "Undo")) (c:CALSET))
+       (t (setenv "CalofinTheme" (if v (strcase v) "Auto"))
+          ;; ...and beside the pins, where the VB palette reads it
+          ;; (ui/calofin_net/PaletteTheme.vb).  The profile is what the
+          ;; Lisp side reads and the registry is what the palette can
+          ;; reach, and a drafter who has said which way their screen
+          ;; reads has said it to both surfaces -- the same bargain the
+          ;; pinned row already strikes.
+          (vl-catch-all-apply
+            'vl-registry-write
+            (list lzp:*pinkey* "Theme"
+                  (if (= (strcase (getenv "CalofinTheme")) "AUTO") ""
+                      (strcase (getenv "CalofinTheme")))))
+          (princ (strcat "\nCalofinTheme is now "
+                         (getenv "CalofinTheme")
+                         ".  Every tool reads it on the next colour it"
+                         " picks; the toolbar icon takes it at the next"
+                         " LAZBUTTON or LAZICON, and the VB palette at"
+                         " its next chart.")))))
+    (t
+     (setq v (getstring T (strcat "\n" key
+                                  " (a folder, Back to leave it, "
+                                  "or . to clear it): ")))
+     (if lzd:ask (lzd:ask key v))
+     (cond
+       ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
+       ((= v "") (princ "\nUnchanged."))
+       ((= v ".")
+        (setenv key "")
+        (princ (strcat "\n" key " cleared.")))
+       (t (setenv key v)
+          (princ (strcat "\n" key " is now " v "."))))))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:commands))) " tools on the panel across "
@@ -2201,8 +2401,18 @@
   '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 
-(princ (strcat "\nLAZPANEL " *lazpanel-version*
-               " loaded.  LAZPANEL opens the panel;"
-               " LAZBUTTON puts its button on screen;"
-               " LAZPIN edits the pinned row."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZPANEL " *lazpanel-version*
+                 " loaded.  LAZPANEL opens the panel;"
+                 " LAZBUTTON puts its button on screen;"
+                 " LAZPIN edits the pinned row;"
+                 " CALHELP says what a command does;"
+                 " CALSET shows the settings.")))
 (princ)

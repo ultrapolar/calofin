@@ -345,7 +345,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.13")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.14")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -414,10 +414,12 @@
                                     ; of the tag height - how long the
                                     ; strip a click on a tag can land
                                     ; on is taken to be
-(setq abf:*locus-color*  8)         ; colour of the guide line each
+(setq abf:*locus-color*  'auto)     ; colour of the guide line each
                                     ; group of suggestions sits on:
                                     ; grey, so it reads as a guide and
-                                    ; not as drawn work
+                                    ; not as drawn work.  'auto picks
+                                    ; the grey for the background; a
+                                    ; number is used exactly as given
 (setq abf:*locus-ltype*  "DASHED")  ; and its linetype - created at
                                     ; pool scale when the drawing has
                                     ; no linetype by that name
@@ -1874,7 +1876,7 @@
       (abf:ensure-dashed)
       (entmake (list '(0 . "ARC") '(100 . "AcDbEntity")
                      (cons 8 abf:*sug-layer*)
-                     (cons 62 abf:*locus-color*)
+                     (cons 62 (cal:ink abf:*locus-color* 'guide))
                      (cons 6 abf:*locus-ltype*)
                      '(100 . "AcDbCircle")
                      (list 10 (car ctr) (cadr ctr) 0.0)
@@ -2986,11 +2988,19 @@
                  "  (commands: ABFIND, ABMOVE, ABPCREATE)"))
   (princ))
 
-(princ (strcat "\nABFIND " *abfind-version*
-               " loaded.  Commands: ABFIND (dim Pt.## from the "
-               abf:*a-name* " and " abf:*b-name*
-               " stakes), ABMOVE (the same, and move it to where a"
-               " misread tape would put it), ABPCREATE (plot a point"
-               " that is not there yet from the two readings it was"
-               " taped at)."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nABFIND " *abfind-version*
+                 " loaded.  Commands: ABFIND (dim Pt.## from the "
+                 abf:*a-name* " and " abf:*b-name*
+                 " stakes), ABMOVE (the same, and move it to where a"
+                 " misread tape would put it), ABPCREATE (plot a point"
+                 " that is not there yet from the two readings it was"
+                 " taped at).")))
 (princ)

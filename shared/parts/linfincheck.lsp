@@ -278,7 +278,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.13")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.14")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -435,7 +435,13 @@
 
 ;; -- colours -----------------------------------------------------------
 
-(setq *lfc-grey-color*    8)       ; ACI: everything not under review, faded (grey)
+(setq *lfc-grey-color*    'auto)  ; ACI: everything not under review, faded.
+                                  ; 'auto fades it the way round the drawing
+                                  ; needs -- darker than the work on a dark
+                                  ; background, lighter on a light one, since
+                                  ; 8 recedes on the first and is one of the
+                                  ; most prominent things on screen on the
+                                  ; second.  A number is used exactly as given
 (setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
 (setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
 (setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
@@ -782,7 +788,7 @@
 (defun lfc:unstage (ent keep)
   ;; send a reviewed entity back into the grey background
   (if (and (entget ent) (not (member ent keep)))
-    (lfc:set-color ent *lfc-grey-color*)))
+    (lfc:set-color ent (cal:ink *lfc-grey-color* 'fade))))
 
 (defun lfc:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -2705,7 +2711,7 @@
 
 ;; --- command -------------------------------------------------------
 
-(defun c:LINFINCHECK ( / *error* oldecho vc vs undo-open ss i e et
+(defun c:LINFINCHECK ( / *error* oldecho vc vs undo-open ss i e et grey
                       cands dims arcs lns plns segs blks olaps rest e1 e2 pr
                       saved keep res n total lines ans
                       anchors anchheld
@@ -2859,6 +2865,10 @@
         ;; grey out the whole selection so each item can take the
         ;; stage, stashing every original colour in xdata first so
         ;; LINFINCHECKRESCUE can recover them even after a crash
+        ;; the fade, resolved once for the whole run: the knob may
+        ;; be 'auto, and measuring the background per entity would
+        ;; be a COM round trip per entity
+        (setq grey (cal:ink *lfc-grey-color* 'fade))
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
@@ -2867,7 +2877,7 @@
             (progn
               (setq saved (cons (cons e (lfc:ent-color e)) saved))
               (lfc:stash-color e (lfc:ent-color e))
-              (lfc:set-color e *lfc-grey-color*))))
+              (lfc:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
         (if dims
@@ -2894,13 +2904,13 @@
                                  (vl-remove (assoc e anchheld) anchheld))))
           (cond
             ((eq (cadr res) 'skip)
-             (lfc:set-color e *lfc-grey-color*)
+             (lfc:set-color e grey)
              (setq skiprest T)
              (princ (strcat "\n  Skipping the remaining "
                             (itoa (- total n)) " dimension(s).")))
             ((eq (cadr res) 'back)
              ;; undo what the previous item recorded, then redo it
-             (lfc:set-color e *lfc-grey-color*)
+             (lfc:set-color e grey)
              (if (> n 0)
                (progn
                  (setq n  (1- n)
@@ -2926,14 +2936,14 @@
                                                       carried))))
                      (setq dlines (cdr dlines))))
                  (setq keep (vl-remove e1 keep))
-                 (lfc:set-color e1 *lfc-grey-color*)
+                 (lfc:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
              (setq n (1- n)))                            ; loop's 1+ re-enters it
             (t
              (if (cadr res)
                (progn (setq ndok (1+ ndok))
-                      (lfc:set-color e *lfc-grey-color*))
+                      (lfc:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
                       (setq keep (cons e keep))))
              (setq sty (lfc:dim-style e))
@@ -2976,7 +2986,7 @@
           (setq nasnap (+ nasnap (cadddr res)))
           (if (cadr res)
             (progn (setq naok (1+ naok))
-                   (lfc:set-color e *lfc-grey-color*))
+                   (lfc:set-color e grey))
             (progn (setq namoved (1+ namoved))
                    (setq keep (cons e keep))))           ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
@@ -4490,9 +4500,18 @@
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))
 
-(princ (strcat "\nlinfincheck.lsp " *lfc-version*
-               " loaded - LINFINCHECK reviews the whole title block one item at a"))
-(princ "\n  time (dims, arcs, overlaps, steps, wall height, liner, border); LINFINSCAN reports")
-(princ "\n  it read-only; LINFINCHECKRESCUE undoes LINFINCHECK's marks. For just dims, arcs")
-(princ "\n  and overlaps, load dimcheck.lsp instead and run DIMCHECK.")
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (progn
+    (princ (strcat "\nlinfincheck.lsp " *lfc-version*
+                   " loaded - LINFINCHECK reviews the whole title block one item at a"))
+    (princ "\n  time (dims, arcs, overlaps, steps, wall height, liner, border); LINFINSCAN reports")
+    (princ "\n  it read-only; LINFINCHECKRESCUE undoes LINFINCHECK's marks. For just dims, arcs")
+    (princ "\n  and overlaps, load dimcheck.lsp instead and run DIMCHECK.")))
 (princ)

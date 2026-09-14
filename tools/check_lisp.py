@@ -523,7 +523,13 @@ def house_rules(path, src, problems):
 
     # 4. A tool announces itself on load, after its last defun, naming
     #    its own banner -- that line is how a user says which build they
-    #    are running.
+    #    are running.  And it announces itself QUIETLY inside the whole
+    #    build: sixty-three greetings in every drawing opened is 83
+    #    lines of scrollback before the drafter has done anything, so
+    #    the banner sits under (if (not *calofin-quiet*) ...), which
+    #    LAZPASS.lsp and CALOFIN-LOADER.lsp set while they load their
+    #    members and clear after.  APPLOADed alone the flag is nil and
+    #    the banner prints, which is the one time it is wanted.
     if name not in LIBRARY_FILES:
         vm = VERSION_SYM.search(body)
         if vm:
@@ -531,12 +537,19 @@ def house_rules(path, src, problems):
             last = max((i for i, (a, b) in enumerate(spans)
                         if body[a:b].startswith("(defun")), default=-1)
             tail = [body[a:b] for a, b in spans[last + 1:]]
-            if not any(t.startswith("(princ") and vm.group(1) in t
-                       for t in tail):
+            said = [t for t in tail
+                    if t.startswith(("(princ", "(if")) and vm.group(1) in t]
+            if not said:
                 problems.append(
                     "no load banner: nothing after the last defun princ's "
                     "%s (a tool says which build it is on load)"
                     % vm.group(1))
+            elif not any(t.startswith("(if (not *calofin-quiet*)")
+                         for t in said):
+                problems.append(
+                    "load banner is not quiet inside the build: wrap it in "
+                    "(if (not *calofin-quiet*) ...) so the whole-build load "
+                    "does not print sixty-three of them")
 
 
 def check_file(path):

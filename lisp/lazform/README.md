@@ -10,8 +10,15 @@ Type a number and the letter it answers is replaced on the drawing by
 what you typed -- which is what the letter was standing in for all
 along.
 
-Fill in what you know, leave the rest blank, press **Insert**: the
-routine runs and asks only for the gaps.
+**Insert draws the pool.** It used to hand over whatever had been typed
+and leave POOL to ask for the rest a question at a time -- which is the
+interview a form exists to replace: a sheet you filled in and then
+answered again. So the sheet carries the whole run or it does not go.
+Press **Insert** on an unfinished one and it does not close: every
+letter with nothing usable against it goes **bold and red on the
+chart**, the line under the form names them, and the page stays open.
+Answer them and the same button draws, leaving POOL nothing to ask for
+but the point the pool is placed at.
 
 **Two routines are fed from here.** Which one is a property of the
 page, so a tab is all there is to it:
@@ -21,15 +28,25 @@ page, so a tab is all there is to it:
 | Rectangle, True Oval, Roman, both Grecians, True L Left, Round, Octagon | `POOL` |
 | Oasis Center, Top-Right, Cloud, Kidney, NXT Cloud | `OASIS` |
 
-| In a box | On the wire | What POOL does |
+| In a box | On the wire | What the form does |
 | --- | --- | --- |
-| left empty | the key is not sent | asks the question as usual |
+| left empty | the key is not sent | **owed** -- Insert marks it and waits |
 | `NA` | `(key . nil)` | takes NA, no prompt |
 | `12'6"` or `150` | `(key . 150.0)` | takes the measurement, no prompt |
+| a typo | the key is not sent | named on the state line; **Insert is greyed** |
 
-A typo counts as an empty box on purpose: something that is neither `NA`
-nor a distance AutoCAD can read leaves POOL asking, rather than quietly
-feeding it a nil that means something else entirely.
+A typo is not treated as an empty box: something that is neither `NA`
+nor a distance AutoCAD can read would be dropped in silence while the
+chart went on showing it, so it holds the button rather than being
+marked as a gap.
+
+**`NA` is an answer everywhere but in a depth box.** `C`, `D` and `C2`
+go through `pool:askh`, which reads the form only when what it finds
+there is a *number* -- every caller range checks the answer and none of
+them can do anything with a nil -- so an NA in one of those three is
+consumed and then asked for at the command line anyway. The form knows
+that (`lzf:*numonly*`) and keeps waiting. It also holds Insert on a
+depth pair POOL would send back: **D deeper than C, C2 between them**.
 
 A **tab strip** across the top switches charts. Thirteen are drawn, wrapped onto rows no wider than the budget -- eight keys on one line already ran about 94 character cells against a budget of 90, which is a dialog that does not open:
 
@@ -41,7 +58,7 @@ A **tab strip** across the top switches charts. Thirteen are drawn, wrapped onto
 | `Grecian` | Grecian (6-sided hopper) | B S T S1 A V H G W L1 M L K F E | 2 collective corner rows, `gcross` + 2 cross dims, Sport chain |
 | `GRSquare` | Grecian (square hopper) | B S T S1 A V H G M L K F E | 2 collective corner rows, `gcross` + 2 cross dims, Sport chain |
 | `L` | L | B B1 B2 A A1 A2 H G F E M L K | 2 corner rows, 9 diagonals, `mirror` |
-| `ROUnd` | ROUnd | B A W (H G F E M L K in the list) | Sport chain, T check |
+| `ROUnd` | ROUnd | B A W (H G F E M L K in the list) | Sport chain, `R3`, T check |
 | `OCtagon` | OCtagon | B S T A S1 V H G F E M L K (S2 in the list) | 2 collective corner rows, `gcross` + 2 cross dims, Sport chain |
 | `OACenter` | OASIS Center | X Y L T R TL TR BC | `detail`, and `off` in the column |
 | `OATopRight` | OASIS TopRight | X Y L T R TL RS BC | `detail` |
@@ -143,8 +160,15 @@ oval uses, so the hopper letters are the oval's (`H G F E`, `W`,
 `tot`, `tp` and `le`). Tick **in-square** and POOL asks one diameter,
 keyed `b`, so `B` is the box that matters.
 
-Two things about it are worth knowing:
+Three things about it are worth knowing:
 
+- **It asks `R3` too, and the sheet did not carry it.** The oval's
+  hopper routine asks `R3 - hopper end radius` between `G` and `W`, on
+  a Normal bottom, for a round pool exactly as for an oval one. The
+  round sheet had no box for it, so that one question was left at the
+  command line on every round pool this form drew -- the kind of gap a
+  box count cannot show, because a box that is not there is not
+  counted. It has one now.
 - **`M L K` run through the centre, and they have to.** POOL resolves
   that chain against the overall width, so `M+L+K` must equal `A` --
   and on a circle the only vertical that is a full diameter is the one
@@ -394,7 +418,7 @@ from `LAZPASS.lsp`.
 ## The state line
 
 Under the form, above `Insert`, one line that says what the sheet is
-about to do. It has two jobs and takes them in that order.
+about to do. It has three jobs and takes them in that order.
 
 **A box that cannot be read.** `lzf:answer` turns anything that is
 neither `NA` nor a distance AutoCAD can parse into *not answered* -- the
@@ -415,24 +439,122 @@ F, G, E and 1 more are not measurements - ...
 point: pressing `Insert` with an unreadable box in front of you is what
 used to drop it.
 
-**The hand-off.** With nothing unreadable, the line is what is left:
+**A depth pair POOL would refuse.** `pool:askdeep` and `pool:askc2` do
+not accept a depth that fails their check -- they print the reason and
+ask again -- so a sheet that sent one would get its own numbers back as
+questions:
 
 ```
-Nothing filled yet - POOL will ask for all 14 boxes, plus the base point.
-9 of 14 boxes filled - POOL will ask for C, D and C2, plus the base point.
-All 14 boxes filled - POOL will ask only for the base point.
+D must be deeper than C - POOL will not take it otherwise.
+C2 has to land between C and D - POOL will not take it otherwise.
 ```
 
-Which is the difference between a finished sheet and one you only think
-is finished.
+`Insert` is greyed for these too: they are errors in what is typed,
+not gaps in what has not been.
 
-Both halves count the same set: `lzf:livekeys`, the boxes that are not
+**What is still owed.** With nothing wrong, the line counts down:
+
+```
+Nothing filled yet - Insert needs all 14 boxes.
+9 of 14 boxes done - Insert needs C, D and C2.
+Ready - Insert draws it - POOL asks only for the base point.
+```
+
+and once `Insert` has been pressed on an unfinished sheet, the chart is
+carrying the names, so the line points at it instead of repeating them:
+
+```
+Marked on the chart: C, D and 2 more.
+```
+
+The count is the **whole page**: `lzf:askcount` is the live boxes plus
+the dropdowns that are live with them, because a corner row or a
+cross-dim mode left on `(ask)` is POOL asking at the command line
+exactly as an empty box is. A dropdown has no letter to mark, so it is
+named in the line or nowhere.
+
+Everything is measured against `lzf:livekeys`, the boxes that are not
 greyed. A greyed box is withheld whatever is in it, so rubbish in one is
-neither complained about nor counted as still to ask. And the line
-**reports `lzf:form` rather than second-guessing it** -- the test
-partitions every live box into sent, still-to-ask and unreadable and
-fails if any box lands in two of them or in none, so the line and the
-alist cannot drift apart.
+neither complained about nor waited for. And the line **reports
+`lzf:form` rather than second-guessing it** -- the test partitions every
+live box into sent, still-owed and unreadable and fails if any box lands
+in two of them or in none, so the line and the alist cannot drift apart.
+
+## Bold: what the sheet still owes, on the picture
+
+`Insert` on an unfinished sheet does not close the page. It turns the
+**marking** on: every dimension whose box is live and has no usable
+answer in it has its letter drawn **twice, a pixel apart, in red** --
+which is what a stroke font has instead of a bold weight, and it is on
+the picture the drafter is already reading. The marks come off one at a
+time as the boxes are answered, so the chart is a checklist that empties
+as it is worked through, and when the last one goes the same button
+draws.
+
+It is **not** a state the page opens in. A fresh chart struck red all
+over would be shouting before it had been asked anything, and the
+letters are the sheet's own labels the rest of the time. Once it is on
+it stays on for the rest of the run, tabs included: somebody who has
+asked what this sheet still owes is asking about the next one too.
+
+A **greyed** box is never marked: the marking reads `lzf:livekeys` like
+everything else, so a letter this bottom type or this square state has
+taken away goes on being drawn plainly. That is now the difference on
+the picture between *still to answer* and *not asked here*.
+
+Why not bold in the column too: DCL has no font control at all. A tile's
+label is fixed when the dialog is built and `mode_tile` offers enable,
+disable, focus and select -- no weight, no colour. The picture is drawn
+by this file, so the picture is where a weight can exist.
+
+## What a finished sheet still leaves at the command line
+
+Four things, and the state line names each one when it applies:
+
+- **The insertion point.** It is a pick in the drawing, not a
+  measurement, and there is nowhere on a form to make it.
+- **An oasis floor.** `OASIS` asks about the floor *after* the outline
+  exists, so there is no gate in front of that question for a form to
+  close. An oasis page says so: *"Insert draws it - OASIS asks for the
+  base point, then the floor."*
+- **The Grecian `Center` and `Complex` cross-dim modes**, which tape 14
+  and 18 diagonals apiece -- more than any sheet has boxes for. The
+  dropdown answers the gate here and the numbers are typed there, and
+  the line says which mode it is rather than promising a draw it cannot
+  make.
+- **A hopper chain that resolves `G` to zero on a Normal bottom.** POOL
+  then says *"G = 0 -- that is a slope bottom, so a side view is drawn
+  too"* and asks for `C` and `D`, which a Normal bottom greys. It is a
+  discovery POOL makes while resolving the chain against the overalls,
+  not a state of the page, so the form cannot see it coming without
+  redoing POOL's arithmetic; it needs a sheet whose hopper is as long
+  as the pool, and the two prompts arrive with that line in front of
+  them saying why.
+
+Everything else is answered from the sheet, including these, which used
+to be asked on runs that had already answered them:
+
+- **The pool-bottom gate** (*"Add pool bottom (hopper) detail?"*). It is
+  a run flag in POOL rather than a store key -- five shape paths reach
+  that one question and the store is consume-once -- so a sheet carrying
+  the hopper chain and the depths still stopped to be asked whether
+  there was a bottom at all. `pool:*hasbottom*` is the cover flag's
+  twin: `LAZFORM` sets it, `LAZFORMCOVER` sets `pool:*nobottom*`
+  instead, and `c:POOL` clears both on either exit. **A sheet with no
+  floor work on it is `LAZFORMCOVER`**, which is also what greys
+  everything behind that gate so the page does not wait to be filled in.
+- **The Roman's "are both ends perfect"**. In square POOL takes the ends
+  as identical and asks one end's letters, so the sheet's right-hand
+  `S`/`S1`/`V`/`R2` boxes are greyed there. Out of square the sheet
+  prints both ends, so it answers the question itself.
+- **The hopper's straight-side check.** POOL asked it under the same key
+  as the perimeter `T`, and the store is consume-once, so on a Roman --
+  which asks both on one run -- the second question could only ever go
+  unanswered. It has its own key now (`ttc`), the Oval and Round sheets
+  carry it under that name, and the Roman's one `T` box answers both.
+- **The round pool's `R3`.** A round pool's hopper is the oval's, which
+  asks `R3 - hopper end radius`; the round sheet had no box for it, so
+  it was asked every time. It has one now.
 
 ## Recall last, and what a box takes
 
@@ -473,7 +595,8 @@ string it sits in, and these files write their own `.dcl`.
 ## Notes & limitations
 
 - DCL dialogs are modal and not resizable. The form closes when you
-  press Insert and POOL takes over at the command line.
+  press Insert on a sheet that can be drawn from; press it on one that
+  cannot and the page stays open with the gaps marked.
 - An edit box reports its value when the caret **leaves** it, so the
   picture updates on Tab or on a click elsewhere, not per keystroke.
 - The picture is read, not clicked -- see above.
@@ -495,9 +618,11 @@ string it sits in, and these files write their own `.dcl`.
   input method (`Overall`), the hopper type, and -- on the six-sided
   chart -- that its corners were taped by `Letters`. Those are the
   chart's `gates`.
-- A chart's letters assume the bottom type it was drawn for. `W`, `R3`
-  and `L1` exist only on a Normal bottom; pick another and POOL asks a
-  different set, so those boxes go unread.
+- A chart's letters assume the bottom type it was drawn for. `W`, `R3`,
+  `L1` and the hopper's straight-side check are asked inside
+  `pool:hopoval` / `pool:hopgrec`, which run on a Normal bottom alone;
+  pick another and POOL asks a different set, so those boxes are greyed
+  rather than left to be filled in.
 - **Height is the failure mode to watch.** A DCL dialog taller than the
   screen does not open, and nothing in this file can measure a screen:
   DCL reports a tile's size only once the dialog is already up, which

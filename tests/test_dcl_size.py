@@ -59,10 +59,28 @@ print("== the model reproduces the size AutoCAD reported ==")
 # boxed column, under the furniture every page carries, came to
 # (436, 1085).  Rebuild that page and the model must land on it, or
 # every other number here is guesswork.
-vm = panel('(setq lzp:*colbudget* 9999)')      # as it was before the fix
+#
+# 28 is the count that was MEASURED, not the count Rest happens to hold:
+# Rest is the page every newly registered tool lands on, so reading the
+# live roster here would retire the one real number in this file the
+# next time anyone added a tool.  So the page is cut back to the 28 that
+# were measured, and the anchor keeps meaning what it says.
+FIRST_N = '''(defun zz:first (n l / out)
+  (while (and l (> n 0))
+    (setq out (cons (car l) out) l (cdr l) n (1- n)))
+  (reverse out))'''
+CUT_REST = '''(setq lzp:*groups*
+  (mapcar '(lambda (g)
+             (if (= (car g) "Rest")
+               (list "Rest" (cons "" (zz:first 28 (cdr (cadr g)))))
+               g))
+          lzp:*groups*))'''
+vm = panel('(setq lzp:*colbudget* 9999)',       # as it was before the fix
+           FIRST_N, CUT_REST)
 sizes = dialogs(vm)
 assert sizes['lazpanel_rest'] == (436, 1085), sizes['lazpanel_rest']
-print("   un-wrapped, Rest is 436x1085 -- exactly what AutoCAD refused")
+print("   un-wrapped, 28 buttons on Rest is 436x1085"
+      " -- exactly what AutoCAD refused")
 
 
 print("== every dialog in the tree fits, worst case ==")
@@ -80,7 +98,8 @@ vm.loads('(setq zz:*w* (lzp:wrap (list "A" "B" "C")))')
 assert len(vm.globals['zz:*w*']) == 1, "a short page must stay one column"
 vm.loads('(setq zz:*w* (lzp:wrap (lzp:commands)))')
 cols = vm.globals['zz:*w*']
-assert len(cols) > 1, "82 tools must not come back as one column"
+assert len(cols) > 1, ("%d tools must not come back as one column"
+                       % len(vm.globals['zz:*w*']))
 lens = [len(c) for c in cols]
 assert max(lens) - min(lens) <= 1, "columns must be balanced: %r" % lens
 assert max(lens) <= int(vm.globals['lzp:*colbudget*']), lens
@@ -100,9 +119,13 @@ for line in dcl[i:]:
     d += line.count('{') - line.count('}')
     if d == 0 and len(body) > 1:
         break
+vm.loads('(setq zz:*nrest*'
+         ' (length (cdr (cadr (assoc "Rest" lzp:*groups*)))))')
+nrest = int(vm.globals['zz:*nrest*'])
 caps = [l for l in body if '  -  ' in l and ': button' in l]
-assert len(caps) == 28, "Rest lost its captions: %d left" % len(caps)
-print("   all 28 buttons still read NAME  -  what the tool does")
+assert len(caps) == nrest, ("Rest lost its captions: %d of %d left"
+                            % (len(caps), nrest))
+print("   all %d buttons still read NAME  -  what the tool does" % nrest)
 
 
 print("== Pinned is capped, at the tick and on the way in ==")
@@ -118,8 +141,9 @@ vm.loads('(setq zz:*after* (length lzp:*pins*))')
 before, after = int(vm.globals['zz:*before*']), int(vm.globals['zz:*after*'])
 assert after == before, "a pin past the cap was taken anyway"
 assert int(vm.globals['zz:*r*']) <= mx
-print("   82 pinned trims to %s in %d row(s); one more is refused"
-      % (vm.globals['zz:*n*'], rows))
+vm.loads('(setq zz:*all* (length (lzp:commands)))')
+print("   %s pinned trims to %s in %d row(s); one more is refused"
+      % (vm.globals['zz:*all*'], vm.globals['zz:*n*'], rows))
 
 
 print("== Recent is capped on the way in too ==")
@@ -128,7 +152,9 @@ vm.loads('(setq lzp:*recent* (lzp:commands)) (lzp:rectrim)')
 vm.loads('(setq zz:*n* (length lzp:*recent*))')
 n, lim = int(vm.globals['zz:*n*']), int(vm.globals['lzp:*reclimit*'])
 assert n == lim, "rectrim left %d, limit is %d" % (n, lim)
-print("   a stored Recent of 82 comes back as %d" % n)
+vm.loads('(setq zz:*all* (length (lzp:commands)))')
+print("   a stored Recent of %s comes back as %d"
+      % (vm.globals['zz:*all*'], n))
 
 
 print("== the worst page a drafter can build still fits ==")

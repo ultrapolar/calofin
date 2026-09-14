@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091026 REV25")
+(setq pool:*version* "091226 REV26")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -335,7 +335,10 @@
 ;;;  asked for turns red.  The nominal point rings below are what the
 ;;;  guide starts at before any measurement is in -- proportions, not
 ;;;  sizes, since the first answer rescales them.
-(setq pool:*pv-col*  8)         ; guide outline (dark gray)
+(setq pool:*pv-col*  'auto)     ; guide outline: 'auto picks the
+                                ; grey for the background (8 is
+                                ; nearly the stock dark one), a
+                                ; number is used exactly as given
 (setq pool:*pvx-col* 7)         ; cross-dim / measuring line (white)
 (setq pool:*hi-col*  1)         ; the element being asked for (red)
 (setq pool:*pv-margin* 30.0)    ; smallest margin round the guide's zoom
@@ -964,6 +967,16 @@
 ;; c:POOL.  nil for a typed POOL, always.
 (setq pool:*nobottom* nil)
 
+;; The other side of that gate, and the reason a FORM can draw without
+;; stopping to talk.  A sheet that carries the hopper chain and the
+;; depths has already said there is a bottom; asking again is the one
+;; question a completely filled LAZFORM sheet could not answer, and it
+;; used to be asked on every single run.  Set by the form, cleared with
+;; pool:*nobottom* on both exits of c:POOL.  nil for a typed POOL,
+;; always, and pool:*nobottom* wins if something ever sets both --
+;; "draw no bottom" is the safer of the two to be wrong about.
+(setq pool:*hasbottom* nil)
+
 ;; Did the form answer KEY at all?  This is the absent/nil distinction
 ;; that (cdr (assoc ...)) throws away.
 (defun pool:fhas (key) (if (assoc key pool:*form*) t nil))
@@ -1143,19 +1156,28 @@
 ;; pool:*nobottom* and the gate answers No without appearing.  That is
 ;; the whole of "cover mode" -- one gate, closed.
 ;;
-;; It is a run flag rather than an entry in pool:*form* on purpose.
+;; And the other way: a sheet that HAS the hopper chain and the depths
+;; filled in has already said there is a bottom, so LAZFORM sets
+;; pool:*hasbottom* and the gate answers Yes without appearing.  That
+;; was the one question a completely filled sheet could not answer, and
+;; it used to be asked on every form-driven run.  nobottom wins if both
+;; are somehow set -- "draw no bottom" is the safer way to be wrong.
+;;
+;; Both are run flags rather than entries in pool:*form* on purpose.
 ;; The store is consume-once (an answer is removed as it is read, so a
 ;; range check can escape to the keyboard and Back cannot deadlock),
 ;; which is right for a measurement asked once and wrong for a gate
 ;; that five different shape paths may reach.  A flag answers wherever
 ;; the run happens to land.
 ;;
-;; Like the store, it is cleared on the way out of c:POOL -- both exits
-;; -- so a cover run can never leave the next POOL silently bottomless.
+;; Like the store, both are cleared on the way out of c:POOL -- both
+;; exits -- so neither a cover run nor a form run can leave the next
+;; POOL silently bottomless or silently un-asked.
 (defun pool:askbottom ()
-  (if pool:*nobottom*
-      nil
-      (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil)))
+  (cond
+    (pool:*nobottom* nil)
+    (pool:*hasbottom* t)
+    (t (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))))
 
 ;; Does this treatment cut real geometry off the corner?  NotGiven
 ;; does NOT: its corner is built square, so everything that asks
@@ -1284,7 +1306,7 @@
 (defun pool:getcol (e / ed)
   (if (and e (setq ed (entget e)) (assoc 62 ed))
       (cdr (assoc 62 ed))
-      pool:*pv-col*))
+      (cal:ink pool:*pv-col* 'guide)))
 
 ;; Guide entities for a list of corner-label keys, e.g. '(lA lB), so a
 ;; prompt can light up the letters it names as well as the line.
@@ -1297,7 +1319,7 @@
 
 (defun pool:pvline (p1 p2)
   (pool:line p1 p2 pool:*lay-notes*)
-  (pool:setcol (entlast) pool:*pv-col*))
+  (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))
 
 ;; Guide measuring line -- the cross dims and other ties, drawn WHITE
 ;; and DOTTED so they stand out from the gray pool outline.
@@ -1421,13 +1443,13 @@
     ((= ty "LINED") (pool:pvadd (pool:pvlined (cadr pr) (caddr pr))))
     ((= ty "TEXT")
      (pool:text (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     ((= ty "ARC")
      (pool:arc3p (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     ((= ty "ELL")
      (pool:pvell (cadr pr) (caddr pr) (cadddr pr))
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))))
 
 ;; The two primitives of one field-sheet tie -- the dotted measuring
 ;; line and its letter beside the midpoint.
@@ -4121,7 +4143,7 @@
       ((= (car cc) "Radius")
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                    pool:*lay-notes*)
-       (pool:pvadd (pool:setcol (entlast) pool:*pv-col*))))
+       (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))))
     (setq i (1+ i)))
   pv)
 
@@ -5236,7 +5258,7 @@
     ((and pvflag pool:*pvcoll*) (pool:pvcput (list "ARC" p mm q)))
     (pvflag
      (pool:arc3p p mm q pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) pool:*pv-col*)))
+     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
     (t (pool:arc3p p mm q lay))))
 
 ;;; ---------------- oval pool bottom (True Oval sheet) -----------------
@@ -5393,11 +5415,18 @@
                                 nil nil nil '(pool:sugsym ans totv2))
                           (list 'k 'SUG "K - hopper to bottom side" (cdr (assoc "K" pv)) '(m h)
                                 nil nil '(pool:chainrest ans '(m l) totv2))
-                          (list 'tt 'NAX "T - straight side length (check)" (cdr (assoc "T" pv)))))
+                          ;; ttc, not tt.  The hopper's straight-side CHECK
+                          ;; and the PERIMETER's T are two questions on one
+                          ;; run of a Roman -- rm:letters asks 'tt and then
+                          ;; this asked 'tt again -- and the store is
+                          ;; consume-once, so one key could only ever answer
+                          ;; the first of them.  A form that has the side
+                          ;; length sends it to both under its own name.
+                          (list 'ttc 'NAX "T - straight side length (check)" (cdr (assoc "T" pv)))))
               hraw (pool:sq ans 'h) graw (pool:sq ans 'g) r3raw (pool:sq ans 'r3)
               w (pool:sq ans 'w) fraw (pool:sq ans 'f) eraw (pool:sq ans 'e)
               mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
-              tt (pool:sq ans 'tt))
+              tt (pool:sq ans 'ttc))
         (pool:pvkill)
         ;; resolve against tip-to-tip length and side-to-side width
         ;; (both measured out above, before the questions)
@@ -7982,7 +8011,7 @@
     ;; Cover mode is the same hazard, quieter: a leaked flag draws the
     ;; next pool with no bottom and never asks why
     (pool:fclear)
-    (setq pool:*nobottom* nil)
+    (setq pool:*nobottom* nil pool:*hasbottom* nil)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "POOL" pool:*version* msg))
@@ -8083,7 +8112,7 @@
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (pool:fclear)
-  (setq pool:*nobottom* nil)
+  (setq pool:*nobottom* nil pool:*hasbottom* nil)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
@@ -8113,8 +8142,16 @@
                  (if tutorial:*version* tutorial:*version* "not loaded")))
   (princ))
 
-(princ (strcat "\nPOOL " pool:*version*
-               " loaded.  POOL to lay out a pool, POOLVER for the version"
-               (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
-               "."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPOOL " pool:*version*
+                 " loaded.  POOL to lay out a pool, POOLVER for the version"
+                 (if tutorial:*version* ", TUTORIALPOOL to learn it" "")
+                 ".")))
 (princ)

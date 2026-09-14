@@ -71,6 +71,8 @@ TOOLS = {
     'SPA': {
         'src': 'lisp/spa/SPA.LSP',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'spa:ink': 'cal:ink',
             'spa:v+': 'cal:v+', 'spa:v-': 'cal:v-', 'spa:v*': 'cal:v*',
             'spa:dot': 'cal:dot', 'spa:perp': 'cal:perp',
             'spa:mid': 'cal:mid', 'spa:trim': 'cal:trim',
@@ -187,6 +189,8 @@ TOOLS = {
     'CONSTELLATION': {
         'src': 'lisp/constellation/CONSTELLATION.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'cst:ink': 'cal:ink',
             'cst:askkw': 'cal:askkw', 'cst:askyn': 'cal:askyn',
             'cst:askdist': 'cal:askdist',
             'cst:back-word-p': 'cal:back-word-p',
@@ -347,6 +351,34 @@ TOOLS = {
         # acc:run tests for it by name
         'symbols': {'ACC-BACK': 'CAL-BACK'},
     },
+    # ABLOBF is LHD's OPEN half forked onto ABHD's survey classifier, so
+    # it takes the same helpers from the library that LHD does -- the
+    # vector set, the angle pair, ceil/nthcdr/sublist, dedupe, pad,
+    # ensure-layer and the point-block reader.  What stays local is the
+    # fitting itself, the open walk, and the two things that are ABLOBF
+    # and not LHD: the survey-number reader and the end picker.
+    'ABLOBF': {
+        'src': 'lisp/ablobf/ABLOBF.lsp',
+        'swap': {
+            'abl:2d': 'cal:2d', 'abl:dist': 'cal:dist',
+            'abl:sub': 'cal:v-', 'abl:add': 'cal:v+', 'abl:scl': 'cal:v*',
+            'abl:dot': 'cal:dot', 'abl:mid': 'cal:mid',
+            'abl:perp': 'cal:perp', 'abl:tan': 'cal:tan',
+            'abl:ceil': 'cal:ceil', 'abl:nthcdr': 'cal:nthcdr',
+            'abl:sublist': 'cal:sublist', 'abl:norm-ang': 'cal:angnorm',
+            'abl:signed-dang': 'cal:signed-dang',
+            'abl:dedupe': 'cal:dedupe',
+            'abl:block-number': 'cal:block-number',
+            'abl:ensure-layer': 'cal:ensure-layer', 'abl:pad': 'cal:pad',
+        },
+        'drop_globals': [],
+        'expand': {
+            '(cal:block-number en)':
+                ['(cal:block-number en *ABL-PT-TAG*)'],
+            '(cal:dedupe pts)':
+                ['(cal:dedupe pts *ABL-EXACT-EPS*)'],
+        },
+    },
     # LOBF was written against the library from the start (STANDARDS
     # section 6): its vector set, the sysvar pair, ensure-layer, pad,
     # dedupe and the point-block reader are all CALOFIN-LIB bodies under
@@ -359,6 +391,8 @@ TOOLS = {
     'LOBF': {
         'src': 'lisp/lobf/LOBF.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lobf:ink': 'cal:ink',
             'lobf:2d': 'cal:2d', 'lobf:dist': 'cal:dist',
             'lobf:v-': 'cal:v-', 'lobf:v+': 'cal:v+', 'lobf:v*': 'cal:v*',
             'lobf:dot': 'cal:dot', 'lobf:perp': 'cal:perp',
@@ -488,6 +522,8 @@ TOOLS = {
     'POOL': {
         'src': 'lisp/pool/POOL.LSP',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'pool:ink': 'cal:ink',
             'pool:v+': 'cal:v+', 'pool:v-': 'cal:v-', 'pool:v*': 'cal:v*',
             'pool:dot': 'cal:dot', 'pool:perp': 'cal:perp',
             'pool:mid': 'cal:mid', 'pool:npos': 'cal:angnorm',
@@ -526,6 +562,8 @@ TOOLS = {
     'POOLSIDE': {
         'src': 'lisp/poolside/POOLSIDE.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'psd:ink': 'cal:ink',
             'psd:2d': 'cal:2d', 'psd:v+': 'cal:v+', 'psd:v*': 'cal:v*',
             'psd:mid': 'cal:mid',
             'psd:askkw': 'cal:askkw', 'psd:askyn': 'cal:askyn',
@@ -595,6 +633,8 @@ TOOLS = {
         # written; lzX:px, lzX:py and lzX:pline are NOT here, because
         # LAZSPA and LAZSTEP clip to a band where LAZFORM draws whole.
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lzf:ink': 'cal:ink',
             'lzf:glyph': 'cal:imgglyph',
             'lzf:text': 'cal:imgtext',
             'lzf:textw': 'cal:imgtextw',
@@ -620,7 +660,7 @@ TOOLS = {
                          'lzf:*font-h*', 'lzf:*font-adv*',
                          'lzf:*col-line*', 'lzf:*col-back*',
                          'lzf:*col-dim*', 'lzf:*col-val*',
-                         'lzf:*col-hi*'],
+                         'lzf:*col-hi*', 'lzf:*col-miss*'],
         'symbols': {
             # the prose names it too, and prose that names a helper the
             # twin does not define is the drift this file exists to stop
@@ -634,6 +674,7 @@ TOOLS = {
             'lzf:*col-dim*': 'cal:*imgcol-dim*',
             'lzf:*col-val*': 'cal:*imgcol-val*',
             'lzf:*col-hi*': 'cal:*imgcol-hi*',
+            'lzf:*col-miss*': 'cal:*imgcol-miss*',
         },
         # the section header survives the drop -- top_span stops at a
         # ;;; block -- so the prose under it would be left explaining a
@@ -662,7 +703,9 @@ TOOLS = {
 
     'LAZPANEL': {
         'src': 'lisp/lazpanel/LAZPANEL.lsp',
-        'swap': {},
+        'swap': {
+            # the interface-theme probe: the library's is this body
+            'lzp:ui': 'cal:ui',},
         'drop_globals': [],
     },
     # The spa chart and the step form are LAZFORM's shape applied to
@@ -682,6 +725,8 @@ TOOLS = {
         # written; lzX:px, lzX:py and lzX:pline are NOT here, because
         # LAZSPA and LAZSTEP clip to a band where LAZFORM draws whole.
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lzs:ink': 'cal:ink',
             'lzs:glyph': 'cal:imgglyph',
             'lzs:text': 'cal:imgtext',
             'lzs:textw': 'cal:imgtextw',
@@ -739,6 +784,8 @@ TOOLS = {
         # written; lzX:px, lzX:py and lzX:pline are NOT here, because
         # LAZSPA and LAZSTEP clip to a band where LAZFORM draws whole.
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lzt:ink': 'cal:ink',
             'lzt:glyph': 'cal:imgglyph',
             'lzt:text': 'cal:imgtext',
             'lzt:textw': 'cal:imgtextw',
@@ -811,6 +858,8 @@ TOOLS = {
     'covercheck': {
         'src': 'lisp/covercheck/covercheck.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'cchk:ink': 'cal:ink',
             'cchk:ensure-layer': 'cal:ensure-layer',
             'cchk:bbox': 'cal:bbox-ent',
             'cchk:pad2': 'cal:zeropad2',
@@ -861,6 +910,8 @@ TOOLS = {
     'dimcheck': {
         'src': 'lisp/dimcheck/dimcheck.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'dchk:ink': 'cal:ink',
             'dchk:ensure-layer': 'cal:ensure-layer',
             'dchk:bbox': 'cal:bbox-ent',
             'dchk:pad2': 'cal:zeropad2',
@@ -896,6 +947,8 @@ TOOLS = {
     'linfincheck': {
         'src': 'lisp/linfincheck/linfincheck.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'lfc:ink': 'cal:ink',
             'lfc:ensure-layer': 'cal:ensure-layer',
             'lfc:bbox': 'cal:bbox-ent',
             'lfc:pad2': 'cal:zeropad2',
@@ -1018,6 +1071,8 @@ TOOLS = {
     'OASIS': {
         'src': 'lisp/oasis/OASIS.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'oasis:ink': 'cal:ink',
             'oasis:v+': 'cal:v+', 'oasis:v*': 'cal:v*',
             'oasis:pad': 'cal:pad',
             'oasis:osup': 'cal:osup', 'oasis:osdown': 'cal:osdown',
@@ -1054,6 +1109,8 @@ TOOLS = {
     'ABFIND': {
         'src': 'lisp/abfind/ABFIND.lsp',
         'swap': {
+            # the ink table: one body, and the library's is it
+            'abf:ink': 'cal:ink',
             'abf:askkw': 'cal:askkw', 'abf:askyn': 'cal:askyn',
             'abf:back-word-p': 'cal:back-word-p',
             'abf:ensure-layer': 'cal:ensure-layer',

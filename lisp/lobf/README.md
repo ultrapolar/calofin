@@ -152,7 +152,7 @@ is read when the command runs, not when the file loads.
 | `lobf:*layer*` | `"LOBF"` | The layer the construction line you keep is moved to |
 | `lobf:*color*` | `4` | Its colour (ACI, cyan) -- applied when the layer is created, so a layer already in the drawing keeps its own |
 | `lobf:*preview-layer*` | `"LOBF-PREVIEW"` | The three candidates, their stalks and their numbers while you choose |
-| `lobf:*preview-color*` | `8` | The preview layer's colour (ACI, grey). Each candidate carries its own colour, so this is only what the layer itself is created as |
+| `lobf:*preview-color*` | `'auto` | The preview layer's colour (ACI, grey). Each candidate carries its own colour, so this is only what the layer itself is created as |
 | `lobf:*ign-layer*` | `"LOBF-IGNORED"` | The ring round a point a kept fit ignores. Its own layer, so it can be frozen or erased without touching the line |
 | `lobf:*ign-color*` | `1` | Its colour (ACI, red) |
 | `lobf:*appid*` | `"LOBF"` | The xdata stamp every object LOBF draws carries. Renaming it orphans earlier runs |
@@ -187,6 +187,11 @@ is read when the command runs, not when the file loads.
   decide -- which is exactly why fit 2 is offered rather than applied.
 * **One line per run.** LOBF does not split a selection into two walls
   and fit each; highlight one run at a time.
+* **It only ever draws a straight line.** Points that trace a curve get
+  the straight line that best answers them, which is a true answer to
+  the wrong question. [ABLOBF](../ablobf/README.md) is the same idea as
+  a POLYLINE: arcs and lines threaded through the points, open, between
+  two ends you pick.
 * The grouped twin is generated -- run
   `python3 tools/mirror_shared.py LOBF` after editing this file, never
   hand-edit `shared/parts/LOBF.lsp`.

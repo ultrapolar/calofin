@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 82 of them across 188 buttons, because the pages come in two kinds
+-- 83 of them across 190 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both. (Both numbers are
 *checked*, not counted by hand: `tools/check_registry.py` computes them
 off the tree and `make check` fails when the prose disagrees.)
@@ -62,14 +62,16 @@ short lists in the order you reach for them.
 
 | **Shape** | **Points** | **Steps** | **Converters** | **Dims & check** |
 | --- | --- | --- | --- | --- |
-| `POOL` | `ABFIND` | `LAZSTEP` | `XFTCONV` | `AUTODIM` |
-| `POOLSIDE` | `ABMOVE` | `CORNERSTP` | `SOCONV` | `LINFINCHECK` |
-| `LAZFORM` | `ABPCREATE` | `HEMISTEP` | `VSCONV` | `LINFINSCAN` |
-| `LAZTXT` | `CDCREATE` | `NORMIESTEP` | `G2MCONV` | `LITELINFINSCAN` |
-| `OASIS` | `CDCALLOUT` | `AUTOBEAD` | `XFTRECONV` | `DIMCHECK` |
-| `ABHD` | `BPCALLOUT` | `PERPPTS` | `SORECONV` | `DIMSCAN` |
-| `ADAB` |  | `CPERPPTS` | `VSRECONV` |  |
-| `FITABHD` |  |  | `G2MRECONV` |  |
+| `POOL` | `ABFIND` | `LAZSTEP` | *Convert* | `AUTODIM` |
+| `POOLSIDE` | `ABMOVE` | `CORNERSTP` | `XFTCONV` | `LINFINCHECK` |
+| `LAZFORM` | `ABPCREATE` | `HEMISTEP` | `SOCONV` | `LINFINSCAN` |
+| `LAZTXT` | `CDCREATE` | `NORMIESTEP` | `VSCONV` | `LITELINFINSCAN` |
+| `OASIS` | `CDCALLOUT` | `AUTOBEAD` | `G2MCONV` | `DIMCHECK` |
+| `ABHD` | `BPCALLOUT` | `PERPPTS` | *Revert* | `DIMSCAN` |
+| `ADAB` |  | `CPERPPTS` | `XFTRECONV` |  |
+| `FITABHD` |  |  | `SORECONV` |  |
+|  |  |  | `VSRECONV` |  |
+|  |  |  | `G2MRECONV` |  |
 
 **Cover** -- 4 columns, converters second to last:
 
@@ -89,16 +91,16 @@ short lists in the order you reach for them.
 
 | **Converters** | **Shape, dims & check** |
 | --- | --- |
-| `XFTCONV` | `SPA` |
-| `SOCONV` | `LAZSPA` |
-| `VSCONV` | `SPACOVCREATE` |
-| `G2MCONV` | `CUSTBLOCK` |
-| `XFTRECONV` | `AUTODIM` |
-| `SORECONV` | `SPACHECK` |
-| `VSRECONV` | `SPACHECKSCAN` |
-| `G2MRECONV` | `LITESPACHECKSCAN` |
-|  | `DIMCHECK` |
-|  | `DIMSCAN` |
+| *Convert* | `SPA` |
+| `XFTCONV` | `LAZSPA` |
+| `SOCONV` | `SPACOVCREATE` |
+| `VSCONV` | `CUSTBLOCK` |
+| `G2MCONV` | `AUTODIM` |
+| *Revert* | `SPACHECK` |
+| `XFTRECONV` | `SPACHECKSCAN` |
+| `SORECONV` | `LITESPACHECKSCAN` |
+| `VSRECONV` | `DIMCHECK` |
+| `G2MRECONV` | `DIMSCAN` |
 
 **Why converters are second to last.** They used to lead, on the
 argument that reading somebody else's export happens before anything is
@@ -124,12 +126,30 @@ automatically -- the test recomputes that and would have failed if they
 had not. `G2MCONV` was placed on the job pages from the start, for the
 same reason, and so was never on `Rest`.)
 
-**The converters come first, the reverters underneath them**, in the
-one column and in the same order -- `XFTCONV`, `SOCONV`, `VSCONV`,
-`G2MCONV`, then `XFTRECONV`, `SORECONV`, `VSRECONV`, `G2MRECONV`, so
-the fourth button in the lower run undoes the fourth in the upper one.
-The column name still tells the truth: undoing a conversion is
-converting, in the other direction.
+**The column carries two labelled runs, `Convert` and `Revert`**, in
+the same order -- `XFTCONV`, `SOCONV`, `VSCONV`, `G2MCONV`, then
+`XFTRECONV`, `SORECONV`, `VSRECONV`, `G2MRECONV` -- so the fourth
+button under `Revert` undoes the fourth under `Convert`.
+
+That is one page column holding two labelled boxes, not two columns
+(see below for why not). A column entry in `lzp:*groups*` is therefore
+either a command name or a **headed run** of them:
+
+```lisp
+("Converters"
+ ("Convert" "XFTCONV" "SOCONV" "VSCONV" "G2MCONV")
+ ("Revert"  "XFTRECONV" "SORECONV" "VSRECONV" "G2MRECONV"))
+```
+
+A column that is nothing but runs gets no label of its own --
+`Converters` above `Convert` above `Revert` would be three frames
+saying one thing -- so the two run headings are the two headings the
+drafter sees. The run's heading is a **label, not a command**:
+everything that walks a column for the commands in it goes through
+`lzp:col-commands` (and `_col_commands` in `check_registry.py`, which
+`gen_ui_data.py` reads through), or `Convert` would land on the roster
+and then be looked up for a caption, a blurb and a probe entry that
+will never exist.
 
 Each reverter used to sit directly under its own converter, pairing
 them two by two. That reads well when you already know which export
@@ -152,6 +172,13 @@ it fails to open. Shortening the headings does not help; the command
 names are what set the width. Spa (41 cells) and Cover (73) have the
 room, but a page that splits beside a Pool that cannot would be two
 different layouts for one column, which is worse than either.
+
+The labelled runs above are what that constraint bought instead, and
+they cost 4px of height on Pool and nothing at all in width:
+`check_dcl.py` measures the page at 518x793 of the 1920x1080 it is
+allowed. `Cover`'s Converters column is left flat -- it holds one
+converter and one reverter, and two headings over two buttons is more
+frame than content.
 
 **Spa's buttons lost their captions**, and that is the column rule
 biting rather than an oversight: a page laid out in columns shows the
@@ -426,12 +453,39 @@ second file to ship, no support-path entry to add, and no DLL to
 `NETLOAD` -- unlike the VB.NET palette in `ui/`, which needs its
 assembly loaded on every machine.
 
+## The two commands that are not the panel
+
+`CALHELP` and `CALSET` live in this file because this is where their
+answers already were: the captions are here, and so were the only
+settings calofin keeps in the AutoCAD profile. Neither carries a
+panel button -- both are named in `NAMED_SATELLITES` in
+`tools/callib.py`, and a button that told you what buttons do would be
+a joke at the drafter's expense.
+
+| Command | Answers |
+| --- | --- |
+| `CALHELP` | what a command IS, at the command line. Type any part of a name **or of its caption** -- the same search the Find page runs, so `survey` finds `ABHD` -- and it prints the matches with their captions; Enter lists every tool. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
+| `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
+
+## The icon follows the theme
+
+A `.bmp` has no alpha channel, so the square around the orange hexagon
+is PAINTED, and it was painted `54 54 54` -- dark-theme panel grey --
+for everybody. On the light theme that is a dark tile in a light
+toolbar, and it had been since the button shipped. `lzp:ui` reads
+`COLORTHEME` (and `CalofinTheme`, which beats it), and the two BMPs
+are regenerated on every load anyway, so the ground is picked rather
+than assumed. A theme nothing can report keeps the dark grey that was
+always there. `LAZICON` reports which one it used and where the answer
+came from.
+
 ## Install & run
 
 APPLOAD `LAZPANEL.lsp` on its own, or load `shared/LAZPASS.lsp`, which
 carries it along with every tool it lists. The button toolbar appears
 on load; type `LAZPANEL` to open the panel directly, or `LAZBUTTON` to
-re-summon the button, or `LAZPIN` to choose the pinned tools.
+re-summon the button, `LAZPIN` to choose the pinned tools, `CALHELP`
+to ask what a command does, or `CALSET` to see the settings.
 
 ## Tunables
 

@@ -141,6 +141,25 @@ def _sexp(body):
     return cur[0] if len(cur) == 1 and isinstance(cur[0], list) else cur
 
 
+def _col_commands(entries):
+    """The command names in one column, flat.
+
+    A column entry is either a command name or a HEADED RUN of them --
+    ["Revert", "XFTRECONV", ...] -- which is how the Converters column
+    labels its two halves without becoming two columns.  The run's own
+    heading is a label, not a command, so it is dropped rather than
+    counted: taking it would put "Convert" on the panel's roster and
+    then look for a caption, a blurb and a probe entry for it.
+    """
+    out = []
+    for e in entries:
+        if isinstance(e, str):
+            out.append(e)
+        elif isinstance(e, list) and e:
+            out.extend(c for c in e[1:] if isinstance(c, str))
+    return out
+
+
 def pages(src):
     """{page: {column: [command, ...]}} out of lzp:*groups*."""
     span = _table_span(src, "groups")
@@ -153,7 +172,7 @@ def pages(src):
         cols = {}
         for col in page[1:]:
             if isinstance(col, list) and col and isinstance(col[0], str):
-                cols[col[0]] = [c for c in col[1:] if isinstance(c, str)]
+                cols[col[0]] = _col_commands(col[1:])
         out[page[0]] = cols
     return out
 
