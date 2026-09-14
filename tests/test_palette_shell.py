@@ -49,10 +49,14 @@ def check(label, cond, detail=''):
 PANEL = ROOT / 'lisp' / 'lazpanel' / 'LAZPANEL.lsp'
 MEMORY = ROOT / 'ui' / 'calofin_net' / 'PaletteMemory.vb'
 TAB = ROOT / 'ui' / 'calofin_net' / 'CalofinPalette.vb'
+#: the palette's answer to "which way does this screen read", which
+#: CALSET writes into the panel's own registry key beside the pins
+THEMEVB = ROOT / 'ui' / 'calofin_net' / 'PaletteTheme.vb'
 
 PANEL_SRC = read(PANEL)
 MEM = read(MEMORY)
 VB = read(TAB)
+THEME = read(THEMEVB)
 
 vm = VM()
 vm.load(PANEL)
@@ -71,11 +75,19 @@ check("the palette writes LAZPANEL's own registry key",
       vb_literal(pinkey) in MEM, pinkey)
 
 values = set(re.findall(r'lzp:\*pinkey\*\s+"([A-Za-z]+)"', PANEL_SRC))
-check("the panel keeps exactly two values there",
-      values == {'Pins', 'Recent'}, repr(sorted(values)))
-for v in sorted(values):
+check("the panel keeps exactly three values there",
+      values == {'Pins', 'Recent', 'Theme'}, repr(sorted(values)))
+for v in sorted(values - {'Theme'}):
     check("the palette reads and writes %r too" % v,
           ('"%s"' % v) in MEM)
+# Theme is the third thing the two surfaces share, and it is read on
+# the palette side by PaletteTheme rather than PaletteMemory: CALSET
+# writes it here so a drafter who has said which way their screen
+# reads has said it to both surfaces, exactly as a pin does.
+check("the palette reads 'Theme' out of the same key",
+      '"Theme"' in THEME and vb_literal(pinkey) in THEME)
+check("...and CALSET is what writes it",
+      '(list lzp:*pinkey* "Theme"' in PANEL_SRC)
 
 limit = vm.globals['lzp:*reclimit*']
 check("the same cap on Recent",
@@ -167,9 +179,9 @@ check("the top hit is selected for you, both sides",
 print("== 5. every page of the strip, not just the categories ==")
 
 pages = [str(g[0]) for g in vm.globals['lzp:*groups*']]
-check("the panel has the four job pages and the four categories",
+check("the panel has the four job pages and the five categories",
       pages == ['Pool', 'Cover', 'Spa', 'Rest', 'Layout', 'Points',
-                'Dimensions', 'Checking'], repr(pages))
+                'Dimensions', 'Converters', 'Checking'], repr(pages))
 check("the palette builds a tab per page of the catalog",
       'For Each page In CommandCatalog.Pages' in VB)
 check("and remembers which one it was left on",

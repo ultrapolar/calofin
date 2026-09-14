@@ -1682,6 +1682,268 @@ def test_the_create_offer_can_be_backed_out_of():
     print("ok  the offer to create is backed out of without plotting")
 
 
+# ---- more than one AB line on the sheet --------------------------------
+# Two surveys merged onto one drawing: each brings its own A and B, and
+# each numbers its points from 1, so "1" names two different places.  A2
+# and B2 stand 20' apart the same way A and B do, a hundred feet east.
+
+A2 = (1200.0, 0.0)
+B2 = (1440.0, 0.0)
+L1P1 = (120.0, 100.0)            # the first survey's Pt.1
+L2P1 = (1320.0, 150.0)           # the second survey's, off ITS stakes
+L1P2 = (60.0, 140.0)
+L2P2 = (1260.0, 190.0)
+
+
+def two_surveys(vm, seconds=True):
+    """One sheet, two surveys: A/B/Pt.1/Pt.2 twice over."""
+    ab_pt(vm, A[0], A[1], 'A')
+    ab_pt(vm, B[0], B[1], 'B')
+    ab_pt(vm, L1P1[0], L1P1[1], 1)
+    ab_pt(vm, L1P2[0], L1P2[1], 2)
+    if seconds:
+        ab_pt(vm, A2[0], A2[1], 'A')
+        ab_pt(vm, B2[0], B2[1], 'B')
+        ab_pt(vm, L2P1[0], L2P1[1], 1)
+        ab_pt(vm, L2P2[0], L2P2[1], 2)
+
+
+def tie_ends(vm):
+    """The two ends of every dimension drawn, rounded."""
+    return [(pt3(d[13]), pt3(d[14])) for d in dims(vm)]
+
+
+def test_two_ab_lines_are_found_and_labelled():
+    """Two As and two Bs make two lines, paired shortest tie first and
+    labelled in the order their A stakes appear in the drawing."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABFIND', ['1', 'L1', 'No', None], 'lines')
+    assert any('2 AB lines on this sheet' in m for m in vm.printed), \
+        vm.printed[:6]
+    # both Pt.1s ringed, on the throwaway layer, one label each
+    rings = [d for d in ever(vm, 'CIRCLE', 'ABMOVE-POINTS')
+             if d.get(40) == 9.0]
+    assert [pt3(d[10]) for d in rings] == [pt3(L1P1), pt3(L2P1)], rings
+    assert [d.get(1) for d in ever(vm, 'TEXT', 'ABMOVE-POINTS')] \
+        == ['L1', 'L2']
+    # and the scaffolding is gone again when the round ends
+    assert not live(vm, 'CIRCLE', 'ABMOVE-POINTS')
+    assert not live(vm, 'TEXT', 'ABMOVE-POINTS')
+    print("ok  two AB lines are paired, labelled L1/L2 and ringed")
+
+
+def test_the_label_picks_which_pt1_is_meant():
+    """The answer settles BOTH which point is meant and which stakes the
+    ties are measured from."""
+    for tag, pt, stakes in (('L1', L1P1, (A, B)), ('L2', L2P1, (A2, B2))):
+        vm = newvm()
+        two_surveys(vm)
+        run(vm, 'c:ABFIND', ['1', tag, 'No', None], tag)
+        assert tie_ends(vm) == [(pt3(stakes[0]), pt3(pt)),
+                                (pt3(stakes[1]), pt3(pt))], tie_ends(vm)
+    print("ok  the label names the point AND the stakes it is tied to")
+
+
+def test_a_click_picks_the_duplicate_without_a_label():
+    """A click is never ambiguous - it names the point it landed on."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABFIND', ['1', list(L2P1) + [0.0], 'No', None], 'click')
+    assert tie_ends(vm) == [(pt3(A2), pt3(L2P1)), (pt3(B2), pt3(L2P1))], \
+        tie_ends(vm)
+    print("ok  a click on one of the ringed points takes that one")
+
+
+def test_the_ab_line_is_assumed_from_then_on():
+    """Once a line is settled the run stays on it: the next doubled
+    number is resolved from it and only reported."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABFIND', ['1', 'L2', 'No', '2', 'No', None], 'stays')
+    assert any('the one on L2 taken' in m for m in vm.printed), vm.printed
+    assert tie_ends(vm)[2:] == [(pt3(A2), pt3(L2P2)),
+                                (pt3(B2), pt3(L2P2))], tie_ends(vm)
+    # only the FIRST number was asked about
+    asked = [q for q, _ in vm.prompts if 'Which AB line' in q]
+    assert len(asked) == 1, asked
+    print("ok  the AB line settled by the first point stands for the run")
+
+
+def test_a_number_only_one_point_carries_is_not_asked_about():
+    """"if theres only one point with the name provided, proceed
+    normally" - the line is read off it and reported, nothing is asked."""
+    vm = newvm()
+    two_surveys(vm)
+    ab_pt(vm, 60.0, 160.0, 7)                    # on the first survey
+    run(vm, 'c:ABFIND', ['7', 'No', None], 'unique')
+    assert not [q for q, _ in vm.prompts if 'Which AB line' in q], vm.prompts
+    assert any('On AB line L1' in m for m in vm.printed), vm.printed
+    assert tie_ends(vm) == [(pt3(A), (60.0, 160.0)),
+                            (pt3(B), (60.0, 160.0))], tie_ends(vm)
+    print("ok  a number only one point carries settles the line unasked")
+
+
+def test_one_ab_line_asks_nothing_at_all():
+    """"if theres only one AB line ... proceed normally" - a sheet with
+    one pair of stakes never sees any of it."""
+    vm = newvm()
+    two_surveys(vm, seconds=False)
+    run(vm, 'c:ABFIND', ['1', 'No', None], 'one line')
+    assert not [m for m in vm.printed if 'AB line' in m], vm.printed
+    assert tie_ends(vm) == [(pt3(A), pt3(L1P1)), (pt3(B), pt3(L1P1))]
+    print("ok  one AB line is not mentioned, let alone asked about")
+
+
+def test_abpcreate_asks_off_the_lines_themselves():
+    """There is no point to read the line off yet, so the lines are what
+    is picked between: both stakes ringed and the tie between them."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABPCREATE', ['L2', 160.0, 160.0, '9', None], 'create')
+    assert [d.get(1) for d in ever(vm, 'TEXT', 'ABMOVE-POINTS')][:2] \
+        == ['L1', 'L2']
+    # the dashed tie of each line, and the four stake rings
+    assert len([d for d in ever(vm, 'LINE', 'ABMOVE-POINTS')]) == 2
+    assert len([d for d in ever(vm, 'CIRCLE', 'ABMOVE-POINTS')
+                if d.get(40) == 9.0]) == 4
+    # and the point it plotted is tied to the line that was chosen
+    assert [e[0] for e in tie_ends(vm)] == [pt3(A2), pt3(B2)], tie_ends(vm)
+    print("ok  ABPCREATE picks between the AB lines themselves")
+
+
+def test_abfind_creating_a_point_asks_the_line_first():
+    """A number that names no point has no line to read off either."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABFIND', ['23', 'Yes', 'L2', 160.0, 160.0, '23', None],
+        'create')
+    assert [e[0] for e in tie_ends(vm)] == [pt3(A2), pt3(B2)], tie_ends(vm)
+    assert [d[1] for _, d in live(vm, 'ATTRIB')][-1] == '23'
+    print("ok  creating a point from ABFIND asks which AB line first")
+
+
+def test_back_and_enter_at_the_line_pick():
+    """Back re-asks the number it came from; Enter takes no line and
+    plots nothing."""
+    vm = newvm()
+    two_surveys(vm)
+    ab_pt(vm, 60.0, 160.0, 7)
+    run(vm, 'c:ABFIND', ['23', 'Yes', 'Back', '7', 'No', None], 'back')
+    assert any('Back to the point number' in m for m in vm.printed)
+    assert len(dims(vm)) == 2, dims(vm)
+
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABPCREATE', [None], 'enter')
+    assert any('No AB line taken' in m for m in vm.printed), vm.printed
+    assert not dims(vm)
+    print("ok  Back and Enter at the AB line pick")
+
+
+def test_back_and_enter_at_the_duplicate_pick():
+    """Back re-asks the number - that is the question in front of it -
+    and a declined pick is NOT read as a number that names nothing."""
+    vm = newvm()
+    two_surveys(vm)
+    ab_pt(vm, 60.0, 160.0, 7)
+    run(vm, 'c:ABFIND', ['1', 'b', '7', 'No', None], 'back')
+    assert any('Back to the point number' in m for m in vm.printed), vm.printed
+    assert tie_ends(vm) == [(pt3(A), (60.0, 160.0)),
+                            (pt3(B), (60.0, 160.0))], tie_ends(vm)
+
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABFIND', ['1', None, None], 'none')
+    assert any('None taken' in m for m in vm.printed), vm.printed
+    # and the offer to CREATE is not raised: the number names two points
+    assert not [q for q, _ in vm.prompts if 'Create Pt.' in q], vm.prompts
+    assert not dims(vm)
+    print("ok  Back and Enter at the duplicate pick")
+
+
+def test_abmove_on_a_two_line_sheet():
+    """ABMOVE asks the same question, and moves the point on the line it
+    was told about."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABMOVE', ['1', 'L2', 'None'], 'abmove')
+    assert any('Which AB line is Pt.1 on' in q for q, _ in vm.prompts), \
+        vm.prompts
+    assert tie_ends(vm) == [(pt3(A2), pt3(L2P1)), (pt3(B2), pt3(L2P1))], \
+        tie_ends(vm)
+    print("ok  ABMOVE settles its one point on the line it was given")
+
+
+def test_two_points_numbered_the_same_on_one_line():
+    """A drawing fault rather than a second survey, and still
+    answerable: the second candidate takes a letter after the label."""
+    vm = newvm()
+    two_surveys(vm)
+    ab_pt(vm, 100.0, 120.0, 1)                # a THIRD Pt.1, on line 1
+    run(vm, 'c:ABFIND', ['1', 'L1b', 'No', None], 'same line')
+    # labelled in drawing order, so the third Pt.1 is the one that has
+    # to take the letter
+    assert [d.get(1) for d in ever(vm, 'TEXT', 'ABMOVE-POINTS')] \
+        == ['L1', 'L2', 'L1b'], ever(vm, 'TEXT', 'ABMOVE-POINTS')
+    assert tie_ends(vm) == [(pt3(A), (100.0, 120.0)),
+                            (pt3(B), (100.0, 120.0))], tie_ends(vm)
+    print("ok  two points numbered the same on one line take L1/L1b")
+
+
+def test_a_spare_stake_is_reported():
+    """Three As and two Bs: one survey has no pair to measure from, and
+    the run says so rather than quietly pairing it with someone else's."""
+    vm = newvm()
+    two_surveys(vm)
+    ab_pt(vm, 2400.0, 0.0, 'A')
+    run(vm, 'c:ABFIND', ['1', 'L1', 'No', None], 'spare')
+    assert any('pair with nothing' in m for m in vm.printed), vm.printed
+    print("ok  a stake that pairs with nothing is reported")
+
+
+def test_naming_a_stake_is_still_refused():
+    """"A" names two stakes on a two-line sheet, so it is asked about
+    like any other doubled number - and then refused, because the ties
+    are measured FROM a stake."""
+    vm = newvm()
+    two_surveys(vm)
+    run(vm, 'c:ABFIND', ['A', 'L2', None], 'stake')
+    assert any('IS a stake' in m for m in vm.printed), vm.printed
+    assert not dims(vm)
+    print("ok  a stake named on a two-line sheet is asked about, then refused")
+
+
+def test_one_stake_named_and_one_clicked_says_nothing_extra():
+    """A drawing that names one stake and not the other is asked to
+    click the missing one - which says it better than a spare-stake
+    count would, so the count is not printed."""
+    vm = newvm()
+    ab_pt(vm, A[0], A[1], 'A')
+    ab_pt(vm, L1P1[0], L1P1[1], 1)
+    run(vm, 'c:ABFIND', [list(B) + [0.0], '1', 'No', None], 'half named')
+    assert not [m for m in vm.printed if 'pair with nothing' in m], vm.printed
+    assert len(dims(vm)) == 2, dims(vm)
+    print("ok  a half-named pair is clicked, with no spare-stake count")
+
+
+def test_the_field_side_is_read_off_one_line_only():
+    """A point created on L1 must not be put on the wrong side of it by
+    the other survey's points, which sit wherever they sit."""
+    vm = newvm()
+    ab_pt(vm, A[0], A[1], 'A')
+    ab_pt(vm, B[0], B[1], 'B')
+    ab_pt(vm, 120.0, 100.0, 1)                 # L1's survey: NORTH
+    ab_pt(vm, A2[0], A2[1], 'A')
+    ab_pt(vm, B2[0], B2[1], 'B')
+    ab_pt(vm, 1320.0, -400.0, 1)               # L2's: well SOUTH
+    ab_pt(vm, 1260.0, -440.0, 2)
+    run(vm, 'c:ABPCREATE', ['L1', 160.0, 160.0, '9', None], 'side')
+    made = pt3(live(vm, 'INSERT')[-1][1][10])
+    assert made[1] > 0.0, made        # north, where L1's own survey is
+    print("ok  the field side is read off the chosen line's own points")
+
+
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
 
 if __name__ == '__main__':

@@ -32,12 +32,23 @@ without a build:
 5. **A member declared twice** in one type, which VB rejects outright
    and which is what an edit spliced into the wrong place leaves
    behind.
+6. **A framework type named without its namespace.**  ``SystemColors``
+   lives in ``System.Windows`` and ``Registry`` in ``Microsoft.Win32``;
+   a file that names one bare and imports neither does not compile.
+   Rule 3 cannot see this -- the members it resolves are this
+   assembly's own, so a missing framework import looks like nothing at
+   all to it.  That is not hypothetical: ``PaletteTheme.vb`` was added
+   naming ``SystemColors`` while importing only ``System.Windows.Media``,
+   and every other rule here passed it.  ``FRAMEWORK_TYPES`` is the
+   table, and it is short on purpose -- the types the palette actually
+   names, not the framework.
 
 What it deliberately does NOT do is type-check.  ``Option Strict On``
 rejects a narrowing conversion and nothing here can tell ``Double``
 from ``Object``; claiming otherwise would make a green run mean less
-than it does.  A green run here means the file is well formed and its
-references to its OWN types resolve.
+than it does.  A green run here means the file is well formed, its
+references to its OWN types resolve, and the framework names it uses
+are imported.
 
     python3 tools/check_vb.py [file ...]     # default: every .vb
 """
@@ -484,6 +495,66 @@ def _balanced(line, open_at):
     return "".join(out)
 
 
+#: Framework types this palette uses, and the namespace each needs.
+#: A table rather than a derivation, because deriving it would mean
+#: reading the framework's own metadata, which this tree has no more of
+#: than it has a compiler.  Short on purpose: these are the ones the
+#: palette actually names, and a type nobody uses does not need a row.
+#:
+#: It exists because of a real miss.  PaletteTheme.vb was added naming
+#: SystemColors -- which lives in System.Windows, not in the
+#: System.Windows.Media it did import -- and every check in this file
+#: passed it: the members it resolves are the ASSEMBLY's own, and a
+#: missing framework import looks like nothing at all to them.  The
+#: first thing that would have said so was a compiler, and the first
+#: compiler this code meets is the one on somebody's build machine.
+FRAMEWORK_TYPES = {
+    "System.Windows": (
+        "SystemColors", "Thickness", "Visibility", "FontWeights",
+        "HorizontalAlignment", "VerticalAlignment", "TextAlignment",
+        "GridLength", "Application",
+    ),
+    "System.Windows.Media": (
+        "Brush", "Brushes", "SolidColorBrush", "Color", "ColorConverter",
+        "PathGeometry", "PathFigure", "LineSegment", "Colors",
+    ),
+    "System.Windows.Controls": (
+        "TextBox", "TextBlock", "DockPanel", "Canvas", "StackPanel",
+        "Button", "TabControl", "TabItem", "ListBox", "ComboBox",
+        "Border", "ScrollViewer", "CheckBox", "Image", "Grid", "Dock",
+    ),
+    "Microsoft.Win32": ("Registry", "RegistryKey"),
+}
+
+
+def framework_import_problems(rel, lines):
+    """A framework type named bare must have its namespace imported.
+
+    Only a BARE name counts: `Shapes.Path` carries its own namespace
+    and `System.Windows.SystemColors` needs no import at all.  A name
+    inside a string or a comment is already gone -- strip_line took it
+    -- so what is left is code.
+    """
+    imported = set()
+    used = {}
+    for n, line, _, _marks in lines:
+        m = re.match(r"^Imports\s+(?:[A-Za-z_][\w]*\s*=\s*)?([\w.]+)", line)
+        if m:
+            imported.add(m.group(1))
+            continue
+        for ns, types in FRAMEWORK_TYPES.items():
+            for t in types:
+                if re.search(r"(?<![\w.])" + t + r"(?![\w])", line):
+                    used.setdefault((ns, t), n)
+    out = []
+    for (ns, t), n in sorted(used.items(), key=lambda kv: kv[1]):
+        if ns not in imported:
+            out.append("%s:%d: %s needs `Imports %s` - nothing else in "
+                       "this file brings it in, and the first thing that "
+                       "would say so is a compiler" % (rel, n, t, ns))
+    return out
+
+
 def imports_problems(rel, lines):
     """Imports must precede every declaration; VB rejects a late one."""
     out, seen = [], False
@@ -525,6 +596,7 @@ def check(paths=None):
         problems += structure_problems(rel, lines)
         problems += paren_problems(rel, lines)
         problems += imports_problems(rel, lines)
+        problems += framework_import_problems(rel, lines)
     types = declared(files)
     problems += duplicate_problems(types)
     problems += reference_problems(files, types)

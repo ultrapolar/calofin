@@ -2021,7 +2021,29 @@ BUILTINS[Sym('getreal')] = _getdist
 # bits and keywords exactly as getdist does
 BUILTINS[Sym('exit')] = lambda vm, a: (_ for _ in ()).throw(
     LispError("exit called", vm))
-BUILTINS[Sym('atoms-family')] = lambda vm, a: []
+@bi('atoms-family')
+def _atoms_family(vm, a):
+    """(atoms-family fmt [names]) -- the symbols this session has.
+
+    It answered [] until CALVER needed it.  The one thing a support
+    call always asks is which versions are loaded, and the build has
+    no table of them: every tool sets its own banner global as it
+    loads, so the SESSION is the table and this is how it is read.
+    Format 0 hands back symbols, 1 hands back strings, and AutoCAD
+    upcases either way.  With a name list, only those -- and a name
+    the session has not got comes back nil in its own slot, which is
+    how a caller tells "not loaded" from "loaded and nil"."""
+    fmt = a[0] if a else 0
+    have = {str(k).upper() for k in vm.globals}
+    have |= {str(k).upper() for k in BUILTINS}
+    have |= {str(k).upper() for k in SPECIAL}
+    if len(a) > 1 and a[1] is not NIL:
+        out = [n.upper() if str(n).upper() in have else None
+               for n in a[1]]
+        return [NIL if n is None else (Sym(n) if fmt == 0 else n)
+                for n in out]
+    names = sorted(have)
+    return [Sym(n) for n in names] if fmt == 0 else names
 # (regapp name) -- registers an xdata application, returns the name.
 # Re-registering an app already there is not an error in AutoCAD, so it
 # is not one here either.

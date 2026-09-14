@@ -40,7 +40,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.9")   ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -467,8 +467,15 @@
           (cond ((eq res 'fixed)   (setq naf (1+ naf)))
                 ((eq res 'skipped) (setq nas (1+ nas)))
                 (t                 (setq nao (1+ nao)))))
-        (command "_.UNDO" "_End")
-        (setq undo-open nil)
+        ;; closed only if one was opened -- the same guard the handler
+        ;; above makes.  With undo recording off (UNDOCTL bit 1 clear)
+        ;; there is no group of this run's, and an _End on nothing is an
+        ;; error of its own: it would land here, with every dimension
+        ;; and arc already fixed and the CMDECHO putback below it
+        (if undo-open
+          (progn
+            (command "_.UNDO" "_End")
+            (setq undo-open nil)))
         (setvar "CMDECHO" oldecho)
         (princ (strcat "\n--- CHECK complete (attachment tolerance "
                        (rtos *cfchk-tol* *cfchk-dist-mode* *cfchk-tol-prec*)
@@ -498,6 +505,14 @@
   (princ (strcat "\nCHECK " *checkdrawing-version*))
   (princ))
 
-(princ (strcat "\ncheck_drawing.lsp " *checkdrawing-version*
-               " loaded - type CHECK to audit dimension & arc attachment."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ncheck_drawing.lsp " *checkdrawing-version*
+                 " loaded - type CHECK to audit dimension & arc attachment.")))
 (princ)

@@ -399,6 +399,159 @@ def test_settings_go_back():
     print("ok   OSMODE, CLAYER, FILLETRAD, TRIMMODE and the dim style go back")
 
 
+def test_a_pending_command_is_cancelled():
+    """FILLET does not give up when it refuses a pick -- it asks again.
+    Left asking, it eats whatever is sent next: the radius dimension,
+    the style restore, the undo close.  A bare (command) cancels it, and
+    the drain that sends one is BOUNDED, because one bit of CMDACTIVE
+    means "a dialog is up" and no keystroke from here clears that -- an
+    unbounded loop against it hangs AutoCAD with no Esc out."""
+    vm = newvm()
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    e1p, e2p = [50.0, 0.0, 0.0], [0.0, 50.0, 0.0]
+    # CMDACTIVE that never clears is the worst case: the valve has to
+    # give up rather than spin
+    vm.sysvars['CMDACTIVE'] = 1
+    run(vm, [[e1, e1p], [e2, e2p],
+             clicker(12.0), clicker(18.0),
+              clicker(13.5),
+              'No'], 'pending command')
+
+    bare = [c for c in vm.commands if not c]
+    assert bare, "the valve never fired -- a pending FILLET would be" \
+        " answered by the next command instead of cancelled"
+    assert len(bare) <= 30, \
+        f"{len(bare)} cancels: the drain is not bounded, and against the" \
+        " dialog bit that hangs AutoCAD"
+    assert 'HONEFILLET error' not in said(vm), said(vm)
+    assert 'corner cut' in said(vm), said(vm)
+    print("ok   a command left waiting is cancelled, and boundedly")
+
+
+def test_undo_off_closes_no_group():
+    """An _End on a group that was never opened is an error of its own,
+    and it lands at the END of the run -- the corner cut, the dimension
+    placed, and the settings restore behind it never reached.  With undo
+    recording off neither half is sent."""
+    e1p, e2p = [50.0, 0.0, 0.0], [0.0, 50.0, 0.0]
+
+    vm = newvm()
+    vm.sysvars['UNDOCTL'] = 5                      # AutoCAD's default
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    run(vm, [[e1, e1p], [e2, e2p],
+             clicker(12.0), clicker(18.0),
+              clicker(13.5),
+              'No'], 'undo on')
+    assert [c[1] for c in cmds(vm, '_.UNDO')] == ['_Begin', '_End'], \
+        vm.commands
+    print("ok   undo on: the bracket is opened and closed")
+
+    vm = newvm()
+    vm.sysvars['UNDOCTL'] = 4                      # recording bit clear
+    vm.sysvars['OSMODE'] = 39
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    run(vm, [[e1, e1p], [e2, e2p],
+             clicker(12.0), clicker(18.0),
+              clicker(13.5),
+              'No'], 'undo off')
+    assert cmds(vm, '_.UNDO') == [], vm.commands
+    assert 'corner cut' in said(vm), said(vm)
+    assert 'HONEFILLET error' not in said(vm), said(vm)
+    # the restore sits after the close: it is what an error there costs
+    assert vm.sysvars['OSMODE'] == 39, vm.sysvars
+    assert vm.sysvars['CLAYER'] == 'POOL', vm.sysvars
+    print("ok   undo off: no group opened, none closed, settings back")
+
+
+def test_the_shades_can_be_switched_off():
+    """nil is what every other knob in the SETTINGS block takes for
+    "leave it to the drawing", and the shade pair is the one a
+    light-background drawing is told to touch -- so it is the one
+    somebody empties rather than swaps.  Emptied, the fan reads as the
+    layer's own colour: no true-colour group at all, which is what
+    hn:colgroups already does with a nil shade."""
+    vm = newvm()
+    vm.loads('(setq hn:*shade-lo* nil)')
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    run(vm, [[e1, [50.0, 0.0, 0.0]], [e2, [0.0, 50.0, 0.0]],
+             clicker(12.0), clicker(18.0), clicker(13.5),
+             'No'], 'no shades')
+    assert 'corner cut' in said(vm), said(vm)
+    assert vm.loads('(hn:shade 0 4)') is None, "no shade means no shade"
+    print("ok   either shade nil: no true colour, and the run still cuts")
+
+
+def test_every_exit_pops_the_error_mode():
+    """(command) from inside *error* needs the mode pushed on the way in,
+    and a mode left stacked refuses command-s inside every LATER
+    handler in the session -- so every exit pops it exactly once.  Esc
+    at each prompt in turn, then a throw from inside the cut, with undo
+    recording on and off: the mode balances, the group balances, the
+    settings come back and no preview is left behind."""
+    def esc(vm_):
+        raise LispError('Function cancelled', vm_)
+
+    sysvars = {'OSMODE': 39, 'CLAYER': 'POOL', 'FILLETRAD': 3.0,
+               'TRIMMODE': 0, 'CMDECHO': 1}
+
+    def drive(script, undoctl, label):
+        vm = newvm()
+        vm.handle_errors = True
+        vm.sysvars['UNDOCTL'] = undoctl
+        for k, v in sysvars.items():
+            vm.sysvars[k] = v
+        e1 = line(vm, (0, 0), (100, 0))
+        e2 = line(vm, (0, 0), (0, 100))
+        picks = [[e1, [50.0, 0.0, 0.0]], [e2, [0.0, 50.0, 0.0]],
+                 clicker(12.0), clicker(18.0), clicker(13.5)]
+        vm.run('c:HONEFILLET', script(picks) + [])
+        assert vm.error_mode_depth == 0, \
+            f'[{label}] error mode left stacked: {vm.error_mode_depth}'
+        assert not vm.error_mode_underflow, \
+            f'[{label}] error mode popped too often'
+        undo = [c[1] for c in vm.commands if c and c[0] == '_.UNDO']
+        assert undo.count('_Begin') == undo.count('_End'), \
+            f'[{label}] undo group unbalanced: {undo}'
+        for k, v in sysvars.items():
+            assert vm.sysvars[k] == v, \
+                f'[{label}] {k} left at {vm.sysvars[k]!r}'
+        assert not alive(vm, layer=PREVIEW_LAYER), \
+            f'[{label}] previews left in the drawing'
+        return vm
+
+    npick = 5
+    for stop in range(npick):
+        for undoctl, uname in ((5, 'undo on'), (4, 'undo off')):
+            drive(lambda p, s=stop: p[:s] + [esc], undoctl,
+                  f'Esc at prompt {stop}, {uname}')
+    print(f"ok   Esc at each of the {npick} prompts: mode, group, settings, previews")
+
+    for undoctl, uname in ((5, 'undo on'), (4, 'undo off')):
+        vm = newvm()
+        vm.handle_errors = True
+        vm.sysvars['UNDOCTL'] = undoctl
+        for k, v in sysvars.items():
+            vm.sysvars[k] = v
+        e1 = line(vm, (0, 0), (100, 0))
+        e2 = line(vm, (0, 0), (0, 100))
+        vm.loads('(defun hn:dofillet (a b c d r) (hn:no-such-helper r))')
+        vm.run('c:HONEFILLET', [[e1, [50.0, 0.0, 0.0]], [e2, [0.0, 50.0, 0.0]],
+                              clicker(12.0), clicker(18.0), clicker(13.5)])
+        assert len(vm.handled_errors) == 1, vm.handled_errors
+        assert vm.error_mode_depth == 0 and not vm.error_mode_underflow
+        undo = [c[1] for c in vm.commands if c and c[0] == '_.UNDO']
+        assert undo.count('_Begin') == undo.count('_End'), undo
+        for k, v in sysvars.items():
+            assert vm.sysvars[k] == v, (uname, k, vm.sysvars[k])
+        assert not alive(vm, layer=PREVIEW_LAYER)
+        assert 'HONEFILLET error' in said(vm), said(vm)
+    print("ok   a throw inside the cut: reported once, and everything back")
+
+
 def test_version_banner():
     vm = newvm()
     vm.run('c:HONEFILLETVER', [])
@@ -413,7 +566,12 @@ TESTS = [test_fine_steps, test_whole_inches_and_halves, test_full_run,
          test_cancel_at_the_bracket, test_repeat_at_the_honed_radius,
          test_one_size_is_nothing_to_hone_between,
          test_no_corner_and_no_room, test_first_prompt_can_be_cancelled,
-         test_settings_go_back, test_version_banner]
+         test_settings_go_back,
+         test_a_pending_command_is_cancelled,
+         test_undo_off_closes_no_group,
+         test_the_shades_can_be_switched_off,
+         test_every_exit_pops_the_error_mode,
+         test_version_banner]
 
 
 def main():

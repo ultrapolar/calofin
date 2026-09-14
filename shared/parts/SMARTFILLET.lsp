@@ -102,9 +102,22 @@
 ;;;      labels still tell the arcs apart.
 ;;;    * OSMODE, CMDECHO, CLAYER, FILLETRAD, TRIMMODE and the current
 ;;;      dimension style are all put back the way they were.
+;;;    * FILLET does not give up when it refuses a pick -- it asks
+;;;      AGAIN -- and DIMRADIUS does the same with a location it will
+;;;      not take.  Either one left waiting swallows whatever is sent
+;;;      next, so both are followed by a bounded cancel (AUTOBEAD's
+;;;      autobead-flush idiom).  Without it a refused radius took the
+;;;      dimension, the style restore and the undo close down with it,
+;;;      and the run died one step after the click that was meant to
+;;;      cut the corner.
+;;;    * The undo group is closed only when one was OPENED: with undo
+;;;      recording off (UNDOCTL bit 1 clear) none is, and an _End on
+;;;      nothing is an error of its own -- landing at the end of the
+;;;      run, with the corner already cut and the settings restore
+;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.2")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.5")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -139,7 +152,10 @@
                              ; a label belongs to is a matter of shade
                              ; rather than of tracing it by eye.  Both
                              ; stay green on black; a light-background
-                             ; drawing wants the pair swapped round
+                             ; drawing wants the pair swapped round.
+                             ; Either one nil = no true colour at all,
+                             ; and the fan reads as the layer's own
+                             ; colour above
 (setq sf:*trans*      40)    ; per cent transparency on every preview,
                              ; so an arc crossing another still reads.
                              ; 0 or nil = solid; over 90 is a preview
@@ -225,9 +241,16 @@
   (setq lo sf:*shade-lo*
         hi sf:*shade-hi*
         f  (if (> n 1) (/ (float i) (float (1- n))) 0.0))
-  (list (sf:mix (float (car   lo)) (float (car   hi)) f)
-        (sf:mix (float (cadr  lo)) (float (cadr  hi)) f)
-        (sf:mix (float (caddr lo)) (float (caddr hi)) f)))
+  ;; Either end set to nil means "no true colour" -- the fan reads as
+  ;; the layer's own sf:*color* instead, which is what sf:colgroups
+  ;; already does with a nil shade.  nil is the value every other knob
+  ;; in the SETTINGS block takes for "leave it to the drawing", and the
+  ;; pair is the one a light-background drawing is told to touch, so it
+  ;; is the one somebody empties rather than swaps.
+  (if (and lo hi)
+    (list (sf:mix (float (car   lo)) (float (car   hi)) f)
+          (sf:mix (float (cadr  lo)) (float (cadr  hi)) f)
+          (sf:mix (float (caddr lo)) (float (caddr hi)) f))))
 
 ;; The DXF 440 value for sf:*trans*: 0x02000000 flags the word as a
 ;; transparency and the low byte is the ALPHA, so 255 is opaque and the
@@ -543,6 +566,29 @@
 
 ;;; -------------------- cutting and dimensioning --------------------
 
+;; Safety valve, AUTOBEAD's (autobead-flush): an internal command left
+;; WAITING for input is still on the command line, and the next
+;; (command ...) from here is read as an answer to it rather than as a
+;; command of its own.  FILLET is the one that does this -- it refuses a
+;; pick and asks again ("Radius is too large", two lines it cannot join)
+;; rather than giving up -- and DIMRADIUS does it with a location it
+;; will not take.  Left un-cancelled, the run derails one step after the
+;; click that was meant to cut the corner: the radius dimension is
+;; swallowed as an answer, then the style restore, then the UNDO close,
+;; and what the drafter gets is an error where the rest of the corners
+;; should have been.
+;;
+;; A bare (command) CANCELS, where an Enter would only answer the prompt
+;; in front of it.  Bounded, for the reason AUTOBEAD gives: one bit of
+;; CMDACTIVE means "a dialog is up", which no keystroke from here can
+;; clear, and an unbounded loop against that bit hangs AutoCAD with no
+;; Esc out.
+(defun sf:flush ( / guard)
+  (setq guard 0)
+  (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (command)
+    (setq guard (1+ guard))))
+
 ;; Cut the corner for real.  The two picks go to FILLET exactly as the
 ;; user made them, so the side each line keeps is the side clicked.
 ;; Returns the arc FILLET made, or nil when it refused.
@@ -550,6 +596,10 @@
   (setq pre (entlast))
   (setvar "FILLETRAD" r)
   (command "_.FILLET" (list e1 (trans pk1 0 1)) (list e2 (trans pk2 0 1)))
+  ;; a FILLET that refused a pick is still asking: cancel it here, where
+  ;; the refusal costs one message, rather than letting the next command
+  ;; answer it
+  (sf:flush)
   (setq new (entlast))
   (if (and new (not (eq new pre))
            (setq ed (entget new))
@@ -611,6 +661,10 @@
       (setq od (sf:dimsbegin r))
       (command "_.DIMRADIUS" (list arc (trans on 0 1))
                "_non" (trans loc 0 1))
+      ;; the same valve: a DIMRADIUS still asking would swallow the
+      ;; style restore below and leave the run dimensioning in the
+      ;; small style
+      (sf:flush)
       (sf:dimsend od)
       (setq new (entlast))
       (if (and new (not (eq new pre))) new))))
@@ -673,6 +727,13 @@
   (defun *error* (m)
     (sf:clear)
     (cal:sysrestore)
+    ;; An Esc part-way through FILLET or DIMRADIUS leaves that command
+    ;; pending, and the two command calls BELOW this line -- the style
+    ;; restore and the undo close -- would be read as answers to it.  So
+    ;; the valve comes first here, before either of them.  (command) is
+    ;; only legal from inside *error* behind *push-error-using-command*,
+    ;; which the command pushes on the way in.
+    (sf:flush)
     (sf:restyle odim)
     (if undo-open
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -680,9 +741,15 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSMARTFILLET error: " m)))
+    (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "SMARTFILLET" *smartfillet-version* m))
     (princ))
   (if lzd:begin (lzd:begin "SMARTFILLET" *smartfillet-version*))
+
+  ;; AutoCAD 2012+ requires this before *error* may call (command) --
+  ;; the CMDACTIVE drain and the undo close in the handler above; a
+  ;; harmless no-op guard on older releases, where it does not exist
+  (if *push-error-using-command* (*push-error-using-command*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
@@ -787,8 +854,14 @@
                          "")
                        "."))))
 
-     (command "_.UNDO" "_End")
-     (setq undo-open nil)))
+     ;; close only a group this run opened: with undo recording off
+     ;; (UNDOCTL bit 1 clear) none was, and an _End on nothing is an
+     ;; error of its own -- and it lands HERE, with the corner already
+     ;; cut and the settings restore below it never reached
+     (if undo-open
+       (progn
+         (command "_.UNDO" "_End")
+         (setq undo-open nil)))))
 
   ;; every path out drops the snapshot, the quiet ones included: a run
   ;; that found nothing to do and kept its snapshot would hand it to the
@@ -797,13 +870,26 @@
   (sf:restyle odim)
   (cal:sysrestore)
   (setq *error* olderr)
+  ;; ...and so does the error mode pushed at the top: every quiet exit
+  ;; and the cut one come through here, and a mode left stacked refuses
+  ;; command-s inside every later handler in the session (AutoLISP
+  ;; reference, *push-error-using-command*)
+  (if *pop-error-mode* (*pop-error-mode*))
   (princ))
 
 (defun c:SMARTFILLETVER ()
   (princ (strcat "\nSMARTFILLET " *smartfillet-version*))
   (princ))
 
-(princ (strcat "\nSMARTFILLET " *smartfillet-version*
-               " loaded -- type SMARTFILLET, pick two lines, and click"
-               " the rounded corner you want."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSMARTFILLET " *smartfillet-version*
+                 " loaded -- type SMARTFILLET, pick two lines, and click"
+                 " the rounded corner you want.")))
 (princ)

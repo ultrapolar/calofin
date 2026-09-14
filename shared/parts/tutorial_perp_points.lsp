@@ -28,7 +28,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.6")
+(setq *tutperp-version* "v0.8")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -140,6 +140,12 @@
                   "  * right after the selection you are asked whether the"
                   "    overall width has changed: Grew, Shrank, New, or"
                   "    Unchanged (the default, and Enter)"
+                  "  * EVERY line gets that question, not just the selected"
+                  "    one: each round draws the next course out, and the"
+                  "    line it drew is asked about the moment it appears -"
+                  "    a line built from typed offsets is only as wide as"
+                  "    they add up to, and the next round is spaced along"
+                  "    it"
                   "  * the width meant is the distance straight ACROSS, end"
                   "    to end - never the length of the OBJECT, which on"
                   "    anything bowed runs further than the width it spans"
@@ -147,10 +153,14 @@
                   "    EACH end: the OBJECT in the drawing is resized to"
                   "    match, so the base points and their dimensions still"
                   "    land on it.  One U puts the width back"
+                  "  * a corrected round has its new points moved with the"
+                  "    line, so its dimensions read the corrected drawing"
+                  "    rather than the lengths typed into it"
                   "  * shrinking away the whole width is rejected, and a"
                   "    resize the drawing will not take - a locked, frozen"
-                  "    or switched-off layer - stops the command rather"
-                  "    than measuring off geometry that is not there"
+                  "    or switched-off layer - stops the command at the"
+                  "    selection, where nothing is drawn yet; at a round it"
+                  "    leaves the line at the width it drew and says so"
                   ""
                   "Direction click"
                   "  * the end nearest your click becomes START - lengths are"
@@ -347,12 +357,15 @@
         (setq i (1+ i)))
       (tutp:say '(""
                   "STAGE 7 - repeating."
-                  "After each polyline PERPPTS asks: Repeat on the new"
-                  "polyline?  Answering Yes spaces a fresh set of points by"
-                  "arc length ALONG that polyline and offsets them again -"
-                  "same side, dimensions still perpendicular to the original"
-                  "line.  Here a second round of 15s was added.  Repeat as"
-                  "many times as you like; a single U undoes the whole run."))
+                  "After each polyline PERPPTS asks whether ITS overall"
+                  "width has changed - the same Grew/Shrank/New/Unchanged"
+                  "question the selected line got, applied the same way -"
+                  "and then: Repeat on the new polyline?  Answering Yes"
+                  "spaces a fresh set of points by arc length ALONG that"
+                  "polyline and offsets them again - same side, dimensions"
+                  "still perpendicular to the original line.  Here a second"
+                  "round of 15s was added.  Repeat as many times as you"
+                  "like; a single U undoes the whole run."))
       (tutp:pause)
 
       ;; keep or erase the demo
@@ -368,6 +381,14 @@
               "Tutorial finished.  Type PERPPTS to try it for real."))
   (princ))
 
-(princ (strcat "\ntutorial_perp_points.lsp " *tutperp-version*
-               " loaded.  Type TUTORIALPERPPTS to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\ntutorial_perp_points.lsp " *tutperp-version*
+                 " loaded.  Type TUTORIALPERPPTS to run.")))
 (princ)

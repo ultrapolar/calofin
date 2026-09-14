@@ -66,7 +66,7 @@
 
 
 
-(setq *xft-version* "v1.14") ; printed on load and at command start so a
+(setq *xft-version* "v1.16") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -1311,8 +1311,15 @@
                         (rtos scale 2 4) " about the conversion's own base ..."))
          (command "_.SCALE" keep "" (trans base 0 1) (/ 1.0 scale))))
 
-     (command "_.UNDO" "_End")
-     (setq undone nil)
+     ;; closed only if one was opened, as the handler and XFTCONV's own
+     ;; close both are: with undo recording off (UNDOCTL bit 1 clear)
+     ;; there is none, and an _End on nothing is an error of its own --
+     ;; here, with every block already converted back and the sysvar
+     ;; restore below it
+     (if undone
+       (progn
+         (command "_.UNDO" "_End")
+         (setq undone nil)))
      (xft:restore)
 
      ;; ---- report -------------------------------------------------
@@ -1356,7 +1363,15 @@
   (princ (strcat "\nXFTCONV " *xft-version*))
   (princ))
 
-(princ (strcat "\nXFTCONV.lsp " *xft-version*
-               " loaded.  Type XFTCONV to scale a survey import and swap"
-               " its points, XFTRECONV to put one back."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nXFTCONV.lsp " *xft-version*
+                 " loaded.  Type XFTCONV to scale a survey import and swap"
+                 " its points, XFTRECONV to put one back.")))
 (princ)

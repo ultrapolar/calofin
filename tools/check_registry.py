@@ -22,9 +22,9 @@ What it deliberately does NOT do:
   * write caption TEXT.  "Pool side view" is editorial.  --fix inserts
     an empty caption and test_lazpanel.py's `assert all(CAPTIONS...)`
     refuses to go green until a human fills it in.
-  * choose a category page.  Layout/Points/Dimensions/Checking is a
-    judgement about what a tool IS.  A plausible-but-wrong placement
-    nobody reviews is worse than a loud gap.
+  * choose a category page.  Layout/Points/Dimensions/Converters/
+    Checking is a judgement about what a tool IS.  A plausible-but-
+    wrong placement nobody reviews is worse than a loud gap.
   * choose a job page other than Rest.  Rest is *defined* as the
     complement of Pool/Cover/Spa, so appending there is arithmetic, not
     judgement; moving a tool off Rest is judgement.
@@ -83,7 +83,7 @@ CAPTION_ROW = re.compile(r'^    \("([A-Z0-9_-]+)"\s+"([^"]*)"\)$', re.M)
 #: The four job pages.  Rest is the complement of the other three, which
 #: is what lets --fix append to it without making a judgement.
 JOBS = ("Pool", "Cover", "Spa", "Rest")
-CATEGORIES = ("Layout", "Points", "Dimensions", "Checking")
+CATEGORIES = ("Layout", "Points", "Dimensions", "Converters", "Checking")
 
 
 # ---------------------------------------------------------------- parsing
@@ -141,6 +141,25 @@ def _sexp(body):
     return cur[0] if len(cur) == 1 and isinstance(cur[0], list) else cur
 
 
+def _col_commands(entries):
+    """The command names in one column, flat.
+
+    A column entry is either a command name or a HEADED RUN of them --
+    ["Revert", "XFTRECONV", ...] -- which is how the Converters column
+    labels its two halves without becoming two columns.  The run's own
+    heading is a label, not a command, so it is dropped rather than
+    counted: taking it would put "Convert" on the panel's roster and
+    then look for a caption, a blurb and a probe entry for it.
+    """
+    out = []
+    for e in entries:
+        if isinstance(e, str):
+            out.append(e)
+        elif isinstance(e, list) and e:
+            out.extend(c for c in e[1:] if isinstance(c, str))
+    return out
+
+
 def pages(src):
     """{page: {column: [command, ...]}} out of lzp:*groups*."""
     span = _table_span(src, "groups")
@@ -153,7 +172,7 @@ def pages(src):
         cols = {}
         for col in page[1:]:
             if isinstance(col, list) and col and isinstance(col[0], str):
-                cols[col[0]] = [c for c in col[1:] if isinstance(c, str)]
+                cols[col[0]] = _col_commands(col[1:])
         out[page[0]] = cols
     return out
 
@@ -373,7 +392,7 @@ def palette_problems(caps, pg, placed):
     """The VB palette against LAZPANEL's roster.
 
     The two surfaces are meant to file every tool the same way -- the
-    palette's four groups ARE the panel's four category pages, and its
+    palette's groups ARE the panel's category pages, and its
     captions are lzp:*captions* text.  They were, once.  Then seven
     tools were added to the panel and not to the palette, every caption
     still agreed, and nothing anywhere said the catalogs had parted.

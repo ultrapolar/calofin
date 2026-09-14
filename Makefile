@@ -11,6 +11,7 @@ all: check test
 help:
 	@echo "make check        tiers in step + generated tiers current + static checks"
 	@echo "                  (including: every command reports its failures)"
+	@echo "                  and every generated dialog fits the screen)"
 	@echo "make verify       just the generated-file checks (mirror/releases/bundle/palette)"
 	@echo "make lint         check_lisp + check_scope over every .lsp, check_vb over the palette"
 	@echo "make test         full suite, standalone tier (lisp/)"
@@ -25,6 +26,7 @@ check:
 	$(PY) tools/check_back.py
 	$(PY) tools/check_lazdiag.py
 	$(PY) tools/check_vb.py
+	$(PY) tools/check_dcl.py
 
 verify:
 	$(PY) tools/mirror_shared.py --check

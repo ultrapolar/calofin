@@ -287,6 +287,43 @@ print("   typed POOL still asks it, and never sets the flag itself")
 
 
 # --------------------------------------------------------------------
+# 8b. The other side of the gate: a form that HAS a bottom on it.
+# --------------------------------------------------------------------
+# The one question a completely filled sheet could not answer.  A form
+# carrying the hopper chain and the depths has already said there is a
+# bottom, and POOL still stopped to ask on every run -- which is the
+# difference between a form that draws and a form that starts an
+# interview.  pool:*hasbottom* is the cover flag's twin and is cleared
+# with it, so neither can leak into the next pool.
+print("== 8b. a form with a bottom on it is not asked whether there is one ==")
+
+hb = VM()
+hb.load(LSP)
+hb.eval(parse_all('(setq pool:*hasbottom* T)')[0])
+hb.eval(parse_all('(setq pool:*form* %s)' % FULL)[0])
+hb.run('c:POOL', LEAD[:-1] + [None, 60.0, None])
+assert not bottom_asked(hb), \
+    "the gate was asked despite the flag: %r" % bottom_asked(hb)
+assert snapshot(hb), "the run drew nothing"
+assert not hb.globals.get('pool:*hasbottom*'), \
+    "pool:*hasbottom* survived the run -- the next pool would skip the gate"
+print("   %d entities, the gate never asked, the flag cleared on the way out"
+      % len(snapshot(hb)))
+
+# and "no bottom" still wins if something ever sets both: it is the
+# safer of the two to be wrong about
+both = VM()
+both.load(LSP)
+both.eval(parse_all('(setq pool:*hasbottom* T pool:*nobottom* T)')[0])
+both.run('c:POOLCOVER', COVER)
+assert not bottom_asked(both) and not depth_asked(both), \
+    "the two flags together asked something: %r" % both.prompts
+assert len([r for r in snapshot(both)]) == len(snapshot(cv)), \
+    "a cover sheet drew a bottom because the other flag was set too"
+print("   with both set the cover wins, which is the safer way round")
+
+
+# --------------------------------------------------------------------
 # 9.  Grecian collective corners fully from the form: the crec gate and
 #     both family treatments (body Cut + size, tips Square) are supplied,
 #     so no corner question of any kind appears -- and the pool drawn is

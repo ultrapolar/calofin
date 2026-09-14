@@ -7,6 +7,8 @@
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
+;;;            CALHELP        what a command does, at the command line
+;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
@@ -22,17 +24,23 @@
 ;;;
 ;;; Four JOB pages -- Pool, Cover, Spa, Rest -- hold what you
 ;;; reach for while doing that job, in columns that follow the work:
-;;; read somebody's export in, lay the shape out, tie the points, build
-;;; the steps, dimension and check.  Converters lead on Pool and Spa
-;;; because that is where they fall in the work -- XFTCONV, SOCONV,
-;;; VSCONV and G2MCONV all answer "here is a drawing somebody else
-;;; exported", which happens before anything is drawn.  Two of the
-;;; first three were reachable only from Rest until now, so a drafter
-;;; doing a pool job never saw them, and XFTCONV was filed under Shape,
-;;; which it never was.  Four CATEGORY pages -- Layout, Points, Dimensions, Checking,
-;;; the same four names the VB.NET palette in ui/calofin_net uses --
-;;; hold the whole roster filed by what each tool IS.  A tool that
-;;; serves two jobs is on both, so there are more buttons than commands.
+;;; lay the shape out, tie the points, build the steps, convert what
+;;; somebody sent you, then dimension and check.  A CONVERTERS column
+;;; sits SECOND TO LAST on Pool and on Cover: past the drawing work,
+;;; in front of the dims-and-check column that ends every job.  XFTCONV,
+;;; SOCONV, VSCONV and G2MCONV all answer "here is a drawing somebody
+;;; else exported", which is how a job sometimes starts and not how
+;;; most of them do, so they no longer hold the left edge in front of
+;;; the tools that are reached for every time.  Spa is two columns
+;;; wide, where second to last IS the first column, so it keeps the
+;;; layout it had.  Cover gains the column: XFTCONV and XFTRECONV were
+;;; on that page all along, filed under Shape, which a converter never
+;;; was.  Five CATEGORY pages -- Layout, Points, Dimensions,
+;;; Converters, Checking, the same five names the VB.NET palette in
+;;; ui/calofin_net uses -- hold the whole roster filed by what each
+;;; tool IS; Converters is the newest, and holds the eight that used to
+;;; sit under Points.  A tool that serves two jobs is on both, so there
+;;; are more buttons than commands.
 ;;; Clicking a button closes the panel and runs the command exactly as
 ;;; if its name had been typed -- the panel adds nothing in front of a
 ;;; tool and nothing behind it.  (The Cover page names the cover twins,
@@ -101,7 +109,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.16")
+(setq *lazpanel-version* "v3.25")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -112,7 +120,9 @@
 ;;;  Also editable, but living beside the code that reads them because
 ;;;  they ARE the panel rather than settings of it:
 ;;;    lzp:*captions*   one caption per command -- the only place they live
-;;;    lzp:*groups*     the pages, as columns of command names
+;;;    lzp:*groups*     the pages, as columns of command names -- an
+;;;                     entry may be a headed run, ("Revert" "X" ...),
+;;;                     which labels part of a column from inside it
 ;;;  tools/check_registry.py --fix maintains both; the VB palette's
 ;;;  catalog is generated from them (tools/gen_ui_data.py).
 
@@ -144,6 +154,34 @@
 ;; preference.  84 fits a laptop screen.
 (setq lzp:*pinbudget* 84)
 
+;; How many captioned buttons may stack in ONE column before a page is
+;; split into more columns.  The width budget above has a twin here for
+;; the same reason: DCL does not scroll in EITHER direction, so a page
+;; taller than the screen does not clip, it refuses to open --
+;;     Dialog too large to fit on screen.
+;;     Requested Size = (436, 1085)   Maximum Size = (1920, 1080)
+;; which is what "Rest" did the day it reached 28 tools, and "Layout"
+;; had quietly passed it at 32.  Rest is COMPUTED -- every tool that is
+;; not on Pool, Cover or Spa lands there -- so the page that broke is
+;; the page every newly registered tool joins, and it would have broken
+;; again at the next one.  16 puts the tallest page near 770px and
+;; leaves room for several rows of pins and recents on top.
+(setq lzp:*colbudget* 16)
+
+;; How many rows the Pinned strip may occupy.  Pins are the one part of
+;; a page whose height the DRAFTER sets, and the note beside lzp:packrow
+;; used to say "pin thirty tools and you get a tall panel, never a
+;; broken one".  That was true when a page was 56 tools in three
+;; columns; it is not true now.  Thirty pins is six rows, which puts the
+;; tallest page at 1053px -- 27px under the limit -- and the next pin
+;; breaks it.  Three rows keeps the worst page under 950px with the
+;; Recent row still to come -- a whole row of slack against the budget
+;; in tools/check_dcl.py, where four rows left less than one, and a
+;; build sitting one row from failing its own check is a build the next
+;; change breaks.  Three rows is around seventeen tools; pins are for
+;; the handful run all day, so the cap is well past what they are for.
+(setq lzp:*pinrowmax* 3)
+
 ;; How many recently launched tools are remembered, newest first.  The
 ;; palette keeps the same number (PaletteMemory.RecentLimit) and
 ;; tests/test_palette_shell.py holds the two together.
@@ -169,12 +207,17 @@
 ;;  The first four pages are JOBS -- what the drafter is actually doing
 ;;  this hour: a pool, a cover, a spa, and everything those three do not
 ;;  reach.  They run in the order the work runs: lay the shape out, tie
-;;  the points, build the steps, then dimension and check.  A command
+;;  the points, build the steps, convert what somebody sent you, then
+;;  dimension and check.  A command
 ;;  that serves two jobs appears on both; AUTODIM and DIMCHECK are on
-;;  all three, because every job ends the same way.  The last four are
-;;  the CATEGORIES the panel has always had -- the whole roster filed by
-;;  what each tool is rather than when you reach for it -- so a tool you
-;;  cannot place in a job is still one tab away.
+;;  all three, because every job ends the same way.  The last five are
+;;  the CATEGORIES -- the whole roster filed by what each tool is
+;;  rather than when you reach for it -- so a tool you cannot place in
+;;  a job is still one tab away.  Converters is the newest of them and
+;;  holds the eight that used to be filed under Points: reading
+;;  somebody else's export is not a way of making points, it is its own
+;;  kind of work, and the job pages have said so with a column of that
+;;  name for a while.
 ;;
 ;;  Every command therefore appears at least twice: once on a job page
 ;;  and once on a category page.  Keys are only required to be unique
@@ -211,6 +254,7 @@
     ("ABCDEF"           "Rectangle plot")
     ("ABCURCHECK"       "Perimeter continuity")
     ("ABCURCHECKSCAN"   "Perimeter continuity, no marks")
+    ("ABLOBF"           "Open best-fit run")
     ("ABPCHECK"         "Survey point offsets")
     ("ABPCREATE"        "Create a missing point")
     ("ABFIND"           "A/B stake ties")
@@ -238,6 +282,7 @@
     ("DIMCHECK"         "Dimension review")
     ("DIMCONTEND"       "Continue dim chains")
     ("DIMSCAN"          "Dimension scan")
+    ("DIMSTAMP"         "Stamp dimension text")
     ("DRONE"            "Drone cleanup")
     ("FITABHD"          "Typed template fit")
     ("FITABHDCOVER"     "Typed template fit, no bottom")
@@ -266,18 +311,21 @@
     ("LINGUTTER"        "Gut to perimeter, then pads")
     ("LINGUTTERSCAN"    "Gut scan, changes nothing")
     ("PADDLE"           "Paddle pads")
+    ("PERPMARK"         "Measured wall offsets")
     ("PERPPTS"          "Perpendicular points")
     ("POINTRENAMER"     "Renumber points in order")
     ("POOL"             "Pool layout")
     ("POOLCOVER"        "Pool layout, no bottom")
     ("POOLDEMO"         "Worked pool example")
     ("POOLSIDE"         "Pool side view")
+    ("SIMPABHD"         "Survey perimeter, no settings")
     ("SMARTFILLET"      "Corner radius, previewed")
     ("SOCONV"           "SO survey onto our layers")
     ("SORECONV"         "SO conversion, undone")
     ("SPA"              "Spa template")
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
+    ("SPACOVCREATE"     "Spa cover from the spa")
     ("STAIRDIM"         "Stair dims")
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
@@ -296,12 +344,17 @@
 ;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
 ;;  one entry per COLUMN, laid out side by side across the page.  The
 ;;  job pages break their tools into the columns the work falls into:
-;;  lay the shape out, tie the points, build the steps, dimension and
-;;  check.  That is the grouping the drafter already carries; the
-;;  columns just stop it being a single list of twenty-four.
+;;  lay the shape out, tie the points, build the steps, convert what
+;;  somebody sent you, dimension and check.  That is the grouping the
+;;  drafter already carries; the columns just stop it being a single
+;;  list of twenty-four.
 ;;
-;;  A column heading of "" means the page is one plain column -- what
-;;  the four category pages are.
+;;  A column heading of "" means the page is laid out as one plain list
+;;  -- what the five category pages and Rest are.  "One list" is not
+;;  "one column": a list too long to stack inside the screen is wrapped
+;;  into balanced columns at lzp:*colbudget*, which is why the table
+;;  below says nothing about how tall a page may be.  It is a list of
+;;  what belongs together, and the fitting is done for it.
 ;;
 ;;  WHY A MULTI-COLUMN PAGE SHOWS THE NAME ALONE.  A button reading
 ;;  "CDCALLOUT  -  Point-to-point cross dims" is about 39 cells wide;
@@ -309,21 +362,14 @@
 ;;  wider than the screen -- the dialog simply fails to open.  So the
 ;;  columns carry the meaning in their headings and the buttons carry
 ;;  the command name, which puts the widest page at about 64 cells.
-;;  Single-column pages have the room, and keep the caption on the
-;;  button: the category pages stay the place to go to find out what a
-;;  tool is, and the job pages are the place to go when you know.
+;;  A plain-list page has the room and keeps the caption on the button,
+;;  wrapped or not: the category pages stay the place to go to find out
+;;  what a tool IS, and the job pages are the place to go when you
+;;  know.  Wrapping one costs width rather than meaning -- two captioned
+;;  columns is about 98 cells, well inside the same wall that rules four
+;;  of them out.
 (setq lzp:*groups*
   '(("Pool"
-     ("Converters"
-      "XFTCONV"
-      "SOCONV"
-      "VSCONV"
-      "G2MCONV"
-      "XFTRECONV"
-      "SORECONV"
-      "VSRECONV"
-      "G2MRECONV"
-      )
      ("Shape"
       "POOL"
       "POOLSIDE"
@@ -331,6 +377,7 @@
       "LAZTXT"
       "OASIS"
       "ABHD"
+      "SIMPABHD"
       "ADAB"
       "FITABHD"
       )
@@ -350,6 +397,21 @@
       "AUTOBEAD"
       "PERPPTS"
       "CPERPPTS"
+      "PERPMARK"
+      )
+     ("Converters"
+      ("Convert"
+       "XFTCONV"
+       "SOCONV"
+       "VSCONV"
+       "G2MCONV"
+       )
+      ("Revert"
+       "XFTRECONV"
+       "SORECONV"
+       "VSRECONV"
+       "G2MRECONV"
+       )
       )
      ("Dims & check"
       "AUTODIM"
@@ -369,8 +431,6 @@
       "FITABHDCOVER"
       "STOCKCOVER"
       "CUSTBLOCK"
-      "XFTCONV"
-      "XFTRECONV"
       )
      ("Points"
       "ABFIND"
@@ -379,6 +439,10 @@
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
+      )
+     ("Converters"
+      "XFTCONV"
+      "XFTRECONV"
       )
      ("Pads, dims & check"
       "LINGUTTER"
@@ -394,18 +458,23 @@
     )
      ("Spa"
      ("Converters"
-      "XFTCONV"
-      "SOCONV"
-      "VSCONV"
-      "G2MCONV"
-      "XFTRECONV"
-      "SORECONV"
-      "VSRECONV"
-      "G2MRECONV"
+      ("Convert"
+       "XFTCONV"
+       "SOCONV"
+       "VSCONV"
+       "G2MCONV"
+       )
+      ("Revert"
+       "XFTRECONV"
+       "SORECONV"
+       "VSRECONV"
+       "G2MRECONV"
+       )
       )
      ("Shape, dims & check"
       "SPA"
       "LAZSPA"
+      "SPACOVCREATE"
       "CUSTBLOCK"
       "AUTODIM"
       "SPACHECK"
@@ -445,6 +514,8 @@
       "TYLERDRONESUITE"
       "LAZDIAG"
       "LOBF"
+      "ABLOBF"
+      "DIMSTAMP"
       )
     )
      ("Layout"
@@ -454,6 +525,7 @@
       "LAZFORMCOVER"
       "LAZSPA"
       "SPA"
+      "SPACOVCREATE"
       "POOL"
       "POOLCOVER"
       "POOLSIDE"
@@ -463,9 +535,11 @@
       "FITABHDCOVER"
       "ABHD"
       "ABHDCOVER"
+      "SIMPABHD"
       "ADAB"
       "CABHD"
       "LHD"
+      "ABLOBF"
       "LINGUTTER"
       "LINGUTTERSCAN"
       "PADDLE"
@@ -494,14 +568,7 @@
       "POINTRENAMER"
       "PERPPTS"
       "CPERPPTS"
-      "XFTCONV"
-      "XFTRECONV"
-      "SOCONV"
-      "SORECONV"
-      "VSCONV"
-      "VSRECONV"
-      "G2MCONV"
-      "G2MRECONV"
+      "PERPMARK"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -517,6 +584,19 @@
       "CDCREATE"
       "CDCALLOUT"
       "BPCALLOUT"
+      "DIMSTAMP"
+      )
+    )
+     ("Converters"
+     (""
+      "XFTCONV"
+      "SOCONV"
+      "VSCONV"
+      "G2MCONV"
+      "XFTRECONV"
+      "SORECONV"
+      "VSRECONV"
+      "G2MRECONV"
       )
     )
      ("Checking"
@@ -546,15 +626,16 @@
 
 ;; How the tab strip is laid out: one DCL row per entry, in this order.
 ;; Find and the jobs sit on one line and the categories on the next,
-;; which is both what they mean and what keeps the strip narrow -- nine
-;; tabs on a single row run about 104 character cells, and DCL will not
+;; which is both what they mean and what keeps the strip narrow -- ten
+;; tabs on a single row run about 120 character cells, and DCL will not
 ;; scroll a dialog that is wider than the screen.  This is presentation
 ;; only; the pages themselves are still lzp:*groups*, plus the one
 ;; search page below.  The test asserts the two tables name the same
 ;; pages, so neither can drift.
 (setq lzp:*rows*
   '(("Find, or by job" "Find" "Pool" "Cover" "Spa" "Rest")
-    ("Or by category"  "Layout" "Points" "Dimensions" "Checking")))
+    ("Or by category"  "Layout" "Points" "Dimensions" "Converters"
+                       "Checking")))
 
 ;; The name of the search page.  It is a PAGE but not a GROUP: it has no
 ;; column layout and no roster of its own, it searches the whole one, so
@@ -585,10 +666,38 @@
   (foreach g lzp:*groups*
     (if (= (car g) name)
         (foreach col (cdr g)
-          (foreach c (cdr col) (setq out (cons c out))))))
+          (foreach c (lzp:col-commands col) (setq out (cons c out))))))
   (reverse out))
 
-;; A page's columns: (heading cmd ...) each.
+;; T when every entry in COL is a headed run rather than a bare command
+;; -- the Converters column, and nothing else today.  Such a column
+;; carries its own labels inside it, so the renderer gives it a plain
+;; wrapper instead of a labelled box: "Converters" above "Convert"
+;; above "Revert" is three frames saying one thing.
+(defun lzp:col-runs-p (col / e out)
+  (setq out (and (cdr col) T))
+  (foreach e (cdr col)
+    (if (not (listp e)) (setq out nil)))
+  out)
+
+;; The commands in one column, flat.
+;;
+;; A column entry is EITHER a command name or a headed run of them --
+;; ("Revert" "XFTRECONV" ...) -- which is how the Converters column
+;; carries its two halves under their own labels without becoming two
+;; columns side by side (there is no width for that; see the panel
+;; README).  Everything that walks a column for the commands in it goes
+;; through here, so the two shapes are read in one place rather than in
+;; every caller.
+(defun lzp:col-commands (col / e c out)
+  (foreach e (cdr col)
+    (if (listp e)
+      (foreach c (cdr e) (setq out (cons c out)))    ; a headed run
+      (setq out (cons e out))))                      ; a plain command
+  (reverse out))
+
+;; A page's columns: (heading cmd ...) each, where a cmd may itself be
+;; a headed run -- lzp:col-commands is what flattens one.
 (defun lzp:group-columns (name / g out)
   (foreach g lzp:*groups*
     (if (= (car g) name) (setq out (cdr g))))
@@ -600,7 +709,7 @@
 (defun lzp:commands ( / g col c out)
   (foreach g lzp:*groups*
     (foreach col (cdr g)
-      (foreach c (cdr col)
+      (foreach c (lzp:col-commands col)
         (if (not (member c out))
           (setq out (cons c out))))))
   (reverse out))
@@ -782,8 +891,10 @@
 ;;  characters -- would push the dialog past the width DCL refuses to
 ;;  scroll, which does not clip the page, it stops it opening at all.
 ;;  So pins are packed greedily into as many rows as they need, with
-;;  the Pin... button packed last like any other item.  Pin thirty
-;;  tools and you get a tall panel, never a broken one.
+;;  the Pin... button packed last like any other item -- up to
+;;  lzp:*pinrowmax* rows, after which a further pin is REFUSED rather
+;;  than taken: height is the same hard wall width is, and a strip that
+;;  grew without limit would walk a page into it.
 ;;  (lzp:*pinbudget* itself is set in the TUNABLES block at the top of the file.)
 
 (defun lzp:pin-label (n) (strcat "    : button { label = \"" n
@@ -885,13 +996,24 @@
   (lzp:recent-write)
   lzp:*recent*)
 
+;; Keep the newest lzp:*reclimit* and drop the rest.  lzp:remember caps
+;; what it WRITES, so this looks redundant and is not: a value stored
+;; by another build, or edited by hand, has never been through it, and
+;; Recent is a row on EVERY page -- an over-long one takes all nine
+;; past the screen at once, which is the one failure that cannot be
+;; escaped by moving to another tab.
+(defun lzp:rectrim ( )
+  (while (> (length lzp:*recent*) lzp:*reclimit*)
+    (setq lzp:*recent* (reverse (cdr (reverse lzp:*recent*)))))
+  lzp:*recent*)
+
 (defun lzp:recent-read ( / s)
   (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Recent")))
   (setq lzp:*recent*
     (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
       (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
                         (lzp:split s ";"))))
-  lzp:*recent*)
+  (lzp:rectrim))
 
 (defun lzp:recent-write ( / s n)
   (setq s "")
@@ -903,7 +1025,36 @@
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
 ;; an edit to that table and nothing else.
-(defun lzp:dcl-one (g / out c col)
+;; NAMES split into as few BALANCED columns as the budget allows: 28
+;; tools at a budget of 16 come out 14 and 14 rather than 16 and 12,
+;; because a page with one full column beside a short one reads as two
+;; different lists.  A page that already fits comes back as a single
+;; column and is emitted exactly as it always was.
+(defun lzp:wrap (names / n cols per rem want out row c)
+  (setq n (length names))
+  (if (<= n lzp:*colbudget*)
+    (list names)
+    (progn
+      ;; the remainder is SHARED OUT, one to a column, rather than left
+      ;; to pile up on the last one: 82 over six columns is four of 14
+      ;; and two of 13, where rounding every column up the same way
+      ;; gives five of 14 and a stub of 12.
+      (setq cols (1+ (/ (1- n) lzp:*colbudget*))   ; columns, rounded up
+            per  (/ n cols)                        ; the even share
+            rem  (- n (* per cols))                ; this many get one more
+            out nil row nil
+            want (if (> rem 0) (1+ per) per))
+      (foreach c names
+        (setq row (cons c row))
+        (if (= (length row) want)
+          (setq out  (cons (reverse row) out)
+                row  nil
+                rem  (1- rem)
+                want (if (> rem 0) (1+ per) per))))
+      (if row (setq out (cons (reverse row) out)))
+      (reverse out))))
+
+(defun lzp:dcl-one (g / out c n col cols)
   ;; consed newest-first and reversed at the end, so this seed list
   ;; reads BACKWARDS: the dialog line last here comes out first
   (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
@@ -918,13 +1069,33 @@
     ;; ONE COLUMN: the page has the width to spare, so every button
     ;; carries its caption -- this is what the category pages are for.
     ((= (length (cdr g)) 1)
-     (setq out (cons "  : boxed_column {" out))
-     (setq out (cons (strcat "    label = \"" (car g) "\";") out))
-     (foreach c (cdr (car (cdr g)))
-       (setq out (cons (strcat "    : button { label = \"" c "  -  "
-                               (lzp:caption c) "\"; key = \"" c "\"; }")
-                       out)))
-     (setq out (cons "  }" out)))
+     (setq cols (lzp:wrap (cdr (car (cdr g)))))
+     (if (= (length cols) 1)
+       ;; fits: the page it has always been, one boxed column
+       (progn
+         (setq out (cons "  : boxed_column {" out))
+         (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+         (foreach c (car cols)
+           (setq out (cons (strcat "    : button { label = \"" c "  -  "
+                                   (lzp:caption c) "\"; key = \"" c "\"; }")
+                           out)))
+         (setq out (cons "  }" out)))
+       ;; too tall for one column, so side by side -- and the captions
+       ;; STAY: a category page is where you go to find out what a tool
+       ;; is, which is the whole reason it carries them.  Plain columns
+       ;; inside the one box, because a border per column would say the
+       ;; halves of one list were separate things.
+       (progn
+         (setq out (cons "  : boxed_row {" out))
+         (setq out (cons (strcat "    label = \"" (car g) "\";") out))
+         (foreach col cols
+           (setq out (cons "    : column {" out))
+           (foreach c col
+             (setq out (cons (strcat "      : button { label = \"" c "  -  "
+                                     (lzp:caption c) "\"; key = \"" c "\"; }")
+                             out)))
+           (setq out (cons "    }" out)))
+         (setq out (cons "  }" out)))))
     ;; SEVERAL COLUMNS, side by side: the heading says what the column
     ;; is for and the buttons carry the command name alone.  Four
     ;; captioned buttons abreast would be about 147 cells wide and the
@@ -933,12 +1104,32 @@
      (setq out (cons "  : boxed_row {" out))
      (setq out (cons (strcat "    label = \"" (car g) "\";") out))
      (foreach col (cdr g)
-       (setq out (cons "    : boxed_column {" out))
-       (setq out (cons (strcat "      label = \"" (car col) "\";") out))
+       ;; a column that is nothing but headed runs labels itself from
+       ;; the inside, so the outer box carries no name of its own
+       (if (lzp:col-runs-p col)
+         (setq out (cons "    : column {" out))
+         (progn
+           (setq out (cons "    : boxed_column {" out))
+           (setq out (cons (strcat "      label = \"" (car col) "\";")
+                           out))))
        (foreach c (cdr col)
-         (setq out (cons (strcat "      : button { label = \"" c
-                                 "\"; key = \"" c "\"; }")
-                         out)))
+         (if (listp c)
+           ;; a HEADED RUN inside the column: its own labelled box, so
+           ;; the Converters column can say Convert above one half and
+           ;; Revert above the other without being two columns -- there
+           ;; is no width on Pool for a sixth column.
+           (progn
+             (setq out (cons "      : boxed_column {" out))
+             (setq out (cons (strcat "        label = \"" (car c) "\";")
+                             out))
+             (foreach n (cdr c)
+               (setq out (cons (strcat "        : button { label = \"" n
+                                       "\"; key = \"" n "\"; }")
+                               out)))
+             (setq out (cons "      }" out)))
+           (setq out (cons (strcat "      : button { label = \"" c
+                                   "\"; key = \"" c "\"; }")
+                           out))))
        (setq out (cons "    }" out)))
      (setq out (cons "  }" out))))
   (setq out (cons "  spacer;" out))
@@ -948,27 +1139,24 @@
                   out))
   (reverse (cons "}" out)))
 
-;; The pin editor: every tool on the panel as a toggle, in three
-;; columns so fifty-six of them fit on a screen rather than a scroll
-;; DCL would not give.
-(defun lzp:dcl-pins ( / out cmds n per i j c)
-  (setq cmds (lzp:commands)
-        n    (length cmds)
-        per  (1+ (/ (1- n) 3))
-        i    0)
+;; The pin editor: every tool on the panel as a toggle, in as many
+;; columns as lzp:*colbudget* needs.  It was three FIXED columns, which
+;; was fine at the fifty-six tools of the day and is not at eighty-two:
+;; three columns of twenty-eight is the same 1085px that stopped "Rest"
+;; opening, on the one dialog that grows every time ANY tool is added.
+;; Sharing the page budget means it cannot drift out of step again.
+(defun lzp:dcl-pins ( / out col c)
   (setq out (list "lazpanel_pins : dialog {"
                   "  label = \"LazPanel  -  pinned tools\";"
-                  (strcat "  : text { label = \"Ticked tools sit in the "
-                          "Pinned row on every page.\"; }")
+                  (strcat "  : text { key = \"pinmsg\"; label = \"Ticked "
+                          "tools sit in the Pinned row on every page.\"; }")
                   "  : row {"))
-  (while (< i n)
-    (setq out (append out (list "    : column {")) j 0)
-    (while (and (< j per) (< i n))
-      (setq c (nth i cmds))
+  (foreach col (lzp:wrap (lzp:commands))
+    (setq out (append out (list "    : column {")))
+    (foreach c col
       (setq out (append out
         (list (strcat "      : toggle { label = \"" c
-                      "\"; key = \"tg_" c "\"; }"))))
-      (setq i (1+ i) j (1+ j)))
+                      "\"; key = \"tg_" c "\"; }")))))
     (setq out (append out (list "    }"))))
   (append out
     (list "  }" "  spacer;"
@@ -1061,13 +1249,24 @@
 ;; Read the pins back, dropping any name no longer on the roster: a pin
 ;; left over from an older build must not put a dead button on screen,
 ;; and the roster is the only thing that says what is real.
+;; Drop pins from the END until the strip fits lzp:*pinrowmax* rows.
+;; The cap is enforced as a tool is ticked, but a list stored by a
+;; build that predates the cap has never been through it -- and the
+;; same sentence applies as to a dead name: what is stored must not be
+;; allowed to put a page on screen that cannot open.  The last pinned
+;; go first, so the row the hand has learned is the part that survives.
+(defun lzp:pintrim ( )
+  (while (and lzp:*pins* (> (length (lzp:pinrows)) lzp:*pinrowmax*))
+    (setq lzp:*pins* (reverse (cdr (reverse lzp:*pins*)))))
+  lzp:*pins*)
+
 (defun lzp:pins-read ( / s)
   (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Pins")))
   (setq lzp:*pins*
     (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
       (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
                         (lzp:split s ";"))))
-  lzp:*pins*)
+  (lzp:pintrim))
 
 (defun lzp:pins-write ( / s n)
   (setq s "")
@@ -1076,12 +1275,31 @@
   (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Pins" s))
   lzp:*pins*)
 
+;; set_tile that cannot throw.  pin-toggle runs as a dialog action, so
+;; the tiles are there when a drafter clicks -- but it is also called
+;; directly, by the tests and by anything restoring a stored list, and
+;; set_tile outside a dialog is an error, not a no-op.
+(defun lzp:settile (key val)
+  (vl-catch-all-apply 'set_tile (list key val)))
+
 ;; Pin order is click order: a newly ticked tool goes on the END rather
 ;; than jumping into the middle of a row the hand has already learned.
-(defun lzp:pin-toggle (name val)
+(defun lzp:pin-toggle (name val / was)
   (if (= val "1")
     (if (not (member name lzp:*pins*))
-      (setq lzp:*pins* (append lzp:*pins* (list name))))
+      (progn
+        (setq was        lzp:*pins*
+              lzp:*pins* (append lzp:*pins* (list name)))
+        ;; one pin too many does not make a tall panel, it makes a page
+        ;; that will not open -- so put it back and say why, rather
+        ;; than storing something that breaks the next page opened
+        (if (> (length (lzp:pinrows)) lzp:*pinrowmax*)
+          (progn
+            (setq lzp:*pins* was)
+            (lzp:settile (strcat "tg_" name) "0")
+            (lzp:settile "pinmsg"
+                         (strcat "That is as many as the Pinned row"
+                                 " holds - un-tick one first."))))))
     (setq lzp:*pins* (vl-remove name lzp:*pins*)))
   (princ))
 
@@ -1194,12 +1412,17 @@
 ;; The complete .bmp as a byte list: 24bpp, bottom-up rows (a positive
 ;; height means the FIRST row in the file is the BOTTOM row of the
 ;; image, hence the reverse).  "X" pixels are orange -- stored B,G,R,
-;; so 0 165 255 -- and the rest panel grey.  Both sizes give a row
-;; width that is a multiple of 4 (48 and 96), so there is no row
-;; padding to get wrong.
+;; so 0 165 255 -- and the rest is PANEL GREY, which is two different
+;; greys: a .bmp has no alpha channel, so the square around the
+;; hexagon is painted, and painting it 54 54 54 on the light theme is
+;; a dark tile in a light toolbar.  It was, for every drafter not on
+;; the dark theme, from the day the button shipped.  The theme is read
+;; rather than assumed, and an unreadable one keeps the dark grey that
+;; was always here.  Both sizes give a row width that is a multiple of
+;; 4 (48 and 96), so there is no row padding to get wrong.
 (defun lzp:bmp-bytes (size grid / fg bg rowbytes out row s i)
   (setq fg '(0 165 255)
-        bg '(54 54 54)
+        bg (if (eq (cal:ui) 'light) '(240 240 240) '(54 54 54))
         rowbytes (* 3 size))
   (setq out (append
               (list 66 77)                      ; "BM"
@@ -1967,6 +2190,17 @@
   (princ (strcat "\n  TEMPPREFIX : "
                  (if (= (type (getvar "TEMPPREFIX")) 'STR)
                      (getvar "TEMPPREFIX") "(not a string)")))
+  ;; which grey went behind the hexagon, and why.  A .bmp has no
+  ;; transparency, so this square is painted and the wrong one shows.
+  (princ (strcat "\n  theme      : "
+                 (cond ((eq (cal:ui) 'light) "light - icon ground 240 240 240")
+                       ((eq (cal:ui) 'dark)  "dark - icon ground 54 54 54")
+                       (t "cannot tell - icon ground 54 54 54, as it always was"))
+                 (if (and (getenv "CalofinTheme")
+                          (/= (getenv "CalofinTheme") ""))
+                     (strcat "  (CalofinTheme says "
+                             (getenv "CalofinTheme") ")")
+                     "  (COLORTHEME; CALSET overrides it)")))
   (setq paths (lzp:write-bmps))
   (cond
     (paths
@@ -2024,6 +2258,130 @@
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
   (princ))
 
+;;; -------------------- the two front-desk commands ---------------------
+;;  CALHELP and CALSET are machinery rather than drafting tools, which
+;;  is why they are here and not files of their own: this is where the
+;;  captions live, and where calofin's profile settings were already
+;;  being read and written (lzp:*poskey*, lzp:*pinkey*).  Both are in
+;;  NAMED_SATELLITES in tools/callib.py, so neither asks for a panel
+;;  button it has no use for.
+
+;; What a command IS, at the command line.  The captions have been
+;; here all along and the only way to read one was to open the panel
+;; and find the page the tool was filed on -- which is the same
+;; complaint the Find page answered inside the dialog, unanswered
+;; outside it.  Enter lists the lot.
+(defun c:CALHELP ( / *error* s hits n)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALHELP error: " msg)))
+    (if lzd:report (lzd:report "CALHELP" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALHELP" *lazpanel-version*))
+  (setq s (getstring T "\nCommand, or any part of one <Enter = all>: "))
+  (if lzd:ask (lzd:ask "Command, or any part of one" s) s)
+  (setq hits (if (= s "") (lzp:commands) (lzp:matches s)))
+  (cond
+    ((null hits)
+     (princ (strcat "\nNothing here matches \"" s "\".  CALHELP on its"
+                    " own lists every tool.")))
+    (t
+     (princ (strcat "\n" (itoa (length hits)) " tool"
+                    (if (= (length hits) 1) "" "s")
+                    (if (= s "") "" (strcat " matching \"" s "\""))
+                    " -- a name in brackets is not loaded in this"
+                    " session:"))
+     (foreach n hits
+       (princ (strcat "\n  " (if (lzp:has n) (strcat n) (strcat "(" n ")"))
+                      "  " (lzp:caption n))))))
+  (princ))
+
+;; The settings calofin keeps in the AutoCAD PROFILE, which is the one
+;; place a setting survives a rebuild: releases/ and LAZPASS.lsp are
+;; generated, so a number edited into either is gone at the next
+;; regeneration.  Each row is (key default what-it-does).
+(setq lzp:*settings*
+  '(("CalofinTheme"
+     "auto"
+     "dark / light / auto.  Which way the ink is picked: auto measures the drawing's background and AutoCAD's theme, and the other two say so outright when a measurement comes out wrong")
+    ("CalofinErrorDir"
+     ""
+     "the folder LAZDIAG writes its error report to.  Empty = the candidate walk, which starts at Downloads")
+    ("StockCover_Folder"
+     ""
+     "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
+
+(defun lzp:setshow ( / r v)
+  (princ "\ncalofin settings, as this session reads them:")
+  (foreach r lzp:*settings*
+    (setq v (getenv (car r)))
+    (princ (strcat "\n  " (car r)
+                   "\n      now: " (if (and v (/= v "")) v
+                                       (strcat "(unset -- " (cadr r) ")"))
+                   "\n      " (caddr r))))
+  (princ))
+
+(defun c:CALSET ( / *error* pick key v)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nCALSET error: " msg)))
+    (if lzd:report (lzd:report "CALSET" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "CALSET" *lazpanel-version*))
+  (lzp:setshow)
+  (initget "Theme Errordir Stockdir Quit")
+  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Quit] <Quit>: "))
+  (if lzd:ask (lzd:ask "Change which?" pick) pick)
+  (setq key (cond ((= pick "Theme") "CalofinTheme")
+                  ((= pick "Errordir") "CalofinErrorDir")
+                  ((= pick "Stockdir") "StockCover_Folder")))
+  (cond
+    ((null key) (princ "\nNothing changed."))
+    ((= key "CalofinTheme")
+     ;; Undo is accepted everywhere Back is, unlisted (STANDARDS 1)
+     (initget "Dark Light Auto Back Undo")
+     (setq v (getkword "\nTheme [Dark/Light/Auto/Back] <Auto>: "))
+     (if lzd:ask (lzd:ask "Theme" v) v)
+     (cond
+       ((member v '("Back" "Undo")) (c:CALSET))
+       (t (setq v (if v (strcase v) "AUTO"))
+          (setenv "CalofinTheme" v)
+          ;; ...and beside the pins, where the VB palette reads it
+          ;; (ui/calofin_net/PaletteTheme.vb).  The profile is what the
+          ;; Lisp side reads and the registry is what the palette can
+          ;; reach, and a drafter who has said which way their screen
+          ;; reads has said it to both surfaces -- the same bargain the
+          ;; pinned row already strikes.  Auto is written as empty:
+          ;; the palette's own probe is what "auto" means there.
+          ;;
+          ;; Read from V and not back out of getenv -- a strcase on the
+          ;; nil a failed setenv would leave is an error thrown from
+          ;; inside the line that reports success.
+          (vl-catch-all-apply
+            'vl-registry-write
+            (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+          (princ (strcat "\nCalofinTheme is now " v
+                         ".  Every tool reads it on the next colour it"
+                         " picks; the toolbar icon takes it at the next"
+                         " LAZBUTTON or LAZICON, and the VB palette at"
+                         " its next chart.")))))
+    (t
+     (setq v (getstring T (strcat "\n" key
+                                  " (a folder, Back to leave it, "
+                                  "or . to clear it): ")))
+     (if lzd:ask (lzd:ask key v) v)
+     (cond
+       ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
+       ((= v "") (princ "\nUnchanged."))
+       ((= v ".")
+        (setenv key "")
+        (princ (strcat "\n" key " cleared.")))
+       (t (setenv key v)
+          (princ (strcat "\n" key " is now " v "."))))))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:commands))) " tools on the panel across "
@@ -2052,8 +2410,18 @@
   '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 
-(princ (strcat "\nLAZPANEL " *lazpanel-version*
-               " loaded.  LAZPANEL opens the panel;"
-               " LAZBUTTON puts its button on screen;"
-               " LAZPIN edits the pinned row."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZPANEL " *lazpanel-version*
+                 " loaded.  LAZPANEL opens the panel;"
+                 " LAZBUTTON puts its button on screen;"
+                 " LAZPIN edits the pinned row;"
+                 " CALHELP says what a command does;"
+                 " CALSET shows the settings.")))
 (princ)

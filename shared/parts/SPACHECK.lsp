@@ -113,7 +113,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.14")
+(setq *spacheck-version* "v1.16")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1920,8 +1920,16 @@
                   ((= ans "Skip") (setq k tot))))))))
       (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
-      (command "_.UNDO" "_End")
-      (setq undo-open nil)
+      ;; closed only if one was opened -- the guard the handler above
+      ;; already makes.  With undo recording off (UNDOCTL bit 1 clear)
+      ;; there is no group of this run's, and an _End on nothing is an
+      ;; error of its own: it would land here, with the report written
+      ;; and every flagged item recoloured, and the CMDECHO and sysvar
+      ;; putbacks below it never reached
+      (if undo-open
+        (progn
+          (command "_.UNDO" "_End")
+          (setq undo-open nil)))
       (setvar "CMDECHO" oldecho)
       (cal:sysrestore)
       (princ (strcat "\n--- SPACHECK complete ---"
@@ -2303,6 +2311,14 @@
   (setvar "CMDECHO" oldecho)
   (princ))
 
-(princ (strcat "\nSPACHECK " *spacheck-version*
-               " loaded.  Type SPACHECK to run."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nSPACHECK " *spacheck-version*
+                 " loaded.  Type SPACHECK to run.")))
 (princ)

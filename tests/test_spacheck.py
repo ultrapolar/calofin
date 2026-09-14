@@ -299,7 +299,7 @@ def test_hinges_drawn_by_spa_are_read_back():
     reads the same arrangement off the chart, and fits the same foam."""
     vm = build([None, 'Coversize', 'Rectangle', None, 230.0, 60.0,
                 'Yes', '90',
-                'Yes', 'No', None, '4-3', 'No'])
+                'Yes', 'No', '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     txt = report_of(vm)
     assert 'Hinges: 4 drawn, so 5 pieces (STD 4-3)' in txt, txt
@@ -314,7 +314,7 @@ def test_piece_count_off_the_foam_sheet_is_flagged():
     two tools disagree about the same chart."""
     vm = build([None, 'Coversize', 'Rectangle', None, 230.0, 60.0,
                 'Yes', '90',
-                'Yes', 'No', None, '4-3', 'No'])
+                'Yes', 'No', '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     bad = problems(report_of(vm))
     assert any('5 is NOT an acceptable count' in p for p in bad), bad
@@ -343,7 +343,7 @@ def test_thermolight_with_a_fold_hinge_is_caught():
     block's rule -- Thermo-Light is velcro only."""
     vm = build([None, 'Coversize', 'Rectangle', None, 140.0, 60.0,
                 'Yes', '90',
-                'Yes', 'No', None, '1-3/8', 'No'])
+                'Yes', 'No', '1-3/8', 'No'])
     add_block(vm, 'THERMO-LIGHT', '1-3/8')
     bad = problems(report_of(vm))
     assert any('reads H V but the chart says V V' in p for p in bad), bad
@@ -354,7 +354,7 @@ def test_hardware_advice_only_speaks_up_when_needed():
     for, and the three "no" answers must not be dressed as advice."""
     vm = build([None, 'Coversize', 'Rectangle', None, 140.0, 60.0,
                 'Yes', '90',
-                'Yes', 'No', None, '1-3/8', 'No'])
+                'Yes', 'No', '1-3/8', 'No'])
     add_block(vm, 'THERMO-LIGHT', '1-3/8')
     txt = report_of(vm)
     assert 'Velcro hinges: YES - always for this grade' in txt, txt
@@ -392,7 +392,7 @@ def test_hinges_without_a_cover_outline_still_audit():
 def test_octagon_audits_clean():
     vm = build([None, 'Coversize', 'OCtagon', None, 95.0, None,
                 'NA', 'NA', 'NA', 'NA', 'NA',
-                'Yes', 'No', None, '4-3', 'No'])
+                'Yes', 'No', '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     border(vm, 422.4, 326.175)
     assert problems(report_of(vm)) == []
@@ -400,7 +400,7 @@ def test_octagon_audits_clean():
 
 def test_round_audits_clean():
     vm = build([None, 'Coversize', 'ROund', None, 84.0,
-                'Yes', 'No', None, '4-3', 'No'])
+                'Yes', 'No', '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     border(vm, 422.4, 326.175)
     assert problems(report_of(vm)) == []
@@ -410,7 +410,7 @@ def test_pickfirst_selection_is_honored():
     """A selection made before the command answers the pickfirst probe:
     only "ssget _I" fires and the Highlight prompt is never asked."""
     vm = build([None, 'Coversize', 'ROund', None, 84.0,
-                'Yes', 'No', None, '4-3', 'No'])
+                'Yes', 'No', '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     border(vm, 422.4, 326.175)
     sel = [e for e in vm.entities if e not in vm.deleted]
@@ -427,7 +427,7 @@ def test_the_guided_walk_marks_and_rescue_puts_it_back():
     take the report away with it."""
     vm = build([None, 'Coversize', 'Rectangle', None, 140.0, 60.0,
                 'Yes', '90',
-                'Yes', 'No', None, '1-3/8', 'No'])
+                'Yes', 'No', '1-3/8', 'No'])
     add_block(vm, 'THERMO-LIGHT', '1-3/8')
     vm.load(CHK)
 
@@ -919,7 +919,7 @@ def test_a_multi_sheet_taper_is_audited_against_the_sheet_spa_used():
 
     # and a single-sheet row still measures against its only sheet
     vm = build([None, 'Coversize', 'Rectangle', None, 98.0, 60.0,
-                'Yes', '90', 'Yes', 'No', None, '4-3', 'No'])
+                'Yes', '90', 'Yes', 'No', '4-3', 'No'])
     add_block(vm, 'STANDARD', '4-3')
     txt = report_of(vm)
     assert 'within 48.0000, OK' in txt and 'within 144.0000, OK' in txt, \
@@ -932,7 +932,7 @@ def test_a_real_foam_overrun_is_still_reported():
     against the most generous sheet, so a reported overrun is one no
     sheet in the row could have absorbed."""
     vm = build([None, 'Coversize', 'Rectangle', None, 98.0, 60.0,
-                'Yes', '90', 'Yes', 'No', None, '3-2', 'No'])
+                'Yes', '90', 'Yes', 'No', '3-2', 'No'])
     add_block(vm, 'STANDARD', '3-2')
     # widen one piece past every sheet in the row by moving the hinge
     vm.loads('(setq t:*h* (ssget "_X" (list (cons 8 "SPA-HINGE"))))')

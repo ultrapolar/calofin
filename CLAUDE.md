@@ -237,6 +237,38 @@ trailing `(princ)`, which is its return value. The `(if ...)` guards are
 what keep a standalone file loading alone: an unbound symbol is nil, so
 with no LAZDIAG present every one of these lines is a no-op.
 
+### The load banner, and colour
+
+Two rules a new or edited tool has to meet, both enforced:
+
+**The banner is quiet inside the build.** A tool announces itself when
+it is APPLOADed alone and says nothing when `LAZPASS.lsp` or
+`CALOFIN-LOADER.lsp` loads it -- they set `*calofin-quiet*` while they
+load their members. Sixty-three greetings was 83 lines in every
+drawing opened. So the last form in the file is:
+
+```lisp
+(if (not *calofin-quiet*)
+  (princ (strcat "\nTOOLNAME " *toolname-version* " loaded.  ...")))
+(princ)
+```
+
+`tools/check_lisp.py` fails a banner that is missing OR unguarded.
+Several lines share one guard and one `progn`. The flag is not a
+`cal:` symbol on purpose -- a `lisp/` file may not call or set one.
+
+**A colour that has to work on any screen says `'auto`.** ACI 8 was
+serving two opposite intents across the tree -- "recede" in the review
+tools and "be readable" in the guide previews -- and each was right on
+one background only. Such a knob is `'auto` now and is resolved at the
+point of use through `tool:ink` (`cal:ink` in the grouped build, one
+swap line in `tools/mirror_shared.py`), by role: `fade`, `guide`,
+`dim`, `hi`. A knob left as a NUMBER is used exactly as given. Resolve
+once into a local before a loop -- the measurement is a COM round
+trip. `tests/test_theme.py` pins the table and holds all fourteen
+copies against the library's; `CALSET` writes the `CalofinTheme`
+override for a drafter whose screen the measurement gets wrong.
+
 ### Adding or removing a command
 
 A tool is not finished when it draws. It has to *report its failures*
@@ -258,8 +290,8 @@ python3 tools/gen_ui_data.py            # the palette's catalog
 `--fix` inserts the caption row and a `Rest`-page placement, rewrites
 every derived count, bumps LAZPANEL's banner, and then **names the
 three things it will not decide for you**: the caption text, which
-category page (`Layout`/`Points`/`Dimensions`/`Checking`) the tool
-belongs on, and the tooltip blurb. Write those and re-run it.
+category page (`Layout`/`Points`/`Dimensions`/`Converters`/`Checking`)
+the tool belongs on, and the tooltip blurb. Write those and re-run it.
 `make check` runs the same check, so a half-registered tool cannot
 pass.
 
@@ -322,9 +354,18 @@ python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
                                  # its prompt; --fix wires what is missing
 python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
                                  # VB compiler: blocks closed by the right
-                                 # closer, quotes and parens balanced, and
-                                 # every member and constructor arity of
-                                 # the assembly's own types resolved
+                                 # closer, quotes and parens balanced, every
+                                 # member and constructor arity of the
+                                 # assembly's own types resolved, and every
+                                 # framework type it names bare (SystemColors,
+                                 # Registry) brought in by an Imports
+python3 tools/check_dcl.py       # every generated dialog still FITS: DCL
+                        [--list] # does not scroll, so one past the screen
+                                 # does not clip, it refuses to open.  The
+                                 # generators are driven to their tallest
+                                 # reachable state (pins and recents full,
+                                 # every chart, every step count) and
+                                 # measured by tools/dclsize.py
 python3 tools/gen_ui_data.py     # rewrites the palette's catalog from
                         [--check]# LAZPANEL's tables; --check is the
                                  # staleness half, and check_standards
@@ -334,6 +375,20 @@ python3 tools/gen_ui_charts.py   # the same for the palette's chart
                                  # chart tables
 make check                       # all of the above in one go
 ```
+
+`check_dcl.py` is the one that reads a dialog as a SIZE rather than as
+code. DCL does not scroll in either direction: a dialog wider or taller
+than the screen does not clip and does not scroll -- AutoCAD refuses to
+open it and the command dies where it stands. Nothing else in the tree
+can see that coming, because a dialog's height is never written down;
+it is the sum of whatever the generator emitted, and the generators
+grow every time a tool is registered. LAZPANEL's `Rest` page is the
+case that proved it: every tool not on Pool, Cover or Spa lands there,
+so the page that stopped opening at 28 tools was the page each new tool
+joins -- and `Layout` had passed the same line at 32 without anyone
+clicking it. Both wrap into balanced columns now (`lzp:*colbudget*`),
+and the two strips a drafter grows, Pinned and Recent, are capped both
+at the tick and on the way in from the registry.
 
 `check_standards.py` covers what the other two cannot see, because they
 read one file at a time: a `lisp/` tool with no `shared/` twin, a tool

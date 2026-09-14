@@ -372,7 +372,8 @@ Public Class PoolFormView
                 .Width = 46, .Tag = f, .IsEnabled = b.Supported,
                 .TextAlignment = TextAlignment.Center,
                 .ToolTip = f.Letter & " - " & f.Label,
-                .Background = New SolidColorBrush(Color.FromArgb(235, 255, 255, 255))}
+                .Background = PaletteTheme.FieldBackground(),
+                .Foreground = PaletteTheme.FieldForeground()}
             BindTo(over, f)
             _canvas.Children.Add(over)
             _overlay.Add(over)

@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.6")
+(setq *xyplot-version* "v1.8")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -960,9 +960,16 @@
                 '())
               (princ "\n  View reset to plan (top).")
               ;; close the group before any ABHD handoff - the whole plot
-              ;; is one U, and ABHD grouped separately is ABHD's own U
-              (command "_.UNDO" "_End")
-              (setq undo-open nil)
+              ;; is one U, and ABHD grouped separately is ABHD's own U.
+              ;; Only a group this run opened, though: with undo
+              ;; recording off (UNDOCTL bit 1 clear) none was, and an
+              ;; _End on nothing is an error of its own -- landing here,
+              ;; with every graph already plotted and the report already
+              ;; written
+              (if undo-open
+                (progn
+                  (command "_.UNDO" "_End")
+                  (setq undo-open nil)))
               ;; ---- on to the pool perimeter ------------------------------
               (if (= "Yes" (cal:askkw
                              "Fit a pool perimeter through graph 1's points now?"
@@ -977,6 +984,14 @@
   (princ (strcat "\nXYPLOT " *xyplot-version* " (XYPLOT.lsp)"))
   (princ))
 
-(princ (strcat "\nXYPLOT.lsp " *xyplot-version*
-               " loaded.  Type XYPLOT to graph an X/Y sheet."))
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nXYPLOT.lsp " *xyplot-version*
+                 " loaded.  Type XYPLOT to graph an X/Y sheet.")))
 (princ)

@@ -5,13 +5,15 @@
 # sets out.  A NEW line here is a decision: thread the prompt
 # into its chain, or say here which reason it falls under.
 # Regenerate with: python3 tools/check_back.py --update-baseline
-lisp/abhd/abhd.lsp|c:ABHD|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/abhd/abhd.lsp|c:TUTORIALABHD|\n Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>:|demo / tutorial
 lisp/abhd/abhd.lsp|pf:bottom|\n\n Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>:|past committed geometry
-lisp/abhd/abhd.lsp|pf:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
+lisp/abhd/abhd.lsp|pf:compare|\n Keep which fit - click one, or [ 1/2/3/4/5 1/2/3 /All/None/Redo] < >:|the fit picker - Redo is its way back
+lisp/abhd/abhd.lsp|pf:fit-session|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/abhd/abhd.lsp|pf:tut-demo|\n Keep the demo drawing to poke at? [Yes/No] <No>:|demo / tutorial
 lisp/abhd/abhd.lsp|pf:tut-demo|\n Pick a clear spot for it:|demo / tutorial
 lisp/abhd/abhd.lsp|pf:tut-pause|\n --- press Enter to continue ---|demo / tutorial
+lisp/ablobf/ABLOBF.lsp|abl:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] <2>:|the fit picker - Redo is its way back
+lisp/ablobf/ABLOBF.lsp|c:ABLOBF|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/abpcheck/ABPCHECK.lsp|abp:asklimit|\n < >:|helper: its callers ask it as the first question of their branch
 lisp/autobead/AUTOBEAD.lsp|autobead-pause|\n [Enter] to continue:|pause
 lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\n Click a side to bead toward:|demo / tutorial
@@ -62,12 +64,17 @@ lisp/dimcheck/dimcheck.lsp|dchk:review-olap|\n Flag to fix, or Leave as is? [Fla
 lisp/dimcheck/dimcheck.lsp|dchk:review-olap|\n Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>:|first question about one reviewed item
 lisp/dimcheck/dimcheck.lsp|dchk:tut-demo|\n Pick an empty spot for the practice drawing:|demo / tutorial
 lisp/dimcheck/dimcheck.lsp|dchk:tut-pause|\n --- press Enter to continue ---|demo / tutorial
+lisp/dimstamp/DIMSTAMP.lsp|c:DIMSTAMP|\nClick a point to place text (Enter when done):|the run's own click loop - Enter ends it; undoing a stamp already placed is AutoCAD's own U, not a Back this prompt offers
+lisp/dimstamp/DIMSTAMP.lsp|ds:ask-raw||helper: its callers ask it as the run's first question, or as the unified prompt's own one-shot typed-text branch
+lisp/dimstamp/DIMSTAMP.lsp|ds:next-action|\nClick to place text, click the ruler to change it, or type new text (Enter when done):|follows a stamp already placed by this same run - past committed geometry; a click or typed value here is taken and acted on immediately, same as the ruler pick it stands beside
 lisp/drone_height/DroneDistortion.lsp|c:DDCAL|\nApparent (traced) size in the drawing - type it or pick 2 points:|first of DDCAL's three; the other two back into it
 lisp/drone_height/DroneDistortion.lsp|c:DDSET|\nDrone height ABOVE THE DECK, in FEET < > :|DDSET's only question
 lisp/drone_height/DroneHeightGPS.lsp|c:DDELEV|\nLatitude (decimal degrees, negative = South):|first of DDELEV's two; the longitude backs into it
 lisp/drone_height/DroneHeightGPS.lsp|c:DDGPS|\nPick a point in the drawing for the height report:|first question of the command
 lisp/fitabhd/FITABHD.lsp|fit:omit-loop|\n Point to leave out - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/lazdiag/LAZDIAG.lsp|lzd:paste|\nPlace the error report, far from the drawing:|the last resort after a failure - there is no earlier question to go back to, and Esc skips it
+lisp/lazpanel/LAZPANEL.lsp|c:CALHELP|\nCommand, or any part of one <Enter = all>:|the only question in the command; Enter answers it with everything
+lisp/lazpanel/LAZPANEL.lsp|c:CALSET|\nChange which? [Theme/Errordir/Stockdir/Quit] <Quit>:|first of the chain - Quit is the way out, and the value question behind it offers Back
 lisp/lhd/lhd.lsp|c:LHD|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/lhd/lhd.lsp|lh:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] <2>:|the fit picker - Redo is its way back
 lisp/linfincheck/linfincheck.lsp|c:LINFINCHECK|\n Type the overall step height or pick two points <skip>:|the only question in its branch; Enter skips it
@@ -90,11 +97,11 @@ lisp/paddle/PADDLE.lsp|paddle--pause|\n [ press ENTER to continue ]|pause
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nClick to pick direction / offset side:|follows a resize already applied to the drawing
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
-lisp/perp_points/cperp_points.lsp|cperp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|first question of the command; only the selection is in front
+lisp/perp_points/cperp_points.lsp|cperp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|asked of the selected curve, where only the selection is in front of it, and of each curve a round draws, where the curve is drawn already
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nClick to pick direction / offset side:|follows a resize already applied to the drawing
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
-lisp/perp_points/perp_points.lsp|perp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|first question of the command; only the selection is in front
+lisp/perp_points/perp_points.lsp|perp:ask-width|\nHas that width changed? [ / ] <Unchanged>:|asked of the selected line, where only the selection is in front of it, and of each line a round draws, where the line is drawn already
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\n --- press Enter to continue ---|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nA point is required - insertion point:|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nDemo size <100>:|demo / tutorial
@@ -114,8 +121,8 @@ lisp/spa/TUTORIALSPA.LSP|c:TUTORIALSPA|\nShow me [Checks/Demo/Both] <Both>:|demo
 lisp/spa/TUTORIALSPA.LSP|tut:demo|\nWhere shall the demo go <0,0>:|demo / tutorial
 lisp/spa/TUTORIALSPA.LSP|tut:pause|\n [Enter to carry on, X to stop]|demo / tutorial
 lisp/spa/TUTORIALSPA.LSP|tut:sheet|\nPoint for the reference sheet <skip>:|demo / tutorial
-lisp/spacheck/SPACHECK.lsp|spachk:demo-say|\n (Enter to go on)|demo / tutorial
 lisp/spacheck/SPACHECK.lsp|spachk:demo|\nPick an empty spot for the practice drawing:|demo / tutorial
+lisp/spacheck/SPACHECK.lsp|spachk:demo-say|\n (Enter to go on)|demo / tutorial
 lisp/standards_checker/src/acady-ui.lsp|acady-ui-highlight|\nPress Enter to return to results...|pause
 lisp/standards_checker/src/acady-ui.lsp|acady-ui-zoom|\nPress Enter to return to results...|pause
 lisp/stockcover/STOCKCOVER.lsp|c:STOCKCOVER|\nStock drawing name < > :|first of its own chain - the which-one pick backs into it

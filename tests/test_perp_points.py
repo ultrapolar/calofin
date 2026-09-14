@@ -70,8 +70,18 @@ KEYWORDS = {"T", "Yes", "No", "Undo", "STR", "RETRY"}
 # Version banners: deliberate globals set once at load time and read by
 # the load message; tools/release_lisp.py stamps the dated releases/
 # twins from them.  Not leaks.
+#
+# *calofin-quiet* is the same shape from the other side: the load
+# message READS it and never sets it.  LAZPASS.lsp and
+# CALOFIN-LOADER.lsp set it while they load their members, so the
+# whole build says one line instead of sixty-three; APPLOADed alone it
+# is unbound, which is nil, and the banner prints.  This check reads
+# from the command's defun to the end of the file, so it sees that
+# banner -- which is exactly why the version globals are listed here
+# too.
 VERSION_GLOBALS = {"*perp-version*", "*cperp-version*",
-                   "*tutperp-version*", "*tutcperp-version*"}
+                   "*tutperp-version*", "*tutcperp-version*",
+                   "*calofin-quiet*"}
 
 
 def strip_comments(src):
@@ -590,6 +600,10 @@ BOW_PTS = [(0.0, 10.0), (25.0, 15.0), (50.0, 22.0), (75.0, 15.0),
 #: clicked well above the line, so the offsets run +y
 CLICK = [50.0, 30.0, 0.0]
 
+#: Enter at the width question every round asks of the line it just
+#: drew: Unchanged, so the round stands exactly as it was drawn
+WIDTH_OK = None
+
 
 def dxf(data, code):
     for g in data:
@@ -745,6 +759,69 @@ def install_curve_builtins():
     VM_BUILTINS[Sym('vlax-curve-getpointatdist')] = point_at_dist
 
 
+def seg_hit(p1, p2, q1, q2):
+    """Where segment p1-p2 crosses q1-q2, or None.  Endpoints count as
+    crossings, which is what AutoCAD's IntersectWith reports too."""
+    rx, ry = p2[0] - p1[0], p2[1] - p1[1]
+    sx, sy = q2[0] - q1[0], q2[1] - q1[1]
+    den = rx * sy - ry * sx
+    if abs(den) < 1e-15:
+        return None
+    t = ((q1[0] - p1[0]) * sy - (q1[1] - p1[1]) * sx) / den
+    u = ((q1[0] - p1[0]) * ry - (q1[1] - p1[1]) * rx) / den
+    if -1e-12 <= t <= 1 + 1e-12 and -1e-12 <= u <= 1 + 1e-12:
+        return (p1[0] + t * rx, p1[1] + t * ry)
+    return None
+
+
+def install_intersect_builtins():
+    """vlax-invoke for the one method cperp:capdist calls: IntersectWith
+    between the ray it casts and the boundary, over straight segments.
+    AutoCAD answers a FLAT list of x y z per crossing and nil when there
+    is none, and capdist reads it as triples, so this does the same."""
+    def ent_segs(vm, e):
+        d = vm.entdata[e]
+        if dxf(d, 0) == 'LINE':
+            return [(tuple(dxf(d, 10)[:2]), tuple(dxf(d, 11)[:2]))]
+        vs = poly_verts(vm, e)
+        return [(vs[i], vs[i + 1]) for i in range(len(vs) - 1)]
+
+    def invoke(vm, a):
+        assert str(a[1]) == 'intersectwith', "unexpected method %r" % (a[1],)
+        out = []
+        for p1, p2 in ent_segs(vm, a[0]):
+            for q1, q2 in ent_segs(vm, a[2]):
+                hit = seg_hit(p1, p2, q1, q2)
+                if hit is not None:
+                    out += [hit[0], hit[1], 0.0]
+        return out or NIL
+
+    VM_BUILTINS[Sym('vlax-invoke')] = invoke
+
+
+def boundary_vm(verts):
+    """A VM holding cperp_points.lsp and one open polyline to be the
+    boundary, bound in the VM as B (an ename is not a literal a script
+    can be written with, and capdist makes entities of its own, so
+    (entlast) would not stay pointed at it)."""
+    install_entity_builtins()
+    install_intersect_builtins()
+    vm = VM()
+    vm.load(CPERP_LSP)
+    vm.script = []
+    e = Ent()
+    vm.entities.append(e)
+    vm.entdata[e] = [Dot(0, 'LWPOLYLINE'), Dot(100, 'AcDbPolyline'),
+                     Dot(8, '0'), Dot(90, len(verts)), Dot(70, 0),
+                     Dot(38, 0.0)] + \
+        [g for p in verts for g in ([10, p[0], p[1]], Dot(42, 0.0))]
+    vm.loads("(setq B (entlast))")
+    # the ray capdist casts goes on the guide layer, which the command
+    # itself makes before the first round
+    vm.tables['LAYER'].add('PERPPTS-TEMP')
+    return vm, e
+
+
 def run_perppts(script, width=None, source=None):
     """One scripted PERPPTS run, by default on a 100-unit line running
     left to right.  width answers the overall-width question that comes
@@ -791,7 +868,8 @@ def close(a, b, tol=1e-9):
 
 
 def test_perppts_asks_how_to_join_the_points():
-    vm, pl = run_perppts([CLICK, 5] + BOW + ["Straight", "No", "STandard"])
+    vm, pl = run_perppts([CLICK, 5] + BOW + ["Straight", WIDTH_OK, "No",
+                                             "STandard"])
     assert len(pl) == 1, "one round draws one polyline, got %d" % len(pl)
     assert poly_verts(vm, pl[0]) == BOW_PTS, poly_verts(vm, pl[0])
     assert poly_bulges(vm, pl[0]) == [0.0] * 4, "Straight must not bulge"
@@ -800,7 +878,8 @@ def test_perppts_asks_how_to_join_the_points():
     assert len(vm.dims) == 5, "one dimension per point, got %d" % len(vm.dims)
     print("PERPPTS Straight: every segment a line, source layer kept")
 
-    vm, pl = run_perppts([CLICK, 5] + BOW + ["Arcs", "No", "STandard"])
+    vm, pl = run_perppts([CLICK, 5] + BOW + ["Arcs", WIDTH_OK, "No",
+                                             "STandard"])
     b = poly_bulges(vm, pl[0])
     assert len(b) == 4 and all(abs(x) > 1e-6 for x in b), b
     assert poly_verts(vm, pl[0]) == BOW_PTS, \
@@ -814,7 +893,7 @@ def test_perppts_asks_how_to_join_the_points():
     # circle passes through those, so a segment with a straight run at
     # both ends stays straight; only the turn is rounded
     vm, pl = run_perppts([CLICK, 5, 10.0, 14.0, 18.0, 14.0, 10.0, "Arcs",
-                          "No", "STandard"])
+                          WIDTH_OK, "No", "STandard"])
     b = poly_bulges(vm, pl[0])
     assert b[0] == 0.0 and b[3] == 0.0, b
     assert abs(b[1]) > 1e-6 and abs(b[1] - b[2]) < 1e-12, b
@@ -822,14 +901,15 @@ def test_perppts_asks_how_to_join_the_points():
 
     # two points make one segment with no neighbour to curve to, so the
     # question is skipped: the script has no answer for it
-    vm, pl = run_perppts([CLICK, 2, 10.0, 20.0, "No", "STandard"])
+    vm, pl = run_perppts([CLICK, 2, 10.0, 20.0, WIDTH_OK, "No",
+                          "STandard"])
     assert poly_verts(vm, pl[0]) == [(0.0, 10.0), (100.0, 20.0)]
     print("PERPPTS: below three points the join question is not asked")
 
 
 def test_perppts_mixed_takes_a_segment_list():
-    vm, pl = run_perppts([CLICK, 5] + BOW + ["Mixed", "2-3", "No",
-                                             "STandard"])
+    vm, pl = run_perppts([CLICK, 5] + BOW + ["Mixed", "2-3", WIDTH_OK,
+                                             "No", "STandard"])
     b = poly_bulges(vm, pl[0])
     assert b[0] == 0.0 and b[3] == 0.0, b
     assert abs(b[1]) > 1e-6 and abs(b[2]) > 1e-6, b
@@ -837,16 +917,17 @@ def test_perppts_mixed_takes_a_segment_list():
 
     # out of range, then junk, then Back to the join question itself
     vm, pl = run_perppts([CLICK, 5] + BOW +
-                         ["Mixed", "9", "zz", "B", "Straight", "No",
-                          "STandard"])
+                         ["Mixed", "9", "zz", "B", "Straight", WIDTH_OK,
+                          "No", "STandard"])
     assert poly_bulges(vm, pl[0]) == [0.0] * 4, poly_bulges(vm, pl[0])
     print("PERPPTS Mixed: a bad list re-asks, B returns to the question")
 
 
 def test_perppts_rounds_follow_the_curve_they_offset_from():
     # Enter on the second round takes the first round's answer
-    vm, pl = run_perppts([CLICK, 3, 10.0, 16.0, 10.0, "Arcs", "Yes",
-                          3, 4.0, 4.0, 4.0, None, "No", "STandard"])
+    vm, pl = run_perppts([CLICK, 3, 10.0, 16.0, 10.0, "Arcs", WIDTH_OK,
+                          "Yes", 3, 4.0, 4.0, 4.0, None, WIDTH_OK, "No",
+                          "STandard"])
     assert len(pl) == 2, len(pl)
     assert all(abs(x) > 1e-6 for x in poly_bulges(vm, pl[1])), \
         "Enter must repeat the previous round's Arcs"
@@ -856,8 +937,9 @@ def test_perppts_rounds_follow_the_curve_they_offset_from():
     # the CURVE, not its chords, so each one lands on the polyline it is
     # dimensioned from -- and the offset is still the fixed +y normal of
     # the original line
-    vm, pl = run_perppts([CLICK, 3, 10.0, 16.0, 10.0, "Arcs", "Yes",
-                          3, 4.0, 4.0, 4.0, "Straight", "No", "STandard"])
+    vm, pl = run_perppts([CLICK, 3, 10.0, 16.0, 10.0, "Arcs", WIDTH_OK,
+                          "Yes", 3, 4.0, 4.0, 4.0, "Straight", WIDTH_OK,
+                          "No", "STandard"])
     segs = poly_segments(vm, pl[0])
     total = sum(seg[2] for seg in segs)
     for i, (x, y) in enumerate(poly_verts(vm, pl[1])):
@@ -874,16 +956,16 @@ def test_perppts_rounds_follow_the_curve_they_offset_from():
 
 def test_perppts_asks_whether_the_overall_width_changed():
     # Enter takes Unchanged: the line stays exactly where it was drawn
-    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
-                          "STandard"])
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", WIDTH_OK,
+                          "No", "STandard"])
     assert source_ends(vm) == ((0.0, 0.0), (100.0, 0.0)), source_ends(vm)
     assert poly_verts(vm, pl[0]) == [(0.0, 10.0), (50.0, 10.0),
                                      (100.0, 10.0)], poly_verts(vm, pl[0])
     print("PERPPTS width: Unchanged leaves the line and the offsets alone")
 
     # Grew by 20: half at each end, and the drawing is resized with it
-    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
-                          "STandard"], width=["Grew", 20.0])
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", WIDTH_OK,
+                          "No", "STandard"], width=["Grew", 20.0])
     assert close(source_ends(vm)[0], (-10.0, 0.0)), source_ends(vm)
     assert close(source_ends(vm)[1], (110.0, 0.0)), source_ends(vm)
     assert [round(x, 9) for x, _ in poly_verts(vm, pl[0])] == \
@@ -891,22 +973,22 @@ def test_perppts_asks_whether_the_overall_width_changed():
     print("PERPPTS width: Grew adds half the difference at each end")
 
     # Shrank by 20: half comes off each end
-    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
-                          "STandard"], width=["Shrank", 20.0])
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", WIDTH_OK,
+                          "No", "STandard"], width=["Shrank", 20.0])
     assert close(source_ends(vm)[0], (10.0, 0.0)), source_ends(vm)
     assert close(source_ends(vm)[1], (90.0, 0.0)), source_ends(vm)
     print("PERPPTS width: Shrank takes half the difference off each end")
 
     # New gives the width itself, not a difference
-    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
-                          "STandard"], width=["New", 50.0])
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", WIDTH_OK,
+                          "No", "STandard"], width=["New", 50.0])
     assert close(source_ends(vm)[0], (25.0, 0.0)), source_ends(vm)
     assert close(source_ends(vm)[1], (75.0, 0.0)), source_ends(vm)
     print("PERPPTS width: New is the overall width, not the change")
 
     # shrinking by the whole width would leave nothing, so it re-asks
-    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
-                          "STandard"], width=["Shrank", 100.0, 20.0])
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", WIDTH_OK,
+                          "No", "STandard"], width=["Shrank", 100.0, 20.0])
     assert close(source_ends(vm)[0], (10.0, 0.0)), source_ends(vm)
     print("PERPPTS width: shrinking away the whole width re-asks")
 
@@ -915,8 +997,9 @@ def test_perppts_width_is_measured_across_not_along():
     # A tent: 100 across, but 116.6 of polyline to walk.  Doubling the
     # WIDTH must put the ends 200 apart -- not make the path 200 long.
     tent = [(0.0, 0.0), (50.0, 30.0), (100.0, 0.0)]
-    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", "No",
-                          "STandard"], width=["New", 200.0], source=tent)
+    vm, pl = run_perppts([CLICK, 3, 10.0, 10.0, 10.0, "Straight", WIDTH_OK,
+                          "No", "STandard"], width=["New", 200.0],
+                         source=tent)
     ends = source_ends(vm)
     assert close(ends[0], (-50.0, 0.0)) and close(ends[1], (150.0, 0.0)), ends
     assert abs(math.dist(ends[0], ends[1]) - 200.0) < 1e-9, ends
@@ -926,8 +1009,8 @@ def test_perppts_width_is_measured_across_not_along():
 
 
 def test_perppts_dimensions_follow_the_resized_line():
-    vm, pl = run_perppts([CLICK, 3, 10.0, 12.0, 10.0, "Straight", "No",
-                          "STandard"], width=["Grew", 20.0])
+    vm, pl = run_perppts([CLICK, 3, 10.0, 12.0, 10.0, "Straight", WIDTH_OK,
+                          "No", "STandard"], width=["Grew", 20.0])
     # every dimension runs from a base point on the resized line to the
     # offset point above it, and the three base points span the new width
     bases = [tuple(d[0][:2]) for d in vm.dims]
@@ -938,6 +1021,241 @@ def test_perppts_dimensions_follow_the_resized_line():
         assert abs(bx - hx) < 1e-9 and abs(hy - by - length) < 1e-9, \
             "each dimension still runs the offset length, straight up"
     print("PERPPTS width: the dimensions move with the resized line")
+
+
+def test_perppts_resizes_the_line_it_just_drew():
+    """The width question is asked of EVERY line, not just the selected
+    one.  A line PERPPTS draws comes out only as wide as the typed
+    offsets add up to, so the course it stands for is re-measured the
+    same way the first one was -- and the same correction is applied to
+    it: half the difference at each end, about the midpoint of the two.
+    """
+    # Enter (Unchanged) leaves the round exactly as it drew
+    vm, pl = run_perppts([CLICK, 3, 10.0, 12.0, 10.0, "Straight",
+                          WIDTH_OK, "No", "STandard"])
+    assert poly_verts(vm, pl[0]) == [(0.0, 10.0), (50.0, 12.0),
+                                     (100.0, 10.0)], poly_verts(vm, pl[0])
+    print("PERPPTS new line: Unchanged leaves the round as it drew")
+
+    # Grew by 20: the polyline just drawn is 100 across (10 up at each
+    # end), so 10 goes on at each end and the bow scales with it
+    vm, pl = run_perppts([CLICK, 3, 10.0, 12.0, 10.0, "Straight",
+                          "Grew", 20.0, "No", "STandard"])
+    assert [tuple(round(v, 9) for v in p) for p in poly_verts(vm, pl[0])] == \
+        [(-10.0, 10.0), (50.0, 12.4), (110.0, 10.0)], poly_verts(vm, pl[0])
+    # the line it was offset FROM is untouched: this question is about
+    # the course just drawn, and step 2 already had its own
+    assert source_ends(vm) == ((0.0, 0.0), (100.0, 0.0)), source_ends(vm)
+    said = "".join(vm.printed)
+    assert "Overall width of the new polyline, end to end" in said, \
+        said[-300:]
+    assert "added at each end" in said, said[-300:]
+    # and the dimensions are recorded after the correction, so every one
+    # of them still ends on the polyline as it now stands
+    heads = [tuple(round(v, 9) for v in d[1][:2]) for d in vm.dims]
+    assert heads == [tuple(round(v, 9) for v in p)
+                     for p in poly_verts(vm, pl[0])], heads
+    print("PERPPTS new line: Grew adds half the difference at each end")
+
+    # New is the width itself, and Shrank takes it off
+    vm, pl = run_perppts([CLICK, 2, 10.0, 10.0, "New", 50.0, "No",
+                          "STandard"])
+    assert [tuple(round(v, 9) for v in p) for p in poly_verts(vm, pl[0])] == \
+        [(25.0, 10.0), (75.0, 10.0)], poly_verts(vm, pl[0])
+    vm, pl = run_perppts([CLICK, 2, 10.0, 10.0, "Shrank", 20.0, "No",
+                          "STandard"])
+    assert [tuple(round(v, 9) for v in p) for p in poly_verts(vm, pl[0])] == \
+        [(10.0, 10.0), (90.0, 10.0)], poly_verts(vm, pl[0])
+    print("PERPPTS new line: New and Shrank read as they do at step 2")
+
+
+def test_perppts_next_round_measures_the_corrected_line():
+    """A corrected line is what the next round is spaced along -- which
+    is the whole reason the drawing is resized rather than the number
+    just remembered.  Round 1 draws arcs here, so round 2 walks the
+    polyline ENTITY (perp:ent-pts) and reads the correction straight out
+    of the drawing."""
+    vm, pl = run_perppts([CLICK, 3, 10.0, 16.0, 10.0, "Arcs",
+                          "Grew", 20.0, "Yes",
+                          3, 4.0, 4.0, 4.0, "Straight", WIDTH_OK, "No",
+                          "STandard"])
+    assert len(pl) == 2, len(pl)
+    ends = poly_verts(vm, pl[0])
+    assert close(ends[0], (-10.0, 10.0)) and close(ends[-1], (110.0, 10.0)), \
+        ends
+    # round 2's three base points are spaced along the corrected round-1
+    # polyline, so the outer two ARE its ends
+    bases2 = [tuple(d[0][:2]) for d in vm.dims[3:]]
+    assert len(bases2) == 3, bases2
+    assert close(bases2[0], ends[0]) and close(bases2[-1], ends[-1]), \
+        (bases2, ends)
+    # and round 2's own polyline is those bases offset by 4
+    for base, pt in zip(bases2, poly_verts(vm, pl[1])):
+        assert abs(pt[0] - base[0]) < 1e-9, (pt, base)
+        assert abs(pt[1] - base[1] - 4.0) < 1e-9, (pt, base)
+    print("PERPPTS: the next round is spaced along the corrected line")
+
+
+def test_perppts_keeps_going_when_the_new_line_will_not_resize():
+    """A refused resize stops step 2, where nothing has been drawn yet.
+    At a round it must NOT: rounds of typed lengths sit behind it and
+    not one dimension has been written.  The line is left at the width
+    it drew, the drafter is told, and because nothing was scaled the
+    dimensions still land on it."""
+    SCALE_REFUSES[0] = True
+    try:
+        vm, pl = run_perppts([CLICK, 3, 10.0, 12.0, 10.0, "Straight",
+                              "Grew", 20.0, "No", "STandard"])
+    finally:
+        SCALE_REFUSES[0] = False
+    assert poly_verts(vm, pl[0]) == [(0.0, 10.0), (50.0, 12.0),
+                                     (100.0, 10.0)], poly_verts(vm, pl[0])
+    said = "".join(vm.printed)
+    assert "could not be resized" in said, said[-300:]
+    assert len(vm.dims) == 3, "the run must finish and draw its dimensions"
+    heads = [tuple(d[1][:2]) for d in vm.dims]
+    assert heads == poly_verts(vm, pl[0]), heads
+    print("PERPPTS new line: a refused resize is reported, not fatal")
+
+
+def test_cperppts_asks_the_same_of_the_curve_it_just_drew():
+    """CPERPPTS has no runnable curve layer in the VM (the vlax-curve
+    calls its rounds make are AutoCAD's own), so its half of the new
+    step is pinned structurally: the question is asked of the curve the
+    round built, the drawing is resized, the points in hand are scaled
+    with it, and only THEN are the dimensions recorded from them."""
+    code = load(CPERP_LSP)
+    loop = code[code.index('(setq curCrv (entlast)'):]
+    ask = loop.index("(cperp:ask-width")
+    assert 'cperp:ask-width "Overall width of the new curve"' in loop, \
+        "the round must name the curve it is asking about"
+    resize = loop.index("(cperp:rescale curCrv")
+    scale = loop.index("(cperp:scale-pts newPts")
+    dims = loop.index("(setq dimPairs")
+    assert ask < resize < scale < dims, (ask, resize, scale, dims)
+    # the width asked about is the span end to end, as at step 2 -- not
+    # the length of the curve that was drawn
+    assert "(car  (last newPts))" in loop and "(cperp:curvelen" not in \
+        loop[:resize], "the width is the distance across, end to end"
+    print("cperppts: the curve each round draws is offered the same "
+          "correction")
+
+
+def test_cperppts_caps_an_offset_at_the_boundary():
+    """The cap is measured per point, along that point's own normal: the
+    nearest crossing strictly ahead of the base point.  A boundary that
+    the ray never reaches leaves the point with no maximum at all, which
+    is how a boundary covering only part of a run behaves."""
+    # a boundary straight across the run, 30 above it
+    vm, bnd = boundary_vm([(-100.0, 30.0), (100.0, 30.0)])
+    got = vm.loads("(cperp:capdist B (list 0.0 0.0 0.0) (list 0.0 1.0))")
+    assert got is not None and abs(float(got) - 30.0) < 1e-9, got
+    # the same boundary from a point already past it, and from one
+    # aiming along it: no crossing ahead, so no maximum
+    assert vm.loads("(cperp:capdist B (list 0.0 0.0 0.0)"
+                    " (list 0.0 -1.0))") is None, \
+        "a boundary behind the offset side must not cap it"
+    assert vm.loads("(cperp:capdist B (list 0.0 0.0 0.0)"
+                    " (list 1.0 0.0))") is None, \
+        "a ray that never reaches the boundary must not cap it"
+    print("cperppts boundary: the crossing ahead of the point is its max")
+
+    # slanted: nearer at one end of the run than at the other, which is
+    # why one number for the whole run could not say where
+    vm, bnd = boundary_vm([(-100.0, 20.0), (100.0, 60.0)])
+    near = vm.loads("(cperp:capdist B (list -50.0 0.0 0.0)"
+                    " (list 0.0 1.0))")
+    far = vm.loads("(cperp:capdist B (list 50.0 0.0 0.0)"
+                   " (list 0.0 1.0))")
+    assert abs(float(near) - 30.0) < 1e-9, near
+    assert abs(float(far) - 50.0) < 1e-9, far
+    print("cperppts boundary: a slanted boundary caps each point apart")
+
+    # a boundary the ray crosses twice stops at the FIRST one
+    vm, bnd = boundary_vm([(-40.0, 60.0), (0.0, 10.0), (40.0, 60.0)])
+    got = vm.loads("(cperp:capdist B (list 0.0 0.0 0.0) (list 0.0 1.0))")
+    assert abs(float(got) - 10.0) < 1e-9, got
+    print("cperppts boundary: the nearest crossing is the one that caps")
+
+    # the ray is a temporary line and has to leave with the probe: a
+    # run casts one per point per round, and a drawing full of them is
+    # the drafter's to clean up
+    before = [e for e in vm.entities if e not in vm.deleted]
+    vm.loads("(cperp:capdist B (list 0.0 0.0 0.0) (list 0.0 1.0))")
+    assert [e for e in vm.entities if e not in vm.deleted] == before, \
+        "the probe must erase the ray it cast"
+    print("cperppts boundary: the ray it casts leaves with it")
+
+
+def test_cperppts_counts_points_carried_past_the_boundary():
+    """Every length is capped as it is typed, so a point can only end up
+    past the boundary through the width correction -- which scales the
+    whole curve about the midpoint of its ends.  That is the drafter's
+    own measurement and is left alone, but the count is reported."""
+    vm, bnd = boundary_vm([(-100.0, 30.0), (100.0, 30.0)])
+    bases = "(list (list -50.0 0.0 0.0) (list 0.0 0.0 0.0)" \
+            " (list 50.0 0.0 0.0))"
+    inside = "(list (list -50.0 20.0 0.0) (list 0.0 25.0 0.0)" \
+             " (list 50.0 20.0 0.0))"
+    past = "(list (list -50.0 40.0 0.0) (list 0.0 25.0 0.0)" \
+           " (list 50.0 40.0 0.0))"
+    assert int(vm.loads("(cperp:past-bnd B %s %s)" % (bases, inside))) \
+        == 0, "points short of the boundary are not past it"
+    assert int(vm.loads("(cperp:past-bnd B %s %s)" % (bases, past))) \
+        == 2, "both scaled-out points must be counted"
+    print("cperppts boundary: a width correction past it is counted")
+
+
+def test_cperppts_boundary_is_optional_and_wired_through():
+    """Structural pins for the parts of the boundary the VM cannot run:
+    the question is optional and tells Enter from a missed click, the
+    cap is taken from the base point along that point's own normal, Max
+    is offered only where there is a cap, and a longer length is brought
+    back to it before the point is drawn."""
+    code = load(CPERP_LSP)
+    ask = code.index("Select a boundary the offsets may not")
+    assert '[None] <None>: ' in code[ask:ask + 200], \
+        "the boundary question must offer None and default to it"
+    assert re.search(r'\(initget "None"\)', code[:ask]), \
+        "None has to be an initget keyword for a click on it to work"
+    assert "(= 7 (getvar \"ERRNO\"))" in code, \
+        "a missed click must be told from Enter, or it drops the boundary"
+    # the source curve is not a boundary for itself
+    assert "(eq (car sel) crv)" in code, \
+        "picking the curve being offset from must be refused"
+    loop = code[code.index("(setq newPts '() usedBases"):]
+    cap = loop.index("(cperp:capdist bnd base nrm)")
+    ask2 = loop.index("(setq len (getdist")
+    draw = loop.index("(setq np      (list")
+    assert cap < ask2 < draw, (cap, ask2, draw)
+    assert '(initget 6 (if cap "Back Undo Max" "Back Undo"))' in loop, \
+        "Max is only an answer where there is a boundary ahead"
+    clip = loop.index("(setq len cap)")
+    assert ask2 < clip < draw, \
+        "a length past the boundary must be brought back before it draws"
+    assert 'boundary at ' in loop[:ask2 + 600], \
+        "the prompt must name the distance to the boundary"
+    print("cperppts boundary: optional, per point, and capped before it draws")
+
+
+def test_scale_pts_moves_points_with_the_resized_object():
+    """The points in hand are scaled by the same centre and factor the
+    drawing was, so the dimensions recorded from them land on the object
+    as it now stands rather than where it was drawn."""
+    for path, prefix in ((PERP_LSP, "perp"), (CPERP_LSP, "cperp")):
+        vm = VM()
+        vm.load(path)
+        vm.script = []
+        got = vm.loads(
+            "(%s:scale-pts (list (list 0.0 10.0 3.0) (list 50.0 12.0 3.0)"
+            " (list 100.0 10.0 3.0)) (list 50.0 10.0 3.0) 1.2)" % prefix)
+        got = [[float(v) for v in p] for p in got]
+        assert close(got[0], (-10.0, 10.0, 3.0)), got
+        assert close(got[1], (50.0, 12.4, 3.0)), got
+        assert close(got[2], (110.0, 10.0, 3.0)), got
+        assert all(p[2] == 3.0 for p in got), "z is carried through untouched"
+        print("%s: scale-pts moves the points with the drawing"
+              % os.path.basename(path))
 
 
 def test_perppts_says_so_when_the_drawing_refuses_the_resize():
@@ -966,7 +1284,7 @@ def ask_width(path, prefix, drawn, answers):
     vm = VM()
     vm.load(path)
     vm.script, vm.prompts = list(answers), []
-    got = vm.loads("(%s:ask-width %r)" % (prefix, drawn))
+    got = vm.loads('(%s:ask-width "Overall width" %r)' % (prefix, drawn))
     assert not vm.script, "answers left over: %r" % vm.script
     return None if got is None else float(got)
 
@@ -1039,6 +1357,14 @@ def main():
     test_perppts_width_is_measured_across_not_along()
     test_perppts_dimensions_follow_the_resized_line()
     test_perppts_says_so_when_the_drawing_refuses_the_resize()
+    test_perppts_resizes_the_line_it_just_drew()
+    test_perppts_next_round_measures_the_corrected_line()
+    test_perppts_keeps_going_when_the_new_line_will_not_resize()
+    test_cperppts_asks_the_same_of_the_curve_it_just_drew()
+    test_cperppts_caps_an_offset_at_the_boundary()
+    test_cperppts_counts_points_carried_past_the_boundary()
+    test_cperppts_boundary_is_optional_and_wired_through()
+    test_scale_pts_moves_points_with_the_resized_object()
     test_the_width_question_reads_the_same_in_both_routines()
     test_rescale_says_whether_the_drawing_took_it()
     test_perppts_walks_its_chains_back()
@@ -1057,22 +1383,27 @@ def test_perppts_walks_its_chains_back():
     """
     # the amount re-opens "has that width changed?"
     vm, _pl = run_perppts([CLICK, 3, 10.0, 12.0, 14.0, "Straight",
-                           "No", "STandard"],
+                           WIDTH_OK, "No", "STandard"],
                           width=["Grew", "Back", None])
     said = "".join(vm.printed)
     asked = [p for p, _v in vm.prompts if "Has that width changed" in p]
-    assert len(asked) == 2, "Back at the amount must re-ask the width"
+    assert len(asked) == 3, \
+        "Back at the amount must re-ask the width, and the line just drawn " \
+        "is asked about after it"
     assert "Stepping back one question" in said, said[-200:]
 
     # ...and U is the same answer as Back there
-    vm, _pl = run_perppts([CLICK, 2, 10.0, 12.0, "No", "STandard"],
+    vm, _pl = run_perppts([CLICK, 2, 10.0, 12.0, WIDTH_OK, "No",
+                           "STandard"],
                           width=["New", "U", None])
     asked = [p for p, _v in vm.prompts if "Has that width changed" in p]
-    assert len(asked) == 2, "U must be taken as Back at the new width"
+    assert len(asked) == 3, \
+        "U must be taken as Back at the new width, and the line just drawn " \
+        "is asked about too"
 
     # the join re-opens the LAST length, guide node and all
     vm, pl = run_perppts([CLICK, 3, 10.0, 12.0, 14.0, "Back", 16.0,
-                          "Straight", "No", "STandard"])
+                          "Straight", WIDTH_OK, "No", "STandard"])
     said = "".join(vm.printed)
     assert "Stepping back one point." in said, said[-200:]
     lengths = [p for p, _v in vm.prompts if "Length for point 3" in p]
@@ -1083,7 +1414,7 @@ def test_perppts_walks_its_chains_back():
         "the point taken back must not leave a spare dimension"
 
     # the dimension style re-opens "repeat?"
-    vm, _pl = run_perppts([CLICK, 2, 10.0, 12.0, "No", "B", "No",
+    vm, _pl = run_perppts([CLICK, 2, 10.0, 12.0, WIDTH_OK, "No", "B", "No",
                            "STandard"])
     asked = [p for p, _v in vm.prompts if "Repeat on the new polyline" in p]
     assert len(asked) == 2, "B at the style must re-ask whether to repeat"
@@ -1096,7 +1427,8 @@ def test_perppts_pops_the_error_mode_on_every_exit():
     handler, so every CLEAN run left it stacked for the session -- and a
     stacked mode refuses command-s inside every later handler.  The pop
     lives in perp:finish now, which both exits call."""
-    vm, pl = run_perppts([CLICK, 5] + BOW + ["Straight", "No", "STandard"])
+    vm, pl = run_perppts([CLICK, 5] + BOW + ["Straight", WIDTH_OK, "No",
+                                             "STandard"])
     assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
         (vm.error_mode_depth, vm.error_mode_underflow)
     assert vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1, \

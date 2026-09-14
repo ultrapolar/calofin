@@ -6,6 +6,109 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## Unreleased
+
+**Which way the screen reads.** Every colour a tool draws in is an ACI
+number, and a number is only right against one background. ACI `8` was
+serving two OPPOSITE intents across thirteen tools: the review tools
+(`COVERCHECK`, `DIMCHECK`, `LINFINCHECK`) used it to make everything
+not under review recede -- which it does on the stock near-black model
+space and the exact opposite of on a white one -- while `POOL`, `SPA`,
+`OASIS`, `POOLSIDE`, `LOBF`, `ABFIND` and `CONSTELLATION` used the same
+number for guide geometry that has to be READ while it is answered,
+which works on white and very nearly disappears on the stock dark
+grey. Nothing in the tree had ever asked which background it was
+drawing onto: 84 colour knobs, zero reads of `COLORTHEME` or the model
+background.
+
+Those knobs say `'auto` now and resolve per role -- `fade`, `guide`,
+`dim`, `hi` -- against the measured background (the drawing's, for ink
+that lands in it; AutoCAD's interface theme for the chart tiles, which
+are drawn beside a dialog's own `-15` and `-16` and were following it
+halfway). **A knob left as a number is used exactly as given**, and a
+session that cannot measure gets the numbers the tree always used, so
+nothing changes for anyone the feature cannot help. `CALSET` writes a
+`CalofinTheme` override for a screen the measurement reads wrong, into
+the profile for the Lisp side and beside the pins for the VB palette.
+
+Three more surfaces were half-themed and are not: the chart tiles'
+dimension arrows and focus box (`-16` adapted, `8` and `5` did not),
+the toolbar button's icon (a `.bmp` has no alpha, so the square around
+the hexagon is painted -- and it was painted dark-theme grey for
+everybody, in every light toolbar, from the day it shipped), and the
+palette's entry boxes (`SystemColors` ink over hard-coded white).
+
+**The load says one line.** A Startup Suite entry runs in every
+drawing opened, and every tool announcing itself was 83 lines and
+6,681 characters of scrollback before the drafter had done anything.
+`LAZPASS.lsp` and `CALOFIN-LOADER.lsp` set `*calofin-quiet*` while
+they load their members; a file APPLOADed alone still greets you.
+`tools/check_lisp.py` requires the guard, so this cannot come back.
+
+**Three commands that answer what the build knows.** `CALVER` reports
+every calofin file loaded and its version -- no table, because each
+tool sets its own banner global and the session IS the table, which is
+why a newer single file loaded over the build shows its own number.
+`CALHELP` prints what a command is, searching names AND captions the
+way the panel's Find page does; until now the captions were readable
+in one place only, the panel, on whichever page the tool was filed on.
+`CALSET` shows the settings calofin keeps in the AutoCAD profile --
+the one place a setting survives a rebuild, since `releases/` and
+`LAZPASS.lsp` are generated.
+
+## v3.12 -- 2026-09-11
+
+**A dialog that does not fit does not open.** DCL does not scroll in
+either direction: a page wider or taller than the screen is not
+clipped and is not scrolled -- AutoCAD refuses it outright, with
+`Dialog too large to fit on screen. Requested Size = (436, 1085)
+Maximum Size = (1920, 1080)`, and the command dies where it stands.
+LAZPANEL's **Rest** page had reached exactly that, so clicking Rest did
+nothing but raise the error. Rest is the page that could least afford
+it: it is COMPUTED -- every tool not on Pool, Cover or Spa lands there
+-- so the page that stopped opening is the page every newly registered
+tool joins, and it would have broken again at the next one regardless.
+
+Nothing in the tree could have caught it, because a dialog's size is
+written down nowhere: it is the sum of whatever the generator emitted.
+So it is computed now. `tools/dclsize.py` reads generated DCL as a tile
+tree and measures it; its constants are fitted to the report above and
+reproduce both of that report's numbers exactly. `tools/check_dcl.py`
+drives every generator to its tallest REACHABLE state -- pins and
+recents full, every chart, every step count -- and fails the build on
+anything within 60px of the limit. It is in `make check`, and
+`tests/test_dcl_size.py` puts the same measurement in `make test`.
+
+Five dialogs were over, only one of which anyone had clicked:
+
+- **Rest** (1085px) and **Layout** (1189px) now wrap into balanced
+  columns at `lzp:*colbudget*`, captions and all -- a category page is
+  where you go to find out what a tool IS, so losing the captions to
+  gain the width would have cost the page its purpose.
+- **LAZFORM's Roman and Grecian** charts (1141px each) pack the boxes
+  beside the picture into two columns instead of one stack. Four more
+  charts were within 20px of the line and came down with them. The
+  picture is only ~260px tall, so the room was always there, sideways.
+- **LAZASCII** (1557px), whose whole job is to be looked at, lays its
+  five sections out in three columns.
+
+And the two strips whose height a DRAFTER sets are capped. The note
+beside the pinned row said "pin thirty tools and you get a tall panel,
+never a broken one"; that was true at 56 tools in three columns and is
+not true at 82 -- thirty pins is 1053px, 27px under the wall, and the
+next pin goes through it. Pinned is held to `lzp:*pinrowmax*` rows, at
+the tick and again on the way in from the registry, where a list stored
+by an older build has never been through the cap. Recent was capped
+only as it was WRITTEN, so a stored value that predates the limit came
+back whole onto every page at once; it is trimmed on read as well.
+
+The pin editor had the same fault from the other end -- three fixed
+columns was 28 rows at 82 tools, the same 1085px, on the one dialog
+that grows every time ANY tool is added. It shares the page budget now,
+so it cannot drift out of step again.
+
+Worst page a drafter can build, pins and recents full: 941px.
+
 ## v3.7 -- 2026-09-10
 
 One pass, one idea: a question you can answer is a question you should
@@ -137,6 +240,73 @@ the drafter to send it, and left no undo group, error mode or entity
 behind. At both tiers. The roster is computed and the exclusions are
 read out of `test_cancel_paths.py`, so a command added later is swept
 by construction.
+## v3.11 -- 2026-09-11
+
+Three changes to the AB perimeter fitters, all of them about the same
+thing: what the drafter should have to decide, and what the drawing
+already knows.
+
+**A point numbered with an `m` is not a survey point.** ABFIND writes
+`17m` when it copies Pt.17 to a position it worked out from two tape
+readings off a pair of good points -- the original was a bad shot, and
+the copy is where that point SHOULD be, not where anybody stood. ABHD,
+ADAB, CABHD and FITABHD were all fitting it like any other shot, so a
+perimeter bent to meet a deduction and the hit report then claimed it
+held a point nobody measured. It is dropped as the selection is read
+now, before the point list exists, which is what makes it true of
+everything downstream at once: not ordered into the loop, not fitted,
+not held, not counted against the miss allowance, and never ringed or
+listed as one the line missed. The original it came from is still in.
+Each command says how many it left out, so a survey that comes up
+short is explained rather than mysterious. In CABHD this is NOT the
+cutoff and NOT the omit list: both of those keep a point and decide
+about it, and a moved point is not in the survey to be decided about.
+LHD is deliberately not in this list -- it fits laser scans, where an
+`m` in a label is as likely to be metres as a moved point.
+
+**ABHD's recommended answers now describe an AB survey.** The miss
+share Enter offers goes from 15% to **20%**: a fifth of the points an
+inch off is what a built shell actually measures like, and at 15% the
+fitter ran out of allowance early in the loop and paid for the rest of
+it in short arcs. The curve cap gains a third state, **`Auto`**, which
+is what a fresh session now starts on: one curve per `*PF-ARC-DIV*`
+(3) survey points, rounded to the nearest whole curve. A pool edge
+reads as long overarching arcs with three or so points under each, not
+one curve per shot. `Auto` cannot be a number at the prompt -- the cap
+is asked at step 3 and the points are not selected until step 7 -- so
+it is a RULE that becomes a number once the survey is in hand, and
+every reader of the cap goes through `pf:cap-for` so it becomes one in
+exactly one place. `None` still lifts the cap entirely. CABHD carries
+both, because it promises the same fit as ABHD, rule for rule; LHD
+keeps its own 15% and gains no recommendation, because a laser scan is
+a finer instrument than a tape and a rod, and a cap of a third of a
+scan's points is not a cap.
+
+**SIMPABHD: the same fit, with nothing to decide first.** ABHD's first
+three questions are the ones that stop a run before it starts -- how
+far off may the line sit, what share may be off, how many curves --
+and none of them can honestly be answered from the command line,
+because the answer IS the shape they produce. That is why ABHD draws
+three and lets you point at one. SIMPABHD takes it the rest of the
+way: it asks NONE of the three and draws FIVE. Two are ABHD's own ends
+of the trade (the least error there is, and the fewest curves that
+still hold an inch), so whatever a typed answer could have produced
+sits between them; the three in the middle are ready-made answers -- a
+share, a distance and a curve cap TOGETHER, which is how they actually
+behave -- printed beside each outline: 10% off by an inch with a third
+as many curves as points, all but the 3 worst points held with half as
+many, and 20% off by half an inch with a third as many.
+
+It is not a copy of ABHD. Both commands walk one `pf:fit-session`,
+lifted out of `c:ABHD` unchanged, so the same straight walls, sharp
+corners and held points are declared, the same selection is read, the
+same table is printed, the same pick keeps one, the same points are
+ringed and the same pool bottom is offered. SIMPABHD enters that chain
+at step 4 and its steps print as 1 to 4; `Back` at the first of them
+re-opens it rather than falling out of the run. `pf:compare` grew one
+argument and serves both tables. What a second copy would have had to
+keep in step is not the fitter but every promise the run makes around
+it, and those are the ones that rot quietly.
 
 ## v3.10 -- 2026-09-11
 

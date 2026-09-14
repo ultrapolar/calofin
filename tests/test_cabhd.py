@@ -215,9 +215,14 @@ def answers(vm, kind):
 
 
 # The pickfirst probe (no pre-selection), then the six questions ahead
-# of the selection, answered plainly: 1 inch, the standard miss share,
-# no curve cap, no walls, no corners, no holds.
-SETTINGS = [None, None, None, None, "No", "No", "No"]
+# of the selection, answered plainly: 1 inch, the recommended miss
+# share, NO CURVE CAP, no walls, no corners, no holds.  The cap is
+# typed rather than Entered because Enter now means Auto - one curve
+# per *CAB-ARC-DIV* points - and these checks are about the cutoff:
+# a capped fit ends its spans wherever the cap allows, so the vertex
+# list stops being a usable proxy for the shape's extent.  The Auto
+# cap has checks of its own further down.
+SETTINGS = [None, None, None, "None", "No", "No", "No"]
 
 
 def run(cut, extra=None, pts=None, keep="2"):
@@ -492,6 +497,67 @@ for label, want in (("17", 17), ("P17", 17), ("17A", 17), ("PT-8", 8),
                     ("100", 100), ("", -1), ("edge", -1)):
     got = vm.loads('(t:num "%s")' % label)
     check('"%s" reads as %s' % (label, want), got == want)
+
+print('CABHD -- the recommended curve cap is a third of the points')
+# Enter at step 3 is Auto: one curve per *CAB-ARC-DIV* of the points
+# the cutoff KEPT - not of everything selected, and not a number the
+# prompt could have known, since the points arrive four steps later.
+vm = VM()
+vm.load(LSP)
+for n, want in ((18, 6), (30, 10), (55, 18), (20, 7), (1, 1), (0, 1)):
+    got = vm.loads('(cab:rec-arcs %d)' % n)
+    check('%d points recommend %d curves' % (n, want), got == want)
+check("a fresh session starts on Auto",
+      vm.loads("(eq 'AUTO *CAB-MAX-ARCS*)") is not None)
+check("...and Auto resolves against the count it is given",
+      vm.loads('(cab:cap-for 18)') == 6)
+vm.loads('(setq *CAB-MAX-ARCS* nil)')
+check("None means no cap at all, whatever the count",
+      vm.loads('(cab:cap-for 18)') is None)
+vm.loads('(setq *CAB-MAX-ARCS* 4)')
+check("a typed number wins over the count",
+      vm.loads('(cab:cap-for 18)') == 4)
+
+vm, ents = survey_vm()
+vm.run('c:CABHD', [None, None, None, None, "No", "No", "No", ents, 18, "2"])
+check('Enter at the cap prompt caps the kept fit at the recommendation',
+      kept_polyline(vm) is not None and len(kept_polyline(vm)) <= 6)
+
+print('CABHD -- a moved point is not a survey point')
+# ABFIND numbers a point it DEDUCED "17m"; nobody stood there, so it
+# is out of the fit before the cutoff is even asked.
+vm = VM()
+vm.load(LSP)
+for label, want in (("17", False), ("17m", True), ("17M", True),
+                    ("17m2", True), ("P17A", False), ("", False)):
+    got = vm.loads('(cab:moved-p "%s")' % label) is not None
+    check('"%s" is %sa moved point' % (label, '' if want else 'not '),
+          got == want)
+
+# the same survey with the far-left point duplicated as a moved twin
+# 2 ft inboard and numbered "9m": if it were fitted, the outline would
+# be dragged in off the pool it was given
+vm = VM()
+vm.load(LSP)
+ents = []
+for i, (p_, label) in enumerate(
+        [(q, str(k)) for k, q in enumerate(POOL, start=1)]
+        + [((-96.0, 0.0), "9m")]
+        + [(q, str(k)) for k, q in enumerate(STEPS, start=19)]):
+    vm.loads('(entmake \'((0 . "INSERT") (2 . "ab_pt") (8 . "POINTS")'
+             ' (10 %.6f %.6f 0.0)))' % (p_[0], p_[1]))
+    ents.append(vm.entities[-1])
+    vm.loads('(entmake \'((0 . "ATTRIB") (8 . "POINTS") (2 . "number")'
+             ' (1 . "%s")))' % label)
+vm.run('c:CABHD', SETTINGS + [ents, 18, "2"])
+verts = kept_polyline(vm)
+check('the moved point is left out, and said so',
+      '1 moved point(s)' in ''.join(vm.printed))
+check('...and nothing in the fit sits on it',
+      verts is not None
+      and all(math.dist(v[:2], (-96.0, 0.0)) > 1.0 for v in verts))
+check('...so the outline still spans the pool it was given',
+      verts is not None and min(v[0] for v in verts) < -130.0)
 
 print('CABHD -- pickfirst: a selection made before the command is used as-is')
 vm, ents = survey_vm()
