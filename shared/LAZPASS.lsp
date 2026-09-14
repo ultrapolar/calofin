@@ -45163,22 +45163,36 @@
 ;;; ends or is cancelled -- only the MTEXT it actually stamped is left
 ;;; behind.
 ;;;
-;;; Every value is one of four forms, exactly -- nothing else parses:
+;;; What it WRITES is one of four forms, always:
 ;;;   34"                     whole inches
 ;;;   3'-4"                   feet and whole inches
 ;;;   34 1/2"                 inches and a fraction
 ;;;   3'- 4 1/2"              feet, inches and a fraction
 ;;;
-;;; What the ruler offers depends on which family the current text is
-;;; in:
-;;;   * bare inches, no feet (34" or 34 1/2") -- every eighth of an
-;;;     inch from there up to the next whole inch (34-1/8" ... 35");
-;;;   * feet and inches, fraction or not (3'-4" or 3'- 4 1/2") -- every
-;;;     eighth of an inch up and down for up to 7/8" either side, THEN
-;;;     whole-inch jumps of 1", 2" and 3" beyond that on each side --
-;;;     quarters and eighths together on the one ruler, told apart by
-;;;     tier rather than by switching which the tool offers.
-;;; A row that would come out at or below zero is dropped.
+;;; What it READS is far looser, because nobody types a dimension
+;;; carefully twice.  The inch mark is optional and may be two
+;;; apostrophes, the dash after the feet mark is optional, inches may
+;;; be decimal, and a fraction may be spaced or dashed -- so
+;;;
+;;;   4'4.5    4'-4 1/2"    4' 4-1/2    4'4 1/2    52.5    52 1/2
+;;;
+;;; all read, and the first four all mean 4'- 4 1/2".  Anything not a
+;;; whole eighth is rounded to the nearest one.  What is STAMPED is
+;;; always the canonical spelling above, never the keystrokes: type
+;;; 4'4.5 and the line back reads "read as 4'- 4 1/2"", which is
+;;; where a mis-typed value is caught by eye rather than in the
+;;; drawing.  Feet spelled means feet written, so 52.5 stays 52 1/2"
+;;; rather than becoming 4'- 4 1/2".
+;;;
+;;; The ruler offers, around whatever the current value is, every
+;;; eighth of an inch for a WHOLE INCH EITHER SIDE -- 44" offers 43"
+;;; through 45", the inch before as well as the inch after, since a
+;;; measurement is read back off the tape as often downward as up.
+;;; Quarters and eighths sit on the one ruler, told apart by tier
+;;; rather than by switching which the tool offers.  A value with FEET
+;;; in it gets whole-inch jumps of 2" and 3" beyond that inch as well,
+;;; on each side.  A row that would come out at or below zero is
+;;; dropped.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *dimstamp-version* below and stamps a dated, REV-numbered twin of
@@ -45186,7 +45200,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.0")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.1")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -45244,74 +45258,99 @@
 
 ;;; -------------------- helpers ----------------------------------------
 
-;; T when every character of S is 0-9 and S is not empty.
+;; T when C is 0-9.
 (defun ds:digit-p (c)
   (and (>= (ascii c) 48) (<= (ascii c) 57)))
 
-(defun ds:digits-p (s / i n ok)
-  (setq n (strlen s) ok (> n 0) i 1)
+;; T when S reads as a plain decimal number: digits, at most one dot,
+;; at least one digit, nothing else.
+(defun ds:num-p (s / i n c dots digits ok)
+  (setq n (strlen s) i 1 dots 0 digits 0 ok T)
   (while (and ok (<= i n))
-    (if (not (ds:digit-p (substr s i 1))) (setq ok nil))
+    (setq c (substr s i 1))
+    (cond
+      ((ds:digit-p c) (setq digits (1+ digits)))
+      ((= c ".") (setq dots (1+ dots)))
+      (T (setq ok nil)))
     (setq i (1+ i)))
-  ok)
+  (and ok (> digits 0) (< dots 2)))
 
-;; Parse a measurement string into (EIGHTHS HASFEET), where EIGHTHS is
-;; the total value in eighths of an inch (an integer) and HASFEET is T
-;; when the text used feet notation -- carried back through so a value
-;; renders, and is offered further suggestions, in the family it came
-;; in.  nil when S is not one of the four canonical forms in the
-;; header.
-(defun ds:parse (s / n apos feetstr rest hasfeet feetnum spc wholestr
-                    fracstr slash numstr denstr wholenum num den frac
-                    ok eighths)
-  (setq ok T)
-  (setq s (vl-string-trim " \t" s))
-  (setq n (strlen s))
-  (if (or (= n 0) (/= (substr s n 1) "\""))
-    (setq ok nil)
-    (setq s (substr s 1 (1- n))))
-  (setq hasfeet nil feetnum 0)
-  (if (and ok (setq apos (vl-string-search "'" s)))
+;; S cut on spaces, tabs and dashes, empty pieces dropped -- the
+;; separators a measurement's inches part is written with, so
+;; "4 1/2" and "4-1/2" come apart the same way.
+(defun ds:split (s / i n c buf out)
+  (setq n (strlen s) i 1 buf "" out nil)
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (or (= c " ") (= c "\t") (= c "-"))
+      (progn
+        (if (/= buf "") (setq out (cons buf out)))
+        (setq buf ""))
+      (setq buf (strcat buf c)))
+    (setq i (1+ i)))
+  (if (/= buf "") (setq out (cons buf out)))
+  (reverse out))
+
+;; One token of an inches part -- a decimal number, or a fraction N/D
+;; -- as a number of inches.  nil when it is neither.
+(defun ds:token-val (tok / slash n d)
+  (if (setq slash (vl-string-search "/" tok))
     (progn
-      (setq feetstr (substr s 1 apos))
-      (setq rest (substr s (+ apos 2)))
-      (if (or (= feetstr "") (not (ds:digits-p feetstr)))
-        (setq ok nil)
-        (setq feetnum (atoi feetstr) hasfeet T))
-      (setq rest (vl-string-trim " " rest))
-      (if (and ok (> (strlen rest) 0) (= (substr rest 1 1) "-"))
-        (setq rest (vl-string-trim " " (substr rest 2)))
-        (setq ok nil)))
-    (setq rest (vl-string-trim " " s)))
-  (setq wholenum 0 frac 0.0)
-  (if ok
+      (setq n (substr tok 1 slash)
+            d (substr tok (+ slash 2)))
+      (if (and (ds:num-p n) (ds:num-p d) (/= (atof d) 0.0))
+        (/ (atof n) (atof d))))
+    (if (ds:num-p tok) (atof tok))))
+
+;; The inches part of a measurement as a number of inches: every token
+;; added up, so "4", "4.5", "4 1/2", "4-1/2" and "1/2" all read.  An
+;; empty part is 0, which is how 4' reads as 4'-0".  nil when any
+;; token is neither a number nor a fraction.
+(defun ds:inches (s / toks total v tk)
+  (setq toks (ds:split s) total 0.0)
+  (foreach tk toks
+    (if (and total (setq v (ds:token-val tk)))
+      (setq total (+ total v))
+      (setq total nil)))
+  total)
+
+;; Parse a measurement into (EIGHTHS HASFEET), where EIGHTHS is the
+;; total in eighths of an inch (an integer, rounded to the nearest
+;; eighth) and HASFEET is T when feet were spelled -- carried back
+;; through so a value renders, and is offered further suggestions, in
+;; the family it was typed in.
+;;
+;; Deliberately LENIENT, because nobody types a dimension carefully
+;; twice: the inch mark is optional and may be two apostrophes, the
+;; dash after the feet mark is optional, inches may be decimal, and a
+;; fraction may be spaced or dashed.  4'4.5, 4'-4 1/2", 4' 4-1/2 and
+;; 52.5 all read; what gets STAMPED is always ds:format's canonical
+;; spelling, never what was typed.  nil when the text is not a
+;; measurement at all, or reads as nothing at all.
+(defun ds:parse (s / n apos feetstr rest hasfeet feet inch eighths)
+  (setq s (vl-string-trim " \t" s)
+        n (strlen s))
+  ;; the inch mark, however it was spelled, or left off entirely
+  (cond
+    ((and (>= n 2) (= (substr s (1- n) 2) "''"))
+     (setq s (substr s 1 (- n 2))))
+    ((and (>= n 1) (= (substr s n 1) "\""))
+     (setq s (substr s 1 (1- n)))))
+  (setq s (vl-string-trim " \t" s) hasfeet nil feet 0.0)
+  (if (setq apos (vl-string-search "'" s))
     (progn
-      (setq spc (vl-string-search " " rest))
-      (if spc
-        (setq wholestr (substr rest 1 spc)
-              fracstr  (vl-string-trim " " (substr rest (+ spc 2))))
-        (setq wholestr rest fracstr nil))
-      (if (or (= wholestr "") (not (ds:digits-p wholestr)))
-        (setq ok nil)
-        (setq wholenum (atoi wholestr)))
-      (if (and ok fracstr)
-        (progn
-          (setq slash (vl-string-search "/" fracstr))
-          (if (null slash)
-            (setq ok nil)
-            (progn
-              (setq numstr (substr fracstr 1 slash)
-                    denstr (substr fracstr (+ slash 2)))
-              (if (or (not (ds:digits-p numstr)) (not (ds:digits-p denstr))
-                      (= (atoi denstr) 0))
-                (setq ok nil)
-                (setq num (atoi numstr) den (atoi denstr)
-                      frac (/ (float num) (float den))))))))))
-  (if ok
+      (setq feetstr (vl-string-trim " \t" (substr s 1 apos))
+            rest    (vl-string-trim " \t-" (substr s (+ apos 2))))
+      (if (ds:num-p feetstr)
+        (setq feet (atof feetstr) hasfeet T)
+        (setq rest nil)))                  ; feet that are not a number
+    (setq rest (vl-string-trim " \t" s)))
+  (setq inch (if rest (ds:inches rest)))
+  ;; an empty inches part is only an answer when feet carried it
+  (if (and inch (or hasfeet (/= rest "")))
     (progn
-      (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feetnum 12.0) wholenum frac)))))
-      (list eighths hasfeet))
-    nil))
+      (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
+      (if (> eighths 0) (list eighths hasfeet)))))
 
 ;; Render TOTAL-EIGHTHS (an integer count of 1/8" units) back to text,
 ;; in the HASFEET family the source text used -- feet notation, or
@@ -45341,6 +45380,13 @@
     (T
      (strcat (itoa whole) "\""))))
 
+;; What S MEANS, in the canonical spelling -- the round trip through
+;; ds:parse and ds:format that turns 4'4.5 into 4'- 4 1/2".  nil when
+;; S is not a measurement.  Every typed answer goes through this, so
+;; nothing but a canonical spelling is ever stamped or remembered.
+(defun ds:read (s / p)
+  (if (setq p (ds:parse s)) (ds:format (car p) (cadr p))))
+
 ;; The RULER TIER an offset of OFFSET eighths from the current value
 ;; falls in -- 'jump for a whole inch or more, 'half/'quarter/'eighth
 ;; for the finer steps, biggest to smallest.  This is what a row's
@@ -45360,22 +45406,20 @@
 ;; once it also has the current row to place among them.
 (defun ds:suggestions (total-eighths hasfeet / out i off)
   (setq out nil)
-  (if (not hasfeet)
+  ;; every eighth of an inch for a WHOLE INCH either side, whatever
+  ;; family the value is in: 44" offers 43" through 45", the inch
+  ;; before as well as the inch after, because a measurement is read
+  ;; back off the tape as often downward as up
+  (setq i 1)
+  (while (<= i 8)
+    (setq out (cons (list (- total-eighths i) (ds:tier i)) out))
+    (setq out (cons (list (+ total-eighths i) (ds:tier i)) out))
+    (setq i (1+ i)))
+  ;; feet as well?  then the 2" and 3" jumps beyond that inch, each
+  ;; side -- the 1" jump is already the end of the sweep above
+  (if hasfeet
     (progn
-      ;; bare inches: every eighth from here up to the next whole inch
-      (setq i 1)
-      (while (<= i 8)
-        (setq out (cons (list (+ total-eighths i) (ds:tier i)) out))
-        (setq i (1+ i))))
-    (progn
-      ;; feet involved: eighths up and down for up to 7/8" a side...
-      (setq i 1)
-      (while (<= i 7)
-        (setq out (cons (list (- total-eighths i) (ds:tier i)) out))
-        (setq out (cons (list (+ total-eighths i) (ds:tier i)) out))
-        (setq i (1+ i)))
-      ;; ...then whole-inch jumps of 1, 2 and 3 beyond that, each side
-      (setq i 1)
+      (setq i 2)
       (while (<= i 3)
         (setq off (* i 8))
         (setq out (cons (list (- total-eighths off) 'jump) out))
@@ -45558,23 +45602,33 @@
         (setq best (car r) bd d))))
   best)
 
-;; One validated free-text answer.  PROMPT already carries its leading
-;; \n and trailing ": ".  Loops on anything that is not one of the
-;; four canonical forms.
-(defun ds:ask-raw (prompt / v)
+;; What to say when something typed is not a measurement at all.  The
+;; examples are the lazy spellings on purpose: the ones worth showing
+;; are the ones that save keystrokes.
+(defun ds:say-unread (v)
+  (princ (strcat "\nDIMSTAMP: \"" v "\" is not a measurement - try 44,"
+                 " 44.5, 44 1/2, 4'4.5 or 4'-4 1/2\".")))
+
+;; One free-text answer, read as loosely as ds:parse reads and handed
+;; back in the CANONICAL spelling.  PROMPT already carries its leading
+;; \n and trailing ": ".  A lazy answer is echoed as what it was taken
+;; to mean, so a wrong guess is caught by eye and not by the drawing.
+(defun ds:ask-raw (prompt / v canon)
   (setq v (getstring T prompt))
   (if lzd:ask (lzd:ask prompt v) v)
-  (if (ds:parse v)
-    v
+  (if (setq canon (ds:read v))
     (progn
-      (princ (strcat "\nDIMSTAMP: \"" v "\" is not one of the four forms"
-                     " (34\", 3'-4\", 34 1/2\", 3'- 4 1/2\") - try again."))
+      (if (/= canon (vl-string-trim " \t" v))
+        (princ (strcat "\n  read as " canon)))
+      canon)
+    (progn
+      (ds:say-unread v)
       (ds:ask-raw prompt))))
 
 ;; The very first text of a run: no default, no ruler yet -- nothing
 ;; exists to build one around.
 (defun ds:ask-first ()
-  (ds:ask-raw "\nText, e.g. 34\", 3'-4\", 34 1/2\" or 3'- 4 1/2\": "))
+  (ds:ask-raw "\nText - 4'-4 1/2\", or just 4'4.5: "))
 
 ;; The second-and-later prompt: one click or one typed line does every
 ;; job.  Returns nil for Enter (done), (adopt TEXT) for a new current
@@ -45582,7 +45636,7 @@
 ;; point to stamp the CURRENT text at.  BOX and ROWS are the live
 ;; ruler's hit-test data from ds:draw-ruler/ds:redraw-ruler; HASFEET is
 ;; the current value's family, for formatting a ruler pick.
-(defun ds:next-action (box rows hasfeet / pk hitval)
+(defun ds:next-action (box rows hasfeet / pk hitval canon)
   (initget 128)
   (setq pk (getpoint (strcat "\nClick to place text, click the ruler to"
                              " change it, or type new text (Enter when"
@@ -45591,12 +45645,13 @@
   (cond
     ((null pk) nil)
     ((= (type pk) 'STR)
-     (if (ds:parse pk)
-       (list 'adopt pk)
+     (if (setq canon (ds:read pk))
        (progn
-         (princ (strcat "\nDIMSTAMP: \"" pk "\" is not one of the four"
-                        " forms (34\", 3'-4\", 34 1/2\", 3'- 4 1/2\") -"
-                        " try again."))
+         (if (/= canon (vl-string-trim " \t" pk))
+           (princ (strcat "\n  read as " canon)))
+         (list 'adopt canon))
+       (progn
+         (ds:say-unread pk)
          (ds:next-action box rows hasfeet))))
     (T
      (setq hitval (ds:ruler-hit pk box rows))
