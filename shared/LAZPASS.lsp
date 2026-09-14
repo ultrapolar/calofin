@@ -99664,7 +99664,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.21")
+(setq *lazpanel-version* "v3.22")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -99675,7 +99675,9 @@
 ;;;  Also editable, but living beside the code that reads them because
 ;;;  they ARE the panel rather than settings of it:
 ;;;    lzp:*captions*   one caption per command -- the only place they live
-;;;    lzp:*groups*     the pages, as columns of command names
+;;;    lzp:*groups*     the pages, as columns of command names -- an
+;;;                     entry may be a headed run, ("Revert" "X" ...),
+;;;                     which labels part of a column from inside it
 ;;;  tools/check_registry.py --fix maintains both; the VB palette's
 ;;;  catalog is generated from them (tools/gen_ui_data.py).
 
@@ -99950,14 +99952,18 @@
       "CPERPPTS"
       )
      ("Converters"
-      "XFTCONV"
-      "SOCONV"
-      "VSCONV"
-      "G2MCONV"
-      "XFTRECONV"
-      "SORECONV"
-      "VSRECONV"
-      "G2MRECONV"
+      ("Convert"
+       "XFTCONV"
+       "SOCONV"
+       "VSCONV"
+       "G2MCONV"
+       )
+      ("Revert"
+       "XFTRECONV"
+       "SORECONV"
+       "VSRECONV"
+       "G2MRECONV"
+       )
       )
      ("Dims & check"
       "AUTODIM"
@@ -100004,14 +100010,18 @@
     )
      ("Spa"
      ("Converters"
-      "XFTCONV"
-      "SOCONV"
-      "VSCONV"
-      "G2MCONV"
-      "XFTRECONV"
-      "SORECONV"
-      "VSRECONV"
-      "G2MRECONV"
+      ("Convert"
+       "XFTCONV"
+       "SOCONV"
+       "VSCONV"
+       "G2MCONV"
+       )
+      ("Revert"
+       "XFTRECONV"
+       "SORECONV"
+       "VSRECONV"
+       "G2MRECONV"
+       )
       )
      ("Shape, dims & check"
       "SPA"
@@ -100205,10 +100215,38 @@
   (foreach g lzp:*groups*
     (if (= (car g) name)
         (foreach col (cdr g)
-          (foreach c (cdr col) (setq out (cons c out))))))
+          (foreach c (lzp:col-commands col) (setq out (cons c out))))))
   (reverse out))
 
-;; A page's columns: (heading cmd ...) each.
+;; T when every entry in COL is a headed run rather than a bare command
+;; -- the Converters column, and nothing else today.  Such a column
+;; carries its own labels inside it, so the renderer gives it a plain
+;; wrapper instead of a labelled box: "Converters" above "Convert"
+;; above "Revert" is three frames saying one thing.
+(defun lzp:col-runs-p (col / e out)
+  (setq out (and (cdr col) T))
+  (foreach e (cdr col)
+    (if (not (listp e)) (setq out nil)))
+  out)
+
+;; The commands in one column, flat.
+;;
+;; A column entry is EITHER a command name or a headed run of them --
+;; ("Revert" "XFTRECONV" ...) -- which is how the Converters column
+;; carries its two halves under their own labels without becoming two
+;; columns side by side (there is no width for that; see the panel
+;; README).  Everything that walks a column for the commands in it goes
+;; through here, so the two shapes are read in one place rather than in
+;; every caller.
+(defun lzp:col-commands (col / e c out)
+  (foreach e (cdr col)
+    (if (listp e)
+      (foreach c (cdr e) (setq out (cons c out)))    ; a headed run
+      (setq out (cons e out))))                      ; a plain command
+  (reverse out))
+
+;; A page's columns: (heading cmd ...) each, where a cmd may itself be
+;; a headed run -- lzp:col-commands is what flattens one.
 (defun lzp:group-columns (name / g out)
   (foreach g lzp:*groups*
     (if (= (car g) name) (setq out (cdr g))))
@@ -100220,7 +100258,7 @@
 (defun lzp:commands ( / g col c out)
   (foreach g lzp:*groups*
     (foreach col (cdr g)
-      (foreach c (cdr col)
+      (foreach c (lzp:col-commands col)
         (if (not (member c out))
           (setq out (cons c out))))))
   (reverse out))
@@ -100565,7 +100603,7 @@
       (if row (setq out (cons (reverse row) out)))
       (reverse out))))
 
-(defun lzp:dcl-one (g / out c col cols)
+(defun lzp:dcl-one (g / out c n col cols)
   ;; consed newest-first and reversed at the end, so this seed list
   ;; reads BACKWARDS: the dialog line last here comes out first
   (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
@@ -100615,12 +100653,32 @@
      (setq out (cons "  : boxed_row {" out))
      (setq out (cons (strcat "    label = \"" (car g) "\";") out))
      (foreach col (cdr g)
-       (setq out (cons "    : boxed_column {" out))
-       (setq out (cons (strcat "      label = \"" (car col) "\";") out))
+       ;; a column that is nothing but headed runs labels itself from
+       ;; the inside, so the outer box carries no name of its own
+       (if (lzp:col-runs-p col)
+         (setq out (cons "    : column {" out))
+         (progn
+           (setq out (cons "    : boxed_column {" out))
+           (setq out (cons (strcat "      label = \"" (car col) "\";")
+                           out))))
        (foreach c (cdr col)
-         (setq out (cons (strcat "      : button { label = \"" c
-                                 "\"; key = \"" c "\"; }")
-                         out)))
+         (if (listp c)
+           ;; a HEADED RUN inside the column: its own labelled box, so
+           ;; the Converters column can say Convert above one half and
+           ;; Revert above the other without being two columns -- there
+           ;; is no width on Pool for a sixth column.
+           (progn
+             (setq out (cons "      : boxed_column {" out))
+             (setq out (cons (strcat "        label = \"" (car c) "\";")
+                             out))
+             (foreach n (cdr c)
+               (setq out (cons (strcat "        : button { label = \"" n
+                                       "\"; key = \"" n "\"; }")
+                               out)))
+             (setq out (cons "      }" out)))
+           (setq out (cons (strcat "      : button { label = \"" c
+                                   "\"; key = \"" c "\"; }")
+                           out))))
        (setq out (cons "    }" out)))
      (setq out (cons "  }" out))))
   (setq out (cons "  spacer;" out))
