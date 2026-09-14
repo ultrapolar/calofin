@@ -1445,7 +1445,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'AB-BACK)
         ((null v) (if dflt dflt (abcdef:askkw msg kws shown dflt back)))
         (T v)))

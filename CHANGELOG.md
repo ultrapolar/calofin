@@ -200,6 +200,64 @@ folded, and no file that accepts the keyword and then only tests for
 `"Back"`. The other half of the same test walks each threaded chain
 backwards through the interpreter, at both tiers.
 
+## v3.11 -- 2026-09-14
+
+An audit of the two passes above, and what it turned up.
+
+**Nothing was broken, and the way it was safe was luck.** The 95
+`lzd:watch` calls went in straight after a `(setq ss (ssget ...))`,
+which in this tree is very often the last form of a `(progn ...)` that
+is the then-branch of an `(if (null ss) ...)`. Thirty of them landed
+exactly there. Every one happened to sit where the value is discarded --
+LINGUTTER's `lg:highlight` ends with a bare `ss`, POINTRENAMER's and
+wcalst's are `cond` clauses with more forms after them -- so nothing
+misbehaved. That is not safety, it is the absence of an accident.
+`lzd:watch` returns its argument now and the injected form carries an
+else branch, `(if lzd:watch (lzd:watch ss) ss)`, so the whole insertion
+evaluates to the variable whether LAZDIAG is loaded or not. The same for
+`lzd:ask`. `check_lazdiag` grew the audit that found it, so a future
+injection cannot land in an `(and ...)`, as an `(if ...)` else branch,
+or last in a body without failing `make check`.
+
+**`enclosing_call` answered 0 for two different questions** -- "the
+enclosing form starts at byte 0" and "there is no enclosing form" -- and
+the new audit read the second meaning, silently skipping any form inside
+a defun that opened at the first byte of a file. It returns -1 for "none"
+now. The audit missed a planted fault until it did.
+
+Four in the engine, each one a path a real drawing can take:
+
+* an LWPOLYLINE with no vertices became a POLYLINE with no VERTEX
+  between it and its SEQEND -- not a degenerate shape, a file AutoCAD
+  argues with. Dropped instead.
+* two failures inside one second took the same file name, and the second
+  report overwrote the first: the drafter would send one file believing
+  it was both. `lzd:free` walks to `-2`, `-3` and so on. (The VM's
+  `findfile` could not see a file the VM itself had written, so the
+  guard could not have been tested either.)
+* `lzd:gather` walks the drawing from an ename snapshotted before the
+  run, and a tool that erased that entity on its way past left `entnext`
+  walking from something gone. Caught per-walk, so a drawing that will
+  not walk costs the geometry and not the whole report.
+* an MTEXT with no group 1 at all reached `(strlen nil)` and was lost to
+  the catch for no reason.
+
+The DXF gained a **STYLE table**. Every TEXT in a report names STANDARD
+by leaving group 7 off, and this file exists to be opened on somebody
+else's machine by somebody who was told to send it; ten lines so it
+cannot argue about a style it never defined. The last resort gained an
+**undo group**, so sixty lines of text placed in a drawing come back out
+with one U rather than sixty.
+
+**`tests/test_lazdiag_sweep.py` is the verification that matters.**
+`check_lazdiag` reads the tree and says the calls are there, which is a
+claim about the text. The sweep drives 63 headline commands to their
+first prompt, hands each a genuine error instead of an answer, and
+checks a DXF came back that parses end to end, carries that error, told
+the drafter to send it, and left no undo group, error mode or entity
+behind. At both tiers. The roster is computed and the exclusions are
+read out of `test_cancel_paths.py`, so a command added later is swept
+by construction.
 ## v3.11 -- 2026-09-11
 
 Three changes to the AB perimeter fitters, all of them about the same

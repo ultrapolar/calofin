@@ -162,7 +162,7 @@
                           (t " (or NA if not measured)"))
                     (if back " [Back]" "")
                     ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CBK-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
@@ -178,7 +178,7 @@
   (setq v (getkword (strcat "\n" msg " [" shown
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'CBK-BACK)
         ((null v) (if dflt dflt (cbk:askkw msg kws shown dflt back)))
         (t v)))
@@ -202,7 +202,7 @@
       (if back (initget 6 "Back Undo") (initget 6))
       (setq v (getdist (strcat "\n" msg (if back " [Back]" "")
                                " <" (rtos last) ">: ")))
-      (if lzd:ask (lzd:ask msg v))
+      (if lzd:ask (lzd:ask msg v) v)
       (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CBK-BACK)
             ((null v) last)
             (t v)))))
@@ -218,7 +218,7 @@
   ;; section 1 -- the wording itself is section 3's Placement question
   (setq v (getpoint (strcat "\nInsertion base point"
                             (if back " [Back]" "") " <0,0>: ")))
-  (if lzd:ask (lzd:ask "cbk:askbase" v))
+  (if lzd:ask (lzd:ask "cbk:askbase" v) v)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CBK-BACK)
         ((null v) (list 0.0 0.0 0.0))
         (t (list (car v) (cadr v) (if (caddr v) (caddr v) 0.0)))))

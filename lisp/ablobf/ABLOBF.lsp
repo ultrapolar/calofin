@@ -66,7 +66,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.1")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.2")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -555,7 +555,18 @@
 ;; an end can be named by typing that number instead of hunting for the
 ;; point.  Points with no number of their own get the next count.
 (defun abl:add-point (p nm / num)
-  (setq num         (abl:num-in nm)
+  ;; REALS, always.  AutoLISP divides two integers as integers, and the
+  ;; segment math turns on one such division: abl:seg-dist projects a
+  ;; point onto a span with (/ (dot w v) len2), which on all-integer
+  ;; coordinates collapses to 0 and reports a point sitting EXACTLY on
+  ;; the middle of a span as a whole half-span away.  Five collinear
+  ;; points written (10 0 0) rather than (10 0.0 0.0) then come back as
+  ;; four stubs instead of one line.  AutoCAD's own DXF carries reals,
+  ;; so this is only reachable from geometry another routine entmade -
+  ;; but one float here is cheaper than trusting every producer, and it
+  ;; is the ONLY door points come in by.
+  (setq p           (list (float (car p)) (float (cadr p)))
+        num         (abl:num-in nm)
         npt         (1+ npt)
         pts         (cons p pts)
         abl-ptnames (cons (cons p (if (and nm (/= nm "")) nm (itoa npt)))
@@ -593,12 +604,22 @@
   (if lo (cons lo hi)))
 
 ;; The point in QS whose survey number is N, or nil when no point
-;; carries it.  Two points cannot share a number in a sane survey; if
-;; they do, the first one read wins and the caller says which it took.
+;; carries it.  The first one read wins -- see abl:count-key, which is
+;; what stops that being a silent choice.
 (defun abl:pt-of-key (n qs / out q)
   (foreach q qs
     (if (and (null out) (= (abl:pt-key q) n)) (setq out q)))
   out)
+
+;; How many points in QS carry survey number N.  Two points sharing one
+;; is a mistake in the SURVEY, not in the drawing, and typing that
+;; number is the moment it becomes visible -- so it is counted and said
+;; rather than resolved quietly in favour of whichever was read first.
+(defun abl:count-key (n qs / c q)
+  (setq c 0)
+  (foreach q qs
+    (if (= (abl:pt-key q) n) (setq c (1+ c))))
+  c)
 
 ;; What to call the survey point at Q.
 (defun abl:pt-name (q / nm p)
@@ -1628,7 +1649,7 @@
       (if (null pick)
         (progn
           (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
-          (if lzd:watch (lzd:watch sel))
+          (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -1701,7 +1722,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *ABL-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "abl:ask-tol" tol))
+  (if lzd:ask (lzd:ask "abl:ask-tol" tol) tol)
   (cond
     ((abl:back-kw tol) 'ABL-BACK)
     (T
@@ -1723,7 +1744,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "abl:ask-pct" pct))
+  (if lzd:ask (lzd:ask "abl:ask-pct" pct) pct)
   (cond
     ((abl:back-kw pct) 'ABL-BACK)
     ((null pct) def)
@@ -1739,7 +1760,7 @@
                            (if *ABL-MAX-ARCS* (itoa *ABL-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "abl:ask-cap" mx))
+  (if lzd:ask (lzd:ask "abl:ask-cap" mx) mx)
   (cond
     ((abl:back-kw mx) 'ABL-BACK)
     (T
@@ -1770,7 +1791,7 @@
     (setq v (getpoint (strcat "\n  " msg " [Number"
                               (if back "/Back" "") "] <Pt."
                               (abl:pt-name dflt) ">: ")))
-    (if lzd:ask (lzd:ask msg v))
+    (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((abl:back-kw v) (setq out 'ABL-BACK))
       ((null v) (setq out dflt))                  ; Enter: the offer
@@ -1786,7 +1807,15 @@
          ((null v) (setq done nil))               ; Enter: back to the pick
          ((setq q (abl:pt-of-key v dpts))
           (setq out q)
-          (princ (strcat "  - Pt." (abl:pt-name q))))
+          (princ (strcat "  - Pt." (abl:pt-name q)))
+          (if (> (abl:count-key v dpts) 1)
+            (princ (strcat "\n    (WARNING: " (itoa (abl:count-key v dpts))
+                           " selected points carry the number " (itoa v)
+                           " - taking the one at "
+                           (rtos (car q) 2 2) "," (rtos (cadr q) 2 2)
+                           ".  Two points with one number is a fault in"
+                           " the survey; click the end instead to be"
+                           " sure of it.)"))))
          (T
           (princ (strcat "\n  No selected point carries the number "
                          (itoa v) " - try again."))
@@ -2033,7 +2062,7 @@
   ;; letting some in here would spend the pickfirst set on objects the
   ;; classifier goes on to ignore
   (setq abl-pick (ssget "_I" '((0 . "POINT,INSERT"))))
-  (if lzd:watch (lzd:watch abl-pick))
+  (if lzd:watch (lzd:watch abl-pick) abl-pick)
 
   ;; one undo group around the whole fit - a U after ABLOBF takes back
   ;; the outline, the labels and the markers in one step (the stale
@@ -2207,7 +2236,7 @@
                        *ABL-POINT-LAYER* ")."))
         (princ "\n  Select objects: ")
         (setq ss (ssget '((0 . "POINT,INSERT"))))
-        (if lzd:watch (lzd:watch ss))))
+        (if lzd:watch (lzd:watch ss) ss)))
     (if (null ss)
       (princ "\nNo points selected - there is nothing to fit a run through.")
       (progn

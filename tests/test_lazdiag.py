@@ -167,7 +167,11 @@ def g(ent, code):
 
 def failing_run(vm, tool="POOL", ver="v2.7",
                 msg="bad argument type: numberp: nil"):
-    vm.loads('(lzd:report "%s" "%s" "%s")' % (tool, ver, msg))
+    """ver=None is a tool with no version banner, and has to reach the
+    Lisp as nil -- interpolated as a string it arrives as "None", which
+    is a version, and the no-banner path is never taken."""
+    vm.loads('(lzd:report "%s" %s "%s")'
+             % (tool, ('"%s"' % ver) if ver is not None else "nil", msg))
 
 
 print("a failure writes a DXF into Downloads")
@@ -213,6 +217,15 @@ check("CONTINUOUS is defined before a layer names it",
       "CONTINUOUS" in layers)
 check("the report has a layer of its own",
       "CALOFIN-ERROR" in used, sorted(used))
+# every TEXT here names STANDARD by leaving group 7 off, so the file has
+# to define it rather than hope the machine it is opened on does
+tbl = sec["TABLES"]
+check("the STANDARD text style the TEXT entities rely on is defined",
+      "STANDARD" in {v for c, v in tbl if c == 2},
+      sorted({v for c, v in tbl if c == 2}))
+check("...and no entity names a style the file does not define",
+      not [e for e in ents if g(e, 7)
+           and g(e, 7) not in {v for c, v in tbl if c == 2}])
 
 print("the geometry the run drew, copied shape for shape")
 
@@ -524,6 +537,23 @@ check("...and it is the whole report, transcript included",
       and "north-east one" in text)
 check("...with a word about erasing it afterwards",
       "erase them" in said(vm), said(vm)[-200:])
+# sixty lines of text into somebody's drawing should come back out with
+# one U, not sixty
+# undo_log is the ActiveX mark; a (command "_.UNDO" ...) group shows up
+# in vm.commands, which is the spelling STANDARDS section 5 asks for
+undos = [c for c in vm.commands if c and c[0] == "_.UNDO"]
+check("...and the whole paste is inside ONE undo group",
+      undos == [["_.UNDO", "_Begin"], ["_.UNDO", "_End"]], undos)
+
+vm3 = newvm()
+vm3.loads('(lzd:begin "POOL" "v2.7")')
+vm3.loads('''(entmakex (list '(0 . "MTEXT") '(8 . "POOL")
+              '(10 1.0 1.0 0.0) '(40 . 2.0)))''')      # no group 1 at all
+failing_run(vm3)
+ents = entities(sections(pairs(only_file(vm3)[1]))["ENTITIES"])
+check("an MTEXT with no text at all is still copied, not dropped",
+      [e for e in ents if g(e, 0) == "TEXT" and g(e, 8) == "POOL"],
+      "the entity was lost to the catch")
 
 vm2 = newvm(profile=None)
 vm2.sysvars["DWGPREFIX"] = r"C:\jobs"
@@ -601,6 +631,119 @@ vm.run("c:LAZDIAG", [])
 check("c:LAZDIAG's own wired handler writes a report",
       any("LAZDIAG-" in p and "-error-" in p for p in vm.files),
       list(vm.files))
+
+print("the edges: what a drawing can hand the writer")
+
+# An empty drawing.  No geometry at all means no extent, and every
+# placement and text-height sum downstream divides by it.
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+failing_run(vm)
+body = only_file(vm)[1]
+ents = entities(sections(pairs(body))["ENTITIES"])
+check("an empty drawing still produces a readable report",
+      [e for e in ents if g(e, 8) == "CALOFIN-ERROR"], "no report text")
+check("...with a text height that is not zero",
+      all(float(g(e, 40)) > 0 for e in ents if g(e, 0) == "TEXT"),
+      [g(e, 40) for e in ents if g(e, 0) == "TEXT"][:3])
+
+# One point of geometry: the extent is a dot, so its diagonal is zero.
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads("""(entmakex (list '(0 . "POINT") '(8 . "POOL")
+              '(10 5.0 5.0 0.0)))""")
+failing_run(vm)
+ents = entities(sections(pairs(only_file(vm)[1]))["ENTITIES"])
+check("a single point does not divide the layout by zero",
+      all(float(g(e, 40)) > 0 for e in ents if g(e, 0) == "TEXT"),
+      "a zero-size extent produced a zero text height")
+
+# Group codes that are simply not there.  entget gives what the entity
+# has, and a hand-built or foreign entity need not have all of it.
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads("""(entmakex (list '(0 . "ARC") '(8 . "POOL")
+              '(10 0.0 0.0 0.0) '(40 . 5.0)))""")          # no 50 / 51
+vm.loads("""(entmakex (list '(0 . "LINE") '(8 . "POOL")
+              '(10 1.0 1.0 0.0)))""")                      # no 11
+failing_run(vm)
+body = only_file(vm)[1]
+check("an ARC with no start or end angle still writes a number",
+      "\n 50\n" in body and "\n 51\n" in body, "missing angle groups")
+check("...and the file still parses end to end",
+      pairs(body)[-1] == (0, "EOF"))
+
+# An LWPOLYLINE with no vertices at all.  A POLYLINE with no VERTEX
+# between it and its SEQEND is a file AutoCAD argues with.
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads("""(entmakex (list '(0 . "LWPOLYLINE") '(8 . "POOL")
+              '(90 . 0) '(70 . 0)))""")
+failing_run(vm)
+ents = entities(sections(pairs(only_file(vm)[1]))["ENTITIES"])
+check("an empty polyline is dropped, not written headless",
+      not [e for e in ents if g(e, 0) == "POLYLINE"],
+      "a POLYLINE with no VERTEX reached the file")
+
+# Text that would end a DXF value early.  A newline inside a group 1
+# shifts every code after it by one line and the file will not load.
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:ask "a prompt\nwith a newline\tand a tab" "an\nanswer")')
+failing_run(vm)
+body = only_file(vm)[1]
+check("a newline in a prompt cannot break the pairing",
+      pairs(body)[-1] == (0, "EOF"), "the file stopped parsing")
+check("...and the text is still there, flattened to one line",
+      "with a newline" in body)
+
+print("the edges: what a run can hand the namer")
+
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+failing_run(vm, "POOL", None)
+check("a tool with no version banner still gets a file name",
+      "POOL-noversion-error-" in base(only_file(vm)[0]), base(only_file(vm)[0]))
+
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "091026 REV25")')
+failing_run(vm, "POOL", "091026 REV25")
+check("a version with a space in it is made safe for a file system",
+      " " not in base(only_file(vm)[0])
+      and "091026-REV25" in base(only_file(vm)[0]), base(only_file(vm)[0]))
+
+vm = newvm()
+failing_run(vm, "A/B\\C:D", "v1")
+check("a command name that is all path characters cannot escape the folder",
+      "/" not in base(only_file(vm)[0])
+      and ":" not in base(only_file(vm)[0])
+      and only_file(vm)[0].startswith(DOWNLOADS + "\\"), only_file(vm)[0])
+
+# Two failures inside one second used to take the same name, and the
+# second report overwrote the first: the drafter sent one file believing
+# it was both.  The VM's clock is fixed, so every run here is that case.
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+failing_run(vm)
+vm.loads('(lzd:begin "POOL" "v2.7")')
+failing_run(vm)
+check("two failures in the same second write two files, not one",
+      len(vm.files) == 2, sorted(base(f) for f in vm.files))
+
+print("the edges: a drawing the walk cannot finish")
+
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads("(defun lzd:drawn ( / e out n) (car 1))")   # the walk blows up
+vm.loads('(lzd:ask "Pool length" "25 ft")')
+vm.printed.clear()
+failing_run(vm)
+check("a drawing that will not walk costs the geometry, not the report",
+      len(vm.files) == 1, "the whole report was lost")
+if vm.files:
+    check("...and the transcript and the error still arrive",
+          "Pool length" in only_file(vm)[1]
+          and "numberp" in only_file(vm)[1])
 
 print("the checker that keeps this true for the tool written next")
 

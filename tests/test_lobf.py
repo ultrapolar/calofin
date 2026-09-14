@@ -321,7 +321,102 @@ check("a bare POINT run numbers its points in reading order",
       'Pt. 6 set aside' in txt, txt)
 
 # ----------------------------------------------------------------------
-# 5. the file's own rules
+# 5. the edges
+# ----------------------------------------------------------------------
+print("the edges")
+
+# A cloud with no direction in it at all: four corners of a square fit
+# every direction equally well.  Something has to come back, and what
+# must NOT happen is a confident answer with no warning on it.
+vm = vm_with(point(0, 0) + point(10, 0) + point(10, 10) + point(0, 10))
+txt = run(vm, [None, "None"])
+check("a cloud with no best direction is called out, not answered flat",
+      'CAUTION' in txt, txt)
+
+# Coordinates a long way from the origin: the fit is built from
+# differences, so it must not lose the shape to float noise out there.
+FAR = [(1.0e6, 1.0e6), (1.0e6 + 100, 1.0e6 + 1), (1.0e6 + 200, 1.0e6)]
+vm = vm_with(''.join(point(x, y) for x, y in FAR))
+txt = run(vm, [None, "1"])
+kept = live(vm, 'XLINE')
+check("a survey a million units from the origin still fits",
+      len(kept) == 1, len(kept))
+d = grp(kept[0][1], 11) if kept else None
+check("...and comes back roughly along the run, not along an axis",
+      d is not None and abs(d[1] / d[0]) < 0.05, d)
+
+# Enough points that the O(n^2) drop-one and the hull walk both matter.
+MANY = [(float(i * 7), 0.0) for i in range(100)]
+vm = vm_with(''.join(point(x, y) for x, y in MANY))
+txt = run(vm, [None, "1"])
+check("100 collinear points fit without complaint",
+      len(live(vm, 'XLINE')) == 1 and 'CAUTION' not in txt, txt[-200:])
+
+# Every guard in the file is written against an exact zero.  Several of
+# them read lobf:*tiny*, which is a knob - so they have to hold when it
+# is set to the one value that would switch a < off.
+vm = vm_with()
+vm.loads('(setq lobf:*tiny* 0.0)')
+check("at lobf:*tiny* 0, coincident points still refuse a direction",
+      call(vm, f'(lobf:tls {lisp_pts([(5, 5, "1"), (5, 5, "2")])})')
+      in (None, []))
+cands = call(vm, f'(lobf:candidates {lisp_pts(ROW)})')
+check("...and a zero-width band is still not divided by",
+      call(vm, '(lobf:ratio (cadr (lobf:candidates '
+                + lisp_pts(ROW) + ')))') is None)
+check("...and the run still completes on that setting",
+      'point(s) fitted' in run(vm_with(DRAWING), [None, "None"]))
+
+# ----------------------------------------------------------------------
+# 6. what one run leaves for the next
+# ----------------------------------------------------------------------
+print("what one run leaves for the next")
+
+# Everything LOBF draws is stamped so that only its own work is ever
+# erased again.  A run that is escaped out of leaves its candidates
+# standing; the next run sweeps them, and sweeps nothing else.
+vm = vm_with(DRAWING)
+# the layer is made here rather than through the tool's own
+# ensure-layer, which is lobf: in lisp/ and cal: in the shared build
+vm.loads('''(entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+               '(100 . "AcDbLayerTableRecord") '(2 . "LOBF-PREVIEW")
+               '(70 . 0) '(62 . 8) '(6 . "Continuous")))''')
+vm.loads("(lobf:xline '(0.0 0.0) '(1.0 0.0) lobf:*preview-layer* 3)")
+vm.loads("""(entmake (list '(0 . "LINE") '(8 . "LOBF-PREVIEW")
+               '(10 0.0 0.0 0.0) '(11 9.0 9.0 0.0)))""")
+txt = run(vm, [None, "None"])
+left = live(vm, layer='LOBF-PREVIEW')
+check("a candidate left by a run that did not finish is swept",
+      'did not finish' in txt, txt[:400])
+check("...before the undo group opens, so one U cannot put it back",
+      txt.index('did not finish') < txt.index('LOBF - the construction'),
+      txt[:300])
+check("...and the sweep says so rather than doing it silently",
+      'off layer LOBF-PREVIEW' in txt, txt[:400])
+check("...and it spares what the drafter drew on the same layer",
+      len(left) == 1 and grp(left[0][1], 0) == 'LINE',
+      [grp(d, 0) for _, d in left])
+
+# All keeps three lines, and keeping them means keeping them: they move
+# off the scaffolding layer with every other result, or the sweep above
+# would eat an answer somebody asked for.
+vm = vm_with(DRAWING)
+run(vm, [None, "All"])
+check("All keeps its three off the scaffolding layer",
+      len(live(vm, 'XLINE', 'LOBF')) == 3
+      and live(vm, layer='LOBF-PREVIEW') == [],
+      (len(live(vm, 'XLINE', 'LOBF')), len(live(vm, layer='LOBF-PREVIEW'))))
+check("...still in their own colours, which is why all three were kept",
+      len({grp(d, 62) for _, d in live(vm, 'XLINE', 'LOBF')}) == 3,
+      [grp(d, 62) for _, d in live(vm, 'XLINE', 'LOBF')])
+n_kept = len(live(vm, 'XLINE', 'LOBF'))
+run(vm, [None, "None"])
+check("...and a later run does not sweep them away",
+      len(live(vm, 'XLINE', 'LOBF')) == n_kept,
+      len(live(vm, 'XLINE', 'LOBF')))
+
+# ----------------------------------------------------------------------
+# 7. the file's own rules
 # ----------------------------------------------------------------------
 print("the file's own rules")
 

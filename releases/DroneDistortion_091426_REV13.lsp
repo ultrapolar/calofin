@@ -163,7 +163,7 @@
   ;; selection - skip straight to the height question; Back from there
   ;; re-opens an interactive pick.
   (setq ss (ssget "_I"))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (setq stage (if ss 2 1) done nil)
   (while (not done)
     (cond
@@ -172,7 +172,7 @@
       ((= stage 1)
        (princ "\nSelect the spa / obstacle to correct (one or more objects), then Enter.")
        (setq ss (ssget))
-       (if lzd:watch (lzd:watch ss))
+       (if lzd:watch (lzd:watch ss) ss)
        (if (null ss)
          (progn (princ "\nNothing selected.") (setq done T))
          (setq stage 2)))

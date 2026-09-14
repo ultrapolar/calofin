@@ -325,12 +325,12 @@
       ;; a highlight made before the command was typed (pickfirst) is
       ;; the perimeter - only ask when there is none
       (setq ss-old (ssget "_I"))
-      (if lzd:watch (lzd:watch ss-old))
+      (if lzd:watch (lzd:watch ss-old) ss-old)
       (if (null ss-old)
         (progn
           (princ "\nHighlight the perimeter to be replaced: ")
           (setq ss-old (ssget))
-          (if lzd:watch (lzd:watch ss-old))))
+          (if lzd:watch (lzd:watch ss-old) ss-old)))
       (if (null ss-old)
         (stock:say "nothing highlighted - nothing to replace.")
         (progn

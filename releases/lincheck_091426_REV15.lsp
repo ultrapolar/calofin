@@ -149,7 +149,7 @@
                                 (vl-string-translate " " "/" kwlist)
                                 (if back "/Back" "") "]"
                                 (if dflt (strcat " <" dflt ">") "") ": ")))
-    (if lzd:ask (lzd:ask prompt ans))
+    (if lzd:ask (lzd:ask prompt ans) ans)
     (if (and (null ans) dflt) (setq ans dflt))
   )
   (if (member ans '("Back" "Undo"))

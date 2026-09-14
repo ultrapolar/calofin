@@ -2280,7 +2280,7 @@
     (princ))
   (if lzd:begin (lzd:begin "CALHELP" *lazpanel-version*))
   (setq s (getstring T "\nCommand, or any part of one <Enter = all>: "))
-  (if lzd:ask (lzd:ask "Command, or any part of one" s))
+  (if lzd:ask (lzd:ask "Command, or any part of one" s) s)
   (setq hits (if (= s "") (lzp:commands) (lzp:matches s)))
   (cond
     ((null hits)
@@ -2333,7 +2333,7 @@
   (lzp:setshow)
   (initget "Theme Errordir Stockdir Quit")
   (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Quit] <Quit>: "))
-  (if lzd:ask (lzd:ask "Change which?" pick))
+  (if lzd:ask (lzd:ask "Change which?" pick) pick)
   (setq key (cond ((= pick "Theme") "CalofinTheme")
                   ((= pick "Errordir") "CalofinErrorDir")
                   ((= pick "Stockdir") "StockCover_Folder")))
@@ -2343,7 +2343,7 @@
      ;; Undo is accepted everywhere Back is, unlisted (STANDARDS 1)
      (initget "Dark Light Auto Back Undo")
      (setq v (getkword "\nTheme [Dark/Light/Auto/Back] <Auto>: "))
-     (if lzd:ask (lzd:ask "Theme" v))
+     (if lzd:ask (lzd:ask "Theme" v) v)
      (cond
        ((member v '("Back" "Undo")) (c:CALSET))
        (t (setq v (if v (strcase v) "AUTO"))
@@ -2371,7 +2371,7 @@
      (setq v (getstring T (strcat "\n" key
                                   " (a folder, Back to leave it, "
                                   "or . to clear it): ")))
-     (if lzd:ask (lzd:ask key v))
+     (if lzd:ask (lzd:ask key v) v)
      (cond
        ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
        ((= v "") (princ "\nUnchanged."))
