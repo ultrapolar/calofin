@@ -310,6 +310,16 @@ answer is on the sheet either way instead of only in a sentence.
 (see below), it is marked in yellow, and the only thing left to settle
 is what the point is called.
 
+A pair that only just reaches touches at one spot and counts as
+crossing — and so does one that misses by less than `abf:*touch*`
+(1/32", half the 1/16" `abf:*prec*` prints to as shipped). Without
+that band the
+arithmetic finds gaps the drawing cannot print, and the command answers
+a pair of readings that *do* meet with `the two arcs fall 0" short of
+each other` and a table of readings to replace them with — noise in
+place of an answer. Raise `abf:*touch*` and a real gap gets silently
+closed; lower it and a miss too small to print gets reported.
+
 **They cannot cross.** Two circles miss each other two ways round, and
 they are different mistakes:
 
@@ -375,6 +385,19 @@ radial; on a reading barely longer than the label itself it is tens of
 degrees and the leaders do slant across each other, which is the right
 way round to fail — an untidy leader can be read past, two labels on
 top of each other cannot.
+
+One limit, and it is a fallback rather than a fix: an **inward** fan
+needs room between its arc and its stake for the text to lie in, and a
+reading no longer than the label itself has none — the spokes would
+meet at the stake, and the spacing that keeps them apart there would
+fling them right round the circle. Such a fan goes **outward** instead,
+and where both are forced out (two readings under about eight feet,
+from stakes far apart) the two point towards each other and their
+labels can cross. A point taped from five feet away is a rare thing to
+fail to place, the markers are still where they are, and the table on
+the command line still says which is which; what is not acceptable at
+any radius is a fan scattered round its own circle, and that is what
+the fallback stops.
 
 ### If none of them is right
 
@@ -551,19 +574,60 @@ reported —
   2 points are numbered "2" - the one on L2 taken.
 ```
 
-— and the ties are measured from that line's stakes. Only a number
-whose points include **none** on that line asks again, because then the
+— and the ties are measured from that line's stakes. A number whose
+points include **none** on that line asks again, because then the
 assumption has nothing to stand on.
 
-A **click** is never asked about either way: it names the point it
-landed on, whatever that point is numbered.
+### But the assumption is only a convenience
+
+A point that turns out **not** to be on the settled line moves the run
+to its own:
+
+```
+  Pt.9 is on AB line L2, not L1 - the run moves to it, and its ties are
+  measured from that pair.
+```
+
+Measuring from the settled line when the point was taped off the other
+pair is the wrong answer this whole question exists to prevent, and it
+is not worth asking about: the point says which pair it belongs to. It
+drew `Pt.9` a **106-foot tie** off stakes nobody had a tape on, and said
+nothing.
+
+A **click** is never asked about either way — it names the point it
+landed on, whatever that point is numbered — but it moves the line just
+the same, and says so.
 
 Two points numbered the same **on one line** is a fault in the drawing
 rather than a second survey, and it is still answerable: the second
-takes a letter after the label (`L1`, `L1b`).
+takes a letter after the label (`L1`, `L1b`). A label that names none of
+them is re-asked with the rings still up, so a typo costs a keystroke
+and not the round.
 
 The rings and labels are scaffolding — they go the moment the question
 is answered, like every other marker this tool draws.
+
+### Where there is no pair to name
+
+A drawing that names **neither** stake is clicked, the way it always
+was — and the pair just clicked becomes the run's one line, so a doubled
+number there is asked about off those two clicks like any other. (Before
+`v1.15` that case asked `abf:line-of` a question with no lines to answer
+from and handed `distance` a `nil` stake: a hard crash.)
+
+Where a stake name is used twice and **no pair can be made from it at
+all** — two `A`s and no `B` — nothing can say which `A` is meant, so the
+first is taken and the run says so:
+
+```
+  2 points are numbered "A" and no A/B pair could be made to say which
+  - the first was taken.
+```
+
+And where the drawing *does* name a pair, the ties are measured from the
+**paired** two, not from the first of each name. On a sheet with a spare
+stake those are different points, and the first `A` measured 190 feet off
+a stake the pairing had already rejected.
 
 ## Naming the point
 
@@ -623,8 +687,12 @@ The shared Back convention (see the root README) applies:
   suggestions still on screen;
 * in `ABPCREATE`, `Back` at **the A reading** undoes the whole of the
   last round the same way `ABFIND`'s point number does — the point it
-  created, its number and its ties — or, when it is `ABFIND` or
-  `ABMOVE` that sent you there, re-asks the point number instead;
+  created, its number and its ties. With no round left to undo it
+  re-asks **which AB line** on a sheet that carries more than one, and
+  that is also what it re-asks straight away when `ABFIND` or `ABMOVE`
+  sent you there through the line question; on a single-line sheet it
+  re-asks the point number in that case, and says
+  `Already at the first point.` in the other;
 * `Back` at **the B reading** re-asks the A reading;
 * `Back` at **which candidate** re-asks the B reading;
 * `Back` at **the number for the new point** re-asks which candidate —
@@ -633,8 +701,9 @@ The shared Back convention (see the root README) applies:
 
 `ABMOVE`'s first question has nothing to go back to, and once its point
 is settled — moved or created — the run is over; to undo that, `U`.
-`ABPCREATE`'s first question is the A reading of its first round, and
-that one says `Already at the first point.`
+`ABPCREATE`'s first question is the A reading of its first round — or,
+on a sheet with more than one AB line, the line itself, which is the
+one that says `Already at the first question.`
 
 The whole run is **one undo group**: a single `U` takes it all away.
 The dimension style, current layer, `OSMODE` and `CMDECHO` in force
@@ -703,14 +772,20 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*tag-width*    0.8)           ; a character's width, as a
                                         ; fraction of the tag height, for
                                         ; the strip a click on a tag hits
-(setq abf:*locus-color*  8)             ; guide-line colour: grey
+(setq abf:*locus-color*  'auto)         ; guide-line colour: 'auto asks
+                                        ; abf:ink for the grey that
+                                        ; suits the background; a
+                                        ; number is used as given
 (setq abf:*locus-ltype*  "DASHED")      ; and its linetype
 (setq abf:*ghost-color*  1)             ; ABPCREATE's two whole reading
                                         ; circles: red, dashed
 (setq abf:*dupe-color*   4)             ; the ring round a point a
                                         ; doubled number names, and
                                         ; round an AB line's stakes:
-                                        ; cyan
+                                        ; cyan.  A number, not 'auto -
+                                        ; a ring that asks a question
+                                        ; has to stand out - but read
+                                        ; through abf:ink all the same
 (setq abf:*dupe-radius*  9.0)           ; and its radius
 (setq abf:*line-prefix*  "L")           ; what an AB line is called:
                                         ; L1, L2, ...
@@ -724,6 +799,8 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*prec*         4)             ; rtos precision, 4 = 1/16"
 (setq abf:*same-eps*     0.125)         ; two suggestions this close
                                         ; are one place
+(setq abf:*touch*        0.03125)       ; a pair that misses by less
+                                        ; than this is taken as crossing
 ```
 
 `abf:*tag-gap*` is measured *across* the tags; along the arc they
@@ -793,9 +870,41 @@ one of the two answers.
 ## Versioning
 
 `tools/release_lisp.py` reads the `*abfind-version*` banner and stamps
-`releases/ABFIND_MMDDYY_REV11.lsp`; run it after any change and bump
+`releases/ABFIND_MMDDYY_REV115.lsp`; run it after any change and bump
 the banner.
 
+* **v1.16** — the creation flow audited. A pair that misses touching
+  by less than the drawing can print is a **crossing** now
+  (`abf:*touch*`, with `abf:closest` solving the touch point), instead
+  of being answered `the two arcs fall 0" short of each other` and a
+  table of readings to replace a pair that meets — and `abf:circint`'s
+  square root has gone a hair negative there, so that answer was one
+  line away from `(car nil)`. A label fan with no room inside its own
+  arc hangs outside it rather than scattering round the circle. `Pt`,
+  `#` and a line of spaces no longer offer to create a point with no
+  number. `abf:click-side` tests a distance rather than a cross
+  product, so "on the A–B line" means the same thing at any stake
+  spacing. And `Back` at the first reading re-asks **which AB line**
+  where v1.13 put that question in front of it.
+* **v1.15** — the edge cases of the AB line question, each of them a
+  live defect: a doubled number in a drawing whose stakes are **clicked**
+  crashed (no line to answer from, a `nil` stake into `distance`) and now
+  reads off the clicked pair, which becomes the run's one line; a point
+  that is **not** on the settled line now **moves** the run to its own
+  instead of being measured from the settled one (that drew a 106-foot
+  tie off stakes nobody had a tape on, silently); the ties are measured
+  from the **paired** stake rather than the first of each name (a spare
+  stake made those different points, and the first `A` was 190 feet out);
+  a **stray label** at the duplicate pick is re-asked with the rings up
+  instead of costing the round; a stake name used twice with no pair to
+  be made from it says the first was taken; and `None of them is on L1`
+  is printed only where it is true. `abf:*dupe-color*` reads through
+  `abf:ink`.
+* **v1.14** — `abf:*locus-color*` is `'auto`: the guide arcs ask
+  `abf:ink` for the grey that suits the background they will be seen
+  against, rather than assuming a near-black model space. A knob set to
+  a number is used exactly as given, so a shop that has picked its own
+  colours keeps them. (Part of the tree-wide ink change.)
 * **v1.13** — **more than one AB line on the sheet**. Two surveys
   merged onto one drawing carry two points named `A`, two named `B`,
   and two of every `Pt.##` after them; the stakes are paired into

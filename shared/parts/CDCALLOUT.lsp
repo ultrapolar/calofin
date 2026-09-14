@@ -413,7 +413,7 @@
   (setq ans (getpoint (strcat "\n  Which Pt." nm
                               " is meant - click it, or type its"
                               " label [Back] <Enter = none>: ")))
-  (if lzd:ask (lzd:ask "cdo:ask-pick" ans))
+  (if lzd:ask (lzd:ask "cdo:ask-pick" ans) ans)
   (cond
     ((null ans) nil)
     ((and (not (listp ans)) (cal:back-word-p ans)) 'CDO-BACK)

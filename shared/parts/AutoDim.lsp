@@ -1734,7 +1734,7 @@
   (if lzd:begin (lzd:begin "AUTODIM" *autodim-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq plan (ssget "_I" (ad:geomfilter)))
-  (if lzd:watch (lzd:watch plan))
+  (if lzd:watch (lzd:watch plan) plan)
   (if (null plan)
     (progn
       (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
@@ -1745,7 +1745,7 @@
                       " instead and it is recognised as one: the depth of"
                       " every step gets dimensioned rather than a plan."))
       (setq plan (ssget (ad:geomfilter)))
-      (if lzd:watch (lzd:watch plan))))
+      (if lzd:watch (lzd:watch plan) plan)))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
@@ -1816,7 +1816,7 @@
   ;; a pickfirst selection if there is one, grabbed before the undo
   ;; group's command clears it - nil makes ad:dimstairs ask
   (setq ss0 (ssget "_I" (ad:stairfilter)))
-  (if lzd:watch (lzd:watch ss0))
+  (if lzd:watch (lzd:watch ss0) ss0)
   (setvar "CMDECHO" 0)
   (ad:begin)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1900,7 +1900,7 @@
   (if lzd:begin (lzd:begin "AUTODIMSIDEPOV" *autodim-version*))
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I" (ad:stairfilter)))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
       (prompt (strcat "\nAUTODIMSIDEPOV - dimensions steps drawn in side"
@@ -1909,7 +1909,7 @@
                       "\nHighlight the side view of the steps, then press"
                       " Enter."))
       (setq ss (ssget (ad:stairfilter)))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (prompt "\nNothing highlighted - AUTODIMSIDEPOV cancelled.")
     (progn

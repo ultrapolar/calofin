@@ -253,7 +253,6 @@ def count_rules(n):
 #: every *VER.
 UNTESTED = {
     "DDALT": "drone-height toolset: needs an EXIF/GPS photo fixture",
-    "DDGPS": "drone-height toolset: needs an EXIF/GPS photo fixture",
     "DDTEST": "drone-height toolset: needs an EXIF/GPS photo fixture",
 }
 

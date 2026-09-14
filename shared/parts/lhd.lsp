@@ -1994,7 +1994,7 @@
       (if (null pick)
         (progn
           (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
-          (if lzd:watch (lzd:watch sel))
+          (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -2067,7 +2067,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *LH-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "lh:ask-tol" tol))
+  (if lzd:ask (lzd:ask "lh:ask-tol" tol) tol)
   (cond
     ((lh:back-kw tol) 'LH-BACK)
     (T
@@ -2089,7 +2089,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "lh:ask-pct" pct))
+  (if lzd:ask (lzd:ask "lh:ask-pct" pct) pct)
   (cond
     ((lh:back-kw pct) 'LH-BACK)
     ((null pct) def)
@@ -2105,7 +2105,7 @@
                            (if *LH-MAX-ARCS* (itoa *LH-MAX-ARCS*) "None")
                            ">"
                            (if back " [None/Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "lh:ask-cap" mx))
+  (if lzd:ask (lzd:ask "lh:ask-cap" mx) mx)
   (cond
     ((lh:back-kw mx) 'LH-BACK)
     (T
@@ -2122,7 +2122,7 @@
               "\n  Closed outline or Open polyline? [Closed/Open"
               (if back "/Back" "") "] <"
               *LH-SHAPE* ">: ")))
-  (if lzd:ask (lzd:ask "lh:ask-shape" ans))
+  (if lzd:ask (lzd:ask "lh:ask-shape" ans) ans)
   (cond
     ((member ans '("Back" "Undo")) 'LH-BACK)
     (T (if ans (setq *LH-SHAPE* ans))
@@ -2137,7 +2137,7 @@
               "\n  Draw the outline at which height - [Top/Bottom/Average/Zero"
               (if back "/Back" "") "] <"
               *LH-ZMODE* ">: ")))
-  (if lzd:ask (lzd:ask "lh:ask-zmode" ans))
+  (if lzd:ask (lzd:ask "lh:ask-zmode" ans) ans)
   (cond
     ((member ans '("Back" "Undo")) 'LH-BACK)
     (T (if ans (setq *LH-ZMODE* ans))
@@ -2394,7 +2394,7 @@
   ;; a pickfirst selection if there is one - kept for step 6, probed
   ;; before the undo group opens, which would clear the set
   (setq lh-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
-  (if lzd:watch (lzd:watch lh-pick))
+  (if lzd:watch (lzd:watch lh-pick) lh-pick)
 
   ;; one undo group around the whole fit - a U after LHD takes back
   ;; the outline, the labels and the markers in one step (the stale
@@ -2579,7 +2579,7 @@
         (princ (strcat "\n  ordering sketch on layer " *LH-POOL-LAYER* "."))
         (princ "\n  Select objects: ")
         (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE,TEXT"))))
-        (if lzd:watch (lzd:watch ss))))
+        (if lzd:watch (lzd:watch ss) ss)))
     (if (null ss)
       (princ "\nNothing usable selected (points, and optionally a sketch on the POOL layer).")
       (progn

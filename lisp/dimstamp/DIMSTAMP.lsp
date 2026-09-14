@@ -373,7 +373,7 @@
 ;; four canonical forms.
 (defun ds:ask-raw (prompt / v)
   (setq v (getstring T prompt))
-  (if lzd:ask (lzd:ask prompt v))
+  (if lzd:ask (lzd:ask prompt v) v)
   (if (ds:parse v)
     v
     (progn
@@ -397,7 +397,7 @@
   (setq pk (getpoint (strcat "\nClick to place text, click the ruler to"
                              " change it, or type new text (Enter when"
                              " done): ")))
-  (if lzd:ask (lzd:ask "ds:next-action" pk))
+  (if lzd:ask (lzd:ask "ds:next-action" pk) pk)
   (cond
     ((null pk) nil)
     ((= (type pk) 'STR)

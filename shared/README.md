@@ -79,7 +79,7 @@ hidden.
 
 It is the helper library: it defines the `cal:` helpers and exactly one
 command (`CALVER`). Loaded alone it looks like it worked -- it prints
-`CALOFIN-LIB v1.7 loaded` -- but not one tool comes with it, so `POOL`,
+`CALOFIN-LIB v1.8 loaded` -- but not one tool comes with it, so `POOL`,
 `SPA` and the rest are all still undefined. It now says so when that
 happens.
 

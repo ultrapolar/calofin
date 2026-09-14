@@ -181,7 +181,8 @@ def tool_name(body, owner, path):
         # searching all of it named ABFIND after the (getvar "DIMSTYLE")
         # that restores its dimension style, and covercheck's after the
         # (setvar "CMDECHO" ...) that restores its echo.
-        found = NAMED_FALLBACK.findall(body[enclosing_call(body, i):i])
+        found = NAMED_FALLBACK.findall(
+            body[max(0, enclosing_call(body, i)):i])
         if found:
             return found[-1]
     return pathlib.Path(path).stem.upper()
@@ -204,7 +205,11 @@ def enclosing_call(body, i, mask=None):
             if depth == 0:
                 return j
             depth -= 1
-    return 0
+    # -1, not 0: index 0 is a real answer -- a defun can open at the very
+    # first byte of a file -- and a caller that read 0 as "nothing found"
+    # would skip exactly that form.  It did: misplaced() was silently
+    # passing over a top-level defun that started at column 0.
+    return -1
 
 
 class _Hit:
@@ -269,7 +274,7 @@ def handlers(src, mask, path):
         begin_at = err_hi
         if em.lam:
             outer = enclosing_call(src, err_lo, mask)
-            end = form_end(src, mask, outer)
+            end = form_end(src, mask, outer) if outer >= 0 else -1
             if end > 0:
                 begin_at = end
         out.append({
@@ -456,6 +461,86 @@ def select_sites(src, mask):
     return out
 
 
+# --------------------------------------------- where an injection landed
+# Dropping a form into a Lisp body is only free when that body is an
+# implicit progn AND the form is not its last.  Land it last and the
+# body's value becomes the injected form's value, which for a helper
+# that ends in (setq ss (ssget ...)) means the caller gets nil instead
+# of a selection.  `check_lisp` cannot see this: every shape involved is
+# perfectly legal Lisp.
+#
+# The watch and ask injections are immune by construction -- they carry
+# an else branch so the whole form evaluates to the variable either way.
+# begin and report are not, so they are checked here.
+
+INJECTED = re.compile(r"\(if lzd:(watch|ask|report|begin) ")
+
+#: an atom or a form: a body's last item is often a bare symbol (the
+#: `ss` that LINGUTTER's lg:highlight returns), and a scan that counted
+#: only parenthesised forms would call the form before it "last"
+ITEM = re.compile(r'"(?:[^"\\]|\\.)*"|[()]|[^\s()";]+')
+
+
+def items(src, mask, lo, hi):
+    """Every item directly inside LO..HI -- atoms as well as forms."""
+    out, i = [], lo
+    while i < hi:
+        if not mask[i] or src[i].isspace():
+            i += 1
+            continue
+        if src[i] == "(":
+            j = form_end(src, mask, i)
+            if j < 0 or j > hi:
+                break
+            out.append((i, j))
+            i = j
+            continue
+        if src[i] == ")":
+            break
+        j = i
+        while j < hi and mask[j] and not src[j].isspace() and src[j] not in "()":
+            j += 1
+        out.append((i, j))
+        i = j
+    return out
+
+
+#: bodies whose value is their LAST item, so a form dropped at the end
+#: of one takes over what it evaluates to
+IMPLICIT_PROGN = {"defun", "lambda", "progn", "while", "foreach", "repeat"}
+
+
+def misplaced(src, mask, path):
+    """Injected forms sitting where they change what something means."""
+    out = []
+    for m in INJECTED.finditer(src):
+        if not mask[m.start()]:
+            continue
+        kind = m.group(1)
+        if kind in ("watch", "ask"):
+            continue          # value-transparent: the else branch sees to it
+        parent = enclosing_call(src, m.start(), mask)
+        if parent < 0:
+            continue
+        phi = form_end(src, mask, parent)
+        head = re.match(r"\(\s*([^\s()]+)", src[parent:parent + 60])
+        head = head.group(1).lower() if head else "?"
+        kids = items(src, mask, parent + 1, phi - 1)
+        idx = next((i for i, (a, b) in enumerate(kids) if a == m.start()), None)
+        last = idx is not None and idx == len(kids) - 1
+        why = None
+        if head in ("and", "or"):
+            why = "adds a term to an (%s ...)" % head
+        elif head == "if" and idx is not None and idx >= 3:
+            why = "became the ELSE branch of an (if test then)"
+        elif last and head in IMPLICIT_PROGN:
+            why = "is the last form of a (%s ...), so its value is now " \
+                  "that body's value" % head
+        if why:
+            out.append((src[:m.start()].count("\n") + 1, kind, why))
+    return out
+
+
 def report_slot(src, mask, c):
     """Where the report call goes inside the handler: in front of its
     trailing (princ), which is the handler's return value and has to
@@ -505,8 +590,12 @@ def wire(path, src, do_fix):
         missing.append("%s <- %s" % (w["var"], w["fn"]))
         if do_fix:
             pad = indent_of(src, w["set_lo"])
-            edits.append((w["at"], "\n%s(if lzd:watch (lzd:watch %s))"
-                          % (pad, w["var"])))
+            # the else branch is not decoration: it makes the whole
+            # form evaluate to the variable whether LAZDIAG is loaded or
+            # not, so dropping it after a (setq ss (ssget ...)) cannot
+            # change what the enclosing progn or cond clause returns
+            edits.append((w["at"], "\n%s(if lzd:watch (lzd:watch %s) %s)"
+                          % (pad, w["var"], w["var"])))
 
     for a in ask_helpers(src, mask):
         if "lzd:ask" in src[a["lo"]:a["hi"]]:
@@ -514,8 +603,8 @@ def wire(path, src, do_fix):
         missing.append(a["fn"])
         if do_fix:
             pad = indent_of(src, a["set_lo"])
-            edits.append((a["at"], "\n%s(if lzd:ask (lzd:ask %s %s))"
-                          % (pad, a["prompt"], a["var"])))
+            edits.append((a["at"], "\n%s(if lzd:ask (lzd:ask %s %s) %s)"
+                          % (pad, a["prompt"], a["var"], a["var"])))
     # back to front, so an earlier insert cannot move a later offset
     for at, text in sorted(edits, key=lambda e: -e[0]):
         src = src[:at] + text + src[at:]
@@ -544,6 +633,7 @@ def main(argv):
     bad = 0
     fixed = 0
     naked = []
+    wrong = []
     for p in lisp_files():
         src = p.read_text()
         missing, new = wire(p, src, do_fix)
@@ -556,8 +646,19 @@ def main(argv):
             bad += len(missing)
             print("%s: %s does not report failures to LAZDIAG"
                   % (p.relative_to(REPO), ", ".join(missing)))
-        for cmd in unprotected(src, code_mask(src), p):
+        mask = code_mask(src)
+        for cmd in unprotected(src, mask, p):
             naked.append((cmd, p.relative_to(REPO)))
+        for ln, kind, why in misplaced(src, mask, p):
+            wrong.append((p.relative_to(REPO), ln, kind, why))
+
+    for rel, ln, kind, why in wrong:
+        print("%s:%d: the lzd:%s call %s" % (rel, ln, kind, why))
+    if wrong:
+        print("\nAn injected call is not free where it lands: move it so it "
+              "is not the last")
+        print("form of a body, and not a term of an (and ...) or a branch "
+              "of an (if ...).\n")
 
     for cmd, rel in naked:
         print("%s: %s has no *error* handler to report from" % (rel, cmd))
@@ -578,8 +679,8 @@ def main(argv):
         print("    python3 tools/mirror_shared.py")
         print("    python3 tools/release_lisp.py")
         print("    python3 tools/build_shared_bundle.py")
-        return 1 if naked else 0
-    if bad or naked:
+        return 1 if (naked or wrong) else 0
+    if bad or naked or wrong:
         if bad:
             print("check_lazdiag: %d command(s) unwired - repair with "
                   "--fix" % bad)

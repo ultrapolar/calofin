@@ -160,6 +160,13 @@ check("with undo OFF neither half is sent", undo == [], f"{undo}")
 # driven where the driver for it already lives: the step routines are
 # what call it, and tests/test_steps_settings.py has the scripts that
 # get all three of them to their bead hand-off.
+# The class is statically checked too, since 2026-09-14: check_lisp.py
+# rule 3c fails an _End that is not guarded by the flag its _Begin set,
+# which is the half of the question this file cannot reach.  Four more
+# commands were closing unconditionally when that rule went in -- CHECK,
+# XFTRECONV, SPACHECK and STOCKCOVER -- and the STANDARDS skeleton every
+# one of the seven had copied showed both halves flat.
+#
 # The same goes for a command whose close sits past a pick no Enter can
 # make: SMARTFILLET and HONEFILLET want two lines and a clicked preview
 # arc before they reach theirs, and XYPLOT wants a sheet and an origin.

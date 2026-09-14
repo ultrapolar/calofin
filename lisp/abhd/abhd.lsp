@@ -2784,7 +2784,7 @@
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
                                     " Enter for " defl "): ")))
-          (if lzd:watch (lzd:watch sel))
+          (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -3583,7 +3583,7 @@
   (setq ans (getkword (strcat
               "\n  Slope line from the offset at Pt." nm
               " [Straight/Guided/Points/Back] <Straight>: ")))
-  (if lzd:ask (lzd:ask "pf:ask-slope" ans))
+  (if lzd:ask (lzd:ask "pf:ask-slope" ans) ans)
   (setq slopemarks nil)     ; the caller's register of this side's rings
   (cond
     ((member ans '("Back" "Undo")) 'PF-BACK)
@@ -3866,7 +3866,7 @@
   (setq tol (getdist (strcat "\n  Maximum distance from a point <"
                              (rtos *PF-TOL* 2 3) ">"
                              (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "pf:ask-tol" tol))
+  (if lzd:ask (lzd:ask "pf:ask-tol" tol) tol)
   (cond
     ((pf:back-kw tol) 'PF-BACK)
     (T
@@ -3888,7 +3888,7 @@
                             (itoa (fix (+ 0.5 (* 100.0 def))))
                             ">"
                             (if back " [Back]" "") ": ")))
-  (if lzd:ask (lzd:ask "pf:ask-pct" pct))
+  (if lzd:ask (lzd:ask "pf:ask-pct" pct) pct)
   (cond
     ((pf:back-kw pct) 'PF-BACK)
     ((null pct) def)
@@ -3914,7 +3914,7 @@
   (setq mx (getint (strcat "\n  Maximum curves <" (pf:cap-word) ">"
                            (if back " [Auto/None/Back]" " [Auto/None]")
                            ": ")))
-  (if lzd:ask (lzd:ask "pf:ask-cap" mx))
+  (if lzd:ask (lzd:ask "pf:ask-cap" mx) mx)
   (cond
     ((pf:back-kw mx) 'PF-BACK)
     (T
@@ -4422,7 +4422,7 @@
       (princ "\n  blocks) and, if you have one, the POOL perimeter or ordering sketch.")
       (princ "\n  Select objects: ")
       (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (princ "\nNothing usable selected (points, and optionally POOL lines/arcs/polylines).")
     (progn
@@ -4785,7 +4785,7 @@
   ;; here, before the undo group opens: the typed prompts between here
   ;; and step 7 leave a pickfirst set alone, a command call would not
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-  (if lzd:watch (lzd:watch pf-pick))
+  (if lzd:watch (lzd:watch pf-pick) pf-pick)
 
   ;; one undo group around the whole fit - a U after ABHD takes back
   ;; the perimeter, the bottom and the markers in one step (the stale
@@ -4871,7 +4871,7 @@
   ;; prompts in between leave a pickfirst set alone, a command call
   ;; would not
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE"))))
-  (if lzd:watch (lzd:watch pf-pick))
+  (if lzd:watch (lzd:watch pf-pick) pf-pick)
 
   ;; one undo group around the whole fit - a U after SIMPABHD takes
   ;; back the perimeter, the bottom and the markers in one step (the
@@ -4957,7 +4957,7 @@
   ;; a pickfirst selection if there is one, otherwise ask for it -
   ;; probed before the undo group opens, which would clear the set
   (setq pf-pick (ssget "_I" '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
-  (if lzd:watch (lzd:watch pf-pick))
+  (if lzd:watch (lzd:watch pf-pick) pf-pick)
   ;; one undo group around the whole bottom, same reasoning as c:ABHD
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -4975,7 +4975,7 @@
       (princ "\n  themselves; select them too only if they live somewhere unusual.")
       (princ "\n  Select objects: ")
       (setq ss (ssget '((0 . "POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
-      (if lzd:watch (lzd:watch ss))))
+      (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (princ "\nNothing usable selected (survey points and the perimeter geometry).")
     (progn

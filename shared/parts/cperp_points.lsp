@@ -324,7 +324,7 @@
     ;; the label, not the helper name: one helper asks this of the
     ;; selected object and of every line a round draws, and a report
     ;; that cannot tell them apart cannot say which one died
-    (if lzd:ask (lzd:ask lbl ans))
+    (if lzd:ask (lzd:ask lbl ans) ans)
     (cond
       ((or (null ans) (= ans "Unchanged")) (setq out nil))
       ((= ans "Grew")
@@ -567,7 +567,7 @@
   (setq crv nil)
   (while (null crv)
     (setq sel (entsel "\nSelect a curve (polyline, arc, spline...): "))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((null sel)
        (princ "\nNothing selected - try again, or press Esc to quit."))
@@ -686,7 +686,7 @@
     (initget "None")
     (setq sel (entsel (strcat "\nSelect a boundary the offsets may not"
                               " cross [None] <None>: ")))
-    (if lzd:watch (lzd:watch sel))
+    (if lzd:watch (lzd:watch sel) sel)
     (cond
       ;; entsel answers nil for Enter AND for a click that hit nothing.
       ;; ERRNO 7 is what tells them apart, and without asking, a click

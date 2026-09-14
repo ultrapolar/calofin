@@ -92,7 +92,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.5")
+(setq *constellation-version* "v1.6")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -1347,7 +1347,7 @@
   (setq dflt (fix (max cst:*minpts* (min cst:*maxpts* cst:*defcount*))))
   (initget 6 "Back Undo")
   (setq v (getint (strcat "\nHow many points? [Back] <" (itoa dflt) ">: ")))
-  (if lzd:ask (lzd:ask "cst:askcount" v))
+  (if lzd:ask (lzd:ask "cst:askcount" v) v)
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) dflt)
         ((or (< v cst:*minpts*) (> v cst:*maxpts*))
@@ -1360,7 +1360,7 @@
 (defun cst:askbase ( / v)
   (initget "Back Undo")
   (setq v (getpoint "\nInsertion base point [Back] <0,0>: "))
-  (if lzd:ask (lzd:ask "cst:askbase" v))
+  (if lzd:ask (lzd:ask "cst:askbase" v) v)
   (cond ((member v '("Back" "Undo")) 'CAL-BACK)
         ((null v) '(0.0 0.0))
         (t (cal:2d v))))
