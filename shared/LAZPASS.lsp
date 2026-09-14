@@ -96,7 +96,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.7")
+(setq cal:*version* "v1.8")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
@@ -113,9 +113,10 @@
 ;;  usually trying to untangle, and exactly what a generated list
 ;;  would have hidden.
 
-;; The version globals this session carries, as (label . value) pairs,
-;; sorted by label.  Two banner spellings exist -- *tool-version* and
-;; the POOL/SPA ns:*version* -- and both end up as the tool's name.
+;; The version globals this session carries, as (label value symbol)
+;; rows sorted by label.  Two banner spellings exist -- *tool-version*
+;; and the POOL/SPA ns:*version* -- and both end up as the tool's name;
+;; the symbol rides along so the sort has something unique to order on.
 (defun cal:vlabel (n / s)
   (setq s n)
   ;; vl-string-search counts from 0, so the index IS the length of the
@@ -130,8 +131,16 @@
   (foreach n (atoms-family 1)
     (if (and (wcmatch n "*VERSION*")
              (= (type (setq v (eval (read n)))) 'STR))
-      (setq out (cons (cons (cal:vlabel n) v) out))))
-  (vl-sort out '(lambda (a b) (< (car a) (car b)))))
+      (setq out (cons (list (cal:vlabel n) v n) out))))
+  ;; Sorted on the label AND the symbol it came from, because vl-sort
+  ;; DROPS any element its comparison calls equal to another.  Sorting
+  ;; on the label alone loses one of two files whose banner globals
+  ;; reduce to the same name -- *cchk-version* and cchk:*version* both
+  ;; read CCHK -- and losing one silently is the one thing this command
+  ;; must not do.  A symbol name is unique in a session, so no two rows
+  ;; can compare equal and nothing can be dropped.
+  (vl-sort out '(lambda (a b) (< (strcat (car a) " " (caddr a))
+                                 (strcat (car b) " " (caddr b))))))
 
 (defun c:CALVER ( / all v)
   (princ (strcat "\nCALOFIN-LIB " cal:*version*))
@@ -142,7 +151,7 @@
      (princ (strcat "\n" (itoa (length all))
                     " calofin file(s) loaded in this session:"))
      (foreach v all
-       (princ (strcat "\n  " (cal:pad (car v) 22) " " (cdr v))))))
+       (princ (strcat "\n  " (cal:pad (car v) 22) " " (cadr v))))))
   (princ))
 
 ;;; -------------------- ask layer ---------------------------------------
@@ -371,7 +380,9 @@
 ;; disagrees with what was measured should have to say so once rather
 ;; than once per tool.  CALSET writes it.
 (defun cal:themeset ( / v)
-  (setq v (strcase (cal:setting "CalofinTheme" "AUTO")))
+  ;; trimmed: this is typed by a person, and " dark " meaning nothing
+  ;; at all would be a silent no-op they could stare at for a while
+  (setq v (strcase (vl-string-trim " \t" (cal:setting "CalofinTheme" "AUTO"))))
   (cond ((= v "DARK") 'dark)
         ((= v "LIGHT") 'light)))
 
@@ -448,7 +459,12 @@
 ;;  tree did before this table existed: a session that cannot tell is
 ;;  not a session that changes behaviour.
 (defun cal:ink (knob role / th)
-  (if (not (eq knob 'auto))
+  ;; numberp, not (eq knob 'auto): a knob is a colour NUMBER used
+  ;; exactly as given, or it is resolved.  Testing for 'auto instead
+  ;; would hand back whatever a mistyped knob holds -- nil, or the
+  ;; symbol AUOT -- and that reaches entmake as a DXF group 62, where
+  ;; it dies a long way from the line that caused it.
+  (if (numberp knob)
     knob
     (progn
       (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
@@ -2275,7 +2291,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091226 REV26")
+(setq pool:*version* "091226 REV27")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -11229,7 +11245,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.4")
+(setq *poolside-version* "v1.5")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -12107,7 +12123,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091226 REV20")
+(setq spa:*version* "091226 REV21")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -16521,7 +16537,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.7")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.8")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -38280,7 +38296,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.1")
+(setq *lobf-version* "v1.2")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -53627,7 +53643,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.7")
+(setq *lazstep-version* "v1.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -55315,7 +55331,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.15")
+(setq *cchk-version* "v1.16")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -59596,7 +59612,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.18")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.19")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -72500,7 +72516,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.14")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.15")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -96181,7 +96197,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.5")
+(setq *constellation-version* "v1.6")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -98147,7 +98163,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.6")
+(setq *lazspa-version* "v1.7")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -99658,7 +99674,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.18")
+(setq *lazform-version* "v2.19")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -102654,7 +102670,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.24")
+(setq *lazpanel-version* "v3.25")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -104891,20 +104907,23 @@
      (if lzd:ask (lzd:ask "Theme" v))
      (cond
        ((member v '("Back" "Undo")) (c:CALSET))
-       (t (setenv "CalofinTheme" (if v (strcase v) "Auto"))
+       (t (setq v (if v (strcase v) "AUTO"))
+          (setenv "CalofinTheme" v)
           ;; ...and beside the pins, where the VB palette reads it
           ;; (ui/calofin_net/PaletteTheme.vb).  The profile is what the
           ;; Lisp side reads and the registry is what the palette can
           ;; reach, and a drafter who has said which way their screen
           ;; reads has said it to both surfaces -- the same bargain the
-          ;; pinned row already strikes.
+          ;; pinned row already strikes.  Auto is written as empty:
+          ;; the palette's own probe is what "auto" means there.
+          ;;
+          ;; Read from V and not back out of getenv -- a strcase on the
+          ;; nil a failed setenv would leave is an error thrown from
+          ;; inside the line that reports success.
           (vl-catch-all-apply
             'vl-registry-write
-            (list lzp:*pinkey* "Theme"
-                  (if (= (strcase (getenv "CalofinTheme")) "AUTO") ""
-                      (strcase (getenv "CalofinTheme")))))
-          (princ (strcat "\nCalofinTheme is now "
-                         (getenv "CalofinTheme")
+            (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+          (princ (strcat "\nCalofinTheme is now " v
                          ".  Every tool reads it on the next colour it"
                          " picks; the toolbar icon takes it at the next"
                          " LAZBUTTON or LAZICON, and the VB palette at"

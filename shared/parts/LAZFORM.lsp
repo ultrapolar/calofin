@@ -98,7 +98,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.18")
+(setq *lazform-version* "v2.19")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes

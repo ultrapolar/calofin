@@ -1853,6 +1853,17 @@ out = ''.join(str(p) for p in vm.printed)
 assert out.count('\n  ') >= len(set(PANEL)), (out.count('\n  '), len(PANEL))
 print("   Enter lists every tool on the panel")
 
+# The Find page takes its needle LITERALLY rather than handing it to
+# wcmatch, so a typed * searches for a star.  CALHELP is the same
+# search at the command line and inherits that; a drafter who types a
+# wildcard out of habit must not get the whole roster back as if they
+# had pressed Enter.
+vm = fresh()
+vm.run('c:CALHELP', ['*'])
+out = ''.join(str(p) for p in vm.printed)
+assert 'Nothing here matches' in out, out[:200]
+print("   a typed * searches for a star, it does not match everything")
+
 vm = fresh()
 vm.run('c:CALHELP', ['zznotathing'])
 out = ''.join(str(p) for p in vm.printed)
