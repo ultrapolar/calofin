@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 67 files, 194 commands:
+;;; 69 files, 198 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -30,19 +30,19 @@
 ;;;   LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT  LHD  LHDVER
 ;;;   LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN
 ;;;   LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN
-;;;   LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER  NORMIESTEP  NORMIESTEPVER
-;;;   OASIS  OASISVER  PADDLE  PADDLEVER  PERPMARK  PERPMARKVER
-;;;   PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER
-;;;   POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD
-;;;   SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV  SPA
-;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER
-;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST
-;;;   TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN
-;;;   TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN
-;;;   TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK
-;;;   TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV
-;;;   WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV
-;;;   XYPLOT  XYPLOTVER
+;;;   LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER  MOHAMADDLE  MOHAMADDLEVER
+;;;   NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  OLAUTO  OLAUTOVER
+;;;   PADDLE  PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER
+;;;   POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER
+;;;   POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER
+;;;   SOCONV  SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE
+;;;   SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM
+;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB
+;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
+;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
+;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER
+;;;   TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER
+;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -22088,7 +22088,29 @@
 ;;;   be inventing one (abf:*new-atts* keeps them for a drawing whose
 ;;;   second attribute really is the same on every point).
 ;;;
-;;;   Then its two ties are drawn, and it asks for the next pair.
+;;;   Then its two ties are drawn, a NOTE is written on
+;;   abf:*ring-layer* beside it, and it asks for the next pair.  The
+;;   note is the one a moved point gets, for the same reason: a point
+;;   that was plotted rather than surveyed is not the same thing as one
+;;   the field sheet placed, and a sheet that does not say so reads as
+;;   though the field measured it.
+;;
+;;       Created Pt.23 - A 16'-8", B 15'-0"
+;;
+;;   and, where the two readings could NOT cross and one of them had to
+;;   be changed to make them, the note says which was held and what the
+;;   other went from and to -- the half of it somebody will want to
+;;   check back against the sheet:
+;;
+;;       Created Pt.23 - A 25'-0" held, B from 20'-10" to 27'-10"
+;;
+;;   Where it goes is not asked.  ABMOVE asks where to put its own
+;;   because that one belongs at the spot the point came OFF, away from
+;;   the point itself and next to a ring, and because ABMOVE settles one
+;;   point and ends -- so the question is put once.  A created point's
+;;   note has one place to be, beside the point, and ABPCREATE is a
+;;   LOOP: a question per point is a question per point.  It is ordinary
+;;   TEXT and moves like any other.
 ;;;
 ;;; AND WHEN A LOOKUP FINDS NOTHING.  A number typed at ABFIND or
 ;;; ABMOVE that names no point used to be reported and re-asked, full
@@ -22248,7 +22270,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.16")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.17")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -23148,6 +23170,29 @@
                  (cons 40 abf:*note-hgt*) (cons 1 str)))
   (entlast))
 
+;; What a CREATED point's note says.  A point that was plotted rather
+;; than surveyed is not the same thing as one the field sheet placed,
+;; and the sheet should say which it is looking at - so every created
+;; point gets the note, the way every moved one does.
+;;
+;; Two of them, because there are two ways to get here.  A pair of
+;; readings that crossed as they were written down is recorded as it
+;; stands.  A pair that could NOT cross had one reading held and the
+;; other changed to make it, and that is the one worth writing out: the
+;; note names the tape that was held, at what, and the one that moved,
+;; from the reading on the sheet to the reading used.  SUG is the
+;; candidate that was taken, or nil when the two crossed unaided.
+(defun abf:new-note-text (nm ra rb sug)
+  (strcat "Created Pt." nm " - "
+          (if sug
+            (strcat (cadr sug) " "
+                    (abf:fmt (if (= (cadr sug) abf:*a-name*) ra rb))
+                    " held, " (caddr sug) " from "
+                    (abf:fmt (cadddr sug)) " to "
+                    (abf:fmt (nth 4 sug)))
+            (strcat abf:*a-name* " " (abf:fmt ra) ", "
+                    abf:*b-name* " " (abf:fmt rb)))))
+
 ;; Where the note goes when it is not placed by hand: beside the ring,
 ;; clear of it, the way BPCALLOUT tucks its callout.
 (defun abf:note-spot (ctr)
@@ -23886,7 +23931,8 @@
     ((= (car r) "DIM") (abf:drop (cadr r)))
     ((= (car r) "NEW")
      (abf:drop (cadr r))                   ; the ties to the new point
-     (abf:drop (caddr r)))                 ; and the point itself
+     (abf:drop (caddr r))                  ; the point itself
+     (abf:drop (list (cadddr r))))         ; and the note that says so
     (t
      (abf:drop (caddr r))                  ; the dims to where it moved
      (abf:drop (cadddr r))                 ; the moved point
@@ -24764,8 +24810,13 @@
              ((= stage 9)
               (abf:drop temps)
               (cal:ensure-layer abf:*sug-layer* abf:*sug-color*)
+              ;; sug belongs to ONE attempt at ONE pair of readings:
+              ;; a round that comes back here has new readings, so a
+              ;; candidate chosen for the old pair must not still be
+              ;; standing when the note is written
               (setq why   (abf:reach pa pb ra rb)
                     sugs  nil
+                    sug   nil
                     spots nil
                     temps (append (abf:ghost pa ra) (abf:ghost pb rb)))
               (if (null why)
@@ -24889,8 +24940,22 @@
                  (abf:drop temps)
                  (setq temps nil)
                  (cal:ensure-layer abf:*point-layer* abf:*point-color*)
+                 (cal:ensure-layer abf:*ring-layer* 1)
+                 ;; the note goes beside the point, unasked.  ABMOVE
+                 ;; asks where to put its own because that one belongs
+                 ;; at the spot the point came OFF - away from the point
+                 ;; itself, next to a ring, in whatever the drafter was
+                 ;; already drawing there - and because ABMOVE settles
+                 ;; one point and ends, so the question is asked once.
+                 ;; A created point's note has one place to be, beside
+                 ;; the point, and ABPCREATE is a LOOP: a question per
+                 ;; point is a question per point.  It is ordinary TEXT
+                 ;; on abf:*ring-layer* and moves like any other
                  (setq tmpl  (abf:template newpt cands pa pb)
                        pents (abf:new-point tmpl newpt newnm)
+                       note  (abf:note (abf:note-spot newpt)
+                                       (abf:new-note-text
+                                         newnm ra rb sug))
                        pair  (abf:dim-pair pa pb newpt havestyle)
                        made  (1+ made)
                        built (1+ built)
@@ -24902,7 +24967,8 @@
                                 (abf:fmt (cal:dist pa newpt)) "   "
                                 abf:*b-name* " "
                                 (abf:fmt (cal:dist pb newpt))
-                                "  dimensioned."))
+                                "  dimensioned, and noted on "
+                                abf:*ring-layer* "."))
                  (princ
                    (if tmpl
                      (strcat "\n  Built like the survey point nearest"
@@ -24921,7 +24987,7 @@
                                     " readings put it - run " cmd
                                     " again to move it."))
                      (setq done T))
-                   (setq hist    (cons (list "NEW" pair pents) hist)
+                   (setq hist    (cons (list "NEW" pair pents note) hist)
                          newnm   nil
                          fromfind nil
                          createp (eq mode 'CREATE)
@@ -33746,6 +33812,1123 @@
 (if (not *calofin-quiet*)
   (princ (strcat "\nABPCHECK " *abpcheck-version*
                  " loaded.  Type ABPCHECK to run.")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> OLAUTO.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; OLAUTO.lsp  --  overlay two pool perimeters at the least error, and
+;;;                 dimension where they still disagree
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  OLAUTO          overlay two perimeters and dimension the
+;;;                            worst error
+;;;            OLAUTOVER       print the loaded version
+;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; The job.  A pool has been measured twice: once when the liner that is
+;;; in it now was made (the ORIGINAL, drawn as the bead track the liner
+;;; hooks into) and once just now (the NEW perimeter).  The two drawings
+;;; are never in the same place on the sheet and never at the same angle,
+;;; so before anyone can say whether the new measurement agrees with the
+;;; pool that is already there, one has to be laid over the other.
+;;;
+;;; Laid over HOW is the whole question.  Slide it a little one way and
+;;; the deep end lines up while the steps are out by three inches; slide
+;;; it back and the fault moves to the other end.  Doing that by eye
+;;; means the answer depends on who did the sliding.  OLAUTO does not
+;;; slide by eye: it finds the one position -- the one rotation and the
+;;; one translation -- where the total disagreement is as small as it can
+;;; be made, and then dimensions what is left.
+;;;
+;;; What is left is the real news.  A perfect overlay with a 3" gap at
+;;; the shallow end is not a bad overlay: it is a pool that is 3" out of
+;;; shape there, and a liner cut to the new perimeter will fight the
+;;; track at that spot.  The dimensions this command draws are that
+;;; list, worst first.
+;;;
+;;; RIGID, never scaled.  The fit may turn and slide the perimeter and
+;;; nothing else.  Stretching one outline onto the other would hide the
+;;; one error nobody can afford to miss -- a pool measured 2% long --
+;;; by absorbing it into the fit.  So a size difference stays a size
+;;; difference and shows up in the dimensions where it belongs.
+;;;
+;;; How the fit is found, in two stages, because the obvious one method
+;;; does not work on its own:
+;;;
+;;;   1. PHASE SEARCH.  Both perimeters are walked out into the same
+;;;      number of points spaced evenly BY ARC LENGTH.  Two outlines of
+;;;      the same pool then correspond point for point, up to where the
+;;;      walk started and which way round it went.  Every starting point
+;;;      and both directions are tried -- for each, the best rotation
+;;;      and translation follow in closed form, so a whole candidate
+;;;      costs one pass and nothing is iterated.  The best of them is
+;;;      the starting pose.
+;;;   2. ICP POLISH.  From there each point is re-matched to the nearest
+;;;      place on the other curve (not to its opposite number) and the
+;;;      transform re-solved, over and over until it stops moving.  This
+;;;      is what takes the fit from "about right" to the least-squares
+;;;      answer.
+;;;
+;;; Stage 1 exists because stage 2 alone is a local search and a pool is
+;;; nearly symmetric: started at the wrong angle it settles happily into
+;;; a fit five times worse and reports it as the answer.  Started from
+;;; the phase search it lands on the same fit from any angle the two
+;;; drawings happen to arrive at, which is the property that makes the
+;;; result worth putting a dimension on.
+;;;
+;;; What it draws.  Nothing, until the fit is found and the perimeter is
+;;; moved.  Then one aligned dimension at each of the worst spots --
+;;; four by default (ola:*dimcount*) -- each one a local WORST, forced
+;;; apart around the perimeter so that four dimensions describe four
+;;; problems instead of crowding onto one bad corner.  The error is
+;;; measured along the ORIGINAL, which is the one that did not move.
+;;;
+;;; Workflow
+;;;   1. Select the first perimeter -- one polyline, or the same shape
+;;;      exploded into lines and arcs.
+;;;   2. Select the second.
+;;;   3. Say which of the two is the NEW one.  The layers answer this
+;;;      when they are the shop's own, so the question comes up already
+;;;      answered and Enter takes it.
+;;;   4. Say which one should move.  The other stays exactly where it
+;;;      is, and by default that is the original -- it is the pool that
+;;;      exists, and the rest of the sheet is drawn around it.
+;;;   5. OLAUTO fits, moves, re-layers (new onto POOL, original onto
+;;;      Bead Track) and dimensions.
+;;;
+;;; It reports the fit as three numbers -- worst, average and RMS error
+;;; -- so two candidate measurements can be compared, and names the
+;;; layer everything landed on.
+;;; ======================================================================
+
+(setq *olauto-version* "v1.0")       ; announced on load; release_lisp.py
+                                     ; reads this banner and stamps the
+                                     ; dated twin in releases/ from it
+
+;;; ======================================================================
+;;;  TUNABLES -- every value OLAUTO reads that someone might want to
+;;;  change lives in this block, and nowhere else in the file.
+;;;
+;;;  How to change one: edit the value, save, and APPLOAD the file
+;;;  again.  To try a value for one session only, type the setq at the
+;;;  command line -- e.g. (setq ola:*dimcount* 6) -- because every knob
+;;;  is read when the command runs, not when the file loads.
+;;;
+;;;  Units: distances are drawing units (1 unit = 1 inch on the shop's
+;;;  sheets); colours are ACI numbers (1 red, 2 yellow, 3 green, 4 cyan,
+;;;  5 blue, 6 magenta, 7 white, 8 grey).
+;;; ----------------------------------------------------------------------
+
+;; -- where everything lands ---------------------------------------------
+
+;; The two perimeters are put onto the shop's own layers on the way out,
+;; so the sheet reads the same whichever drawing they arrived in.  Point
+;; either of these at a layer of your own and that is where they go.
+(setq ola:*new-layer*   "POOL")        ; the NEW perimeter ends up here
+(setq ola:*og-layer*    "Bead Track")  ; the ORIGINAL ends up here
+(setq ola:*dim-layer*   "DIMENSION")   ; and the error dimensions here
+
+;; Colours used only when a layer above has to be CREATED; a layer the
+;; drawing already has keeps the colour it has.
+(setq ola:*new-color*   3)             ; ACI for a created POOL layer
+(setq ola:*og-color*    1)             ; ACI for a created Bead Track
+(setq ola:*dim-color*   7)             ; ACI for a created DIMENSION
+
+;; The dimension style the errors are drawn in.  A drawing without it
+;; keeps whatever style is current and is told so rather than being
+;; given a style it did not ask for.
+(setq ola:*dim-style*   "STANDARD INCHES")
+
+;; -- how many errors get dimensioned, and where --------------------------
+
+;; How many of the worst spots to dimension.  Each one is a local worst,
+;; so raising this finds the next distinct problem rather than more
+;; dimensions on the one already drawn.
+(setq ola:*dimcount*    4)             ; dimensions drawn
+
+;; How far apart two dimensions have to be, as a fraction of the
+;; perimeter.  This is what stops four dimensions describing one long
+;; bad stretch: lower it to let them crowd, raise it to spread them.
+(setq ola:*peak-gap*    0.07)          ; fraction of the perimeter
+
+;; An error smaller than this is not worth a dimension and the spot is
+;; skipped -- so a fit that came out clean draws two dimensions, or
+;; none, instead of four dimensions of nothing.
+(setq ola:*peak-min*    0.0625)        ; drawing units (1/16")
+
+;; ...and neither is one this much smaller than the worst error found.
+;; A fit always leaves a little residue spread around the perimeter, and
+;; without this floor a pool with ONE real 3" fault gets that fault
+;; dimensioned and then three more dimensions reading 1/16" -- which
+;; says "four problems" about a pool that has one.  Raise it to report
+;; only faults of the same order as the worst; set it to 0.0 to let
+;; ola:*peak-min* alone decide.
+(setq ola:*peak-share*  0.10)          ; fraction of the worst error
+
+;; How far the dimension TEXT is dragged clear of the geometry, as a
+;; fraction of the perimeter's bounding-box diagonal.  The gap being
+;; measured is an inch or two on a forty-foot pool, so the text cannot
+;; live where the dimension line is and be read.
+(setq ola:*text-push*   0.045)         ; fraction of the bbox diagonal
+
+;; -- the fit -------------------------------------------------------------
+
+;; Points each perimeter is walked out into for the fit.  The phase
+;; search costs this SQUARED, so it is the one knob here that is worth
+;; money: 96 is ample for a pool and 48 is enough for a spa.
+(setq ola:*fitpts*      96)            ; samples per perimeter
+
+;; Points along the ORIGINAL at which the error is measured once the
+;; fit is in.  Higher finds a narrow spike that a coarser walk steps
+;; over; the cost is this times the number of segments in the new
+;; perimeter.
+(setq ola:*devpts*      240)           ; samples along the original
+
+;; How far along the curve the polish may look for a better match, in
+;; samples either way.  The phase search hands it a correspondence that
+;; is already close, so this only has to cover the sliding the polish
+;; itself does.  Widening it costs time and buys nothing; narrowing it
+;; below about 3 can pin the fit before it has finished settling.
+(setq ola:*icp-win*     6)             ; samples either side
+
+;; The polish stops when no point moved further than this, or after
+;; this many passes, whichever comes first.  The tolerance is in
+;; drawing units and 0.001" is far below anything a tape can see.
+(setq ola:*fit-tol*     0.001)         ; drawing units
+(setq ola:*fit-max*     60)            ; passes
+
+;; -- numerical guards (rarely changed) -----------------------------------
+
+;; Closer than this and two ends are the same point -- ABHD's
+;; *PF-CHAIN-FUZZ*, so a perimeter reads the same here as it does
+;; there.  It is also what decides whether a chain came out CLOSED,
+;; which is what puts the cyclic half of the phase search in play.
+(setq ola:*fuzz*        1.0e-4)        ; drawing units
+
+;;; ----------------------------------------------------------------------
+;;;  END TUNABLES.  The sysvar list and its snapshot below are not
+;;;  knobs: they are what the run puts back on the way out.
+(setq ola:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;;; ======================================================================
+
+;; ---- small 2D vector helpers -----------------------------------------
+;; Local copies of the generic library helpers, as the standalone tier
+;; requires (STANDARDS section 6): same bodies, this file's prefix.
+
+;; centre of the circle through three points; nil when they are colinear
+(defun ola:circumcenter (pa pb pc / x1 y1 x2 y2 x3 y3 d s1 s2 s3)
+  (setq x1 (car pa) y1 (cadr pa)
+        x2 (car pb) y2 (cadr pb)
+        x3 (car pc) y3 (cadr pc)
+        d  (* 2.0 (+ (* x1 (- y2 y3)) (* x2 (- y3 y1)) (* x3 (- y1 y2)))))
+  (if (equal d 0.0 1e-12)
+    nil
+    (progn
+      (setq s1 (+ (* x1 x1) (* y1 y1))
+            s2 (+ (* x2 x2) (* y2 y2))
+            s3 (+ (* x3 x3) (* y3 y3)))
+      (list (/ (+ (* s1 (- y2 y3)) (* s2 (- y3 y1)) (* s3 (- y1 y2))) d)
+            (/ (+ (* s1 (- x3 x2)) (* s2 (- x1 x3)) (* s3 (- x2 x1))) d)))))
+
+(defun ola:remove (val lst / out hit x)
+  (setq out nil hit nil)
+  (foreach x lst
+    (if (and (not hit) (eq x val))
+      (setq hit T)
+      (setq out (cons x out))))
+  (reverse out))
+
+;; ---- segment geometry ------------------------------------------------
+;; A segment is (startPt endPt bulge), 2D points -- ABHD's shape and
+;; ABCURCHECK's, so all three read a drawing the same way.
+
+;; signed sweep of a bulged segment: bulge = tan(sweep/4), positive CCW
+(defun ola:sweep (b) (* 4.0 (atan b)))
+
+;; Radius of the arc (A B bulge); nil for a straight segment.
+(defun ola:bulge-radius (a b bl / h)
+  (if (< (abs bl) 1.0e-9)
+    nil
+    (progn
+      (setq h (/ (cal:dist a b) 2.0))
+      (/ (* h (1+ (* bl bl))) (* 2.0 (abs bl))))))
+
+;; Length along a segment -- the chord when straight, the arc otherwise.
+(defun ola:seg-len (s / r)
+  (setq r (ola:bulge-radius (car s) (cadr s) (caddr s)))
+  (if r
+    (* r (abs (ola:sweep (caddr s))))
+    (cal:dist (car s) (cadr s))))
+
+;; Arc geometry of a bulged segment: (center radius angStart), nil when
+;; the segment is straight.
+(defun ola:arc-geom (s / p1 p2 b ch dir apex c)
+  (setq p1 (cal:2d (car s))
+        p2 (cal:2d (cadr s))
+        b  (caddr s))
+  (if (or (< (abs b) 1.0e-9)
+          (< (setq ch (cal:dist p1 p2)) 1.0e-12))
+    nil
+    (progn
+      (setq dir  (cal:v* (cal:v- p2 p1) (/ 1.0 ch))
+            ;; sagitta = (chord/2)*bulge; a positive (CCW) bulge apex
+            ;; lies to the RIGHT of the p1->p2 chord direction
+            apex (cal:v+ (cal:v* (cal:v+ p1 p2) 0.5)
+                         (cal:v* (list (- (cadr dir)) (car dir))
+                                 (* -0.5 ch b)))
+            c    (ola:circumcenter p1 apex p2))
+      (if (null c)
+        nil
+        (list c (cal:dist c p1) (angle c p1))))))
+
+;; The point at parameter U (0..1) along a segment.  U is arc length on
+;; an arc as much as on a line -- the sweep is proportional to it --
+;; which is what lets the walk below space its samples evenly.
+(defun ola:seg-pt (s u / gm)
+  (setq gm (ola:arc-geom s))
+  (if (null gm)
+    (cal:v+ (cal:2d (car s))
+            (cal:v* (cal:v- (cadr s) (car s)) u))
+    (polar (car gm) (+ (caddr gm) (* u (ola:sweep (caddr s)))) (cadr gm))))
+
+;; The point of the straight span A->B nearest to P.  Written out rather
+;; than called through the segment form because this is the inner loop
+;; of the polish, run tens of thousands of times in a fit.
+(defun ola:chord-close (a b p / vx vy wx wy l2 u)
+  (setq vx (- (car b) (car a))   vy (- (cadr b) (cadr a))
+        wx (- (car p) (car a))   wy (- (cadr p) (cadr a))
+        l2 (+ (* vx vx) (* vy vy))
+        u  (if (< l2 1.0e-18) 0.0 (/ (+ (* wx vx) (* wy vy)) l2)))
+  (cond ((< u 0.0) (setq u 0.0)) ((> u 1.0) (setq u 1.0)))
+  (list (+ (car a) (* u vx)) (+ (cadr a) (* u vy))))
+
+;; A segment PREPARED for repeated measurement: the segment, its arc
+;; geometry worked out once, and its two endpoints.  ola:profile
+;; measures every sample against every segment, so working the arc out
+;; inside that double loop -- a circumcentre each time -- would be most
+;; of what the command costs.
+(defun ola:prep (segs)
+  (mapcar '(lambda (s)
+             (list s (ola:arc-geom s) (cal:2d (car s)) (cal:2d (cadr s))))
+          segs))
+
+;; The point on a prepared segment nearest to P -- exactly, on the arc
+;; itself rather than on a chord standing in for it.  On an arc that is
+;; where the line from the centre through P crosses it, unless P is off
+;; the end of the sweep, and then it is the nearer end.
+(defun ola:pclose (ps p / gm s c r a0 th da q)
+  (setq s  (car ps)
+        gm (cadr ps)
+        p  (cal:2d p))
+  (if (null gm)
+    (ola:chord-close (caddr ps) (cadddr ps) p)
+    (progn
+      (setq c  (car gm)
+            r  (cadr gm)
+            a0 (caddr gm)
+            th (ola:sweep (caddr s)))
+      (if (< (cal:dist c p) 1.0e-12)
+        ;; dead on the centre: every point of the arc is as near as
+        ;; every other, so hand back the one at the start
+        (polar c a0 r)
+        (progn
+          (setq da (cal:angnorm (- (angle c p) a0)))
+          ;; fold DA onto the same side of zero the sweep runs
+          (if (< th 0.0) (setq da (- da pi pi)))
+          (if (if (< th 0.0) (>= da th) (<= da th))
+            (polar c (angle c p) r)
+            ;; off the end: whichever end is nearer
+            (progn
+              (setq q (polar c (+ a0 th) r))
+              (if (< (cal:dist p (caddr ps)) (cal:dist p q))
+                (caddr ps)
+                q))))))))
+
+;; ---- entity -> segment extraction ------------------------------------
+
+(defun ola:lw-segs (ed / pts bls item segs n closed cur nxt bl)
+  (setq pts nil bls nil)
+  (foreach item ed
+    (cond
+      ((= (car item) 10)
+       (setq pts (cons (cal:2d (cdr item)) pts)
+             bls (cons 0.0 bls)))
+      ((and (= (car item) 42) bls)
+       (setq bls (cons (cdr item) (cdr bls))))))
+  (setq pts    (reverse pts)
+        bls    (reverse bls)
+        closed (= 1 (logand 1 (cond ((cdr (assoc 70 ed))) (0))))
+        segs   nil)
+  ;; walked with two pointers rather than (nth n pts): nth is a walk of
+  ;; its own, and a traced perimeter can carry a few hundred vertices
+  (setq cur pts nxt (cdr pts) n bls)
+  (while nxt
+    (setq segs (cons (list (car cur) (car nxt) (car n)) segs)
+          cur  nxt
+          nxt  (cdr nxt)
+          n    (cdr n)))
+  ;; The closing span of a CLOSED polyline is real geometry and carries
+  ;; the last vertex's bulge; an OPEN one is left open, and the walk
+  ;; below will simply find the chain unclosed.
+  (if (and closed (> (length pts) 1)
+           (>= (cal:dist (last pts) (car pts)) ola:*fuzz*))
+    (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
+  (reverse segs))
+
+(defun ola:pl-segs (en / ed sub pts bls segs closed cur nxt n)
+  ;; heavy (old-style) 2D POLYLINE: walk its VERTEX sub-entities
+  (setq ed     (entget en)
+        closed (= 1 (logand 1 (cond ((cdr (assoc 70 ed))) (0))))
+        pts    nil
+        bls    nil
+        sub    (entnext en))
+  (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
+    ;; skip spline/fit control vertices (flag bits 1 and 16)
+    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+      (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
+            bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
+    (setq sub (entnext sub)))
+  (setq pts (reverse pts) bls (reverse bls) segs nil)
+  (setq cur pts nxt (cdr pts) n bls)
+  (while nxt
+    (setq segs (cons (list (car cur) (car nxt) (car n)) segs)
+          cur  nxt
+          nxt  (cdr nxt)
+          n    (cdr n)))
+  (if (and closed (> (length pts) 1)
+           (>= (cal:dist (last pts) (car pts)) ola:*fuzz*))
+    (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
+  (reverse segs))
+
+(defun ola:ent-segs (en / ed typ c r a1 a2 delta)
+  (setq ed  (entget en)
+        typ (cdr (assoc 0 ed)))
+  (cond
+    ((= typ "LINE")
+     (list (list (cal:2d (cdr (assoc 10 ed)))
+                 (cal:2d (cdr (assoc 11 ed)))
+                 0.0)))
+    ((= typ "ARC")
+     (setq c     (cal:2d (cdr (assoc 10 ed)))
+           r     (cdr (assoc 40 ed))
+           a1    (cdr (assoc 50 ed))
+           a2    (cdr (assoc 51 ed))
+           delta (cal:angnorm (- a2 a1)))
+     (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
+     ;; a full-circle arc cannot be one bulged segment (its bulge is
+     ;; infinite): hand back two semicircles instead
+     (if (> delta (- (* 2.0 pi) 1.0e-9))
+       (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
+             (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
+       (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
+    ;; a CIRCLE is a legitimate perimeter (a round spa): two semicircles,
+    ;; so the walk sees a normal closed loop instead of a gap
+    ((= typ "CIRCLE")
+     (setq c (cal:2d (cdr (assoc 10 ed)))
+           r (cdr (assoc 40 ed)))
+     (list (list (polar c 0.0 r) (polar c pi r) 1.0)
+           (list (polar c pi r) (polar c 0.0 r) 1.0)))
+    ((= typ "LWPOLYLINE") (ola:lw-segs ed))
+    ((= typ "POLYLINE") (ola:pl-segs en))
+    (T nil)))
+
+;; ---- ordering loose segments into a ring -----------------------------
+;; ABCURCHECK's acc:chain, and for the same reason: a perimeter handed
+;; over as loose arcs and lines has no order of its own, so one is made
+;; by always walking to whichever end is nearest, reversing the segment
+;; when it is its far end that is nearer.
+
+(defun ola:chain (segs / loop cur rest best orig bd s d dr)
+  (if (null segs)
+    nil
+    (progn
+      (setq loop (list (car segs))
+            cur  (cadr (car segs))
+            rest (cdr segs))
+      (while rest
+        (setq best nil orig nil bd nil)
+        (foreach s rest
+          (setq d  (cal:dist cur (car s))
+                dr (cal:dist cur (cadr s)))
+          (if (or (null bd) (< d bd))
+            (setq bd d best s orig s))
+          (if (< dr bd)
+            (setq bd   dr
+                  best (list (cadr s) (car s) (- (caddr s)))
+                  orig s)))
+        (setq loop (cons best loop)
+              cur  (cadr best)
+              rest (ola:remove orig rest)))
+      (reverse loop))))
+
+;; T when the chain comes back to where it started.
+(defun ola:closed-p (segs)
+  (and segs
+       (< (cal:dist (car (car segs)) (cadr (last segs))) ola:*fuzz*)))
+
+;; Total length of a chain.
+(defun ola:chain-len (segs / L s)
+  (setq L 0.0)
+  (foreach s segs (setq L (+ L (ola:seg-len s))))
+  L)
+
+;; ---- walking a chain out into evenly spaced points --------------------
+;; Evenly spaced BY ARC LENGTH, which is the whole trick behind the
+;; phase search: two outlines of one pool, walked this way, line up
+;; point for point wherever the walks happen to have started.
+;;
+;; A closed chain gets N points around the loop (the last one does not
+;; repeat the first); an open one gets N points from end to end.
+
+(defun ola:walk (segs n closed / L step out k t0 acc s rest slen u)
+  (setq L (ola:chain-len segs))
+  (if (or (null segs) (< L 1.0e-9) (< n 2))
+    nil
+    (progn
+      (setq step (/ L (float (if closed n (1- n))))
+            out  nil
+            k    0
+            acc  0.0
+            rest segs
+            s    (car segs)
+            slen (ola:seg-len s))
+      (while (< k n)
+        (setq t0 (* step k))
+        ;; advance to the segment this distance falls in.  The walk only
+        ;; ever moves forward, so the whole of it costs one pass over
+        ;; the chain, not one pass per sample.
+        (while (and (cdr rest) (> t0 (+ acc slen)))
+          (setq acc  (+ acc slen)
+                rest (cdr rest)
+                s    (car rest)
+                slen (ola:seg-len s)))
+        (setq u (if (< slen 1.0e-12) 0.0 (/ (- t0 acc) slen)))
+        (cond ((< u 0.0) (setq u 0.0)) ((> u 1.0) (setq u 1.0)))
+        (setq out (cons (ola:seg-pt s u) out)
+              k   (1+ k)))
+      (reverse out))))
+
+;; ---- the transform ----------------------------------------------------
+;; One is (angle dx dy), meaning "turn by ANGLE about the origin, then
+;; move by (DX DY)".  Kept this way because they COMPOSE: the fit is a
+;; phase search followed by dozens of polish steps, and the entities in
+;; the drawing are moved once, by the product of all of them, rather
+;; than dragged through every intermediate pose.
+
+(defun ola:xid () (list 0.0 0.0 0.0))
+
+(defun ola:xapply (x p / c s)
+  (setq c (cos (car x)) s (sin (car x)) p (cal:2d p))
+  (list (+ (- (* c (car p)) (* s (cadr p))) (cadr x))
+        (+ (+ (* s (car p)) (* c (cadr p))) (caddr x))))
+
+;; The step "turn by TH about CA, then put CA onto CB" as one of the
+;; above.
+(defun ola:xstep (th ca cb / c s)
+  (setq c (cos th) s (sin th))
+  (list th
+        (- (car cb)  (- (* c (car ca)) (* s (cadr ca))))
+        (- (cadr cb) (+ (* s (car ca)) (* c (cadr ca))))))
+
+;; X1 and then X2, as one transform.
+(defun ola:xthen (x1 x2 / c s)
+  (setq c (cos (car x2)) s (sin (car x2)))
+  (list (+ (car x1) (car x2))
+        (+ (- (* c (cadr x1)) (* s (caddr x1))) (cadr x2))
+        (+ (+ (* s (cadr x1)) (* c (caddr x1))) (caddr x2))))
+
+;; ---- the fit ----------------------------------------------------------
+
+(defun ola:centroid (pts / sx sy n p)
+  (setq sx 0.0 sy 0.0 n 0)
+  (foreach p pts
+    (setq sx (+ sx (car p)) sy (+ sy (cadr p)) n (1+ n)))
+  (if (= n 0) nil (list (/ sx n) (/ sy n))))
+
+;; The rigid transform taking the paired points A onto B, in closed
+;; form -- the 2D Kabsch solution.  Rotation only: no scale term is
+;; computed and none is applied, which is the promise in the header.
+(defun ola:kabsch (a b / ca cb sxx sxy pa pb ax ay bx by)
+  (setq ca  (ola:centroid a)
+        cb  (ola:centroid b)
+        sxx 0.0
+        sxy 0.0
+        pa  a
+        pb  b)
+  (while pa
+    (setq ax (- (car (car pa)) (car ca))   ay (- (cadr (car pa)) (cadr ca))
+          bx (- (car (car pb)) (car cb))   by (- (cadr (car pb)) (cadr cb))
+          sxx (+ sxx (* ax bx) (* ay by))
+          sxy (+ sxy (- (* ax by) (* ay bx)))
+          pa  (cdr pa)
+          pb  (cdr pb)))
+  (ola:xstep (if (and (equal sxx 0.0 1e-15) (equal sxy 0.0 1e-15))
+               0.0
+               (atan sxy sxx))
+             ca cb))
+
+;; PHASE SEARCH.  A and B are the two walks, the same length.  Every
+;; starting offset and both directions are scored; the winner is the
+;; one whose best rotation leaves the least squared error, and because
+;; the two point sets and their centroids do not change as the offset
+;; slides, that reduces to the largest (sxx^2 + sxy^2) -- one pass each
+;; and no iteration anywhere.
+;;
+;; Returns (transform fixed-reordered), the second being B renumbered so
+;; that its point J is the one facing A's point J.  The polish then has
+;; its correspondence for free.
+(defun ola:phase (a b closed / n ca cb ac bc rev bd bb pa qb sxx sxy m
+                               best bestk bestrev k lim)
+  (setq n    (length a)
+        ca   (ola:centroid a)
+        cb   (ola:centroid b)
+        ;; centred once; the centroids are the same for every offset and
+        ;; either direction, because the point SET never changes
+        ac   (mapcar '(lambda (p) (cal:v- p ca)) a)
+        best nil bestk 0 bestrev 0
+        rev  0
+        lim  (if closed n 1))
+  (while (< rev 2)
+    (setq bd (if (= rev 0) b (reverse b))
+          bc (mapcar '(lambda (p) (cal:v- p cb)) bd)
+          ;; doubled, so an offset is a cdr rather than an index
+          bb (append bc bc)
+          k  0)
+    (while (< k lim)
+      (setq pa ac qb bb sxx 0.0 sxy 0.0)
+      (while pa
+        (setq sxx (+ sxx (* (car (car pa)) (car (car qb)))
+                         (* (cadr (car pa)) (cadr (car qb))))
+              sxy (+ sxy (- (* (car (car pa)) (cadr (car qb)))
+                            (* (cadr (car pa)) (car (car qb)))))
+              pa  (cdr pa)
+              qb  (cdr qb)))
+      (setq m (+ (* sxx sxx) (* sxy sxy)))
+      (if (or (null best) (> m best))
+        (setq best m bestk k bestrev rev))
+      (setq bb (cdr bb)
+            k  (1+ k)))
+    (setq rev (1+ rev)))
+  ;; rebuild the winner and solve it once more for the transform itself
+  (setq bd (if (= bestrev 0) b (reverse b))
+        bb (append bd bd)
+        qb bb
+        k  0)
+  (while (< k bestk) (setq qb (cdr qb) k (1+ k)))
+  (setq bd nil k 0)
+  (while (< k n) (setq bd (cons (car qb) bd) qb (cdr qb) k (1+ k)))
+  (setq bd (reverse bd))
+  (list (ola:kabsch a bd) bd))
+
+;; ICP POLISH.  Re-match every point to the nearest place on the fixed
+;; walk, re-solve, repeat until nothing moves.  Returns the transform
+;; that carries the phase-search pose the rest of the way in.
+;;
+;; The match for point J is looked for only among the spans within
+;; ola:*icp-win* of span J -- the phase search has already put J beside
+;; its opposite number, and the polish never slides a correspondence
+;; more than a sample or two from there.  So the window sits on J
+;; itself rather than chasing the last match, and the whole pass walks
+;; ONE pointer down a doubled copy of the fixed walk: no indexing, and
+;; no re-walking the list for every sample.
+(defun ola:polish (a bs closed / n win cur pass corr shift new acc
+                                 bb wp j p q best bd cand nxt step
+                                 lim head)
+  (setq n    (length a)
+        win  (max 1 (fix ola:*icp-win*))
+        cur  a
+        acc  (ola:xid)
+        pass 0
+        shift (* 2.0 ola:*fit-tol*))
+  (if (>= (* 2 win) (- n 2)) (setq win (max 1 (/ (- n 2) 2))))
+  ;; a closed walk wraps, so three copies laid end to end let the window
+  ;; start WIN before the first sample and still read a span past the
+  ;; last; an open one simply clamps at its two ends.  Built once: the
+  ;; fixed walk does not move, only the one being fitted to it does.
+  (setq bb  (if closed (append bs bs bs) bs)
+        lim (- n 2 win))
+  (while (and (< pass ola:*fit-max*) (> shift ola:*fit-tol*))
+    (setq wp bb
+          j  (if closed (- n win) 0))
+    (while (> j 0) (setq wp (cdr wp) j (1- j)))
+    (setq corr nil
+          p    cur
+          j    0)
+    (while p
+      (setq head wp
+            best nil
+            cand (1+ (* 2 win)))
+      ;; measure against the spans of the window, in order
+      (while (and (> cand 0) (cdr head))
+        (setq q  (ola:chord-close (car head) (cadr head) (car p))
+              bd (cal:dist (car p) q))
+        (if (or (null best) (< bd (car best))) (setq best (list bd q)))
+        (setq head (cdr head)
+              cand (1- cand)))
+      (setq corr (cons (cadr best) corr)
+            p    (cdr p)
+            j    (1+ j))
+      ;; the window start never moves backwards, so it is one cdr a
+      ;; sample -- and on an open walk it holds still at both ends,
+      ;; where there are no spans beyond to slide onto
+      (if (or closed (and (> j win) (<= j lim)))
+        (setq wp (cdr wp))))
+    (setq corr (reverse corr)
+          step (ola:kabsch cur corr)
+          new  (mapcar '(lambda (v) (ola:xapply step v)) cur)
+          acc  (ola:xthen acc step)
+          shift 0.0
+          p    cur)
+    (foreach nxt new
+      (setq shift (max shift (cal:dist nxt (car p)))
+            p     (cdr p)))
+    (setq cur new
+          pass (1+ pass)))
+  acc)
+
+;; The whole fit: walk both, phase-search, polish.  Returns the
+;; transform that carries MSEG's perimeter onto FSEG's.
+;; (Neither argument is called FIX: that is the built-in this defun
+;; needs two lines down, and a local of the same name would shadow it.)
+(defun ola:fit (mseg fseg / n closed a b ph x1 bs x2)
+  (setq n      (max 8 (fix ola:*fitpts*))
+        closed (and (ola:closed-p mseg) (ola:closed-p fseg))
+        a      (ola:walk mseg n closed)
+        b      (ola:walk fseg n closed))
+  (if (or (null a) (null b))
+    nil
+    (progn
+      (setq ph (ola:phase a b closed)
+            x1 (car ph)
+            bs (cadr ph)
+            a  (mapcar '(lambda (p) (ola:xapply x1 p)) a)
+            x2 (ola:polish a bs closed))
+      (ola:xthen x1 x2))))
+
+;; ---- moving the drawing to match --------------------------------------
+;; The entities are rewritten in place with entmod rather than driven
+;; through MOVE and ROTATE: two commands would round the geometry twice
+;; through the command line and leave the result depending on snaps and
+;; on the current UCS.  A rigid transform leaves a bulge alone -- it is
+;; a shape, not a position -- so only points and arc angles move.
+
+(defun ola:xform-ed (x ed / out item code p q)
+  (setq out nil)
+  (foreach item ed
+    (setq code (car item))
+    (setq out
+          (cons
+            (cond
+              ;; every point group a curve of ours carries.  A LINE's
+              ;; are 3D and an LWPOLYLINE's are 2D, so whatever third
+              ;; ordinate came in goes back out: handing entmod a
+              ;; flattened point would quietly drop the elevation of a
+              ;; perimeter drawn off the Z zero.
+              ((member code '(10 11))
+               (setq p (cdr item)
+                     q (ola:xapply x p))
+               (cons code (if (caddr p) (append q (list (caddr p))) q)))
+              ;; arc start/end angles turn with it
+              ((member code '(50 51))
+               (cons code (cal:angnorm (+ (cdr item) (car x)))))
+              (T item))
+            out)))
+  (reverse out))
+
+(defun ola:xform-ent (x en / ed typ sub)
+  (setq ed  (entget en)
+        typ (cdr (assoc 0 ed)))
+  (cond
+    ;; a heavy POLYLINE keeps its points in VERTEX sub-entities, and the
+    ;; header itself carries a 10 that is an elevation, not a position
+    ((= typ "POLYLINE")
+     (setq sub (entnext en))
+     (while (and sub (= "VERTEX" (cdr (assoc 0 (entget sub)))))
+       (entmod (ola:xform-ed x (entget sub)))
+       (setq sub (entnext sub)))
+     (entupd en))
+    (T (entmod (ola:xform-ed x ed)))))
+
+(defun ola:xform-ss (x ss / i)
+  (setq i 0)
+  (repeat (sslength ss)
+    (ola:xform-ent x (ssname ss i))
+    (setq i (1+ i))))
+
+;; ---- where the two still disagree -------------------------------------
+
+;; The error at each of DEVPTS points along the ORIGINAL: how far that
+;; point is from the new perimeter.  Measured on the original because
+;; the original is the one that did not move -- the dimensions then hang
+;; off geometry that is still exactly where the drawing put it.
+;;
+;; Each sample is measured against every segment of the new perimeter,
+;; on the real arcs rather than on a chord standing in for them, so a
+;; reading is the true distance and not a sampling of one.
+(defun ola:profile (og new / n closed pts ps out p best s q d)
+  (setq n      (max 8 (fix ola:*devpts*))
+        closed (ola:closed-p og)
+        pts    (ola:walk og n closed)
+        ;; the arcs of the new perimeter are worked out ONCE, here,
+        ;; rather than inside the double loop below
+        ps     (ola:prep new)
+        out    nil)
+  (foreach p pts
+    (setq best nil)
+    (foreach s ps
+      (setq q (ola:pclose s p)
+            d (cal:dist p q))
+      (if (or (null best) (< d (car best)))
+        (setq best (list d p q))))
+    (setq out (cons best out)))
+  (reverse out))
+
+;; The worst spots, worst first.  Taken greedily: the biggest error
+;; anywhere, then the biggest that is still GAPN samples clear of it,
+;; and so on.  The separation is what makes four dimensions describe
+;; four problems -- without it one long bad stretch takes every slot
+;; and the other three faults on the pool go undrawn.  WANT at most,
+;; and a spot is skipped when it is under ola:*peak-min* outright or
+;; under ola:*peak-share* of the worst error there is, which is what
+;; keeps the fit's own residue from being dimensioned as a finding.
+(defun ola:peaks (prof want closed / n gapn out taken i v ok j k
+                                     bestd besti more floor)
+  (setq n     (length prof)
+        gapn  (max 1 (fix (* n ola:*peak-gap*)))
+        out   nil
+        taken nil
+        more  T
+        floor 0.0)
+  (foreach v prof (setq floor (max floor (car v))))
+  (setq floor (max ola:*peak-min* (* floor ola:*peak-share*)))
+  (while (and more (< (length out) want))
+    (setq i 0 bestd nil besti nil)
+    (foreach v prof
+      (setq v (car v))
+      (if (and (>= v floor) (or (null bestd) (> v bestd)))
+        (progn
+          (setq ok T)
+          (foreach j taken
+            (setq k (abs (- i j)))
+            ;; round a closed perimeter the two ends of the profile are
+            ;; neighbours, so the separation is measured the short way
+            (if (and closed (> k (/ n 2))) (setq k (- n k)))
+            (if (< k gapn) (setq ok nil)))
+          (if ok (setq bestd v besti i))))
+      (setq i (1+ i)))
+    (if besti
+      (setq out   (cons (nth besti prof) out)
+            taken (cons besti taken))
+      (setq more nil)))
+  (reverse out))
+
+;; ---- layers and drawing ------------------------------------------------
+
+;; Put a whole selection onto a layer.
+(defun ola:relayer (ss name / i en ed)
+  (setq i 0)
+  (repeat (sslength ss)
+    (setq en (ssname ss i)
+          ed (entget en))
+    (if (assoc 8 ed)
+      (entmod (subst (cons 8 name) (assoc 8 ed) ed)))
+    (setq i (1+ i))))
+
+;; The dominant layer of a selection -- what the new/original question
+;; is answered with before it is asked.
+(defun ola:ss-layer (ss / i counts en lay hit best bestn p)
+  (setq i 0 counts nil)
+  (repeat (sslength ss)
+    (setq en  (ssname ss i)
+          lay (cdr (assoc 8 (entget en)))
+          hit (assoc lay counts))
+    (if hit
+      (setq counts (subst (cons lay (1+ (cdr hit))) hit counts))
+      (setq counts (cons (cons lay 1) counts)))
+    (setq i (1+ i)))
+  (setq best nil bestn 0)
+  (foreach p counts
+    (if (> (cdr p) bestn) (setq best (car p) bestn (cdr p))))
+  best)
+
+;; What a chain spans, as (lower-left upper-right).  The midpoint of an
+;; arc is taken as well as its ends: an arc bulges past both of them,
+;; and a box drawn round the ends alone would be too small by the
+;; sagitta on every curve in the pool.
+(defun ola:bbox (segs / lo hi s p)
+  (setq lo nil hi nil)
+  (foreach s segs
+    (foreach p (list (car s) (cadr s) (ola:seg-pt s 0.5))
+      (if (null lo)
+        (setq lo (cal:2d p) hi (cal:2d p))
+        (setq lo (list (min (car lo) (car p)) (min (cadr lo) (cadr p)))
+              hi (list (max (car hi) (car p)) (max (cadr hi) (cadr p)))))))
+  (if lo (list lo hi)))
+
+;; Its diagonal -- the scale everything drawn is sized against, so a
+;; dimension reads the same on a spa and on a pool.
+(defun ola:span (segs / bb)
+  (if (setq bb (ola:bbox segs)) (cal:dist (car bb) (cadr bb)) 0.0))
+
+;; ...and its middle, which is the side of a dimension the text is
+;; pushed AWAY from.
+(defun ola:middle (segs / bb)
+  (if (setq bb (ola:bbox segs))
+    (cal:v* (cal:v+ (car bb) (cadr bb)) 0.5)
+    '(0.0 0.0)))
+
+;; One error dimension: from the point on the original to the point on
+;; the new perimeter, with the text dragged clear along the line the two
+;; make, because the gap itself is an inch on a forty-foot pool and
+;; nothing would be readable sitting on it.
+(defun ola:dim (pog pnew push mid / pre new dir loc a b)
+  (setq pre (entlast)
+        dir (cal:unit (cal:v- pnew pog)))
+  ;; a zero-length gap has no direction to push along
+  (if (null dir) (setq dir '(0.0 1.0)))
+  ;; DIMTEDIT slides the text ALONG the dimension line, so the push has
+  ;; to run that way too -- but which of the two ways is free, and the
+  ;; one leading AWAY from the middle of the pool is the one that puts
+  ;; the text outside the shape rather than into it
+  (setq a (cal:v+ pog (cal:v* dir push))
+        b (cal:v- pog (cal:v* dir push))
+        loc (if (> (cal:dist a mid) (cal:dist b mid)) a b))
+  (command "_.DIMALIGNED"
+           "_non" (trans (cal:2d pog) 0 1)
+           "_non" (trans (cal:2d pnew) 0 1)
+           "_non" (trans (cal:2d pnew) 0 1))
+  (setq new (entlast))
+  (if (and new (not (eq new pre)))
+    (progn
+      ;; DIMTEDIT moves the TEXT alone -- the dimension line stays on
+      ;; the geometry, which is what makes the reading traceable back
+      ;; to the two points it came from
+      (command "_.DIMTEDIT" new "_non" (trans (cal:2d loc) 0 1))
+      new)))
+
+;; ---- housekeeping ------------------------------------------------------
+
+;; ---- asking ------------------------------------------------------------
+;; The section 4 reference helper: KWS is BOTH the initget list and the
+;; bracket text, so the two cannot drift.
+
+;; ---- reading a selection ------------------------------------------------
+
+(defun ola:collect (ss / i en all)
+  (setq i 0 all nil)
+  (repeat (sslength ss)
+    (setq en  (ssname ss i)
+          all (append all (ola:ent-segs en))
+          i   (1+ i)))
+  ;; one polyline carries its own vertex order and is trusted; anything
+  ;; else is loose geometry and gets walked into a ring
+  (if (and (= 1 (sslength ss)) (> (length all) 1))
+    all
+    (ola:chain all)))
+
+(defun ola:select (which / ss)
+  (princ (strcat "\n\nSelect the " which
+                 " perimeter - one polyline, or the same"))
+  (princ "\nshape exploded into lines and arcs.")
+  (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
+  (if lzd:watch (lzd:watch ss))
+  ss)
+
+;; ---- the report ---------------------------------------------------------
+
+(defun ola:rtos1 (v) (rtos v 2 3))
+
+(defun ola:report (prof drawn / n worst sum rms d p)
+  (setq n (length prof) worst 0.0 sum 0.0 rms 0.0)
+  (foreach p prof
+    (setq d     (car p)
+          worst (max worst d)
+          sum   (+ sum d)
+          rms   (+ rms (* d d))))
+  (if (> n 0) (setq sum (/ sum n) rms (sqrt (/ rms n))))
+  (princ (strcat "\n\nOLAUTO: best overlay found - worst error "
+                 (ola:rtos1 worst) ", average " (ola:rtos1 sum)
+                 ", RMS " (ola:rtos1 rms) "."))
+  (princ (strcat "\n        Measured at " (itoa n)
+                 " points around the original."))
+  (if drawn
+    (princ (strcat "\n        " (itoa (length drawn))
+                   " dimension(s) drawn on layer \"" ola:*dim-layer*
+                   "\" at the worst spots."))
+    (princ (strcat "\n        Nothing over " (ola:rtos1 ola:*peak-min*)
+                   " to dimension - the two agree everywhere.")))
+  (list worst sum rms))
+
+;; ---- the command ---------------------------------------------------------
+
+(defun ola:run ( / ssa ssb newss ogss movss fixss laya layb qstep ans
+                   whichnew whichmove segnew segog x prof pk drawn push
+                   havestyle p dimlist mid)
+  ;; The selections and the two questions are ONE chain, walked with a
+  ;; step counter (STANDARDS section 3).  A selection cannot be armed
+  ;; with initget, so Back cannot be typed AT one -- which is why Back
+  ;; at the question sitting straight after the selections re-opens
+  ;; them instead, the way WCALST and AUTOBEAD have always done.
+  ;; Nothing has been drawn at this point, and step 0 rebuilds every
+  ;; answer it fills, so the second pass starts clean.
+  (setq qstep 0)
+  (while (and qstep (< qstep 3))
+    (cond
+      ((= qstep 0)
+       (if (and (setq ssa (ola:select "FIRST"))
+                (setq ssb (ola:select "SECOND")))
+         (setq laya (ola:ss-layer ssa)
+               layb (ola:ss-layer ssb)
+               ;; the layers answer the next question before it is
+               ;; asked: the selection already sitting on the pool
+               ;; layer is the new one, and if neither is, the first
+               ;; one asked for leads
+               whichnew (cond ((and laya (= (strcase laya)
+                                            (strcase ola:*new-layer*)))
+                               "First")
+                              ((and layb (= (strcase layb)
+                                            (strcase ola:*new-layer*)))
+                               "Second")
+                              ((and layb (= (strcase layb)
+                                            (strcase ola:*og-layer*)))
+                               "First")
+                              ((and laya (= (strcase laya)
+                                            (strcase ola:*og-layer*)))
+                               "Second")
+                              (T "First"))
+               qstep 1)
+         (setq qstep nil)))                    ; nothing picked - done
+      ((= qstep 1)
+       (setq ans (cal:askkw
+                   (strcat "Which selection is the NEW perimeter?"
+                           " (first on \"" (cond (laya) ("?"))
+                           "\", second on \"" (cond (layb) ("?")) "\")")
+                   "First Second" "First/Second" whichnew T))
+       (if (eq ans 'CAL-BACK)
+         ;; the canonical wording (README, "Going back a step"); the
+         ;; select prompt that follows says what re-opened
+         (progn (princ "\nStepping back one question.")
+                (setq qstep 0))
+         (setq whichnew ans qstep 2)))
+      ((= qstep 2)
+       (setq ans (cal:askkw
+                   "Which perimeter should move onto the other?"
+                   "New OG" "New/OG" (cond (whichmove) ("New")) T))
+       (if (eq ans 'CAL-BACK)
+         (progn (princ "\nStepping back one question.")
+                (setq qstep 1))
+         (setq whichmove ans qstep 3)))))
+  (if (= qstep 3)
+    (progn
+      (setq newss (if (= whichnew "First") ssa ssb)
+            ogss  (if (= whichnew "First") ssb ssa)
+            movss (if (= whichmove "New") newss ogss)
+            fixss (if (= whichmove "New") ogss newss))
+      (setq segnew (ola:collect newss)
+            segog  (ola:collect ogss))
+      (if (or (< (length segnew) 1) (< (length segog) 1))
+        (princ "\nOLAUTO: one of those selections has no curve in it.")
+        (progn
+          (princ "\n\nFitting...")
+          (setq x (ola:fit (if (= whichmove "New") segnew segog)
+                           (if (= whichmove "New") segog segnew)))
+          (if (null x)
+            (princ "\nOLAUTO: those two perimeters cannot be walked - one of them has no length.")
+            (progn
+              ;; the drawing moves ONCE, by the whole transform
+              (ola:xform-ss x movss)
+              (if (= whichmove "New")
+                (setq segnew (mapcar '(lambda (s)
+                                        (list (ola:xapply x (car s))
+                                              (ola:xapply x (cadr s))
+                                              (caddr s)))
+                                     segnew))
+                (setq segog (mapcar '(lambda (s)
+                                       (list (ola:xapply x (car s))
+                                             (ola:xapply x (cadr s))
+                                             (caddr s)))
+                                    segog)))
+              ;; onto the shop's layers, so the sheet reads the same
+              ;; whichever drawing the two arrived in
+              (cal:ensure-layer ola:*new-layer* ola:*new-color*)
+              (cal:ensure-layer ola:*og-layer* ola:*og-color*)
+              (ola:relayer newss ola:*new-layer*)
+              (ola:relayer ogss ola:*og-layer*)
+              ;; the error, and the worst of it
+              (setq prof (ola:profile segog segnew)
+                    pk   (ola:peaks prof (max 0 (fix ola:*dimcount*))
+                                    (ola:closed-p segog))
+                    push (* ola:*text-push* (ola:span segog))
+                    mid  (ola:middle segog))
+              (if pk
+                (progn
+                  (cal:ensure-layer ola:*dim-layer* ola:*dim-color*)
+                  (cal:dimstysave)
+                  (setq havestyle (tblsearch "DIMSTYLE" ola:*dim-style*))
+                  (if havestyle
+                    (command "_.-DIMSTYLE" "_Restore" ola:*dim-style*)
+                    (princ (strcat "\nOLAUTO: dimension style \""
+                                   ola:*dim-style*
+                                   "\" is not in this drawing - using the"
+                                   " current style \"" (getvar "DIMSTYLE")
+                                   "\" instead.")))
+                  (setvar "CLAYER" ola:*dim-layer*)
+                  (setq drawn nil)
+                  (foreach p pk
+                    (setq dimlist (ola:dim (cadr p) (caddr p) push mid))
+                    (if dimlist (setq drawn (cons dimlist drawn))))
+                  (cal:dimstyrestore)))
+              (ola:report prof drawn)))))))
+  (princ))
+
+(defun c:OLAUTO ( / *error* undo-open)
+  (defun *error* (msg)
+    ;; user settings come back FIRST so nothing below can skip them
+    (cal:sysrestore)
+    (cal:dimstyrestore)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nOLAUTO error: " msg)))
+    (if lzd:report (lzd:report "OLAUTO" *olauto-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "OLAUTO" *olauto-version*))
+  (cal:syssave ola:*sysvars*)
+  (setvar "CMDECHO" 0)
+  ;; only when undo is recording - _Begin in a drawing with UNDO
+  ;; off (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+  (ola:run)
+  (if undo-open (command "_.UNDO" "_End"))
+  (setq undo-open nil)
+  (cal:sysrestore)
+  (princ))
+
+(defun c:OLAUTOVER ()
+  (princ (strcat "\nOLAUTO " *olauto-version* " loaded."))
+  (princ))
+
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nOLAUTO " *olauto-version*
+                 " loaded.  Type OLAUTO to run.")))
 (princ)
 
 
@@ -45128,28 +46311,40 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
-;;; Click a point and type the text once; it lands there as a TEXT
-;;; entity.  Beside it, a little vertical RULER appears -- a column of
-;;; nearby values, each drawn as a tick and a label, graded like a real
-;;; ruler: the near eighth-inch steps are the smallest text and the
-;;; shortest ticks, quarters and halves step up from there, and the
-;;; whole-inch jumps (1", 2", 3" either way) are the tallest and
-;;; boldest, exactly where the deepest mark on a tape measure would be.
-;;; A small CIRCLE rides the row that is the CURRENT value.
+;;; What it stamps is an MTEXT written the way this shop's dimension
+;;; text already is: the TEXT layer, the Attributes style, 6" high,
+;;; attached TOP LEFT at the point clicked, unwrapped, ByLayer colour,
+;;; no rotation.  Every one of those is a knob in the block below.
+;;;
+;;; Beside it, a little vertical RULER appears -- a column of nearby
+;;; values, each drawn as a tick and a label, graded like a real ruler:
+;;; the near eighth-inch steps are the smallest text and the shortest
+;;; ticks, quarters and halves step up from there, and the whole-inch
+;;; jumps (1", 2", 3" either way) are the tallest and boldest, exactly
+;;; where the deepest mark on a tape measure would be.  A small CIRCLE
+;;; rides the row that is the CURRENT value.
+;;;
+;;; The ruler is pinned to the SCREEN, not to the drawing: it is drawn
+;;; down a strip near the left of whatever the current view is showing
+;;; and sized as a fraction of that view, so it stays the same size and
+;;; in the same place whether the drawing is zoomed to a whole pool or
+;;; to one step.  It re-pins every time it redraws.  That strip is
+;;; reserved -- a click inside it picks a row, so stamps land outside
+;;; it; ds:*ruler-screen-x* moves it if it is ever in the way.
 ;;;
 ;;; From there, one prompt does three jobs:
-;;;   * click empty space           -- stamps the CURRENT text there,
-;;;                                    and the ruler follows the click;
+;;;   * click empty space           -- stamps the CURRENT text there;
 ;;;   * click a row on the ruler    -- adopts THAT row's value as the
 ;;;                                    new current text (nothing is
 ;;;                                    stamped yet; the ruler redraws
-;;;                                    in place, re-graded around it);
+;;;                                    re-graded around it);
 ;;;   * type something else         -- becomes the new current text,
 ;;;                                    the same way, once it parses.
 ;;; Enter ends the run.  The ruler is scratch, not drawing content: it
-;;; is erased and redrawn every time the current value changes, and
-;;; swept away for good when the command ends or is cancelled -- only
-;;; the TEXT it actually stamped is left behind.
+;;; lives on its own layer, is erased and redrawn every time the
+;;; current value changes, and is swept away for good when the command
+;;; ends or is cancelled -- only the MTEXT it actually stamped is left
+;;; behind.
 ;;;
 ;;; Every value is one of four forms, exactly -- nothing else parses:
 ;;;   34"                     whole inches
@@ -45174,47 +46369,61 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v2.0")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.0")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
 ;;; -------------------- tunables --------------------------------------
-(setq ds:*layer* "DIMENSION")       ; layer the stamped text (and the
-                                    ; scratch ruler) lands on -- the
-                                    ; same layer name ABFIND, CDCREATE
-                                    ; and CDCALLOUT use for their own
-                                    ; dimension text
-(setq ds:*layer-color* 7)          ; ACI colour the layer is CREATED
+
+;; -- what a stamp IS.  These are the MTEXT properties the shop's own
+;;    dimension text carries; change one and every later stamp takes it.
+(setq ds:*layer* "TEXT")            ; layer the stamped MTEXT lands on.
+                                    ; Created when the drawing lacks it;
+                                    ; thawed, unlocked and switched on
+                                    ; when it is there but unusable
+(setq ds:*layer-color* 7)          ; ACI colour that layer is CREATED
                                     ; with -- 7 is AutoCAD's own
                                     ; black-on-white/white-on-black
-                                    ; swap, so it reads on any screen
-                                    ; without a measured 'auto knob.  A
-                                    ; layer already in the drawing
-                                    ; keeps its own colour
-(setq ds:*text-hgt* 6.0)           ; TEXT height of a stamped value,
-                                    ; and of the ruler's own biggest
-                                    ; (jump-tier) row labels
-(setq ds:*ruler-gap* 24.0)         ; how far right of the anchor point
-                                    ; the ruler's spine sits
-(setq ds:*ruler-row-gap* 9.0)      ; vertical distance between one
-                                    ; ruler row and the next
-(setq ds:*ruler-ticklen* 4.0)      ; tick length for the tallest
-                                    ; (current/jump) rows; smaller
-                                    ; tiers scale it down
-(setq ds:*ruler-txt-gap* 2.0)      ; gap between a tick's outer end
-                                    ; and where its label starts
-(setq ds:*ruler-circle-r* 1.5)     ; radius of the circle marking the
-                                    ; current value's row
-(setq ds:*ruler-click-width* 70.0) ; how far right of the spine a
-                                    ; click still counts as picking a
-                                    ; row rather than an empty-space
-                                    ; stamp -- generous, since a label
-                                    ; is never measured for its real
-                                    ; width
-(setq ds:*ruler-hit-pad* 2.0)      ; how far LEFT of the spine still
-                                    ; counts too, so a click that lands
-                                    ; just shy of it is not read as
-                                    ; empty space
+                                    ; swap.  A layer already in the
+                                    ; drawing keeps its own colour, and
+                                    ; the stamp itself is ByLayer
+(setq ds:*style* "Attributes")      ; text style the stamp is written
+                                    ; in.  A drawing without it gets a
+                                    ; plain variable-height style of
+                                    ; that name made, and is told so
+(setq ds:*text-hgt* 6.0)           ; MTEXT height of a stamp
+(setq ds:*text-width* 0.0)         ; its defined (wrap) width; 0 is no
+                                    ; wrap at all, so a value can never
+                                    ; break across two lines
+(setq ds:*line-space* 1.0)         ; line space factor, at the "at
+                                    ; least" spacing style
+
+;; -- the ruler.  Scratch geometry, and pinned to the SCREEN: every
+;;    size below is a fraction of the current view, so the ruler looks
+;;    the same at any zoom.
+(setq ds:*ruler-layer* "DIMSTAMP RULER")  ; layer the scratch ruler is
+                                    ; drawn on -- its own, so the TEXT
+                                    ; layer never carries scratch
+(setq ds:*ruler-color* 3)          ; ACI colour of the ruler, on the
+                                    ; entities themselves so it reads
+                                    ; the same whatever its layer says
+(setq ds:*ruler-screen-x* 0.12)    ; where the spine sits across the
+                                    ; view: a fraction of the view's
+                                    ; WIDTH in from its left edge.
+                                    ; Raise it to move the ruler right,
+                                    ; out of the way of work at the
+                                    ; left of the screen
+(setq ds:*ruler-row-frac* 0.042)   ; one row's share of the view's
+                                    ; HEIGHT -- the ruler's whole size
+                                    ; knob.  Raise it for a bigger
+                                    ; ruler with fewer rows on screen
+(setq ds:*ruler-txt-frac* 0.5)     ; the biggest row label's height,
+                                    ; as a fraction of the row spacing
+(setq ds:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq ds:*ruler-reach* 6.0)        ; how far right of the spine, in row
+                                    ; spacings, a click still counts as
+                                    ; picking a row rather than as an
+                                    ; empty-space stamp
 
 ;;; -------------------- helpers ----------------------------------------
 
@@ -45360,105 +46569,175 @@
 ;; Ascending by value -- the comparator ds:draw-ruler sorts rows with.
 (defun ds:val-lt (a b) (< (car a) (car b)))
 
-;; TEXT height for a ruler row of this TIER.
-(defun ds:ruler-hgt (tier)
-  (cond
-    ((eq tier 'half) (* ds:*text-hgt* 0.8))
-    ((eq tier 'quarter) (* ds:*text-hgt* 0.65))
-    ((eq tier 'eighth) (* ds:*text-hgt* 0.5))
-    (T ds:*text-hgt*)))            ; 'current and 'jump
+;; What the screen is showing, as (LEFT BOTTOM WIDTH HEIGHT) in drawing
+;; units.  This is what pins the ruler to the same strip of screen at
+;; any zoom: VIEWSIZE is the view's height, and its width is that times
+;; the viewport's own aspect, which SCREENSIZE reports in pixels.
+(defun ds:view ( / ctr vh ss aspect vw)
+  (setq ctr (getvar "VIEWCTR")
+        vh  (getvar "VIEWSIZE")
+        ss  (getvar "SCREENSIZE"))
+  (setq aspect (if (and ss (listp ss) (numberp (car ss))
+                        (numberp (cadr ss)) (> (cadr ss) 0))
+                 (/ (float (car ss)) (float (cadr ss)))
+                 1.6))                    ; no viewport to measure
+  (setq vw (* vh aspect))
+  (list (- (car ctr) (/ vw 2.0)) (- (cadr ctr) (/ vh 2.0)) vw vh))
 
-;; Tick length for a ruler row of this TIER.
-(defun ds:ruler-tick (tier)
+;; Label height for a ruler row of this TIER, against a row spacing of
+;; GAP.
+(defun ds:ruler-hgt (tier gap / base)
+  (setq base (* gap ds:*ruler-txt-frac*))
   (cond
-    ((eq tier 'half) (* ds:*ruler-ticklen* 0.75))
-    ((eq tier 'quarter) (* ds:*ruler-ticklen* 0.55))
-    ((eq tier 'eighth) (* ds:*ruler-ticklen* 0.35))
-    (T ds:*ruler-ticklen*)))       ; 'current and 'jump
+    ((eq tier 'half) (* base 0.8))
+    ((eq tier 'quarter) (* base 0.65))
+    ((eq tier 'eighth) (* base 0.5))
+    (T base)))                     ; 'current and 'jump
 
-;; Write STR at PT.
-(defun ds:draw-text (pt str)
-  (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                  (cons 8 ds:*layer*) '(100 . "AcDbText")
+;; Tick length for a ruler row of this TIER, same measure.
+(defun ds:ruler-tick (tier gap / base)
+  (setq base (* gap ds:*ruler-tick-frac*))
+  (cond
+    ((eq tier 'half) (* base 0.75))
+    ((eq tier 'quarter) (* base 0.55))
+    ((eq tier 'eighth) (* base 0.35))
+    (T base)))                     ; 'current and 'jump
+
+;; The text style the stamps are written in.  A drawing that already
+;; has it keeps its own font and settings, untouched; one that does not
+;; gets a plain variable-height style of that name, and is told -- an
+;; entmake naming a style the drawing has not got is refused outright,
+;; so the alternative is a click that silently draws nothing.
+(defun ds:ensure-style (name)
+  (if (not (tblsearch "STYLE" name))
+    (progn
+      (entmakex (list '(0 . "STYLE") '(100 . "AcDbSymbolTableRecord")
+                      '(100 . "AcDbTextStyleTableRecord")
+                      (cons 2 name) '(70 . 0)
+                      '(40 . 0.0)            ; variable height: the
+                                             ; entity's own governs
+                      '(41 . 1.0) '(50 . 0.0) '(71 . 0) '(42 . 2.5)
+                      '(3 . "txt") '(4 . "")))
+      (princ (strcat "\nDIMSTAMP: text style " name
+                     " was not in this drawing - a plain one was made"
+                     " so the stamps have a style to carry."))))
+  name)
+
+;; One MTEXT, written the way the shop's dimension text is: attached
+;; TOP LEFT at PT, the tool's own style, unwrapped, upright.  COL is
+;; an ACI number for the scratch ruler's own colour, or nil for
+;; ByLayer, which is what a real stamp takes.
+(defun ds:mtext (pt hgt str lay col / dxf)
+  (setq dxf (list '(0 . "MTEXT") '(100 . "AcDbEntity") (cons 8 lay)))
+  (if col (setq dxf (append dxf (list (cons 62 col)))))
+  (entmakex
+    (append dxf
+            (list '(100 . "AcDbMText")
                   (cons 10 (list (car pt) (cadr pt) 0.0))
-                  (cons 40 ds:*text-hgt*)
-                  (cons 1 str))))
+                  (cons 40 hgt)
+                  (cons 41 ds:*text-width*)   ; 0 = no wrap
+                  '(71 . 1)                   ; attachment: top left
+                  '(72 . 5)                   ; direction: by style
+                  (cons 1 str)
+                  (cons 7 ds:*style*)
+                  '(50 . 0.0)                 ; rotation
+                  '(73 . 1)                   ; line spacing: at least
+                  (cons 44 ds:*line-space*)))))
+
+;; Stamp STR at PT -- the drawing content this whole tool exists for.
+(defun ds:stamp (pt str)
+  (ds:mtext pt ds:*text-hgt* str ds:*layer* nil))
 
 ;; Erase every entity in ENTS -- how the scratch ruler is swept away,
 ;; before a redraw and for good when the run ends.
 (defun ds:erase-ents (ents / e)
   (foreach e ents (if (and e (entget e)) (entdel e))))
 
-;; Draw the ruler beside AP for the current value (TOTAL-EIGHTHS,
-;; HASFEET), one row per suggestion plus a circled CURRENT row among
-;; them.  Returns (ENTS SPX ROWS): the entities drawn (for
-;; ds:erase-ents), the ruler's spine X (for a click's X test), and
-;; ROWS as a list of (VALUE ROW-Y) pairs (for a click's Y test).
-(defun ds:draw-ruler (ap total-eighths hasfeet / rows n i row val tier y
-                          hgt tl spx ents lbl ty result)
-  (cal:ensure-layer ds:*layer* ds:*layer-color*)
+;; Draw the ruler down its strip of the CURRENT VIEW for the current
+;; value (TOTAL-EIGHTHS, HASFEET), one row per suggestion plus a
+;; circled CURRENT row among them, the whole thing centred vertically
+;; in the view.  Returns (ENTS BOX ROWS): the entities drawn (for
+;; ds:erase-ents), BOX as (XMIN XMAX YTOL) for a click's hit test, and
+;; ROWS as a list of (VALUE ROW-Y) pairs.
+(defun ds:draw-ruler (total-eighths hasfeet / rows n i row val tier y
+                          hgt tl spx ents lbl result view vx vy vw vh
+                          gap base)
+  (cal:ensure-layer ds:*ruler-layer* ds:*ruler-color*)
+  (ds:ensure-style ds:*style*)
   (setq rows (cons (list total-eighths 'current)
                    (ds:suggestions total-eighths hasfeet)))
   (setq rows (vl-sort rows 'ds:val-lt))
-  (setq n (length rows) i 0 ents nil result nil
-        spx (+ (car ap) ds:*ruler-gap*))
+  (setq view (ds:view)
+        vx   (car view)  vy (cadr view)
+        vw   (caddr view) vh (cadddr view))
+  (setq n    (length rows)
+        gap  (* vh ds:*ruler-row-frac*)
+        spx  (+ vx (* vw ds:*ruler-screen-x*))
+        ;; centred on the view's own middle, however many rows there are
+        base (- (+ vy (/ vh 2.0)) (* gap (/ (- n 1) 2.0)))
+        i    0
+        ents nil
+        result nil)
   (foreach row rows
     (setq val (car row) tier (cadr row))
-    (setq y (+ (cadr ap) (* i ds:*ruler-row-gap*)))
-    (setq hgt (ds:ruler-hgt tier))
-    (setq tl  (ds:ruler-tick tier))
+    (setq y (+ base (* i gap)))
+    (setq hgt (ds:ruler-hgt tier gap))
+    (setq tl  (ds:ruler-tick tier gap))
     (setq ents (cons
                 (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                                (cons 8 ds:*layer*) '(100 . "AcDbLine")
+                                (cons 8 ds:*ruler-layer*)
+                                (cons 62 ds:*ruler-color*)
+                                '(100 . "AcDbLine")
                                 (cons 10 (list spx y 0.0))
                                 (cons 11 (list (+ spx tl) y 0.0))))
                 ents))
     (setq lbl (ds:format val hasfeet))
-    (setq ty (- y (/ hgt 2.0)))
-    (setq ents (cons
-                (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
-                                (cons 8 ds:*layer*) '(100 . "AcDbText")
-                                (cons 10 (list (+ spx tl ds:*ruler-txt-gap*)
-                                              ty 0.0))
-                                (cons 40 hgt)
-                                (cons 1 lbl)))
-                ents))
+    ;; top-left attachment, so half a label's height above the tick
+    ;; puts the label astride its own row
+    (setq ents (cons (ds:mtext (list (+ spx tl (* gap 0.35))
+                                     (+ y (/ hgt 2.0)))
+                               hgt lbl ds:*ruler-layer* ds:*ruler-color*)
+                     ents))
     (if (eq tier 'current)
       (setq ents (cons
                   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                                  (cons 8 ds:*layer*) '(100 . "AcDbCircle")
+                                  (cons 8 ds:*ruler-layer*)
+                                  (cons 62 ds:*ruler-color*)
+                                  '(100 . "AcDbCircle")
                                   (cons 10 (list spx y 0.0))
-                                  (cons 40 ds:*ruler-circle-r*)))
+                                  (cons 40 (* gap 0.18))))
                   ents)))
     (setq result (cons (list val y) result))
     (setq i (1+ i)))
   (setq ents (cons
               (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                              (cons 8 ds:*layer*) '(100 . "AcDbLine")
-                              (cons 10 (list spx (cadr ap) 0.0))
-                              (cons 11 (list spx
-                                             (+ (cadr ap)
-                                                (* (1- n) ds:*ruler-row-gap*))
+                              (cons 8 ds:*ruler-layer*)
+                              (cons 62 ds:*ruler-color*)
+                              '(100 . "AcDbLine")
+                              (cons 10 (list spx base 0.0))
+                              (cons 11 (list spx (+ base (* (- n 1) gap))
                                              0.0))))
               ents))
-  (list ents spx (reverse result)))
+  (list ents
+        (list (- spx (/ gap 2.0)) (+ spx (* gap ds:*ruler-reach*))
+              (/ gap 2.0))
+        (reverse result)))
 
-;; Erase OLDENTS and draw a fresh ruler at AP for PARSED -- the
+;; Erase OLDENTS and draw a fresh ruler for PARSED -- the
 ;; (EIGHTHS HASFEET) pair ds:parse hands back.
-(defun ds:redraw-ruler (ap parsed oldents)
+(defun ds:redraw-ruler (parsed oldents)
   (ds:erase-ents oldents)
-  (ds:draw-ruler ap (car parsed) (cadr parsed)))
+  (ds:draw-ruler (car parsed) (cadr parsed)))
 
-;; The ruler row (if any) that PT lands on, close enough in Y to one
-;; of ROWS and within the ruler's column in X -- nil when PT is empty
+;; The ruler row (if any) that PT lands on: inside the ruler's strip in
+;; X, and close enough in Y to one of ROWS.  nil when PT is empty
 ;; space, meant as a stamp point instead.  Returns the row's VALUE.
-(defun ds:ruler-hit (pt spx rows / r best bd d)
+(defun ds:ruler-hit (pt box rows / r best bd d)
   (setq best nil bd nil)
-  (if (and spx (>= (car pt) (- spx ds:*ruler-hit-pad*))
-                (<= (car pt) (+ spx ds:*ruler-click-width*)))
+  (if (and box (>= (car pt) (car box)) (<= (car pt) (cadr box)))
     (foreach r rows
       (setq d (abs (- (cadr pt) (cadr r))))
-      (if (and (<= d (/ ds:*ruler-row-gap* 2.0)) (or (null bd) (< d bd)))
+      (if (and (<= d (caddr box)) (or (null bd) (< d bd)))
         (setq best (car r) bd d))))
   best)
 
@@ -45483,10 +46762,10 @@
 ;; The second-and-later prompt: one click or one typed line does every
 ;; job.  Returns nil for Enter (done), (adopt TEXT) for a new current
 ;; value picked off the ruler or typed fresh, or (stamp PT) for a
-;; point to stamp the CURRENT text at.  SPX and ROWS are the live
+;; point to stamp the CURRENT text at.  BOX and ROWS are the live
 ;; ruler's hit-test data from ds:draw-ruler/ds:redraw-ruler; HASFEET is
 ;; the current value's family, for formatting a ruler pick.
-(defun ds:next-action (spx rows hasfeet / pk hitval)
+(defun ds:next-action (box rows hasfeet / pk hitval)
   (initget 128)
   (setq pk (getpoint (strcat "\nClick to place text, click the ruler to"
                              " change it, or type new text (Enter when"
@@ -45501,9 +46780,9 @@
          (princ (strcat "\nDIMSTAMP: \"" pk "\" is not one of the four"
                         " forms (34\", 3'-4\", 34 1/2\", 3'- 4 1/2\") -"
                         " try again."))
-         (ds:next-action spx rows hasfeet))))
+         (ds:next-action box rows hasfeet))))
     (T
-     (setq hitval (ds:ruler-hit pk spx rows))
+     (setq hitval (ds:ruler-hit pk box rows))
      (if hitval
        (list 'adopt (ds:format hitval hasfeet))
        (list 'stamp pk)))))
@@ -45513,8 +46792,8 @@
 ;; calls - an AutoLISP local SHADOWS the function of the same name for
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
-(defun c:DIMSTAMP (/ *error* undo-open pk lasttext count parsed anchor
-                    rulerents rulerx rulerrows action rr)
+(defun c:DIMSTAMP (/ *error* undo-open pk lasttext count parsed
+                    rulerents rulerbox rulerrows action rr)
   (defun *error* (msg)
     (ds:erase-ents rulerents)
     (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -45539,22 +46818,23 @@
     (progn
       (setq lasttext (ds:ask-first))
       (cal:ensure-layer ds:*layer* ds:*layer-color*)
-      (ds:draw-text pk lasttext)
-      (setq count 1 anchor pk parsed (ds:parse lasttext))
+      (ds:ensure-style ds:*style*)
+      (ds:stamp pk lasttext)
+      (setq count 1 parsed (ds:parse lasttext))
       (princ (strcat "\n  \"" lasttext "\" placed."))
-      (setq rr (ds:redraw-ruler anchor parsed rulerents)
-            rulerents (car rr) rulerx (cadr rr) rulerrows (caddr rr))
-      (while (setq action (ds:next-action rulerx rulerrows (cadr parsed)))
+      (setq rr (ds:redraw-ruler parsed rulerents)
+            rulerents (car rr) rulerbox (cadr rr) rulerrows (caddr rr))
+      (while (setq action (ds:next-action rulerbox rulerrows (cadr parsed)))
         (cond
           ((= (car action) 'stamp)
            (cal:ensure-layer ds:*layer* ds:*layer-color*)
-           (ds:draw-text (cadr action) lasttext)
-           (setq count (1+ count) anchor (cadr action))
+           (ds:stamp (cadr action) lasttext)
+           (setq count (1+ count))
            (princ (strcat "\n  \"" lasttext "\" placed.")))
           (T                                    ; 'adopt
            (setq lasttext (cadr action) parsed (ds:parse lasttext))))
-        (setq rr (ds:redraw-ruler anchor parsed rulerents)
-              rulerents (car rr) rulerx (cadr rr) rulerrows (caddr rr)))
+        (setq rr (ds:redraw-ruler parsed rulerents)
+              rulerents (car rr) rulerbox (cadr rr) rulerrows (caddr rr)))
       (ds:erase-ents rulerents)
       (setq rulerents nil)))
 
@@ -79296,6 +80576,724 @@
 
 
 ;;; ======================================================================
+;;; >>> MOHAMADDLE.lsp
+;;; ======================================================================
+
+;;; ===================================================================
+;;; MOHAMADDLE.lsp
+;;;
+;;; PADDLE's pad placer, with the pad size asked at run time instead of
+;;; fixed at the top of the file.  Scans the perimeter of a drawing for
+;;; concave features that require pads and inserts pad blocks centered
+;;; on the affected areas, always parallel to the X/Y axes -- exactly
+;;; PADDLE's rule set, just with a choice of block/size at the start of
+;;; the run instead of one baked in.
+;;;
+;;; Pad specification (identical to PADDLE's):
+;;;   * Any CONCAVE arc / fillet with a radius of 4'-6" (54") or less
+;;;     -- all the way down to sharp 90-degree inside corners --
+;;;     requires pads along the affected arc.
+;;;   * Any CONCAVE intersection of straight segments (an inside
+;;;     corner) requires a pad centered on the corner.
+;;;   * Semi-straight geometry is left alone, and a corner is judged
+;;;     harder than a curve: a connection point counts as an inside
+;;;     corner only once it bends more than 30 degrees away from
+;;;     straight, and an arc is a feature only once its total bend is
+;;;     more than 10 degrees.  Shallow drafting kinks and segmented
+;;;     walls are not corners.
+;;;   * Convex features and concave arcs larger than 4'-6" radius do
+;;;     NOT require pads.
+;;;   * Pads never overlap: where features crowd together, a pad on a
+;;;     sharp point stays dead-center on that point, and the pads
+;;;     along curves do the dodging -- sliding over to sit flush
+;;;     alongside, or dropping out when a neighbour covers their spot.
+;;;
+;;; Accepted perimeter input (generous):
+;;;   * a closed LWPOLYLINE or 2D POLYLINE, or
+;;;   * loose LINEs / ARCs (or a mix of all of the above) -- MOHAMADDLE
+;;;     chains touching segments end-to-end into closed loops.
+;;;
+;;; Usage:
+;;;   Command: MOHAMADDLE
+;;;   First asks which pad size to place (the sizes *mohamaddle-blkfile*
+;;;   ships block definitions for).  Highlight the perimeter geometry
+;;;   BEFORE typing the command and it is taken as-is; otherwise select
+;;;   it at the prompt, or press Enter to auto-detect the perimeter
+;;;   (the largest closed loop found in the drawing).
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; Versioning: see tools/release_lisp.py at the repo root. It reads
+;;; *mohamaddle-version* below and stamps a dated, REV-numbered twin of
+;;; this file into releases/.
+;;;
+;;; Block resolution order for the chosen pad block:
+;;;   1. A block definition already in the drawing.
+;;;   2. Imported from "24inpad.dwg" found on the AutoCAD support
+;;;      path (ships alongside PADDLE.lsp in lisp/paddle/ -- add that
+;;;      folder to the support file search path, or drop the dwg next
+;;;      to the current drawing).
+;;;   3. As a last resort a plain square block of the right size is
+;;;      created so the command always works.
+;;;
+;;; The perimeter-reading and pad-placement geometry below is PADDLE's
+;;; own engine, ported under the mohamaddle-- prefix the way LINGUTTER
+;;; ports paddle--ent-segs and friends under lg: (see lisp/paddle/
+;;; README.md) -- a second self-contained copy, not a shared library
+;;; call, because every lisp/ tool has to load alone. Only the pad-size
+;;; question at the top of c:MOHAMADDLE is new.
+;;;
+;;; Assumes drawing units are INCHES (architectural). Adjust the
+;;; constants below for other setups.
+;;; ===================================================================
+
+(vl-load-com)
+
+;; --------------------------- tunables -------------------------------
+;; Every knob MOHAMADDLE has lives in this block: change a value here,
+;; save, and APPLOAD the file again.  Distances are drawing units
+;; (inches on an architectural drawing); the two angles are typed in
+;; degrees and converted to radians on the same line.  Nothing below
+;; this block is meant to be edited to change behaviour.
+
+;; Version banner.  Bump it on every change to this file: it is
+;; printed on load and at command start, and tools/release_lisp.py
+;; reads it to stamp the dated twin in releases/, so a loaded routine
+;; and its release can never disagree.
+(setq *mohamaddle-version* "v1.0")
+
+;; --- the pad itself ---
+;; Pad sizes MOHAMADDLE offers, in the order shown at the prompt.  Each
+;; entry is (KEYWORD BLOCKNAME SIZE-IN-INCHES); *mohamaddle-blkfile*
+;; ships block definitions for both.  Add a third entry here to offer
+;; a third size -- nothing else about the picker needs to change.
+(setq *mohamaddle-sizes*
+  '(("24" "Pad24x24" 24.0)
+    ("36" "Pad36x36" 36.0)))
+;; Which size the prompt defaults to the first time it is asked in a
+;; session.  MOHAMADDLE remembers whatever was picked last after that
+;; and offers it instead, so this only matters once per drawing session.
+(setq *mohamaddle-defaultkw* "36")
+;; The dwg the block definitions are imported from when the drawing
+;; does not already hold them.  Looked up with findfile, so put its
+;; folder on the AutoCAD support path or drop the dwg beside the
+;; drawing.  If it cannot be found a plain square block is made.
+(setq *mohamaddle-blkfile* "24inpad.dwg")
+;; Layer the pads land on.  Created when missing; an existing one is
+;; thawed, unlocked and turned on so the result is visible.
+(setq *mohamaddle-layer* "PADS")
+;; AutoCAD colour index the layer is created with.  An existing layer
+;; keeps whatever colour it already has.
+(setq *mohamaddle-layer-color* 7)
+;; nil = every pad stays parallel to the X/Y axes (the shop standard).
+;; T   = each pad rotates to follow its stretch of perimeter instead.
+(setq *mohamaddle-align* nil)
+
+;; --- what counts as a feature ---
+;; Largest concave radius that still needs pads, 4'-6".  Concave arcs
+;; this tight or tighter get a flush row of pads; bigger sweeps get
+;; none.  Independent of which pad size was picked -- it is a
+;; drafting-standard threshold, not a property of the block.
+(setq *mohamaddle-maxrad* 54.0)
+;; A connection point (line meets line, line meets arc, a polyline
+;; vertex) counts as a sharp inside corner only when the perimeter
+;; bends MORE than this many degrees away from straight, into the
+;; pool, at that one point.  Gentler joints - drafting kinks, a wall
+;; drawn as several nearly-collinear pieces, the mouth of a shallow
+;; alcove - are semi-straight and get no pad.  Edit the 30.0; the
+;; rest of the line converts it to radians.
+(setq *mohamaddle-cornertol* (/ (* 30.0 pi) 180.0))
+;; A concave arc counts as a feature only when its total bend is MORE
+;; than this many degrees; a gentler sweep is a semi-straight line
+;; however tight its radius.  Judged separately from corners on
+;; purpose: a curve earns its row of pads more easily than a joint
+;; earns one pad.  Edit the 10.0.
+(setq *mohamaddle-arctol* (/ (* 10.0 pi) 180.0))
+
+;; --- reading the perimeter ---
+;; Largest gap between the end of one loose line/arc and the start of
+;; the next that still counts as touching when MOHAMADDLE chains them
+;; into a loop.  Segments shorter than this are dropped as slivers (a
+;; doubled polyline vertex, a zero-length line), which is also what
+;; keeps a corner drawn with a duplicate vertex from being missed.
+(setq *mohamaddle-fuzz* 0.05)
+
+;; -------------------------- text helper ------------------------------
+;; A length as inches with the mark, 36.0 -> 36" -- every message that
+;; quotes a pad size goes through this, whichever size was picked.
+(defun mohamaddle--in (n)
+  (strcat (rtos n 2 (if (equal n (float (fix n)) 1e-9) 0 2)) "\""))
+
+;; -------------------------- size picker -------------------------------
+;; Ask which pad size to place, from *mohamaddle-sizes* above.  This is
+;; the FIRST thing MOHAMADDLE asks -- there is nothing in front of it
+;; to go back to, so it offers no Back (tools/back_baseline.txt).  The
+;; keyword string and the bracket shown are both built off the table,
+;; so a third size needs no other edit here.
+(defun mohamaddle--asksize (dflt / kws shown v)
+  (setq kws (apply 'strcat (mapcar '(lambda (s) (strcat (car s) " "))
+                                   *mohamaddle-sizes*)))
+  (setq shown (vl-string-translate " " "/" (substr kws 1 (1- (strlen kws)))))
+  (initget 0 kws)
+  (setq v (getkword (strcat "\nPad size (inches)? [" shown "] <" dflt ">: ")))
+  (if lzd:ask (lzd:ask "Pad size (inches)?" v))
+  (if v v dflt))
+
+(defun mohamaddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
+(defun mohamaddle--rot (v a) ; rotate vector v by angle a
+  (list (- (* (car v) (cos a)) (* (cadr v) (sin a)))
+        (+ (* (car v) (sin a)) (* (cadr v) (cos a)))))
+(defun mohamaddle--arcpt (cen r ang) (cal:v+ cen (cal:v* (mohamaddle--dir ang) r)))
+(defun mohamaddle--cheb (v) (max (abs (car v)) (abs (cadr v)))) ; Chebyshev norm
+
+;; Segment data for vertex A -> B with bulge b (b /= 0):
+;; returns (theta radius center start-tangent end-tangent)
+;; theta = signed included angle (CCW positive), tangents are angles.
+(defun mohamaddle--arcdata (a b blg / theta chord r phi ts cen)
+  (setq theta (* 4.0 (atan blg))
+        chord (distance a b)
+        r     (/ chord (* 2.0 (sin (/ (abs theta) 2.0))))
+        phi   (angle a b)
+        ts    (- phi (/ theta 2.0))
+        cen   (cal:v+ a (cal:v* (mohamaddle--dir (+ ts (if (> blg 0.0) (/ pi 2.0) (/ pi -2.0)))) r)))
+  (list theta r cen ts (+ phi (/ theta 2.0))))
+
+;; Signed area of a closed vertex list (shoelace + circular segments).
+;; vts = list of (x y bulge), bulge belongs to the segment leaving it.
+(defun mohamaddle--area (vts / n i a b blg area theta r seg)
+  (setq n (length vts) i 0 area 0.0)
+  (repeat n
+    (setq a   (nth i vts)
+          b   (nth (rem (1+ i) n) vts)
+          blg (caddr a))
+    (setq area (+ area (* 0.5 (- (* (car a) (cadr b)) (* (car b) (cadr a))))))
+    (if (/= blg 0.0)
+        (progn
+          (setq seg   (mohamaddle--arcdata a b blg)
+                theta (abs (car seg))
+                r     (cadr seg))
+          (setq area (+ area (* (if (> blg 0.0) 1.0 -1.0)
+                                0.5 r r (- theta (sin theta)))))))
+    (setq i (1+ i)))
+  area)
+
+;; Next pad along an arc: starting from arc-parameter CUR (previous
+;; pad center PREV), find the parameter where the pad center is
+;; exactly PADSIZE away from PREV in Chebyshev distance -- axis-
+;; aligned pads of that size then touch edge-to-edge without ever
+;; overlapping. Returns (parameter center), or nil when the rest of
+;; the arc is too short for another flush pad.
+(defun mohamaddle--next-flush (cen r sa sgn cur sweep prev padsize
+                               / ds d p hit lo hi mid)
+  (setq ds (/ padsize r 8.0))                ; ~1/8 pad per probe step
+  (if (> ds (/ sweep 4.0)) (setq ds (/ sweep 4.0)))
+  (setq d cur hit nil)
+  (while (and (not hit) (< d (- sweep 1e-9))) ; walk until pads separate
+    (setq lo d
+          d  (min sweep (+ d ds))
+          p  (mohamaddle--arcpt cen r (+ sa (* sgn d))))
+    (if (>= (mohamaddle--cheb (cal:v- p prev)) padsize)
+        (setq hit T)))
+  (if hit
+      (progn ; tighten the crossing between lo and d by bisection
+        (setq hi d)
+        (repeat 45
+          (setq mid (/ (+ lo hi) 2.0)
+                p   (mohamaddle--arcpt cen r (+ sa (* sgn mid))))
+          (if (>= (mohamaddle--cheb (cal:v- p prev)) padsize)
+              (setq hi mid)
+              (setq lo mid)))
+        (list hi (mohamaddle--arcpt cen r (+ sa (* sgn hi)))))))
+
+;; Pad centers for one concave arc: the fewest pads that matter most.
+;; The first pad is centered on the MIDDLE of the arc (the part that
+;; must be covered); further pads march outward toward both ends, each
+;; exactly one pad-size on center from the last, so the row touches
+;; edge-to-edge and stair-steps into a blocky representation of the
+;; curve. Marching stops when the leftover end of the arc is too short
+;; for another flush pad -- the extreme ends of the radius are allowed
+;; to stay uncovered.
+(defun mohamaddle--arc-pads (cen r sa sgn sweep padsize
+                             / mid amid pmid fwd bwd cur prev nxt)
+  (setq mid  (/ sweep 2.0)
+        amid (+ sa (* sgn mid))
+        pmid (mohamaddle--arcpt cen r amid))
+  ;; march from the middle toward the arc's end...
+  (setq cur 0.0 prev pmid fwd nil)
+  (while (setq nxt (mohamaddle--next-flush cen r amid sgn cur (- sweep mid) prev padsize))
+    (setq cur (car nxt) prev (cadr nxt) fwd (cons prev fwd)))
+  ;; ...and from the middle back toward the arc's start
+  (setq cur 0.0 prev pmid bwd nil)
+  (while (setq nxt (mohamaddle--next-flush cen r amid (- sgn) cur mid prev padsize))
+    (setq cur (car nxt) prev (cadr nxt) bwd (cons prev bwd)))
+  (append bwd (list pmid) (reverse fwd)))
+
+;; Direction (unit vector) of travel at the START / END of segment a->b.
+(defun mohamaddle--tan-start (a b blg)
+  (if (= blg 0.0)
+      (cal:unit (cal:v- b a))
+      (mohamaddle--dir (cadddr (mohamaddle--arcdata a b blg)))))
+(defun mohamaddle--tan-end (a b blg)
+  (if (= blg 0.0)
+      (cal:unit (cal:v- b a))
+      (mohamaddle--dir (last (mohamaddle--arcdata a b blg)))))
+
+;; --------------------- entities -> segments ------------------------
+;; A segment is (p1 p2 bulge) with 2D points.
+
+;; LWPOLYLINE -> (closed-flag . vts)
+(defun mohamaddle--lwverts (ent / ed out grp)
+  (setq ed (entget ent))
+  (foreach grp ed
+    (cond
+      ((= (car grp) 10)
+       (setq out (cons (list (cadr grp) (caddr grp) 0.0) out)))
+      ((= (car grp) 42)
+       (if out (setq out (cons (list (caar out) (cadr (car out)) (cdr grp)) (cdr out)))))))
+  (cons (= 1 (logand 1 (cdr (assoc 70 ed)))) (reverse out)))
+
+;; heavy 2D POLYLINE -> (closed-flag . vts), nil for 3D/mesh plines
+(defun mohamaddle--plverts (ent / ed flags e ved out p)
+  (setq ed (entget ent) flags (cdr (assoc 70 ed)))
+  (if (zerop (logand 112 flags)) ; skip 3D polylines / meshes / polyfaces
+      (progn
+        (setq e (entnext ent))
+        (while (and e (= "VERTEX" (cdr (assoc 0 (setq ved (entget e))))))
+          (if (zerop (logand 16 (cond ((cdr (assoc 70 ved))) (0)))) ; skip spline frame pts
+              (progn
+                (setq p (cdr (assoc 10 ved)))
+                (setq out (cons (list (car p) (cadr p)
+                                      (cond ((cdr (assoc 42 ved))) (0.0)))
+                                out))))
+          (setq e (entnext e)))
+        (cons (= 1 (logand 1 flags)) (reverse out)))))
+
+;; vertex list -> segments (wrapping when closed)
+(defun mohamaddle--vts->segs (closed vts / n i segs a b)
+  (setq n (length vts) i 0)
+  (repeat (if closed n (max 0 (1- n)))
+    (setq a (nth i vts)
+          b (nth (rem (1+ i) n) vts))
+    (setq segs (cons (list (cal:2d a) (cal:2d b) (caddr a)) segs))
+    (setq i (1+ i)))
+  (reverse segs))
+
+;; any supported entity -> list of segments
+(defun mohamaddle--ent-segs (ent / ed typ cen r sa ea sweep cv)
+  (setq ed (entget ent) typ (cdr (assoc 0 ed)))
+  (cond
+    ((= typ "LINE")
+     (list (list (cal:2d (cdr (assoc 10 ed)))
+                 (cal:2d (cdr (assoc 11 ed))) 0.0)))
+    ((= typ "ARC")
+     (setq cen   (cal:2d (cdr (assoc 10 ed)))
+           r     (cdr (assoc 40 ed))
+           sa    (cdr (assoc 50 ed))
+           ea    (cdr (assoc 51 ed))
+           sweep (- ea sa))
+     (if (<= sweep 0.0) (setq sweep (+ sweep pi pi)))
+     (list (list (cal:v+ cen (cal:v* (mohamaddle--dir sa) r))
+                 (cal:v+ cen (cal:v* (mohamaddle--dir ea) r))
+                 (/ (sin (/ sweep 4.0)) (cos (/ sweep 4.0)))))) ; tan(sweep/4)
+    ((= typ "LWPOLYLINE")
+     (setq cv (mohamaddle--lwverts ent))
+     (mohamaddle--vts->segs (car cv) (cdr cv)))
+    ((= typ "POLYLINE")
+     (setq cv (mohamaddle--plverts ent))
+     (if cv (mohamaddle--vts->segs (car cv) (cdr cv))))))
+
+;; ------------------- chain segments into loops ---------------------
+;; Chains touching segments (ends within *mohamaddle-fuzz*) end-to-end.
+;; Returns (loops . open-count); each loop is a vertex list (x y bulge).
+(defun mohamaddle--chain (segs / loops nopen chain head tail done found rest s)
+  (setq nopen 0)
+  ;; drop degenerate slivers
+  (setq segs (vl-remove-if
+               '(lambda (s) (<= (distance (car s) (cadr s)) *mohamaddle-fuzz*))
+               segs))
+  (while segs
+    (setq chain (list (car segs))
+          head  (car (car segs))
+          tail  (cadr (car segs))
+          segs  (cdr segs)
+          done  nil)
+    (while (not done)
+      (cond
+        ;; loop closed back onto its start?
+        ((and (> (length chain) 1) (<= (distance tail head) *mohamaddle-fuzz*))
+         (setq loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
+                                   chain)
+                           loops)
+               done  T))
+        (T ;; look for a segment continuing from the tail
+         (setq found nil rest nil)
+         (foreach s segs
+           (if found
+               (setq rest (cons s rest))
+               (cond
+                 ((<= (distance tail (car s)) *mohamaddle-fuzz*)
+                  (setq found s))
+                 ((<= (distance tail (cadr s)) *mohamaddle-fuzz*) ; reversed
+                  (setq found (list (cadr s) (car s) (- (caddr s)))))
+                 (T (setq rest (cons s rest))))))
+         (if found
+             (setq chain (append chain (list found))
+                   tail  (cadr found)
+                   segs  (reverse rest))
+             (setq nopen (1+ nopen) done T)))))) ; dead end: open chain
+  (cons (reverse loops) nopen))
+
+;; ------------------------ feature detection ------------------------
+;; Returns a list of pads: (center rotation kind), kind = "corner"/"arc".
+;; PADSIZE sets the pad-grid pitch used to cover concave arcs.
+(defun mohamaddle--features (vts padsize / s n i a b c blg pads din dout turn
+                                 seg theta r cen sa sgn sweep)
+  (setq s (if (< (mohamaddle--area vts) 0.0) -1 1) ; -1 = clockwise
+        n (length vts)
+        i 0)
+  (repeat n
+    (setq a   (nth i vts)                     ; segment i : a -> b
+          b   (nth (rem (1+ i) n) vts)
+          c   (nth (rem (+ i (1- n)) n) vts)  ; previous vertex
+          blg (caddr a))
+
+    ;; --- concave vertex (inside corner) at a, between seg i-1 and i ---
+    (setq din  (mohamaddle--tan-end (cal:2d c) (cal:2d a) (caddr c))
+          dout (mohamaddle--tan-start (cal:2d a) (cal:2d b) blg))
+    (if (and din dout)
+        (progn
+          (setq turn (atan (cal:cross din dout) (cal:dot din dout)))
+          (if (< (* s turn) (- *mohamaddle-cornertol*)) ; turns away from
+                                                        ; the interior by
+                                                        ; more than 30 deg
+              (setq pads (cons (list (cal:2d a) (angle '(0.0 0.0) din) "corner")
+                               pads)))))
+
+    ;; --- concave arc segment with radius <= 4'-6" ---
+    (if (and (/= blg 0.0)
+             (< (* s blg) 0.0)) ; bulges into the interior
+        (progn
+          (setq seg   (mohamaddle--arcdata (cal:2d a) (cal:2d b) blg)
+                theta (car seg)
+                r     (cadr seg)
+                cen   (caddr seg))
+          (if (and (<= r (+ *mohamaddle-maxrad* 1e-6))
+                   (> (abs theta) *mohamaddle-arctol*)) ; total bend over 10
+                                                       ; deg, else it's a
+                                                       ; semi-straight line
+              (progn
+                (setq sa    (angle cen (cal:2d a))
+                      sgn   (if (> theta 0.0) 1.0 -1.0)
+                      sweep (abs theta))
+                (foreach ctr (mohamaddle--arc-pads cen r sa sgn sweep padsize)
+                  (setq pads (cons (list ctr 0.0 "arc") pads)))))))
+    (setq i (1+ i)))
+  (reverse pads))
+
+;; Keep pads from colliding where features crowd together, without
+;; ever pulling a pad off a sharp point. Corner pads commit first,
+;; dead-center on their vertex -- they NEVER slide; one that would
+;; overlap an earlier corner pad is dropped (in a notch that tight,
+;; the neighbour carries the area). Arc pads then dodge around
+;; everything committed: one that would overlap a committed pad slides
+;; along one axis to sit flush alongside it instead (pads are PADSIZE
+;; x PADSIZE, so flush = exactly PADSIZE on center). An arc pad whose
+;; center is already inside a committed pad -- or that cannot find a
+;; clear flush spot within half a pad of where it wanted to be -- is
+;; dropped: its area is covered by the neighbours it kept hitting.
+;; Returns the committed pads, corner pads first.
+(defun mohamaddle--dodge (pads padsize / out ctr orig tries done hit d ax sgn)
+  (foreach pad pads ; sharp points first: exact centers, never slid
+    (if (= (caddr pad) "corner")
+        (progn
+          (setq hit nil)
+          (foreach q out
+            (if (and (not hit)
+                     (< (mohamaddle--cheb (cal:v- (car pad) (car q)))
+                        (- padsize 1e-6)))
+                (setq hit T)))
+          (if (not hit) (setq out (cons pad out))))))
+  (foreach pad pads ; arc pads dodge around what's committed
+    (if (/= (caddr pad) "corner")
+        (progn
+          (setq ctr   (car pad)
+                orig  ctr
+                tries 0
+                done  nil)
+          (while (not done)
+            (setq hit nil)
+            (foreach q out
+              (if (and (not hit)
+                       (< (mohamaddle--cheb (cal:v- ctr (car q)))
+                          (- padsize 1e-6)))
+                  (setq hit (car q))))
+            (cond
+              ((not hit) ; clear: commit it here
+               (setq out  (cons (list ctr (cadr pad) (caddr pad)) out)
+                     done T))
+              ((or (< (mohamaddle--cheb (cal:v- ctr hit)) (/ padsize 2.0))
+                   (> tries 6)
+                   (> (mohamaddle--cheb (cal:v- ctr orig)) (/ padsize 2.0)))
+               (setq done T)) ; already covered there, or stuck: drop it
+              (T ; slide along the more-separated axis until flush
+               (setq d   (cal:v- ctr hit)
+                     ax  (if (>= (abs (car d)) (abs (cadr d))) 0 1)
+                     sgn (if (< (nth ax d) 0.0) -1.0 1.0))
+               (setq ctr (if (= ax 0)
+                             (list (+ (car hit) (* sgn padsize)) (cadr ctr))
+                             (list (car ctr) (+ (cadr hit) (* sgn padsize)))))
+               (setq tries (1+ tries))))))))
+  (reverse out))
+
+;; ------------------------- block handling --------------------------
+;; Make sure block NAME (a SIZE-inch pad) is defined in the drawing.
+;; Returns T.
+(defun mohamaddle--ensure-block (doc name size / path oldcmd oldatt tmpname)
+  (cond
+    ((tblsearch "BLOCK" name) T)
+    ;; pull the definitions in from the pad dwg if it can be found --
+    ;; inserting the file (under a throwaway name, then cancelling)
+    ;; imports every block definition it contains
+    ((setq path (findfile *mohamaddle-blkfile*))
+     (setq oldcmd (getvar "CMDECHO") oldatt (getvar "ATTREQ")
+           tmpname "MOHAMADDLE-TEMP-IMPORT")
+     (setvar "CMDECHO" 0) (setvar "ATTREQ" 0)
+     ;; the restore below must run even if the insert throws: oldcmd
+     ;; and oldatt are locals of THIS helper, so c:MOHAMADDLE's *error*
+     ;; handler cannot put them back and the user would be left with
+     ;; no command echo and no attribute prompts
+     (vl-catch-all-apply
+       '(lambda ()
+          (command "_.-INSERT" (strcat tmpname "=" path))
+          (command)) '())   ; cancel the insert -- the definitions stay behind
+     (setvar "CMDECHO" oldcmd) (setvar "ATTREQ" oldatt)
+     (vl-catch-all-apply ; drop the unused throwaway definition
+       '(lambda () (vla-Delete (vla-Item (vla-get-Blocks doc) tmpname))) '())
+     (if (tblsearch "BLOCK" name)
+         T
+         (mohamaddle--make-fallback-block name size)))
+    (T (mohamaddle--make-fallback-block name size))))
+
+;; Last-resort pad: a plain size x size square block, base at center.
+(defun mohamaddle--make-fallback-block (name size / h)
+  (setq h (/ size 2.0))
+  (entmake (list '(0 . "BLOCK") (cons 2 name)
+                 '(10 0.0 0.0 0.0) '(70 . 0)))
+  (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") '(8 . "0")
+                 '(100 . "AcDbPolyline") '(90 . 4) '(70 . 1)
+                 (list 10 (- h) (- h)) (list 10 h (- h))
+                 (list 10 h h) (list 10 (- h) h)))
+  (entmake '((0 . "ENDBLK")))
+  (princ (strcat "\nMOHAMADDLE: block \"" name "\" not found; created a plain "
+                 (rtos size 2 0) "x" (rtos size 2 0) " square block instead."))
+  (tblsearch "BLOCK" name))
+
+;; Offset from the block's insertion point to the center of its extents
+;; (measured at 0 rotation), so pads land centered no matter where the
+;; block's base point was drawn.
+(defun mohamaddle--block-delta (space name / tmp mn mx d)
+  (setq tmp (vla-InsertBlock space (vlax-3d-point 0.0 0.0 0.0)
+                             name 1.0 1.0 1.0 0.0))
+  (vla-GetBoundingBox tmp 'mn 'mx)
+  (setq mn (vlax-safearray->list mn)
+        mx (vlax-safearray->list mx)
+        d  (list (/ (+ (car mn) (car mx)) 2.0)
+                 (/ (+ (cadr mn) (cadr mx)) 2.0)))
+  (vla-Delete tmp)
+  d)
+
+;; Create the pad layer, or - when it already exists - un-freeze,
+;; unlock and switch it back on and say so.  Symbol-table (DXF) level,
+;; so it needs no document object.
+(defun mohamaddle--ensure-layer (name color / rec ed flags col fixed)
+  (if (not (tblsearch "LAYER" name))
+    (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord")
+                    (cons 2 name) '(70 . 0) (cons 62 color)
+                    '(6 . "Continuous")))
+    (progn
+      (setq rec   (tblobjname "LAYER" name)
+            ed    (entget rec)
+            flags (cdr (assoc 70 ed))
+            col   (cdr (assoc 62 ed))
+            fixed nil)
+      (if (/= 0 (logand 5 flags))          ; frozen (1) or locked (4)
+        (setq ed    (subst (cons 70 (- flags (logand 5 flags)))
+                           (assoc 70 ed) ed)
+              fixed T))
+      (if (< col 0)                        ; layer switched off
+        (setq ed    (subst (cons 62 (abs col)) (assoc 62 ed) ed)
+              fixed T))
+      (if fixed
+        (progn
+          (entmod ed)
+          (princ (strcat "\nLayer " name
+                         " was off, frozen or locked - restored so the"
+                         " result is visible."))))))
+  name)
+
+;; Insert one pad so that its extents are centered on CTR. Pads stay
+;; parallel to the X/Y axes unless *mohamaddle-align* is set.
+(defun mohamaddle--insert-pad (space name ctr rot delta / ip obj)
+  (if (not *mohamaddle-align*) (setq rot 0.0))
+  (setq ip  (cal:v- ctr (mohamaddle--rot delta rot))
+        obj (vla-InsertBlock space
+              (vlax-3d-point (car ip) (cadr ip) 0.0)
+              name 1.0 1.0 1.0 rot))
+  (vla-put-Layer obj *mohamaddle-layer*)
+  obj)
+
+;; Loops that enclose no area - two lines lying on top of each other,
+;; a polyline that doubles straight back on itself - have no inside
+;; for anything to be concave toward, and the sign of their zero area
+;; is float noise, so the 180-degree reversal at each end could be
+;; called an inside corner on the strength of a -0.0.  Returns LOOPS
+;; without them.  (Auto-detect never picks one, since it keeps the
+;; largest area; an explicit selection would have padded it.)
+(defun mohamaddle--solid-loops (loops)
+  (vl-remove-if '(lambda (l) (< (abs (mohamaddle--area l)) 1e-6)) loops))
+
+;; --------------------------- selection -----------------------------
+;; Turns a selection set (or the whole current tab when SS is nil) into
+;; a list of closed perimeter loops (vertex lists). Auto-detect keeps
+;; only the largest loop.
+(defun mohamaddle--perimeters (ss / auto i segs res loops nopen nflat best
+                                  bestarea a)
+  (setq auto (not ss))
+  (if auto
+      (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
+                                 (cons 410 (getvar "CTAB"))))))
+  (if ss
+      (progn
+        (setq i 0)
+        (repeat (sslength ss)
+          (setq segs (append segs (mohamaddle--ent-segs (ssname ss i)))
+                i    (1+ i)))
+        (setq res   (mohamaddle--chain segs)
+              loops (mohamaddle--solid-loops (car res))
+              nflat (- (length (car res)) (length loops))
+              nopen (cdr res))
+        (if (> nopen 0)
+            (princ (strcat "\nMOHAMADDLE: ignored " (itoa nopen)
+                           " open chain(s) that never close back on themselves"
+                           " (check for gaps; chaining tolerance is "
+                           (rtos *mohamaddle-fuzz* 2 2) ").")))
+        (if (> nflat 0)
+            (princ (strcat "\nMOHAMADDLE: ignored " (itoa nflat)
+                           " closed loop(s) that enclose no area"
+                           " (lines doubling back on themselves).")))
+        (if auto
+            (progn ; keep only the biggest closed loop
+              (setq bestarea 0.0)
+              (foreach l loops
+                (setq a (abs (mohamaddle--area l)))
+                (if (> a bestarea) (setq bestarea a best l)))
+              (if best
+                  (progn
+                    (princ "\nMOHAMADDLE: auto-detected the largest closed loop as the perimeter.")
+                    (list best))))
+            loops))))
+
+;; ---------------------------- command ------------------------------
+(defun c:MOHAMADDLE (/ *error* doc space mark-open sizekw picked padsize
+                       blkname ss perims vts allpads delta ndodge ncorner narc)
+  (defun *error* (msg)
+    ;; close only the mark THIS run opened: an Esc at the size or
+    ;; perimeter prompt comes before StartUndoMark, and closing a mark
+    ;; nothing opened throws -- from inside the handler, where nothing
+    ;; catches it.  command-s style: the close itself goes through
+    ;; vl-catch-all-apply so it can never be the second error.
+    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
+    (setq mark-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nMOHAMADDLE error: " msg)))
+    (if lzd:report (lzd:report "MOHAMADDLE" *mohamaddle-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "MOHAMADDLE" *mohamaddle-version*))
+
+  (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
+        space (vla-get-Block (vla-get-ActiveLayout doc)))
+
+  (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*))
+
+  ;; ask which size to place -- see mohamaddle--asksize above for why
+  ;; this one prompt is allowed to offer no Back
+  (setq sizekw  (mohamaddle--asksize *mohamaddle-defaultkw*)
+        picked  (assoc sizekw *mohamaddle-sizes*)
+        blkname (cadr picked)
+        padsize (caddr picked))
+  (setq *mohamaddle-defaultkw* sizekw) ; remember the pick for next time
+
+  (princ (strcat "\nMOHAMADDLE - " (mohamaddle--in padsize)
+                 " pads at concave perimeter features (R <= "
+                 (rtos *mohamaddle-maxrad* 4 0) " and inside corners)."))
+
+  ;; A pickfirst selection is taken as-is.  A user who highlighted the
+  ;; outline before typing MOHAMADDLE meant the same thing. It matters
+  ;; because auto-detect reads the WHOLE drawing for its largest closed
+  ;; loop -- being handed the loop beats guessing at it beside a title
+  ;; block border.
+  (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  (if lzd:watch (lzd:watch ss) ss)
+  (if (null ss)
+      (progn
+        (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
+        (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+        (if lzd:watch (lzd:watch ss) ss)))
+  (setq perims (mohamaddle--perimeters ss))
+
+  (if (not perims)
+      (princ "\nMOHAMADDLE: no closed perimeter loop found.")
+      (progn
+        (vla-StartUndoMark doc)
+        (setq mark-open T)
+        (mohamaddle--ensure-block doc blkname padsize)
+        (mohamaddle--ensure-layer *mohamaddle-layer* *mohamaddle-layer-color*)
+        (setq delta (mohamaddle--block-delta space blkname))
+        (foreach vts perims
+          (if (> (length vts) 1)
+              (setq allpads (append allpads (mohamaddle--features vts padsize)))))
+        (setq ndodge  (length allpads)
+              allpads (mohamaddle--dodge allpads padsize)
+              ndodge  (- ndodge (length allpads)))
+        (setq ncorner 0 narc 0)
+        (foreach pad allpads
+          (mohamaddle--insert-pad space blkname (car pad) (cadr pad) delta)
+          (if (= (caddr pad) "corner") (setq ncorner (1+ ncorner)) (setq narc (1+ narc))))
+        (vla-EndUndoMark doc)
+        (setq mark-open nil)
+        (if allpads
+            (progn
+              (princ (strcat "\nMOHAMADDLE: inserted " (itoa (length allpads))
+                             " " (mohamaddle--in padsize) " pad(s) on layer \""
+                             *mohamaddle-layer* "\" ("
+                             (itoa ncorner) " at inside corners, "
+                             (itoa narc) " along concave arcs)."))
+              (if (> ndodge 0)
+                  (princ (strcat "\nMOHAMADDLE: " (itoa ndodge)
+                                 " overlapping pad(s) merged into their"
+                                 " neighbours where features crowd together."))))
+            (princ "\nMOHAMADDLE: perimeter checked - no concave features need pads."))))
+  (princ))
+
+(defun c:MOHAMADDLEVER ()
+  (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*))
+  (princ))
+
+;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
+;; the flag while they load their members, because one file's greeting
+;; is a greeting and every tool's is a wall the drafter scrolls past in
+;; every drawing they open.  APPLOADed alone the flag is nil and this
+;; prints, which is the one time somebody wants to be told.  CALVER
+;; reports the whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*
+                 " loaded. Command: MOHAMADDLE (pick a pad size, then place pads).")))
+(princ)
+
+
+;;; ======================================================================
 ;;; >>> LINGUTTER.lsp
 ;;; ======================================================================
 
@@ -104310,7 +106308,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.27")
+(setq *lazpanel-version* "v3.28")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -104526,10 +106524,12 @@
     ("LITELINFINSCAN"   "Liner scan, no dims")
     ("LITESPACHECKSCAN" "Spa scan, no dims")
     ("LOBF"             "Line of best fit")
+    ("MOHAMADDLE"       "Pads, pick a size")
     ("NORMIESTEP"       "Normie step")
     ("OASIS"            "Freeform pool")
     ("LINGUTTER"        "Gut to perimeter, then pads")
     ("LINGUTTERSCAN"    "Gut scan, changes nothing")
+    ("OLAUTO"           "Overlay two perimeters")
     ("PADDLE"           "Paddle pads")
     ("PERPMARK"         "Measured wall offsets")
     ("PERPPTS"          "Perpendicular points")
@@ -104758,6 +106758,8 @@
       "LOBF"
       "ABLOBF"
       "DIMSTAMP"
+      "MOHAMADDLE"
+      "OLAUTO"
       "CLEARDIM"
       "CLEARDIMSCAN"
       )
@@ -104787,6 +106789,7 @@
       "LINGUTTER"
       "LINGUTTERSCAN"
       "PADDLE"
+      "MOHAMADDLE"
       "AUTOBEAD"
       "LAZSTEP"
       "CORNERSTP"
@@ -104853,6 +106856,7 @@
       "DIMSCAN"
       "ABCURCHECK"
       "ABCURCHECKSCAN"
+      "OLAUTO"
       "ABPCHECK"
       "LINCHECK"
       "LINFINCHECK"
@@ -106682,33 +108686,33 @@
   "ABFIND" "ABMOVE" "ABPCREATE" "ABFINDVER" "ALTABCDEF" "ALTABCDEFVER"
   "ABHD" "SIMPABHD" "ABHDCOVER" "ADAB" "TUTORIALABHD" "TUTORIALADAB"
   "ABHDVER" "ABCURCHECK" "ABCURCHECKSCAN" "ABCURCHECKRESCUE" "ABCURCHECKVER" "ABPCHECK"
-  "ABPCHECKRESCUE" "ABPCHECKVER" "CABHDVER" "CABHD" "POINTRENAMER" "POINTRENAMERVER"
-  "LOBF" "LOBFVER" "ABLOBF" "ABLOBFVER" "AUTOBEAD" "AUTOBEADVER"
-  "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "AUTODIMVER"
-  "BPCALLOUT" "BPCALLOUTVER" "DIMSTAMP" "DIMSTAMPVER" "CCPRECHECK" "CCPRECHECKVER"
-  "CDCALLOUT" "CDCALLOUTVER" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK"
-  "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP"
-  "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER"
-  "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN"
-  "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "CLEARDIM" "CLEARDIMSCAN"
-  "CLEARDIMVER" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK"
-  "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DIMCONTENDVER" "DDFIX" "DDSET"
-  "DDCAL" "DDINFO" "DDALT" "DDFIXVER" "DDGPS" "DDELEV"
-  "DDTEST" "DDGPSVER" "FITABHDVER" "FITABHD" "FITABHDCOVER" "LHD"
-  "LHDVER" "LINCHECK" "LINCHECKVER" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK"
-  "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER"
-  "PADDLE" "TUTORIALPADDLE" "PADDLEVER" "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER"
-  "PERPPTSVER" "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS"
-  "PERPMARKVER" "PERPMARK" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER"
-  "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK"
-  "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER"
-  "DRONE" "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV"
-  "SORECONV" "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV"
-  "G2MRECONV" "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV"
-  "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER"
-  "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER"
-  "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZBUTTON" "LAZICON" "CALHELP"
-  "CALSET" "LAZPANELVER"
+  "ABPCHECKRESCUE" "ABPCHECKVER" "OLAUTO" "OLAUTOVER" "CABHDVER" "CABHD"
+  "POINTRENAMER" "POINTRENAMERVER" "LOBF" "LOBFVER" "ABLOBF" "ABLOBFVER"
+  "AUTOBEAD" "AUTOBEADVER" "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM"
+  "AUTODIMSIDEPOV" "AUTODIMVER" "BPCALLOUT" "BPCALLOUTVER" "DIMSTAMP" "DIMSTAMPVER"
+  "CCPRECHECK" "CCPRECHECKVER" "CDCALLOUT" "CDCALLOUTVER" "CDCREATE" "CDCREATEVER"
+  "CHECK" "DIMARCCHECK" "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER"
+  "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER"
+  "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN"
+  "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER"
+  "CLEARDIM" "CLEARDIMSCAN" "CLEARDIMVER" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK"
+  "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DIMCONTENDVER"
+  "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT" "DDFIXVER"
+  "DDGPS" "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER" "FITABHD"
+  "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK" "LINCHECKVER" "LINFINCHECKVER"
+  "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN"
+  "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER" "MOHAMADDLE"
+  "MOHAMADDLEVER" "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS"
+  "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK"
+  "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN"
+  "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER"
+  "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER"
+  "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER"
+  "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER"
+  "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER"
+  "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER"
+  "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
+  "LAZPIN" "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

@@ -392,6 +392,45 @@ TOOLS = {
         # acc:run tests for it by name
         'symbols': {'ACC-BACK': 'CAL-BACK'},
     },
+    # OLAUTO was written against the library from the start (STANDARDS
+    # section 6): its ask helper, the sysvar and dim-style pairs,
+    # ensure-layer and the vector set are the CALOFIN-LIB bodies under
+    # ola:, so all of that comes back out here.  What stays local is the
+    # tool: the arc-length walk, the phase search, the ICP polish and
+    # the error profile.
+    #
+    # ola:circumcenter is NOT in here, for the same reason
+    # acc:circumcenter is not: it is ABHD's 2-element form, and the
+    # library's carries p1's Z through as a third ordinate, so on the
+    # 2D points ola:arc-geom hands it the library would return
+    # (x y nil) -- which the (angle ...) and (polar ...) right after it
+    # cannot read.  tests/test_cal_parity.py is what says so.
+    'OLAUTO': {
+        'src': 'lisp/olauto/OLAUTO.lsp',
+        'swap': {
+            'ola:askkw': 'cal:askkw',
+            'ola:syssave': 'cal:syssave',
+            'ola:sysrestore': 'cal:sysrestore',
+            'ola:dimstysave': 'cal:dimstysave',
+            'ola:dimstyrestore': 'cal:dimstyrestore',
+            'ola:ensure-layer': 'cal:ensure-layer',
+            'ola:2d': 'cal:2d', 'ola:dist': 'cal:dist',
+            'ola:v-': 'cal:v-', 'ola:v+': 'cal:v+', 'ola:v*': 'cal:v*',
+            'ola:dot': 'cal:dot', 'ola:vlen': 'cal:vlen',
+            'ola:unit': 'cal:unit', 'ola:angnorm': 'cal:angnorm',
+            'ola:tan': 'cal:tan',
+        },
+        'drop_globals': ['ola:*sysold*', 'ola:*odstyle*'],
+        # ola:askkw is the STANDARDS section 4 REFERENCE helper: it takes
+        # the hidden-keyword list third and derives the bracket from the
+        # keywords.  cal:askkw is the older shape and takes the bracket
+        # there, so the call sites are translated rather than renamed.
+        'askkw_hidden': True,
+        # ...and the Back sentinel travels with the helper, because
+        # ola:run tests for it by name.  Miss this and Back silently
+        # stops working in the grouped build while every check passes.
+        'symbols': {'OLA-BACK': 'CAL-BACK'},
+    },
     # ABLOBF is LHD's OPEN half forked onto ABHD's survey classifier, so
     # it takes the same helpers from the library that LHD does -- the
     # vector set, the angle pair, ceil/nthcdr/sublist, dedupe, pad,
@@ -1182,6 +1221,19 @@ TOOLS = {
             'paddle--scl': 'cal:v*', 'paddle--len': 'cal:vlen',
             'paddle--unit': 'cal:unit', 'paddle--cross': 'cal:cross',
             'paddle--dot': 'cal:dot', 'paddle--2d': 'cal:2d',
+        },
+        'drop_globals': [],
+    },
+    # MOHAMADDLE ports PADDLE's own 2D vector kit under its own prefix
+    # (every lisp/ tool has to load alone), so the same eight names come
+    # out here for the same reason.
+    'MOHAMADDLE': {
+        'src': 'lisp/mohamaddle/MOHAMADDLE.lsp',
+        'swap': {
+            'mohamaddle--sub': 'cal:v-', 'mohamaddle--add': 'cal:v+',
+            'mohamaddle--scl': 'cal:v*', 'mohamaddle--len': 'cal:vlen',
+            'mohamaddle--unit': 'cal:unit', 'mohamaddle--cross': 'cal:cross',
+            'mohamaddle--dot': 'cal:dot', 'mohamaddle--2d': 'cal:2d',
         },
         'drop_globals': [],
     },

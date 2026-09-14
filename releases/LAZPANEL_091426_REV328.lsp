@@ -106,7 +106,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.27")
+(setq *lazpanel-version* "v3.28")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -322,10 +322,12 @@
     ("LITELINFINSCAN"   "Liner scan, no dims")
     ("LITESPACHECKSCAN" "Spa scan, no dims")
     ("LOBF"             "Line of best fit")
+    ("MOHAMADDLE"       "Pads, pick a size")
     ("NORMIESTEP"       "Normie step")
     ("OASIS"            "Freeform pool")
     ("LINGUTTER"        "Gut to perimeter, then pads")
     ("LINGUTTERSCAN"    "Gut scan, changes nothing")
+    ("OLAUTO"           "Overlay two perimeters")
     ("PADDLE"           "Paddle pads")
     ("PERPMARK"         "Measured wall offsets")
     ("PERPPTS"          "Perpendicular points")
@@ -554,6 +556,8 @@
       "LOBF"
       "ABLOBF"
       "DIMSTAMP"
+      "MOHAMADDLE"
+      "OLAUTO"
       "CLEARDIM"
       "CLEARDIMSCAN"
       )
@@ -583,6 +587,7 @@
       "LINGUTTER"
       "LINGUTTERSCAN"
       "PADDLE"
+      "MOHAMADDLE"
       "AUTOBEAD"
       "LAZSTEP"
       "CORNERSTP"
@@ -649,6 +654,7 @@
       "DIMSCAN"
       "ABCURCHECK"
       "ABCURCHECKSCAN"
+      "OLAUTO"
       "ABPCHECK"
       "LINCHECK"
       "LINFINCHECK"
