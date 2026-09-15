@@ -42,6 +42,32 @@ selection cannot be armed with `initget`, so Back cannot be typed at
 one. Re-selecting throws away everything the first pass worked out, so
 the second starts clean.
 
+### What OLAUTO needs from you -- and what it does not
+
+Measured, not assumed. Each line below was tried on the drawing this
+command was written from or on a shape with a known answer, through the
+repo's AutoLISP VM.
+
+| It does **not** need | Because |
+| --- | --- |
+| the two perimeters anywhere near each other | the fit is centroid-relative; a perimeter 3,900 units away lands identically to one already overlaid |
+| the two anywhere near the same **angle** | the phase search scores every arc-length alignment in both directions. A pool turned 137 degrees lands on the same answer to the last digit. A nearly-symmetric pool -- one end just 0.5" wider than the other, turned 180 degrees -- still lands on the right end. Under measurement noise as large as the asymmetry (a 1" taper under +/-1" jitter) it may pick the other end, and then the two ends are genuinely indistinguishable in the data and the reported error is the noise level either way |
+| the same **winding** | clockwise against counter-clockwise is tried |
+| the same **vertex density** | a 600-segment trace fits a 4-line drawing of the same shape to 5e-13 |
+| a **clean join** | a gap up to 1% of the perimeter still reads as a closed loop (`ola:*close-frac*`); a 12" skimmer gap in a 40' bead track is one perimeter, not two |
+| the perimeter to sit at Z zero | a perimeter drawn at an elevation keeps it through the move |
+| the two to be the same **kind of entity** | a polyline against exploded lines and arcs, a heavy `POLYLINE` against a light one -- all read into the same chain |
+
+| It **does** need | Or else |
+| --- | --- |
+| **two outlines of one pool** | it fits any two curves and has no idea what a pool is. Two checks catch a mis-pick (lengths more than 10% apart, or a worst error over 5% of the pool's size) and say so, after the numbers where you will see it |
+| the pick to hold **only the perimeter** | a stray deck line or coping arc caught by the window is chained end to end with the perimeter and the fit is of the junk. A pick that comes in as separate pieces is called out with the size of the jump |
+| **not a mirror image** -- or say yes when asked | a rigid fit can turn and slide but never flip, so a perimeter drawn from the far side, or brought in with an axis reversed, fits as badly as it possibly can. OLAUTO tries the flipped walk too and, when that fits at least twice as well (`ola:*mirror-ratio*`), offers the mirror. Enter declines, because Enter must never rewrite the drawing by itself; the run then goes on and the report says the fit was made without the mirror it asked for |
+| both in the **world XY plane** | a mirrored object (extrusion `0,0,-1`) is refused rather than fitted backwards |
+| the **same units** | a 25.4x, 12x, 2.54x or 10x length ratio is named as a units mismatch rather than reported as a bad pool |
+| polylines, lines, arcs or circles | a `SPLINE`, `ELLIPSE` or block in the pick is named with what to do about it (`PEDIT`, redraw, `EXPLODE`); text and dimensions caught by the window are dropped without comment |
+| both closed, or both open | one of each cannot be walked end for end; the fit runs and says it is the best of a bad job |
+
 ### What it refuses
 
 Three picks send you straight back to the picking rather than producing
@@ -202,6 +228,8 @@ Every knob is read when the command runs, not when the file loads, so
 | `ola:*close-frac*` | `0.01` | ...and the gap that still counts as closed, as a fraction of the chain's own length. Raise it to forgive a rougher rejoin; lower it if a genuinely open run of yours comes back on itself far enough to read as a loop |
 | `ola:*len-warn*` | `0.10` | how far apart the two perimeter lengths may be before the pick itself looks wrong |
 | `ola:*fit-warn*` | `0.05` | ...and how big the worst error may be, against the original's bounding diagonal, before the overlay stops meaning anything |
+| `ola:*piece-frac*` | `0.05` | a jump between consecutive pieces of a pick bigger than this share of the chain is called out as a separate piece -- looser than `ola:*close-frac*` on purpose, so a skimmer gap is one perimeter drawn with a break, not two objects |
+| `ola:*mirror-ratio*` | `0.5` | the flipped walk has to fit at least this much better (its residual at most half the unflipped one) before the mirror is offered; a shape with a mirror line of its own scores the same both ways and is never asked about |
 
 ## Notes & limitations
 
