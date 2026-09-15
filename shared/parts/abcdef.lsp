@@ -1432,6 +1432,7 @@
   (while (null v)
     (setq s (getstring T (strcat "\n" prompt " (e.g. 20'-6\""
                                  (if back ", B = back" "") "): ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
     (cond
       ((and back (member (strcase s) '("B" "BACK" "U" "UNDO")))
        (setq v 'CAL-BACK))
@@ -1623,6 +1624,7 @@
       (T
        (initget "Back Undo")
        (setq base (getpoint "\nInsertion point for corner A <0,0> [Back]: "))
+       (if lzd:ask (lzd:ask "\nInsertion point for corner A <0,0> [Back]: " base) base)
        (if (= (type base) 'STR) (setq stage 4) (setq done T)))))
   (if (eq done 'quit)
     (progn (princ "\nCancelled.") (princ))

@@ -2790,12 +2790,14 @@
                    (strcat "\n  Keep which fit - click one, or ["
                            (if simp "1/2/3/4/5" "1/2/3")
                            "/All/None/Redo] <" defl ">: ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pick) pick)
       (if (null pick)
         ;; no keyword typed: give them a click, and fall back to the
         ;; standing default
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
                                     " Enter for " defl "): ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
           (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
@@ -3168,6 +3170,7 @@
   (while (null res)
     (setq s (getstring T (strcat msg " <" (pf:fmt-off def) ">"
                                  (if back " [Back]" "") ": ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
     (cond
       ((= s "") (setq res def))
       ((and back (cal:back-word-p s)) (setq res 'CAL-BACK))
@@ -3670,6 +3673,7 @@
           (initget "Yes No")
           (setq ans (getkword
                       "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: "))
+          (if lzd:ask (lzd:ask "\n\n  Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>: " ans) ans)
           (if (= ans "Yes") (setq stage 1) (setq go nil)))))
 
       ;; -- the shallow break, one end per stage
@@ -3963,6 +3967,7 @@
           (princ (strcat "\n  Wall Pt." (cadr c1) " - Pt." (cadr c2) "."))
           (initget "Yes No Back Undo")
           (setq again (getkword "\n  Another straight line? [Yes/No/Back] <No>: "))
+          (if lzd:ask (lzd:ask "\n  Another straight line? [Yes/No/Back] <No>: " again) again)
           (cond
             ((member again '("Back" "Undo"))
              (pf:temp-kill (car pf-decl-marks))
@@ -4048,6 +4053,7 @@
     (setq ans (getkword (strcat
                 "\n  Straight walls (" (itoa (length pf-walls))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
@@ -4073,6 +4079,7 @@
            (setq pf-phase "removing a straight wall")
            (initget "Back Undo")
            (setq wp1 (getpoint "\n  Pick near the straight wall to remove [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick near the straight wall to remove [Back]: " wp1) wp1)
            (if (pf:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
@@ -4102,6 +4109,7 @@
     (setq ans (getkword (strcat
                 "\n  Sharp corners (" (itoa (length pf-corners))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
@@ -4151,6 +4159,7 @@
     (setq ans (getkword (strcat
                 "\n  Held points (" (itoa (length pf-holds))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
@@ -4316,6 +4325,7 @@
        (initget "Yes No Back Undo")
        (setq ans      (getkword "\n  Any straight lines? [Yes/No/Back] <No>: ")
              rawwalls nil)
+       (if lzd:ask (lzd:ask "\n  Any straight lines? [Yes/No/Back] <No>: " ans) ans)
        (cond
          ((member ans '("Back" "Undo"))
           (setq step (pf:step-back step lo)))
@@ -4356,6 +4366,7 @@
        (initget "Yes No Back Undo")
        (setq ans     (getkword "\n  Any sharp corners? [Yes/No/Back] <No>: ")
              rawcnrs nil)
+       (if lzd:ask (lzd:ask "\n  Any sharp corners? [Yes/No/Back] <No>: " ans) ans)
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\n  Stepping back one question.")
@@ -4395,6 +4406,7 @@
        (initget "Yes No Back Undo")
        (setq ans      (getkword "\n  Any held points? [Yes/No/Back] <No>: ")
              rawholds nil)
+       (if lzd:ask (lzd:ask "\n  Any held points? [Yes/No/Back] <No>: " ans) ans)
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\n  Stepping back one question.")
@@ -5103,7 +5115,8 @@
 ;; by stage, for lookers - then cleans up after itself.
 
 (defun pf:tut-pause ()
-  (getstring "\n  --- press Enter to continue ---")
+  ((lambda (v) (if lzd:ask (lzd:ask "\n  --- press Enter to continue ---" v) v))
+    (getstring "\n  --- press Enter to continue ---"))
   (princ))
 
 ;; The stage caption above the demo, replaced at each stage.
@@ -5278,6 +5291,7 @@
   (princ "\n\n  The demo draws a practice pool about 30 ft wide, walks it")
   (princ "\n  through the whole flow, and cleans up after itself.")
   (setq cp (getpoint "\n  Pick a clear spot for it: "))
+  (if lzd:ask (lzd:ask "\n  Pick a clear spot for it: " cp) cp)
   (if (null cp)
     (princ "\n  (no spot picked - tutorial ended, nothing drawn)")
     (progn
@@ -5389,8 +5403,9 @@
       (princ "\n  rule; ABHD runs it on your survey; ADAB does just the")
       (princ "\n  bottom over any perimeter.")
       (initget "Yes No")
-      (if (= "Yes" (getkword
-                     "\n  Keep the demo drawing to poke at? [Yes/No] <No>: "))
+      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\n  Keep the demo drawing to poke at? [Yes/No] <No>: " v) v))
+                     (getkword
+                       "\n  Keep the demo drawing to poke at? [Yes/No] <No>: ")))
         (progn
           (setq pf-temp nil)
           (princ "\n  Kept - erase it whenever; every piece is stamped ABHD."))
@@ -5416,6 +5431,7 @@
   (initget "Checks Demo Both")
   (setq mode (getkword
                "\n  Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>: "))
+  (if lzd:ask (lzd:ask "\n  Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>: " mode) mode)
   (cond ((= mode "Checks") (pf:tut-checks))
         ((= mode "Demo")   (pf:tut-demo))
         (t (pf:tut-checks) (pf:tut-demo)))

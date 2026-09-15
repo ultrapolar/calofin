@@ -2826,12 +2826,14 @@
       (setq pick (getkword
                    (strcat "\n  Keep which fit - click one, or"
                            " [1/2/3/All/None/Redo] <" dflt ">: ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pick) pick)
       (if (null pick)
         ;; no keyword typed: give them a click, and fall back to the
         ;; default above
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
                                     dflt "): ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
           (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
@@ -3020,6 +3022,7 @@
           (princ (strcat "\n  Wall Pt." (cadr c1) " - Pt." (cadr c2) "."))
           (initget "Yes No Back Undo")
           (setq again (getkword "\n  Another straight line? [Yes/No/Back] <No>: "))
+          (if lzd:ask (lzd:ask "\n  Another straight line? [Yes/No/Back] <No>: " again) again)
           (cond
             ((member again '("Back" "Undo"))
              (cab:temp-kill (car cab-decl-marks))
@@ -3105,6 +3108,7 @@
     (setq ans (getkword (strcat
                 "\n  Straight walls (" (itoa (length cab-walls))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
@@ -3130,6 +3134,7 @@
            (setq cab-phase "removing a straight wall")
            (initget "Back Undo")
            (setq wp1 (getpoint "\n  Pick near the straight wall to remove [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick near the straight wall to remove [Back]: " wp1) wp1)
            (if (cab:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
@@ -3159,6 +3164,7 @@
     (setq ans (getkword (strcat
                 "\n  Sharp corners (" (itoa (length cab-corners))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
@@ -3208,6 +3214,7 @@
     (setq ans (getkword (strcat
                 "\n  Held points (" (itoa (length cab-holds))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
@@ -3403,6 +3410,7 @@
        (initget "Yes No Back Undo")
        (setq ans      (getkword "\n  Any straight lines? [Yes/No/Back] <No>: ")
              rawwalls nil)
+       (if lzd:ask (lzd:ask "\n  Any straight lines? [Yes/No/Back] <No>: " ans) ans)
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\n  Stepping back one question.")
@@ -3443,6 +3451,7 @@
        (initget "Yes No Back Undo")
        (setq ans     (getkword "\n  Any sharp corners? [Yes/No/Back] <No>: ")
              rawcnrs nil)
+       (if lzd:ask (lzd:ask "\n  Any sharp corners? [Yes/No/Back] <No>: " ans) ans)
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\n  Stepping back one question.")
@@ -3481,6 +3490,7 @@
        (initget "Yes No Back Undo")
        (setq ans      (getkword "\n  Any held points? [Yes/No/Back] <No>: ")
              rawholds nil)
+       (if lzd:ask (lzd:ask "\n  Any held points? [Yes/No/Back] <No>: " ans) ans)
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\n  Stepping back one question.")

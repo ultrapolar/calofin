@@ -1821,9 +1821,11 @@
       (initget "1 2 3 All None Redo")
       (setq pick (getkword
                    "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: "))
+      (if lzd:ask (lzd:ask "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: " pick) pick)
       (if (null pick)
         (progn
           (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+          (if lzd:ask (lzd:ask "\n  Pick the outline to keep (or Enter for 2): " sel) sel)
           (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
@@ -2002,6 +2004,7 @@
     (setq ans (getkword (strcat
                 "\n  Straight stretches (" (itoa (length abl-walls))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
@@ -2027,6 +2030,7 @@
            (setq abl-phase "removing a straight stretch")
            (initget "Back Undo")
            (setq wp1 (getpoint "\n  Pick near the straight stretch to remove [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick near the straight stretch to remove [Back]: " wp1) wp1)
            (if (abl:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
@@ -2054,6 +2058,7 @@
     (setq ans (getkword (strcat
                 "\n  Sharp corners (" (itoa (length abl-corners))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
@@ -2103,6 +2108,7 @@
     (setq ans (getkword (strcat
                 "\n  Held points (" (itoa (length abl-holds))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
@@ -2277,6 +2283,7 @@
          (initget "Stretch Corner Hold Done Back Undo")
          (setq ans (getkword
                      "\n  Declare a stretch, corner or held point - or Done to fit? [Stretch/Corner/Hold/Done/Back] <Done>: "))
+         (if lzd:ask (lzd:ask "\n  Declare a stretch, corner or held point - or Done to fit? [Stretch/Corner/Hold/Done/Back] <Done>: " ans) ans)
          (cond
            ((member ans '("Back" "Undo"))
             (if decls

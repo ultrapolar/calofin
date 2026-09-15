@@ -1490,6 +1490,9 @@ def test_no_local_shadows_a_function():
     src = re.sub(r'"(\\.|[^"\\])*"', '""', src)
     arglists = re.findall(r'\(defun\s+[^\s()]+\s*\(([^)]*)\)', src)
     bodies = re.sub(r'\(defun\s+[^\s()]+\s*\([^)]*\)', '(defun', src)
+    # a lambda's parameter list is parenthesised too -- ((lambda (v)
+    # ...) (getpoint ...)) is how LAZDIAG records an input read in place
+    bodies = re.sub(r'\(lambda\s*\([^)]*\)', '(lambda', bodies)
     called = set(re.findall(r'\(\s*([a-zA-Z][\w:*<>=+/-]*)', bodies))
     bad = []
     for arglist in arglists:

@@ -1329,6 +1329,7 @@
                                   " - pick the START point of the line to"
                                   " measure along (Enter to skip"
                                   (if back ", or Back" "") "): ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") p1) p1)
        (cond
          ((null p1) (prompt "\nNothing drawn - skipped.") (setq out 'skip))
          ((= (type p1) 'STR) (setq out 'CAL-BACK))
@@ -1337,6 +1338,7 @@
        (initget "Back Undo")
        (setq p2 (getpoint p1 (strcat "\n" tag
                                      " - pick the END point [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") p2) p2)
        (cond
          ((= (type p2) 'STR) (setq stage 1))
          ((or (null p2) (<= (distance p1 p2) 1e-8))
@@ -1348,6 +1350,7 @@
        (setq loc (getpoint (strcat "\n" tag
                                    " - pick where the dimension chain"
                                    " should sit <on the drawn line> [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") loc) loc)
        (if (= (type loc) 'STR)
          (setq stage 2)
          (progn

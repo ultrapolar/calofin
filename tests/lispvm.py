@@ -209,6 +209,7 @@ class VM:
         self.entities = []       # Ent -> alist, in creation order
         self.entdata = {}
         self.deleted = set()
+        self.lastprompt = ''     # what AutoCAD's LASTPROMPT would hold
         self.pickfirst = None    # the implied selection sssetfirst
                                  # left for the next command's "_I"
         self.initget_kws = ""
@@ -302,6 +303,13 @@ class VM:
             raise LispError(f"SCRIPT EXHAUSTED at {kind} prompt: {prompt!r}",
                             self)
         v = self.script.pop(0)
+        # AutoCAD keeps the prompt it just showed in LASTPROMPT, and an
+        # input site whose prompt is built at run time labels its
+        # transcript line with that -- so the VM has to keep it too, or
+        # every such line would read "nil".  It is NOT in sysvars: it is
+        # read-only in AutoCAD and changes at every prompt, and a test
+        # that diffs the settings a run left behind must not see it
+        self.lastprompt = prompt.lstrip("\n") if prompt else ""
         if callable(v):
             # A scripted answer that is a function is CALLED here, with
             # the VM, at the moment the prompt is reached.  That is the
@@ -679,9 +687,12 @@ def _arith(op, args, unit):
 
 
 def _div(a, b):
+    # AutoCAD's own message, and an AutoLISP error rather than a Python
+    # one, so it reaches the routine's *error* handler the way it does
+    # at the command line -- for a real as much as for an int
+    if b == 0:
+        raise LispError("divide by zero")
     if isinstance(a, int) and isinstance(b, int):
-        if b == 0:
-            raise LispError("divide by zero")
         return a // b if (a < 0) == (b < 0) or a % b == 0 else -((-a) // b)
     return a / b
 
@@ -919,7 +930,15 @@ BUILTINS[Sym('cos')] = lambda vm, a: math.cos(num(a[0]))
 BUILTINS[Sym('atan')] = lambda vm, a: (math.atan(num(a[0])) if len(a) == 1
                                        else math.atan2(num(a[0]),
                                                        num(a[1])))
-BUILTINS[Sym('rem')] = lambda vm, a: num(a[0]) % num(a[1])
+
+
+def _rem(vm, a):
+    if num(a[1]) == 0:
+        raise LispError("divide by zero", vm)
+    return num(a[0]) % num(a[1])
+
+
+BUILTINS[Sym('rem')] = _rem
 BUILTINS[Sym('float')] = lambda vm, a: float(num(a[0]))
 BUILTINS[Sym('fix')] = lambda vm, a: int(num(a[0]))
 # logand lives with logior further down -- the n-argument _logop pair
@@ -1121,10 +1140,14 @@ def _to_string(v):
         return "T"
     if isinstance(v, bool):
         return "T" if v else "nil"
+    # Sym BEFORE str: Sym subclasses str, so the str branch would hand
+    # the symbol back unconverted and strcat would then refuse it --
+    # which is exactly how AutoCAD behaves with a symbol, and exactly
+    # not what vl-princ-to-string is for
+    if isinstance(v, Sym):
+        return str.__str__(v).upper()
     if isinstance(v, str):
         return v
-    if isinstance(v, Sym):
-        return str(v)
     if isinstance(v, float):
         return _rtos_default(v)
     if _is_ss(v):
@@ -1157,6 +1180,8 @@ def _prompt(vm, a):
 def _getvar(vm, a):
     """An unknown variable is nil, as in AutoCAD -- not 0, which this
     VM used to invent and which no arithmetic ever complained about."""
+    if a[0].upper() == 'LASTPROMPT':
+        return vm.lastprompt
     return vm.sysvars.get(a[0].upper(), NIL)
 
 

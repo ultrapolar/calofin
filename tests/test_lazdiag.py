@@ -30,6 +30,7 @@ Run: python3 tests/test_lazdiag.py
 """
 
 import os
+import re
 import sys
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,7 +38,7 @@ REPO_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, TESTS_DIR)
 sys.path.insert(0, os.path.join(REPO_DIR, "tools"))
 
-from lispvm import VM, LispError  # noqa: E402
+from lispvm import VM, LispError, Sym  # noqa: E402
 
 LSP = os.path.join(REPO_DIR, "lisp", "lazdiag", "LAZDIAG.lsp")
 #: POOL, for the one check that drives a REAL prompt through a REAL
@@ -950,6 +951,164 @@ check("a command that does something with no handler is named",
       naked == ["DEMOBARE"], naked)
 check("...and a version reporter is not, though it prints \"(commands:\"",
       "DEMOVER" not in naked, naked)
+
+print("every input is in the transcript, wherever the call sits")
+
+# A transcript that had the ask helpers' answers could be read.  One
+# that has EVERY answer can be replayed -- tools/probe_report.py feeds
+# it back to the same tool in this VM -- and a replay is out of step the
+# moment one prompt went unrecorded.  So the codemod has to reach the
+# inputs no helper takes: the (setq p (getpoint)) that is a while's
+# test, the getkword inside an (= ...), the getstring that only pauses.
+# Dropping a record in after a while's test would run it only when the
+# test passed, and the transcript would be short exactly the answer
+# that ended the loop; those calls are wrapped instead.
+INPUTS = r"""(setq *demo-version* "v1.0")
+(defun demo:askint (msg / v)
+  (setq v (getint msg))
+  (if v v 3))
+(defun demo:pause ()
+  (getstring "\n--- press Enter ---")
+  (princ))
+(defun demo:two ( / a b)
+  (setq a (getdist "\nA: ") b 2))
+(defun c:DEMOC ( / *error* p k n a b)
+  (defun *error* (msg)
+    (princ (strcat "\nDEMOC error: " msg))
+    (princ))
+  (setq p (getpoint "\nBase: "))
+  (while (setq p (getpoint "\nNext: "))
+    (setq n (demo:askint (strcat "\nHow many <" (itoa 3) ">: "))))
+  (initget "Yes No")
+  (if (= "Yes" (getkword "\nGo? [Yes/No]: ")) (demo:pause))
+  (initget "Alpha Beta")
+  (cond ((setq k (getkword "\nWhich? ")) (princ k))
+        (t (setq k (getstring)) (princ k)))
+  (setq a 1 b (getreal "\nB: "))
+  (demo:two)
+  (princ))
+"""
+missing, wired = cz.wire("INPUTS.lsp", INPUTS, True)
+imask = cz.code_mask(wired)
+check("every input call is named as unrecorded", len(missing) == 10,
+      "%d: %s" % (len(missing), missing))
+check("a setq that is a body statement takes the record after it",
+      '(setq p (getpoint "\\nBase: "))\n  (if lzd:ask (lzd:ask "\\nBase: " p) p)'
+      in wired)
+check("a while's test is wrapped, so the nil that ends the loop is written down",
+      '(while (setq p ((lambda (v) (if lzd:ask (lzd:ask "\\nNext: " v) v))'
+      in wired)
+check("a getkword read in place is wrapped where it is",
+      '(= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\\nGo? [Yes/No]: " v) v))'
+      in wired)
+check("a cond clause's test is wrapped, its body is not",
+      '(cond ((setq k ((lambda (v)' in wired
+      and re.search(r'\(t \(setq k \(getstring\)\)\s+'
+                    r'\(if lzd:ask \(lzd:ask \(getvar "LASTPROMPT"\) k\) k\)',
+                    wired))
+check("a getstring that only pauses is recorded too",
+      '((lambda (v) (if lzd:ask (lzd:ask "\\n--- press Enter ---" v) v))\n'
+      '    (getstring "\\n--- press Enter ---"))' in wired)
+check("a multi-pair setq keeps its value: the get in its later pair is wrapped",
+      '(setq a 1 b ((lambda (v)' in wired)
+check("...and one that sits last in its body is wrapped, not followed",
+      '(setq a ((lambda (v) (if lzd:ask (lzd:ask "\\nA: " v) v))\n'
+      in wired and '(getdist "\\nA: ")) b 2))' in wired)
+check("an ask helper is recorded once, with its msg as the label",
+      wired.count("(lzd:ask msg v)") == 1
+      and wired.count('(lzd:ask "(getvar') == 0,
+      wired.count("(lzd:ask msg v)"))
+check("a prompt built at run time is labelled with LASTPROMPT",
+      wired.count('(lzd:ask (getvar "LASTPROMPT") k) k)') == 1)
+check("nothing landed where it changes a meaning",
+      not cz.misplaced(wired, imask, "INPUTS.lsp"),
+      cz.misplaced(wired, imask, "INPUTS.lsp"))
+again, twice = cz.wire("INPUTS.lsp", wired, True)
+check("a second --fix is a no-op, not a second record", twice == wired
+      and not again, again)
+
+SCRIPT = [(1.0, 2.0, 0.0), (3.0, 4.0, 0.0), 5, None, "Yes", "",
+          None, "x", 2.5, 7.0]
+vm = newvm()
+vm.loads(wired)
+vm.run("c:DEMOC", SCRIPT)
+check("the run asks ten times, ends clean and is logged as ok",
+      len(vm.prompts) == 10 and "  ok " in logof(vm)
+      and not any("error" in s.lower() for s in vm.printed),
+      (len(vm.prompts), vm.printed[-3:]))
+
+
+def boom(_vm):
+    raise LispError("bad argument type: numberp: nil", _vm)
+
+
+# the same run, failed at the tenth prompt: the report's transcript has
+# to carry the nine answers that came before it, every kind of site
+vm = newvm()
+vm.loads(wired)
+vm.handle_errors = True
+vm.run("c:DEMOC", SCRIPT[:-1] + [boom])
+path, body = only_file(vm)
+check("a failure at the tenth prompt reports the nine answers before it",
+      body.count("   -> ") == 9, body.count("   -> "))
+check("...the loop-ending Enter among them, as nil",
+      re.search(r"Next: +-> nil", body)
+      and len(re.findall(r"Next: +-> ", body)) == 2)
+check("...the pause, the keyword and the wrapped getreal too",
+      re.search(r"press Enter --- +-> \"\"", body)
+      and re.search(r"Go\? \[Yes/No\]: +-> \"Yes\"", body)
+      and re.search(r"B: +-> 2\.5", body))
+vm = VM()
+vm.loads(wired)
+vm.run("c:DEMOC", SCRIPT)
+check("without LAZDIAG the same run asks the same ten and says nothing",
+      len(vm.prompts) == 10 and not any("error" in s.lower()
+                                        for s in vm.printed),
+      (len(vm.prompts), vm.printed[-3:]))
+vm.script = [7.0, None]
+check("a wrapped call hands its answer straight back",
+      vm.loads("(demo:two)") == 2 and vm.loads('(demo:askint "n")') == 3)
+
+print("the report says what is odd about the inputs")
+
+# The values a run was given, read against each other: a zero, a
+# negative, two lengths that are the same number, two picks on one
+# spot.  And when nothing is -- that is written down too, because it
+# points at the code instead of the inputs.
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+for form in ('(lzd:ask "Radius" 0.0)', '(lzd:ask "Width" 12.0)',
+             '(lzd:ask "Length" 12.0)', '(lzd:ask "Depth" -3.0)',
+             '(lzd:ask "First corner" (list 1.0 2.0 0.0))',
+             '(lzd:ask "Second corner" (list 1.0 2.0 0.0))',
+             '(lzd:ask "Treatment" "Radius")', '(lzd:ask "Skip" nil)'):
+    vm.loads(form)
+failing_run(vm)
+path, body = only_file(vm)
+check("the section is in the report",
+      "THE INPUTS, AND WHAT IS ODD ABOUT THEM" in body)
+check("...with the answers counted by kind",
+      "8 answers: 4 numbers, 1 words, 2 points, 1 Enter/NA" in body)
+check("a zero is flagged", re.search(r"ODD  Radius = 0(\.0+)?\s+zero", body))
+check("a negative is flagged",
+      re.search(r"ODD  Depth = -3(\.0+)?\s+negative", body))
+check("two equal numbers name each other",
+      re.search(r"ODD  Width = 12(\.0+)?\s+equals Length", body)
+      and re.search(r"ODD  Length = 12(\.0+)?\s+equals Width", body))
+check("two picks on one spot name each other",
+      "same spot as Second corner" in body
+      and "same spot as First corner" in body)
+check("an ordinary word and an Enter draw no flag",
+      "ODD  Treatment" not in body and "ODD  Skip" not in body)
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:ask "Radius" 5.0)')
+vm.loads('(lzd:ask "Width" 12.0)')
+vm.loads('(lzd:ask "Corner" (list 3.0 4.0 0.0))')
+failing_run(vm)
+path, body = only_file(vm)
+check("ordinary inputs say so, in words",
+      "nothing stands out" in body and "ODD  " not in body)
 
 if failures:
     print("\n%d LAZDIAG check(s) FAILED" % len(failures))

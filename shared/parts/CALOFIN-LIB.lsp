@@ -210,7 +210,8 @@
 ;; POOL/SPA tutorials keep their own pauses -- theirs can stop the
 ;; tutorial, and the two disagree about which answer means stop.
 (defun cal:pause ()
-  (getstring "\n--- press Enter to continue ---")
+  ((lambda (v) (if lzd:ask (lzd:ask "\n--- press Enter to continue ---" v) v))
+    (getstring "\n--- press Enter to continue ---"))
   (princ))
 
 ;;; -------------------- system variables --------------------------------

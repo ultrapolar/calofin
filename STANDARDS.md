@@ -682,7 +682,7 @@ failure in it produces a file somebody can diagnose from.  That is the
 whole of the rule, and it applies to the tool written next year exactly
 as it applies to the seventy in the tree today.
 
-Four call sites, all of them maintained by
+Five call sites, all of them maintained by
 `tools/check_lazdiag.py --fix`, and `make check` runs the same check so
 a command that is missing any of them cannot ship:
 
@@ -692,12 +692,28 @@ a command that is missing any of them cannot ship:
 | in the `*error*` handler | `(if lzd:report (lzd:report "TOOL" *tool-version* msg))` | the report itself: the DXF, and the words telling the drafter to send it |
 | before the command's `(princ)` | `(if lzd:end (lzd:end "TOOL"))` | the run LOG's "ok" line: a clean run, counted |
 | after a selection | `(if lzd:watch (lzd:watch ss) ss)` | the geometry the run was HANDED, not just what it drew |
-| in an ask helper | `(if lzd:ask (lzd:ask msg v) v)` | the transcript -- which question it died on |
+| after a `(setq v (getX ...))` that is a body statement, ask helpers included | `(if lzd:ask (lzd:ask msg v) v)` | the transcript -- which question it died on, and what was answered |
+| at an input read where it stands | `((lambda (v) (if lzd:ask (lzd:ask "prompt" v) v)) (getpoint "prompt"))` | the same transcript line for a `while`'s test, a keyword inside `(= ...)`, a `getstring` that only pauses -- and the `nil` that ends a loop, written down like any other answer |
 
-The else branch on the last two is load-bearing, not decoration: it
-makes the whole form evaluate to the variable whether LAZDIAG is loaded
-or not, so a call dropped after a `(setq ss (ssget ...))` cannot change
-what the enclosing `progn` or `cond` clause returns.
+The else branch on the `watch` and `ask` forms is load-bearing, not
+decoration: it makes the whole form evaluate to the variable whether
+LAZDIAG is loaded or not, so a call dropped after a
+`(setq ss (ssget ...))` cannot change what the enclosing `progn` or
+`cond` clause returns.  The lambda is the same idea for a call whose
+value something reads in place: it binds the answer for the length of
+the record and hands it straight back, so the wrapped call means
+exactly what the bare one did wherever it sits.  A record dropped in
+AFTER a `while`'s test would have run only when the test passed, and
+the transcript would have been short exactly the answer that ended the
+loop.
+
+The answers are recorded TYPED -- `nil`, `12.5`, `"Yes"`, `(x y z)`,
+`(<ent> (x y z))` -- so a transcript is not just readable but
+replayable: `tools/probe_report.py` feeds a report back to the tool in
+the test VM, confirms the failure, and varies each answer in turn to
+say which one it is tied to.  Every input a new tool takes is
+therefore an input `--fix` will record; do not route one around a
+`getX` call to keep it out of the transcript.
 
 Those four also feed the **run log** -- one line per run into
 `<profile>\calofin\calofin-YYYY-MM.log`, `ok` / `quit` / `FAIL` -- which

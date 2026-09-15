@@ -78,7 +78,8 @@
     (princ))
 
   (defun tutp:pause ()
-    (getstring "\n      --- press Enter to continue --- ")
+    ((lambda (v) (if lzd:ask (lzd:ask "\n      --- press Enter to continue --- " v) v))
+      (getstring "\n      --- press Enter to continue --- "))
     (princ))
 
   ;; remember the entity just created so the demo can be erased
@@ -123,6 +124,7 @@
               "built, as many times as you like."))
   (initget "Checks Demo Both")
   (setq mode (getkword "\nWhat would you like? [Checks/Demo/Both] <Both>: "))
+  (if lzd:ask (lzd:ask "\nWhat would you like? [Checks/Demo/Both] <Both>: " mode) mode)
   (if (null mode) (setq mode "Both"))
 
   ;; --- the checklist ---------------------------------------------------
@@ -219,9 +221,12 @@
                   "The demo now draws what PERPPTS produces, one stage at a"
                   "time.  Pick an empty spot with room to the upper right."))
       (setq p (getpoint "\nInsertion point for the demo: "))
+      (if lzd:ask (lzd:ask "\nInsertion point for the demo: " p) p)
       (while (null p)
-        (setq p (getpoint "\nA point is required - insertion point: ")))
+        (setq p (getpoint "\nA point is required - insertion point: "))
+        (if lzd:ask (lzd:ask "\nA point is required - insertion point: " p) p))
       (setq sz (getdist p "\nDemo size <100>: "))
+      (if lzd:ask (lzd:ask "\nDemo size <100>: " sz) sz)
       (if (null sz) (setq sz 100.0))
       (setvar "OSMODE" 0)
       (if (member pd '(0 1)) (setvar "PDMODE" 3))
@@ -371,6 +376,7 @@
       ;; keep or erase the demo
       (initget "Keep Erase")
       (setq ans (getkword "\nKeep the demo drawing? [Keep/Erase] <Keep>: "))
+      (if lzd:ask (lzd:ask "\nKeep the demo drawing? [Keep/Erase] <Keep>: " ans) ans)
       (if (equal ans "Erase")
         (progn
           (foreach e ents (if (and e (entget e)) (entdel e)))

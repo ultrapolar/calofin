@@ -4297,6 +4297,7 @@
   (while (null res)
     (setq s (getstring T (strcat "\n" msg " <" (fit:fmt-off def) ">"
                                  (if back " [Back]" "") ": ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
     (cond
       ((= s "") (setq res def))
       ((and back (cal:back-word-p s)) (setq res 'CAL-BACK))
@@ -4440,6 +4441,7 @@
    ;; first break below re-opens the pick instead
    (initget "Back Undo")
    (setq pick (getpoint "\nPick a point at the DEEP end of the pool [Back]: "))
+   (if lzd:ask (lzd:ask "\nPick a point at the DEEP end of the pool [Back]: " pick) pick)
    (cond
     ((and (= (type pick) 'STR) (member pick '("Back" "Undo")))
      (princ "\n  Stepping back one question.")
@@ -4674,6 +4676,7 @@
        (setq v (getint (strcat "\nPercent of points allowed beyond <"
                                (itoa (fix (+ 0.5 (* 100.0 pct))))
                                "> [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
        (cond
          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
           (princ "\nStepping back one step.")
