@@ -446,6 +446,151 @@ SELECT_GET = re.compile(
 WHOLE_DB = re.compile(r'^\s*"_?[XA]"')
 
 
+#: every interactive input a routine can take.  ssget is not here: a
+#: selection is geometry, and lzd:watch copies it into the report rather
+#: than writing it down.
+INPUT_CALL = re.compile(
+    r"\(\s*(getpoint|getdist|getkword|getstring|getint|getreal|getangle"
+    r"|getcorner|entsel|nentsel)\b")
+
+#: how an input is recorded where nothing binds its answer, or where
+#: something reads it in place: bound for the length of one lambda and
+#: handed straight back, so the wrapped call means what the bare one did
+WRAP = "((lambda (v) (if lzd:ask (lzd:ask %s v) v))"
+WRAPPED = "((lambda (v) (if lzd:ask (lzd:ask "
+
+#: the bodies whose items are STATEMENTS -- evaluated for effect, their
+#: values dropped unless last -- and the index each body starts at
+BODY_FROM = {"defun": 3, "defun-q": 3, "lambda": 2, "progn": 1,
+             "while": 2, "foreach": 3, "repeat": 2}
+
+
+def head_of(src, pos):
+    """The symbol a form starts with, lowercased -- "" when its first
+    item is itself a form, as a cond clause's test is."""
+    m = re.match(r"\(\s*([^\s()\"';]+)", src[pos:pos + 80])
+    return m.group(1).lower() if m else ""
+
+
+def item_index(src, mask, parent, lo):
+    """(the items of PARENT, the index of the one starting at LO)."""
+    kids = items(src, mask, parent + 1, form_end(src, mask, parent) - 1)
+    return kids, next((i for i, (a, b) in enumerate(kids) if a == lo), None)
+
+
+def is_statement(src, mask, lo):
+    """True when the form at LO is a body statement: a form dropped in
+    after it is evaluated for effect and nothing reads its value --
+    unless it lands last, and the watch and ask forms are
+    value-transparent for exactly that case."""
+    parent = enclosing_call(src, lo, mask)
+    if parent < 0:
+        return True
+    head = head_of(src, parent)
+    kids, idx = item_index(src, mask, parent, lo)
+    if idx is None:
+        return False
+    if head in BODY_FROM:
+        return idx >= BODY_FROM[head]
+    # a cond clause is (test body...): the test is read, the rest is body
+    outer = enclosing_call(src, parent, mask)
+    return outer >= 0 and head_of(src, outer) == "cond" and idx >= 1
+
+
+def recorded_after(src, mask, setq_lo):
+    """True when the record already follows the setq at SETQ_LO -- as
+    the next item of its body, or the one after a watch call."""
+    parent = enclosing_call(src, setq_lo, mask)
+    if parent < 0:
+        return "(if lzd:ask" in src[form_end(src, mask, setq_lo):][:200]
+    kids, idx = item_index(src, mask, parent, setq_lo)
+    if idx is None:
+        return False
+    for a, b in kids[idx + 1:idx + 3]:
+        if src.startswith("(if lzd:ask", a):
+            return True
+    return False
+
+
+def input_sites(src, mask, taken=()):
+    """Every input call in the file, and how to record it.
+
+    The ask helpers record themselves already, with their msg argument
+    as the label -- that pass stays, because a helper's prompt is built
+    at run time and its msg is the best name there is; TAKEN is where
+    it is about to write, and those setqs are left to it.  This pass is
+    for the OTHER 300: the base point c:POOL asks for directly, the
+    stage loops that getkword their own way, every entsel, the getstring
+    that only pauses.  A transcript that had a quarter of the inputs
+    could be read; one that has all of them can be REPLAYED, which is
+    what tools/probe_report.py does.
+
+    Two shapes come back.  "after": the call is the value of a
+    (setq v ...) that is itself a body statement, and the record goes in
+    after the setq the way the helpers' does.  "wrap": anything else --
+    a bare (getstring) that pauses, a getkword inside an (= ...), the
+    (setq p (getpoint)) that is a while's test -- and the CALL is
+    wrapped, ((lambda (v) (if lzd:ask (lzd:ask label v) v)) (getpoint
+    ...)): the answer is bound for the length of the record and handed
+    straight back, so the form means what the bare call did wherever it
+    sits, and a nil that ends a loop is written down like any other
+    answer.  Dropping a record in after a while's test would have run
+    it only when the test passed, and the transcript would have been
+    short exactly the answer that stopped the loop.
+
+    The label is the prompt when the call names it as one literal, and
+    AutoCAD's own LASTPROMPT otherwise -- which after a getpoint is the
+    prompt it just showed, built or not."""
+    out = []
+    for m in INPUT_CALL.finditer(src):
+        lo = m.start()
+        if not mask[lo]:
+            continue
+        hi = form_end(src, mask, lo)
+        if hi < 0:
+            continue
+        parent = enclosing_call(src, lo, mask)
+        if parent >= 0 and src.startswith(WRAPPED, parent):
+            continue                                    # wrapped already
+        args = items(src, mask, lo + 1, hi - 1)
+        label = '(getvar "LASTPROMPT")'
+        if len(args) > 1 and src[args[-1][0]] == '"':
+            label = src[args[-1][0]:args[-1][1]]
+        site = {"fn": m.group(1), "label": label, "lo": lo, "hi": hi}
+        if parent >= 0 and head_of(src, parent) == "setq":
+            kids, idx = item_index(src, mask, parent, lo)
+            if idx == 2 and is_statement(src, mask, parent):
+                s_hi = form_end(src, mask, parent)
+                if s_hi in taken or recorded_after(src, mask, parent):
+                    continue
+                outer = enclosing_call(src, parent, mask)
+                okids, oidx = (item_index(src, mask, outer, parent)
+                               if outer >= 0 else ([], None))
+                if not (len(kids) > 3 and oidx is not None
+                        and oidx == len(okids) - 1):
+                    # not a multi-pair setq sitting last in its body --
+                    # THAT one returned its last pair, and a record after
+                    # it would hand back this one instead, so it is
+                    # wrapped like the rest
+                    site.update(kind="after", at=s_hi, set_lo=parent,
+                                var=src[kids[1][0]:kids[1][1]])
+                    out.append(site)
+                    continue
+        site.update(kind="wrap", var="v")
+        out.append(site)
+    return out
+
+
+def wrap_text(src, mask, lo, hi, label):
+    """The wrapped form of the call at LO..HI, laid out as the lambda on
+    the call's old line and the call one line down and two columns in,
+    its own continuation lines moved with it."""
+    col = lo - (src.rfind("\n", 0, lo) + 1)
+    call = "".join("\n  " if src[i] == "\n" and mask[i] else src[i]
+                   for i in range(lo, hi))
+    return WRAP % label + "\n" + " " * (col + 2) + call + ")"
+
+
 def select_sites(src, mask):
     out = []
     for m in SELECT_GET.finditer(src):
@@ -485,8 +630,29 @@ def items(src, mask, lo, hi):
     """Every item directly inside LO..HI -- atoms as well as forms."""
     out, i = [], lo
     while i < hi:
-        if not mask[i] or src[i].isspace():
+        if src[i].isspace():
             i += 1
+            continue
+        if not mask[i]:
+            # A string literal is masked out whole, quotes included, so
+            # the mask alone would skip it and a body ending in a bare
+            # "text" would look as if it ended one form earlier.  It is
+            # an item: walk to its closing quote by the same escape rule
+            # the mask used.
+            if src[i] == '"' and (i == lo or not mask[i - 1] is False):
+                j = i + 1
+                while j < hi:
+                    if src[j] == "\\":
+                        j += 2
+                        continue
+                    if src[j] == '"':
+                        j += 1
+                        break
+                    j += 1
+                out.append((i, j))
+                i = j
+            else:
+                i += 1
             continue
         if src[i] == "(":
             j = form_end(src, mask, i)
@@ -517,9 +683,30 @@ def misplaced(src, mask, path):
         if not mask[m.start()]:
             continue
         kind = m.group(1)
-        if kind in ("watch", "ask"):
-            continue          # value-transparent: the else branch sees to it
         parent = enclosing_call(src, m.start(), mask)
+        if kind in ("watch", "ask"):
+            # value-transparent by construction -- the else branch
+            # returns the variable -- EXCEPT after a setq with more than
+            # one pair, whose value was its LAST pair's, not this one.
+            # None of the 29 in the tree sit last in a body; this is
+            # what keeps that true.
+            if parent < 0:
+                continue
+            phi = form_end(src, mask, parent)
+            kids = items(src, mask, parent + 1, phi - 1)
+            idx = next((i for i, (a, b) in enumerate(kids)
+                        if a == m.start()), None)
+            if idx is None or idx == 0 or idx != len(kids) - 1:
+                continue
+            plo, phi2 = kids[idx - 1]
+            prev = items(src, mask, plo + 1, phi2 - 1)
+            head = src[plo:plo + 6].lower()
+            if head.startswith("(setq") and len(prev) > 3:
+                out.append((src[:m.start()].count("\n") + 1, kind,
+                            "follows a multi-pair setq and is last in its "
+                            "body: it returns %s, the setq returned its "
+                            "last pair" % src[prev[1][0]:prev[1][1]]))
+            continue
         if parent < 0:
             continue
         phi = form_end(src, mask, parent)
@@ -623,17 +810,34 @@ def wire(path, src, do_fix):
             edits.append((w["at"], "\n%s(if lzd:watch (lzd:watch %s) %s)"
                           % (pad, w["var"], w["var"])))
 
+    taken = set()
     for a in ask_helpers(src, mask):
         if "lzd:ask" in src[a["lo"]:a["hi"]]:
             continue
         missing.append(a["fn"])
+        taken.add(a["at"])
         if do_fix:
             pad = indent_of(src, a["set_lo"])
             edits.append((a["at"], "\n%s(if lzd:ask (lzd:ask %s %s) %s)"
                           % (pad, a["prompt"], a["var"], a["var"])))
-    # back to front, so an earlier insert cannot move a later offset
-    for at, text in sorted(edits, key=lambda e: -e[0]):
-        src = src[:at] + text + src[at:]
+    for w in input_sites(src, mask, taken):
+        missing.append("%s <- %s" % (w["var"], w["fn"]))
+        if not do_fix:
+            continue
+        if w["kind"] == "after":
+            pad = indent_of(src, w["set_lo"])
+            edits.append((w["at"], "\n%s(if lzd:ask (lzd:ask %s %s) %s)"
+                          % (pad, w["label"], w["var"], w["var"])))
+        else:
+            edits.append((w["lo"], wrap_text(src, mask, w["lo"], w["hi"],
+                                             w["label"]), w["hi"]))
+
+    # back to front, so an earlier edit cannot move a later offset; an
+    # edit is (at, text) to insert, or (at, text, end) to replace at..end
+    for e in sorted(edits, key=lambda e: -e[0]):
+        at, text = e[0], e[1]
+        end = e[2] if len(e) > 2 else at
+        src = src[:at] + text + src[end:]
     return missing, src
 
 

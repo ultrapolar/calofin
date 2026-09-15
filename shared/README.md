@@ -136,7 +136,12 @@ dotn midn proj-param axis-pt pt-line-dist`), angles (`cal:angnorm
 signed-dang ang-diff`), `cal:circumcenter`, `cal:bbox-ent` /
 `cal:bbox-ss`, lists (`cal:nthcdr sublist dedupe`), numbers
 (`cal:ceil tan`), strings (`cal:trim pad zeropad2 datestr`), entity
-creation (`cal:text cal:mtext`), and `cal:block-number`. Each
+creation (`cal:text cal:mtext`), `cal:block-number`, and the
+survey-point naming PERPMARK introduced -- `cal:as-number`, `cal:canon`,
+`cal:cand-matches`, `cal:cand-nearest` and `cal:askpoint`, the one
+prompt that takes a click or a typed point number and re-asks a miss
+where it stands, which ABHD, CABHD, LHD, ABLOBF and FITABHD now ask
+every declaration through. Each
 helper's comment names the tool implementation it was lifted from.
 
 **The chart-form kit** is the newest of them, and the largest single

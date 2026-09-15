@@ -82,12 +82,28 @@ points of span. Held points, declared corners and stretch points are
 never given up, and the tight candidate gives up none at all.
 
 **Open** drops the loop. The two ends of the run are the
-farthest-apart pair of points (or two points you pick on a Redo -
+farthest-apart pair of points (or two points you name on a Redo -
 "Pick the two END points"), the 2-opt keeps both ends fixed, and the
 fitter walks the path once: the first span starts free, the last
 simply ends at the final point, and one long arc may legally cover
 the whole run. There is no seam, so no seam re-run and no closing
 tangent window.
+
+**Naming a point.** Every question about a scanned point - a stretch
+end, a corner, a held point at step 5, an open run's ends and a point
+to leave out at a `Redo` - is asked the way `PERPMARK` asks it: click
+the point, or type its number where it has one (`17`, `Pt.17`, `#17`
+and `017` are the same point; a bare laser `POINT` has no number and
+is clicked). A click has to land within `*LH-SNAP*` (12 units, the
+radius `BPCALLOUT`, `ABFIND` and `PERPMARK` share) of a point to
+pick it; a click on nothing, a number nothing carries and a number
+two points share are re-asked where they stand, never snapped to
+whatever was nearest. Step 5 comes before the points are selected, so
+each declaration is matched to the selection afterwards by the
+point's own identity, and one made on a point that was not selected
+is named and dropped - `(Pt.17 is not among the selected points - the
+stretch declared on it is dropped)` - not snapped onto some other
+point.
 
 A rough **ordering sketch** on layer `POOL` (lines/arcs/polylines)
 overrides the automatic order in either mode, and unlike ABHD's it

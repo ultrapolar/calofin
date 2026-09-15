@@ -68,17 +68,29 @@ underneath is ABHD's, walked in a straight line instead of round a loop.
      (11 of 11 selected point(s) carry a number of their own; the rest
      are numbered in the order they were read.)
 
-     Point the run STARTS at [Number/Back] <Pt.1>:
-     Point the run ENDS at [Number/Back] <Pt.10>:
+     Point the run STARTS at - pick it or type its number [Back] <Pt.1>:
+     Point the run ENDS at - pick it or type its number [Back] <Pt.10>:
      Run: Pt.1 to Pt.10, through 9 point(s) between them.
    ```
 
+   One prompt takes both, the way `PERPMARK` names a point: `17`,
+   `Pt.17`, `pt 17`, `#17` and `017` all name the same one, and a click
+   has to land within `*ABL-SNAP*` (12 units) of a point to pick it.
    Naming one point for both ends is refused and re-asked -- a run from a
    point to itself is not a run. A number no selected point carries is
-   named and re-asked rather than guessed at. `Back` at the second end
+   named and re-asked rather than guessed at, and so is a number two
+   points share -- `2 points are numbered "3" - click the one you mean`
+   -- and a click on nothing. `Back` at the second end
    re-opens the first; `Back` at the first hands the whole selection
    back, because nothing is drawn yet and the classifier rebuilds every
    list it fills.
+
+   The stretches, corners and held points of step 4 and the points left
+   out at a `Redo` are named the same way. Step 4 comes before the
+   points are selected, so each declaration is matched to the selection
+   afterwards by the point's own identity, and one made on a point that
+   was not selected is named and dropped, never snapped onto some other
+   point.
 
 4. **Fits three candidates** and draws them side by side to pick from --
    ABHD's three, numbered on screen in their own colours:
@@ -131,6 +143,7 @@ label-pairing distance).
 | `*ABL-MISS-LAYER*` | `"FGStep"` | Layer the "could not hold this point" rings go on |
 | `*ABL-MISS-RADIUS*` | `4.0` | Radius of those rings (drawing units) |
 | `*ABL-PT-TAG*` | `"number"` | The attribute carrying a point's survey number -- what a report calls it, and what you can type to name an end |
+| `*ABL-SNAP*` | `12.0` | How close a **click** has to land to a survey point to name it -- at a run end, a stretch end, a corner, a held point, an omit. A typed number never uses it. The radius `BPCALLOUT`, `ABFIND` and `PERPMARK` share |
 | `*ABL-WALL-LAYER*` | `"POOL-WALLS"` | Layer for the dashed markers of declared stretches, corners and held points |
 | `*ABL-TOL-MAX*` | `2.0` | Hard ceiling on the max-distance prompt: past this the run is no longer a trace of the points |
 | `*ABL-COMPARE*` | three rows | The three candidates offered, as (name, colour, aim). Drop a row and that candidate is not built |

@@ -920,12 +920,14 @@
      (while (null w2)
        (while (null w1)
          (setq tmp (getpoint "\nPick the FIRST wall of the corner: "))
+         (if lzd:ask (lzd:ask "\nPick the FIRST wall of the corner: " tmp) tmp)
          (if (null tmp) (progn (princ "\nNothing picked.") (exit)))
          (setq w1 (cs-nearseg straights (trans tmp 1 0))))
        ;; the second pick only means anything beside the first, so Back
        ;; here re-asks the first rather than ending the command
        (initget "Back Undo")
        (setq tmp (getpoint "\nPick the SECOND wall of the corner [Back]: "))
+       (if lzd:ask (lzd:ask "\nPick the SECOND wall of the corner [Back]: " tmp) tmp)
        (cond
          ((cs-back-kw tmp)
           (princ "\n  Stepping back one question.")
@@ -1013,7 +1015,8 @@
        (if (null (setq key (cs-fkw 'direction "Inside Outside" "Inside")))
          (progn
            (initget "Inside Outside")
-           (setq key (getkword "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: "))))
+           (setq key (getkword "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: "))
+           (if lzd:ask (lzd:ask "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: " key) key)))
        (setq outflag (= key "Outside")
              qstep   2
              qdir    1))
@@ -1026,7 +1029,8 @@
              (progn
                (initget "Middle True Back Undo")
                (setq key (getkword
-                 "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True/Back] <Middle>: "))))
+                 "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True/Back] <Middle>: "))
+               (if lzd:ask (lzd:ask "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True/Back] <Middle>: " key) key)))
            (if (member key '("Back" "Undo"))
              (progn (princ "\n  Stepping back one question.")
                     (setq qstep 1 qdir -1))
@@ -1063,11 +1067,13 @@
                  (initget "Parallel Equidistant Back Undo")
                  (setq key (getkword (strcat
                    "\nSteps parallel to the diagonal, or equidistant"
-                   " from the true corner? [Parallel/Equidistant/Back] <Parallel>: "))))
+                   " from the true corner? [Parallel/Equidistant/Back] <Parallel>: ")))
+                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") key) key))
                (progn
                  (initget "Parallel True Back Undo")
                  (setq key (getkword
-                   "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True/Back] <Parallel>: ")))))
+                   "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True/Back] <Parallel>: "))
+                 (if lzd:ask (lzd:ask "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True/Back] <Parallel>: " key) key))))
            (if (member key '("Back" "Undo"))
              (progn (princ "\n  Stepping back one question.")
                     (setq qstep 2 qdir -1))
@@ -1121,7 +1127,8 @@
        (if (null (setq fkey (cs-fkw 'dims "Yes No" "Yes")))
          (progn
            (initget "Yes No Back Undo")
-           (setq fkey (getkword "\nDimension the steps? [Yes/No/Back] <Yes>: "))))
+           (setq fkey (getkword "\nDimension the steps? [Yes/No/Back] <Yes>: "))
+           (if lzd:ask (lzd:ask "\nDimension the steps? [Yes/No/Back] <Yes>: " fkey) fkey)))
        (if (member fkey '("Back" "Undo"))
          (progn (princ "\n  Stepping back one question.")
                 (setq qstep 3 qdir -1))
@@ -1155,7 +1162,8 @@
            (if (null (setq fkey (cs-fkw 'bench "Yes No" "No")))
              (progn
                (initget "Yes No Back Undo")
-               (setq fkey (getkword "\nAdd a bench along a wall? [Yes/No/Back] <No>: "))))
+               (setq fkey (getkword "\nAdd a bench along a wall? [Yes/No/Back] <No>: "))
+               (if lzd:ask (lzd:ask "\nAdd a bench along a wall? [Yes/No/Back] <No>: " fkey) fkey)))
            (cond
              ((member fkey '("Back" "Undo"))
               (princ "\n  Stepping back one question.")
@@ -1164,6 +1172,7 @@
               (setq bnw nil bno nil bnk nil)
               (initget "Back Undo")
               (setq tmp (getpoint "\nPick the wall the bench sits against [Back]: "))
+              (if lzd:ask (lzd:ask "\nPick the wall the bench sits against [Back]: " tmp) tmp)
               (cond
                 ((and (= (type tmp) 'STR) (member tmp '("Back" "Undo")))
                  (princ "\n  Stepping back one question."))  ; re-ask the bench
@@ -1182,7 +1191,8 @@
                  (if (not (numberp bno))
                    (progn
                      (initget 7 "Back Undo")
-                     (setq bno (getdist "\nBench offset off the wall (its depth) [Back]: "))))
+                     (setq bno (getdist "\nBench offset off the wall (its depth) [Back]: "))
+                     (if lzd:ask (lzd:ask "\nBench offset off the wall (its depth) [Back]: " bno) bno)))
                  (if (and (= (type bno) 'STR) (member bno '("Back" "Undo")))
                    (princ "\n  Stepping back one question.")   ; re-ask the wall
                    (progn
@@ -1191,7 +1201,8 @@
                        (progn
                          (initget 7 "Back Undo")
                          (setq bnk (getint (strcat "\nWhich step is the bench attached"
-                                                   " to (it ends on that tread) [Back]: ")))))
+                                                   " to (it ends on that tread) [Back]: ")))
+                         (if lzd:ask (lzd:ask (getvar "LASTPROMPT") bnk) bnk)))
                      (if (and (= (type bnk) 'STR) (member bnk '("Back" "Undo")))
                        (progn (princ "\n  Stepping back one question.")
                               (setq bno nil))          ; re-ask the offset
@@ -1227,6 +1238,7 @@
              (initget 6 "Back Undo")
              (setq wid (getdist
                          "\nWidth of the furthest (outermost) step [Back]: "))
+             (if lzd:ask (lzd:ask "\nWidth of the furthest (outermost) step [Back]: " wid) wid)
              (if (cs-back-kw wid)
                (progn (princ "\n  Stepping back one question.")
                       (setq wid   nil
@@ -1344,6 +1356,7 @@
                                      " - step tread (going in) ["
                                      (if lastdep "Back/Same" "Back")
                                      "] <Enter = done>: ")))
+                         (if lzd:ask (lzd:ask (getvar "LASTPROMPT") dep) dep)
                          (if (= (type dep) 'STR)
                            (cond
                              ((or (= dep "Back") (= dep "Undo"))
@@ -1379,6 +1392,7 @@
                              " <Enter = fit to walls"
                              (if lastwid (strcat ", Same = " (rtos lastwid)) "")
                              ">: ")))
+                           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") wid) wid)
                            (if (= (type wid) 'STR) (setq wid lastwid))))
                        ;; only a width the user GAVE is one Same can repeat;
                        ;; a step fitted to the walls has no number to reuse
@@ -1407,6 +1421,7 @@
                                           (strcat " <Enter = done, Same = "
                                                   (rtos lastdep) ">: ")
                                           " <Enter = done>: "))))
+             (if lzd:ask (lzd:ask (getvar "LASTPROMPT") dep) dep)
              (if (= (type dep) 'STR)
                (cond
                  ((or (= dep "Back") (= dep "Undo")) (cs-popstep) (setq dep 'RETRY))
@@ -1434,6 +1449,7 @@
                                        (strcat ", Same = " (rtos lastwid))
                                        "")
                                      ">: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") wid) wid)
           (if (= (type wid) 'STR) (setq wid lastwid))))
       ;; only a width the user GAVE is one Same can repeat
       (if (numberp wid) (setq lastwid wid))
@@ -1539,7 +1555,8 @@
       (if (null (setq fkey (cs-fkw 'profile "Yes No" "Yes")))
         (progn
           (initget "Yes No")
-          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))))
+          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
+          (if lzd:ask (lzd:ask "\nAdd a side profile? [Yes/No] <Yes>: " fkey) fkey)))
       (if (/= "No" fkey)
         (progn
           ;; treads, top step first: sort the axis distances ascending
@@ -1582,7 +1599,8 @@
                           ;; Back/Undo hidden here: typing them only gets
                           ;; the already-at-the-first-step feedback
                           (initget 7 "Back Undo")
-                          (setq pd (getdist "\nStep 1 - step depth (the drop): ")))
+                          (setq pd (getdist "\nStep 1 - step depth (the drop): "))
+                          (if lzd:ask (lzd:ask "\nStep 1 - step depth (the drop): " pd) pd))
                         (progn
                           ;; Undo is the old keyword, kept as a hidden synonym
                           (initget 6 "Back Undo")
@@ -1591,7 +1609,8 @@
                                         "\nDepth after the last tread [Back] <"
                                         (strcat "\nStep " (itoa (1+ ix))
                                                 " - step depth [Back] <"))
-                                      (rtos (car drops)) ">: ")))))
+                                      (rtos (car drops)) ">: ")))
+                          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pd) pd)))
                       (cond
                         ((= (type pd) 'STR)             ; Back or Undo
                          (if (zerop ix)
@@ -1606,6 +1625,7 @@
                (initget "Back Undo")
                (setq ppt (getpoint (strcat "\nPick the top of the first"
                                            " tread for the side profile [Back]: ")))
+               (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ppt) ppt)
                (if (cs-back-kw ppt)
                  (progn (princ "\n  Stepping back one step.")
                         (setq drops (cdr drops)
@@ -1716,7 +1736,8 @@
              (if (null (setq fkey (cs-fkw 'bead "Yes No" "Yes")))
                (progn
                  (initget "Yes No")
-                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
+                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))
+                 (if lzd:ask (lzd:ask "\nBead the steps? [Yes/No] <Yes>: " fkey) fkey)))
              (setq bstep (if (/= "No" fkey) 2 5)))
             ((= bstep 2)
              (setq btreads (cs-treadents slog)
@@ -1728,10 +1749,11 @@
                  ;; every tread but the last is beaded - the side walls
                  ;; are the question, and None leaves them bare
                  (initget "All Some None Back Undo")
-                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
-                                                      " beaded side walls?"
-                                                      " [All/Some/None/Back]"
-                                                      " <All>: ")))
+                 (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                                      (getkword (strcat "\nWhich steps have"
+                                                        " beaded side walls?"
+                                                        " [All/Some/None/Back]"
+                                                        " <All>: "))))
                                    ("All")))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
@@ -1744,6 +1766,7 @@
                  (princ (strcat "\n  Steps drawn: " (cs-numsay btreads)))
                  (setq s (getstring T (strcat "\nStep numbers with"
                                               " beaded sides (B = back): ")))
+                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
                  (if (cs-back-word s)
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
@@ -1761,6 +1784,7 @@
             ((= bstep 4)
              (initget "Back Undo")
              (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
+             (if lzd:ask (lzd:ask "\nClick the side to bead toward [Back]: " bdir) bdir)
              (if (cs-back-kw bdir)
                (progn (princ "\n  Stepping back one question.")
                       (setq bstep (if (= bside "Some") 3 2)))
@@ -1801,7 +1825,8 @@
 
 (defun cs-tut-pause ( )
   (princ "\n      --- press Enter to continue ---")
-  (getstring)
+  ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+    (getstring))
   (princ))
 
 (defun cs-tut-text (pt h s)
@@ -1892,11 +1917,13 @@
   (cs-tut-pause)
 
   (initget "Yes No")
-  (if (= "No" (getkword (strcat "\nDraw a demonstration in this drawing?"
-                                " [Yes/No] <Yes>: ")))
+  (if (= "No" ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                (getkword (strcat "\nDraw a demonstration in this drawing?"
+                                  " [Yes/No] <Yes>: "))))
     (progn (princ "\nTutorial done - type CORNERSTP to use it for real.")
            (exit)))
   (setq pt (getpoint "\nPick a clear spot (about 250 x 250 needed): "))
+  (if lzd:ask (lzd:ask "\nPick a clear spot (about 250 x 250 needed): " pt) pt)
   (if (null pt)
     (progn (princ "\nNo spot picked - tutorial done.") (exit)))
   (setq org  (trans pt 1 0)

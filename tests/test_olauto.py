@@ -197,6 +197,41 @@ def said(vm):
     return ' '.join(vm.printed)
 
 
+def asked(vm):
+    """The prompts put, as one string -- a getkword's text goes to the
+    prompt log, not to printed."""
+    return ' '.join(str(p) for p, _ in vm.prompts)
+
+
+def kidney():
+    """An asymmetric outline with no mirror line of its own, so a mirror
+    image of it is a different shape."""
+    return [(0.0, 0.0, 0.35), (220.0, -20.0, 0.15), (400.0, 40.0, 0.45),
+            (380.0, 180.0, 0.2), (240.0, 150.0, -0.3), (120.0, 210.0, 0.4),
+            (-20.0, 150.0, 0.25)]
+
+
+def mirrored(pts):
+    """Reflect about the Y axis: x -> -x, and every bulge flips sign."""
+    return [(-p[0], p[1], -p[2]) if len(p) > 2 else (-p[0], p[1])
+            for p in pts]
+
+
+def worst_reported(vm):
+    r = [x for x in vm.printed if 'best overlay' in x]
+    return float(r[0].split('worst error ')[1].split(',')[0]) if r else None
+
+
+def other_ent(vm, etype, layer='POOL'):
+    """An entity of a type OLAUTO does not read."""
+    e = Ent()
+    vm.entities.append(e)
+    vm.entdata[e] = [Dot(0, etype), Dot(8, layer), [10, 0.0, 0.0, 0.0]]
+    if etype == 'INSERT':
+        vm.entdata[e].append(Dot(2, 'PB'))
+    return e
+
+
 def bind(vm, ents):
     for i, e in enumerate(ents):
         vm.set(Sym(f'_e{i}'), e)
@@ -910,6 +945,199 @@ def test_a_duplicate_vertex_costs_nothing():
     fit(vm)
     assert stats(profile(vm))[0] < 1e-4
     print("ok  a zero-length segment in the perimeter costs the fit nothing")
+
+
+# ---- mirror images ------------------------------------------------------
+
+def test_a_mirror_image_is_detected_and_offered():
+    """A rigid fit can turn and slide but never flip, so a perimeter
+    that arrived as a mirror image fits as badly as it possibly can --
+    38.7 out on this kidney -- and every dimension is nonsense.  The
+    flipped walk is tried too; when it fits far better the mirror is
+    offered, and Yes lands it."""
+    vm = newvm()
+    k = kidney()
+    a = lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New', 'Yes'])
+    assert 'MIRROR image' in said(vm), said(vm)[-400:]
+    w = worst_reported(vm)
+    assert w is not None and w < 0.05, f"after the mirror, worst {w}"
+    print(f"ok  a mirrored kidney is detected, mirrored on Yes, fits to {w:.4f}")
+
+
+def test_enter_never_mirrors_the_drawing():
+    """Enter must not rewrite the drawing by itself: the default is No,
+    the run goes on, and the report says the fit was made without the
+    mirror it asked for."""
+    vm = newvm()
+    k = kidney()
+    a = lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New', None])
+    assert 'WITHOUT the mirror' in ' '.join(vm.printed[-8:]), said(vm)[-400:]
+    assert worst_reported(vm) > 10.0
+    print("ok  Enter declines the mirror, and the report says so")
+
+
+def test_back_at_the_mirror_question_reasks_which_moves():
+    vm = newvm()
+    k = kidney()
+    a = lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New', 'Back', 'New', 'Yes'])
+    assert asked(vm).count('Mirror the new perimeter') == 2
+    assert asked(vm).count('should move onto') == 2
+    print("ok  Back at the mirror question re-asks which one moves")
+
+
+def test_the_mirror_is_never_offered_when_it_should_not_be():
+    """Unmirrored: silent.  Symmetric shapes (a rectangle, a circle)
+    score the same both ways: silent.  A noisy but honest measurement
+    (+/-4\" on a 1300\" kidney): silent."""
+    k = kidney()
+    vm = newvm()
+    a = lwpoly(vm, pose(k, 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'])
+    assert 'MIRROR image' not in said(vm), "offered on an unmirrored pair"
+    for name in ('rectangle', 'circle'):
+        vm = newvm()
+        if name == 'rectangle':
+            a = lwpoly(vm, pose(rect(300.0, 150.0), 40.0, 500.0, 0.0), layer='POOL')
+            b = lwpoly(vm, rect(300.0, 150.0), layer='Bead Track')
+        else:
+            a = circle(vm, (500, 0), 90.0, layer='POOL')
+            b = circle(vm, (0, 0), 90.0, layer='Bead Track')
+        run(vm, [[a], [b], 'First', 'New'], label=name)
+        assert 'MIRROR image' not in said(vm), f"offered on a {name}"
+    import random
+    random.seed(11)
+    vm = newvm()
+    vm.set(Sym('_tmp'), lwpoly(vm, k))
+    pts = vm.loads("(ola:walk (ola:ent-segs _tmp) 80 T)")
+    vm.entities.remove(vm.get(Sym('_tmp')))
+    noisy = [(x + random.uniform(-4, 4), y + random.uniform(-4, 4)) for x, y in pts]
+    a = lwpoly(vm, pose(noisy, 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'], label='noisy')
+    assert 'MIRROR image' not in said(vm), "offered on a noisy honest pair"
+    print("ok  the mirror is not offered unmirrored, on symmetric shapes, or under noise")
+
+
+def test_mirroring_gets_the_arcs_right():
+    """Reflecting an ARC turns each direction angle into pi minus itself
+    and runs the sweep the other way, so the reflected arc has to start
+    at the old END's reflection.  An exploded kidney is the test."""
+    vm = newvm()
+    k = kidney()
+    vm.set(Sym('_tmp'), lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0)))
+    segs_ = vm.loads("(ola:ent-segs _tmp)")
+    vm.entities.remove(vm.get(Sym('_tmp')))
+    ents = []
+    for p1, p2, bl in segs_:
+        if abs(bl) < 1e-9:
+            ents.append(line(vm, p1, p2))
+            continue
+        th = 4 * math.atan(bl)
+        ch = math.dist(p1, p2)
+        rs = ch / (2 * math.sin(th / 2))
+        mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
+        h = rs * math.cos(th / 2)
+        ux, uy = (p2[0] - p1[0]) / ch, (p2[1] - p1[1]) / ch
+        cx, cy = mx - uy * h, my + ux * h
+        a0 = math.degrees(math.atan2(p1[1] - cy, p1[0] - cx))
+        a1 = math.degrees(math.atan2(p2[1] - cy, p2[0] - cx))
+        if th < 0:
+            a0, a1 = a1, a0
+        ents.append(arc(vm, (cx, cy), abs(rs), a0, a1))
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [ents, [b], 'First', 'New', 'Yes'])
+    w = worst_reported(vm)
+    assert w is not None and w < 0.05, f"arcs mirrored wrong: worst {w}"
+    print(f"ok  an exploded kidney's ARCs mirror correctly, fitting to {w:.4f}")
+
+
+def test_the_mirror_names_the_perimeter_that_would_move():
+    vm = newvm()
+    k = kidney()
+    a = lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'OG', 'Yes'])
+    assert 'Mirror the original perimeter' in asked(vm)
+    assert 'times better' in said(vm) and '26296699755' not in said(vm)
+    assert worst_reported(vm) < 0.05
+    print("ok  moving the original instead: the offer names it, and the ratio is sane")
+
+
+# ---- what a sloppy window drags in --------------------------------------
+
+def test_a_stray_line_in_the_pick_is_called_out():
+    vm = newvm()
+    base = rect(300.0, 150.0)
+    pts = pose(base, 10.0, 600.0, -200.0)
+    ents = [line(vm, pts[i], pts[(i + 1) % 4], layer='POOL') for i in range(4)]
+    junk = line(vm, (1300.0, -500.0), (1400.0, -480.0), layer='DECK')
+    b = lwpoly(vm, base, layer='Bead Track')
+    run(vm, [ents + [junk], [b], 'First', 'New'])
+    assert '2 separate pieces' in said(vm), said(vm)[-500:]
+    print("ok  a stray deck line in the pick is reported as a second piece")
+
+
+def test_a_skimmer_gap_is_still_one_perimeter():
+    """A foot missing from the bottom wall of a 900\" outline is a
+    perimeter drawn with a break, not two objects."""
+    vm = newvm()
+    base = rect(300.0, 150.0)
+    pts = pose(base, 10.0, 600.0, -200.0)
+    ents = [line(vm, pts[i], pts[(i + 1) % 4], layer='POOL') for i in range(1, 4)]
+    (ax, ay), (bx, by) = pts[0], pts[1]
+    ux, uy = (bx - ax) / 300.0, (by - ay) / 300.0
+    ents.append(line(vm, (ax, ay), (ax + ux * 144, ay + uy * 144), layer='POOL'))
+    ents.append(line(vm, (ax + ux * 156, ay + uy * 156), (bx, by), layer='POOL'))
+    b = lwpoly(vm, base, layer='Bead Track')
+    run(vm, [ents, [b], 'First', 'New'])
+    assert 'separate pieces' not in said(vm), said(vm)[-400:]
+    print("ok  a 12\" skimmer gap is not called a second piece")
+
+
+# ---- what it cannot read, and says so -----------------------------------
+
+def test_unreadable_picks_say_what_to_do():
+    """Picking only a SPLINE used to end the command in silence.  Each
+    kind it cannot read is named with the fix; one it can read beside
+    them keeps the run going; text is dropped without a word."""
+    vm = newvm()
+    run(vm, [[other_ent(vm, 'SPLINE')]], label='spline')
+    assert 'SPLINE' in said(vm) and 'PEDIT' in said(vm), said(vm)[-300:]
+    vm = newvm()
+    run(vm, [[other_ent(vm, 'INSERT')]], label='block')
+    assert 'block' in said(vm) and 'EXPLODE' in said(vm), said(vm)[-300:]
+    vm = newvm()
+    sp = other_ent(vm, 'SPLINE')
+    a = lwpoly(vm, pose(rect(300.0, 150.0), 10.0, 600.0, -200.0), layer='POOL')
+    b = lwpoly(vm, rect(300.0, 150.0), layer='Bead Track')
+    run(vm, [[sp, a], [b], 'First', 'New'], label='spline+pline')
+    assert 'Going on with the rest' in said(vm) and 'best overlay' in said(vm)
+    vm = newvm()
+    tx = other_ent(vm, 'TEXT', layer='TEXT')
+    a = lwpoly(vm, pose(rect(300.0, 150.0), 10.0, 600.0, -200.0), layer='POOL')
+    b = lwpoly(vm, rect(300.0, 150.0), layer='Bead Track')
+    run(vm, [[tx, a], [b], 'First', 'New'], label='text')
+    assert 'cannot be read' not in said(vm) and 'best overlay' in said(vm)
+    print("ok  a SPLINE or block is named with its fix; text is dropped quietly")
+
+
+def test_a_units_mismatch_is_named():
+    for f, word in ((25.4, 'millimetres'), (12.0, 'feet to inches'),
+                    (2.54, 'centimetres')):
+        vm = newvm()
+        base = rect(300.0, 150.0)
+        a = lwpoly(vm, [(x * f, y * f) for x, y in base], layer='POOL')
+        b = lwpoly(vm, base, layer='Bead Track')
+        run(vm, [[a], [b], 'First', 'New'], label=str(f))
+        assert word in said(vm), f"x{f}: {said(vm)[-300:]}"
+    print("ok  a 25.4x, 12x or 2.54x length ratio is named as a units mismatch")
 
 
 # ---- run them ----------------------------------------------------------

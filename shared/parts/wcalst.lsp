@@ -612,6 +612,7 @@
       ((= stage 2)
        (initget "Back Undo")
        (setq pick (entsel "\nClick the long side to STRAIGHTEN [Back]: "))
+       (if lzd:ask (lzd:ask "\nClick the long side to STRAIGHTEN [Back]: " pick) pick)
        (if lzd:watch (lzd:watch pick) pick)
        (cond
          ((= (type pick) 'STR) (setq stage 1))
@@ -798,6 +799,7 @@
        (initget "Back Undo")
        (setq maxfeat (getint (strcat "\nMaximum darts + inserts [Back] <"
                                      (itoa wc:*maxfeat*) ">: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") maxfeat) maxfeat)
        (if (= (type maxfeat) 'STR)
          (setq stage 2)
          (progn
@@ -811,6 +813,7 @@
        (initget "Back Undo")
        (setq tileh (getreal (strcat "\nTile height along the straightened"
                                     " edge [Back] <none>: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") tileh) tileh)
        (if (= (type tileh) 'STR)
          (setq stage 4)
          (progn

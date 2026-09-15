@@ -8,12 +8,10 @@
 lisp/abhd/abhd.lsp|c:TUTORIALABHD|\n Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>:|demo / tutorial
 lisp/abhd/abhd.lsp|pf:bottom|\n\n Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>:|past committed geometry
 lisp/abhd/abhd.lsp|pf:compare|\n Keep which fit - click one, or [ 1/2/3/4/5 1/2/3 /All/None/Redo] < >:|the fit picker - Redo is its way back
-lisp/abhd/abhd.lsp|pf:fit-session|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/abhd/abhd.lsp|pf:tut-demo|\n Keep the demo drawing to poke at? [Yes/No] <No>:|demo / tutorial
 lisp/abhd/abhd.lsp|pf:tut-demo|\n Pick a clear spot for it:|demo / tutorial
 lisp/abhd/abhd.lsp|pf:tut-pause|\n --- press Enter to continue ---|demo / tutorial
 lisp/ablobf/ABLOBF.lsp|abl:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] <2>:|the fit picker - Redo is its way back
-lisp/ablobf/ABLOBF.lsp|c:ABLOBF|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/abpcheck/ABPCHECK.lsp|abp:asklimit|\n < >:|helper: its callers ask it as the first question of their branch
 lisp/autobead/AUTOBEAD.lsp|autobead-pause|\n [Enter] to continue:|pause
 lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\n Click a side to bead toward:|demo / tutorial
@@ -21,7 +19,6 @@ lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\nErase the demo pool and its 
 lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\nPick an empty spot for the demo pool:|demo / tutorial
 lisp/autobead/AUTOBEAD.lsp|c:TUTORIALAUTOBEAD|\nAUTOBEAD tutorial - read the Checks, or watch a live Demo? \n [Checks/Demo/Both] <Both>:|demo / tutorial
 lisp/bpcallout/BPCALLOUT.lsp|c:BPCALLOUT|\nClick a bad point (a ringed one un-rings it, Enter when done):|reselection loop - clicking again undoes it
-lisp/cabhd/CABHD.lsp|c:CABHD|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/cabhd/CABHD.lsp|cab:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
@@ -71,11 +68,9 @@ lisp/drone_height/DroneDistortion.lsp|c:DDCAL|\nApparent (traced) size in the dr
 lisp/drone_height/DroneDistortion.lsp|c:DDSET|\nDrone height ABOVE THE DECK, in FEET < > :|DDSET's only question
 lisp/drone_height/DroneHeightGPS.lsp|c:DDELEV|\nLatitude (decimal degrees, negative = South):|first of DDELEV's two; the longitude backs into it
 lisp/drone_height/DroneHeightGPS.lsp|c:DDGPS|\nPick a point in the drawing for the height report:|first question of the command
-lisp/fitabhd/FITABHD.lsp|fit:omit-loop|\n Point to leave out - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/lazdiag/LAZDIAG.lsp|lzd:paste|\nPlace the error report, far from the drawing:|the last resort after a failure - there is no earlier question to go back to, and Esc skips it
 lisp/lazpanel/LAZPANEL.lsp|c:CALHELP|\nCommand, or any part of one <Enter = all>:|the only question in the command; Enter answers it with everything
 lisp/lazpanel/LAZPANEL.lsp|c:CALSET|\nChange which? [Theme/Errordir/Stockdir/Itemcolors/Hidden/Quit] <Quit>:|first of the chain - Quit is the way out, Hidden opens LAZHIDE's own dialog, and the value question behind Theme/Errordir/Stockdir/Itemcolors offers Back
-lisp/lhd/lhd.lsp|c:LHD|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/lhd/lhd.lsp|lh:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] <2>:|the fit picker - Redo is its way back
 lisp/linfincheck/linfincheck.lsp|c:LINFINCHECK|\n Type the overall step height or pick two points <skip>:|the only question in its branch; Enter skips it
 lisp/linfincheck/linfincheck.lsp|c:TUTORIALLINFINCHECK|\n Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>:|demo / tutorial

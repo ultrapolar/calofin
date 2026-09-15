@@ -6,7 +6,83 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
-## Unreleased
+## v3.15 -- 2026-09-15
+
+**A failure report can be replayed, and its inputs varied, without
+AutoCAD.**  A report said what the drafter answered and where the tool
+died; it did not say WHICH answer mattered.  Three things changed so
+that it can:
+
+* **Every input is in the transcript, typed.**  `check_lazdiag --fix`
+  reached only the ask helpers before -- 97 of the tree's 410 input
+  sites.  It now records every `get*` and `entsel`: after a
+  `(setq v (getX ...))` that is a body statement, and wrapped as
+  `((lambda (v) (if lzd:ask (lzd:ask "prompt" v) v)) (getX ...))`
+  where the answer is read in place -- a `while`'s test, a keyword
+  inside `(= ...)`, the `getstring` that only pauses -- so the `nil`
+  that ends a loop is written down like any other answer.  The codemod
+  tells a body statement from a value something reads, because a
+  record dropped in after a `while`'s test would have run only when
+  the test passed.  The answers are typed on the way out (`nil`,
+  `12.5`, `"Yes"`, `(x y z)`, `(<ent> (x y z))`; a real keeps its
+  point whatever DIMZIN does to `rtos`), a selection gets a line of
+  its own at the step it was taken, and the report says how many of
+  the entities it copied were the run's INPUT and where they sit in
+  the file.  311 sites wired; a second `--fix` is a no-op.
+* **THE INPUTS, AND WHAT IS ODD ABOUT THEM.**  A new report section
+  reads the answers against each other: a zero, a negative, a tiny or
+  a huge number, two lengths that are the same number, two picks on
+  one spot -- and says when nothing stands out, because ordinary
+  inputs point at the code.
+* **`tools/probe_report.py REPORT.dxf`.**  Loads the tool the report
+  names at the version it names (its `releases/` twin when there is
+  one) into the test VM, hands it the report's geometry and answers,
+  and confirms the same failure comes back.  Then one answer at a time
+  -- 1, 0, half, double, a step either side, ten times, a thousand; a
+  point moved -- and a verdict per answer: NOT this value (the same
+  failure whatever it is), THIS value (any other runs clean), or a
+  boundary (fails up to 4, passes from 20: a range the tool never
+  checks).  A tool that selects is handed the copied input back at
+  its `ssget`, without the output the failed run drew beside it.  When
+  the control run does not reproduce -- a whole-drawing sweep the
+  report could not carry, a file dialog -- it says so rather than
+  probing.  Writes `REPORT.probe.txt` beside the report, `.probe.json`
+  with `--json`.
+
+LAZDIAG v1.3.  `tests/test_lazdiag_probe.py` makes reports the way real
+ones are made -- fixture tools wired by the codemod, run beside
+LAZDIAG, failed -- and probes them; `tests/test_lazdiag.py` covers the
+codemod's placement rules and the oddities section.  Two VM fixes on
+the way: `LASTPROMPT` is what AutoCAD showed last, not a setting a run
+can be said to have changed, and a division by zero is an AutoLISP
+error -- "divide by zero" -- that reaches the handler for a real as
+much as for an int, rather than a Python one.
+
+**LINGUTTER keeps a radius call-out on the perimeter, and asks before
+it spares a cross dim.** LINGUTTER v2.6. A corner radius under a foot
+lands in `STANDARD INCHES` the same as any other short measurement --
+which is not in `lg:*perimstyles*`, so the very call-out for the corner
+`PADDLE` was about to pad used to be the thing erased. A RADIUS or
+DIAMETER dimension on the perimeter is now kept regardless of its
+style, judged on its one attachment point (DXF 10) the way
+`lg:*perimstyles*` dims are judged on 13/14.
+
+`CROSS DIM*` dims stop being kept unconditionally: LINGUTTER now asks
+"Keep CROSS DIMENSIONS?" once, and a Yes spares only the ones that
+belong to the pool just gutted -- every attachment point either inside
+the traced perimeter or within `lg:*ontol*` of it, so a cross dim
+answering to a second pool sitting in the same highlight is no longer
+swept up with it. Answered No, those dims get no exemption at all and
+are judged, and counted, like any other style. Neither question is a
+confirmation to erase -- LINGUTTER still never asks that.
+
+**Every AB note leads with a bullet.** `ABMOVE` and `ABPCREATE` leave a
+note per point on one layer, and a run that settles several of them
+leaves a column -- which read as loose text rather than as a list.
+`abf:*note-prefix*` (`- `) goes on inside `abf:note`, so every note
+carries it and one worded later cannot quietly miss it: one call is one
+TEXT is one line.  Set it to `""` for the bare wording.
+
 
 **A themeable colour space for what KIND of thing is drawn, not just
 the screen it's drawn on.** COVERCHECK v1.17, DIMCHECK v1.20,

@@ -69,6 +69,20 @@ INPUTS = {
     "cal:axis-pt": ["'(1.0 2.0) '(1.0 0.0) 3.0",
                     "'(0.0 0.0) '(0.0 1.0) -2.5"],
     "cal:back-word-p": ['"Back"', '"back"', '"B"', '"Next"', '""'],
+    "cal:as-number": ['"17"', '"Pt.17"', '"pt 17"', '"#17"', '"017"',
+                      '"40.5"', '"PT.40.5"', '"P"', '""'],
+    "cal:canon": ['"17"', '"Pt.17"', '"pt 17"', '"#17"', '"017"',
+                  '"40.5"', '"17m"', '""'],
+    "cal:cand-matches": [
+        '"pt 3" (list (list (list 0.0 0.0) "3") (list (list 1.0 1.0) "03")'
+        ' (list (list 2.0 2.0) "4"))',
+        '"9" (list (list (list 0.0 0.0) "3"))', '"3" nil'],
+    "cal:cand-nearest": [
+        '(list 1.0 1.0 0.0) (list (list (list 0.0 0.0) "3")'
+        ' (list (list 20.0 20.0) "4")) 12.0',
+        '(list 50.0 50.0) (list (list (list 0.0 0.0) "3")) 12.0',
+        '(list 5.0 0.0) (list (list (list 0.0 0.0) "3")'
+        ' (list (list 8.0 0.0) "4")) 12.0'],
     "cal:ceil": ["1.0", "1.2", "-1.2", "0.0", "5.99"],
     "cal:circumcenter": ["'(0.0 0.0) '(4.0 0.0) '(0.0 4.0)",
                          "'(1.0 1.0) '(3.0 1.0) '(2.0 4.0)",
@@ -165,6 +179,7 @@ SKIP = {
     "cal:ask-yn": "asks",
     "cal:ask-yn-nav": "asks",
     "cal:pause": "asks",
+    "cal:askpoint": "asks",
     "cal:syssave": "session state, and the mirror expands its arity",
     "cal:sysrestore": "session state",
     "cal:dimstysave": "session state",

@@ -1141,6 +1141,7 @@
         (setq v (getkword
                   (strcat "\nPool shape [Rectangle/Grecian/ROman/L/LAzyl/Oval/"
                           "OCtagon/ROUnd/MUtt" (if back "/Back" "") "]: ")))
+        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
         (if (member v '("Back" "Undo")) 'POOL-BACK v))))
 
 ;; Run POOL with a form's answers already in hand.  Nothing happens
@@ -4408,7 +4409,8 @@
                          (rtos (/ maxsb (pool:cornerk ty wed)))
                          ".  Re-enter."))
           (initget 7)
-          (setq sz (getdist (strcat szmsg ": "))))
+          (setq sz (getdist (strcat szmsg ": ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sz) sz))
         (pool:osdown))))
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (if ty (list ty sz) 'POOL-BACK)))
@@ -8268,6 +8270,7 @@
          (progn
            (initget "Back Undo")
            (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+           (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
            (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
              (progn (princ "\nStepping back one question.") (setq pstep 2))
              (setq pstep 4)))))))
