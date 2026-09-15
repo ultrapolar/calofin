@@ -189,13 +189,16 @@ assert [str(x) for x in vm.globals['test:*pages*']] == flat_rows, \
     "lzp:pages does not flatten lzp:*rows* in strip order"
 
 opens = [l for l in dcl if l.endswith(' : dialog {')]
-# one dialog per page, plus the pin editor and the hide editor
-assert len(opens) == len(PAGES) + 2, (
-    "%d dialogs for %d pages + the pin and hide editors" % (len(opens), len(PAGES)))
+# one dialog per page, plus the pin, hide and settings editors
+assert len(opens) == len(PAGES) + 3, (
+    "%d dialogs for %d pages + the pin, hide and settings editors"
+    % (len(opens), len(PAGES)))
 assert 'lazpanel_pins : dialog {' in opens, \
     "the pin editor dialog is not in the generated file"
 assert 'lazpanel_hidden : dialog {' in opens, \
     "the hide editor dialog is not in the generated file"
+assert 'lazpanel_set : dialog {' in opens, \
+    "the settings dialog is not in the generated file"
 depth = 0
 for line in dcl:
     assert line.count('"') % 2 == 0, "odd quotes: %r" % line
@@ -1172,21 +1175,21 @@ print("== Options: settings, not a roster launch ==")
 # options_btn is wired exactly like a grid button -- rc=1, full dialog
 # teardown before anything runs -- but the pick it sets is a sentinel
 # c:LAZPANEL reads itself rather than a name lzp:launch would look up.
-# CALSET is stubbed here rather than answered: this is about ROUTING,
-# not about CALSET's own prompts, which test_lazpanel.py's CALSET
-# section below already covers.
+# LAZSET is stubbed here rather than driven: this is about ROUTING,
+# not about the settings dialog itself, which its own section below
+# covers end to end.
 ov = stubbed()
-ov.loads('(setq t:*calset-ran* nil)')
-ov.loads('(defun c:CALSET () (setq t:*calset-ran* t) (princ))')
+ov.loads('(setq t:*lazset-ran* nil)')
+ov.loads('(defun c:LAZSET () (setq t:*lazset-ran* t) (princ))')
 ov.loads('(setq stub:*click* "options_btn")')
 run(ov, 'c:LAZPANEL', 'options-click')
-assert ov.globals.get('t:*calset-ran*'), "clicking Options did not run CALSET"
+assert ov.globals.get('t:*lazset-ran*'), "clicking Options did not open LAZSET"
 assert not ov.globals.get('stub:*ran*'), \
     "Options went through lzp:launch like a roster tool: %r" % ov.globals.get('stub:*ran*')
 assert not (ov.globals.get('lzp:*recent*') or []), \
-    "CALSET reached Recent, which is for drafting tools only"
+    "LAZSET reached Recent, which is for drafting tools only"
 assert ov.globals.get('lzp:*pick*') is None, "pick not cleared after the settings launch"
-print("   clicking Options runs CALSET, and it never reaches lzp:launch or Recent")
+print("   clicking Options opens LAZSET, and it never reaches lzp:launch or Recent")
 
 
 print("== the screen button goes up as the file loads ==")
@@ -1984,6 +1987,156 @@ assert any('could not load the dialog file' in str(p) for p in vm.printed), \
 assert any(e.startswith('delete ') for e in events(vm)), \
     "a dialog that would not load left its temp file behind: %r" % events(vm)
 print("   an unwritable or unloadable dialog is reported, and cleans up")
+
+
+print("== LAZSET: the settings dialog, end to end ==")
+# CALSET's questions as a form: a dropdown for the theme, a box per
+# item colour, the two folders, and a way into the hidden list -- what
+# LAZFORM is to POOL.  The rule the whole dialog turns on is that
+# NOTHING reaches the profile until OK, so every case below is really
+# one question: did this end up in setenv, or did it not.
+
+
+def setvm(rcs, click=None, val="", env=None):
+    """A stubbed session whose profile holds ENV, with the settings
+    dialog scripted to fire CLICK and then return the RCS queue."""
+    v = stubbed()
+    v.loads('(setq t:*reg* "")')
+    v.loads('(defun vl-registry-read (k n) t:*reg*)')
+    v.loads('(defun vl-registry-write (k n s) (setq t:*reg* (list n s)) s)')
+    for k, val_ in (env or {}).items():
+        v.loads('(setenv "%s" "%s")' % (k, val_))
+    v.loads("(setq stub:*rcs* '(%s))" % ' '.join(str(r) for r in rcs))
+    if click:
+        # a Windows path goes through the VM's string reader on its way
+        # in, where a bare \r is a carriage return and not two thirds of
+        # "reports" -- so it is escaped exactly as Lisp source would be
+        v.loads('(setq stub:*click* "%s" stub:*clickval* "%s")'
+                % (click, val.replace('\\', '\\\\')))
+    return v
+
+
+def prof(v, key):
+    v.loads('(setq t:*g* (getenv "%s"))' % key)
+    g = v.globals.get('t:*g*')
+    return '' if g is None else str(g)
+
+
+def tile(v, key):
+    v.loads('(setq t:*t* (stub:tile "%s"))' % key)
+    t = v.globals.get('t:*t*')
+    return '' if t is None else str(t)
+
+
+vm = setvm([0])
+run(vm, 'c:LAZSET', 'set-cancel')
+# the dropdown's start_list is the one event a page cycle does not have
+assert [e for e in events(vm) if not e.startswith('list ')] == DIALOG, events(vm)
+assert 'list set_theme' in events(vm), \
+    "the dropdown was never filled: %r" % events(vm)
+assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_set', \
+    "LAZSET opened %r, not the settings page" % vm.globals.get('stub:*dlgname*')
+assert any('unchanged' in str(p) for p in vm.printed), vm.printed
+assert prof(vm, 'CalofinTheme') == '', "cancel wrote to the profile"
+print("   opens the settings page, unloads it and deletes the temp DCL")
+
+# the dropdown is filled at runtime -- DCL cannot carry a popup_list's
+# list -- and comes up on whatever the profile already says
+vm = setvm([0], env={'CalofinTheme': 'LIGHT'})
+run(vm, 'c:LAZSET', 'set-theme-shown')
+assert [str(x) for x in (vm.globals.get('stub:*list*') or [])] \
+    == ['Auto', 'Dark', 'Light'], vm.globals.get('stub:*list*')
+assert tile(vm, 'set_theme') == '2', \
+    "the dropdown did not open on Light: %r" % tile(vm, 'set_theme')
+print("   the Theme dropdown is filled and opens on the stored answer")
+
+# picking Dark and accepting writes the profile AND the registry copy
+# the VB palette reads, which is the bargain CALSET's own Theme strikes
+vm = setvm([1], click='set_theme', val='1')
+run(vm, 'c:LAZSET', 'set-theme-dark')
+assert prof(vm, 'CalofinTheme') == 'DARK', prof(vm, 'CalofinTheme')
+assert [str(x) for x in (vm.globals.get('t:*reg*') or [])] == ['Theme', 'DARK'], \
+    "the theme was not mirrored to the registry: %r" % vm.globals.get('t:*reg*')
+assert any('settings saved' in str(p) for p in vm.printed), vm.printed
+print("   picking a theme and accepting writes the profile and the registry")
+
+# an item colour is stored under the key cal:ink actually reads
+vm = setvm([1], click='ink_flag', val='42')
+run(vm, 'c:LAZSET', 'set-ink')
+assert prof(vm, 'CalofinInk-FLAG') == '42', prof(vm, 'CalofinInk-FLAG')
+print("   a colour box lands under CalofinInk-<ROLE>")
+
+# ...and emptying one puts that role back to auto
+vm = setvm([1], click='ink_flag', val='', env={'CalofinInk-FLAG': '42'})
+run(vm, 'c:LAZSET', 'set-ink-clear')
+assert prof(vm, 'CalofinInk-FLAG') == '', \
+    "an emptied colour box did not go back to auto: %r" % prof(vm, 'CalofinInk-FLAG')
+print("   ...and emptying it puts the role back to auto")
+
+# a colour box that is not a colour: the state line names it, OK is
+# greyed, and the value never reaches the profile
+vm = setvm([1], click='ink_flag', val='red')
+run(vm, 'c:LAZSET', 'set-ink-bad')
+assert 'Flag' in tile(vm, 'state'), \
+    "the state line does not name the bad box: %r" % tile(vm, 'state')
+assert 'accept' in {str(x) for x in (vm.globals.get('stub:*disabled*') or [])}, \
+    "OK was not greyed while a colour box was unreadable"
+assert prof(vm, 'CalofinInk-FLAG') == '', \
+    "a value that is not a colour was stored: %r" % prof(vm, 'CalofinInk-FLAG')
+print("   a box that is not a colour greys OK and is never written")
+
+# the folders are plain text, and empty is how one is cleared
+vm = setvm([1], click='set_errdir', val='C:\\reports')
+run(vm, 'c:LAZSET', 'set-errdir')
+assert prof(vm, 'CalofinErrorDir') == 'C:\\reports', prof(vm, 'CalofinErrorDir')
+print("   a folder box is taken as typed -- LAZDIAG reads this one")
+
+# Hidden... closes the dialog, runs the hide editor on the SAME loaded
+# handle, and comes back with the pending answers still in the store --
+# which is the whole reason the store is a global
+vm = setvm([5, 0, 0], click='set_errdir', val='C:\\kept')
+run(vm, 'c:LAZSET', 'set-hidden-hop')
+assert events(vm).count('new') == 3, \
+    "the hop through the hide editor did not reopen the settings page: %r" \
+    % events(vm)
+vm.loads('(setq t:*k* (lzp:set-get "CalofinErrorDir"))')
+assert str(vm.globals.get('t:*k*')) == 'C:\\kept', \
+    "the trip through Hidden... lost what was typed: %r" % vm.globals.get('t:*k*')
+print("   Hidden... hops to the checklist and back without losing an answer")
+
+# a dialog file that cannot be written, and one that cannot be loaded
+vm = setvm([1])
+vm.loads('(defun lzp:write-dcl () nil)')
+run(vm, 'c:LAZSET', 'set-nofile')
+assert any('could not write the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert 'load' not in events(vm), events(vm)
+vm = setvm([1])
+vm.loads('(defun load_dialog (f) (stub:ev "load") -1)')
+run(vm, 'c:LAZSET', 'set-noload')
+assert any('could not load the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert any(e.startswith('delete ') for e in events(vm)), \
+    "a dialog that would not load left its temp file behind: %r" % events(vm)
+print("   an unwritable or unloadable dialog is reported, and cleans up")
+
+# every key the dialog offers is one something actually reads: the two
+# folders and the theme are CALSET's own, and the eight colours are the
+# roles cal:ink resolves -- a settings surface that writes a key nothing
+# reads is worse than none, which is the rule CALSET is already held to
+sv = fresh()
+sv.loads('(setq t:*keys* nil)')
+sv.loads('(foreach r lzp:*inkroles*'
+         ' (setq t:*keys* (cons (lzp:inkkey r) t:*keys*)))')
+inkkeys = {str(x) for x in sv.globals['t:*keys*']}
+assert inkkeys == {'CalofinInk-' + r.upper() for r in
+                   ('flag', 'arc', 'olap', 'orig', 'sugg', 'point',
+                    'constr', 'report')}, sorted(inkkeys)
+setsrc = callib.read(LSP)
+for k in ('CalofinTheme', 'CalofinErrorDir', 'StockCover_Folder'):
+    assert '"%s"' % k in setsrc, k
+print("   %d colour keys plus the theme and the two folders, all real"
+      % len(inkkeys))
 
 
 print("== LAZPANELVER ==")
