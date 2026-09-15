@@ -58,6 +58,24 @@ can be said to have changed, and a division by zero is an AutoLISP
 error -- "divide by zero" -- that reaches the handler for a real as
 much as for an int, rather than a Python one.
 
+**LINGUTTER keeps a radius call-out on the perimeter, and asks before
+it spares a cross dim.** LINGUTTER v2.6. A corner radius under a foot
+lands in `STANDARD INCHES` the same as any other short measurement --
+which is not in `lg:*perimstyles*`, so the very call-out for the corner
+`PADDLE` was about to pad used to be the thing erased. A RADIUS or
+DIAMETER dimension on the perimeter is now kept regardless of its
+style, judged on its one attachment point (DXF 10) the way
+`lg:*perimstyles*` dims are judged on 13/14.
+
+`CROSS DIM*` dims stop being kept unconditionally: LINGUTTER now asks
+"Keep CROSS DIMENSIONS?" once, and a Yes spares only the ones that
+belong to the pool just gutted -- every attachment point either inside
+the traced perimeter or within `lg:*ontol*` of it, so a cross dim
+answering to a second pool sitting in the same highlight is no longer
+swept up with it. Answered No, those dims get no exemption at all and
+are judged, and counted, like any other style. Neither question is a
+confirmation to erase -- LINGUTTER still never asks that.
+
 **Every AB note leads with a bullet.** `ABMOVE` and `ABPCREATE` leave a
 note per point on one layer, and a run that settles several of them
 leaves a column -- which read as loose text rather than as a list.
