@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 69 files, 200 commands:
+;;; 69 files, 201 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -27,23 +27,23 @@
 ;;;   G2MCONVVER  G2MRECONV  HEMISTEP  HEMISTEPVER  HONEFILLET  HONEFILLETVER
 ;;;   LAZASCII  LAZBUTTON  LAZDIAG  LAZDIAGVER  LAZFORM  LAZFORMCOVER
 ;;;   LAZFORMVER  LAZHIDE  LAZICON  LAZLOG  LAZPANEL  LAZPANELVER
-;;;   LAZPIN  LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT
-;;;   LHD  LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE
-;;;   LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK
-;;;   LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER
-;;;   MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER
-;;;   OLAUTO  OLAUTOVER  PADDLE  PADDLEVER  PERPMARK  PERPMARKVER
-;;;   PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER
-;;;   POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD
-;;;   SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV  SPA
-;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER
-;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST
-;;;   TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN
-;;;   TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN
-;;;   TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK
-;;;   TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV
-;;;   WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV
-;;;   XYPLOT  XYPLOTVER
+;;;   LAZPIN  LAZSET  LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER
+;;;   LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK
+;;;   LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER
+;;;   LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF
+;;;   LOBFVER  MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER  OASIS
+;;;   OASISVER  OLAUTO  OLAUTOVER  PADDLE  PADDLEVER  PERPMARK
+;;;   PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL
+;;;   POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER
+;;;   SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV
+;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE
+;;;   SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER
+;;;   STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK
+;;;   TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK
+;;;   TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA
+;;;   TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER
+;;;   VSRECONV  WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER
+;;;   XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -109316,6 +109316,7 @@
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
 ;;;            LAZHIDE        choose which tools stay off the panel
+;;;            LAZSET         the settings, as a dialog
 ;;;            CALHELP        what a command does, at the command line
 ;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
@@ -109397,11 +109398,13 @@
 ;;; reopened by hand: click, the panel closes, the tool runs to its own
 ;;; end, and the panel COMES BACK on the page and at the screen position
 ;;; it was at.  Close is the way out, and is the default button.  Beside
-;;; it, on every page including Find, an OPTIONS button runs CALSET --
-;;; the panel's own settings command -- so the theme, the error folder
-;;; and which tools are hidden are one click away rather than a typed
-;;; command.  It is not a roster launch: CALSET is not a drafting tool,
-;;; so clicking it never lands in Recent the way a real one would.  A
+;;; it, on every page including Find, an OPTIONS button opens LAZSET --
+;;; the settings as a DIALOG, with the theme on a dropdown, a box per
+;;; item colour, the two folders and a way into the hidden list, all in
+;;; front of you at once.  CALSET asks the same questions one prompt at
+;;; a time and is still there for a drafter who would rather type.
+;;; Neither is a roster launch: settings are not a drafting tool, so
+;;; clicking Options never lands in Recent the way a real one would.  A
 ;;; PINNED row on every page carries the handful of tools you actually
 ;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.
 ;;; A RECENT row above it carries the last five you launched, newest
@@ -109432,7 +109435,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.31")
+(setq *lazpanel-version* "v3.32")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -110504,6 +110507,18 @@
       (if row (setq out (cons (reverse row) out)))
       (reverse out))))
 
+;; LST in runs of N, in order.  lzp:wrap above answers a different
+;; question -- the FEWEST balanced columns a page budget allows -- and
+;; a box that wants a fixed shape, like the settings dialog's eight
+;; colour boxes three to a column, cannot ask it that way.
+(defun lzp:chunk (lst n / row out e)
+  (foreach e lst
+    (setq row (cons e row))
+    (if (= (length row) n)
+      (setq out (cons (reverse row) out) row nil)))
+  (if row (setq out (cons (reverse row) out)))
+  (reverse out))
+
 ;; A headed run (heading cmd cmd ...) with every hidden command struck
 ;; out of it, or nil when nothing in it is left to show -- an emptied
 ;; run is dropped rather than rendered as a labelled box with nothing
@@ -110719,7 +110734,7 @@
           "  }"
           "}")))
 
-;; Every page, then the pin editor and the hide editor, in one
+;; Every page, then the pin, hide and settings editors, in one
 ;; generated file.  Find leads, because it is the page that does not
 ;; need you to know where a tool was filed.
 (defun lzp:dcl-lines ( / out g)
@@ -110727,7 +110742,8 @@
   (foreach g lzp:*groups*
     (setq out (append out (lzp:dcl-one g) (list ""))))
   (setq out (append out (lzp:dcl-pins) (list "")))
-  (append out (lzp:dcl-hidden) (list "")))
+  (setq out (append out (lzp:dcl-hidden) (list "")))
+  (append out (lzp:dcl-set) (list "")))
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -111658,7 +111674,7 @@
   (while (setq pick (lzp:show))
     (cond
       ((= pick "*pins*"))            ; already handled inside lzp:show
-      ((= pick "*options*") (c:CALSET))  ; settings, never a roster launch
+      ((= pick "*options*") (c:LAZSET))  ; settings, never a roster launch
       (t (lzp:launch pick))))
   (princ))
 
@@ -112038,6 +112054,275 @@
   (if lzd:end (lzd:end "CALSET"))
   (princ))
 
+;;; -------------------- the settings dialog -----------------------------
+;;  CALSET asks these same questions one prompt at a time.  This is the
+;;  panel's Options button, and it is to CALSET what LAZFORM is to
+;;  POOL: every answer in front of you at once, each box filled in from
+;;  what the profile already holds, rather than an interview you have
+;;  to finish to change one thing.
+;;
+;;  NOTHING IS WRITTEN UNTIL OK.  What you type lands in lzp:*setvals*,
+;;  an alist keyed by the PROFILE KEY itself, and lzp:set-write is the
+;;  single place that reaches setenv.  Cancel drops the store on the
+;;  floor.  The Hidden... button closes this dialog, runs the hide
+;;  editor on the same loaded handle and comes back -- which is why the
+;;  store is a global and not a local: the reopen repaints every box
+;;  from it, so a hop through the checklist does not cost you the
+;;  colour you had just typed.
+;;
+;;  A colour box holds an ACI number or nothing at all, and while one
+;;  holds anything else the state line names it and OK stays greyed --
+;;  the same bargain LAZFORM's Insert strikes, for the same reason: a
+;;  value nothing can read must not be stored and then silently
+;;  ignored by the tool that goes looking for it.
+
+;; What the Theme dropdown offers -> what is stored under CalofinTheme.
+;; The order is the list order, and the INDEX is what DCL hands back.
+(setq lzp:*themes*
+  '(("Auto"  . "AUTO")
+    ("Dark"  . "DARK")
+    ("Light" . "LIGHT")))
+
+(setq lzp:*setvals* nil)          ; the pending answers, until OK
+
+;; The profile key one item-colour role's override lives under.
+(defun lzp:inkkey (r) (strcat "CalofinInk-" (strcase (cdr r))))
+
+(defun lzp:set-get (key / p)
+  (if (setq p (assoc key lzp:*setvals*)) (cdr p) ""))
+
+(defun lzp:set-put (key v)
+  (setq lzp:*setvals*
+        (cons (cons key v)
+              (vl-remove (assoc key lzp:*setvals*) lzp:*setvals*)))
+  (princ))
+
+;; mode_tile that cannot throw, for the same reason lzp:settile exists:
+;; the state line is recomputed from a tile callback, where the tiles
+;; are there, and from the tests, where they are not.
+(defun lzp:setmode (key m)
+  (vl-catch-all-apply 'mode_tile (list key m)))
+
+(defun lzp:digit-p (c)
+  (if (member c '("0" "1" "2" "3" "4" "5" "6" "7" "8" "9")) t nil))
+
+;; T when S reads as an ACI colour, 1 to 255.  Spelled out rather than
+;; handed to atoi alone: atoi answers 0 for "red" and reads "12x" as
+;; 12, so a typo would be stored as a colour and drawn in.
+(defun lzp:aci-p (s / i n ok)
+  (setq n (strlen s) i 1 ok (> n 0))
+  (while (and ok (<= i n))
+    (if (not (lzp:digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  (if (and ok (> (atoi s) 0) (< (atoi s) 256)) t nil))
+
+;; The roles whose box holds something that is not a colour.  Empty is
+;; not one of them: empty is how a role is put back to auto.
+(defun lzp:set-badinks ( / r v out)
+  (foreach r lzp:*inkroles*
+    (setq v (lzp:set-get (lzp:inkkey r)))
+    (if (and (/= v "") (not (lzp:aci-p v)))
+      (setq out (cons (car r) out))))
+  (reverse out))
+
+(defun lzp:hiddenmsg ()
+  (strcat (itoa (length lzp:*hidden*)) " of "
+          (itoa (length (lzp:commands))) " tools hidden"))
+
+;; The state line, and OK with it.  Called as each box is typed into,
+;; so the refusal arrives while the box is still in front of you.
+(defun lzp:set-state ( / bad msg b)
+  (setq bad (lzp:set-badinks) msg "")
+  (foreach b bad (setq msg (strcat msg (if (= msg "") "" ", ") b)))
+  (lzp:settile "state"
+    (if bad
+      (strcat "Not a colour number: " msg
+              " -- type 1 to 255, or empty for auto")
+      "OK writes these to your AutoCAD profile, where they survive a rebuild"))
+  (lzp:setmode "accept" (if bad 1 0))
+  (princ))
+
+;; Which entry of lzp:*themes* the profile is on now, as the index DCL
+;; wants.  An unset or unreadable value is Auto, which is index 0.
+(defun lzp:theme-index ( / v i out r)
+  (setq v (lzp:set-get "CalofinTheme") out 0 i 0)
+  (foreach r lzp:*themes*
+    (if (= (cdr r) v) (setq out i))
+    (setq i (1+ i)))
+  out)
+
+;; The dropdown firing.  $value is an INDEX, not the word.
+(defun lzp:set-theme (v / r)
+  (if (setq r (nth (atoi v) lzp:*themes*))
+    (lzp:set-put "CalofinTheme" (cdr r)))
+  (princ))
+
+;; Fill the store from the profile.  Every key the dialog shows gets a
+;; row, so a box is never painted from a nil.
+(defun lzp:set-read ( / r v)
+  (setq lzp:*setvals* nil)
+  (setq v (getenv "CalofinTheme"))
+  (lzp:set-put "CalofinTheme"
+               (if (and v (member (strcase v) '("DARK" "LIGHT")))
+                 (strcase v)
+                 "AUTO"))
+  (foreach r '("CalofinErrorDir" "StockCover_Folder")
+    (setq v (getenv r))
+    (lzp:set-put r (if v v "")))
+  (foreach r lzp:*inkroles*
+    (setq v (getenv (lzp:inkkey r)))
+    (lzp:set-put (lzp:inkkey r) (if v v "")))
+  lzp:*setvals*)
+
+;; The one place that writes.  A colour that is not a colour is written
+;; as EMPTY rather than stored: OK is greyed while one is in the box,
+;; so reaching here with a bad one means something else went wrong, and
+;; clearing the role is the answer that leaves the tool reading its own
+;; table instead of a number nobody can explain.
+(defun lzp:set-write ( / r v)
+  (setq v (lzp:set-get "CalofinTheme"))
+  (setenv "CalofinTheme" v)
+  ;; ...and beside the pins, where the VB palette reads it
+  ;; (ui/calofin_net/PaletteTheme.vb) -- the same bargain CALSET's own
+  ;; Theme branch strikes.  Auto is written as empty: the palette's own
+  ;; probe is what "auto" means there.
+  (vl-catch-all-apply
+    'vl-registry-write
+    (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+  (foreach r '("CalofinErrorDir" "StockCover_Folder")
+    (setenv r (lzp:set-get r)))
+  (foreach r lzp:*inkroles*
+    (setq v (lzp:set-get (lzp:inkkey r)))
+    (setenv (lzp:inkkey r) (if (lzp:aci-p v) v "")))
+  lzp:*setvals*)
+
+;; The dialog.  The dropdown is emitted EMPTY -- DCL has no way to
+;; write a list into a popup_list from the file, so it is filled with
+;; start_list once the dialog is up, exactly as LAZFORM fills its
+;; corner dropdowns.
+(defun lzp:dcl-set ( / out col r)
+  (setq out (list "lazpanel_set : dialog {"
+                  "  label = \"LazPanel  -  settings\";"
+                  "  : boxed_column {"
+                  "    label = \"Ink\";"
+                  (strcat "    : popup_list { key = \"set_theme\"; "
+                          "label = \"Theme\"; edit_width = 10; }")
+                  (strcat "    : text { label = \"auto measures the drawing's"
+                          " background and AutoCAD's own theme\"; }")
+                  "  }"
+                  "  : boxed_row {"
+                  (strcat "    label = \"Item colours - COVERCHECK, DIMCHECK"
+                          " and LINFINCHECK; empty is auto\";")))
+  ;; three to a column, so the box is a block rather than one tall stack
+  (foreach col (lzp:chunk lzp:*inkroles* 3)
+    (setq out (append out (list "    : column {")))
+    (foreach r col
+      (setq out (append out
+        (list (strcat "      : edit_box { key = \"ink_" (cdr r)
+                      "\"; label = \"" (car r)
+                      "\"; edit_width = 5; fixed_width = true; }")))))
+    (setq out (append out (list "    }"))))
+  (append out
+    (list "  }"
+          "  : boxed_column {"
+          "    label = \"Folders - empty means the tool's own default\";"
+          (strcat "    : edit_box { key = \"set_errdir\"; "
+                  "label = \"Error reports\"; edit_width = 40; }")
+          (strcat "    : edit_box { key = \"set_stockdir\"; "
+                  "label = \"Stock covers \"; edit_width = 40; }")
+          "  }"
+          "  : boxed_row {"
+          "    label = \"Panel\";"
+          "    : text { key = \"hiddenmsg\"; width = 32; }"
+          (strcat "    : button { label = \"Hidden...\"; "
+                  "key = \"set_hidden\"; fixed_width = true; }")
+          "  }"
+          "  : text { key = \"state\"; width = 60; }"
+          "  spacer;"
+          "  : row {"
+          "    alignment = centered;"
+          (strcat "    : button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; }")
+          (strcat "    : button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; }")
+          "  }"
+          "}")))
+
+;; Open it, wire it, and keep reopening while the Hidden... button is
+;; the way out.  Answers "ok" when OK was pressed and nil otherwise, so
+;; the caller is what decides to write.
+(defun lzp:set-edit (dcl / rc r done out)
+  (while (not done)
+    (cond
+      ((not (new_dialog "lazpanel_set" dcl)) (setq done t))
+      (t
+       ;; the dropdown's list, which is only legal with the dialog up
+       (start_list "set_theme")
+       (foreach r lzp:*themes* (add_list (car r)))
+       (end_list)
+       (set_tile "set_theme" (itoa (lzp:theme-index)))
+       (action_tile "set_theme" "(lzp:set-theme $value)")
+       (foreach r lzp:*inkroles*
+         (set_tile (strcat "ink_" (cdr r)) (lzp:set-get (lzp:inkkey r)))
+         (action_tile (strcat "ink_" (cdr r))
+           (strcat "(lzp:set-put \"" (lzp:inkkey r) "\" $value)"
+                   " (lzp:set-state)")))
+       (set_tile "set_errdir" (lzp:set-get "CalofinErrorDir"))
+       (action_tile "set_errdir" "(lzp:set-put \"CalofinErrorDir\" $value)")
+       (set_tile "set_stockdir" (lzp:set-get "StockCover_Folder"))
+       (action_tile "set_stockdir"
+                    "(lzp:set-put \"StockCover_Folder\" $value)")
+       (set_tile "hiddenmsg" (lzp:hiddenmsg))
+       (action_tile "set_hidden" "(done_dialog 5)")
+       (action_tile "accept" "(done_dialog 1)")
+       (action_tile "cancel" "(done_dialog 0)")
+       (lzp:set-state)
+       (setq rc (start_dialog))
+       (cond
+         ;; the hide editor, then round again: this dialog repaints
+         ;; itself from the store, so nothing typed is lost to the trip
+         ((= rc 5) (lzp:hide-edit dcl))
+         ((= rc 1) (setq done t out "ok"))
+         (t (setq done t))))))
+  out)
+
+(defun c:LAZSET ( / *error* f dcl ok)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl -- the same fix c:LAZPIN and c:LAZHIDE carry
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZSET error: " msg)))
+    (if lzd:report (lzd:report "LAZSET" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZSET" *lazpanel-version*))
+  (lzp:pins-read)
+  (lzp:recent-read)
+  (lzp:hidden-read)
+  (lzp:set-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZSET error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZSET error: could not load the dialog file.")
+     (vl-file-delete f))
+    (t
+     (setq ok (lzp:set-edit dcl))
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (cond
+       (ok
+        (lzp:set-write)
+        (princ (strcat "\nLAZPANEL: settings saved.  Every tool reads the"
+                       " theme and the item colours on the next colour it"
+                       " picks; the toolbar icon takes the theme at the next"
+                       " LAZBUTTON or LAZICON, and the VB palette at its"
+                       " next chart.")))
+       (t (princ "\nLAZPANEL: settings unchanged.")))))
+  (if lzd:end (lzd:end "LAZSET"))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:visible))) " tools on the panel across "
@@ -112083,7 +112368,7 @@
                  " LAZPIN edits the pinned row;"
                  " LAZHIDE picks which tools stay off it;"
                  " CALHELP says what a command does;"
-                 " CALSET shows the settings.")))
+                 " LAZSET is the settings dialog, CALSET the prompts.")))
 (princ)
 
 
@@ -112123,7 +112408,7 @@
   "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA"
   "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
   "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON" "LAZICON" "CALHELP"
-  "CALSET" "LAZPANELVER"
+  "CALSET" "LAZSET" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
