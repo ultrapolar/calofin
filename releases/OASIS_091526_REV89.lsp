@@ -226,7 +226,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.8")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.9")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -958,8 +958,16 @@
   (if (not oasis:*odstyle*) (setq oasis:*odstyle* (getvar "DIMSTYLE"))))
 
 (defun oasis:dimstyrestore ()
+  ;; called from *error*, where a bare (command ...) can itself fail --
+  ;; so command-s under vl-catch-all-apply (STANDARDS section 5), the
+  ;; same shape CDCREATE, CUSTBLOCK, PERPMARK, SPACHECK, OLAUTO and the
+  ;; perp_points pair all use.  Unwrapped, this was the ONE dimension
+  ;; style restore in the standalone tier that could throw inside a
+  ;; handler -- and it sat ahead of the sysvar restore, so the throw
+  ;; took the drafter's object snaps down with it.
   (if (and oasis:*odstyle* (tblsearch "DIMSTYLE" oasis:*odstyle*))
-      (command "_.-DIMSTYLE" "_Restore" oasis:*odstyle*))
+      (vl-catch-all-apply 'command-s
+                          (list "_.-DIMSTYLE" "_Restore" oasis:*odstyle*)))
   (setq oasis:*odstyle* nil))
 
 ;; Make the cross-dimension style current for the dims about to be drawn.
@@ -3405,8 +3413,14 @@
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
                    lt a nchk gotbot)
   (defun *error* (msg)
-    ;; user settings come back FIRST so nothing below can skip them
-    (oasis:dimstyrestore)
+    ;; user settings come back FIRST so nothing below can skip them --
+    ;; and that means FIRST, which this handler did not used to be.  It
+    ;; opened with (oasis:dimstyrestore), whose (command ...) is exactly
+    ;; what the valve below exists to make safe: on the Esc-mid-dimension
+    ;; the comment there describes, the style restore was fed into the
+    ;; PENDING command as answers, and a throw there took this line with
+    ;; it -- leaving the drafter with every object snap unticked.
+    ;; Nothing above this line may drive a command.
     (oasis:sysrestore)
     ;; a form's leftovers go with the run that was reading them: an Esc
     ;; part-way through must not leave answers behind for the next one
@@ -3418,6 +3432,9 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
+    ;; and only now, with nothing pending, the style -- it is read-only
+    ;; to setvar, so it is the one restore here that needs a command
+    (oasis:dimstyrestore)
     ;; the preview is scaffolding, not a result -- it goes whether the run
     ;; finished or the user pressed Esc part-way through the questions.
     ;; So are the pool-bottom flow's numbered tangency marks, which are

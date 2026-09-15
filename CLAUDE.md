@@ -352,6 +352,15 @@ handler that could put it back. The table-driven form counts too --
 `(tool:sysrestore)` over a snapshot whose list names `OSMODE`, with
 `OSMODE` first in that list -- and is what the bigger tools use.
 
+**FIRST means first.** An error inside `*error*` aborts the handler, so
+a restore behind a bare `(command ...)` is a restore that does not run
+on the path it was written for. Put the `setvar`s at the top -- they
+cannot throw -- and the drain, the `-DIMSTYLE` and the `_End` after
+them. And drop the snapshot before the risky form, not after: a
+snapshot left standing makes `syssave` a no-op for the rest of the
+session, so every later run restores the stale value over whatever the
+drafter has ticked since. Both are enforced.
+
 ### Adding or removing a command
 
 A tool is not finished when it draws. It has to *report its failures*
@@ -443,7 +452,13 @@ python3 tools/check_osnap.py     # the drafter's OBJECT SNAPS survive every
                                  # that mutes OSMODE for its own picks puts
                                  # it back before it returns AND from its
                                  # *error* handler, because Esc is the one
-                                 # way out the success path never runs
+                                 # way out the success path never runs --
+                                 # and puts it back BEFORE anything in that
+                                 # handler that can throw, since an error
+                                 # inside *error* skips every line after it.
+                                 # Also: a restore helper may not drop its
+                                 # snapshot behind such a form, or every
+                                 # LATER run restores this run's OSMODE
 python3 tools/probe_report.py    # not a check: replays a failure report in
                    REPORT.dxf    # the VM and varies its inputs one at a
                                  # time, to say which one the failure is

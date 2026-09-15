@@ -228,7 +228,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091526 REV22")
+(setq spa:*version* "091526 REV23")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -3915,11 +3915,21 @@
   (foreach v (spa:sysvars)
     (setq p (assoc v spa:*sysold*))
     (if p (setvar v (cdr p))))
-  ;; the current dimension style is read-only, so it takes a command
+  ;; The snapshot is dropped HERE, before the one form below that can
+  ;; throw -- not after it.  spa:syssave refuses to overwrite a snapshot
+  ;; that already exists (it has to: a second save mid-run would capture
+  ;; the zeroed OSMODE and "restore" 0 for ever).  So a throw that
+  ;; stranded this setq left the table standing, and every LATER run in
+  ;; the session then saved nothing and restored run one's OSMODE --
+  ;; silently undoing whatever the drafter had since ticked in Drafting
+  ;; Settings.  Sticky, session-long, and invisible.
+  (setq spa:*sysold* nil)
+  ;; the current dimension style is read-only, so it takes a command --
+  ;; and this runs from *error*, where a bare one can itself fail
   (if (and spa:*odstyle* (tblsearch "DIMSTYLE" spa:*odstyle*))
-      (command "_.-DIMSTYLE" "_Restore" spa:*odstyle*))
-  (setq spa:*sysold* nil
-        spa:*odstyle* nil))
+      (vl-catch-all-apply 'command-s
+                          (list "_.-DIMSTYLE" "_Restore" spa:*odstyle*)))
+  (setq spa:*odstyle* nil))
 
 ;;; -------------------- main command -----------------------------------
 

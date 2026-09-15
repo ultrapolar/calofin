@@ -12786,7 +12786,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091526 REV22")
+(setq spa:*version* "091526 REV23")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -17252,7 +17252,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.8")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.9")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -20275,8 +20275,14 @@
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
                    lt a nchk gotbot)
   (defun *error* (msg)
-    ;; user settings come back FIRST so nothing below can skip them
-    (cal:dimstyrestore)
+    ;; user settings come back FIRST so nothing below can skip them --
+    ;; and that means FIRST, which this handler did not used to be.  It
+    ;; opened with (cal:dimstyrestore), whose (command ...) is exactly
+    ;; what the valve below exists to make safe: on the Esc-mid-dimension
+    ;; the comment there describes, the style restore was fed into the
+    ;; PENDING command as answers, and a throw there took this line with
+    ;; it -- leaving the drafter with every object snap unticked.
+    ;; Nothing above this line may drive a command.
     (cal:sysrestore)
     ;; a form's leftovers go with the run that was reading them: an Esc
     ;; part-way through must not leave answers behind for the next one
@@ -20288,6 +20294,9 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
+    ;; and only now, with nothing pending, the style -- it is read-only
+    ;; to setvar, so it is the one restore here that needs a command
+    (cal:dimstyrestore)
     ;; the preview is scaffolding, not a result -- it goes whether the run
     ;; finished or the user pressed Esc part-way through the questions.
     ;; So are the pool-bottom flow's numbered tangency marks, which are
@@ -44454,7 +44463,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.8"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.9"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -44753,11 +44762,17 @@
   ;; -- error handler: cancel stuck commands, purge temp geometry,
   ;;    restore system variables, close the undo group -------------------
   (defun *error* (msg)
+    ;; the drafter's settings come back FIRST, ahead of the flush below.
+    ;; autobead-flush is a bare (command) drain -- the one form up here
+    ;; that can throw -- and it used to sit in front of these two, so a
+    ;; drain that died left every object snap unticked and PEDITACCEPT
+    ;; at 1.  Two setvars of values this run captured itself cannot
+    ;; throw, so nothing is risked by putting them above it.
+    (if oldos (setvar "OSMODE" oldos))
+    (if oldpa (setvar "PEDITACCEPT" oldpa))
     (autobead-flush)
     (foreach e temps
       (if (and e (entget e)) (entdel e)))
-    (if oldpa (setvar "PEDITACCEPT" oldpa))
-    (if oldos (setvar "OSMODE" oldos))
     ;; only close a group that was actually opened -- an error thrown
     ;; before the _Begin below (a cancelled selection, a failed getvar)
     ;; used to run _End on nothing, which errors inside the handler
@@ -100478,7 +100493,7 @@
 
 
 
-(setq *xft-version* "v1.16") ; printed on load and at command start so a
+(setq *xft-version* "v1.17") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -101285,15 +101300,23 @@
 ;;;  XFTCONV
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone guard
+(defun c:XFTCONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
                      ss base wbase i en ed typ locked
                      markers names dots dotnames r recs
                      nmade nblank ndots nleft)
 
-  (defun xft:restore ()
+  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, which is the point -- the
+  ;; handler calls it BEFORE its (command) drain, so a drain that dies
+  ;; cannot take the drafter's object snaps with it.  The pop below
+  ;; cannot move up with them: the drain needs the pushed mode.
+  (defun xft:sysback ()
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
-    (if osclay (setvar "CLAYER"  osclay))
+    (if osclay (setvar "CLAYER"  osclay)))
+
+  (defun xft:restore ()
+    (xft:sysback)
     ;; The error mode pushed below is popped HERE, on every way out --
     ;; the three quiet exits, the report, and the handler -- not in the
     ;; handler alone.  A clean run used to leave the mode stacked for
@@ -101307,6 +101330,13 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
+    ;; the drafter's settings come back FIRST, ahead of the drain below:
+    ;; that drain is a bare (command), the one form in this handler that
+    ;; can throw, and it used to sit in front of the only OSMODE restore
+    ;; there is -- so an Esc that died in the drain left every object
+    ;; snap unticked AND stranded the pop, which refuses command-s inside
+    ;; every later handler for the rest of the session
+    (xft:sysback)
     ;; back out of SCALE etc.  Bounded: CMDACTIVE carries a
     ;; "dialog is up" bit no keystroke from here can clear, and an
     ;; unbounded drain against it would hang with no Esc out.
@@ -101595,14 +101625,22 @@
   (reverse out)
 )
 
-(defun c:XFTRECONV ( / *error* xft:restore oscm osos osclay undone guard
+(defun c:XFTRECONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
                        ss recs runs locked r spec keep i en
                        scale base nback nrebuilt)
 
-  (defun xft:restore ()
+  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, which is the point -- the
+  ;; handler calls it BEFORE its (command) drain, so a drain that dies
+  ;; cannot take the drafter's object snaps with it.  The pop below
+  ;; cannot move up with them: the drain needs the pushed mode.
+  (defun xft:sysback ()
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
-    (if osclay (setvar "CLAYER"  osclay))
+    (if osclay (setvar "CLAYER"  osclay)))
+
+  (defun xft:restore ()
+    (xft:sysback)
     ;; popped on every way out, not in the handler alone -- see the
     ;; same note in c:XFTCONV
     (if *pop-error-mode* (*pop-error-mode*))
@@ -101611,6 +101649,13 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTRECONV error: " msg)))
+    ;; the drafter's settings come back FIRST, ahead of the drain below:
+    ;; that drain is a bare (command), the one form in this handler that
+    ;; can throw, and it used to sit in front of the only OSMODE restore
+    ;; there is -- so an Esc that died in the drain left every object
+    ;; snap unticked AND stranded the pop, which refuses command-s inside
+    ;; every later handler for the rest of the session
+    (xft:sysback)
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)

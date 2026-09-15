@@ -8,6 +8,45 @@ which set of them shipped together. The release name lives in
 
 ## v3.15 -- 2026-09-15
 
+**...and they come back even when the cleanup itself fails.**  OASIS
+v8.9, AUTOBEAD v1.9, XFTCONV/XFTRECONV v1.17, SPA 091526 REV23.  The
+first pass proved every command HAS an OSMODE restore in its `*error*`
+handler.  It could not see whether that restore is ever REACHED.  An
+error raised inside `*error*` aborts the handler, so a restore sitting
+behind a form that can throw is a restore that does not run on the one
+path it was written for.
+
+Four handlers had them the wrong way round.  OASIS opened with
+`oasis:dimstyrestore`, the one unwrapped `-DIMSTYLE` restore in the
+standalone tier -- and it sat ABOVE the pending-command valve whose own
+comment says an Esc part-way through a dimension leaves that command
+pending and anything below would be read as answers to it.  So on
+exactly that Esc, the style restore was fed into the pending command
+and took `oasis:sysrestore` down with it.  AUTOBEAD, XFTCONV and
+XFTRECONV each put their bare-`(command)` drain ahead of the only
+OSMODE restore they have; XFTCONV's also pops the error mode, so a
+throw there stranded the pop and refused `command-s` inside every later
+handler for the rest of the session.  The settings now go back first in
+all four -- putting back a value the run captured itself is pure
+`setvar` and cannot throw -- and OASIS's `-DIMSTYLE` is wrapped in
+`vl-catch-all-apply`, the shape its six siblings already used and the
+shape the grouped build got right via `cal:dimstyrestore`.
+
+`spa:sysrestore` had the mirror-image bug: its
+`(setq spa:*sysold* nil)` sat BEHIND a bare `-DIMSTYLE`.  OSMODE came
+back, but a throw left the snapshot standing -- and `spa:syssave`
+refuses to overwrite a snapshot that exists, because a second save
+mid-run would capture the zeroed OSMODE and restore 0 for ever.  So one
+failed SPA run froze the drafter's snaps at that run's value for the
+rest of the session, silently undoing anything they ticked in Drafting
+Settings afterwards.  The snapshot is dropped before the command now,
+and the command is wrapped.
+
+`tools/check_osnap.py` grew both rules, so neither shape can come back:
+no throwable form ahead of the OSMODE restore in a handler, and no
+snapshot drop behind one.  Run against the pre-fix source it names all
+five sites.
+
 **The drafter's object snaps come back from a failed run too.**
 COVERCHECK v1.18, DIMCHECK v1.21, LINFINCHECK v2.17, and a new
 `tools/check_osnap.py` in `make check`. Forty-three commands here mute

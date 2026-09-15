@@ -229,7 +229,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.8")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v8.9")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -3252,8 +3252,14 @@
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
                    lt a nchk gotbot)
   (defun *error* (msg)
-    ;; user settings come back FIRST so nothing below can skip them
-    (cal:dimstyrestore)
+    ;; user settings come back FIRST so nothing below can skip them --
+    ;; and that means FIRST, which this handler did not used to be.  It
+    ;; opened with (cal:dimstyrestore), whose (command ...) is exactly
+    ;; what the valve below exists to make safe: on the Esc-mid-dimension
+    ;; the comment there describes, the style restore was fed into the
+    ;; PENDING command as answers, and a throw there took this line with
+    ;; it -- leaving the drafter with every object snap unticked.
+    ;; Nothing above this line may drive a command.
     (cal:sysrestore)
     ;; a form's leftovers go with the run that was reading them: an Esc
     ;; part-way through must not leave answers behind for the next one
@@ -3265,6 +3271,9 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
+    ;; and only now, with nothing pending, the style -- it is read-only
+    ;; to setvar, so it is the one restore here that needs a command
+    (cal:dimstyrestore)
     ;; the preview is scaffolding, not a result -- it goes whether the run
     ;; finished or the user pressed Esc part-way through the questions.
     ;; So are the pool-bottom flow's numbered tangency marks, which are
