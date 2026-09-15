@@ -121,7 +121,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.8")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v2.9")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -132,6 +132,12 @@
                                    ; points; insertion point = location
 (setq fit:*pt-tag*      "number")  ; attribute tag carrying the point
                                    ; number, for the miss report
+(setq fit:*snap*        12.0)      ; a CLICK within this of a survey
+                                   ; point names that point, at the
+                                   ; Redo's omit prompt.  A typed
+                                   ; number never uses it: a name is
+                                   ; exact.  12.0 is what BPCALLOUT,
+                                   ; ABFIND and PERPMARK snap at
 (setq fit:*moved-mark*  "M")       ; a point number carrying this letter
                                    ; is a MOVED point - ABFIND writes
                                    ; "17m" when it copies Pt.17 to a
@@ -664,6 +670,120 @@
     (setq d (fit:dist p q))
     (if (or (null bd) (< d bd)) (setq best q bd d)))
   best)
+
+;; ---- naming a survey point -------------------------------------------
+;; The Redo's omit prompt is a question about a survey point the
+;; drawing already holds, so it NAMES one rather than placing it - this
+;; is PERPMARK's infrastructure, carried here under this file's own
+;; prefix so the standalone file loads alone (STANDARDS section 4; the
+;; grouped build takes it from CALOFIN-LIB): one prompt takes a click
+;; OR a typed number - "17", "Pt.17", "pt 17", "#17" and "017" all name
+;; the same point - a click has to land within fit:*snap* of a point to
+;; pick it, and every miss - a click on nothing, a number nothing
+;; carries, a number two points share - is re-asked where it stands.
+;; What used to happen: any click was snapped to the nearest survey
+;; point, however far off it landed.
+;;
+;; A candidate is (position name): where the point is, and what the
+;; prompts and the report call it.
+
+;; The NUMBER a typed point name carries: the spelling with the spaces,
+;; the hashes and the "Pt." prefix taken off, and nothing else touched.
+;; Only the dot right after PT is a prefix dot - a point genuinely named
+;; "40.5" keeps its decimal.
+(defun fit:as-number (s / out i ch)
+  (setq out "" i 1)
+  (while (<= i (strlen s))
+    (setq ch (substr s i 1))
+    (if (not (member ch '(" " "#")))
+      (setq out (strcat out ch)))
+    (setq i (1+ i)))
+  (if (and (>= (strlen out) 2) (= (strcase (substr out 1 2)) "PT"))
+    (progn
+      (setq out (substr out 3))
+      (if (= (substr out 1 1) ".") (setq out (substr out 2)))))
+  out)
+
+;; One comparable form for a point number, so "35", "Pt.35", "pt 35",
+;; "#35" and "035" all meet in the middle.
+(defun fit:canon (s)
+  (setq s (fit:as-number (strcase s)))
+  (if (distof s 2)
+    (rtos (distof s 2) 2 8)
+    s))
+
+;; Every candidate whose name is the number typed.  More than one is a
+;; sheet that numbers two points the same, and is asked about rather
+;; than guessed at.
+(defun fit:cand-matches (s cands / want out c)
+  (setq want (fit:canon s) out nil)
+  (foreach c cands
+    (if (= (fit:canon (cadr c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;; The candidate nearest PK, when one sits within SNAP of it.  A typed
+;; number never comes here - a name is exact.
+(defun fit:cand-nearest (pk cands snap / best bd c d)
+  (setq best nil bd nil)
+  (foreach c cands
+    (setq d (distance (fit:2d pk) (fit:2d (car c))))
+    (if (and (<= d snap) (or (null bd) (< d bd)))
+      (setq best c bd d)))
+  best)
+
+;; A survey point, clicked or typed.  One prompt takes both: (initget
+;; 128) is arbitrary input, which hands typed text back from getpoint as
+;; the string it is where a click comes back as the point it is.  The
+;; misses are re-asked HERE rather than unwinding the caller's chain --
+;; a number nothing carries and a click on nothing are typos, not
+;; answers, and the question they belong to is this one.  TAIL is the
+;; prose inside the angle brackets on a prompt whose Enter means
+;; something - "Enter = done", the point Enter takes - and nil when a
+;; point is required.  CANDS are the (position name) candidates and
+;; SNAP how close a click has to land.  Returns the candidate, nil for
+;; Enter, or FIT-BACK.
+(defun fit:askpoint (msg tail back cands snap / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (if lzd:ask (lzd:ask msg v) v)
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'FIT-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (fit:cand-matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (fit:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (fit:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (fit:cand-nearest v cands snap))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
+
+;; The candidates for the points in hand - the fit's, or the omit
+;; list's - named the way the report names them.
+(defun fit:cands-of (qs)
+  (mapcar '(lambda (q) (list q (fit:pt-name q))) qs))
 
 ;; Order points into a closed tour: nearest-neighbour walk from the
 ;; leftmost point, then 2-opt passes to remove crossings (ABHD's).
@@ -4904,18 +5024,22 @@
 
 ;; The omit/restore loop.  Each pick toggles: a point in the fit goes
 ;; out and gets a ring, a ringed one comes back in and loses it.
-(defun fit:omit-loop ( / wp pick)
+(defun fit:omit-loop ( / cand pick)
   (princ "\n\n  Any points to leave out this time?")
-  (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
-  (princ "\n  anything the outline should not chase; each gets a dashed ring.")
+  (princ "\n  Name each one - click it, or type its number (Enter for none):")
+  (princ "\n  mis-shots, duplicates, anything the outline should not chase;")
+  (princ "\n  each gets a dashed ring.")
   (if fit-omit
     (princ (strcat "\n  " (itoa (length fit-omit))
-                   " point(s) are already out - picking one of those puts"
+                   " point(s) are already out - naming one of those puts"
                    " it BACK IN.")))
-  (while (setq wp (getpoint "\n  Point to leave out - or a ringed one to restore (Enter when done): "))
-    (setq pick (fit:omit-choose (fit:2d wp)))
+  (while (setq cand (fit:askpoint
+                      "  Point to leave out, or a ringed one to restore - pick it or type its number"
+                      "Enter = done" nil
+                      (fit:cands-of (append (fit:active) (mapcar 'car fit-omit)))
+                      fit:*snap*))
+    (setq pick (fit:omit-choose (car cand)))
     (cond
-      ((null pick) (princ "  - (no survey point near that pick)"))
       ((eq (car pick) 'RESTORE)
        (setq fit-omit (fit:omit-drop (cdr pick)))
        (princ (strcat "  - Pt." (fit:pt-name (cdr pick)) " back in")))

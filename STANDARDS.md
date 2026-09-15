@@ -382,6 +382,71 @@ for the same reason.
   (princ))
 ```
 
+**A question about a survey point NAMES one.** A wall runs from
+Pt.17 to Pt.22, Pt.9 is a corner, Pt.30 is held, Pt.41 is left out:
+each of those is a question about a point the drawing already holds,
+not about a place, so it is asked with `tool:askpoint` (`cal:askpoint`
+in the library, lifted from PERPMARK) -- one prompt that takes a
+click OR a typed number, and never a bare `getpoint` snapped to
+whatever was nearest. The rules it carries:
+
+* a click has to land within the tool's snap radius of a point to
+  pick it (12.0 in every tool that has one, so a drafter's aim
+  carries between them); a typed number never uses the radius -- a
+  name is exact;
+* `"17"`, `"Pt.17"`, `"pt 17"`, `"#17"` and `"017"` all name the same
+  point (`tool:canon`);
+* a click on nothing, a number nothing carries and a number two
+  points share are re-asked where they stand, never guessed at;
+* the answer is a candidate `(position name)`, and the position is
+  the point's identity: a declaration made before the selection is
+  matched to the selected points by it, and one that is not among
+  them is named and dropped, never snapped onto some other point.
+
+```lisp
+;; A survey point, clicked or typed.  TAIL is the prose inside the
+;; angle brackets on a prompt whose Enter means something ("Enter =
+;; done"), nil when a point is required.  CANDS are the (position
+;; name) candidates and SNAP how close a click has to land.  Returns
+;; the candidate, nil for Enter, or TOOL-BACK.
+(defun tool:askpoint (msg tail back cands snap / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'TOOL-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (tool:cand-matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (tool:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (tool:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (tool:cand-nearest v cands snap))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
+```
+
 ## 5. Code structure
 
 **File.** One tool per `lisp/<tool>/` folder; the file is named after

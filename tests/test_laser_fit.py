@@ -987,7 +987,7 @@ def test_lisp_file_is_well_formed():
                "lh:ask-shape", "lh:ask-zmode", "lh:pick-elev",
                "lh:zs-of", "lh:block-number", "lh:pt-name",
                "lh:edit-walls", "lh:edit-corners", "lh:edit-holds",
-               "lh:draw-hold-marker", "lh:snap-break",
+               "lh:draw-hold-marker", "lh:askpoint",
                "lh:tag-mine", "lh:purge-mine", "lh:temp-clear"):
         assert fn in defined, "lhd.lsp no longer defines %s" % fn
     print("  lhd.lsp is balanced and self-consistent")

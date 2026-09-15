@@ -87,10 +87,24 @@
 ;;; "17m2" are all out.
 ;;;
 ;;; DECLARED STRAIGHT WALLS: the user may declare dead-straight walls
-;;; up front by picking their two end points; each is marked with a
+;;; up front by naming their two end points; each is marked with a
 ;;; dashed line on *PF-WALL-LAYER* and comes out of the points-built
 ;;; fit as a straight LINE between exactly those two survey points -
 ;;; arcs never swallow or cross a declared wall.
+;;;
+;;; NAMING A POINT: every question about a survey point - a wall end,
+;;; a corner, a held point, a break end, a slope waypoint, a point to
+;;; omit - is asked PERPMARK's way, because it is a question about a
+;;; point the drawing already holds and not about a place: click the
+;;; point, or type its number ("17", "Pt.17", "pt 17", "#17" and "017"
+;;; all name the same one).  A click has to land within *PF-SNAP* of
+;;; a point to pick it; a click on nothing, a number nothing carries
+;;; and a number two points share are re-asked where they stand,
+;;; never snapped to whatever was nearest.  A wall, corner or hold is
+;;; declared before the points are selected, so it is matched to the
+;;; selection afterwards by the point's own identity - and one
+;;; declared on a point that was not selected is named and dropped,
+;;; not snapped onto some other point.
 ;;;
 ;;; HELD POINTS: the user may also declare points that must be held
 ;;; ABSOLUTELY - control shots, tie-ins, anything surveyed as an
@@ -154,7 +168,7 @@
 ;;; through exactly, how many are within tolerance, how many missed.
 ;;;
 ;;; THE POOL BOTTOM: once a perimeter is kept, the command offers to
-;;; draw the floor too (Enter = No).  The user picks the two ends of
+;;; draw the floor too (Enter = No).  The user names the two ends of
 ;;; the SHALLOW BREAK and the DEEP BREAK; the hopper - the flat
 ;;; deep-end floor - lies beyond the deep break, away from the
 ;;; shallow.  Its back is found automatically (the survey point
@@ -165,7 +179,7 @@
 ;;; join the hopper's ends to the shallow break points - each side is
 ;;; asked whether its line runs STRAIGHT, GUIDED (following the
 ;;; perimeter's curve, the offset easing to nothing at the shallow
-;;; break), or through POINTS the user picks along that side, each
+;;; break), or through POINTS the user names along that side, each
 ;;; with its own offset measured square off the wall - the line still
 ;;; runs guided between them.  Every prompt in the flow after the
 ;;; first offers Back ([Back] at the picks and choices, B typed at
@@ -598,14 +612,16 @@
                                     ; distance grow about 700,000-fold,
                                     ; so a cap unmet by then is
                                     ; genuinely unreachable
-(setq *PF-PICK-WARN*    3.0)        ; a picked point (wall end, corner,
-                                    ; held point, break point, slope
-                                    ; waypoint) snaps to the nearest
-                                    ; survey point; one picked further
-                                    ; than this many times the max
-                                    ; distance from any is still snapped
-                                    ; but called out, in case the wrong
-                                    ; point was meant
+(setq *PF-SNAP*         12.0)       ; a CLICK within this of a survey
+                                    ; point names that point - at a
+                                    ; wall end, a corner, a held point,
+                                    ; a break end, a slope waypoint, a
+                                    ; point to omit.  A typed number
+                                    ; never uses it: a name is exact.
+                                    ; 12.0 is what BPCALLOUT, ABFIND
+                                    ; and PERPMARK snap at, so a
+                                    ; drafter's aim carries between
+                                    ; the tools
 (setq *PF-PICKUP-EPS*   3.0)        ; a survey point within this of the
                                     ; selected perimeter counts as one
                                     ; of ITS points when ADAB gathers
@@ -663,7 +679,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "091226 REV18") ; announced on load.  The
+(setq pf:*version*      "091526 REV19") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -1381,6 +1397,190 @@
     (setq d (pf:dist p q))
     (if (or (null bd) (< d bd)) (setq best q bd d)))
   best)
+
+;; ---- naming a survey point -------------------------------------------
+;; A declaration is ABOUT a survey point - the wall runs from Pt.17 to
+;; Pt.22, Pt.9 is a corner, Pt.30 is held, Pt.41 is left out - so every
+;; question below NAMES one rather than placing it.  This is PERPMARK's
+;; infrastructure, carried here under this file's own prefix so the
+;; standalone file loads alone (STANDARDS section 4; the grouped build
+;; takes it from CALOFIN-LIB): one prompt takes a click OR a typed
+;; number - "17", "Pt.17", "pt 17", "#17" and "017" all name the same
+;; point - a click has to land within *PF-SNAP* of a point to pick it,
+;; and every miss - a click on nothing, a number nothing carries, a
+;; number two points share - is re-asked where it stands.  What used to
+;; happen: a click ANYWHERE was snapped to the nearest survey point
+;; after the selection, however far off it landed, and a wall end that
+;; took the wrong point was a bad fit with no visible cause.
+;;
+;; A candidate is (position name): where the point is, and what the
+;; prompts and the report call it.  The position is its IDENTITY - it
+;; is what the fitter holds, and what a declaration made before the
+;; selection is matched to once the selection is in hand.
+
+;; The NUMBER a typed point name carries: the spelling with the spaces,
+;; the hashes and the "Pt." prefix taken off, and nothing else touched.
+;; Only the dot right after PT is a prefix dot - a point genuinely named
+;; "40.5" keeps its decimal.
+(defun pf:as-number (s / out i ch)
+  (setq out "" i 1)
+  (while (<= i (strlen s))
+    (setq ch (substr s i 1))
+    (if (not (member ch '(" " "#")))
+      (setq out (strcat out ch)))
+    (setq i (1+ i)))
+  (if (and (>= (strlen out) 2) (= (strcase (substr out 1 2)) "PT"))
+    (progn
+      (setq out (substr out 3))
+      (if (= (substr out 1 1) ".") (setq out (substr out 2)))))
+  out)
+
+;; One comparable form for a point number, so "35", "Pt.35", "pt 35",
+;; "#35" and "035" all meet in the middle.
+(defun pf:canon (s)
+  (setq s (pf:as-number (strcase s)))
+  (if (distof s 2)
+    (rtos (distof s 2) 2 8)
+    s))
+
+;; Every candidate whose name is the number typed.  More than one is a
+;; sheet that numbers two points the same, and is asked about rather
+;; than guessed at.
+(defun pf:cand-matches (s cands / want out c)
+  (setq want (pf:canon s) out nil)
+  (foreach c cands
+    (if (= (pf:canon (cadr c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;; The candidate nearest PK, when one sits within SNAP of it.  A typed
+;; number never comes here - a name is exact.
+(defun pf:cand-nearest (pk cands snap / best bd c d)
+  (setq best nil bd nil)
+  (foreach c cands
+    (setq d (distance (pf:2d pk) (pf:2d (car c))))
+    (if (and (<= d snap) (or (null bd) (< d bd)))
+      (setq best c bd d)))
+  best)
+
+;; A survey point, clicked or typed.  One prompt takes both: (initget
+;; 128) is arbitrary input, which hands typed text back from getpoint as
+;; the string it is where a click comes back as the point it is.  The
+;; misses are re-asked HERE rather than unwinding the caller's chain --
+;; a number nothing carries and a click on nothing are typos, not
+;; answers, and the question they belong to is this one.  TAIL is the
+;; prose inside the angle brackets on a prompt whose Enter means
+;; something - "Enter = done", the point Enter takes - and nil when a
+;; point is required.  CANDS are the (position name) candidates and
+;; SNAP how close a click has to land.  Returns the candidate, nil for
+;; Enter, or PF-BACK.
+(defun pf:askpoint (msg tail back cands snap / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (if lzd:ask (lzd:ask msg v) v)
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'PF-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (pf:cand-matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (pf:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (pf:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (pf:cand-nearest v cands snap))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
+
+;; Every survey point in the DRAWING as a candidate, for the questions
+;; asked before the selection exists (steps 4 to 6).  The classifier is
+;; the selection's own: an ab_pt INSERT wherever it sits, any other
+;; INSERT on the POINTS layer, a plain POINT on that layer - and a
+;; moved point is left out here as it is there, since a declaration on
+;; a point that is not in the fit declares nothing.  A point with no
+;; readable number is called "?": it can be clicked, not typed.
+(defun pf:collect-points ( / ss i en ed typ nm out)
+  (setq out nil
+        ss  (ssget "_X" '((0 . "INSERT,POINT"))))
+  (if ss
+    (progn
+      (setq i 0)
+      (repeat (sslength ss)
+        (setq en  (ssname ss i)
+              ed  (entget en)
+              typ (cdr (assoc 0 ed))
+              nm  nil)
+        (cond
+          ((= typ "INSERT")
+           (if (or (= (strcase (cdr (assoc 2 ed)))
+                      (strcase *PF-POINT-BLOCK*))
+                   (= (strcase (cdr (assoc 8 ed)))
+                      (strcase *PF-POINT-LAYER*)))
+             (progn
+               (setq nm (pf:block-number en))
+               (if (not (pf:moved-p nm))
+                 (setq out (cons (list (pf:2d (cdr (assoc 10 ed)))
+                                       (if (and nm (/= nm "")) nm "?"))
+                                 out))))))
+          ((= typ "POINT")
+           (if (= (strcase (cdr (assoc 8 ed)))
+                  (strcase *PF-POINT-LAYER*))
+             (setq out (cons (list (pf:2d (cdr (assoc 10 ed))) "?")
+                             out)))))
+        (setq i (1+ i)))))
+  (reverse out))
+
+;; The candidates for points already in hand - the selection's, or the
+;; omit list's - named the way the report names them.
+(defun pf:cands-of (qs)
+  (mapcar '(lambda (q) (list q (pf:pt-name q))) qs))
+
+;; T when the named point is one of DPTS.  When it is not, the WHAT
+;; declared on it is named and dropped: it is a declaration about a
+;; point the selection does not hold, never a near miss to be snapped
+;; onto some other point.
+(defun pf:declared-in (cand dpts what)
+  (if (pf:memb (car cand) dpts)
+    T
+    (progn
+      (princ (strcat "\n  (Pt." (cadr cand) " is not among the selected"
+                     " points - the " what " declared on it is dropped)"))
+      nil)))
+
+;; The second end of a wall from C1: required, and a different point
+;; from C1 - the same one again is refused and re-asked where it
+;; stands.  Returns the candidate or PF-BACK.
+(defun pf:ask-wall-end (c1 cands / c2)
+  (setq c2 (pf:askpoint (strcat "  Second end, from Pt." (cadr c1)
+                                " - pick it or type its number")
+                        nil T cands *PF-SNAP*))
+  (while (and (not (eq c2 'PF-BACK))
+              (< (pf:dist (car c1) (car c2)) *PF-EXACT-EPS*))
+    (princ (strcat "\n  That is Pt." (cadr c1)
+                   " again - a wall needs two different points."))
+    (setq c2 (pf:askpoint (strcat "  Second end, from Pt." (cadr c1)
+                                  " - pick it or type its number")
+                          nil T cands *PF-SNAP*)))
+  c2)
 
 ;; Index of point P in TOUR (exact-point fuzz), or nil.
 (defun pf:tour-index (p tour / i k q)
@@ -3175,18 +3375,6 @@
          (T (setq res (cons v (if (wcmatch s "*'*") T nil))))))))
   res)
 
-;; Snap a picked break point onto the nearest survey point, warning
-;; when the pick was nowhere near one (same rule as declared walls).
-(defun pf:snap-break (p dpts / q)
-  (setq p (pf:2d p)
-        q (pf:nearest p dpts))
-  (if (null q)
-    p
-    (progn
-      (if (> (pf:dist p q) (* *PF-PICK-WARN* *PF-TOL*))
-        (princ "\n  (picked well away from any survey point - snapped to the nearest one)"))
-      q)))
-
 ;; The survey point marking the BACK of the hopper: cast a ray from
 ;; the middle of the deep break line, perpendicular to it, away from
 ;; the shallow break, and take the point closest to that ray on that
@@ -3578,7 +3766,7 @@
 ;; nil for straight, T for guided, or a list of (surveyPt offset
 ;; ftin) waypoints for a guided line that passes through picked
 ;; points at pinned offsets.
-(defun pf:ask-slope (nm dpts defo / ans wp spec o seed marks mk done)
+(defun pf:ask-slope (nm dpts defo / ans wp spec o seed marks mk done cands)
   (initget "Straight Guided Points Back Undo")
   (setq ans (getkword (strcat
               "\n  Slope line from the offset at Pt." nm
@@ -3590,22 +3778,23 @@
     ((= ans "Guided") T)
     ((/= ans "Points") nil)
     (T
-     (princ "\n  Pick survey points along this side, between the breaks; each")
-     (princ "\n  gets its own offset, measured square off the wall.  The line")
-     (princ "\n  follows the curve through them and eases to the shallow break.")
+     (princ "\n  Name survey points along this side, between the breaks - click")
+     (princ "\n  each, or type its number; each gets its own offset, measured")
+     (princ "\n  square off the wall.  The line follows the curve through them")
+     (princ "\n  and eases to the shallow break.")
      (setq spec     nil
            marks    nil
            seed     defo
            done     nil
+           cands    (pf:cands-of dpts)
            pf-phase "picking slope waypoints")
      (while (not done)
-       (initget "Back Undo")
-       (setq wp (getpoint (strcat
-                  "\n  Point on the Pt." nm
-                  " side (Enter when done) [Back]: ")))
+       (setq wp (pf:askpoint (strcat "  Point on the Pt." nm
+                                     " side - pick it or type its number")
+                             "Enter = done" T cands *PF-SNAP*))
        (cond
          ((null wp) (setq done T))
-         ((= (type wp) 'STR)             ; Back: un-pick the last waypoint
+         ((eq wp 'PF-BACK)               ; Back: un-pick the last waypoint
           (if spec
             (progn
               (pf:temp-kill (car marks))
@@ -3617,7 +3806,7 @@
               (princ "\n  Stepping back one point."))
             (setq done 'PF-BACK)))       ; none yet: back to the choice
          (T
-          (setq wp (pf:snap-break wp dpts))
+          (setq wp (car wp))
           ;; the dashed ring is scaffolding: it confirms the pick and
           ;; clears itself when the command ends (or on a Back)
           (setq mk (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp))))
@@ -3648,7 +3837,7 @@
 ;; first offered the bottom (Enter or No skips it - the ABHD ending);
 ;; without, the flow starts straight away (the ADAB command, which
 ;; exists only for this).
-(defun pf:bottom (segs dpts ask / ans s1 s2 d1 d2 sp1 sp2 dp1 dp2
+(defun pf:bottom (segs dpts ask / ans s1 s2 d1 d2 sp1 sp2 dp1 dp2 cands
                                    back off1 off2 off3 o1 o2 o3 bfl
                                    lines nm1 nm2 g1 g2 g1m g2m
                                    slopemarks stage go quit v e)
@@ -3657,7 +3846,7 @@
   ;; question and removing the scaffolding it drew.  Enter at a pick
   ;; still cancels the whole bottom, as before.  A break line whose
   ;; ends land wrong re-opens its own pick instead of aborting.
-  (setq stage (if ask 0 1) go T quit nil)
+  (setq stage (if ask 0 1) go T quit nil cands (pf:cands-of dpts))
   (while (and go (not quit))
     (cond
       ;; -- offer the bottom (the ABHD ending; ADAB starts at 1)
@@ -3677,95 +3866,97 @@
           (if (= ans "Yes") (setq stage 1) (setq go nil)))))
 
       ;; -- the shallow break, one end per stage
+      ;; Each end is a survey point NAMED - clicked, or typed by number
+      ;; - and a second end that is the first one again is refused
+      ;; where it stands, so a break line of no length is never carried
+      ;; on to be found later
       ((= stage 1)
        (princ "\n\n  SHALLOW BREAK - where the flat shallow floor starts sloping down.")
-       (princ "\n  Pick its two ends (snap to the survey points).")
+       (princ "\n  Name its two ends - click each survey point, or type its number.")
        (setq pf-phase "picking the shallow break")
-       (if ask (initget "Back Undo") (initget ""))
-       (setq v (getpoint (strcat "\n  First shallow break point"
-                                 (if ask " [Back]" "") ": ")))
+       (setq v (pf:askpoint "  First shallow break point" "Enter = no bottom"
+                            ask cands *PF-SNAP*))
        (cond
          ((null v)
           (princ "\n  (point pick cancelled - the pool bottom was not added)")
           (setq quit T))
-         ((= (type v) 'STR) (setq stage 0))
-         (T (setq s1 v stage 2))))
+         ((eq v 'PF-BACK) (setq stage 0))
+         (T (setq s1 (car v) stage 2))))
       ((= stage 2)
-       (initget "Back Undo")
-       (setq v (getpoint s1 "\n  Second shallow break point [Back]: "))
+       (setq v (pf:askpoint (strcat "  Second shallow break point, from Pt."
+                                    (pf:pt-name s1))
+                            "Enter = no bottom" T cands *PF-SNAP*))
        (cond
          ((null v)
           (princ "\n  (point pick cancelled - the pool bottom was not added)")
           (setq quit T))
-         ((= (type v) 'STR) (setq stage 1))
-         (T (setq s2 v stage 3))))
+         ((eq v 'PF-BACK) (setq stage 1))
+         ((< (pf:dist (car v) s1) *PF-EXACT-EPS*)
+          (princ (strcat "\n  (that is Pt." (pf:pt-name s1)
+                         " again - the shallow break needs two different"
+                         " points)")))
+         (T (setq s2 (car v) stage 3))))
 
       ;; -- the deep break
       ((= stage 3)
        (princ "\n  DEEP BREAK - where the slope levels out into the hopper.")
        (setq pf-phase "picking the deep break")
-       (initget "Back Undo")
-       (setq v (getpoint "\n  First deep break point [Back]: "))
+       (setq v (pf:askpoint "  First deep break point" "Enter = no bottom"
+                            T cands *PF-SNAP*))
        (cond
          ((null v)
           (princ "\n  (point pick cancelled - the pool bottom was not added)")
           (setq quit T))
-         ((= (type v) 'STR) (setq stage 2))
-         (T (setq d1 v stage 4))))
+         ((eq v 'PF-BACK) (setq stage 2))
+         (T (setq d1 (car v) stage 4))))
       ((= stage 4)
-       (initget "Back Undo")
-       (setq v (getpoint d1 "\n  Second deep break point [Back]: "))
+       (setq v (pf:askpoint (strcat "  Second deep break point, from Pt."
+                                    (pf:pt-name d1))
+                            "Enter = no bottom" T cands *PF-SNAP*))
        (cond
          ((null v)
           (princ "\n  (point pick cancelled - the pool bottom was not added)")
           (setq quit T))
-         ((= (type v) 'STR) (setq stage 3))
+         ((eq v 'PF-BACK) (setq stage 3))
+         ((< (pf:dist (car v) d1) *PF-EXACT-EPS*)
+          (princ (strcat "\n  (that is Pt." (pf:pt-name d1)
+                         " again - the deep break needs two different"
+                         " points)")))
          (T
-          (setq d2 v)
-          ;; break ends snap to survey points, like declared walls do
-          (setq s1 (pf:snap-break s1 dpts) s2 (pf:snap-break s2 dpts)
-                d1 (pf:snap-break d1 dpts) d2 (pf:snap-break d2 dpts))
-          (cond
-            ((< (pf:dist s1 s2) *PF-EXACT-EPS*)
-             (princ "\n  (both ends of the shallow break landed on the same survey point - pick it again)")
-             (setq stage 1))
-            ((< (pf:dist d1 d2) *PF-EXACT-EPS*)
-             (princ "\n  (both ends of the deep break landed on the same survey point - pick it again)")
-             (setq stage 3))
-            (T
-             ;; the break ends land exactly on the kept perimeter
-             (setq sp1  (pf:curve-near s1 segs)
-                   sp2  (pf:curve-near s2 segs)
-                   dp1  (pf:curve-near d1 segs)
-                   dp2  (pf:curve-near d2 segs)
-                   back (pf:hopper-back dp1 dp2 sp1 sp2 dpts))
-             (cond
-               ((null back)
-                (princ (strcat "\n  (no survey point lies beyond the"
-                               " deep break - are the two break lines"
-                               " swapped?  Pick the deep break again)"))
-                (setq stage 3))
-               (T
-                ;; both break lines go down now, solid, so what was
-                ;; declared is visible while the offsets are typed;
-                ;; they stay scaffolding until the whole flow lands.
-                ;; A re-commit (after a Back) sweeps the old pair first.
-                (foreach e lines (pf:temp-kill e))
-                (pf:ensure-layer *PF-POOL-LAYER* *PF-POOL-COLOUR*)
-                (setq lines (list (pf:temp-add (pf:tag-mine
-                                    (pf:make-line sp1 sp2 nil nil)))
-                                  (pf:temp-add (pf:tag-mine
-                                    (pf:make-line dp1 dp2 nil nil)))))
-                (princ (strcat "\n  Back of the hopper: Pt."
-                               (pf:pt-name back)
-                               " (the survey point straight out from"
-                               " the deep break)."))
-                (setq nm1 (pf:pt-name d1)
-                      nm2 (pf:pt-name d2))
-                (princ "\n  Three offsets pull the hopper in from the perimeter;")
-                (princ "\n  they blend gradually where they differ.  Type inches (42)")
-                (princ "\n  or feet and inches (3'6).")
-                (setq stage 5))))))))
+          (setq d2 (car v))
+          ;; the break ends land exactly on the kept perimeter
+           (setq sp1  (pf:curve-near s1 segs)
+                 sp2  (pf:curve-near s2 segs)
+                 dp1  (pf:curve-near d1 segs)
+                 dp2  (pf:curve-near d2 segs)
+                 back (pf:hopper-back dp1 dp2 sp1 sp2 dpts))
+           (cond
+             ((null back)
+              (princ (strcat "\n  (no survey point lies beyond the"
+                             " deep break - are the two break lines"
+                             " swapped?  Pick the deep break again)"))
+              (setq stage 3))
+             (T
+              ;; both break lines go down now, solid, so what was
+              ;; declared is visible while the offsets are typed;
+              ;; they stay scaffolding until the whole flow lands.
+              ;; A re-commit (after a Back) sweeps the old pair first.
+              (foreach e lines (pf:temp-kill e))
+              (pf:ensure-layer *PF-POOL-LAYER* *PF-POOL-COLOUR*)
+              (setq lines (list (pf:temp-add (pf:tag-mine
+                                  (pf:make-line sp1 sp2 nil nil)))
+                                (pf:temp-add (pf:tag-mine
+                                  (pf:make-line dp1 dp2 nil nil)))))
+              (princ (strcat "\n  Back of the hopper: Pt."
+                             (pf:pt-name back)
+                             " (the survey point straight out from"
+                             " the deep break)."))
+              (setq nm1 (pf:pt-name d1)
+                    nm2 (pf:pt-name d2))
+              (princ "\n  Three offsets pull the hopper in from the perimeter;")
+              (princ "\n  they blend gradually where they differ.  Type inches (42)")
+              (princ "\n  or feet and inches (3'6).")
+              (setq stage 5))))))
 
       ;; -- the three hopper offsets
       ((= stage 5)
@@ -3935,36 +4126,34 @@
 ;; markers it drew in pf-decl-marks so the caller can sweep them if the
 ;; step is later re-opened from the one below it.
 
-(defun pf:declare-walls ( / out go wp1 wp2 mk again res)
+(defun pf:declare-walls (cands / out go c1 c2 mk again res)
   (setq out nil pf-decl-marks nil go T res nil)
   (while go
     (setq pf-phase "picking a straight wall")
-    (initget "Back Undo")
-    (setq wp1 (getpoint "\n  First end of the straight wall [Back]: "))
+    (setq c1 (pf:askpoint
+               "  First end of the straight wall - pick it or type its number"
+               "Enter = done" T cands *PF-SNAP*))
     (cond
-      ((pf:back-kw wp1)
+      ((eq c1 'PF-BACK)
        (if pf-decl-marks
          (progn (pf:temp-kill (car pf-decl-marks))
                 (setq pf-decl-marks (cdr pf-decl-marks) out (cdr out))
                 (princ "\n  Stepping back one wall."))
          (progn (princ "\n  Already at the first wall.")
                 (setq go nil res T))))
-      ((null wp1) (setq go nil))
+      ((null c1) (setq go nil))
       (T
-       (setq pf-phase "picking a straight wall")
-       (initget "Back Undo")
-       (setq wp2 (getpoint wp1 "\n  Second end [Back]: "))
+       (setq c2 (pf:ask-wall-end c1 cands))
        (cond
          ;; Back at the second end re-asks the first: nothing was
          ;; committed yet, so there is no marker to sweep
-         ((pf:back-kw wp2) (princ "\n  Stepping back one point."))
-         ((null wp2) (setq go nil))
+         ((eq c2 'PF-BACK) (princ "\n  Stepping back one point."))
          (T
-          (setq wp1 (pf:2d wp1)
-                wp2 (pf:2d wp2)
-                mk  (pf:temp-add (pf:tag-mine (pf:draw-wall-marker wp1 wp2)))
+          (setq mk  (pf:temp-add (pf:tag-mine
+                      (pf:draw-wall-marker (car c1) (car c2))))
                 pf-decl-marks (cons mk pf-decl-marks)
-                out (cons (list wp1 wp2) out))
+                out (cons (list c1 c2) out))
+          (princ (strcat "\n  Wall Pt." (cadr c1) " - Pt." (cadr c2) "."))
           (initget "Yes No Back Undo")
           (setq again (getkword "\n  Another straight line? [Yes/No/Back] <No>: "))
           (cond
@@ -3975,46 +4164,50 @@
             ((/= again "Yes") (setq go nil))))))))
   (if res 'PF-BACK (reverse out)))
 
-(defun pf:declare-corners ( / out go wp1 mk res)
+(defun pf:declare-corners (cands / out go c mk res)
   (setq out nil pf-decl-marks nil go T res nil)
   (while go
     (setq pf-phase "picking a sharp corner")
-    (initget "Back Undo")
-    (setq wp1 (getpoint "\n  Corner point (Enter when done) [Back]: "))
+    (setq c (pf:askpoint "  Corner point - pick it or type its number"
+                         "Enter = done" T cands *PF-SNAP*))
     (cond
-      ((pf:back-kw wp1)
+      ((eq c 'PF-BACK)
        (if pf-decl-marks
          (progn (pf:temp-kill (car pf-decl-marks))
                 (setq pf-decl-marks (cdr pf-decl-marks) out (cdr out))
                 (princ "\n  Stepping back one corner."))
          (progn (princ "\n  Already at the first corner.")
                 (setq go nil res T))))
-      ((null wp1) (setq go nil))
-      (T (setq wp1 (pf:2d wp1)
-               mk  (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp1)))
+      ((null c) (setq go nil))
+      ((pf:memb (car c) (mapcar 'car out))
+       (princ (strcat "\n  Pt." (cadr c) " is already declared a corner.")))
+      (T (setq mk  (pf:temp-add (pf:tag-mine (pf:draw-corner-marker (car c))))
                pf-decl-marks (cons mk pf-decl-marks)
-               out (cons wp1 out)))))
+               out (cons c out))
+         (princ (strcat "\n  Corner Pt." (cadr c) ".")))))
   (if res 'PF-BACK (reverse out)))
 
-(defun pf:declare-holds ( / out go wp1 mk res)
+(defun pf:declare-holds (cands / out go c mk res)
   (setq out nil pf-decl-marks nil go T res nil)
   (while go
     (setq pf-phase "picking a held point")
-    (initget "Back Undo")
-    (setq wp1 (getpoint "\n  Point to hold exactly (Enter when done) [Back]: "))
+    (setq c (pf:askpoint "  Point to hold exactly - pick it or type its number"
+                         "Enter = done" T cands *PF-SNAP*))
     (cond
-      ((pf:back-kw wp1)
+      ((eq c 'PF-BACK)
        (if pf-decl-marks
          (progn (pf:temp-kill (car pf-decl-marks))
                 (setq pf-decl-marks (cdr pf-decl-marks) out (cdr out))
                 (princ "\n  Stepping back one held point."))
          (progn (princ "\n  Already at the first held point.")
                 (setq go nil res T))))
-      ((null wp1) (setq go nil))
-      (T (setq wp1 (pf:2d wp1)
-               mk  (pf:temp-add (pf:tag-mine (pf:draw-hold-marker wp1)))
+      ((null c) (setq go nil))
+      ((pf:memb (car c) (mapcar 'car out))
+       (princ (strcat "\n  Pt." (cadr c) " is already held.")))
+      (T (setq mk  (pf:temp-add (pf:tag-mine (pf:draw-hold-marker (car c))))
                pf-decl-marks (cons mk pf-decl-marks)
-               out (cons wp1 out)))))
+               out (cons c out))
+         (princ (strcat "\n  Held Pt." (cadr c) ".")))))
   (if res 'PF-BACK (reverse out)))
 
 ;; ---- redo-time editing of walls and corners --------------------------
@@ -4038,11 +4231,11 @@
       (setq keep (cons en keep))))
   (setq pf-temp (reverse keep)))
 
-;; Add or remove declared straight walls.  Ends snap to the survey
-;; points; each change is confirmed by name and the dashed markers
-;; follow.
-(defun pf:edit-walls (dpts / ans wp1 wp2 w1 w2 best bd w d res)
-  (setq ans T res nil)
+;; Add or remove declared straight walls.  Ends are NAMED - clicked or
+;; typed by number, out of the points in the fit; each change is
+;; confirmed by name and the dashed markers follow.
+(defun pf:edit-walls (dpts / cands ans c1 c2 wp1 best bd w d res)
+  (setq ans T res nil cands (pf:cands-of dpts))
   (while ans
     (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
@@ -4052,24 +4245,20 @@
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq pf-phase "picking a straight wall")
-       (initget "Back Undo")
-       (setq wp1 (getpoint "\n  First end of the straight wall [Back]: "))
-       (if (pf:back-kw wp1) (setq wp1 nil wp2 nil)
+       (setq c1 (pf:askpoint
+                  "  First end of the straight wall - pick it or type its number"
+                  "Enter = none" T cands *PF-SNAP*)
+             c2 nil)
+       (if (and c1 (not (eq c1 'PF-BACK)))
          (progn
-           (initget "Back Undo")
-           (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
-           (if (pf:back-kw wp2) (setq wp2 nil))))
-       (if wp2
+           (setq c2 (pf:ask-wall-end c1 cands))
+           (if (eq c2 'PF-BACK) (setq c2 nil))))
+       (if c2
          (progn
-           (setq w1 (pf:snap-break wp1 dpts)
-                 w2 (pf:snap-break wp2 dpts))
-           (if (< (pf:dist w1 w2) *PF-EXACT-EPS*)
-             (princ "\n  (both ends landed on the same survey point - ignored)")
-             (progn
-               (setq pf-walls (append pf-walls (list (list w1 w2))))
-               (pf:temp-add (pf:tag-mine (pf:draw-wall-marker w1 w2)))
-               (princ (strcat "\n  wall Pt." (pf:pt-name w1)
-                              " - Pt." (pf:pt-name w2) " added")))))))
+           (setq pf-walls (append pf-walls (list (list (car c1) (car c2)))))
+           (pf:temp-add (pf:tag-mine (pf:draw-wall-marker (car c1) (car c2))))
+           (princ (strcat "\n  wall Pt." (cadr c1)
+                          " - Pt." (cadr c2) " added")))))
       ((= ans "Remove")
        (if (null pf-walls)
          (princ "\n  (no straight walls to remove)")
@@ -4099,8 +4288,8 @@
 ;; Add or remove declared sharp corners the same way.  (The corners
 ;; the fitter finds by itself - turns over *PF-CORNER-ANG* - are not
 ;; declarations and cannot be removed here.)
-(defun pf:edit-corners (dpts / ans wp1 w1 best bd w res)
-  (setq ans T res nil)
+(defun pf:edit-corners (dpts / cands ans c best w res)
+  (setq ans T res nil cands (pf:cands-of dpts))
   (while ans
     (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
@@ -4110,33 +4299,29 @@
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq pf-phase "picking a sharp corner")
-       (initget "Back Undo")
-       (setq wp1 (getpoint "\n  Corner point [Back]: "))
-       (if (pf:back-kw wp1) (setq wp1 nil))
-       (if wp1
-         (progn
-           (setq w1 (pf:snap-break wp1 dpts))
-           (if (pf:memb w1 pf-corners)
-             (princ "\n  (that corner is already declared)")
-             (progn
-               (setq pf-corners (append pf-corners (list w1)))
-               (pf:temp-add (pf:tag-mine (pf:draw-corner-marker w1)))
-               (princ (strcat "\n  corner Pt." (pf:pt-name w1)
-                              " added")))))))
+       (setq c (pf:askpoint "  Corner point - pick it or type its number"
+                            "Enter = none" T cands *PF-SNAP*))
+       (if (and c (not (eq c 'PF-BACK)))
+         (if (pf:memb (car c) pf-corners)
+           (princ "\n  (that corner is already declared)")
+           (progn
+             (setq pf-corners (append pf-corners (list (car c))))
+             (pf:temp-add (pf:tag-mine (pf:draw-corner-marker (car c))))
+             (princ (strcat "\n  corner Pt." (cadr c) " added"))))))
       ((= ans "Remove")
        (if (null pf-corners)
          (princ "\n  (no declared corners to remove)")
          (progn
            (setq pf-phase "removing a sharp corner")
-           (initget "Back Undo")
-           (setq wp1 (getpoint "\n  Pick the declared corner to remove [Back]: "))
-           (if (pf:back-kw wp1) (setq wp1 nil))
-           (if wp1
-             (progn
-               (setq wp1 (pf:2d wp1) best nil bd nil)
-               (foreach w pf-corners
-                 (if (or (null bd) (< (pf:dist wp1 w) bd))
-                   (setq best w bd (pf:dist wp1 w))))
+           (setq c (pf:askpoint
+                     "  The declared corner to remove - pick it or type its number"
+                     "Enter = none" T cands *PF-SNAP*))
+           (cond
+             ((or (null c) (eq c 'PF-BACK)) nil)
+             ((not (pf:memb (car c) pf-corners))
+              (princ (strcat "\n  (Pt." (cadr c) " is not a declared corner)")))
+             (T
+               (setq best (pf:nearest (car c) pf-corners))
                (setq pf-corners (pf:remove best pf-corners))
                ;; the rings share their look with the omit markers;
                ;; redraw the corner and hold rings (spent omit rings
@@ -4152,8 +4337,8 @@
   (if res 'PF-BACK))
 
 ;; Add or remove HELD points the same way.
-(defun pf:edit-holds (dpts / ans wp1 w1 best bd w res)
-  (setq ans T res nil)
+(defun pf:edit-holds (dpts / cands ans c best w res)
+  (setq ans T res nil cands (pf:cands-of dpts))
   (while ans
     (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
@@ -4163,33 +4348,29 @@
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq pf-phase "picking a held point")
-       (initget "Back Undo")
-       (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
-       (if (pf:back-kw wp1) (setq wp1 nil))
-       (if wp1
-         (progn
-           (setq w1 (pf:snap-break wp1 dpts))
-           (if (pf:memb w1 pf-holds)
-             (princ "\n  (that point is already held)")
-             (progn
-               (setq pf-holds (append pf-holds (list w1)))
-               (pf:temp-add (pf:tag-mine (pf:draw-hold-marker w1)))
-               (princ (strcat "\n  held Pt." (pf:pt-name w1)
-                              " added")))))))
+       (setq c (pf:askpoint "  Point to hold exactly - pick it or type its number"
+                            "Enter = none" T cands *PF-SNAP*))
+       (if (and c (not (eq c 'PF-BACK)))
+         (if (pf:memb (car c) pf-holds)
+           (princ "\n  (that point is already held)")
+           (progn
+             (setq pf-holds (append pf-holds (list (car c))))
+             (pf:temp-add (pf:tag-mine (pf:draw-hold-marker (car c))))
+             (princ (strcat "\n  held Pt." (cadr c) " added"))))))
       ((= ans "Remove")
        (if (null pf-holds)
          (princ "\n  (no held points to remove)")
          (progn
            (setq pf-phase "removing a held point")
-           (initget "Back Undo")
-           (setq wp1 (getpoint "\n  Pick the held point to release [Back]: "))
-           (if (pf:back-kw wp1) (setq wp1 nil))
-           (if wp1
-             (progn
-               (setq wp1 (pf:2d wp1) best nil bd nil)
-               (foreach w pf-holds
-                 (if (or (null bd) (< (pf:dist wp1 w) bd))
-                   (setq best w bd (pf:dist wp1 w))))
+           (setq c (pf:askpoint
+                     "  The held point to release - pick it or type its number"
+                     "Enter = none" T cands *PF-SNAP*))
+           (cond
+             ((or (null c) (eq c 'PF-BACK)) nil)
+             ((not (pf:memb (car c) pf-holds))
+              (princ (strcat "\n  (Pt." (cadr c) " is not a held point)")))
+             (T
+               (setq best (pf:nearest (car c) pf-holds))
                (setq pf-holds (pf:remove best pf-holds))
                ;; redraw the rings to match what is left
                (pf:sweep-marks "CIRCLE")
@@ -4232,7 +4413,7 @@
                          nunsup nocs segs pts dpts allow loop tour ok
                          npt pf-nmoved again omits pts2 ent ring
                          pf-omitted pf-miss-pct pf-walls pf-corners
-                         pf-holds pf-ptnames pf-dim-warned)
+                         pf-holds pf-ptnames pf-dim-warned cands cand)
   ;; -- steps 1 to 6: the settings, walked as one chain --------------
   ;; Every question after the first offers Back (Undo is its hidden
   ;; synonym), so a mistyped tolerance or a wrong Yes costs one
@@ -4251,6 +4432,10 @@
         cmd    (if simp "SIMPABHD" "ABHD")
         lo     (if simp 4 1))
   (if simp (setq tol *PF-SIMP-TOL*))
+  ;; steps 4 to 6 name survey points before any are selected, so the
+  ;; whole drawing's are the candidates there; the selection decides
+  ;; afterwards which of the declarations it holds
+  (setq cands nil)
   (while (<= step 6)
     (cond
 
@@ -4319,8 +4504,8 @@
        (setq pf-phase "asking about straight lines")
        (princ (strcat (pf:step-n step simp)
                       "does the pool edge have any dead-straight walls?"))
-       (princ "\n  If Yes you will pick the two end points of each (snap to the")
-       (princ "\n  survey points); a dashed line marks each declared wall.")
+       (princ "\n  If Yes you will name the two end points of each - click the")
+       (princ "\n  survey point, or type its number; a dashed line marks each wall.")
        (initget "Yes No Back Undo")
        (setq ans      (getkword "\n  Any straight lines? [Yes/No/Back] <No>: ")
              rawwalls nil)
@@ -4328,11 +4513,18 @@
          ((member ans '("Back" "Undo"))
           (setq step (pf:step-back step lo)))
          ((= ans "Yes")
-          (setq rawwalls (pf:declare-walls)
+          (if (null cands) (setq cands (pf:collect-points)))
+          (setq rawwalls (if cands (pf:declare-walls cands) nil)
                 wallmk   pf-decl-marks)
-          (if (eq rawwalls 'PF-BACK)
-            (setq rawwalls nil)               ; re-ask this step's Yes/No
-            (progn
+          (cond
+            ((null cands)
+             (princ (strcat "\n  No survey points in this drawing to declare"
+                            " a wall on - a wall is named by its two"
+                            " survey points."))
+             (setq step 5))
+            ((eq rawwalls 'PF-BACK)
+             (setq rawwalls nil))              ; re-ask this step's Yes/No
+            (T
               (if rawwalls
                 (princ (strcat "\n  " (itoa (length rawwalls))
                                " straight wall(s) noted - the dashed markers on "
@@ -4353,7 +4545,7 @@
        (princ (strcat (pf:step-n step simp)
                       "are there any sharp corners the fit must not round off?"))
        (princ "\n  Obvious ones are found automatically; declare the gentler ones here.")
-       (princ "\n  If Yes you will pick each corner point (snap to the survey points).")
+       (princ "\n  If Yes you will name each corner point - click it, or type its number.")
        (initget "Yes No Back Undo")
        (setq ans     (getkword "\n  Any sharp corners? [Yes/No/Back] <No>: ")
              rawcnrs nil)
@@ -4362,11 +4554,17 @@
           (princ "\n  Stepping back one question.")
           (setq step 4))
          ((= ans "Yes")
-          (setq rawcnrs (pf:declare-corners)
+          (if (null cands) (setq cands (pf:collect-points)))
+          (setq rawcnrs (if cands (pf:declare-corners cands) nil)
                 cnrmk   pf-decl-marks)
-          (if (eq rawcnrs 'PF-BACK)
-            (setq rawcnrs nil)
-            (progn
+          (cond
+            ((null cands)
+             (princ (strcat "\n  No survey points in this drawing to declare"
+                            " a corner on."))
+             (setq step 6))
+            ((eq rawcnrs 'PF-BACK)
+             (setq rawcnrs nil))
+            (T
               (if rawcnrs
                 (princ (strcat "\n  " (itoa (length rawcnrs))
                                " corner(s) noted - the markers clear themselves"
@@ -4385,8 +4583,8 @@
        (princ (strcat (pf:step-n step simp)
                       "any points that must be held ABSOLUTELY?"))
        (princ "\n  A held point can never be fudged: the line passes through it")
-       (princ "\n  exactly, in every candidate.  If Yes you will pick each one")
-       (princ "\n  (snap to the survey points); a small dashed ring marks it.")
+       (princ "\n  exactly, in every candidate.  If Yes you will name each one -")
+       (princ "\n  click it, or type its number; a small dashed ring marks it.")
        (initget "Yes No Back Undo")
        (setq ans      (getkword "\n  Any held points? [Yes/No/Back] <No>: ")
              rawholds nil)
@@ -4395,11 +4593,16 @@
           (princ "\n  Stepping back one question.")
           (setq step 5))
          ((= ans "Yes")
-          (setq rawholds (pf:declare-holds)
+          (if (null cands) (setq cands (pf:collect-points)))
+          (setq rawholds (if cands (pf:declare-holds cands) nil)
                 holdmk   pf-decl-marks)
-          (if (eq rawholds 'PF-BACK)
-            (setq rawholds nil)
-            (progn
+          (cond
+            ((null cands)
+             (princ (strcat "\n  No survey points in this drawing to hold."))
+             (setq step 7))
+            ((eq rawholds 'PF-BACK)
+             (setq rawholds nil))
+            (T
               (if rawholds
                 (princ (strcat "\n  " (itoa (length rawholds))
                                " held point(s) noted - the markers clear"
@@ -4495,43 +4698,28 @@
       ;; by up to TOL
       (setq dpts  (if pts (pf:dedupe pts))
             allow (pf:ceil (* (pf:misspct) (length dpts))))
-      ;; snap the declared straight-wall ends onto actual survey
-      ;; points - arc and wall endpoints always sit ON points
+      ;; a declaration was made on a NAMED point before the selection
+      ;; existed, so it is matched to the selection by that point's own
+      ;; identity - and one made on a point the selection does not hold
+      ;; is named and dropped, never snapped onto some other point
       (setq pf-walls nil)
       (foreach w rawwalls
-        (setq w1 (pf:nearest (car w) dpts)
-              w2 (pf:nearest (cadr w) dpts))
-        (cond
-          ((or (null w1) (null w2)) nil)
-          ((< (pf:dist w1 w2) *PF-EXACT-EPS*)
-           (princ "\n  (both ends of a declared wall landed on the same survey point - that wall is ignored)"))
-          (T
-           (if (or (> (pf:dist (car w) w1) (* *PF-PICK-WARN* tol))
-                   (> (pf:dist (cadr w) w2) (* *PF-PICK-WARN* tol)))
-             (princ "\n  (a declared wall end was picked well away from any survey point - snapped to the nearest one)"))
-           (setq pf-walls (cons (list w1 w2) pf-walls)))))
+        (if (and (pf:declared-in (car w) dpts "wall")
+                 (pf:declared-in (cadr w) dpts "wall"))
+          (setq pf-walls (cons (list (car (car w)) (car (cadr w)))
+                               pf-walls))))
       (setq pf-walls (reverse pf-walls))
-      ;; declared corners snap onto survey points the same way
       (setq pf-corners nil)
       (foreach w rawcnrs
-        (setq w1 (pf:nearest w dpts))
-        (if w1
-          (progn
-            (if (> (pf:dist w w1) (* *PF-PICK-WARN* tol))
-              (princ "\n  (a declared corner was picked well away from any survey point - snapped to the nearest one)"))
-            (setq pf-corners (cons w1 pf-corners)))))
+        (if (pf:declared-in w dpts "corner")
+          (setq pf-corners (cons (car w) pf-corners))))
       (setq pf-corners (reverse pf-corners))
-      ;; held points snap onto survey points the same way; duplicates
-      ;; collapse to one
+      ;; duplicates collapse to one
       (setq pf-holds nil)
       (foreach w rawholds
-        (setq w1 (pf:nearest w dpts))
-        (if w1
-          (progn
-            (if (> (pf:dist w w1) (* *PF-PICK-WARN* tol))
-              (princ "\n  (a held point was picked well away from any survey point - snapped to the nearest one)"))
-            (if (not (pf:memb w1 pf-holds))
-              (setq pf-holds (cons w1 pf-holds))))))
+        (if (and (pf:declared-in w dpts "hold")
+                 (not (pf:memb (car w) pf-holds)))
+          (setq pf-holds (cons (car w) pf-holds))))
       (setq pf-holds (reverse pf-holds))
       (if (> (length dpts) *PF-SLOW-NOTE*)
         (princ (strcat "\n" cmd ": " (itoa (length dpts))
@@ -4593,25 +4781,27 @@
                    (setq pf-phase "picking points to omit"
                          omits    nil)
                    (princ "\n\nRedoing the fit.  Any points to leave out this time?")
-                   (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
-                   (princ "\n  anything the line should not chase; each gets a dashed ring.")
+                   (princ "\n  Name each one - click it, or type its number (Enter for none):")
+                   (princ "\n  mis-shots, duplicates, anything the line should not chase;")
+                   (princ "\n  each gets a dashed ring.")
                    (if pf-omitted
                      (princ (strcat "\n  " (itoa (length pf-omitted))
                                     " point(s) are already out -"
-                                    " picking one of those puts it"
+                                    " naming one of those puts it"
                                     " BACK IN.")))
-                   (while (setq wp1 (getpoint
-                                      "\n  Point to omit - or a ringed one to restore (Enter when done): "))
-                     (setq wp1 (pf:2d wp1)
-                           w1  (pf:nearest wp1 dpts)
-                           w2  (pf:nearest wp1 (mapcar 'car pf-omitted)))
+                   (while (setq cand (pf:askpoint
+                                       "  Point to omit, or a ringed one to restore - pick it or type its number"
+                                       "Enter = done" nil
+                                       (pf:cands-of
+                                         (append dpts (mapcar 'car pf-omitted)))
+                                       *PF-SNAP*))
+                     (setq w1 (car cand)
+                           w2 (pf:nearest w1 (mapcar 'car pf-omitted)))
                      (cond
-                       ;; nearer to an already-omitted point: this
-                       ;; click un-omits it - the saved entries (its
-                       ;; duplicates too) rejoin the fit, its ring goes
-                       ((and w2 (or (null w1)
-                                    (<= (pf:dist wp1 w2)
-                                        (pf:dist wp1 w1))))
+                       ;; a ringed point: naming it again un-omits it -
+                       ;; the saved entries (its duplicates too) rejoin
+                       ;; the fit, its ring goes
+                       ((and w2 (< (pf:dist w1 w2) *PF-EXACT-EPS*))
                         (setq ent        (assoc w2 pf-omitted)
                               pts        (append pts (cadr ent))
                               dpts       (pf:dedupe pts)
@@ -5171,12 +5361,17 @@
                  " points, rounded to"))
   (princ "\n     the nearest, worked out once they are selected.  None =")
   (princ "\n     unlimited; either way it binds in every mode).")
-  (princ "\n  4. Dead-straight walls: pick both ends, dashed marker, comes out")
+  (princ "\n  4. Dead-straight walls: name both ends, dashed marker, comes out")
   (princ "\n     as a straight LINE no arc may swallow or cross.")
-  (princ "\n  5. Sharp corners: pick points where tangency is waived.")
-  (princ "\n  6. Held points: pick points the line must pass through EXACTLY -")
+  (princ "\n  5. Sharp corners: name points where tangency is waived.")
+  (princ "\n  6. Held points: name points the line must pass through EXACTLY -")
   (princ "\n     never fudged, never spent from the miss allowance; tangency")
   (princ "\n     still applies at them (they are not corners).")
+  (princ "\n     A point is NAMED the way PERPMARK names one: click it, or type")
+  (princ "\n     its number (17, Pt.17 and #17 are the same point).  A click has")
+  (princ (strcat "\n     to land within " (rtos *PF-SNAP* 2 0)
+                 " of a point; a miss is re-asked, never snapped"))
+  (princ "\n     to whatever was nearest.")
   (princ "\n  7. Select the points (and the POOL guide if you have one).")
   (princ "\n  SIMPABHD asks NONE of the first three and draws five perimeters")
   (princ "\n  instead of three - the least error there is, the fewest curves")

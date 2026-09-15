@@ -31,7 +31,7 @@
 ;;; unchanged: nearest-neighbour tour + 2-opt, arcs grown span by span
 ;;; inside the tangent window, the seam held closed.  Open drops the
 ;;; loop: the two ends of the run are the farthest-apart pair of
-;;; points (or two points you pick on a Redo), the ordering keeps both
+;;; points (or two points you name on a Redo), the ordering keeps both
 ;;; ends fixed, and the fitter walks the path once with no seam - the
 ;;; first span starts free and the last simply ends.
 ;;;
@@ -41,6 +41,21 @@
 ;;; span ends ON it and the fitted line passes through it exactly, in
 ;;; every candidate; it costs nothing from the miss allowance and the
 ;;; tangency window still applies at its joint (it is not a corner).
+;;;
+;;; NAMING A POINT: every question about a scanned point - a stretch
+;;; end, a corner, a held point, an open run's end, a point to omit -
+;;; is asked PERPMARK's way, because it is a question about a point
+;;; the drawing already holds and not about a place: click the point,
+;;; or type its number where it has one ("17", "Pt.17", "#17" and
+;;; "017" all name the same one; a bare laser POINT has no number and
+;;; is clicked).  A click has to land within *LH-SNAP* of a point to
+;;; pick it; a click on nothing, a number nothing carries and a number
+;;; two points share are re-asked where they stand, never snapped to
+;;; whatever was nearest.  A stretch, corner or hold is declared before
+;;; the points are selected, so it is matched to the selection
+;;; afterwards by the point's own identity - and one declared on a
+;;; point that was not selected is named and dropped, not snapped onto
+;;; some other point.
 ;;;
 ;;; Everything else is ABHD's behaviour, kept on purpose: the miss
 ;;; allowance, declared straight stretches and sharp corners, the
@@ -52,7 +67,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.3")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.4")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -69,6 +84,14 @@
 (setq *LH-MISS-RADIUS*  4.0)        ; radius of those rings (4 inches)
 (setq *LH-PT-TAG*       "number")   ; attribute tag on the point block
                                     ; naming the point, as in "Pt.17"
+(setq *LH-SNAP*         12.0)       ; a CLICK within this of a scanned
+                                    ; point names that point - at a
+                                    ; stretch end, a corner, a held
+                                    ; point, a run end, a point to
+                                    ; omit.  A typed number never uses
+                                    ; it: a name is exact.  12.0 is
+                                    ; what BPCALLOUT, ABFIND and
+                                    ; PERPMARK snap at
 (setq *LH-WALL-LAYER*   "POOL-WALLS") ; layer for the dashed markers of
                                     ; declared straight stretches
 (setq *LH-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
@@ -781,6 +804,186 @@
     (setq d (lh:dist p q))
     (if (or (null bd) (< d bd)) (setq best q bd d)))
   best)
+
+;; ---- naming a scanned point -------------------------------------------
+;; A declaration is ABOUT a scanned point - the wall runs from Pt.17 to
+;; Pt.22, Pt.9 is a corner, Pt.30 is held, Pt.41 is left out - so every
+;; question below NAMES one rather than placing it.  This is PERPMARK's
+;; infrastructure, carried here under this file's own prefix so the
+;; standalone file loads alone (STANDARDS section 4; the grouped build
+;; takes it from CALOFIN-LIB): one prompt takes a click OR a typed
+;; number - "17", "Pt.17", "pt 17", "#17" and "017" all name the same
+;; point - a click has to land within *LH-SNAP* of a point to pick it,
+;; and every miss - a click on nothing, a number nothing carries, a
+;; number two points share - is re-asked where it stands.  What used to
+;; happen: a click ANYWHERE was snapped to the nearest scanned point
+;; after the selection, however far off it landed, and a wall end that
+;; took the wrong point was a bad fit with no visible cause.
+;;
+;; A candidate is (position name): where the point is, and what the
+;; prompts and the report call it.  The position is its IDENTITY - it
+;; is what the fitter holds, and what a declaration made before the
+;; selection is matched to once the selection is in hand.
+
+;; The NUMBER a typed point name carries: the spelling with the spaces,
+;; the hashes and the "Pt." prefix taken off, and nothing else touched.
+;; Only the dot right after PT is a prefix dot - a point genuinely named
+;; "40.5" keeps its decimal.
+(defun lh:as-number (s / out i ch)
+  (setq out "" i 1)
+  (while (<= i (strlen s))
+    (setq ch (substr s i 1))
+    (if (not (member ch '(" " "#")))
+      (setq out (strcat out ch)))
+    (setq i (1+ i)))
+  (if (and (>= (strlen out) 2) (= (strcase (substr out 1 2)) "PT"))
+    (progn
+      (setq out (substr out 3))
+      (if (= (substr out 1 1) ".") (setq out (substr out 2)))))
+  out)
+
+;; One comparable form for a point number, so "35", "Pt.35", "pt 35",
+;; "#35" and "035" all meet in the middle.
+(defun lh:canon (s)
+  (setq s (lh:as-number (strcase s)))
+  (if (distof s 2)
+    (rtos (distof s 2) 2 8)
+    s))
+
+;; Every candidate whose name is the number typed.  More than one is a
+;; sheet that numbers two points the same, and is asked about rather
+;; than guessed at.
+(defun lh:cand-matches (s cands / want out c)
+  (setq want (lh:canon s) out nil)
+  (foreach c cands
+    (if (= (lh:canon (cadr c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;; The candidate nearest PK, when one sits within SNAP of it.  A typed
+;; number never comes here - a name is exact.
+(defun lh:cand-nearest (pk cands snap / best bd c d)
+  (setq best nil bd nil)
+  (foreach c cands
+    (setq d (distance (lh:2d pk) (lh:2d (car c))))
+    (if (and (<= d snap) (or (null bd) (< d bd)))
+      (setq best c bd d)))
+  best)
+
+;; A scanned point, clicked or typed.  One prompt takes both: (initget
+;; 128) is arbitrary input, which hands typed text back from getpoint as
+;; the string it is where a click comes back as the point it is.  The
+;; misses are re-asked HERE rather than unwinding the caller's chain --
+;; a number nothing carries and a click on nothing are typos, not
+;; answers, and the question they belong to is this one.  TAIL is the
+;; prose inside the angle brackets on a prompt whose Enter means
+;; something - "Enter = done", the point Enter takes - and nil when a
+;; point is required.  CANDS are the (position name) candidates and
+;; SNAP how close a click has to land.  Returns the candidate, nil for
+;; Enter, or LH-BACK.
+(defun lh:askpoint (msg tail back cands snap / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (if lzd:ask (lzd:ask msg v) v)
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'LH-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (lh:cand-matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (lh:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (lh:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (lh:cand-nearest v cands snap))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
+
+;; Every scanned point in the DRAWING as a candidate, for the
+;; declarations asked before the selection exists (step 5).  The
+;; classifier is the selection's own: an ab_pt INSERT wherever it
+;; sits, any other INSERT on the POINTS layer, and a plain POINT on
+;; ANY layer - laser exports land wherever the converter put them.  A
+;; point with no number is called "?": it can be clicked, not typed,
+;; which is most of a laser scan.
+(defun lh:collect-points ( / ss i en ed typ nm out)
+  (setq out nil
+        ss  (ssget "_X" '((0 . "INSERT,POINT"))))
+  (if ss
+    (progn
+      (setq i 0)
+      (repeat (sslength ss)
+        (setq en  (ssname ss i)
+              ed  (entget en)
+              typ (cdr (assoc 0 ed))
+              nm  nil)
+        (cond
+          ((= typ "INSERT")
+           (if (or (= (strcase (cdr (assoc 2 ed)))
+                      (strcase *LH-POINT-BLOCK*))
+                   (= (strcase (cdr (assoc 8 ed)))
+                      (strcase *LH-POINT-LAYER*)))
+             (progn
+               (setq nm (lh:block-number en))
+               (setq out (cons (list (lh:2d (cdr (assoc 10 ed)))
+                                     (if (and nm (/= nm "")) nm "?"))
+                               out)))))
+          ((= typ "POINT")
+           (setq out (cons (list (lh:2d (cdr (assoc 10 ed))) "?") out))))
+        (setq i (1+ i)))))
+  (reverse out))
+
+;; The candidates for points already in hand - the selection's, or the
+;; omit list's - named the way the report names them.
+(defun lh:cands-of (qs)
+  (mapcar '(lambda (q) (list q (lh:pt-name q))) qs))
+
+;; T when the named point is one of DPTS.  When it is not, the WHAT
+;; declared on it is named and dropped: it is a declaration about a
+;; point the selection does not hold, never a near miss to be snapped
+;; onto some other point.
+(defun lh:declared-in (cand dpts what)
+  (if (lh:memb (car cand) dpts)
+    T
+    (progn
+      (princ (strcat "\n  (Pt." (cadr cand) " is not among the selected"
+                     " points - the " what " declared on it is dropped)"))
+      nil)))
+
+;; The second end of a stretch from C1: required, and a different point
+;; from C1 - the same one again is refused and re-asked where it
+;; stands.  Returns the candidate or LH-BACK.
+(defun lh:ask-wall-end (c1 cands / c2)
+  (setq c2 (lh:askpoint (strcat "  Second end, from Pt." (cadr c1)
+                                " - pick it or type its number")
+                        nil T cands *LH-SNAP*))
+  (while (and (not (eq c2 'LH-BACK))
+              (< (lh:dist (car c1) (car c2)) *LH-EXACT-EPS*))
+    (princ (strcat "\n  That is Pt." (cadr c1)
+                   " again - a stretch needs two different points."))
+    (setq c2 (lh:askpoint (strcat "  Second end, from Pt." (cadr c1)
+                                  " - pick it or type its number")
+                          nil T cands *LH-SNAP*)))
+  c2)
 
 ;; Index of point P in TOUR (exact-point fuzz), or nil.
 (defun lh:tour-index (p tour / i k q)
@@ -2282,20 +2485,9 @@
       (setq keep (cons en keep))))
   (setq lh-temp (reverse keep)))
 
-;; Snap a picked point onto the nearest scanned point.
-(defun lh:snap-break (p dpts / q)
-  (setq p (lh:2d p)
-        q (lh:nearest p dpts))
-  (if (null q)
-    p
-    (progn
-      (if (> (lh:dist p q) (* 3.0 *LH-TOL*))
-        (princ "\n  (picked well away from any scanned point - snapped to the nearest one)"))
-      q)))
-
 ;; Add or remove declared straight stretches.
-(defun lh:edit-walls (dpts / ans wp1 wp2 w1 w2 best bd w d res)
-  (setq ans T res nil)
+(defun lh:edit-walls (dpts / cands ans c1 c2 wp1 best bd w d res)
+  (setq ans T res nil cands (lh:cands-of dpts))
   (while ans
     (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
@@ -2305,24 +2497,20 @@
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq lh-phase "picking a straight stretch")
-       (initget "Back Undo")
-       (setq wp1 (getpoint "\n  First end of the straight stretch [Back]: "))
-       (if (lh:back-kw wp1) (setq wp1 nil wp2 nil)
+       (setq c1 (lh:askpoint
+                  "  First end of the straight stretch - pick it or type its number"
+                  "Enter = none" T cands *LH-SNAP*)
+             c2 nil)
+       (if (and c1 (not (eq c1 'LH-BACK)))
          (progn
-           (initget "Back Undo")
-           (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
-           (if (lh:back-kw wp2) (setq wp2 nil))))
-       (if wp2
+           (setq c2 (lh:ask-wall-end c1 cands))
+           (if (eq c2 'LH-BACK) (setq c2 nil))))
+       (if c2
          (progn
-           (setq w1 (lh:snap-break wp1 dpts)
-                 w2 (lh:snap-break wp2 dpts))
-           (if (< (lh:dist w1 w2) *LH-EXACT-EPS*)
-             (princ "\n  (both ends landed on the same survey point - ignored)")
-             (progn
-               (setq lh-walls (append lh-walls (list (list w1 w2))))
-               (lh:temp-add (lh:tag-mine (lh:draw-wall-marker w1 w2)))
-               (princ (strcat "\n  stretch Pt." (lh:pt-name w1)
-                              " - Pt." (lh:pt-name w2) " added")))))))
+           (setq lh-walls (append lh-walls (list (list (car c1) (car c2)))))
+           (lh:temp-add (lh:tag-mine (lh:draw-wall-marker (car c1) (car c2))))
+           (princ (strcat "\n  stretch Pt." (cadr c1)
+                          " - Pt." (cadr c2) " added")))))
       ((= ans "Remove")
        (if (null lh-walls)
          (princ "\n  (no straight stretches to remove)")
@@ -2350,8 +2538,8 @@
   (if res 'LH-BACK))
 
 ;; Add or remove declared sharp corners the same way.
-(defun lh:edit-corners (dpts / ans wp1 w1 best bd w res)
-  (setq ans T res nil)
+(defun lh:edit-corners (dpts / cands ans c best w res)
+  (setq ans T res nil cands (lh:cands-of dpts))
   (while ans
     (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
@@ -2361,33 +2549,29 @@
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq lh-phase "picking a sharp corner")
-       (initget "Back Undo")
-       (setq wp1 (getpoint "\n  Corner point [Back]: "))
-       (if (lh:back-kw wp1) (setq wp1 nil))
-       (if wp1
-         (progn
-           (setq w1 (lh:snap-break wp1 dpts))
-           (if (lh:memb w1 lh-corners)
-             (princ "\n  (that corner is already declared)")
-             (progn
-               (setq lh-corners (append lh-corners (list w1)))
-               (lh:temp-add (lh:tag-mine (lh:draw-corner-marker w1)))
-               (princ (strcat "\n  corner Pt." (lh:pt-name w1)
-                              " added")))))))
+       (setq c (lh:askpoint "  Corner point - pick it or type its number"
+                            "Enter = none" T cands *LH-SNAP*))
+       (if (and c (not (eq c 'LH-BACK)))
+         (if (lh:memb (car c) lh-corners)
+           (princ "\n  (that corner is already declared)")
+           (progn
+             (setq lh-corners (append lh-corners (list (car c))))
+             (lh:temp-add (lh:tag-mine (lh:draw-corner-marker (car c))))
+             (princ (strcat "\n  corner Pt." (cadr c) " added"))))))
       ((= ans "Remove")
        (if (null lh-corners)
          (princ "\n  (no declared corners to remove)")
          (progn
            (setq lh-phase "removing a sharp corner")
-           (initget "Back Undo")
-           (setq wp1 (getpoint "\n  Pick the declared corner to remove [Back]: "))
-           (if (lh:back-kw wp1) (setq wp1 nil))
-           (if wp1
-             (progn
-               (setq wp1 (lh:2d wp1) best nil bd nil)
-               (foreach w lh-corners
-                 (if (or (null bd) (< (lh:dist wp1 w) bd))
-                   (setq best w bd (lh:dist wp1 w))))
+           (setq c (lh:askpoint
+                     "  The declared corner to remove - pick it or type its number"
+                     "Enter = none" T cands *LH-SNAP*))
+           (cond
+             ((or (null c) (eq c 'LH-BACK)) nil)
+             ((not (lh:memb (car c) lh-corners))
+              (princ (strcat "\n  (Pt." (cadr c) " is not a declared corner)")))
+             (T
+               (setq best (lh:nearest (car c) lh-corners))
                (setq lh-corners (lh:remove best lh-corners))
                ;; the rings share their look with the omit markers;
                ;; redraw the corner and hold rings (spent omit rings
@@ -2403,8 +2587,8 @@
   (if res 'LH-BACK))
 
 ;; Add or remove HELD points the same way.
-(defun lh:edit-holds (dpts / ans wp1 w1 best bd w res)
-  (setq ans T res nil)
+(defun lh:edit-holds (dpts / cands ans c best w res)
+  (setq ans T res nil cands (lh:cands-of dpts))
   (while ans
     (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
@@ -2414,33 +2598,29 @@
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq lh-phase "picking a held point")
-       (initget "Back Undo")
-       (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
-       (if (lh:back-kw wp1) (setq wp1 nil))
-       (if wp1
-         (progn
-           (setq w1 (lh:snap-break wp1 dpts))
-           (if (lh:memb w1 lh-holds)
-             (princ "\n  (that point is already held)")
-             (progn
-               (setq lh-holds (append lh-holds (list w1)))
-               (lh:temp-add (lh:tag-mine (lh:draw-hold-marker w1)))
-               (princ (strcat "\n  held Pt." (lh:pt-name w1)
-                              " added")))))))
+       (setq c (lh:askpoint "  Point to hold exactly - pick it or type its number"
+                            "Enter = none" T cands *LH-SNAP*))
+       (if (and c (not (eq c 'LH-BACK)))
+         (if (lh:memb (car c) lh-holds)
+           (princ "\n  (that point is already held)")
+           (progn
+             (setq lh-holds (append lh-holds (list (car c))))
+             (lh:temp-add (lh:tag-mine (lh:draw-hold-marker (car c))))
+             (princ (strcat "\n  held Pt." (cadr c) " added"))))))
       ((= ans "Remove")
        (if (null lh-holds)
          (princ "\n  (no held points to remove)")
          (progn
            (setq lh-phase "removing a held point")
-           (initget "Back Undo")
-           (setq wp1 (getpoint "\n  Pick the held point to release [Back]: "))
-           (if (lh:back-kw wp1) (setq wp1 nil))
-           (if wp1
-             (progn
-               (setq wp1 (lh:2d wp1) best nil bd nil)
-               (foreach w lh-holds
-                 (if (or (null bd) (< (lh:dist wp1 w) bd))
-                   (setq best w bd (lh:dist wp1 w))))
+           (setq c (lh:askpoint
+                     "  The held point to release - pick it or type its number"
+                     "Enter = none" T cands *LH-SNAP*))
+           (cond
+             ((or (null c) (eq c 'LH-BACK)) nil)
+             ((not (lh:memb (car c) lh-holds))
+              (princ (strcat "\n  (Pt." (cadr c) " is not a held point)")))
+             (T
+               (setq best (lh:nearest (car c) lh-holds))
                (setq lh-holds (lh:remove best lh-holds))
                ;; redraw the rings to match what is left
                (lh:sweep-marks "CIRCLE")
@@ -2455,7 +2635,7 @@
 
 ;; ---- the command -----------------------------------------------------
 (defun c:LHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
-                   step rstep mk decls reselect
+                   step rstep mk decls reselect cands cand c c1 c2
                    ss i en ed lay typ ext nunsup nocs closed
                    segs pts dpts allow tour ok stale npt chn sketch
                    texts tx q v zs elev e1 e2
@@ -2585,10 +2765,14 @@
              go       T)
        (princ "\n\n  Step 5 of 6 - any dead-straight stretches, sharp corners, or points")
        (princ "\n  to hold ABSOLUTELY?  A held point can never be fudged: the line")
-       (princ "\n  passes through it exactly, in every candidate.  Each is picked by")
-       (princ "\n  its point(s), snapping to the scanned points; dashed markers")
+       (princ "\n  passes through it exactly, in every candidate.  Each is named by")
+       (princ "\n  its point(s) - click the point, or type its number; dashed markers")
        (princ "\n  confirm them and clear themselves afterwards.")
        (setq step 6)                    ; unless a Back below says otherwise
+       ;; the points are named before any are selected, so the whole
+       ;; drawing's are the candidates here; the selection decides
+       ;; afterwards which of the declarations it holds
+       (if (null cands) (setq cands (lh:collect-points)))
        (while go
          (initget "Stretch Corner Hold Done Back Undo")
          (setq ans (getkword
@@ -2611,42 +2795,41 @@
                 (setq decls (cdr decls)))
               (progn (princ "\n  Already at the first declaration.")
                      (setq go nil step 4))))
+           ((and (null cands) (member ans '("Stretch" "Corner" "Hold")))
+            (princ "\n  (no points in this drawing to declare on - nothing to name)"))
            ((= ans "Hold")
             (setq lh-phase "picking a held point")
-            (initget "Back Undo")
-            (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
-            (if (and wp1 (not (lh:back-kw wp1)))
-              (progn
-                (setq wp1      (lh:2d wp1)
-                      rawholds (cons wp1 rawholds)
-                      mk       (lh:temp-add (lh:tag-mine (lh:draw-hold-marker wp1)))
-                      decls    (cons (cons "Hold" mk) decls)))))
+            (setq c (lh:askpoint "  Point to hold exactly - pick it or type its number"
+                                 "Enter = none" T cands *LH-SNAP*))
+            (if (and c (not (eq c 'LH-BACK)))
+              (setq rawholds (cons c rawholds)
+                    mk       (lh:temp-add (lh:tag-mine
+                               (lh:draw-hold-marker (car c))))
+                    decls    (cons (cons "Hold" mk) decls))))
            ((= ans "Stretch")
             (setq lh-phase "picking a straight stretch")
-            (initget "Back Undo")
-            (setq wp1 (getpoint "\n  First end of the straight stretch [Back]: "))
-            (if (lh:back-kw wp1) (setq wp1 nil wp2 nil)
+            (setq c1 (lh:askpoint
+                       "  First end of the straight stretch - pick it or type its number"
+                       "Enter = none" T cands *LH-SNAP*)
+                  c2 nil)
+            (if (and c1 (not (eq c1 'LH-BACK)))
               (progn
-                (initget "Back Undo")
-                (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
-                (if (lh:back-kw wp2) (setq wp2 nil))))
-            (if wp2
-              (progn
-                (setq wp1      (lh:2d wp1)
-                      wp2      (lh:2d wp2)
-                      mk       (lh:temp-add (lh:tag-mine (lh:draw-wall-marker wp1 wp2)))
-                      rawwalls (cons (list wp1 wp2) rawwalls)
-                      decls    (cons (cons "Stretch" mk) decls)))))
+                (setq c2 (lh:ask-wall-end c1 cands))
+                (if (eq c2 'LH-BACK) (setq c2 nil))))
+            (if c2
+              (setq mk       (lh:temp-add (lh:tag-mine
+                               (lh:draw-wall-marker (car c1) (car c2))))
+                    rawwalls (cons (list c1 c2) rawwalls)
+                    decls    (cons (cons "Stretch" mk) decls))))
            ((= ans "Corner")
             (setq lh-phase "picking a sharp corner")
-            (initget "Back Undo")
-            (setq wp1 (getpoint "\n  Corner point [Back]: "))
-            (if (and wp1 (not (lh:back-kw wp1)))
-              (progn
-                (setq wp1     (lh:2d wp1)
-                      mk      (lh:temp-add (lh:tag-mine (lh:draw-corner-marker wp1)))
-                      rawcnrs (cons wp1 rawcnrs)
-                      decls   (cons (cons "Corner" mk) decls)))))
+            (setq c (lh:askpoint "  Corner point - pick it or type its number"
+                                 "Enter = none" T cands *LH-SNAP*))
+            (if (and c (not (eq c 'LH-BACK)))
+              (setq mk      (lh:temp-add (lh:tag-mine
+                              (lh:draw-corner-marker (car c))))
+                    rawcnrs (cons c rawcnrs)
+                    decls   (cons (cons "Corner" mk) decls))))
            (T (setq go nil))))
        (if (= step 6)
          (progn
@@ -2761,41 +2944,28 @@
                    (< (lh:dist q (cdr tx)) *LH-TEXT-EPS*)
                    (not (assoc q lh-zvals)))
             (setq lh-zvals (cons (cons q (car tx)) lh-zvals))))
-        ;; snap the declared stretch ends and corners onto actual points
+        ;; a declaration was made on a NAMED point before the selection
+        ;; existed, so it is matched to the selection by that point's
+        ;; own identity - and one made on a point the selection does
+        ;; not hold is named and dropped, never snapped onto another
         (setq lh-walls nil)
         (foreach w rawwalls
-          (setq w1 (lh:nearest (car w) dpts)
-                w2 (lh:nearest (cadr w) dpts))
-          (cond
-            ((or (null w1) (null w2)) nil)
-            ((< (lh:dist w1 w2) *LH-EXACT-EPS*)
-             (princ "\n  (both ends of a declared stretch landed on the same scanned point - that stretch is ignored)"))
-            (T
-             (if (or (> (lh:dist (car w) w1) (* 3.0 tol))
-                     (> (lh:dist (cadr w) w2) (* 3.0 tol)))
-               (princ "\n  (a declared stretch end was picked well away from any scanned point - snapped to the nearest one)"))
-             (setq lh-walls (cons (list w1 w2) lh-walls)))))
+          (if (and (lh:declared-in (car w) dpts "stretch")
+                   (lh:declared-in (cadr w) dpts "stretch"))
+            (setq lh-walls (cons (list (car (car w)) (car (cadr w)))
+                                 lh-walls))))
         (setq lh-walls (reverse lh-walls))
         (setq lh-corners nil)
         (foreach w rawcnrs
-          (setq w1 (lh:nearest w dpts))
-          (if w1
-            (progn
-              (if (> (lh:dist w w1) (* 3.0 tol))
-                (princ "\n  (a declared corner was picked well away from any scanned point - snapped to the nearest one)"))
-              (setq lh-corners (cons w1 lh-corners)))))
+          (if (lh:declared-in w dpts "corner")
+            (setq lh-corners (cons (car w) lh-corners))))
         (setq lh-corners (reverse lh-corners))
-        ;; held points snap onto scanned points the same way; duplicates
-        ;; collapse to one
+        ;; duplicates collapse to one
         (setq lh-holds nil)
         (foreach w rawholds
-          (setq w1 (lh:nearest w dpts))
-          (if w1
-            (progn
-              (if (> (lh:dist w w1) (* 3.0 tol))
-                (princ "\n  (a held point was picked well away from any scanned point - snapped to the nearest one)"))
-              (if (not (lh:memb w1 lh-holds))
-                (setq lh-holds (cons w1 lh-holds))))))
+          (if (and (lh:declared-in w dpts "hold")
+                   (not (lh:memb (car w) lh-holds)))
+            (setq lh-holds (cons (car w) lh-holds))))
         (setq lh-holds (reverse lh-holds))
         (if (> (length dpts) 150)
           (princ (strcat "\nLHD: " (itoa (length dpts))
@@ -2869,22 +3039,24 @@
                          (setq lh-phase "picking points to omit"
                                omits    nil)
                          (princ "\n\nRedoing the fit.  Any points to leave out this time?")
-                         (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
-                         (princ "\n  anything the line should not chase; each gets a dashed ring.")
+                         (princ "\n  Name each one - click it, or type its number (Enter for none):")
+                         (princ "\n  mis-shots, duplicates, anything the line should not chase;")
+                         (princ "\n  each gets a dashed ring.")
                          (if lh-omitted
                            (princ (strcat "\n  " (itoa (length lh-omitted))
                                           " point(s) are already out -"
-                                          " picking one of those puts it"
+                                          " naming one of those puts it"
                                           " BACK IN.")))
-                         (while (setq wp1 (getpoint
-                                            "\n  Point to omit - or a ringed one to restore (Enter when done): "))
-                           (setq wp1 (lh:2d wp1)
-                                 w1  (lh:nearest wp1 dpts)
-                                 w2  (lh:nearest wp1 (mapcar 'car lh-omitted)))
+                         (while (setq cand (lh:askpoint
+                                             "  Point to omit, or a ringed one to restore - pick it or type its number"
+                                             "Enter = done" nil
+                                             (lh:cands-of
+                                               (append dpts (mapcar 'car lh-omitted)))
+                                             *LH-SNAP*))
+                           (setq w1 (car cand)
+                                 w2 (lh:nearest w1 (mapcar 'car lh-omitted)))
                            (cond
-                             ((and w2 (or (null w1)
-                                          (<= (lh:dist wp1 w2)
-                                              (lh:dist wp1 w1))))
+                             ((and w2 (< (lh:dist w1 w2) *LH-EXACT-EPS*))
                               (setq ent        (assoc w2 lh-omitted)
                                     pts        (append pts (cadr ent))
                                     dpts       (lh:dedupe pts)
@@ -2983,16 +3155,32 @@
                                          (princ "\n  Stepping back one question.")
                                          (setq rstep 3))
                                         ((= ans "Yes")
-                                         (initget "Back Undo")
-                                         (setq wp1 (getpoint "\n  First end [Back]: "))
-                                         (if (lh:back-kw wp1) (setq wp1 nil wp2 nil)
+                                         (setq cands (lh:cands-of dpts)
+                                               c1    (lh:askpoint
+                                                       "  First end - pick it or type its number"
+                                                       "Enter = none" T cands *LH-SNAP*)
+                                               c2    nil)
+                                         (if (and c1 (not (eq c1 'LH-BACK)))
                                            (progn
-                                             (initget "Back Undo")
-                                             (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
-                                             (if (lh:back-kw wp2) (setq wp2 nil))))
-                                         (if wp2
-                                           (setq e1 (lh:snap-break wp1 dpts)
-                                                 e2 (lh:snap-break wp2 dpts))))))))
+                                             (setq c2 (lh:askpoint
+                                                        (strcat "  Second end, from Pt." (cadr c1)
+                                                                " - pick it or type its number")
+                                                        nil T cands *LH-SNAP*))
+                                             ;; a run from a point to itself is not a run
+                                             (while (and (not (eq c2 'LH-BACK))
+                                                         (< (lh:dist (car c1) (car c2))
+                                                            *LH-EXACT-EPS*))
+                                               (princ (strcat "\n  That is Pt." (cadr c1)
+                                                              " again - the run needs two"
+                                                              " different ends."))
+                                               (setq c2 (lh:askpoint
+                                                          (strcat "  Second end, from Pt." (cadr c1)
+                                                                  " - pick it or type its number")
+                                                          nil T cands *LH-SNAP*)))
+                                             (if (eq c2 'LH-BACK) (setq c2 nil))))
+                                         (if c2
+                                           (setq e1 (car c1)
+                                                 e2 (car c2))))))))
                                  ((= rstep 5)
                                   (princ "\n\n  New settings - Enter keeps each one as it is.")
                                   (setq lh-phase "reading the tolerance"
