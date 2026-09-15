@@ -712,6 +712,7 @@
                         (cdr (assoc 8 (entget cand))) ") [Back]: ")
                 (strcat "\nSelect the perimeter (a polyline, circle,"
                         " line or arc) [Back]: "))))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
     (if lzd:watch (lzd:watch v) v)
     (cond
       ((member v '("Back" "Undo")) (setq done T res 'CAL-BACK))
@@ -834,6 +835,7 @@
        (initget 1 "Back Undo")
        (setq res (getpoint
                    "\nPick the start point on the perimeter [Back]: "))
+       (if lzd:ask (lzd:ask "\nPick the start point on the perimeter [Back]: " res) res)
        (cond
          ((member res '("Back" "Undo")) (setq step 2))
          ((null res))                   ; initget 1 makes this unreachable

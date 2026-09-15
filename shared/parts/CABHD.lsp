@@ -1172,6 +1172,7 @@
            ;; its own
            (initget "Back Undo")
            (setq wp (getpoint "\n  Pick the LAST point that belongs to the pool edge [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick the LAST point that belongs to the pool edge [Back]: " wp) wp)
            (cond
              ((cab:back-kw wp)
               (princ "\n  Stepping back one question.")
@@ -2533,12 +2534,14 @@
       (setq pick (getkword
                    (strcat "\n  Keep which fit - click one, or"
                            " [1/2/3/All/None/Redo] <" dflt ">: ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pick) pick)
       (if (null pick)
         ;; no keyword typed: give them a click, and fall back to the
         ;; default above
         (progn
           (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
                                     dflt "): ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
           (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
@@ -2716,6 +2719,7 @@
     (setq cab-phase "picking a straight wall")
     (initget "Back Undo")
     (setq wp1 (getpoint "\n  First end of the straight wall [Back]: "))
+    (if lzd:ask (lzd:ask "\n  First end of the straight wall [Back]: " wp1) wp1)
     (cond
       ((cab:back-kw wp1)
        (if cab-decl-marks
@@ -2729,6 +2733,7 @@
        (setq cab-phase "picking a straight wall")
        (initget "Back Undo")
        (setq wp2 (getpoint wp1 "\n  Second end [Back]: "))
+       (if lzd:ask (lzd:ask "\n  Second end [Back]: " wp2) wp2)
        (cond
          ;; Back at the second end re-asks the first: nothing was
          ;; committed yet, so there is no marker to sweep
@@ -2742,6 +2747,7 @@
                 out (cons (list wp1 wp2) out))
           (initget "Yes No Back Undo")
           (setq again (getkword "\n  Another straight line? [Yes/No/Back] <No>: "))
+          (if lzd:ask (lzd:ask "\n  Another straight line? [Yes/No/Back] <No>: " again) again)
           (cond
             ((member again '("Back" "Undo"))
              (cab:temp-kill (car cab-decl-marks))
@@ -2756,6 +2762,7 @@
     (setq cab-phase "picking a sharp corner")
     (initget "Back Undo")
     (setq wp1 (getpoint "\n  Corner point (Enter when done) [Back]: "))
+    (if lzd:ask (lzd:ask "\n  Corner point (Enter when done) [Back]: " wp1) wp1)
     (cond
       ((cab:back-kw wp1)
        (if cab-decl-marks
@@ -2777,6 +2784,7 @@
     (setq cab-phase "picking a held point")
     (initget "Back Undo")
     (setq wp1 (getpoint "\n  Point to hold exactly (Enter when done) [Back]: "))
+    (if lzd:ask (lzd:ask "\n  Point to hold exactly (Enter when done) [Back]: " wp1) wp1)
     (cond
       ((cab:back-kw wp1)
        (if cab-decl-marks
@@ -2823,16 +2831,19 @@
     (setq ans (getkword (strcat
                 "\n  Straight walls (" (itoa (length cab-walls))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq cab-phase "picking a straight wall")
        (initget "Back Undo")
        (setq wp1 (getpoint "\n  First end of the straight wall [Back]: "))
+       (if lzd:ask (lzd:ask "\n  First end of the straight wall [Back]: " wp1) wp1)
        (if (cab:back-kw wp1) (setq wp1 nil wp2 nil)
          (progn
            (initget "Back Undo")
-           (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
+           (setq wp2 (if wp1 ((lambda (v) (if lzd:ask (lzd:ask "\n  Second end [Back]: " v) v))
+                               (getpoint wp1 "\n  Second end [Back]: "))))
            (if (cab:back-kw wp2) (setq wp2 nil))))
        (if wp2
          (progn
@@ -2852,6 +2863,7 @@
            (setq cab-phase "removing a straight wall")
            (initget "Back Undo")
            (setq wp1 (getpoint "\n  Pick near the straight wall to remove [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick near the straight wall to remove [Back]: " wp1) wp1)
            (if (cab:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
@@ -2881,12 +2893,14 @@
     (setq ans (getkword (strcat
                 "\n  Sharp corners (" (itoa (length cab-corners))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq cab-phase "picking a sharp corner")
        (initget "Back Undo")
        (setq wp1 (getpoint "\n  Corner point [Back]: "))
+       (if lzd:ask (lzd:ask "\n  Corner point [Back]: " wp1) wp1)
        (if (cab:back-kw wp1) (setq wp1 nil))
        (if wp1
          (progn
@@ -2905,6 +2919,7 @@
            (setq cab-phase "removing a sharp corner")
            (initget "Back Undo")
            (setq wp1 (getpoint "\n  Pick the declared corner to remove [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick the declared corner to remove [Back]: " wp1) wp1)
            (if (cab:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
@@ -2934,12 +2949,14 @@
     (setq ans (getkword (strcat
                 "\n  Held points (" (itoa (length cab-holds))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq cab-phase "picking a held point")
        (initget "Back Undo")
        (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
+       (if lzd:ask (lzd:ask "\n  Point to hold exactly [Back]: " wp1) wp1)
        (if (cab:back-kw wp1) (setq wp1 nil))
        (if wp1
          (progn
@@ -2958,6 +2975,7 @@
            (setq cab-phase "removing a held point")
            (initget "Back Undo")
            (setq wp1 (getpoint "\n  Pick the held point to release [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick the held point to release [Back]: " wp1) wp1)
            (if (cab:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
@@ -3129,6 +3147,7 @@
        (initget "Yes No Back Undo")
        (setq ans      (getkword "\n  Any straight lines? [Yes/No/Back] <No>: ")
              rawwalls nil)
+       (if lzd:ask (lzd:ask "\n  Any straight lines? [Yes/No/Back] <No>: " ans) ans)
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\n  Stepping back one question.")
@@ -3162,6 +3181,7 @@
        (initget "Yes No Back Undo")
        (setq ans     (getkword "\n  Any sharp corners? [Yes/No/Back] <No>: ")
              rawcnrs nil)
+       (if lzd:ask (lzd:ask "\n  Any sharp corners? [Yes/No/Back] <No>: " ans) ans)
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\n  Stepping back one question.")
@@ -3194,6 +3214,7 @@
        (initget "Yes No Back Undo")
        (setq ans      (getkword "\n  Any held points? [Yes/No/Back] <No>: ")
              rawholds nil)
+       (if lzd:ask (lzd:ask "\n  Any held points? [Yes/No/Back] <No>: " ans) ans)
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\n  Stepping back one question.")
@@ -3488,8 +3509,9 @@
                          (setq reomit T)
                          (while reomit
                            (setq reomit nil)
-                           (while (setq wp1 (getpoint
-                                              "\n  Point to omit - or a ringed one to restore (Enter when done): "))
+                           (while (setq wp1 ((lambda (v) (if lzd:ask (lzd:ask "\n  Point to omit - or a ringed one to restore (Enter when done): " v) v))
+                                              (getpoint
+                                                "\n  Point to omit - or a ringed one to restore (Enter when done): ")))
                              (setq wp1 (cal:2d wp1)
                                    w1  (cab:nearest wp1 dpts)
                                    w2  (cab:nearest wp1 (mapcar 'car cab-omitted)))

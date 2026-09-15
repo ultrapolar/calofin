@@ -708,6 +708,7 @@
       (setq pk (getpoint (strcat "\nPick the " name
                                  " stake (Enter to cancel)"
                                  (if back " [Back]" "") ": ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pk) pk)
       (cond
         ((and back (= (type pk) 'STR) (member pk '("Back" "Undo"))) 'CAL-BACK)
         (pk
@@ -2308,6 +2309,7 @@
                                     (if hist " [Back]" "")
                                     " <Enter = done>: ")))
                     hit nil)
+              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
               (cond
                 ((null ans) (setq done T))
                 ((and (not (listp ans)) (cal:back-word-p ans))
@@ -2660,6 +2662,7 @@
                                     " - click a marker or its"
                                     " tag, or type a tag"
                                     " [None/Back] <None>: "))))
+              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
               (cond
                 ((and ans (not (listp ans)) (member ans '("Back" "Undo")))
                  (abf:drop temps)
@@ -2910,6 +2913,7 @@
                                       (if newnm (strcat "Pt." newnm)
                                           "the new point")
                                       " belongs [Back]: ")))
+                  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
                   (cond
                     ((null ans)
                      (princ (strcat "\n  Nothing clicked - the readings"
@@ -3124,6 +3128,7 @@
               (initget "Auto Back Undo")
               (setq np (getpoint (strcat "\n  Place the note for Pt." nm
                                          " [Auto/Back] <Auto>: ")))
+              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") np) np)
               (if (and np (member np '("Back" "Undo")))
                 (setq stage 4)
                 (progn

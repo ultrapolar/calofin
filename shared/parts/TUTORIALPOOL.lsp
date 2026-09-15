@@ -50,6 +50,7 @@
 ;; value maps to a plain Enter except one starting with X/x.
 (defun tutorial:pause ( / v)
   (setq v (getstring "\nPress ENTER for the next topic (X then ENTER to stop here): "))
+  (if lzd:ask (lzd:ask "\nPress ENTER for the next topic (X then ENTER to stop here): " v) v)
   (/= (strcase (substr v 1 1)) "X"))
 
 ;;; -------------------- topic 1: welcome --------------------------------

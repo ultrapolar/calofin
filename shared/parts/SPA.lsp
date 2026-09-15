@@ -1128,6 +1128,7 @@
                            (if back " Back Undo" "")))
         (setq v (getkword (strcat "\nSpa shape [Rectangle/OCtagon/ROUnd"
                                   (if back "/Back" "") "]: ")))
+        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
         (if (member v '("Back" "Undo")) 'CAL-BACK v))))
 
 ;; THERMOLIGHT closes the water's-edge question the same way the block
@@ -2230,6 +2231,7 @@
   (setq spa:*blockasked* t)
   (cal:osup)
   (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
+  (if lzd:ask (lzd:ask "\nSelect the Spa Cover Details block <Enter to skip>: " sel) sel)
   (if lzd:watch (lzd:watch sel) sel)
   (cal:osdown)
   (if sel
@@ -3813,6 +3815,7 @@
          (progn
            (initget "Back Undo")
            (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+           (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
            (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
              (progn (princ "\nStepping back one question.") (setq sstep 2))
              (setq sstep 4)))))))
