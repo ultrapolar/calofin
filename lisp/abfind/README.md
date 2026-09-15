@@ -278,7 +278,7 @@ Pick one and four things happen:
    one that was *not* held) and both of its readings:
 
    ```
-   Moved Pt.17 B from 18'-6" to 18'-5"
+   - Moved Pt.17 B from 18'-6" to 18'-5"
    ```
 
    Enter tucks it beside the ring; click a spot to put it anywhere
@@ -446,7 +446,7 @@ placed, and a sheet that does not say so reads as though the field
 measured it.
 
 ```
-Created Pt.23 - A 16'-8", B 15'-0"
+- Created Pt.23 - A 16'-8", B 15'-0"
 ```
 
 Where the two readings could **not** cross and one of them had to be
@@ -455,7 +455,7 @@ other went from and to — the half of it somebody will want to check
 back against the sheet:
 
 ```
-Created Pt.23 - A 25'-0" held, B from 20'-10" to 27'-10"
+- Created Pt.23 - A 25'-0" held, B from 20'-10" to 27'-10"
 ```
 
 Where the note goes is **not** asked. `ABMOVE` asks where to put its
@@ -466,6 +466,14 @@ question is put once. A created point's note has one place to be,
 beside the point, and `ABPCREATE` is a **loop**: a question per point
 is a question per point. It is ordinary `TEXT` and moves like any
 other.
+
+Every note this file writes — moved and created alike — leads with
+`abf:*note-prefix*`, one per line. A run that settles several points
+leaves a column of them on `abf:*ring-layer*`, and the bullet is what
+makes that column read as a list when the sheet is laid out later. It
+goes on inside `abf:note` rather than at the two places that word a
+note, so a note added later cannot quietly miss it; set the knob to
+`""` to write them bare.
 
 `Back` takes the note away with the rest of the round.
 
@@ -789,6 +797,7 @@ The constants at the top of `ABFIND.lsp`:
 (setq abf:*ring-layer*   "FGStep")      ; ring + note layer
 (setq abf:*ring-radius*  5.0)           ; ring RADIUS, inches
 (setq abf:*note-hgt*     6.0)           ; note text height
+(setq abf:*note-prefix*  "- ")          ; leads every note, one per line
 (setq abf:*moved-suffix* "m")           ; Pt.17 -> Pt.17m
 (setq abf:*att-height*   4.0)           ; the FALLBACK point's number,
 (setq abf:*att-offset*   '(0.87 -3.53)) ; and where it sits: a COPIED
@@ -905,6 +914,10 @@ one of the two answers.
 `releases/ABFIND_MMDDYY_REV115.lsp`; run it after any change and bump
 the banner.
 
+* **v1.18** — every note leads with `abf:*note-prefix*` (`- `), one per
+  line, moved and created alike: a run that settles several points
+  leaves a column of notes on one layer, and the bullet is what makes
+  it read as a list for whoever lays the sheet out.
 * **v1.17** — a created point is **noted** on `abf:*ring-layer*`, the
   way a moved one is, and where a reading had to be changed to make the
   two cross the note says which tape was held and what the other went

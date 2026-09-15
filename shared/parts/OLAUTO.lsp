@@ -88,7 +88,7 @@
 ;;; layer everything landed on.
 ;;; ======================================================================
 
-(setq *olauto-version* "v1.1")       ; announced on load; release_lisp.py
+(setq *olauto-version* "v1.2")       ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -216,6 +216,25 @@
 ;; ...and how big the worst error may be, against the diagonal of the
 ;; original's bounding box, before the overlay stops meaning anything.
 (setq ola:*fit-warn*    0.05)          ; fraction of the bbox diagonal
+
+;; A pick that came in as more than one piece -- a stray deck line or
+;; coping arc caught by the window -- is chained end to end with the
+;; perimeter and poisons the fit.  A jump between consecutive pieces
+;; bigger than this share of the whole chain is called out as a piece.
+;; It is looser than ola:*close-frac* on purpose: a skimmer gap of a
+;; foot in a forty-foot bead track is one perimeter drawn with a break,
+;; not two objects.
+(setq ola:*piece-frac*  0.05)          ; fraction of the chain length
+
+;; -- mirror images ----------------------------------------------------------
+;;
+;; A rigid fit can turn and slide but never flip, so a perimeter that
+;; arrived as a MIRROR image -- a survey read from the far side, a DXF
+;; brought in with its Y axis reversed -- fits as badly as it possibly
+;; can and every dimension is nonsense.  OLAUTO tries the flipped walk
+;; as well and, when that fits this much better than the unflipped one,
+;; offers to mirror the perimeter before fitting.
+(setq ola:*mirror-ratio* 0.5)         ; flipped residual / unflipped, at most
 
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
@@ -473,6 +492,24 @@
               rest (ola:remove orig rest)))
       (reverse loop))))
 
+;; The pieces a chain is really in: one more than the number of jumps
+;; between consecutive segments that are bigger than ola:*piece-frac*
+;; of the whole, and the biggest such jump.  Returns (pieces jump).
+(defun ola:chain-pieces (segs / L tol n big prev s d)
+  (setq L    (ola:chain-len segs)
+        tol  (* ola:*piece-frac* L)
+        n    1
+        big  0.0
+        prev nil)
+  (foreach s segs
+    (if prev
+      (progn
+        (setq d (cal:dist (cadr prev) (car s)))
+        (if (> d tol) (setq n (1+ n)))
+        (if (> d big) (setq big d))))
+    (setq prev s))
+  (list n big))
+
 ;; Total length of a chain.
 (defun ola:chain-len (segs / L s)
   (setq L 0.0)
@@ -605,7 +642,7 @@
 ;; that its point J is the one facing A's point J.  The polish then has
 ;; its correspondence for free.
 (defun ola:phase (a b closed / n ca cb ac bc rev bd bb pa qb sxx sxy m
-                               best bestk bestrev k lim)
+                               best bestk bestrev k lim saa sbb p)
   (setq n    (length a)
         ca   (ola:centroid a)
         cb   (ola:centroid b)
@@ -614,7 +651,12 @@
         ac   (mapcar '(lambda (p) (cal:v- p ca)) a)
         best nil bestk 0 bestrev 0
         rev  0
-        lim  (if closed n 1))
+        lim  (if closed n 1)
+        saa  0.0
+        sbb  0.0)
+  ;; the two self-terms of the residual, once: they do not move either
+  (foreach p ac (setq saa (+ saa (cal:dot p p))))
+  (foreach p b  (setq p (cal:v- p cb) sbb (+ sbb (cal:dot p p))))
   (while (< rev 2)
     (setq bd (if (= rev 0) b (reverse b))
           bc (mapcar '(lambda (p) (cal:v- p cb)) bd)
@@ -645,7 +687,12 @@
   (setq bd nil k 0)
   (while (< k n) (setq bd (cons (car qb) bd) qb (cdr qb) k (1+ k)))
   (setq bd (reverse bd))
-  (list (ola:kabsch a bd) bd))
+  ;; The residual the winner leaves, as an RMS over the walk: with the
+  ;; best rotation applied the summed squared error is
+  ;; sum|a|^2 + sum|b|^2 - 2 sqrt(sxx^2 + sxy^2), and that is what the
+  ;; mirror test compares between the flipped walk and the unflipped.
+  (list (ola:kabsch a bd) bd
+        (sqrt (/ (max 0.0 (- (+ saa sbb) (* 2.0 (sqrt best)))) n))))
 
 ;; ICP POLISH.  Re-match every point to the nearest place on the fixed
 ;; walk, re-solve, repeat until nothing moves.  Returns the transform
@@ -712,6 +759,89 @@
     (setq cur new
           pass (1+ pass)))
   acc)
+
+;; Does MSEG fit FSEG far better as a mirror image than as itself?
+;;
+;; Run the phase search twice, once on the walk and once on the walk
+;; with its X reversed, and compare what each leaves behind.  A shape
+;; with a mirror line of its own -- a rectangle, a round spa -- leaves
+;; the same residual both ways, so the flipped one has to be BETTER by
+;; ola:*mirror-ratio* before anything is said, and the unflipped
+;; residual has to be more than sampling noise to begin with.
+;;
+;; Returns (unflipped-rms flipped-rms) when the mirror is the better
+;; fit, nil otherwise.
+(defun ola:mirror-p (mseg fseg / n closed a b r0 r1 span)
+  (setq n      (max 8 (fix ola:*fitpts*))
+        closed (and (ola:closed-p mseg) (ola:closed-p fseg))
+        a      (ola:walk mseg n closed)
+        b      (ola:walk fseg n closed))
+  (if (and a b)
+    (progn
+      (setq r0   (caddr (ola:phase a b closed))
+            r1   (caddr (ola:phase (mapcar '(lambda (p) (list (- (car p)) (cadr p)))
+                                           a)
+                                   b closed))
+            span (ola:span fseg))
+      (if (and (> r0 (* 0.01 span))
+               (< r1 (* ola:*mirror-ratio* r0)))
+        (list r0 r1)))))
+
+;; Reflect a chain about the vertical line x = X0: every point goes
+;; across, and every bulge changes sign because a reflection runs each
+;; arc the other way round.
+(defun ola:mirror-segs (segs x0)
+  (mapcar '(lambda (s)
+             (list (list (- (* 2.0 x0) (car (car s))) (cadr (car s)))
+                   (list (- (* 2.0 x0) (car (cadr s))) (cadr (cadr s)))
+                   (- (caddr s))))
+          segs))
+
+;; ...and one entity, in place.  An ARC is the one that needs thought:
+;; reflecting turns the direction angle t into pi - t and runs the
+;; sweep the other way, and an AutoCAD arc always goes counter-
+;; clockwise from 50 to 51, so the reflected arc starts where the old
+;; END was reflected to and ends at the old START's reflection.
+(defun ola:mirror-ed (ed x0 / out item code p a0 a1)
+  (setq out nil)
+  (foreach item ed
+    (setq code (car item))
+    (setq out
+          (cons
+            (cond
+              ((member code '(10 11))
+               (setq p (cdr item))
+               (cons code (append (list (- (* 2.0 x0) (car p)) (cadr p))
+                                  (if (caddr p) (list (caddr p)) nil))))
+              ((= code 42) (cons 42 (- (cdr item))))
+              (T item))
+            out)))
+  (setq out (reverse out))
+  (if (and (assoc 50 out) (assoc 51 out))
+    (progn
+      (setq a0 (cdr (assoc 50 out))
+            a1 (cdr (assoc 51 out)))
+      (setq out (subst (cons 50 (cal:angnorm (- pi a1))) (assoc 50 out) out)
+            out (subst (cons 51 (cal:angnorm (- pi a0))) (assoc 51 out) out))))
+  out)
+
+(defun ola:mirror-ent (en x0 / ed typ sub)
+  (setq ed  (entget en)
+        typ (cdr (assoc 0 ed)))
+  (cond
+    ((= typ "POLYLINE")
+     (setq sub (entnext en))
+     (while (and sub (= "VERTEX" (cdr (assoc 0 (entget sub)))))
+       (entmod (ola:mirror-ed (entget sub) x0))
+       (setq sub (entnext sub)))
+     (entupd en))
+    (T (entmod (ola:mirror-ed ed x0)))))
+
+(defun ola:mirror-ss (ss x0 / i)
+  (setq i 0)
+  (repeat (sslength ss)
+    (ola:mirror-ent (ssname ss i) x0)
+    (setq i (1+ i))))
 
 ;; The whole fit: walk both, phase-search, polish.  Returns the
 ;; transform that carries MSEG's perimeter onto FSEG's.
@@ -1012,13 +1142,55 @@
     all
     (ola:chain all)))
 
-(defun ola:select (which / ss)
+(defun ola:select (which / all ss i en typ bad)
   (princ (strcat "\n\nSelect the " which
                  " perimeter - one polyline, or the same"))
   (princ "\nshape exploded into lines and arcs.")
-  (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
-  (if lzd:watch (lzd:watch ss) ss)
-  ss)
+  ;; Picked WITHOUT a type filter, so that what cannot be read can be
+  ;; named.  A filter would quietly drop a spline or a block, and the
+  ;; command would then end as if nothing had been picked at all --
+  ;; which is what it did, and what a drafter with a SPLINE perimeter
+  ;; saw: nothing.  Text, dimensions and hatches caught by the window
+  ;; are dropped without comment; only the things somebody might
+  ;; reasonably expect to work are called out.
+  (setq all (ssget))
+  (if lzd:watch (lzd:watch all) all)
+  (if all
+    (progn
+      (setq ss (ssadd) bad nil i 0)
+      (repeat (sslength all)
+        (setq en  (ssname all i)
+              typ (cdr (assoc 0 (entget en))))
+        (cond
+          ((member typ '("LWPOLYLINE" "POLYLINE" "LINE" "ARC" "CIRCLE"))
+           (ssadd en ss))
+          ((and (member typ '("SPLINE" "ELLIPSE" "INSERT"))
+                (not (member typ bad)))
+           (setq bad (cons typ bad))))
+        (setq i (1+ i)))
+      (foreach typ bad
+        (princ (strcat "\nOLAUTO: the " which " pick has "
+                       (cond ((= typ "SPLINE") "a SPLINE")
+                             ((= typ "ELLIPSE") "an ELLIPSE")
+                             (T "a block (INSERT)"))
+                       " in it, which cannot be read - "
+                       (cond ((= typ "SPLINE")
+                              "PEDIT it into a polyline first.")
+                             ((= typ "ELLIPSE")
+                              "redraw it as arcs, or PEDIT it, first.")
+                             (T (strcat "EXPLODE it, or pick the"
+                                        " perimeter inside it, first.")))
+                       (if (> (sslength ss) 0)
+                         "  Going on with the rest of the pick."
+                         ""))))
+      (if (> (sslength ss) 0)
+        ss
+        (progn
+          (if (null bad)
+            (princ (strcat "\nOLAUTO: nothing in the " which
+                           " pick can be read - it wants a polyline,"
+                           " or lines and arcs.")))
+          nil)))))
 
 ;; ---- the report ---------------------------------------------------------
 
@@ -1064,21 +1236,29 @@
 
 (defun ola:run ( / ssa ssb newss ogss movss fixss laya layb qstep ans
                    whichnew whichmove segnew segog x prof pk drawn push
-                   havestyle p dimlist mid shared flat lnew log_ warn w)
-  ;; The selections and the two questions are ONE chain, walked with a
-  ;; step counter (STANDARDS section 3).  A selection cannot be armed
-  ;; with initget, so Back cannot be typed AT one -- which is why Back
-  ;; at the question sitting straight after the selections re-opens
-  ;; them instead, the way WCALST and AUTOBEAD have always done.
-  ;; Nothing has been drawn at this point, and step 0 rebuilds every
-  ;; answer it fills, so the second pass starts clean.
+                   havestyle p dimlist mid shared flat lnew log_ warn w
+                   pcs mir mseg fseg ratio hint)
+  ;; The selections and the questions are ONE chain, walked with a step
+  ;; counter (STANDARDS section 3).  A selection cannot be armed with
+  ;; initget, so Back cannot be typed AT one -- which is why Back at the
+  ;; question sitting straight after the selections re-opens them
+  ;; instead, the way WCALST and AUTOBEAD have always done.  Nothing
+  ;; has been drawn before step 4, and every step rebuilds what it
+  ;; fills, so a second pass through any of them starts clean.
+  ;;
+  ;;   0  the two picks (and the picks OLAUTO refuses)
+  ;;   1  which one is the NEW perimeter
+  ;;   2  which one should move
+  ;;   3  read both, say what looks wrong, and -- only when the flipped
+  ;;      walk fits far better -- offer the mirror
+  ;;   4  fit, move, re-layer, dimension, report
   (setq qstep 0)
-  (while (and qstep (< qstep 3))
+  (while (and qstep (< qstep 4))
     (cond
       ((= qstep 0)
        ;; Two picks, then two refusals that leave QSTEP where it is --
        ;; which sends the run straight back to the picking, because that
-       ;; is where the mistake was made and nothing has been drawn yet.
+       ;; is where the mistake was made.
        (cond
          ((not (and (setq ssa (ola:select "FIRST"))
                     (setq ssb (ola:select "SECOND"))))
@@ -1107,25 +1287,25 @@
                          " mirrored outline.  Flatten it first.")))
          (T
           (setq laya (ola:ss-layer ssa)
-               layb (ola:ss-layer ssb)
-               ;; the layers answer the next question before it is
-               ;; asked: the selection already sitting on the pool
-               ;; layer is the new one, and if neither is, the first
-               ;; one asked for leads
-               whichnew (cond ((and laya (= (strcase laya)
-                                            (strcase ola:*new-layer*)))
-                               "First")
-                              ((and layb (= (strcase layb)
-                                            (strcase ola:*new-layer*)))
-                               "Second")
-                              ((and layb (= (strcase layb)
-                                            (strcase ola:*og-layer*)))
-                               "First")
-                              ((and laya (= (strcase laya)
-                                            (strcase ola:*og-layer*)))
-                               "Second")
-                              (T "First"))
-               qstep 1))))
+                layb (ola:ss-layer ssb)
+                ;; the layers answer the next question before it is
+                ;; asked: the selection already sitting on the pool
+                ;; layer is the new one, and if neither is, the first
+                ;; one asked for leads
+                whichnew (cond ((and laya (= (strcase laya)
+                                             (strcase ola:*new-layer*)))
+                                "First")
+                               ((and layb (= (strcase layb)
+                                             (strcase ola:*new-layer*)))
+                                "Second")
+                               ((and layb (= (strcase layb)
+                                             (strcase ola:*og-layer*)))
+                                "First")
+                               ((and laya (= (strcase laya)
+                                             (strcase ola:*og-layer*)))
+                                "Second")
+                               (T "First"))
+                qstep 1))))
       ((= qstep 1)
        (setq ans (cal:askkw
                    (strcat "Which selection is the NEW perimeter?"
@@ -1145,97 +1325,184 @@
        (if (eq ans 'CAL-BACK)
          (progn (princ "\nStepping back one question.")
                 (setq qstep 1))
-         (setq whichmove ans qstep 3)))))
-  (if (= qstep 3)
+         (setq whichmove ans qstep 3)))
+      ((= qstep 3)
+       (setq newss  (if (= whichnew "First") ssa ssb)
+             ogss   (if (= whichnew "First") ssb ssa)
+             movss  (if (= whichmove "New") newss ogss)
+             fixss  (if (= whichmove "New") ogss newss)
+             segnew (ola:collect newss)
+             segog  (ola:collect ogss)
+             warn   nil)
+       (if (or (< (length segnew) 1) (< (length segog) 1))
+         (progn
+           (princ "\nOLAUTO: one of those selections has no curve in it.")
+           (setq qstep nil))
+         (progn
+           ;; Before anything moves: do these two even look like the
+           ;; same pool?  OLAUTO has no idea what a pool is and will fit
+           ;; any two curves, so a mis-pick comes back as a confident
+           ;; set of dimensions off a meaningless overlay unless
+           ;; something says otherwise.  Warnings, not refusals -- a
+           ;; pool really can be measured wrong by a lot, and that is
+           ;; the run somebody needs the numbers from.
+           ;;
+           ;; First: is either pick really several objects?  A stray
+           ;; deck line caught by the window is chained end to end with
+           ;; the perimeter, and the fit that follows is of the junk.
+           (foreach p (list (list "new" segnew) (list "original" segog))
+             (setq pcs (ola:chain-pieces (cadr p)))
+             (if (> (car pcs) 1)
+               (setq warn
+                     (cons (strcat "the " (car p) " perimeter came in as "
+                                   (itoa (car pcs)) " separate pieces - the"
+                                   " biggest jump between them is "
+                                   (ola:rtos1 (cadr pcs))
+                                   ".  A stray line or arc caught by the"
+                                   " window?  It is fitted along with the"
+                                   " rest.")
+                           warn))))
+           (setq lnew (ola:chain-len segnew)
+                 log_ (ola:chain-len segog))
+           (if (and (> (max lnew log_) 0.0)
+                    (> (/ (abs (- lnew log_)) (max lnew log_))
+                       ola:*len-warn*))
+             (progn
+               ;; a ratio that is a units factor is worth naming: it is
+               ;; the one mis-pick that is not a mis-pick at all
+               (setq ratio (/ (max lnew log_) (max 1.0e-12 (min lnew log_)))
+                     hint  (cond
+                             ((equal ratio 25.4 0.8)
+                              "  That is the ratio of inches to millimetres.")
+                             ((equal ratio 12.0 0.4)
+                              "  That is the ratio of feet to inches.")
+                             ((equal ratio 2.54 0.08)
+                              "  That is the ratio of inches to centimetres.")
+                             ((or (equal ratio 10.0 0.3) (equal ratio 100.0 3.0))
+                              "  That is a power of ten: a scale factor?")
+                             (T "")))
+               (setq warn
+                     (cons (strcat "the two perimeters are "
+                                   (ola:rtos1 lnew) " and " (ola:rtos1 log_)
+                                   " round - "
+                                   (itoa (fix (+ 0.5 (* 100.0
+                                                        (/ (abs (- lnew log_))
+                                                           (max lnew log_))))))
+                                   "% apart.  Two measurements of one pool"
+                                   " agree far closer than that: check the"
+                                   " pick." hint)
+                           warn))))
+           (if (not (eq (not (ola:closed-p segnew))
+                        (not (ola:closed-p segog))))
+             (setq warn
+                   (cons (strcat "one of these perimeters closes and the"
+                                 " other does not, so they cannot be walked"
+                                 " against each other end for end.  The fit"
+                                 " below is the best of a bad job.")
+                         warn)))
+           (foreach w (reverse warn) (princ (strcat "\nOLAUTO: " w)))
+           ;; Then: is it a mirror image?  A rigid fit can turn and slide
+           ;; but never flip, so a perimeter that arrived flipped fits as
+           ;; badly as it possibly can and every dimension is nonsense.
+           ;; The flipped walk is tried too, and when it fits far better
+           ;; the mirror is offered -- offered, because it changes the
+           ;; drawing, and Enter must not do that by itself.
+           (setq mseg (if (= whichmove "New") segnew segog)
+                 fseg (if (= whichmove "New") segog segnew)
+                 mir  (ola:mirror-p mseg fseg))
+           (if mir
+             (progn
+               ;; the ratio is capped for the sentence: a mirrored fit
+               ;; that lands dead on divides by next to nothing
+               (setq ratio (/ (car mir) (max 1.0e-9 (cadr mir))))
+               (princ (strcat "\n\nOLAUTO: the "
+                              (if (= whichmove "New") "new" "original")
+                              " perimeter fits the other "
+                              (if (> ratio 100.0)
+                                "more than 100"
+                                (strcat "about "
+                                        (itoa (max 2 (fix (+ 0.5 ratio))))))
+                              " times better as a MIRROR image than as it"
+                              " is.  One of the two was probably drawn from"
+                              " the far side, or brought in with an axis"
+                              " reversed.  Without the mirror the overlay"
+                              " will be about " (ola:rtos1 (car mir))
+                              " out everywhere."))
+               (setq ans (cal:askkw
+                           (strcat "Mirror the "
+                                   (if (= whichmove "New") "new" "original")
+                                   " perimeter before fitting?")
+                           "Yes No" "Yes/No" "No" T))
+               (cond
+                 ((eq ans 'CAL-BACK)
+                  (princ "\nStepping back one question.")
+                  (setq qstep 2))
+                 ((= ans "Yes")
+                  ;; about the vertical through its own middle -- any
+                  ;; line would do, the rigid fit puts it where it goes
+                  (setq mid (car (ola:middle mseg)))
+                  (ola:mirror-ss movss mid)
+                  (if (= whichmove "New")
+                    (setq segnew (ola:mirror-segs segnew mid))
+                    (setq segog  (ola:mirror-segs segog mid)))
+                  (setq qstep 4))
+                 (T
+                  (setq warn (cons "fitted WITHOUT the mirror it asked for."
+                                   warn)
+                        qstep 4))))
+             (setq qstep 4)))))))
+  (if (= qstep 4)
     (progn
-      (setq newss (if (= whichnew "First") ssa ssb)
-            ogss  (if (= whichnew "First") ssb ssa)
-            movss (if (= whichmove "New") newss ogss)
-            fixss (if (= whichmove "New") ogss newss))
-      (setq segnew (ola:collect newss)
-            segog  (ola:collect ogss))
-      (if (or (< (length segnew) 1) (< (length segog) 1))
-        (princ "\nOLAUTO: one of those selections has no curve in it.")
+      (princ "\n\nFitting...")
+      (setq x (ola:fit (if (= whichmove "New") segnew segog)
+                       (if (= whichmove "New") segog segnew)))
+      (if (null x)
+        (princ "\nOLAUTO: those two perimeters cannot be walked - one of them has no length.")
         (progn
-          ;; Before anything moves: do these two even look like the same
-          ;; pool?  OLAUTO has no idea what a pool is and will fit any
-          ;; two curves, so a mis-pick comes back as a confident set of
-          ;; dimensions off a meaningless overlay unless something says
-          ;; otherwise.  Warnings, not refusals -- a pool really can be
-          ;; measured wrong by a lot, and that is the run somebody needs
-          ;; the numbers from.
-          (setq lnew (ola:chain-len segnew)
-                log_ (ola:chain-len segog)
-                warn nil)
-          (if (and (> (max lnew log_) 0.0)
-                   (> (/ (abs (- lnew log_)) (max lnew log_)) ola:*len-warn*))
-            (setq warn
-                  (cons (strcat "the two perimeters are "
-                                (ola:rtos1 lnew) " and " (ola:rtos1 log_)
-                                " round - "
-                                (itoa (fix (+ 0.5 (* 100.0 (/ (abs (- lnew log_))
-                                                              (max lnew log_))))))
-                                "% apart.  Two measurements of one pool"
-                                " agree far closer than that: check the pick.")
-                        warn)))
-          (if (not (eq (not (ola:closed-p segnew)) (not (ola:closed-p segog))))
-            (setq warn
-                  (cons (strcat "one of these perimeters closes and the"
-                                " other does not, so they cannot be walked"
-                                " against each other end for end.  The fit"
-                                " below is the best of a bad job.")
-                        warn)))
-          (foreach w (reverse warn) (princ (strcat "\nOLAUTO: " w)))
-          (princ "\n\nFitting...")
-          (setq x (ola:fit (if (= whichmove "New") segnew segog)
-                           (if (= whichmove "New") segog segnew)))
-          (if (null x)
-            (princ "\nOLAUTO: those two perimeters cannot be walked - one of them has no length.")
+          ;; the drawing moves ONCE, by the whole transform
+          (ola:xform-ss x movss)
+          (if (= whichmove "New")
+            (setq segnew (mapcar '(lambda (s)
+                                    (list (ola:xapply x (car s))
+                                          (ola:xapply x (cadr s))
+                                          (caddr s)))
+                                 segnew))
+            (setq segog (mapcar '(lambda (s)
+                                   (list (ola:xapply x (car s))
+                                         (ola:xapply x (cadr s))
+                                         (caddr s)))
+                                segog)))
+          ;; onto the shop's layers, so the sheet reads the same
+          ;; whichever drawing the two arrived in
+          (cal:ensure-layer ola:*new-layer* ola:*new-color*)
+          (cal:ensure-layer ola:*og-layer* ola:*og-color*)
+          (ola:relayer newss ola:*new-layer*)
+          (ola:relayer ogss ola:*og-layer*)
+          ;; the error, and the worst of it
+          (setq prof (ola:profile segog segnew)
+                pk   (ola:peaks prof (max 0 (fix ola:*dimcount*))
+                                (ola:closed-p segog))
+                push (* ola:*text-push* (ola:span segog))
+                mid  (ola:middle segog))
+          (if pk
             (progn
-              ;; the drawing moves ONCE, by the whole transform
-              (ola:xform-ss x movss)
-              (if (= whichmove "New")
-                (setq segnew (mapcar '(lambda (s)
-                                        (list (ola:xapply x (car s))
-                                              (ola:xapply x (cadr s))
-                                              (caddr s)))
-                                     segnew))
-                (setq segog (mapcar '(lambda (s)
-                                       (list (ola:xapply x (car s))
-                                             (ola:xapply x (cadr s))
-                                             (caddr s)))
-                                    segog)))
-              ;; onto the shop's layers, so the sheet reads the same
-              ;; whichever drawing the two arrived in
-              (cal:ensure-layer ola:*new-layer* ola:*new-color*)
-              (cal:ensure-layer ola:*og-layer* ola:*og-color*)
-              (ola:relayer newss ola:*new-layer*)
-              (ola:relayer ogss ola:*og-layer*)
-              ;; the error, and the worst of it
-              (setq prof (ola:profile segog segnew)
-                    pk   (ola:peaks prof (max 0 (fix ola:*dimcount*))
-                                    (ola:closed-p segog))
-                    push (* ola:*text-push* (ola:span segog))
-                    mid  (ola:middle segog))
-              (if pk
-                (progn
-                  (cal:ensure-layer ola:*dim-layer* ola:*dim-color*)
-                  (cal:dimstysave)
-                  (setq havestyle (tblsearch "DIMSTYLE" ola:*dim-style*))
-                  (if havestyle
-                    (command "_.-DIMSTYLE" "_Restore" ola:*dim-style*)
-                    (princ (strcat "\nOLAUTO: dimension style \""
-                                   ola:*dim-style*
-                                   "\" is not in this drawing - using the"
-                                   " current style \"" (getvar "DIMSTYLE")
-                                   "\" instead.")))
-                  (setvar "CLAYER" ola:*dim-layer*)
-                  (setq drawn nil)
-                  (foreach p pk
-                    (setq dimlist (ola:dim (cadr p) (caddr p) push mid))
-                    (if dimlist (setq drawn (cons dimlist drawn))))
-                  (cal:dimstyrestore)))
-              (ola:report prof drawn (ola:span segog) warn)))))))
+              (cal:ensure-layer ola:*dim-layer* ola:*dim-color*)
+              (cal:dimstysave)
+              (setq havestyle (tblsearch "DIMSTYLE" ola:*dim-style*))
+              (if havestyle
+                (command "_.-DIMSTYLE" "_Restore" ola:*dim-style*)
+                (princ (strcat "\nOLAUTO: dimension style \""
+                               ola:*dim-style*
+                               "\" is not in this drawing - using the"
+                               " current style \"" (getvar "DIMSTYLE")
+                               "\" instead.")))
+              (setvar "CLAYER" ola:*dim-layer*)
+              (setq drawn nil)
+              (foreach p pk
+                (setq dimlist (ola:dim (cadr p) (caddr p) push mid))
+                (if dimlist (setq drawn (cons dimlist drawn))))
+              (cal:dimstyrestore)))
+          (ola:report prof drawn (ola:span segog) warn)))))
   (princ))
 
 (defun c:OLAUTO ( / *error* undo-open)

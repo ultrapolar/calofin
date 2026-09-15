@@ -136,7 +136,7 @@
 ;;;       FGStep layer, so the spot it came off is still visible,
 ;;;     * a note is written on FGStep reading
 ;;;
-;;;           Moved Pt.17 B from 21'-1" to 21'-7"
+;;;           - Moved Pt.17 B from 21'-1" to 21'-7"
 ;;;
 ;;;       naming the tape that moved -- the one that was NOT held --
 ;;;       and both of its readings, and
@@ -220,14 +220,14 @@
 ;;   the field sheet placed, and a sheet that does not say so reads as
 ;;   though the field measured it.
 ;;
-;;       Created Pt.23 - A 16'-8", B 15'-0"
+;;       - Created Pt.23 - A 16'-8", B 15'-0"
 ;;
 ;;   and, where the two readings could NOT cross and one of them had to
 ;;   be changed to make them, the note says which was held and what the
 ;;   other went from and to -- the half of it somebody will want to
 ;;   check back against the sheet:
 ;;
-;;       Created Pt.23 - A 25'-0" held, B from 20'-10" to 27'-10"
+;;       - Created Pt.23 - A 25'-0" held, B from 20'-10" to 27'-10"
 ;;
 ;;   Where it goes is not asked.  ABMOVE asks where to put its own
 ;;   because that one belongs at the spot the point came OFF, away from
@@ -395,7 +395,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.17")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.18")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -426,6 +426,14 @@
                                     ; bad points on
 (setq abf:*ring-radius*  5.0)       ; ring RADIUS (5 inches)
 (setq abf:*note-hgt*     6.0)       ; height of the "Moved Pt.##" note
+(setq abf:*note-prefix*  "- ")      ; put in front of EVERY note this file
+                                    ; writes, one per line.  A run that
+                                    ; moves or creates several points
+                                    ; leaves a column of them on
+                                    ; abf:*ring-layer*, and the bullet is
+                                    ; what makes that column read as a
+                                    ; list when the sheet is laid out
+                                    ; later.  "" writes the note bare
 (setq abf:*moved-suffix* "m")       ; added to the number of a point
                                     ; that moved: Pt.17 -> Pt.17m
 (setq abf:*sug-radius*   3.0)       ; radius of a suggestion's marker
@@ -1288,12 +1296,20 @@
                  (cons 40 abf:*ring-radius*)))
   (entlast))
 
-;; The note that says what moved, and from what reading to what.
+;; The note that says what moved, or what was created, and from what
+;; reading to what.
+;;
+;; abf:*note-prefix* goes on HERE rather than at the two places that
+;; word a note, so that every note carries it and a note added later
+;; cannot quietly miss it: one call is one TEXT is one line, which is
+;; what "one per line" has to mean for a file whose notes are single
+;; lines of text.
 (defun abf:note (p str)
   (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
                  (cons 8 abf:*ring-layer*) '(100 . "AcDbText")
                  (list 10 (car p) (cadr p) 0.0)
-                 (cons 40 abf:*note-hgt*) (cons 1 str)))
+                 (cons 40 abf:*note-hgt*)
+                 (cons 1 (strcat abf:*note-prefix* str))))
   (entlast))
 
 ;; What a CREATED point's note says.  A point that was plotted rather

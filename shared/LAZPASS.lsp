@@ -436,6 +436,24 @@
                       (* 0.11 (rem (/ c 65536) 256))))
          (if (< lum 128.0) 'dark 'light))))))
 
+;; A per-ROLE override a drafter has set through CALSET's Itemcolors
+;; menu: CalofinInk-<ROLE> in the profile, or nil when none is set for
+;; this role.  One profile key per role, rather than one packed
+;; setting parsed by hand, so what CALSET writes is exactly what
+;; getint already validated -- nothing downstream re-parses a typed
+;; string.  Works for any role, fade/guide/dim/hi included, though
+;; today only the item-type roles below are reachable from CALSET.
+(defun cal:inkoverride (role / q v)
+  (setq q (assoc role '((fade . "FADE") (guide . "GUIDE") (dim . "DIM")
+                         (hi . "HI") (flag . "FLAG") (arc . "ARC")
+                         (olap . "OLAP") (orig . "ORIG") (sugg . "SUGG")
+                         (point . "POINT") (constr . "CONSTR")
+                         (report . "REPORT"))))
+  (if q
+    (progn
+      (setq v (cal:setting (strcat "CalofinInk-" (cdr q)) ""))
+      (if (/= v "") (atoi v)))))
+
 ;;  THE INK TABLE.  A colour knob set to 'auto asks for the ACI that
 ;;  suits the background it will be seen against; a knob set to a
 ;;  NUMBER is used exactly as given, so a shop that has picked its own
@@ -460,27 +478,56 @@
 ;;  pool, which is 8 on white and nearly the background itself on the
 ;;  stock dark grey.  The unmeasured column is deliberately what the
 ;;  tree did before this table existed: a session that cannot tell is
-;;  not a session that changes behaviour.
-(defun cal:ink (knob role / th)
+;;  not a session that behaves differently.
+;;
+;;  ITEM-TYPE COLOURS.  A second set of roles, alongside the four
+;;  above, for parts of a review that are not about the SCREEN at all
+;;  but about what KIND of thing is being marked -- a flagged error, an
+;;  arc whose endpoints moved, an overlap, the point as drawn versus
+;;  the one suggested, the construction line, the report text.
+;;  COVERCHECK, DIMCHECK and LINFINCHECK each carried the same eight
+;;  numbers as a separate literal copy; this table is the one place
+;;  they are decided now.
+;;
+;;    role     what it is                                    ACI
+;;    flag     what a drafter answered "No" to                 1  red
+;;    arc      an arc whose endpoints were moved                6  magenta
+;;    olap     a merged or flagged overlapping line             4  cyan
+;;    orig     the X at the point as drawn                      1  red
+;;    sugg     the + at the point the tool suggests              3  green
+;;    point    the crosses at an overlap's two ends              2  yellow
+;;    constr   the construction line through moved points       2  yellow
+;;    report   the report text                                  3  green
+;;
+;;  None of these vary with the screen the way fade/guide/dim/hi do --
+;;  they are the same ordinary ACI colours on any background the three
+;;  review tools have ever drawn on -- so there is no dark/light table
+;;  for them, only the override above and CALSET's Itemcolors menu.
+(defun cal:ink (knob role / th ov)
   ;; numberp, not (eq knob 'auto): a knob is a colour NUMBER used
   ;; exactly as given, or it is resolved.  Testing for 'auto instead
   ;; would hand back whatever a mistyped knob holds -- nil, or the
   ;; symbol AUOT -- and that reaches entmake as a DXF group 62, where
   ;; it dies a long way from the line that caused it.
-  (if (numberp knob)
-    knob
-    (progn
-      (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
-      (cond
-        ((eq role 'fade)
-         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
-        ((eq role 'guide)
-         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
-        ((eq role 'dim)
-         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
-        ((eq role 'hi)
-         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
-        (t 7)))))
+  (cond
+    ((numberp knob) knob)
+    ((setq ov (cal:inkoverride role)) ov)
+    ((setq ov (assoc role '((flag . 1) (arc . 6) (olap . 4) (orig . 1)
+                             (sugg . 3) (point . 2) (constr . 2)
+                             (report . 3))))
+     (cdr ov))
+    (t
+     (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
+     (cond
+       ((eq role 'fade)
+        (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+       ((eq role 'guide)
+        (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+       ((eq role 'dim)
+        (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+       ((eq role 'hi)
+        (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+       (t 7)))))
 
 ;;; -------------------- layers ------------------------------------------
 
@@ -22444,7 +22491,7 @@
 ;;;       FGStep layer, so the spot it came off is still visible,
 ;;;     * a note is written on FGStep reading
 ;;;
-;;;           Moved Pt.17 B from 21'-1" to 21'-7"
+;;;           - Moved Pt.17 B from 21'-1" to 21'-7"
 ;;;
 ;;;       naming the tape that moved -- the one that was NOT held --
 ;;;       and both of its readings, and
@@ -22528,14 +22575,14 @@
 ;;   the field sheet placed, and a sheet that does not say so reads as
 ;;   though the field measured it.
 ;;
-;;       Created Pt.23 - A 16'-8", B 15'-0"
+;;       - Created Pt.23 - A 16'-8", B 15'-0"
 ;;
 ;;   and, where the two readings could NOT cross and one of them had to
 ;;   be changed to make them, the note says which was held and what the
 ;;   other went from and to -- the half of it somebody will want to
 ;;   check back against the sheet:
 ;;
-;;       Created Pt.23 - A 25'-0" held, B from 20'-10" to 27'-10"
+;;       - Created Pt.23 - A 25'-0" held, B from 20'-10" to 27'-10"
 ;;
 ;;   Where it goes is not asked.  ABMOVE asks where to put its own
 ;;   because that one belongs at the spot the point came OFF, away from
@@ -22703,7 +22750,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.17")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.18")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -22734,6 +22781,14 @@
                                     ; bad points on
 (setq abf:*ring-radius*  5.0)       ; ring RADIUS (5 inches)
 (setq abf:*note-hgt*     6.0)       ; height of the "Moved Pt.##" note
+(setq abf:*note-prefix*  "- ")      ; put in front of EVERY note this file
+                                    ; writes, one per line.  A run that
+                                    ; moves or creates several points
+                                    ; leaves a column of them on
+                                    ; abf:*ring-layer*, and the bullet is
+                                    ; what makes that column read as a
+                                    ; list when the sheet is laid out
+                                    ; later.  "" writes the note bare
 (setq abf:*moved-suffix* "m")       ; added to the number of a point
                                     ; that moved: Pt.17 -> Pt.17m
 (setq abf:*sug-radius*   3.0)       ; radius of a suggestion's marker
@@ -23596,12 +23651,20 @@
                  (cons 40 abf:*ring-radius*)))
   (entlast))
 
-;; The note that says what moved, and from what reading to what.
+;; The note that says what moved, or what was created, and from what
+;; reading to what.
+;;
+;; abf:*note-prefix* goes on HERE rather than at the two places that
+;; word a note, so that every note carries it and a note added later
+;; cannot quietly miss it: one call is one TEXT is one line, which is
+;; what "one per line" has to mean for a file whose notes are single
+;; lines of text.
 (defun abf:note (p str)
   (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
                  (cons 8 abf:*ring-layer*) '(100 . "AcDbText")
                  (list 10 (car p) (cadr p) 0.0)
-                 (cons 40 abf:*note-hgt*) (cons 1 str)))
+                 (cons 40 abf:*note-hgt*)
+                 (cons 1 (strcat abf:*note-prefix* str))))
   (entlast))
 
 ;; What a CREATED point's note says.  A point that was plotted rather
@@ -34394,7 +34457,7 @@
 ;;; layer everything landed on.
 ;;; ======================================================================
 
-(setq *olauto-version* "v1.1")       ; announced on load; release_lisp.py
+(setq *olauto-version* "v1.2")       ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -34522,6 +34585,25 @@
 ;; ...and how big the worst error may be, against the diagonal of the
 ;; original's bounding box, before the overlay stops meaning anything.
 (setq ola:*fit-warn*    0.05)          ; fraction of the bbox diagonal
+
+;; A pick that came in as more than one piece -- a stray deck line or
+;; coping arc caught by the window -- is chained end to end with the
+;; perimeter and poisons the fit.  A jump between consecutive pieces
+;; bigger than this share of the whole chain is called out as a piece.
+;; It is looser than ola:*close-frac* on purpose: a skimmer gap of a
+;; foot in a forty-foot bead track is one perimeter drawn with a break,
+;; not two objects.
+(setq ola:*piece-frac*  0.05)          ; fraction of the chain length
+
+;; -- mirror images ----------------------------------------------------------
+;;
+;; A rigid fit can turn and slide but never flip, so a perimeter that
+;; arrived as a MIRROR image -- a survey read from the far side, a DXF
+;; brought in with its Y axis reversed -- fits as badly as it possibly
+;; can and every dimension is nonsense.  OLAUTO tries the flipped walk
+;; as well and, when that fits this much better than the unflipped one,
+;; offers to mirror the perimeter before fitting.
+(setq ola:*mirror-ratio* 0.5)         ; flipped residual / unflipped, at most
 
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
@@ -34779,6 +34861,24 @@
               rest (ola:remove orig rest)))
       (reverse loop))))
 
+;; The pieces a chain is really in: one more than the number of jumps
+;; between consecutive segments that are bigger than ola:*piece-frac*
+;; of the whole, and the biggest such jump.  Returns (pieces jump).
+(defun ola:chain-pieces (segs / L tol n big prev s d)
+  (setq L    (ola:chain-len segs)
+        tol  (* ola:*piece-frac* L)
+        n    1
+        big  0.0
+        prev nil)
+  (foreach s segs
+    (if prev
+      (progn
+        (setq d (cal:dist (cadr prev) (car s)))
+        (if (> d tol) (setq n (1+ n)))
+        (if (> d big) (setq big d))))
+    (setq prev s))
+  (list n big))
+
 ;; Total length of a chain.
 (defun ola:chain-len (segs / L s)
   (setq L 0.0)
@@ -34911,7 +35011,7 @@
 ;; that its point J is the one facing A's point J.  The polish then has
 ;; its correspondence for free.
 (defun ola:phase (a b closed / n ca cb ac bc rev bd bb pa qb sxx sxy m
-                               best bestk bestrev k lim)
+                               best bestk bestrev k lim saa sbb p)
   (setq n    (length a)
         ca   (ola:centroid a)
         cb   (ola:centroid b)
@@ -34920,7 +35020,12 @@
         ac   (mapcar '(lambda (p) (cal:v- p ca)) a)
         best nil bestk 0 bestrev 0
         rev  0
-        lim  (if closed n 1))
+        lim  (if closed n 1)
+        saa  0.0
+        sbb  0.0)
+  ;; the two self-terms of the residual, once: they do not move either
+  (foreach p ac (setq saa (+ saa (cal:dot p p))))
+  (foreach p b  (setq p (cal:v- p cb) sbb (+ sbb (cal:dot p p))))
   (while (< rev 2)
     (setq bd (if (= rev 0) b (reverse b))
           bc (mapcar '(lambda (p) (cal:v- p cb)) bd)
@@ -34951,7 +35056,12 @@
   (setq bd nil k 0)
   (while (< k n) (setq bd (cons (car qb) bd) qb (cdr qb) k (1+ k)))
   (setq bd (reverse bd))
-  (list (ola:kabsch a bd) bd))
+  ;; The residual the winner leaves, as an RMS over the walk: with the
+  ;; best rotation applied the summed squared error is
+  ;; sum|a|^2 + sum|b|^2 - 2 sqrt(sxx^2 + sxy^2), and that is what the
+  ;; mirror test compares between the flipped walk and the unflipped.
+  (list (ola:kabsch a bd) bd
+        (sqrt (/ (max 0.0 (- (+ saa sbb) (* 2.0 (sqrt best)))) n))))
 
 ;; ICP POLISH.  Re-match every point to the nearest place on the fixed
 ;; walk, re-solve, repeat until nothing moves.  Returns the transform
@@ -35018,6 +35128,89 @@
     (setq cur new
           pass (1+ pass)))
   acc)
+
+;; Does MSEG fit FSEG far better as a mirror image than as itself?
+;;
+;; Run the phase search twice, once on the walk and once on the walk
+;; with its X reversed, and compare what each leaves behind.  A shape
+;; with a mirror line of its own -- a rectangle, a round spa -- leaves
+;; the same residual both ways, so the flipped one has to be BETTER by
+;; ola:*mirror-ratio* before anything is said, and the unflipped
+;; residual has to be more than sampling noise to begin with.
+;;
+;; Returns (unflipped-rms flipped-rms) when the mirror is the better
+;; fit, nil otherwise.
+(defun ola:mirror-p (mseg fseg / n closed a b r0 r1 span)
+  (setq n      (max 8 (fix ola:*fitpts*))
+        closed (and (ola:closed-p mseg) (ola:closed-p fseg))
+        a      (ola:walk mseg n closed)
+        b      (ola:walk fseg n closed))
+  (if (and a b)
+    (progn
+      (setq r0   (caddr (ola:phase a b closed))
+            r1   (caddr (ola:phase (mapcar '(lambda (p) (list (- (car p)) (cadr p)))
+                                           a)
+                                   b closed))
+            span (ola:span fseg))
+      (if (and (> r0 (* 0.01 span))
+               (< r1 (* ola:*mirror-ratio* r0)))
+        (list r0 r1)))))
+
+;; Reflect a chain about the vertical line x = X0: every point goes
+;; across, and every bulge changes sign because a reflection runs each
+;; arc the other way round.
+(defun ola:mirror-segs (segs x0)
+  (mapcar '(lambda (s)
+             (list (list (- (* 2.0 x0) (car (car s))) (cadr (car s)))
+                   (list (- (* 2.0 x0) (car (cadr s))) (cadr (cadr s)))
+                   (- (caddr s))))
+          segs))
+
+;; ...and one entity, in place.  An ARC is the one that needs thought:
+;; reflecting turns the direction angle t into pi - t and runs the
+;; sweep the other way, and an AutoCAD arc always goes counter-
+;; clockwise from 50 to 51, so the reflected arc starts where the old
+;; END was reflected to and ends at the old START's reflection.
+(defun ola:mirror-ed (ed x0 / out item code p a0 a1)
+  (setq out nil)
+  (foreach item ed
+    (setq code (car item))
+    (setq out
+          (cons
+            (cond
+              ((member code '(10 11))
+               (setq p (cdr item))
+               (cons code (append (list (- (* 2.0 x0) (car p)) (cadr p))
+                                  (if (caddr p) (list (caddr p)) nil))))
+              ((= code 42) (cons 42 (- (cdr item))))
+              (T item))
+            out)))
+  (setq out (reverse out))
+  (if (and (assoc 50 out) (assoc 51 out))
+    (progn
+      (setq a0 (cdr (assoc 50 out))
+            a1 (cdr (assoc 51 out)))
+      (setq out (subst (cons 50 (cal:angnorm (- pi a1))) (assoc 50 out) out)
+            out (subst (cons 51 (cal:angnorm (- pi a0))) (assoc 51 out) out))))
+  out)
+
+(defun ola:mirror-ent (en x0 / ed typ sub)
+  (setq ed  (entget en)
+        typ (cdr (assoc 0 ed)))
+  (cond
+    ((= typ "POLYLINE")
+     (setq sub (entnext en))
+     (while (and sub (= "VERTEX" (cdr (assoc 0 (entget sub)))))
+       (entmod (ola:mirror-ed (entget sub) x0))
+       (setq sub (entnext sub)))
+     (entupd en))
+    (T (entmod (ola:mirror-ed ed x0)))))
+
+(defun ola:mirror-ss (ss x0 / i)
+  (setq i 0)
+  (repeat (sslength ss)
+    (ola:mirror-ent (ssname ss i) x0)
+    (setq i (1+ i))))
 
 ;; The whole fit: walk both, phase-search, polish.  Returns the
 ;; transform that carries MSEG's perimeter onto FSEG's.
@@ -35318,13 +35511,55 @@
     all
     (ola:chain all)))
 
-(defun ola:select (which / ss)
+(defun ola:select (which / all ss i en typ bad)
   (princ (strcat "\n\nSelect the " which
                  " perimeter - one polyline, or the same"))
   (princ "\nshape exploded into lines and arcs.")
-  (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
-  (if lzd:watch (lzd:watch ss) ss)
-  ss)
+  ;; Picked WITHOUT a type filter, so that what cannot be read can be
+  ;; named.  A filter would quietly drop a spline or a block, and the
+  ;; command would then end as if nothing had been picked at all --
+  ;; which is what it did, and what a drafter with a SPLINE perimeter
+  ;; saw: nothing.  Text, dimensions and hatches caught by the window
+  ;; are dropped without comment; only the things somebody might
+  ;; reasonably expect to work are called out.
+  (setq all (ssget))
+  (if lzd:watch (lzd:watch all) all)
+  (if all
+    (progn
+      (setq ss (ssadd) bad nil i 0)
+      (repeat (sslength all)
+        (setq en  (ssname all i)
+              typ (cdr (assoc 0 (entget en))))
+        (cond
+          ((member typ '("LWPOLYLINE" "POLYLINE" "LINE" "ARC" "CIRCLE"))
+           (ssadd en ss))
+          ((and (member typ '("SPLINE" "ELLIPSE" "INSERT"))
+                (not (member typ bad)))
+           (setq bad (cons typ bad))))
+        (setq i (1+ i)))
+      (foreach typ bad
+        (princ (strcat "\nOLAUTO: the " which " pick has "
+                       (cond ((= typ "SPLINE") "a SPLINE")
+                             ((= typ "ELLIPSE") "an ELLIPSE")
+                             (T "a block (INSERT)"))
+                       " in it, which cannot be read - "
+                       (cond ((= typ "SPLINE")
+                              "PEDIT it into a polyline first.")
+                             ((= typ "ELLIPSE")
+                              "redraw it as arcs, or PEDIT it, first.")
+                             (T (strcat "EXPLODE it, or pick the"
+                                        " perimeter inside it, first.")))
+                       (if (> (sslength ss) 0)
+                         "  Going on with the rest of the pick."
+                         ""))))
+      (if (> (sslength ss) 0)
+        ss
+        (progn
+          (if (null bad)
+            (princ (strcat "\nOLAUTO: nothing in the " which
+                           " pick can be read - it wants a polyline,"
+                           " or lines and arcs.")))
+          nil)))))
 
 ;; ---- the report ---------------------------------------------------------
 
@@ -35370,21 +35605,29 @@
 
 (defun ola:run ( / ssa ssb newss ogss movss fixss laya layb qstep ans
                    whichnew whichmove segnew segog x prof pk drawn push
-                   havestyle p dimlist mid shared flat lnew log_ warn w)
-  ;; The selections and the two questions are ONE chain, walked with a
-  ;; step counter (STANDARDS section 3).  A selection cannot be armed
-  ;; with initget, so Back cannot be typed AT one -- which is why Back
-  ;; at the question sitting straight after the selections re-opens
-  ;; them instead, the way WCALST and AUTOBEAD have always done.
-  ;; Nothing has been drawn at this point, and step 0 rebuilds every
-  ;; answer it fills, so the second pass starts clean.
+                   havestyle p dimlist mid shared flat lnew log_ warn w
+                   pcs mir mseg fseg ratio hint)
+  ;; The selections and the questions are ONE chain, walked with a step
+  ;; counter (STANDARDS section 3).  A selection cannot be armed with
+  ;; initget, so Back cannot be typed AT one -- which is why Back at the
+  ;; question sitting straight after the selections re-opens them
+  ;; instead, the way WCALST and AUTOBEAD have always done.  Nothing
+  ;; has been drawn before step 4, and every step rebuilds what it
+  ;; fills, so a second pass through any of them starts clean.
+  ;;
+  ;;   0  the two picks (and the picks OLAUTO refuses)
+  ;;   1  which one is the NEW perimeter
+  ;;   2  which one should move
+  ;;   3  read both, say what looks wrong, and -- only when the flipped
+  ;;      walk fits far better -- offer the mirror
+  ;;   4  fit, move, re-layer, dimension, report
   (setq qstep 0)
-  (while (and qstep (< qstep 3))
+  (while (and qstep (< qstep 4))
     (cond
       ((= qstep 0)
        ;; Two picks, then two refusals that leave QSTEP where it is --
        ;; which sends the run straight back to the picking, because that
-       ;; is where the mistake was made and nothing has been drawn yet.
+       ;; is where the mistake was made.
        (cond
          ((not (and (setq ssa (ola:select "FIRST"))
                     (setq ssb (ola:select "SECOND"))))
@@ -35413,25 +35656,25 @@
                          " mirrored outline.  Flatten it first.")))
          (T
           (setq laya (ola:ss-layer ssa)
-               layb (ola:ss-layer ssb)
-               ;; the layers answer the next question before it is
-               ;; asked: the selection already sitting on the pool
-               ;; layer is the new one, and if neither is, the first
-               ;; one asked for leads
-               whichnew (cond ((and laya (= (strcase laya)
-                                            (strcase ola:*new-layer*)))
-                               "First")
-                              ((and layb (= (strcase layb)
-                                            (strcase ola:*new-layer*)))
-                               "Second")
-                              ((and layb (= (strcase layb)
-                                            (strcase ola:*og-layer*)))
-                               "First")
-                              ((and laya (= (strcase laya)
-                                            (strcase ola:*og-layer*)))
-                               "Second")
-                              (T "First"))
-               qstep 1))))
+                layb (ola:ss-layer ssb)
+                ;; the layers answer the next question before it is
+                ;; asked: the selection already sitting on the pool
+                ;; layer is the new one, and if neither is, the first
+                ;; one asked for leads
+                whichnew (cond ((and laya (= (strcase laya)
+                                             (strcase ola:*new-layer*)))
+                                "First")
+                               ((and layb (= (strcase layb)
+                                             (strcase ola:*new-layer*)))
+                                "Second")
+                               ((and layb (= (strcase layb)
+                                             (strcase ola:*og-layer*)))
+                                "First")
+                               ((and laya (= (strcase laya)
+                                             (strcase ola:*og-layer*)))
+                                "Second")
+                               (T "First"))
+                qstep 1))))
       ((= qstep 1)
        (setq ans (cal:askkw
                    (strcat "Which selection is the NEW perimeter?"
@@ -35451,97 +35694,184 @@
        (if (eq ans 'CAL-BACK)
          (progn (princ "\nStepping back one question.")
                 (setq qstep 1))
-         (setq whichmove ans qstep 3)))))
-  (if (= qstep 3)
+         (setq whichmove ans qstep 3)))
+      ((= qstep 3)
+       (setq newss  (if (= whichnew "First") ssa ssb)
+             ogss   (if (= whichnew "First") ssb ssa)
+             movss  (if (= whichmove "New") newss ogss)
+             fixss  (if (= whichmove "New") ogss newss)
+             segnew (ola:collect newss)
+             segog  (ola:collect ogss)
+             warn   nil)
+       (if (or (< (length segnew) 1) (< (length segog) 1))
+         (progn
+           (princ "\nOLAUTO: one of those selections has no curve in it.")
+           (setq qstep nil))
+         (progn
+           ;; Before anything moves: do these two even look like the
+           ;; same pool?  OLAUTO has no idea what a pool is and will fit
+           ;; any two curves, so a mis-pick comes back as a confident
+           ;; set of dimensions off a meaningless overlay unless
+           ;; something says otherwise.  Warnings, not refusals -- a
+           ;; pool really can be measured wrong by a lot, and that is
+           ;; the run somebody needs the numbers from.
+           ;;
+           ;; First: is either pick really several objects?  A stray
+           ;; deck line caught by the window is chained end to end with
+           ;; the perimeter, and the fit that follows is of the junk.
+           (foreach p (list (list "new" segnew) (list "original" segog))
+             (setq pcs (ola:chain-pieces (cadr p)))
+             (if (> (car pcs) 1)
+               (setq warn
+                     (cons (strcat "the " (car p) " perimeter came in as "
+                                   (itoa (car pcs)) " separate pieces - the"
+                                   " biggest jump between them is "
+                                   (ola:rtos1 (cadr pcs))
+                                   ".  A stray line or arc caught by the"
+                                   " window?  It is fitted along with the"
+                                   " rest.")
+                           warn))))
+           (setq lnew (ola:chain-len segnew)
+                 log_ (ola:chain-len segog))
+           (if (and (> (max lnew log_) 0.0)
+                    (> (/ (abs (- lnew log_)) (max lnew log_))
+                       ola:*len-warn*))
+             (progn
+               ;; a ratio that is a units factor is worth naming: it is
+               ;; the one mis-pick that is not a mis-pick at all
+               (setq ratio (/ (max lnew log_) (max 1.0e-12 (min lnew log_)))
+                     hint  (cond
+                             ((equal ratio 25.4 0.8)
+                              "  That is the ratio of inches to millimetres.")
+                             ((equal ratio 12.0 0.4)
+                              "  That is the ratio of feet to inches.")
+                             ((equal ratio 2.54 0.08)
+                              "  That is the ratio of inches to centimetres.")
+                             ((or (equal ratio 10.0 0.3) (equal ratio 100.0 3.0))
+                              "  That is a power of ten: a scale factor?")
+                             (T "")))
+               (setq warn
+                     (cons (strcat "the two perimeters are "
+                                   (ola:rtos1 lnew) " and " (ola:rtos1 log_)
+                                   " round - "
+                                   (itoa (fix (+ 0.5 (* 100.0
+                                                        (/ (abs (- lnew log_))
+                                                           (max lnew log_))))))
+                                   "% apart.  Two measurements of one pool"
+                                   " agree far closer than that: check the"
+                                   " pick." hint)
+                           warn))))
+           (if (not (eq (not (ola:closed-p segnew))
+                        (not (ola:closed-p segog))))
+             (setq warn
+                   (cons (strcat "one of these perimeters closes and the"
+                                 " other does not, so they cannot be walked"
+                                 " against each other end for end.  The fit"
+                                 " below is the best of a bad job.")
+                         warn)))
+           (foreach w (reverse warn) (princ (strcat "\nOLAUTO: " w)))
+           ;; Then: is it a mirror image?  A rigid fit can turn and slide
+           ;; but never flip, so a perimeter that arrived flipped fits as
+           ;; badly as it possibly can and every dimension is nonsense.
+           ;; The flipped walk is tried too, and when it fits far better
+           ;; the mirror is offered -- offered, because it changes the
+           ;; drawing, and Enter must not do that by itself.
+           (setq mseg (if (= whichmove "New") segnew segog)
+                 fseg (if (= whichmove "New") segog segnew)
+                 mir  (ola:mirror-p mseg fseg))
+           (if mir
+             (progn
+               ;; the ratio is capped for the sentence: a mirrored fit
+               ;; that lands dead on divides by next to nothing
+               (setq ratio (/ (car mir) (max 1.0e-9 (cadr mir))))
+               (princ (strcat "\n\nOLAUTO: the "
+                              (if (= whichmove "New") "new" "original")
+                              " perimeter fits the other "
+                              (if (> ratio 100.0)
+                                "more than 100"
+                                (strcat "about "
+                                        (itoa (max 2 (fix (+ 0.5 ratio))))))
+                              " times better as a MIRROR image than as it"
+                              " is.  One of the two was probably drawn from"
+                              " the far side, or brought in with an axis"
+                              " reversed.  Without the mirror the overlay"
+                              " will be about " (ola:rtos1 (car mir))
+                              " out everywhere."))
+               (setq ans (cal:askkw
+                           (strcat "Mirror the "
+                                   (if (= whichmove "New") "new" "original")
+                                   " perimeter before fitting?")
+                           "Yes No" "Yes/No" "No" T))
+               (cond
+                 ((eq ans 'CAL-BACK)
+                  (princ "\nStepping back one question.")
+                  (setq qstep 2))
+                 ((= ans "Yes")
+                  ;; about the vertical through its own middle -- any
+                  ;; line would do, the rigid fit puts it where it goes
+                  (setq mid (car (ola:middle mseg)))
+                  (ola:mirror-ss movss mid)
+                  (if (= whichmove "New")
+                    (setq segnew (ola:mirror-segs segnew mid))
+                    (setq segog  (ola:mirror-segs segog mid)))
+                  (setq qstep 4))
+                 (T
+                  (setq warn (cons "fitted WITHOUT the mirror it asked for."
+                                   warn)
+                        qstep 4))))
+             (setq qstep 4)))))))
+  (if (= qstep 4)
     (progn
-      (setq newss (if (= whichnew "First") ssa ssb)
-            ogss  (if (= whichnew "First") ssb ssa)
-            movss (if (= whichmove "New") newss ogss)
-            fixss (if (= whichmove "New") ogss newss))
-      (setq segnew (ola:collect newss)
-            segog  (ola:collect ogss))
-      (if (or (< (length segnew) 1) (< (length segog) 1))
-        (princ "\nOLAUTO: one of those selections has no curve in it.")
+      (princ "\n\nFitting...")
+      (setq x (ola:fit (if (= whichmove "New") segnew segog)
+                       (if (= whichmove "New") segog segnew)))
+      (if (null x)
+        (princ "\nOLAUTO: those two perimeters cannot be walked - one of them has no length.")
         (progn
-          ;; Before anything moves: do these two even look like the same
-          ;; pool?  OLAUTO has no idea what a pool is and will fit any
-          ;; two curves, so a mis-pick comes back as a confident set of
-          ;; dimensions off a meaningless overlay unless something says
-          ;; otherwise.  Warnings, not refusals -- a pool really can be
-          ;; measured wrong by a lot, and that is the run somebody needs
-          ;; the numbers from.
-          (setq lnew (ola:chain-len segnew)
-                log_ (ola:chain-len segog)
-                warn nil)
-          (if (and (> (max lnew log_) 0.0)
-                   (> (/ (abs (- lnew log_)) (max lnew log_)) ola:*len-warn*))
-            (setq warn
-                  (cons (strcat "the two perimeters are "
-                                (ola:rtos1 lnew) " and " (ola:rtos1 log_)
-                                " round - "
-                                (itoa (fix (+ 0.5 (* 100.0 (/ (abs (- lnew log_))
-                                                              (max lnew log_))))))
-                                "% apart.  Two measurements of one pool"
-                                " agree far closer than that: check the pick.")
-                        warn)))
-          (if (not (eq (not (ola:closed-p segnew)) (not (ola:closed-p segog))))
-            (setq warn
-                  (cons (strcat "one of these perimeters closes and the"
-                                " other does not, so they cannot be walked"
-                                " against each other end for end.  The fit"
-                                " below is the best of a bad job.")
-                        warn)))
-          (foreach w (reverse warn) (princ (strcat "\nOLAUTO: " w)))
-          (princ "\n\nFitting...")
-          (setq x (ola:fit (if (= whichmove "New") segnew segog)
-                           (if (= whichmove "New") segog segnew)))
-          (if (null x)
-            (princ "\nOLAUTO: those two perimeters cannot be walked - one of them has no length.")
+          ;; the drawing moves ONCE, by the whole transform
+          (ola:xform-ss x movss)
+          (if (= whichmove "New")
+            (setq segnew (mapcar '(lambda (s)
+                                    (list (ola:xapply x (car s))
+                                          (ola:xapply x (cadr s))
+                                          (caddr s)))
+                                 segnew))
+            (setq segog (mapcar '(lambda (s)
+                                   (list (ola:xapply x (car s))
+                                         (ola:xapply x (cadr s))
+                                         (caddr s)))
+                                segog)))
+          ;; onto the shop's layers, so the sheet reads the same
+          ;; whichever drawing the two arrived in
+          (cal:ensure-layer ola:*new-layer* ola:*new-color*)
+          (cal:ensure-layer ola:*og-layer* ola:*og-color*)
+          (ola:relayer newss ola:*new-layer*)
+          (ola:relayer ogss ola:*og-layer*)
+          ;; the error, and the worst of it
+          (setq prof (ola:profile segog segnew)
+                pk   (ola:peaks prof (max 0 (fix ola:*dimcount*))
+                                (ola:closed-p segog))
+                push (* ola:*text-push* (ola:span segog))
+                mid  (ola:middle segog))
+          (if pk
             (progn
-              ;; the drawing moves ONCE, by the whole transform
-              (ola:xform-ss x movss)
-              (if (= whichmove "New")
-                (setq segnew (mapcar '(lambda (s)
-                                        (list (ola:xapply x (car s))
-                                              (ola:xapply x (cadr s))
-                                              (caddr s)))
-                                     segnew))
-                (setq segog (mapcar '(lambda (s)
-                                       (list (ola:xapply x (car s))
-                                             (ola:xapply x (cadr s))
-                                             (caddr s)))
-                                    segog)))
-              ;; onto the shop's layers, so the sheet reads the same
-              ;; whichever drawing the two arrived in
-              (cal:ensure-layer ola:*new-layer* ola:*new-color*)
-              (cal:ensure-layer ola:*og-layer* ola:*og-color*)
-              (ola:relayer newss ola:*new-layer*)
-              (ola:relayer ogss ola:*og-layer*)
-              ;; the error, and the worst of it
-              (setq prof (ola:profile segog segnew)
-                    pk   (ola:peaks prof (max 0 (fix ola:*dimcount*))
-                                    (ola:closed-p segog))
-                    push (* ola:*text-push* (ola:span segog))
-                    mid  (ola:middle segog))
-              (if pk
-                (progn
-                  (cal:ensure-layer ola:*dim-layer* ola:*dim-color*)
-                  (cal:dimstysave)
-                  (setq havestyle (tblsearch "DIMSTYLE" ola:*dim-style*))
-                  (if havestyle
-                    (command "_.-DIMSTYLE" "_Restore" ola:*dim-style*)
-                    (princ (strcat "\nOLAUTO: dimension style \""
-                                   ola:*dim-style*
-                                   "\" is not in this drawing - using the"
-                                   " current style \"" (getvar "DIMSTYLE")
-                                   "\" instead.")))
-                  (setvar "CLAYER" ola:*dim-layer*)
-                  (setq drawn nil)
-                  (foreach p pk
-                    (setq dimlist (ola:dim (cadr p) (caddr p) push mid))
-                    (if dimlist (setq drawn (cons dimlist drawn))))
-                  (cal:dimstyrestore)))
-              (ola:report prof drawn (ola:span segog) warn)))))))
+              (cal:ensure-layer ola:*dim-layer* ola:*dim-color*)
+              (cal:dimstysave)
+              (setq havestyle (tblsearch "DIMSTYLE" ola:*dim-style*))
+              (if havestyle
+                (command "_.-DIMSTYLE" "_Restore" ola:*dim-style*)
+                (princ (strcat "\nOLAUTO: dimension style \""
+                               ola:*dim-style*
+                               "\" is not in this drawing - using the"
+                               " current style \"" (getvar "DIMSTYLE")
+                               "\" instead.")))
+              (setvar "CLAYER" ola:*dim-layer*)
+              (setq drawn nil)
+              (foreach p pk
+                (setq dimlist (ola:dim (cadr p) (caddr p) push mid))
+                (if dimlist (setq drawn (cons dimlist drawn))))
+              (cal:dimstyrestore)))
+          (ola:report prof drawn (ola:span segog) warn)))))
   (princ))
 
 (defun c:OLAUTO ( / *error* undo-open)
@@ -57700,7 +58030,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.16")
+(setq *cchk-version* "v1.17")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -57864,12 +58194,17 @@
                                    ; 8 recedes on the first and is one of the
                                    ; most prominent things on screen on the
                                    ; second.  A number is used exactly as given
-(setq *cchk-flag-color*    1)       ; ACI: what you answered "No" to (red)
-(setq *cchk-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
-(setq *cchk-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
-(setq *cchk-orig-color*    1)       ; ACI: the X marking where you drew the point (red)
-(setq *cchk-sugg-color*    3)       ; ACI: the + marking where COVERCHECK would put it (green)
-(setq *cchk-point-color*   2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+;; The six below are 'auto too -- they do not vary with the screen the
+;; way *cchk-grey-color* does, but 'auto routes them through cchk:ink's
+;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
+;; in the profile) can override without touching source.  A number is
+;; still used exactly as given.
+(setq *cchk-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
+(setq *cchk-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
+(setq *cchk-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+(setq *cchk-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
+(setq *cchk-sugg-color*    'auto)   ; ACI: the + marking where COVERCHECK would put it (green)
+(setq *cchk-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
 
 ;; The command line and the report name these colours as they use them,
 ;; so a colour changed here is described correctly rather than still
@@ -57882,9 +58217,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *cchk-constr-layer*  "COVERCHECK-CONSTRUCTION")
-(setq *cchk-constr-color*  2)       ; ACI (yellow)
+(setq *cchk-constr-color*  'auto)   ; ACI (yellow)
 (setq *cchk-report-layer*  "COVERCHECK-REPORT")
-(setq *cchk-report-color*  3)       ; ACI (green)
+(setq *cchk-report-color*  'auto)   ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -58225,12 +58560,13 @@
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
-(defun cchk:mark-point (pt)
+(defun cchk:mark-point (pt / col)
   ;; both strokes, for a point that is simply being pointed out
-  (cchk:mark-x pt *cchk-point-color*)
-  (cchk:mark-plus pt *cchk-point-color*))
+  (setq col (cal:ink *cchk-point-color* 'point))
+  (cchk:mark-x pt col)
+  (cchk:mark-plus pt col))
 
-(defun cchk:confirm-move (label orig sugg what / ans newp)
+(defun cchk:confirm-move (label orig sugg what / ans newp ocol scol)
   ;; The point has been put where COVERCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
   ;; which: an X where you drew it, a + where we would move
@@ -58240,15 +58576,17 @@
   ;;   'move - take our suggestion
   ;;   'keep - put it back exactly where you drew it
   ;;   <point> - a spot you picked yourself (current UCS)
-  (cchk:mark-x    orig *cchk-orig-color*)
-  (cchk:mark-plus sugg *cchk-sugg-color*)
+  (setq ocol (cal:ink *cchk-orig-color* 'orig)
+        scol (cal:ink *cchk-sugg-color* 'sugg))
+  (cchk:mark-x    orig ocol)
+  (cchk:mark-plus sugg scol)
   (if (> (distance orig sugg) *cchk-same-pt*)
-    (grdraw (trans orig 0 1) (trans sugg 0 1) *cchk-sugg-color* 1))
+    (grdraw (trans orig 0 1) (trans sugg 0 1) scol 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (cchk:ptstr orig)
-                 "  (" (cchk:color-name *cchk-orig-color*) " X)"
+                 "  (" (cchk:color-name ocol) " X)"
                  "\n    Move = onto " what " " (cchk:ptstr sugg)
-                 "  (" (cchk:color-name *cchk-sugg-color*) " +), "
+                 "  (" (cchk:color-name scol) " +), "
                  (cchk:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   ;; the pick is a second question, so Back at it re-asks the first
@@ -58266,7 +58604,7 @@
        (initget "Back Undo")
        (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
-                                    (cchk:color-name *cchk-sugg-color*)
+                                    (cchk:color-name scol)
                                     " +> [Back]: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") newp) newp)
        (cond
@@ -58291,7 +58629,7 @@
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
   ;; to the surrounding colour after (braces scope the change)
-  (strcat "{\\C" (itoa *cchk-flag-color*) ";" s "}"))
+  (strcat "{\\C" (itoa (cal:ink *cchk-flag-color* 'flag)) ";" s "}"))
 
 (defun cchk:small (s)
   ;; all-clear text renders at *cchk-green-scale* of the height the
@@ -58633,7 +58971,7 @@
                           minx miny maxx maxy
                           / mainl diml l pr nred nmain ndim nlin grps grp
                             ref h ins ins2 txt right)
-  (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
+  (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
   (foreach l lines
     (if (cchk:dimline-p l)
       (setq diml (cons l diml))
@@ -59383,7 +59721,7 @@
 
 (defun cchk:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote)
+                                              ok note meas assocnote fcol)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
   ;; anchor-held-point-count).
@@ -59427,12 +59765,13 @@
   (if (member ok '(back skip))
     (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
     (progn
-      (setq ok (eq ok 'yes))
+      (setq ok (eq ok 'yes)
+            fcol (cal:ink *cchk-flag-color* 'flag))
       (setq note (strcat
                    (if ok
                      "OK"
                      (strcat "FLAGGED to fix ("
-                             (cchk:color-name *cchk-flag-color*) ")"))
+                             (cchk:color-name fcol) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -59446,7 +59785,7 @@
                              " point(s) held at a shared anchor")
                      "")
                    (if assocnote assocnote "")))
-      (if (not ok) (cchk:set-color ent *cchk-flag-color*))
+      (if (not ok) (cchk:set-color ent fcol))
       (list h ok note (length moved) meas (length held)))))
 
 ;; --- arc review ----------------------------------------------------
@@ -59553,7 +59892,7 @@
              nil)))))
     (t nil)))
 
-(defun cchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note)
+(defun cchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
   ;; interactive review of one arc's endpoints.
   ;; Returns (handle untouched-flag report-note moved-point-count).
   (setq ed     (entget ent)
@@ -59572,16 +59911,17 @@
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
-  (if moved (cchk:set-color ent *cchk-arc-color*))
+  (setq acol (cal:ink *cchk-arc-color* 'arc))
+  (if moved (cchk:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
-                        (cchk:color-name *cchk-arc-color*) "), "
+                        (cchk:color-name acol) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
                               " endpoint(s) moved ("
-                              (cchk:color-name *cchk-arc-color*) ")"))
+                              (cchk:color-name acol) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -59590,7 +59930,7 @@
 ;; --- overlapping line review ---------------------------------------
 
 (defun cchk:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds)
+                                           ans mergeable kinds ocol)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
@@ -59638,21 +59978,22 @@
       (redraw ea 4)
       (redraw eb 4)
       (redraw)
+      (setq ocol (cal:ink *cchk-olap-color* 'olap))
       (cond
         ((= ans "Merge")
          (cchk:merge-lines la lb info)
-         (cchk:set-color ea *cchk-olap-color*)
+         (cchk:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
-                        (cchk:color-name *cchk-olap-color*) ")."))
+                        (cchk:color-name ocol) ")."))
          (list label
                (strcat "merged into one line ("
-                       (cchk:color-name *cchk-olap-color*) ")")
+                       (cchk:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (cchk:set-color ea *cchk-olap-color*)
-         (cchk:set-color eb *cchk-olap-color*)
+         (cchk:set-color ea ocol)
+         (cchk:set-color eb ocol)
          (princ (strcat "\n  Flagged to fix ("
-                        (cchk:color-name *cchk-olap-color*) ")."))
+                        (cchk:color-name ocol) ")."))
          (list label
                (strcat
                  (if (cchk:whole-line-p la)
@@ -59660,7 +60001,7 @@
                      "flagged to fix ("
                      "different layers - flagged to fix (")
                    "polyline edge - flagged to fix (")
-                 (cchk:color-name *cchk-olap-color*) ")")
+                 (cchk:color-name ocol) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -60591,8 +60932,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *cchk-constr-layer* *cchk-constr-color*)
-        (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
+        (cal:ensure-layer *cchk-constr-layer* (cal:ink *cchk-constr-color* 'constr))
+        (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -60958,7 +61299,7 @@
      ;; a rerun's leftover report/marker entities (e.g. suggested-pad
      ;; circles) must not pollute this scan's own attachment checks -
      ;; clear them before anything is collected, not after
-     (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
+     (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
      (cchk:clear-old)
      (setq i 0 nd 0 ndbad 0 na 0 nabad 0 ndanch 0)
      (repeat (sslength ss)
@@ -61926,8 +62267,39 @@
 ;;; RIDES -- its own dimension line, its own arc.  AutoCAD breaks that
 ;;; around the text, which is what a dimension is.
 ;;;
+;;; A LINE OF DIMENSIONS IS ONE DIMENSION.  Where several dimensions'
+;;; lines are the same straight line -- what AutoCAD's DIMCONTINUE lays
+;;; down by the handful and AUTODIM lays whole perimeters out as -- they
+;;; are a RUN: one continuous dimension with breaks in it.  Three things
+;;; follow, and all three are what a drafter would do:
+;;;
+;;;   * A run's text stays in its OWN segment.  AutoCAD centres each
+;;;     text between its own extension lines, and one shuffled past them
+;;;     reads as the dimension for the span next door.  So a run member
+;;;     has less room along the track than a lone dimension, not more.
+;;;   * A run's own skeleton is its OWN.  Its dimension line and its
+;;;     extension lines are one dimension's, not several -- a continued
+;;;     chain does not merely have extension lines near each other, it
+;;;     SHARES them -- so a member's text never has to clear them.
+;;;   * When one member has to stand further off the work, THEY ALL GO.
+;;;     Moving one dimension off a wall and leaving its neighbours
+;;;     behind trades a crowded dimension for a crooked run.
+;;;
+;;; And when a run's own members are what crowd each other -- four
+;;; segments thirty wide with text forty wide, where there is nowhere
+;;; along the track to go because every text overhangs its own segment
+;;; whatever it does -- the run is STAGGERED: every other dimension
+;;; stands a row further off the work, its own dimension line with it,
+;;; and every text stays centred where it belongs.  Which of the two it
+;;; is gets decided by WHO is in the way: run-mates alone means stagger,
+;;; anything else means the whole run goes.
+;;;
+;;; A row is cd:*row-f* text heights, the unit AUTODIM already stands
+;;; its own chains off the work in.
+;;;
 ;;; THE ONE THAT IS ALREADY GOOD DOES NOT MOVE.  That is the whole
-;;; policy, and it decides who gives way when two texts want one spot:
+;;; policy for everything else, and it decides who gives way when two
+;;; texts want one spot:
 ;;;
 ;;;   1. Text that CANNOT move goes down first and keeps its spot --
 ;;;      a dimension on a locked layer, a dimension with no text, and
@@ -61943,7 +62315,7 @@
 ;;; way every run: the first one read keeps its spot and the second
 ;;; slides.  Nothing is moved that did not have to be.
 ;;;
-;;; A text that has to move goes to the NEAREST clear spot on its track,
+;;; A text that has to move goes first to the NEAREST clear spot on its track,
 ;;; found by stepping outward from where it sits and then bisecting back
 ;;; toward it, so the move is the smallest one that works.  The two
 ;;; directions are not equal: the one that takes the text back toward
@@ -62028,7 +62400,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v2.1")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.0")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -62074,6 +62446,48 @@
                                    ; text in the sweep.  Two dimensions
                                    ; inside one row are ordered left to
                                    ; right instead of by height
+
+(setq cd:*track-tol-f* 0.5)        ; how far apart two dimension lines
+                                   ; may be across their own direction
+                                   ; and still be the SAME track, as a
+                                   ; multiple of the text height.  A
+                                   ; chain AutoCAD continued is exact;
+                                   ; this is for one somebody nudged
+
+(setq cd:*run-gap-f* 6.0)          ; how big a break may be between two
+                                   ; dimensions on one line before they
+                                   ; stop reading as one run, as a
+                                   ; multiple of the text height.  A run
+                                   ; is one continuous dimension WITH
+                                   ; breaks; raise this and dimensions at
+                                   ; opposite ends of a sheet start
+                                   ; moving each other
+
+(setq cd:*row-f* 2.0)              ; how far one row out is, as a
+                                   ; multiple of the text height -- the
+                                   ; unit AUTODIM already stands its own
+                                   ; chains off the work in
+                                   ; (ad:*text-offsets*)
+
+(setq cd:*rows* 3)                 ; how many rows out a run or a
+                                   ; staggered dimension may be pushed
+                                   ; before the run is left as drawn.  A
+                                   ; dimension four rows from the thing
+                                   ; it measures has stopped belonging
+                                   ; to it
+
+(setq cd:*stagger-max* 3)          ; how many rows a run may be
+                                   ; staggered ACROSS: 2 is every other
+                                   ; dimension a row out, 3 goes out,
+                                   ; further out, and back
+
+(setq cd:*stagger* T)              ; whether dimensions on one track that
+                                   ; crowd each other may be STAGGERED --
+                                   ; the one in the way pushed out a row
+                                   ; on its own, which is what a drafter
+                                   ; does to a run of short dimensions.
+                                   ; nil keeps every run dead straight
+                                   ; and leaves the crowding reported
 
 (setq cd:*arcsegs* 32)             ; chords a full circle is flattened
                                    ; into before it is tested against a
@@ -62240,13 +62654,43 @@
   (not apart))
 
 ;;; -------------------- obstacles --------------------------------------
-;;; An OBSTACLE is (OWNER AABB POLY).  OWNER is the index of the
-;;; dimension record the ink belongs to, or nil for ink that belongs to
-;;; the drawing; a record never has to clear its OWN ink, which is what
-;;; keeps a dimension's own dimension line -- the line AutoCAD breaks
-;;; around the text -- out of its way.
+;;; An OBSTACLE is (TAG AABB POLY).  TAG says who does NOT have to clear
+;;; it: a record index for one dimension's own text box, a LIST of them
+;;; for ink a whole run shares, nil for the drawing's own ink, which
+;;; everybody clears.
+;;;
+;;; A dimension never has to clear its own dimension line -- AutoCAD
+;;; breaks that around the text, which is what a dimension is -- and a
+;;; RUN never has to clear its run's.  A run is one continuous dimension
+;;; with breaks in it, so its line is one line, and when the run is
+;;; staggered a neighbour's step of that line passing behind a text is
+;;; not crowding: it is what a staggered run looks like.  While the run
+;;; is straight the rule changes nothing at all, because every member's
+;;; line IS its own line.
 
-(defun cd:ob (owner poly) (list owner (cd:aabb poly) poly))
+(defun cd:ob (tag poly) (list tag (cd:aabb poly) poly))
+
+;; Is this obstacle OWNER's own, and so not in its way?
+(defun cd:ob-mine-p (tag owner)
+  (and owner tag
+       (if (listp tag) (member owner tag) (equal tag owner))))
+
+;; The OWNER TAGS of everything in OBS that POLY runs into -- an index
+;; for another dimension's own ink, nil for the drawing's.  Whether a
+;; text is in the way is one question and WHOSE way it is in is another,
+;; and the second is what decides between staggering one dimension and
+;; moving a whole run: a dimension crowded only by its own run-mates is
+;; a run that needs staggering, and one crowded by anything else is a
+;; run that needs to stand further off the work.
+(defun cd:hit-owners (poly obs owner / bb out o)
+  (setq bb (cd:aabb poly) out nil)
+  (foreach o obs
+    (if (and (not (cd:ob-mine-p (car o) owner))
+             (cd:aabb-hit-p bb (cadr o))
+             (cd:hit-p poly (caddr o))
+             (not (member (car o) out)))
+      (setq out (cons (car o) out))))
+  out)
 
 ;; Every obstacle in OBS that is not OWNER's own and does overlap POLY.
 ;; Returns T on the first hit: nothing downstream wants the list.
@@ -62255,7 +62699,7 @@
   (while (and obs (not hit))
     (setq o   (car obs)
           obs (cdr obs))
-    (if (and (or (null owner) (not (equal (car o) owner)))
+    (if (and (not (cd:ob-mine-p (car o) owner))
              (cd:aabb-hit-p bb (cadr o))
              (cd:hit-p poly (caddr o)))
       (setq hit T)))
@@ -62722,8 +63166,8 @@
 ;;; because every field is read from three or four places and (nth 7 r)
 ;;; at each of them is how a field quietly becomes the wrong field.
 
-(defun cd:rec (idx en dtype trk s0 ang w h own pins home lo why)
-  (list idx en dtype trk s0 ang w h own pins home lo why))
+(defun cd:rec (idx en dtype trk s0 ang w h own pins home lo hi out shift why)
+  (list idx en dtype trk s0 ang w h own pins home lo hi out shift why))
 
 (defun cd:r-idx  (r) (nth 0 r))    ; also the obstacle OWNER tag
 (defun cd:r-en   (r) (nth 1 r))
@@ -62742,7 +63186,15 @@
                                    ; rather be near; the search tries
                                    ; the way toward it first
 (defun cd:r-lo   (r) (nth 11 r))   ; the smallest s it may take, or nil
-(defun cd:r-why  (r) (nth 12 r))   ; nil, or why it cannot slide
+(defun cd:r-hi   (r) (nth 12 r))   ; and the largest, or nil.  A run
+                                   ; member is held inside its OWN span:
+                                   ; a chain's text slid past its own
+                                   ; extension lines reads as the
+                                   ; dimension for the span next door
+(defun cd:r-out  (r) (nth 13 r))   ; the way AWAY from what it measures
+(defun cd:r-shift (r) (nth 14 r))  ; how far its dimension LINE has been
+                                   ; pushed that way so far, as a vector
+(defun cd:r-why  (r) (nth 15 r))   ; nil, or why it cannot slide
 
 ;; Where R's text sits when it is slid to S.
 (defun cd:r-pt (r s) (cd:trk-pt (cd:r-trk r) s))
@@ -62781,6 +63233,14 @@
 ;;;          search goes the way a drafter would send it; nil for no
 ;;;          preference
 ;;;   PINS   the DXF point groups that travel with the text
+;;;   OUT    the unit normal pointing AWAY from what the dimension
+;;;          measures, toward its own dimension line -- the direction a
+;;;          whole run of dimensions is pushed when something is in its
+;;;          way.  nil for a family whose group 10 is not a dimension
+;;;          line location at all: a radius keeps its CENTRE there and
+;;;          an ordinate its feature, and pushing either "out" would
+;;;          move the dimension onto a different circle or a different
+;;;          point rather than clear of an obstacle.
 ;;;   LO     the smallest s the text may take, or nil for none.  Two
 ;;;          families have a floor under them and the rest do not: an
 ;;;          ordinate's text slid back past its own feature point turns
@@ -62824,7 +63284,17 @@
         own
         (if own (cal:mid f13 f14))
         '(11)
-        nil))
+        nil
+        ;; out: the perpendicular run from the middle of what is being
+        ;; measured to the dimension line.  A dimension line drawn
+        ;; straight through its own definition points has no outward
+        ;; side and gets none
+        (if (and p13 p14)
+          (cal:unit (cal:v- (cal:v- base (cal:mid (cal:2d p13) (cal:2d p14)))
+                          (cal:v* u (cal:dot (cal:v- base
+                                                  (cal:mid (cal:2d p13)
+                                                          (cal:2d p14)))
+                                           u)))))))
 
 ;; ANGULAR (type 2, off two lines; type 5, off three points).  The
 ;; track is an ARC about the angle's vertex, and the radius the text
@@ -62925,6 +63395,7 @@
                                                        (cadr rays))))
                          rad))
                 '(11)
+                nil
                 nil))))))
 
 ;; RADIUS (type 4) and DIAMETER (type 3).  Both slide along the line
@@ -62954,7 +63425,8 @@
                 ;; a radius runs OUT from its centre and its text has no
                 ;; business on the far side of it; a diameter's centre is
                 ;; the middle of its two points, so both sides are its own
-                (if (= dtype 3) nil 0.0)))))))
+                (if (= dtype 3) nil 0.0)
+                nil))))))
 
 ;; ORDINATE (type 6).  Group 13 is the feature being measured and 14 is
 ;; where its leader ends; the text hangs off that end.  Bit 64 of group
@@ -62989,13 +63461,14 @@
             ;; back past that the leader turns round and points the
             ;; other way, which is a drawing error rather than a
             ;; crowded one
-            (* (+ 0.5 cd:*gap-f*) h)))))
+            (* (+ 0.5 cd:*gap-f*) h)
+            nil))))
 
 ;; The record for one DIMENSION.  Returns nil only for an entity that
 ;; is not a dimension at all; everything else comes back as a record,
 ;; with cd:r-why saying why it will not be moved when it will not.
 (defun cd:read-dim (idx en / ed dtype sty hgt s wh w h p10 p11 p13 p14 p15
-                        ang fam trk own home pins lo s0 txtang why)
+                        ang fam trk own home pins lo out s0 txtang why)
   (setq ed (entget en))
   ;; an entity that is not a dimension, and an ename that no longer
   ;; names one, both come back nil rather than half a record
@@ -63052,6 +63525,7 @@
               home (caddr fam)
               pins (cadddr fam)
               lo   (nth 4 fam)
+              out  (nth 5 fam)
               s0   (cd:trk-s trk (cal:2d p11))))
       ;; the text reads along whatever it is set on -- the dimension
       ;; line, or the tangent of the arc -- unless the style turns it
@@ -63076,7 +63550,7 @@
               pins '(11)))
       (cd:rec idx en dtype trk s0 txtang w h own pins
               (if home (cd:trk-near trk (cd:trk-s trk home) s0) s0)
-              lo why))))
+              lo nil out '(0.0 0.0) why))))
 
 ;; How far an extension line runs PAST the dimension line: DIMEXE along
 ;; the direction it was already going.  A zero-length run -- the
@@ -63095,12 +63569,13 @@
 ;; when nothing inside reach is clear: the caller leaves the text alone
 ;; and says so, which is worth more to a drafter than a text parked in
 ;; an arbitrary spot.
-(defun cd:find-slide (r obs / s0 smid step reach owner floor k s found
+(defun cd:find-slide (r obs / s0 smid step reach owner floor roof k s found
                          blocked dirs d lo hi mid i)
   (setq s0    (cd:r-s0 r)
         smid  (cd:r-home r)
         owner (cd:r-idx r)
         floor (cd:r-lo r)
+        roof  (cd:r-hi r)
         step  (max 1e-6 (* cd:*step-f* (cd:r-h r)))
         reach (cd:trk-reach (cd:r-trk r) (* cd:*reach-f* (cd:r-w r))))
   (if (not (cd:hits-p (cd:r-box r s0) obs owner))
@@ -63118,6 +63593,7 @@
             (progn
               (setq s (+ s0 (* d k step)))
               (if (and (or (null floor) (>= s floor))
+                       (or (null roof) (<= s roof))
                        (not (cd:hits-p (cd:r-box r s) obs owner)))
                 (setq found   s
                       blocked (+ s0 (* d (1- k) step)))))))
@@ -63127,7 +63603,9 @@
           ;; the bisection runs between a spot that was blocked and the
           ;; one that was not, and the floor is the one place the
           ;; blocked end may not be allowed to sit
-          (setq lo (if (and floor (< blocked floor)) floor blocked)
+          (setq lo (cond ((and floor (< blocked floor)) floor)
+                         ((and roof (> blocked roof)) roof)
+                         (blocked))
                 hi found
                 i  0)
           (while (< i cd:*refine*)
@@ -63172,6 +63650,171 @@
   (foreach r recs (setq h (max h (cd:r-h r))))
   (setq cd:*rowtol* (max 1e-6 (* cd:*rowtol-f* h))))
 
+;;; -------------------- runs ---------------------------------------------
+;;; A RUN is what a drafter reads as ONE dimension with breaks in it: a
+;;; line of dimensions whose dimension lines are the same straight line.
+;;; AutoCAD's own DIMCONTINUE makes them by the handful, AUTODIM lays
+;;; whole perimeters out that way, and the thing that makes them a run
+;;; rather than a coincidence is that a drafter who moves one expects
+;;; the rest to come.
+;;;
+;;; Only a linear or aligned dimension joins one.  The other families
+;;; keep something else in group 10 -- a radius keeps the CENTRE of its
+;;; circle, an ordinate its feature -- so there is no dimension line
+;;; there to be collinear with, and pushing one "out" would move the
+;;; dimension onto a different circle rather than clear of an obstacle.
+;;; cd:r-out is nil for exactly those, which is the test.
+
+;; T when A and B are the same straight line, near enough: the same
+;; direction (either way round -- a line has no front), the same
+;; perpendicular offset, and close enough ALONG it to read as one run
+;; rather than as two dimensions that happen to be in line across a
+;; whole sheet.
+(defun cd:same-track-p (a b / ua ub tol gap)
+  (and (cd:r-out a) (cd:r-out b)
+       (setq ua (cd:trk-u (cd:r-trk a))
+             ub (cd:trk-u (cd:r-trk b)))
+       ;; parallel, either way round
+       (< (abs (cal:cross ua ub)) 1e-6)
+       (progn
+         (setq tol (* cd:*track-tol-f* (max (cd:r-h a) (cd:r-h b))))
+         ;; and the same line, not merely a parallel one: the offset of
+         ;; b's base from a's, measured across a's direction
+         (< (abs (cal:dot (cal:v- (cd:trk-base (cd:r-trk b))
+                                (cd:trk-base (cd:r-trk a)))
+                         (cal:perp ua)))
+            tol))
+       (progn
+         (setq gap (* cd:*run-gap-f* (max (cd:r-h a) (cd:r-h b))))
+         (cd:spans-near-p (cd:r-span a) (cd:r-span b ) gap))))
+
+;; A track's own direction.  An arc has none, and nothing that reaches
+;; here has one.
+(defun cd:trk-u (trk) (if (cd:trk-arc-p trk) nil (caddr trk)))
+
+;; (LO HI): how far R's dimension line runs along its own track.  Its
+;; own dimension line is the first thing in its ink, so this is read off
+;; the geometry rather than guessed from the text.
+(defun cd:r-span (r / dl a b)
+  (setq dl (car (car (cd:r-own r))))
+  (if dl
+    (progn
+      (setq a (cd:trk-s (cd:r-trk r) (car dl))
+            b (cd:trk-s (cd:r-trk r) (cadr dl)))
+      (list (min a b) (max a b)))
+    (list (cd:r-s0 r) (cd:r-s0 r))))
+
+;; Do two spans on one line come within GAP of each other?  Overlapping
+;; counts, and so does a break of less than GAP -- "one continuous
+;; dimension with breaks" is the whole idea, and a break is allowed to
+;; be a real one.
+(defun cd:spans-near-p (a b gap)
+  (and (<= (car a) (+ (cadr b) gap)) (<= (car b) (+ (cadr a) gap))))
+
+;; RECS grouped into runs, as a list of lists of RECORD INDEXES.  Every
+;; record appears in exactly one, and a dimension with no run-mates is a
+;; run of one -- which keeps everything downstream from having to ask
+;; whether a record is in a run at all.
+(defun cd:runs (recs / out grp r q placed joined)
+  (setq out nil placed nil)
+  (foreach r recs
+    (if (not (member (cd:r-idx r) placed))
+      (progn
+        (setq grp (list r) placed (cons (cd:r-idx r) placed) joined T)
+        ;; keep sweeping: a dimension that joins the group can bring the
+        ;; next one within reach, which one pass over the list would miss
+        (while joined
+          (setq joined nil)
+          (foreach q recs
+            (if (and (not (member (cd:r-idx q) placed))
+                     (cd:any-same-track-p q grp))
+              (setq grp    (cons q grp)
+                    placed (cons (cd:r-idx q) placed)
+                    joined T))))
+        (setq out (cons (mapcar 'cd:r-idx grp) out)))))
+  (reverse out))
+
+(defun cd:any-same-track-p (q grp / hit m)
+  (setq hit nil)
+  (foreach m grp (if (cd:same-track-p q m) (setq hit T)))
+  hit)
+
+;; R held inside its own span: a run's text stays between its OWN
+;; extension lines.  On a chain that is not a nicety -- AutoCAD centres
+;; each text in its own segment, and one slid past the end of that
+;; segment reads as the dimension for the span next door.  It is why a
+;; crowded run is STAGGERED rather than shuffled along: there is nowhere
+;; along to go.
+;;
+;; A dimension with no run-mates keeps the run of the whole track, which
+;; is the ordinary AutoCAD placement for a short dimension with wide
+;; text -- outside its extension lines, where there is room.
+(defun cd:bound-to-span (r / sp)
+  (setq sp (cd:r-span r))
+  (cd:rec (cd:r-idx r) (cd:r-en r) (cd:r-type r) (cd:r-trk r) (cd:r-s0 r)
+          (cd:r-ang r) (cd:r-w r) (cd:r-h r) (cd:r-own r) (cd:r-pins r)
+          (cd:r-home r)
+          (if (cd:r-lo r) (max (cd:r-lo r) (car sp)) (car sp))
+          (cadr sp)
+          (cd:r-out r) (cd:r-shift r) (cd:r-why r)))
+
+;; RECS with every member of a run of MORE THAN ONE bounded to its span.
+(defun cd:bound-runs (recs runs / out r g)
+  (setq out nil)
+  (foreach r recs
+    (setq g (cd:run-of (cd:r-idx r) runs))
+    (setq out (cons (if (and g (cdr g)) (cd:bound-to-span r) r) out)))
+  (reverse out))
+
+;; The run IDX belongs to.
+(defun cd:run-of (idx runs / out g)
+  (foreach g runs (if (member idx g) (setq out g)))
+  out)
+
+;;; -------------------- pushing a line out -------------------------------
+
+;; R with its whole dimension LINE moved N rows away from what it
+;; measures -- the text with it, because the text belongs to the line;
+;; the extension lines stretch to follow, which is what makes this a
+;; move a drafter would make and not a distortion.  The definition
+;; points do not move, so the dimension goes on measuring what it
+;; measured.
+;;
+;; A row is cd:*row-f* text heights, which is the unit AUTODIM already
+;; stands its own chains off the work in.
+(defun cd:shift-rec (r n / d trk own)
+  (if (or (null (cd:r-out r)) (= n 0))
+    r
+    (progn
+      (setq d   (cal:v* (cd:r-out r) (* n cd:*row-f* (cd:r-h r)))
+            trk (cd:r-trk r)
+            own (cd:shift-own (cd:r-own r) d))
+      (cd:rec (cd:r-idx r) (cd:r-en r) (cd:r-type r)
+              (cd:trk-line (cal:v+ (cd:trk-base trk) d) (caddr trk)
+                           (cadddr trk))
+              (cd:r-s0 r) (cd:r-ang r) (cd:r-w r) (cd:r-h r)
+              own (cd:r-pins r) (cd:r-home r) (cd:r-lo r) (cd:r-hi r)
+              (cd:r-out r) (cal:v+ (cd:r-shift r) d) (cd:r-why r)))))
+
+;; OWN moved by D: the dimension line goes bodily, and an extension line
+;; keeps its origin on the work and grows at the far end.
+(defun cd:shift-own (own d / dl ext p)
+  (setq dl nil ext nil)
+  (foreach p (car own) (setq dl (cons (list (cal:v+ (car p) d)
+                                            (cal:v+ (cadr p) d)) dl)))
+  (foreach p (cadr own) (setq ext (cons (list (car p) (cal:v+ (cadr p) d))
+                                        ext)))
+  (list (reverse dl) (reverse ext)))
+
+;; RECS with each one pushed out the number of rows ROWS gives for its
+;; index.  ROWS is an alist; an index it does not name stays put.
+(defun cd:shift-all (recs rows / out r n)
+  (setq out nil)
+  (foreach r recs
+    (setq n (cdr (assoc (cd:r-idx r) rows)))
+    (setq out (cons (cd:shift-rec r (cond (n) (0))) out)))
+  (reverse out))
+
 ;;; -------------------- the plan ---------------------------------------
 ;;; The result for one dimension is (REC S MOVED CLEARED):
 ;;;   S        where its text ends up on the track
@@ -63195,7 +63838,7 @@
 ;; index so that dimension alone ignores it; the extension lines are
 ;; tagged nil, because a text over one of those is unreadable whoever
 ;; drew it.
-(defun cd:static-obs (ss recs / out i n en ed typ lay own p r)
+(defun cd:static-obs (ss recs runs / out i n en ed typ lay own p r tag)
   (setq out nil i 0 n (if ss (sslength ss) 0))
   (while (< i n)
     (setq en  (ssname ss i)
@@ -63207,13 +63850,21 @@
         (setq out (cons (cd:ob nil p) out))))
     (setq i (1+ i)))
   (foreach r recs
-    (setq own (cd:r-own r))
-    ;; what it RIDES is tagged to it, so it alone passes through it
+    (setq own (cd:r-own r)
+          tag (cond ((cd:run-of (cd:r-idx r) runs)) ((list (cd:r-idx r)))))
+    ;; What it RIDES is tagged to its whole RUN, so every member of one
+    ;; line of dimensions passes through it.
     (foreach p (car own)
-      (setq out (cons (cd:ob (cd:r-idx r) p) out)))
-    ;; and what it merely draws is ink to everyone, itself included
+      (setq out (cons (cd:ob tag p) out)))
+    ;; Its EXTENSION lines are ink to everyone -- except, in a run of
+    ;; more than one, to the run itself.  A continued chain does not
+    ;; merely have extension lines near each other, it SHARES them: the
+    ;; line at the end of one segment is the line at the start of the
+    ;; next.  They are the skeleton of one dimension with breaks in it,
+    ;; and a text of that dimension standing against them is the chain
+    ;; drawn tight rather than a text that is hard to read.
     (foreach p (cadr own)
-      (setq out (cons (cd:ob nil p) out))))
+      (setq out (cons (cd:ob (if (cdr tag) tag nil) p) out))))
   out)
 
 ;; The three buckets, in the order they get to claim a spot: what cannot
@@ -63249,7 +63900,8 @@
               (cd:find-slide r obs)))
     (if (null s) (setq s (cd:r-s0 r)))    ; nowhere clear: left as drawn
     (setq res (list r s
-                    (> (abs (- s (cd:r-s0 r))) 1e-9)
+                    (or (> (abs (- s (cd:r-s0 r))) 1e-9)
+                        (> (cal:vlen (cd:r-shift r)) 1e-9))
                     (or (<= (cd:r-w r) 0.0)
                         (not (cd:hits-p (cd:r-box r s) obs (cd:r-idx r))))))
     ;; the spot it just took is ink for everyone after it -- unless there
@@ -63262,6 +63914,193 @@
   ;; back into the records' own order, so a caller can pair results with
   ;; the list it handed in without carrying the bucket order around
   (vl-sort out 'cd:res-lt))
+
+;;; -------------------- rows: staggering, and moving a run ---------------
+;;; cd:plan places text ALONG the track.  When that is not enough there
+;;; is one move left, and it is the one a drafter makes: stand the
+;;; dimension LINE further off the work.  Two shapes of it, and which
+;;; one is right is decided by WHO is in the way:
+;;;
+;;;   * crowded only by its own run-mates -> STAGGER.  That one
+;;;     dimension goes out a row on its own.  A run of short dimensions
+;;;     whose text will not fit between its own extension lines is
+;;;     exactly this, and staggering is what a drafter does to it.
+;;;   * crowded by anything else -> the WHOLE RUN goes out a row
+;;;     together, so the line of them stays a line.  Moving one of them
+;;;     off a wall and leaving its neighbours behind would trade a
+;;;     crowded dimension for a crooked run.
+;;;
+;;; Then the whole placement is run again from the top on the moved
+;;; records, because a row out is a different drawing and the answer to
+;;; who keeps their spot may have changed.  Up to cd:*rows* rows, and
+;;; the arrangement kept is the one that leaves the fewest dimensions
+;;; crowded -- ties to the one that moved the least, and a tie there to
+;;; the rows that came first, so the same sheet comes out the same way
+;;; every run.
+
+;; How many dimensions an arrangement leaves crowded, and how many rows
+;; it spent doing it -- lower is better, in that order.
+(defun cd:score (results state / bad r)
+  (setq bad 0)
+  (foreach r results (if (not (cd:res-clear r)) (setq bad (1+ bad))))
+  (list bad (cd:state-cost state)))
+
+(defun cd:score-lt (a b)
+  (or (< (car a) (car b))
+      (and (= (car a) (car b)) (< (cadr a) (cadr b)))))
+
+;;; A run's state is (INDEXES OFFSET DEPTH):
+;;;
+;;;   OFFSET  how many rows the WHOLE run stands off the work.  This is
+;;;           the one that keeps a line of dimensions a line -- every
+;;;           member takes it, the crowded one and its neighbours alike.
+;;;   DEPTH   how many rows the run is STAGGERED across.  1 is dead
+;;;           straight; 2 puts every other dimension a row further out;
+;;;           3 goes out, further out, and back.
+;;;
+;;; A member's row is OFFSET plus its own place in the stagger, counted
+;;; ALONG THE TRACK so the pattern reads as a pattern and not as
+;;; scatter.
+
+(defun cd:run-state (run) (list run 0 1))
+
+;; RUN's indexes in the order they sit along the track.
+(defun cd:run-order (run recs / pairs r)
+  (setq pairs nil)
+  (foreach r recs
+    (if (member (cd:r-idx r) run)
+      (setq pairs (cons (list (cd:r-s0 r) (cd:r-idx r)) pairs))))
+  (mapcar 'cadr (vl-sort pairs 'cd:pair-lt)))
+
+(defun cd:pair-lt (a b)
+  (if (/= (car a) (car b)) (< (car a) (car b)) (< (cadr a) (cadr b))))
+
+;; The row each record sits on, as an alist, out of every run's state.
+(defun cd:state-rows (state recs / out g i idx)
+  (setq out nil)
+  (foreach g state
+    (setq i 0)
+    (foreach idx (cd:run-order (car g) recs)
+      (setq out (cons (cons idx (+ (cadr g) (rem i (caddr g)))) out)
+            i   (1+ i))))
+  out)
+
+;; How many rows the state spends altogether -- the tie-break that stops
+;; the tool standing a run off the work further than it had to.
+(defun cd:state-cost (state / n g)
+  (setq n 0)
+  (foreach g state
+    (setq n (+ n (* (length (car g)) (+ (cadr g) (1- (caddr g)))))))
+  n)
+
+;; ITEMS without IDX.
+(defun cd:remove-one (idx items / out g)
+  (foreach g items (if (not (equal g idx)) (setq out (cons g out))))
+  (reverse out))
+
+;; Is every one of A in B?  An empty A is not a subset here: a dimension
+;; nothing is in the way of is not one to stagger.
+(defun cd:subset-p (a b / ok g)
+  (setq ok (and a T))
+  ;; a tag that is a LIST is ink some OTHER run shares, never a mate of
+  ;; this one -- its own run's tags never reach here, being its own
+  (foreach g a (if (or (listp g) (not (member g b))) (setq ok nil)))
+  ok)
+
+;; The results for RUN's members that came out crowded and could be
+;; moved about it.
+(defun cd:run-bad (run results / out r)
+  (setq out nil)
+  (foreach r results
+    (if (and (member (cd:r-idx (cd:res-rec r)) run) (not (cd:res-clear r))
+             (cd:r-out (cd:res-rec r)) (not (cd:r-why (cd:res-rec r))))
+      (setq out (cons r out))))
+  out)
+
+;; The state to try next.  Every run with a dimension still crowded in
+;; it moves, and WHICH WAY is decided by who is in the way:
+;;
+;;   * crowded only by its own run-mates -> stagger one row deeper.
+;;     There is nothing along the track to be done about a text wider
+;;     than the segment it belongs to, and shuffling one along only
+;;     hands the crowding to its neighbour.
+;;   * crowded by anything else -> the whole run stands one row further
+;;     off the work, TOGETHER, so the line of them stays a line.  Moving
+;;     one dimension off a wall and leaving its neighbours behind trades
+;;     a crowded dimension for a crooked run.
+;;
+;; nil when nothing is crowded, or when every run that is has run out of
+;; rows to spend.
+(defun cd:next-state (results state runs obs recs / out g run bad mates
+                          hitters all-mates moved r)
+  (setq out nil moved nil)
+  (foreach g state
+    (setq run       (car g)
+          bad       (cd:run-bad run results)
+          all-mates T)
+    (foreach r bad
+      (setq mates   (cd:remove-one (cd:r-idx (cd:res-rec r)) run)
+            hitters (cd:hit-owners (cd:r-box (cd:res-rec r) (cd:res-s r))
+                                   obs (cd:r-idx (cd:res-rec r))))
+      (if (not (cd:subset-p hitters mates)) (setq all-mates nil)))
+    (cond
+      ((null bad) (setq out (cons g out)))
+      ;; a crowd of its own making: stagger deeper
+      ((and cd:*stagger* all-mates (< (caddr g) cd:*stagger-max*))
+       (setq out   (cons (list run (cadr g) (1+ (caddr g))) out)
+             moved T))
+      ;; something else is in the way: the whole run stands further off
+      ((< (cadr g) cd:*rows*)
+       (setq out   (cons (list run (1+ (cadr g)) (caddr g)) out)
+             moved T))
+      (T (setq out (cons g out)))))
+  (if moved (reverse out)))
+
+;; The whole answer: place along the track, and where that is not enough
+;; stagger the run or stand it off the work and place again.  Returns
+;; (RESULTS RECS) -- the results, and the records they were computed
+;; against, which carry the rows in their cd:r-shift and are what
+;; cd:apply must be handed.
+(defun cd:plan-rows (ss recs / runs state tries going shifted static
+                        results score best bestrecs bestscore next)
+  (setq runs  (cd:runs recs)
+        recs  (cd:bound-runs recs runs)
+        state (mapcar 'cd:run-state runs)
+        tries 0
+        going T)
+  (while going
+    (setq shifted (cd:shift-all recs (cd:state-rows state recs))
+          static  (cd:static-obs ss shifted runs)
+          results (cd:plan shifted static)
+          score   (cd:score results state))
+    ;; strictly better only, so a later arrangement that merely ties
+    ;; never displaces an earlier one that spent fewer rows
+    (if (or (null bestscore) (cd:score-lt score bestscore))
+      (setq bestscore score
+            best      results
+            bestrecs  shifted))
+    (setq next (if (= (car score) 0)
+                 nil                            ; nothing left to fix
+                 (cd:next-state results state runs
+                                (cd:placed-obs shifted results static)
+                                shifted)))
+    (if (and next (< tries (* 2 (+ cd:*rows* cd:*stagger-max*))))
+      (setq state next
+            tries (1+ tries))
+      (setq going nil)))
+  (list best bestrecs))
+
+;; STATIC with every text box the arrangement placed added to it -- what
+;; cd:plan itself builds as it goes, rebuilt here so cd:next-rows can
+;; ask who a crowded text is actually crowded BY.
+(defun cd:placed-obs (recs results static / out r rec)
+  (setq out static)
+  (foreach r results
+    (setq rec (cd:res-rec r))
+    (if (> (cd:r-w rec) 0.0)
+      (setq out (cons (cd:ob (cd:r-idx rec) (cd:r-box rec (cd:res-s r)))
+                      out))))
+  out)
 
 ;;; -------------------- writing it back --------------------------------
 
@@ -63284,16 +64123,27 @@
 ;; offset of a straight track, and the radius of an arc, are what
 ;; cd:trk-pt puts back exactly as they were read -- so the text comes
 ;; out on the same track it went in on.  T when the drawing changed.
-(defun cd:apply (res / r ed p0 p1 d flags code g)
+(defun cd:apply (res / r ed p0 p1 d sh flags code g)
   (setq r (cd:res-rec res))
   (if (not (cd:res-moved res))
     nil
     (progn
       (setq ed    (entget (cd:r-en r))
-            p0    (cd:r-pt r (cd:r-s0 r))
+            sh    (cd:r-shift r)
+            ;; where the text WAS: on the track before the run was
+            ;; pushed out, which is the track the record carries minus
+            ;; the push
+            p0    (cal:v- (cd:r-pt r (cd:r-s0 r)) sh)
             p1    (cd:r-pt r (cd:res-s res))
             d     (cal:v- p1 p0)
             flags (cd:num 70 ed 0))
+      ;; the dimension LINE goes with it.  Group 10 is where a linear
+      ;; dimension's line sits, and the definition points are left alone
+      ;; -- so the extension lines stretch and the dimension goes on
+      ;; measuring exactly what it measured
+      (if (and (> (cal:vlen sh) 1e-9) (setq g (assoc 10 ed)))
+        (setq ed (subst (cons 10 (cd:pt-at (cal:v+ (cdr g) sh) (cdr g)))
+                        g ed)))
       (foreach code (cd:r-pins r)
         (setq g (assoc code ed))
         (if g
@@ -63318,7 +64168,8 @@
 ;; totals, under the name WHAT of the command that asked for them.
 ;; MOVING is T for the run that writes and nil for the scan, so the same
 ;; report reads correctly either way.
-(defun cd:report (what results moving / nmove nstuck nclear skip r why d res)
+(defun cd:report (what results moving / nmove nstuck nclear skip r why d
+                                        sh res)
   (setq nmove 0 nstuck 0 nclear 0 skip nil)
   (foreach res results
     (setq r   (cd:res-rec res)
@@ -63333,12 +64184,23 @@
       (cond
         ((cd:res-moved res)
          (setq nmove (1+ nmove)
-               d     (- (cd:res-s res) (cd:r-s0 r)))
+               d     (- (cd:res-s res) (cd:r-s0 r))
+               sh    (cal:vlen (cd:r-shift r)))
          (princ (strcat "\n  " (cd:handle-of r) ": "
-                        (if moving "slid " "would slide ")
-                        (rtos (abs d)) " "
-                        (if (< d 0.0) "back " "")
-                        (cd:trackword r) ".")))
+                        (if moving "" "would be ")
+                        ;; two things can have happened and either may
+                        ;; be the only one: the dimension stood further
+                        ;; off the work, and the text slid along it
+                        (if (> sh 1e-9)
+                          (strcat "stood " (rtos sh) " further off the work")
+                          "")
+                        (if (and (> sh 1e-9) (> (abs d) 1e-9)) " and " "")
+                        (if (> (abs d) 1e-9)
+                          (strcat "slid " (rtos (abs d)) " "
+                                  (if (< d 0.0) "back " "")
+                                  (cd:trackword r))
+                          "")
+                        ".")))
         ((not (cd:res-clear res))
          (setq nstuck (1+ nstuck))
          (princ (strcat "\n  " (cd:handle-of r)
@@ -63468,7 +64330,7 @@
 ;; most if a run is ever cut short partway.
 (defun cd:sysvars () '("OSMODE" "CMDECHO"))
 
-(defun c:CLEARDIM ( / *error* undo-open ss recs static results n res)
+(defun c:CLEARDIM ( / *error* undo-open ss recs results n res)
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
@@ -63495,8 +64357,7 @@
         (progn
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
-      (setq static  (cd:static-obs ss recs)
-            results (cd:plan recs static)
+      (setq results (car (cd:plan-rows ss recs))
             n       0)
       (foreach res results (if (cd:apply res) (setq n (1+ n))))
       (cd:report "CLEARDIM" results T)
@@ -63510,7 +64371,7 @@
   (if lzd:end (lzd:end "CLEARDIM"))
   (princ))
 
-(defun c:CLEARDIMSCAN ( / *error* ss recs static results)
+(defun c:CLEARDIMSCAN ( / *error* ss recs results)
   (defun *error* (msg)
     (cal:sysrestore)
     (if (and msg (not (wcmatch (strcase msg)
@@ -63526,8 +64387,7 @@
   (if (null recs)
     (princ "\nCLEARDIMSCAN: no dimensions in the selection - nothing to do.")
     (progn
-      (setq static  (cd:static-obs ss recs)
-            results (cd:plan recs static))
+      (setq results (car (cd:plan-rows ss recs)))
       (cd:report "CLEARDIMSCAN" results nil)
       (princ "\n  Nothing was moved - run CLEARDIM to do it.")))
   (cal:sysrestore)
@@ -63675,7 +64535,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.19")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.20")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -63766,12 +64626,17 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-(setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
-(setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
-(setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
-(setq *dchk-orig-color*   1)       ; ACI: the X marking where you drew the point (red)
-(setq *dchk-sugg-color*   3)       ; ACI: the + marking where DIMCHECK would put it (green)
-(setq *dchk-point-color*  2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+;; The six below are 'auto too -- they do not vary with the screen the
+;; way *dchk-grey-color* does, but 'auto routes them through dchk:ink's
+;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
+;; in the profile) can override without touching source.  A number is
+;; still used exactly as given.
+(setq *dchk-flag-color*   'auto)   ; ACI: dimensions you answered "No" to (red)
+(setq *dchk-arc-color*    'auto)   ; ACI: arcs whose endpoints were moved (magenta)
+(setq *dchk-olap-color*   'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+(setq *dchk-orig-color*   'auto)   ; ACI: the X marking where you drew the point (red)
+(setq *dchk-sugg-color*   'auto)   ; ACI: the + marking where DIMCHECK would put it (green)
+(setq *dchk-point-color*  'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
 
 ;; The command line and the report name these colours as they use them,
 ;; so a colour changed here is described correctly rather than still
@@ -63784,9 +64649,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
-(setq *dchk-constr-color* 2)       ; ACI (yellow)
+(setq *dchk-constr-color* 'auto)   ; ACI (yellow)
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
-(setq *dchk-report-color* 3)       ; ACI (green)
+(setq *dchk-report-color* 'auto)   ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -64130,12 +64995,13 @@
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
-(defun dchk:mark-point (pt)
+(defun dchk:mark-point (pt / col)
   ;; both strokes, for a point that is simply being pointed out
-  (dchk:mark-x pt *dchk-point-color*)
-  (dchk:mark-plus pt *dchk-point-color*))
+  (setq col (cal:ink *dchk-point-color* 'point))
+  (dchk:mark-x pt col)
+  (dchk:mark-plus pt col))
 
-(defun dchk:confirm-move (label orig sugg what / ans newp)
+(defun dchk:confirm-move (label orig sugg what / ans newp ocol scol)
   ;; The point has been put where DIMCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
   ;; which: an X where you drew it, a + where we would move
@@ -64145,15 +65011,17 @@
   ;;   'move - take our suggestion
   ;;   'keep - put it back exactly where you drew it
   ;;   <point> - a spot you picked yourself (current UCS)
-  (dchk:mark-x    orig *dchk-orig-color*)
-  (dchk:mark-plus sugg *dchk-sugg-color*)
+  (setq ocol (cal:ink *dchk-orig-color* 'orig)
+        scol (cal:ink *dchk-sugg-color* 'sugg))
+  (dchk:mark-x    orig ocol)
+  (dchk:mark-plus sugg scol)
   (if (> (distance orig sugg) *dchk-same-pt*)
-    (grdraw (trans orig 0 1) (trans sugg 0 1) *dchk-sugg-color* 1))
+    (grdraw (trans orig 0 1) (trans sugg 0 1) scol 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (dchk:ptstr orig)
-                 "  (" (dchk:color-name *dchk-orig-color*) " X)"
+                 "  (" (dchk:color-name ocol) " X)"
                  "\n    Move = onto " what " " (dchk:ptstr sugg)
-                 "  (" (dchk:color-name *dchk-sugg-color*) " +), "
+                 "  (" (dchk:color-name scol) " +), "
                  (dchk:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   ;; the pick is a second question, so Back at it re-asks the first
@@ -64171,7 +65039,7 @@
        (initget "Back Undo")
        (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
-                                    (dchk:color-name *dchk-sugg-color*)
+                                    (dchk:color-name scol)
                                     " +> [Back]: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") newp) newp)
        (cond
@@ -64201,7 +65069,7 @@
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
   ;; to the surrounding colour after (braces scope the change)
-  (strcat "{\\C" (itoa *dchk-flag-color*) ";" s "}"))
+  (strcat "{\\C" (itoa (cal:ink *dchk-flag-color* 'flag)) ";" s "}"))
 
 (defun dchk:small (s)
   ;; all-clear text renders at *dchk-green-scale* of the height the
@@ -64656,7 +65524,7 @@
 
 (defun dchk:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote)
+                                              ok note meas assocnote fcol)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
   ;; anchor-held-point-count).
@@ -64700,12 +65568,13 @@
   (if (member ok '(back skip))
     (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
     (progn
-      (setq ok (eq ok 'yes))
+      (setq ok (eq ok 'yes)
+            fcol (cal:ink *dchk-flag-color* 'flag))
       (setq note (strcat
                    (if ok
                      "OK"
                      (strcat "FLAGGED to fix ("
-                             (dchk:color-name *dchk-flag-color*) ")"))
+                             (dchk:color-name fcol) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -64719,7 +65588,7 @@
                              " point(s) held at a shared anchor")
                      "")
                    (if assocnote assocnote "")))
-      (if (not ok) (dchk:set-color ent *dchk-flag-color*))
+      (if (not ok) (dchk:set-color ent fcol))
       (list h ok note (length moved) meas (length held)))))
 
 ;; --- arc review ----------------------------------------------------
@@ -64826,7 +65695,7 @@
              nil)))))
     (t nil)))
 
-(defun dchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note)
+(defun dchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
   ;; interactive review of one arc's endpoints.
   ;; Returns (handle untouched-flag report-note moved-point-count).
   (setq ed     (entget ent)
@@ -64845,16 +65714,17 @@
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
-  (if moved (dchk:set-color ent *dchk-arc-color*))
+  (setq acol (cal:ink *dchk-arc-color* 'arc))
+  (if moved (dchk:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
-                        (dchk:color-name *dchk-arc-color*) "), "
+                        (dchk:color-name acol) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
                               " endpoint(s) moved ("
-                              (dchk:color-name *dchk-arc-color*) ")"))
+                              (dchk:color-name acol) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -64863,7 +65733,7 @@
 ;; --- overlapping line review ---------------------------------------
 
 (defun dchk:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds)
+                                           ans mergeable kinds ocol)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
@@ -64911,21 +65781,22 @@
       (redraw ea 4)
       (redraw eb 4)
       (redraw)
+      (setq ocol (cal:ink *dchk-olap-color* 'olap))
       (cond
         ((= ans "Merge")
          (dchk:merge-lines la lb info)
-         (dchk:set-color ea *dchk-olap-color*)
+         (dchk:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
-                        (dchk:color-name *dchk-olap-color*) ")."))
+                        (dchk:color-name ocol) ")."))
          (list label
                (strcat "merged into one line ("
-                       (dchk:color-name *dchk-olap-color*) ")")
+                       (dchk:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (dchk:set-color ea *dchk-olap-color*)
-         (dchk:set-color eb *dchk-olap-color*)
+         (dchk:set-color ea ocol)
+         (dchk:set-color eb ocol)
          (princ (strcat "\n  Flagged to fix ("
-                        (dchk:color-name *dchk-olap-color*) ")."))
+                        (dchk:color-name ocol) ")."))
          (list label
                (strcat
                  (if (dchk:whole-line-p la)
@@ -64933,7 +65804,7 @@
                      "flagged to fix ("
                      "different layers - flagged to fix (")
                    "polyline edge - flagged to fix (")
-                 (dchk:color-name *dchk-olap-color*) ")")
+                 (dchk:color-name ocol) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -65020,8 +65891,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *dchk-constr-layer* *dchk-constr-color*)
-        (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
+        (cal:ensure-layer *dchk-constr-layer* (cal:ink *dchk-constr-color* 'constr))
+        (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -65334,7 +66205,7 @@
                        "\nDimensions: " (itoa (length dims)) " checked, "
                        (itoa ndok) " correct, "
                        (itoa ndflag) " flagged to fix ("
-                       (dchk:color-name *dchk-flag-color*) ")"
+                       (dchk:color-name (cal:ink *dchk-flag-color* 'flag)) ")"
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
@@ -65345,12 +66216,12 @@
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
                        (itoa nasnap) " endpoint(s), "
-                       (dchk:color-name *dchk-arc-color*) ")"
+                       (dchk:color-name (cal:ink *dchk-arc-color* 'arc)) ")"
                        "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
                        (if olaps
                          (strcat ", " (itoa nomerged) " merged, "
                                  (itoa noflag) " flagged ("
-                                 (dchk:color-name *dchk-olap-color*) "), "
+                                 (dchk:color-name (cal:ink *dchk-olap-color* 'olap)) "), "
                                  (itoa noleft) " left as drawn")
                          "")
                        "\nReport placed on the right side of the drawing (layer "
@@ -65497,7 +66368,7 @@
                          lines)))
 
      ;; --- report (the only thing DIMSCAN writes) ------------------
-     (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
+     (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
      (dchk:clear-old)
      (setq hdr (list
                  (cons (strcat "Dimensions scanned: " (itoa nd) " ("
@@ -65577,9 +66448,9 @@
     "     then left to right, top to bottom inside each group."
     "   Every other object greys out; the one under review is zoomed to."
     "   A definition point not touching any object: you choose"
-    (strcat "     Move (" (dchk:color-name *dchk-sugg-color*)
+    (strcat "     Move (" (dchk:color-name (cal:ink *dchk-sugg-color* 'sugg))
             " +, onto the nearest object) / Keep ("
-            (dchk:color-name *dchk-orig-color*) " X, exactly")
+            (dchk:color-name (cal:ink *dchk-orig-color* 'orig)) " X, exactly")
     "     where you drew it) / Pick your own spot."
     (strcat "   A point "
             (if (= *dchk-anchor-min* 2) "two" (itoa *dchk-anchor-min*))
@@ -65722,10 +66593,10 @@
         (progn
           (princ "\n  Running DIMSCAN - it changes nothing, it only reports.")
           (princ (strcat "\n  (In the report, "
-                         (strcase (dchk:color-name *dchk-flag-color*))
+                         (strcase (dchk:color-name (cal:ink *dchk-flag-color* 'flag)))
                          " lines at full size are the problems;"))
           (princ (strcat "\n   "
-                         (dchk:color-name *dchk-report-color*)
+                         (dchk:color-name (cal:ink *dchk-report-color* 'report))
                          " lines at "
                          (rtos (* 100.0 *dchk-green-scale*) 2 0)
                          "% size are the all-clears.)"))
@@ -65791,7 +66662,7 @@
         (cond
           ((= sstep 1)
            (if (cal:ask-yn "\n  Drop that list into the drawing as a reference sheet?" "Yes")
-             (progn (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
+             (progn (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
@@ -76786,7 +77657,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.15")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.16")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -76950,12 +77821,17 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-(setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
-(setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
-(setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
-(setq *lfc-orig-color*    1)       ; ACI: the X marking where you drew the point (red)
-(setq *lfc-sugg-color*    3)       ; ACI: the + marking where LINFINCHECK would put it (green)
-(setq *lfc-point-color*   2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+;; The six below are 'auto too -- they do not vary with the screen the
+;; way *lfc-grey-color* does, but 'auto routes them through lfc:ink's
+;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
+;; in the profile) can override without touching source.  A number is
+;; still used exactly as given.
+(setq *lfc-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
+(setq *lfc-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
+(setq *lfc-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+(setq *lfc-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
+(setq *lfc-sugg-color*    'auto)   ; ACI: the + marking where LINFINCHECK would put it (green)
+(setq *lfc-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
 
 ;; The command line and the report name these colours as they use them,
 ;; so a colour changed here is described correctly rather than still
@@ -76968,9 +77844,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *lfc-constr-layer*  "LINFINCHECK-CONSTRUCTION")
-(setq *lfc-constr-color*  2)       ; ACI (yellow)
+(setq *lfc-constr-color*  'auto)   ; ACI (yellow)
 (setq *lfc-report-layer*  "LINFINCHECK-REPORT")
-(setq *lfc-report-color*  3)       ; ACI (green)
+(setq *lfc-report-color*  'auto)   ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -77313,15 +78189,16 @@
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
-(defun lfc:mark-point (pt)
+(defun lfc:mark-point (pt / col)
   ;; both strokes, for a point that is simply being pointed out
-  (lfc:mark-x pt *lfc-point-color*)
-  (lfc:mark-plus pt *lfc-point-color*))
+  (setq col (cal:ink *lfc-point-color* 'point))
+  (lfc:mark-x pt col)
+  (lfc:mark-plus pt col))
 
 (defun lfc:progress (what n total)
   (princ (strcat "\r  [" (itoa n) "/" (itoa total) "] " what "          ")))
 
-(defun lfc:confirm-move (label orig sugg what / ans newp)
+(defun lfc:confirm-move (label orig sugg what / ans newp ocol scol)
   ;; The point has been put where LINFINCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
   ;; which: an X where you drew it, a + where we would move
@@ -77331,15 +78208,17 @@
   ;;   'move - take our suggestion
   ;;   'keep - put it back exactly where you drew it
   ;;   <point> - a spot you picked yourself (current UCS)
-  (lfc:mark-x    orig *lfc-orig-color*)
-  (lfc:mark-plus sugg *lfc-sugg-color*)
+  (setq ocol (cal:ink *lfc-orig-color* 'orig)
+        scol (cal:ink *lfc-sugg-color* 'sugg))
+  (lfc:mark-x    orig ocol)
+  (lfc:mark-plus sugg scol)
   (if (> (distance orig sugg) *lfc-same-pt*)
-    (grdraw (trans orig 0 1) (trans sugg 0 1) *lfc-sugg-color* 1))
+    (grdraw (trans orig 0 1) (trans sugg 0 1) scol 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (lfc:ptstr orig)
-                 "  (" (lfc:color-name *lfc-orig-color*) " X)"
+                 "  (" (lfc:color-name ocol) " X)"
                  "\n    Move = onto " what " " (lfc:ptstr sugg)
-                 "  (" (lfc:color-name *lfc-sugg-color*) " +), "
+                 "  (" (lfc:color-name scol) " +), "
                  (lfc:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   ;; the pick is a second question, so Back at it re-asks the first
@@ -77357,7 +78236,7 @@
        (initget "Back Undo")
        (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
-                                    (lfc:color-name *lfc-sugg-color*)
+                                    (lfc:color-name scol)
                                     " +> [Back]: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") newp) newp)
        (cond
@@ -77437,7 +78316,7 @@
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
   ;; to the surrounding colour after (braces scope the change)
-  (strcat "{\\C" (itoa *lfc-flag-color*) ";" s "}"))
+  (strcat "{\\C" (itoa (cal:ink *lfc-flag-color* 'flag)) ";" s "}"))
 
 (defun lfc:small (s)
   ;; all-clear text renders at *lfc-green-scale* of the height the
@@ -77622,7 +78501,7 @@
                          minx miny maxx maxy
                          / mainl diml l pr nred nmain ndim nlin grps grp
                            ref h ins ins2 txt right)
-  (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+  (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
   (foreach l lines
     (if (lfc:dimline-p l)
       (setq diml (cons l diml))
@@ -78939,7 +79818,7 @@
 
 (defun lfc:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote)
+                                              ok note meas assocnote fcol)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
   ;; anchor-held-point-count).
@@ -78983,12 +79862,13 @@
   (if (member ok '(back skip))
     (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
     (progn
-      (setq ok (eq ok 'yes))
+      (setq ok (eq ok 'yes)
+            fcol (cal:ink *lfc-flag-color* 'flag))
       (setq note (strcat
                    (if ok
                      "OK"
                      (strcat "FLAGGED to fix ("
-                             (lfc:color-name *lfc-flag-color*) ")"))
+                             (lfc:color-name fcol) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -79002,7 +79882,7 @@
                              " point(s) held at a shared anchor")
                      "")
                    (if assocnote assocnote "")))
-      (if (not ok) (lfc:set-color ent *lfc-flag-color*))
+      (if (not ok) (lfc:set-color ent fcol))
       (list h ok note (length moved) meas (length held)))))
 
 ;; --- arc review ----------------------------------------------------
@@ -79109,7 +79989,7 @@
              nil)))))
     (t nil)))
 
-(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note)
+(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
   ;; interactive review of one arc's endpoints.
   ;; Returns (handle untouched-flag report-note moved-point-count).
   (setq ed     (entget ent)
@@ -79128,16 +80008,17 @@
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
-  (if moved (lfc:set-color ent *lfc-arc-color*))
+  (setq acol (cal:ink *lfc-arc-color* 'arc))
+  (if moved (lfc:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
-                        (lfc:color-name *lfc-arc-color*) "), "
+                        (lfc:color-name acol) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
                               " endpoint(s) moved ("
-                              (lfc:color-name *lfc-arc-color*) ")"))
+                              (lfc:color-name acol) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -79146,7 +80027,7 @@
 ;; --- overlapping line review ---------------------------------------
 
 (defun lfc:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds)
+                                           ans mergeable kinds ocol)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
@@ -79194,21 +80075,22 @@
       (redraw ea 4)
       (redraw eb 4)
       (redraw)
+      (setq ocol (cal:ink *lfc-olap-color* 'olap))
       (cond
         ((= ans "Merge")
          (lfc:merge-lines la lb info)
-         (lfc:set-color ea *lfc-olap-color*)
+         (lfc:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
-                        (lfc:color-name *lfc-olap-color*) ")."))
+                        (lfc:color-name ocol) ")."))
          (list label
                (strcat "merged into one line ("
-                       (lfc:color-name *lfc-olap-color*) ")")
+                       (lfc:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (lfc:set-color ea *lfc-olap-color*)
-         (lfc:set-color eb *lfc-olap-color*)
+         (lfc:set-color ea ocol)
+         (lfc:set-color eb ocol)
          (princ (strcat "\n  Flagged to fix ("
-                        (lfc:color-name *lfc-olap-color*) ")."))
+                        (lfc:color-name ocol) ")."))
          (list label
                (strcat
                  (if (lfc:whole-line-p la)
@@ -79216,7 +80098,7 @@
                      "flagged to fix ("
                      "different layers - flagged to fix (")
                    "polyline edge - flagged to fix (")
-                 (lfc:color-name *lfc-olap-color*) ")")
+                 (lfc:color-name ocol) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -79318,8 +80200,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *lfc-constr-layer* *lfc-constr-color*)
-        (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+        (cal:ensure-layer *lfc-constr-layer* (cal:ink *lfc-constr-color* 'constr))
+        (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -79647,7 +80529,7 @@
                                           lines)))
                       (progn
                         (setq attwrong T)
-                        (lfc:set-color b *lfc-flag-color*)
+                        (lfc:set-color b (cal:ink *lfc-flag-color* 'flag))
                         (setq keep (cons b keep))
                         (setq lines (cons (strcat "Step Attachment "
                                                   (cdr (assoc 5 (entget b)))
@@ -79835,7 +80717,7 @@
         ;; mark it red automatically and keep it red
         (if (and htbad hdim)
           (progn
-            (lfc:set-color hdim *lfc-flag-color*)
+            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (princ (strcat "\n  Side view height dimension "
                            (cdr (assoc 5 (entget hdim)))
@@ -79852,7 +80734,7 @@
         (if (and hdim dimht stepht
                  (> (abs (- dimht stepht)) *lfc-height-tol*))
           (progn
-            (lfc:set-color hdim *lfc-flag-color*)
+            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (setq lines (cons (strcat "Height dim "
                                       (cdr (assoc 5 (entget hdim)))
@@ -80586,7 +81468,7 @@
      (setq bordsum (lfc:border-verdict bordbb))
 
      ;; --- report (the only thing the scan writes) --------------------
-     (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+     (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
      (lfc:clear-old)
      (setq dhdr (if lite
                   nil
@@ -80974,7 +81856,7 @@
         (cond
           ((= sstep 1)
            (if (cal:ask-yn "\n  Drop that list into the drawing as a reference sheet?" "Yes")
-             (progn (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+             (progn (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
@@ -107927,7 +108809,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.29")
+(setq *lazpanel-version* "v3.30")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -110374,6 +111256,23 @@
      ""
      "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
 
+;; The eight ITEM-TYPE roles cal:ink resolves for COVERCHECK, DIMCHECK
+;; and LINFINCHECK -- generalized off the six colours plus the two
+;; layer colours those three tools used to carry as separate hardcoded
+;; copies.  Keyed by the Itemcolors keyword -> the role cal:ink takes,
+;; which is also the CalofinInk-<ROLE> profile key (uppercased) an
+;; override lives under.  One list so Itemcolors and lzp:setshow read
+;; the same roster instead of two that can drift apart.
+(setq lzp:*inkroles*
+  '(("Flag"   . "flag")
+    ("Arc"    . "arc")
+    ("Olap"   . "olap")
+    ("Orig"   . "orig")
+    ("Sugg"   . "sugg")
+    ("Point"  . "point")
+    ("Constr" . "constr")
+    ("Report" . "report")))
+
 (defun lzp:setshow ( / r v)
   (princ "\ncalofin settings, as this session reads them:")
   (foreach r lzp:*settings*
@@ -110382,6 +111281,15 @@
                    "\n      now: " (if (and v (/= v "")) v
                                        (strcat "(unset -- " (cadr r) ")"))
                    "\n      " (caddr r))))
+  (princ (strcat "\n  Item colours (CALSET Itemcolors; CalofinInk-<ROLE> in"
+                 "\n      the profile) -- COVERCHECK/DIMCHECK/LINFINCHECK's"
+                 "\n      flag/arc/olap/orig/sugg/point/constr/report, each"
+                 "\n      auto (the shared table in CALOFIN-LIB.lsp's"
+                 "\n      cal:ink) unless overridden below:"))
+  (foreach r lzp:*inkroles*
+    (setq v (getenv (strcat "CalofinInk-" (strcase (cdr r)))))
+    (princ (strcat "\n      " (car r) ": "
+                   (if (and v (/= v "")) (strcat "ACI " v) "(auto)"))))
   ;; Not a row of lzp:*settings*: a hidden list is not one scalar in
   ;; the profile, it is a name list in the registry, the same shape
   ;; Pins and Recent already are -- so it gets its own line rather than
@@ -110394,7 +111302,7 @@
                  "\n      LAZHIDE picks which, or Hidden below"))
   (princ))
 
-(defun c:CALSET ( / *error* pick key v)
+(defun c:CALSET ( / *error* pick key v role)
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -110404,13 +111312,44 @@
   (if lzd:begin (lzd:begin "CALSET" *lazpanel-version*))
   (lzp:hidden-read)
   (lzp:setshow)
-  (initget "Theme Errordir Stockdir Hidden Quit")
-  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Hidden/Quit] <Quit>: "))
+  (initget "Theme Errordir Stockdir Itemcolors Hidden Quit")
+  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Itemcolors/Hidden/Quit] <Quit>: "))
   (if lzd:ask (lzd:ask "Change which?" pick) pick)
   (setq key (cond ((= pick "Theme") "CalofinTheme")
                   ((= pick "Errordir") "CalofinErrorDir")
                   ((= pick "Stockdir") "StockCover_Folder")))
   (cond
+    ((= pick "Itemcolors")
+     ;; a second keyword picks WHICH of the eight roles, then the same
+     ;; getstring/Back/"." shape as Errordir and Stockdir below sets its
+     ;; CalofinInk-<ROLE> override -- Undo is accepted everywhere Back
+     ;; is, unlisted (STANDARDS 1)
+     (initget "Flag Arc Olap Orig Sugg Point Constr Report Back Undo")
+     (setq role (getkword
+                  "\nWhich item colour [Flag/Arc/Olap/Orig/Sugg/Point/Constr/Report/Back] <Back>: "))
+     (if lzd:ask (lzd:ask "Which item colour?" role) role)
+     (setq role (if role role "Back"))
+     (cond
+       ((member role '("Back" "Undo")) (c:CALSET))
+       (t
+        (setq key (strcat "CalofinInk-" (strcase (cdr (assoc role lzp:*inkroles*)))))
+        (setq v (getstring T (strcat "\n" role
+                                     " ACI colour (a number, Back to leave it, "
+                                     "or . for Auto): ")))
+        (if lzd:ask (lzd:ask (strcat role " colour") v) v)
+        (cond
+          ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
+          ((= v "") (princ "\nUnchanged."))
+          ((= v ".")
+           (setenv key "")
+           (princ (strcat "\n" role " colour cleared -- back to Auto.")))
+          ((= (atoi v) 0)
+           (princ "\nNot a colour number -- unchanged."))
+          (t
+           (setenv key (itoa (atoi v)))
+           (princ (strcat "\n" role " colour is now ACI " (itoa (atoi v))
+                          ".  COVERCHECK, DIMCHECK and LINFINCHECK read it"
+                          " on their next run.")))))))
     ;; routes straight to LAZHIDE's own dialog and comes back to this
     ;; prompt -- the same way Back re-enters CALSET below
     ((= pick "Hidden") (c:LAZHIDE) (c:CALSET))

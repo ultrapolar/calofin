@@ -58,6 +58,91 @@ can be said to have changed, and a division by zero is an AutoLISP
 error -- "divide by zero" -- that reaches the handler for a real as
 much as for an int, rather than a Python one.
 
+**Every AB note leads with a bullet.** `ABMOVE` and `ABPCREATE` leave a
+note per point on one layer, and a run that settles several of them
+leaves a column -- which read as loose text rather than as a list.
+`abf:*note-prefix*` (`- `) goes on inside `abf:note`, so every note
+carries it and one worded later cannot quietly miss it: one call is one
+TEXT is one line.  Set it to `""` for the bare wording.
+
+
+**A themeable colour space for what KIND of thing is drawn, not just
+the screen it's drawn on.** COVERCHECK v1.17, DIMCHECK v1.20,
+LINFINCHECK v2.16, LAZPANEL v3.30. `cal:ink` already answered "what ACI
+suits this background" for four roles (`fade`/`guide`/`dim`/`hi`); it
+did not know anything about what KIND of thing was being marked. Three
+review tools had separately hand-picked the answer to that question
+eight times over: `flag`/`arc`/`olap`/`orig`/`sugg`/`point`/`constr`/
+`report`, the same ACI numbers, copied byte-for-byte into COVERCHECK,
+DIMCHECK and LINFINCHECK, with nothing to stop the three copies from
+drifting apart the next time one of them changed.
+
+`cal:ink` (and each of the three tools' standalone `:ink` copies) now
+carries those eight roles too, resolved the same way a screen-aware
+role is -- `'auto` for the table, a number for exactly that number --
+except there is no dark/light spread to measure, since these are the
+same ordinary ACI colours on any background the review tools have ever
+drawn on. What IS new is `CalofinInk-<ROLE>` in the AutoCAD profile: a
+per-role override, on any of the twelve roles now, that beats the
+table but never a knob left as a plain number. `CALSET` grew an
+`Itemcolors` menu to write it, so a drafter who wants COVERCHECK's
+"flagged" markup in a different colour no longer edits three `.lsp`
+files by hand to get it consistently.
+
+**A line of dimensions is one dimension.**  `CLEARDIM` v3.0.  Where
+several dimension lines are the same straight line -- what
+`DIMCONTINUE` lays down by the handful and `AUTODIM` lays whole
+perimeters out as -- they are a RUN now: one continuous dimension with
+breaks in it.  Three things follow, and all three are what a drafter
+would do.
+
+**A run's text stays in its own segment.**  AutoCAD centres each text
+between its own extension lines, and one shuffled past them reads as
+the dimension for the span next door.  So a run member has LESS room
+along the track than a lone dimension, not more -- which is the thing
+that was quietly wrong before: a chain of short dimensions came out
+with its texts slid two segments along, each one sitting over somebody
+else's span.
+
+**A run's own skeleton is its own.**  Its dimension line and its
+extension lines belong to one dimension, not several: a continued chain
+does not merely have extension lines near each other, it SHARES them --
+the line at the end of one segment is the line at the start of the
+next.  While a run is straight this changes nothing, because every
+member's line already IS its own line.  It is what makes a staggered
+run possible at all: without it, the step of a staggered dimension's
+line and its lengthened extension lines land on the neighbour's text
+and there is nowhere left to go.
+
+**When one member has to stand further off the work, they all go.**
+Moving one dimension off a wall and leaving its neighbours behind
+trades a crowded dimension for a crooked run.
+
+And when a run's own members are what crowd each other -- four segments
+thirty wide with text forty wide, where there is nowhere along the
+track to go because every text overhangs its own segment whatever it
+does -- the run is STAGGERED: every other dimension stands a row
+further off the work, its own dimension line with it, and every text
+stays centred where it belongs.  Which of the two happens is decided by
+WHO is in the way: run-mates alone means stagger, anything else means
+the whole run goes.  A row is `cd:*row-f*` text heights, the unit
+AUTODIM already stands its own chains off the work in
+(`ad:*text-offsets*`).
+
+Only a linear or aligned dimension joins a run: a radius keeps the
+CENTRE of its circle in group 10 and an ordinate its feature, so there
+is no dimension line there to be collinear with, and pushing one "out"
+would move the dimension onto a different circle rather than clear of
+an obstacle.
+
+The new move is a real one -- group 10 and group 11 together, the
+definition points left alone so the extension lines stretch and the
+dimension goes on measuring exactly what it measured.  A run only ever
+stands FURTHER off the work, never nearer; there is no version of
+"clear of an obstacle" that runs toward the thing being measured.
+
+`tests/test_cleardim.py` is at 77 and runs at both tiers.
+
 **The text box was thirty times too small, so CLEARDIM did nothing.**
 v2.1.  A drawing came back with two `CROSS DIMENSIONS` diagonals
 printing on top of each other in the middle of a rectangle, and
