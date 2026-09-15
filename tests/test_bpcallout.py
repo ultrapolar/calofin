@@ -386,6 +386,9 @@ def test_no_local_shadows_a_function():
     # the arglists themselves are parenthesised, so they have to come
     # out before heads-of-lists are read as the functions being called
     bodies = re.sub(r'\(defun\s+[^\s()]+\s*\([^)]*\)', '(defun', src)
+    # a lambda's parameter list is parenthesised too -- ((lambda (v)
+    # ...) (getpoint ...)) is how LAZDIAG records an input read in place
+    bodies = re.sub(r'\(lambda\s*\([^)]*\)', '(lambda', bodies)
     called = set(re.findall(r'\(\s*([a-zA-Z][\w:*<>=+/-]*)', bodies))
     bad = []
     for arglist in arglists:

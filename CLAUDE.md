@@ -187,14 +187,16 @@ regenerated and your edit will vanish.
 **Every command in this tree reports its failures, and a new one is not
 finished until it does.** A failure is not over when the handler prints
 a line: it is over when the drafter has a file they can send in. That
-is `lisp/lazdiag/LAZDIAG.lsp`, and four guarded call sites reach it:
+is `lisp/lazdiag/LAZDIAG.lsp`, and five guarded call sites reach it:
 
 ```lisp
 (if lzd:begin  (lzd:begin  "TOOLNAME" *toolname-version*))      ; top of the command
 (if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))  ; in *error*
 (if lzd:end    (lzd:end "TOOLNAME"))                            ; before the command's (princ)
 (if lzd:watch  (lzd:watch ss) ss)                               ; after a selection
-(if lzd:ask    (lzd:ask msg v) v)                               ; in an ask helper
+(if lzd:ask    (lzd:ask msg v) v)                               ; after (setq v (getX ...)), ask helpers included
+((lambda (v) (if lzd:ask (lzd:ask "prompt" v) v))               ; an input READ IN PLACE: a while's
+  (getpoint "prompt"))                                          ;   test, a keyword inside (= ...)
 ```
 
 The `watch` and `ask` lines carry an **else branch** and it is not
@@ -205,9 +207,32 @@ LAZDIAG is loaded or not, so dropping one after a
 where it would change a meaning -- last in a body, as an `(if ...)` else
 branch, or as a term of an `(and ...)`.
 
+**Every answer the drafter gives is in the transcript**, not only the
+ask helpers'. A `(setq v (getX ...))` that is a body statement takes
+the `lzd:ask` line after it; an input consumed where it stands -- the
+`(setq p (getpoint))` that is a `while`'s test, a `getkword` inside an
+`(= ...)`, the `getstring` that only pauses -- is wrapped in the lambda
+above, which binds the answer for the length of the record and hands
+it straight back, so the wrapped call means what the bare one did and
+the `nil` that ends a loop is written down like any other answer. The
+answers are typed -- `nil`, `12.5`, `"Yes"`, `(x y z)`,
+`(<ent> (x y z))` -- which is what makes the transcript REPLAYABLE:
+`python3 tools/probe_report.py REPORT.dxf` loads the tool at the
+report's version into the test VM, hands it the geometry and the
+answers the report carries, confirms the same failure comes back, then
+changes one answer at a time (1, 0, half, double, a step either side,
+ten times, a thousand; a point moved) and says which answer the failure
+is tied to, which it is not, and where a range the tool never checks
+begins. When the control run does not reproduce -- a whole-drawing
+sweep the report could not carry, a file dialog -- it says so instead
+of probing. The report itself reads its inputs against each other
+first: THE INPUTS, AND WHAT IS ODD ABOUT THEM flags a zero, a
+negative, two lengths that are the same number, two picks on one spot,
+and says when nothing stands out, which points at the code instead.
+
 Do not write them by hand. `python3 tools/check_lazdiag.py --fix`
-inserts and maintains all four, and `make check` runs the same check,
-so a tool that is missing any of them cannot ship.
+inserts and maintains all of them, and `make check` runs the same
+check, so a tool that is missing any of them cannot ship.
 
 **What `--fix` will not write is the `*error*` handler itself.** What
 belongs in one is the editorial part -- which sysvars this command
@@ -371,9 +396,16 @@ python3 tools/check_registry.py  # every tool registered everywhere it has
                                  # is not editorial
 python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
                     [--fix]      # lzd:begin at the top and the lzd:report
-                                 # in the *error* handler, plus the one
-                                 # line each ask helper carries to record
-                                 # its prompt; --fix wires what is missing
+                                 # in the *error* handler, lzd:end before
+                                 # the (princ), lzd:watch after a selection
+                                 # and lzd:ask at EVERY input -- after a
+                                 # setq that is a statement, wrapped where
+                                 # the answer is read in place; --fix
+                                 # wires what is missing
+python3 tools/probe_report.py    # not a check: replays a failure report in
+                   REPORT.dxf    # the VM and varies its inputs one at a
+                                 # time, to say which one the failure is
+                                 # tied to (see "When a tool fails")
 python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
                                  # VB compiler: blocks closed by the right
                                  # closer, quotes and parens balanced, every

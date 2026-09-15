@@ -1116,6 +1116,7 @@
        (while p
          (initget "Back Undo")
          (setq p (getpoint "\n  Pick a discontinuity (Enter = done) [Back]: "))
+         (if lzd:ask (lzd:ask "\n  Pick a discontinuity (Enter = done) [Back]: " p) p)
          (cond
            ((acc:back-kw p)
             ;; (> added 0), not just ADDED: zero is not false in LISP,
@@ -1133,6 +1134,7 @@
        (while p
          (initget "Back Undo")
          (setq p (getpoint "\n  Pick the declaration to drop (Enter = done) [Back]: "))
+         (if lzd:ask (lzd:ask "\n  Pick the declaration to drop (Enter = done) [Back]: " p) p)
          (if (acc:back-kw p) (setq p nil))
          (if p
            (progn

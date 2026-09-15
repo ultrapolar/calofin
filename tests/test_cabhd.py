@@ -354,6 +354,24 @@ verts = kept_polyline(vm)
 check('picking Pt.18 cuts exactly where typing 18 does',
       verts is not None and max(v[1] for v in verts) < 200.0)
 
+# the point can be typed at the Pick, in any of PERPMARK's spellings,
+# and a click on nothing is re-asked where it stands - not snapped
+vm, ents = survey_vm()
+vm.run('c:CABHD', SETTINGS + [ents, "Pick", (9000.0, 9000.0), "Pt.18", "2"])
+verts = kept_polyline(vm)
+check('a Pick clicked on nothing is re-asked, and a typed number lands it',
+      'No survey point there' in ''.join(vm.printed)
+      and verts is not None and max(v[1] for v in verts) < 200.0)
+
+print('CABHD -- a declaration past the cutoff is dropped by name')
+vm, ents = survey_vm()
+vm.run('c:CABHD', [None, None, None, "None", "No", "No",
+                   "Yes", "24", None,               # hold Pt.24: past the cutoff
+                   ents, 18, "2"])
+check('a held point past the cutoff is named, and dropped for that reason',
+      'Pt.24 sits past the cutoff - the hold declared on it is dropped'
+      in ''.join(vm.printed) and 'snapped' not in ''.join(vm.printed))
+
 print('CABHD -- a cutoff that starves the fit is refused and re-asked')
 vm, ents = survey_vm()
 vm.run('c:CABHD', SETTINGS + [ents, 2, 18, "2"])

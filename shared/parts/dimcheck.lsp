@@ -614,6 +614,7 @@
     (initget "Move Keep Pick")
     (setq ans (getkword
                 "\n  [Move/Keep/Pick] <Move>: "))
+    (if lzd:ask (lzd:ask "\n  [Move/Keep/Pick] <Move>: " ans) ans)
     (cond
       ((or (null ans) (= ans "Move")) (setq ans 'move))
       ((= ans "Keep") (setq ans 'keep))
@@ -623,6 +624,7 @@
                                     " <Move to the "
                                     (dchk:color-name scol)
                                     " +> [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") newp) newp)
        (cond
          ((and (= (type newp) 'STR) (member newp '("Back" "Undo")))
           (princ "\n  Stepping back one question.")
@@ -1347,6 +1349,7 @@
           (initget "Merge Flag Leave")
           (setq ans (getkword
                       "\n  Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>: "))
+          (if lzd:ask (lzd:ask "\n  Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>: " ans) ans)
           (if (null ans) (setq ans "Merge")))
         (progn
           (princ (if (= (strcase lay1) (strcase lay2))
@@ -1356,6 +1359,7 @@
           (initget "Flag Leave")
           (setq ans (getkword
                       "\n  Flag to fix, or Leave as is? [Flag/Leave] <Flag>: "))
+          (if lzd:ask (lzd:ask "\n  Flag to fix, or Leave as is? [Flag/Leave] <Flag>: " ans) ans)
           (if (null ans) (setq ans "Flag"))))
       (redraw ea 4)
       (redraw eb 4)
@@ -2073,7 +2077,8 @@
 
 (defun dchk:tut-pause (msg)
   (princ (strcat "\n  " msg))
-  (getstring "\n  --- press Enter to continue ---")
+  ((lambda (v) (if lzd:ask (lzd:ask "\n  --- press Enter to continue ---" v) v))
+    (getstring "\n  --- press Enter to continue ---"))
   (princ))
 
 (defun dchk:tut-line (p1 p2 lay)
@@ -2100,6 +2105,7 @@
 (defun dchk:tut-demo (/ org ox oy made e ss2 i)
   (princ "\n\n--- DEMO: a practice drawing with faults planted in it ---")
   (setq org (getpoint "\n  Pick an empty spot for the practice drawing: "))
+  (if lzd:ask (lzd:ask "\n  Pick an empty spot for the practice drawing: " org) org)
   (if (null org)
     (princ "\n  Cancelled - nothing drawn.")
     (progn
@@ -2215,6 +2221,7 @@
   (initget "Checks Demo Both LIST")
   (setq ans (getkword
               "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: "))
+  (if lzd:ask (lzd:ask "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: " ans) ans)
   (if (null ans) (setq ans "Both"))
   (if (= ans "LIST") (setq ans "Checks"))
   (setq oldecho (getvar "CMDECHO"))
@@ -2245,6 +2252,7 @@
            (initget "Back Undo")
            (setq ins (getpoint
                        "\n  Pick the top-left corner for the sheet [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick the top-left corner for the sheet [Back]: " ins) ins)
            (cond
              ((and (= (type ins) 'STR) (member ins '("Back" "Undo")))
               (princ "\n  Stepping back one question.")
@@ -2257,6 +2265,7 @@
            (initget "Back Undo")
            (setq h (getdist (strcat "\n  Text height <"
                                     (rtos *dchk-report-hfall*) "> [Back]: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") h) h)
            (if (and (= (type h) 'STR) (member h '("Back" "Undo")))
              (progn (princ "\n  Stepping back one question.")
                     (setq sstep 2))

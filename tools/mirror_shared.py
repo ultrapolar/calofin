@@ -227,7 +227,11 @@ TOOLS = {
     # library has no answer for -- the segment walk over the perimeter,
     # the mark record, the survey-point classifier (BPCALLOUT's and
     # ABFIND's, which are not in the library either) and pm:askpoint,
-    # the pick-or-type prompt none of the tools before it needed.
+    # the pick-or-type prompt.  That prompt IS in the library now, as
+    # cal:askpoint, lifted from here for ABHD and its family -- but the
+    # library's takes the snap radius as an argument where pm:askpoint
+    # reads pm:*snap* itself, so PERPMARK keeps its own copy until its
+    # arity is moved in a pass of its own.
     'PERPMARK': {
         'src': 'lisp/perpmark/PERPMARK.lsp',
         'swap': {
@@ -304,6 +308,10 @@ TOOLS = {
             'fit:dedupe': 'cal:dedupe', 'fit:tan': 'cal:tan',
             'fit:ceil': 'cal:ceil',
             'fit:block-number': 'cal:block-number',
+            'fit:as-number': 'cal:as-number', 'fit:canon': 'cal:canon',
+            'fit:cand-matches': 'cal:cand-matches',
+            'fit:cand-nearest': 'cal:cand-nearest',
+            'fit:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         # fit:askkw already takes the SHOWN bracket third, like the
@@ -450,6 +458,10 @@ TOOLS = {
             'abl:dedupe': 'cal:dedupe',
             'abl:block-number': 'cal:block-number',
             'abl:ensure-layer': 'cal:ensure-layer', 'abl:pad': 'cal:pad',
+            'abl:as-number': 'cal:as-number', 'abl:canon': 'cal:canon',
+            'abl:cand-matches': 'cal:cand-matches',
+            'abl:cand-nearest': 'cal:cand-nearest',
+            'abl:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         'expand': {
@@ -458,6 +470,7 @@ TOOLS = {
             '(cal:dedupe pts)':
                 ['(cal:dedupe pts *ABL-EXACT-EPS*)'],
         },
+        'symbols': {'ABL-BACK': 'CAL-BACK'},
     },
     # LOBF was written against the library from the start (STANDARDS
     # section 6): its vector set, the sysvar pair, ensure-layer, pad,
@@ -1083,12 +1096,22 @@ TOOLS = {
             'pf:signed-dang': 'cal:signed-dang', 'pf:dedupe': 'cal:dedupe',
             'pf:ensure-layer': 'cal:ensure-layer', 'pf:pad': 'cal:pad',
             'pf:back-word': 'cal:back-word-p', 'pf:unit': 'cal:unit',
+            # PERPMARK's survey-point naming, lifted into the library:
+            # the spellings, the typed match, the click within a snap
+            # radius and the one prompt that takes either
+            'pf:as-number': 'cal:as-number', 'pf:canon': 'cal:canon',
+            'pf:cand-matches': 'cal:cand-matches',
+            'pf:cand-nearest': 'cal:cand-nearest',
+            'pf:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         'expand': {
             '(cal:dedupe pts)':
                 ['(cal:dedupe pts *PF-EXACT-EPS*)'],
         },
+        # the Back sentinel travels with cal:askpoint, and every
+        # question in the run tests for it by name
+        'symbols': {'PF-BACK': 'CAL-BACK'},
     },
     # CABHD is ABHD's perimeter half and carries the same kit under
     # cab:, minus the bottom-only pieces; same dedupe epsilon growth.
@@ -1104,12 +1127,17 @@ TOOLS = {
             'cab:norm-ang': 'cal:angnorm',
             'cab:signed-dang': 'cal:signed-dang', 'cab:dedupe': 'cal:dedupe',
             'cab:ensure-layer': 'cal:ensure-layer', 'cab:pad': 'cal:pad',
+            'cab:as-number': 'cal:as-number', 'cab:canon': 'cal:canon',
+            'cab:cand-matches': 'cal:cand-matches',
+            'cab:cand-nearest': 'cal:cand-nearest',
+            'cab:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         'expand': {
             '(cal:dedupe pts)':
                 ['(cal:dedupe pts *CAB-EXACT-EPS*)'],
         },
+        'symbols': {'CAB-BACK': 'CAL-BACK'},
     },
     # ABHD's kit again under lh:, plus block-number -- the library's
     # takes the attribute tag as an argument where lh: read *LH-PT-TAG*
@@ -1126,6 +1154,10 @@ TOOLS = {
             'lh:signed-dang': 'cal:signed-dang', 'lh:dedupe': 'cal:dedupe',
             'lh:block-number': 'cal:block-number',
             'lh:ensure-layer': 'cal:ensure-layer', 'lh:pad': 'cal:pad',
+            'lh:as-number': 'cal:as-number', 'lh:canon': 'cal:canon',
+            'lh:cand-matches': 'cal:cand-matches',
+            'lh:cand-nearest': 'cal:cand-nearest',
+            'lh:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         'expand': {
@@ -1134,6 +1166,7 @@ TOOLS = {
             '(cal:dedupe pts)':
                 ['(cal:dedupe pts *LH-EXACT-EPS*)'],
         },
+        'symbols': {'LH-BACK': 'CAL-BACK'},
     },
     # OASIS asks through askkw/askdist and swaps the sysvar, dimstyle,
     # osnap and layer helpers.  Its Back sentinel rides the SWAP map,

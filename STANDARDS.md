@@ -382,6 +382,71 @@ for the same reason.
   (princ))
 ```
 
+**A question about a survey point NAMES one.** A wall runs from
+Pt.17 to Pt.22, Pt.9 is a corner, Pt.30 is held, Pt.41 is left out:
+each of those is a question about a point the drawing already holds,
+not about a place, so it is asked with `tool:askpoint` (`cal:askpoint`
+in the library, lifted from PERPMARK) -- one prompt that takes a
+click OR a typed number, and never a bare `getpoint` snapped to
+whatever was nearest. The rules it carries:
+
+* a click has to land within the tool's snap radius of a point to
+  pick it (12.0 in every tool that has one, so a drafter's aim
+  carries between them); a typed number never uses the radius -- a
+  name is exact;
+* `"17"`, `"Pt.17"`, `"pt 17"`, `"#17"` and `"017"` all name the same
+  point (`tool:canon`);
+* a click on nothing, a number nothing carries and a number two
+  points share are re-asked where they stand, never guessed at;
+* the answer is a candidate `(position name)`, and the position is
+  the point's identity: a declaration made before the selection is
+  matched to the selected points by it, and one that is not among
+  them is named and dropped, never snapped onto some other point.
+
+```lisp
+;; A survey point, clicked or typed.  TAIL is the prose inside the
+;; angle brackets on a prompt whose Enter means something ("Enter =
+;; done"), nil when a point is required.  CANDS are the (position
+;; name) candidates and SNAP how close a click has to land.  Returns
+;; the candidate, nil for Enter, or TOOL-BACK.
+(defun tool:askpoint (msg tail back cands snap / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'TOOL-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (tool:cand-matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (tool:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (tool:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (tool:cand-nearest v cands snap))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
+```
+
 ## 5. Code structure
 
 **File.** One tool per `lisp/<tool>/` folder; the file is named after
@@ -617,7 +682,7 @@ failure in it produces a file somebody can diagnose from.  That is the
 whole of the rule, and it applies to the tool written next year exactly
 as it applies to the seventy in the tree today.
 
-Four call sites, all of them maintained by
+Five call sites, all of them maintained by
 `tools/check_lazdiag.py --fix`, and `make check` runs the same check so
 a command that is missing any of them cannot ship:
 
@@ -627,12 +692,28 @@ a command that is missing any of them cannot ship:
 | in the `*error*` handler | `(if lzd:report (lzd:report "TOOL" *tool-version* msg))` | the report itself: the DXF, and the words telling the drafter to send it |
 | before the command's `(princ)` | `(if lzd:end (lzd:end "TOOL"))` | the run LOG's "ok" line: a clean run, counted |
 | after a selection | `(if lzd:watch (lzd:watch ss) ss)` | the geometry the run was HANDED, not just what it drew |
-| in an ask helper | `(if lzd:ask (lzd:ask msg v) v)` | the transcript -- which question it died on |
+| after a `(setq v (getX ...))` that is a body statement, ask helpers included | `(if lzd:ask (lzd:ask msg v) v)` | the transcript -- which question it died on, and what was answered |
+| at an input read where it stands | `((lambda (v) (if lzd:ask (lzd:ask "prompt" v) v)) (getpoint "prompt"))` | the same transcript line for a `while`'s test, a keyword inside `(= ...)`, a `getstring` that only pauses -- and the `nil` that ends a loop, written down like any other answer |
 
-The else branch on the last two is load-bearing, not decoration: it
-makes the whole form evaluate to the variable whether LAZDIAG is loaded
-or not, so a call dropped after a `(setq ss (ssget ...))` cannot change
-what the enclosing `progn` or `cond` clause returns.
+The else branch on the `watch` and `ask` forms is load-bearing, not
+decoration: it makes the whole form evaluate to the variable whether
+LAZDIAG is loaded or not, so a call dropped after a
+`(setq ss (ssget ...))` cannot change what the enclosing `progn` or
+`cond` clause returns.  The lambda is the same idea for a call whose
+value something reads in place: it binds the answer for the length of
+the record and hands it straight back, so the wrapped call means
+exactly what the bare one did wherever it sits.  A record dropped in
+AFTER a `while`'s test would have run only when the test passed, and
+the transcript would have been short exactly the answer that ended the
+loop.
+
+The answers are recorded TYPED -- `nil`, `12.5`, `"Yes"`, `(x y z)`,
+`(<ent> (x y z))` -- so a transcript is not just readable but
+replayable: `tools/probe_report.py` feeds a report back to the tool in
+the test VM, confirms the failure, and varies each answer in turn to
+say which one it is tied to.  Every input a new tool takes is
+therefore an input `--fix` will record; do not route one around a
+`getX` call to keep it out of the transcript.
 
 Those four also feed the **run log** -- one line per run into
 `<profile>\calofin\calofin-YYYY-MM.log`, `ok` / `quit` / `FAIL` -- which

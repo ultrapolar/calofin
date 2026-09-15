@@ -56,6 +56,7 @@
 
 (defun tut:pause ( / v)
   (setq v (getstring "\n      [Enter to carry on, X to stop] "))
+  (if lzd:ask (lzd:ask "\n      [Enter to carry on, X to stop] " v) v)
   (if (or (= v "x") (= v "X")) 'TUT-STOP))
 
 ;; Zoom so the whole demo, dimensions and all, is on screen.
@@ -232,6 +233,7 @@
 ;; The same checklist as a text sheet in the drawing, at a picked point.
 (defun tut:sheet ( / p x y h l)
   (setq p (getpoint "\nPoint for the reference sheet <skip>: "))
+  (if lzd:ask (lzd:ask "\nPoint for the reference sheet <skip>: " p) p)
   (if p
       (progn
         (spa:layer "SPA-NOTES" 3)
@@ -255,6 +257,7 @@
                     k x ch rows stop rbox)
   (setq base (getpoint "\nWhere shall the demo go <0,0>: ")
         spa:*base* (if base (list (car base) (cadr base)) (list 0.0 0.0)))
+  (if lzd:ask (lzd:ask "\nWhere shall the demo go <0,0>: " base) base)
   (setvar "OSMODE" 0)
 
   ;; the same set-up the real command does
@@ -499,6 +502,7 @@
         ;; Checklist stays accepted typed in full, hidden
         (initget "Checks Demo Both CHECKLIST")
         (setq what (getkword "\nShow me [Checks/Demo/Both] <Both>: "))
+        (if lzd:ask (lzd:ask "\nShow me [Checks/Demo/Both] <Both>: " what) what)
         (if (= what "CHECKLIST") (setq what "Checks"))
         (if (null what) (setq what "Both"))
         (cal:syssave (spa:sysvars))
