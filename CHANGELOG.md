@@ -8,6 +8,34 @@ which set of them shipped together. The release name lives in
 
 ## v3.15 -- 2026-09-15
 
+**The drafter's object snaps come back from a failed run too.**
+COVERCHECK v1.18, DIMCHECK v1.21, LINFINCHECK v2.17, and a new
+`tools/check_osnap.py` in `make check`. Forty-three commands here mute
+`OSMODE` while they feed computed points to `(command ...)`, so a
+running osnap cannot pull a pick onto nearby geometry. Forty of them
+already put it back on both the clean exit and the one that throws --
+either directly from a local of the command, which the nested `*error*`
+handler can see, or through the `tool:sysrestore` snapshot that leads
+with OSMODE.
+
+Three did not, and they were the three check tutorials. `cchk:tut-build`,
+`dchk:tut-dim` and `lfc:tut-dim` each save OSMODE into a local of their
+OWN, zero it round a `DIMLINEAR` and put it back inline -- correct as
+far as it goes, and out of reach of the command's handler, which is the
+only code that runs when the drafter hits Esc. `TUTORIALCOVERCHECK`
+already held ATTDIA/ATTREQ/FILEDIA itself for exactly that reason; all
+three now hold OSMODE the same way, restored FIRST in the handler
+before anything below it can throw. Snaps left off are not a failure
+that looks like the tool's: the drafter meets it two commands later,
+when a line drawn by eye refuses to snap to an endpoint.
+
+`check_osnap.py` is what keeps it answered. It reads each command's
+whole reach across the tier -- POOLDEMO's restore is POOL's
+`pool:sysrestore`, in another file -- and fails one that can change
+OSMODE without restoring it on the way out, or without restoring it
+from its `*error*` handler. `--list` prints all forty-three and how each
+puts it back.
+
 **A failure report can be replayed, and its inputs varied, without
 AutoCAD.**  A report said what the drafter answered and where the tool
 died; it did not say WHICH answer mattered.  Three things changed so

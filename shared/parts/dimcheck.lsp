@@ -118,7 +118,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.20")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.21")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2203,8 +2203,14 @@
         (princ "\n  Left in place - one U removes the whole tutorial."))
       (princ))))
 
-(defun c:TUTORIALDIMCHECK ( / *error* oldecho undo-open ans l ins h sstep)
+(defun c:TUTORIALDIMCHECK ( / *error* oldecho os0 undo-open ans l ins h
+                             sstep)
   (defun *error* (msg)
+    ;; object snaps first, before anything below it can throw.
+    ;; dchk:tut-dim mutes OSMODE round its DIMLINEAR and puts it back
+    ;; from a local of its own, which this handler cannot see -- so
+    ;; the tutorial holds the drafter's value itself
+    (if os0 (setvar "OSMODE" os0))
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -2224,7 +2230,7 @@
   (if lzd:ask (lzd:ask "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: " ans) ans)
   (if (null ans) (setq ans "Both"))
   (if (= ans "LIST") (setq ans "Checks"))
-  (setq oldecho (getvar "CMDECHO"))
+  (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command

@@ -229,7 +229,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.17")
+(setq *cchk-version* "v1.18")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -3902,8 +3902,15 @@
   (cchk:tut-label (list (+ bx 195.0) (+ by 78.0) 0.0) 4.0 "(5) Cover Details set wrong on purpose")
   T)
 
-(defun c:TUTORIALCOVERCHECK ( / *error* oldecho att0 req0 fil0 undo-open bp)
+(defun c:TUTORIALCOVERCHECK ( / *error* oldecho os0 att0 req0 fil0
+                               undo-open bp)
   (defun *error* (msg)
+    ;; object snaps first, before anything below it can throw.
+    ;; cchk:tut-build mutes OSMODE round its DIMLINEAR and puts it
+    ;; back from a local of its own, which this handler cannot see --
+    ;; so the tutorial holds the drafter's value itself, exactly as
+    ;; it holds the three below
+    (if os0 (setvar "OSMODE" os0))
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     ;; cchk:tut-insert-details drops ATTDIA/ATTREQ/FILEDIA round its
@@ -3926,7 +3933,7 @@
       (setq bp (getpoint "\nPick a base point for the demo, clear of your real geometry <0,0>: "))
       (if lzd:ask (lzd:ask "\nPick a base point for the demo, clear of your real geometry <0,0>: " bp) bp)
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
-      (setq oldecho (getvar "CMDECHO")
+      (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE")
             att0 (getvar "ATTDIA") req0 (getvar "ATTREQ") fil0 (getvar "FILEDIA"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO

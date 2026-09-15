@@ -316,6 +316,42 @@ trip. `tests/test_theme.py` pins the table and holds all fourteen
 copies against the library's; `CALSET` writes the `CalofinTheme`
 override for a drafter whose screen the measurement gets wrong.
 
+### The drafter's object snaps
+
+**A tool that mutes OSMODE gives it back on every path out.** Most of
+the drawing tools here zero it while they feed computed points to
+`(command ...)`, so a running osnap cannot pull a pick onto nearby
+geometry. That is a borrow, and the setting is the one a drafter
+notices last and misses most: left at 0 the failure does not look like
+this tool's, it looks like AutoCAD's, two commands later, when a line
+drawn by eye refuses to snap to an endpoint.
+
+So the restore goes in two places, and `tools/check_osnap.py` fails a
+command missing either:
+
+```lisp
+(defun c:TOOLNAME ( / *error* oos ...)
+  (defun *error* (msg)
+    (if oos (setvar "OSMODE" oos))   ; FIRST -- before anything below throws
+    ...)
+  (setq oos (getvar "OSMODE"))       ; saved BEFORE the mute
+  (setvar "OSMODE" 0)
+  ;; ... the tool ...
+  (setvar "OSMODE" oos))
+```
+
+The handler half is the one that gets forgotten, and it is the half
+that matters: Esc at a prompt is the likeliest way out of a prompting
+command, and it is the only way out that never reaches the line at the
+bottom. Saving into a **local of the command** is what lets the handler
+nested inside it see the value; a save kept in a helper's own local is
+out of the handler's reach, which is exactly how the three check
+tutorials (`TUTORIALCOVERCHECK`, `TUTORIALDIMCHECK`,
+`TUTORIALLINFINCHECK`) sat muting OSMODE round a `DIMLINEAR` with no
+handler that could put it back. The table-driven form counts too --
+`(tool:sysrestore)` over a snapshot whose list names `OSMODE`, with
+`OSMODE` first in that list -- and is what the bigger tools use.
+
 ### Adding or removing a command
 
 A tool is not finished when it draws. It has to *report its failures*
@@ -402,6 +438,12 @@ python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
                                  # setq that is a statement, wrapped where
                                  # the answer is read in place; --fix
                                  # wires what is missing
+python3 tools/check_osnap.py     # the drafter's OBJECT SNAPS survive every
+                    [--list]     # run, the failed ones included: a command
+                                 # that mutes OSMODE for its own picks puts
+                                 # it back before it returns AND from its
+                                 # *error* handler, because Esc is the one
+                                 # way out the success path never runs
 python3 tools/probe_report.py    # not a check: replays a failure report in
                    REPORT.dxf    # the VM and varies its inputs one at a
                                  # time, to say which one the failure is
