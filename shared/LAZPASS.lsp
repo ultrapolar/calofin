@@ -12351,11 +12351,18 @@
 ;;;  AUTO-HINGE
 ;;;  ----------
 ;;;  The command offers to auto-hinge the cover.  The offer, and the
-;;;  spillaways and the grade / taper behind it, are ASKED AS SOON AS
-;;;  THE SPA IS MEASURED -- before a line is drawn -- because their
-;;;  answers can still turn the spa (see THE QUARTER TURN below), and
-;;;  nothing already on the screen can be turned.  The hinges themselves
-;;;  are drawn at the end, on whichever outline they belong to.
+;;;  spillaways behind it, are ASKED AS SOON AS THE SPA IS MEASURED --
+;;;  before a line is drawn -- because their answers can still turn the
+;;;  spa (see THE QUARTER TURN below), and nothing already on the screen
+;;;  can be turned.
+;;;
+;;;  The grade and taper turn nothing, so they are NOT asked there.
+;;;  They wait for the cover itself to actually be on the screen: a
+;;;  water's edge start asks once the cover is drawn, or once the offer
+;;;  to add one is declined; a cover size start asks once the water's
+;;;  edge offer that follows the cover is settled the same way either
+;;;  way.  The hinges themselves are drawn at the end, on whichever
+;;;  outline they belong to.
 ;;;
 ;;;  Spillaways (corner or centred-on-a-wall) are the no-go zones, and
 ;;;  they are answered against the spa AS MEASURED; the "Spa Cover
@@ -12507,7 +12514,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091226 REV21")
+(setq spa:*version* "091526 REV22")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -14108,8 +14115,14 @@
   (cal:trim out))
 
 ;; Normalise a taper string to a foam-sheet key ("3-3 Flat" -> "3-3").
+;; A taper typed as two bare digits with the dash left off ("42" for
+;; "4-2") is understood the same way -- "#" is wcmatch for one numeric
+;; digit, so "##" is exactly two of them and nothing else, and the dash
+;; is put back before the usual patterns are tried.
 (defun spa:tapernorm (v / u)
-  (setq u (strcase v))
+  (setq u (strcase (cal:trim v)))
+  (if (wcmatch u "##")
+      (setq u (strcat (substr u 1 1) "-" (substr u 2 1))))
   (cond ((wcmatch u "*3-2*") "3-2")
         ((wcmatch u "*4-2*") "4-2")
         ((wcmatch u "*4-3*") "4-3")
@@ -14571,9 +14584,11 @@
 ;; The foam sheets a grade + taper may be cut from: (options counts got).
 ;; An Economy taper that only the Standard sheet carries falls back to
 ;; Standard; nothing on the sheet at all falls back to spa:*foamdflt*
-;; with the flag down.  It says nothing itself -- this is asked twice,
-;; once to settle which way round the spa is drawn and once to lay the
-;; hinges out -- so the caller that draws does the reporting.
+;; with the flag down.  It says nothing itself -- this is called twice,
+;; once from spa:pickturn to settle which way round the spa is drawn
+;; (taper not yet asked at that point, so it scores against the default
+;; sheet) and once from spa:hingeflow, by then with the real taper, to
+;; lay the hinges out -- so the caller that draws does the reporting.
 (defun spa:foamopts (grade taper / row r)
   (foreach r spa:*foamtab*
     (if (and (not row) (= (car r) grade) (= (cadr r) taper))
@@ -14678,26 +14693,39 @@
               (not pref))
             pref))))
 
-;; The questions the hinges need, asked BEFORE the outline is drawn:
-;; the answers can still turn the spa at that point, and nothing that is
-;; already on the screen can be turned.  Fills spa:*spills* and the
-;; grade / taper globals; returns T when the cover is to be hinged.  The
-;; offer is the form's autohinge key, exactly as it was when it came
-;; after the draw.
-(defun spa:hingeask ( / gt)
+;; The questions that can still turn the spa, asked BEFORE the outline
+;; is drawn: nothing already on the screen can be turned.  Fills
+;; spa:*spills*; returns T when the cover is to be hinged.  The offer is
+;; the form's autohinge key, exactly as it was when it came after the
+;; draw.  The grade + taper the hinges also need turn nothing, so they
+;; are not asked here -- see spa:hingedetails.
+(defun spa:hingeask ()
   (setq spa:*spills* nil
         spa:*hingeon*
         (= "Yes" (spa:askkwf 'autohinge "Auto-hinge the cover"
                              "Yes No" "Yes/No" "Yes" nil)))
   (if spa:*hingeon*
-      ;; 1 -- where hinges cannot go, then 2 -- grade + taper.  Back at
-      ;; the taper re-opens the spillaways, its previous question.
+      (setq spa:*spills* (spa:askspill)))
+  spa:*hingeon*)
+
+;; The grade + taper the hinges need -- asked once the second-outline
+;; offer is settled, not before: "Auto-hinge the cover" is spa:hingeask,
+;; above, but the taper it needs is a question about a COVER, and a
+;; water's edge start may not have drawn one yet when hinges are
+;; offered.  So it waits -- water's edge start, until the cover is
+;; drawn or the offer to add one is declined; cover size start, until
+;; the water's edge offer that follows the cover is settled the same
+;; way.  Either way that is the point every rect/oct/round flow calls
+;; this, once, right after its second outline (if any) goes down.  A
+;; no-op when autohinge was declined.  Nothing can be turned by now --
+;; both outlines are already drawn -- so Back here has nothing to
+;; reopen but itself, and simply asks again.
+(defun spa:hingedetails ( / gt)
+  (if spa:*hingeon*
       (progn
         (setq gt 'CAL-BACK)
         (while (eq gt 'CAL-BACK)
-          (setq spa:*spills* (spa:askspill)
-                gt (spa:askdetails)))))
-  spa:*hingeon*)
+          (setq gt (spa:askdetails))))))
 
 ;; The auto-hinge pass itself.  desc / x1 / x2 describe the COVER
 ;; outline; coverp nil means only the water's edge was drawn and the
@@ -15241,13 +15269,15 @@
   (spa:stages (list 'rc:sides 'rc:corners))
 
   ;; -------------------------------------------------- hinges, asked now
-  ;; The hinge questions come BEFORE anything is drawn because their
-  ;; answers can still turn the spa -- a spillaway no north-south hinge
-  ;; can dodge is dodged by turning the cover instead, and there is no
-  ;; turning it once it is on the screen.  The hinges themselves are
-  ;; drawn at the end, on whichever outline they belong to.
+  ;; The auto-hinge offer and the spillaways come BEFORE anything is
+  ;; drawn because their answers can still turn the spa -- a spillaway
+  ;; no north-south hinge can dodge is dodged by turning the cover
+  ;; instead, and there is no turning it once it is on the screen.  The
+  ;; grade + taper come later (spa:hingedetails, below, once the second
+  ;; outline is settled) and the hinges themselves are drawn at the end,
+  ;; on whichever outline they belong to.
   ;;
-  ;; The guide stays up across them, treatments and all.  It is the
+  ;; The guide stays up across these two, treatments and all.  It is the
   ;; only spa on the screen until the real one is drawn below, and
   ;; these questions name its corners and its walls -- taking it away
   ;; as the corners were answered left the drafter looking at an empty
@@ -15347,6 +15377,11 @@
         (spa:setmode (spa:othermode))
         (spa:drawrect q2 c2)
         (spa:setmode mode1)))
+
+  ;; the cover is on the screen now (or the offer to add one is
+  ;; declined), so the grade + taper the hinges need is asked for --
+  ;; see spa:hingedetails
+  (spa:hingedetails)
 
   ;; -------------------------------------------------- dimensions
   ;; Laid out the way the order sheet does it.  The COVER's overalls go
@@ -15599,9 +15634,11 @@
         (spa:valnote "V LONGER THAN A - ADJUSTED")))
 
   ;; -------------------------------------------------- hinges, asked now
-  ;; before anything is drawn, so a spillaway can still turn the spa --
-  ;; and with the guide still up, because it is the only spa on the
-  ;; screen until the real one is drawn below
+  ;; the auto-hinge offer and the spillaways, before anything is drawn,
+  ;; so a spillaway can still turn the spa -- and with the guide still
+  ;; up, because it is the only spa on the screen until the real one is
+  ;; drawn below.  The grade + taper come later -- spa:hingedetails,
+  ;; below, once the second outline is settled.
   (spa:hingeask)
 
   ;; -------------------------------------------------- orientation
@@ -15689,6 +15726,11 @@
         (spa:setmode (spa:othermode))
         (spa:perpoly (mapcar '(lambda (p) (cons p 0.0)) pts2))
         (spa:setmode mode1)))
+
+  ;; the cover is on the screen now (or the offer to add one is
+  ;; declined), so the grade + taper the hinges need is asked for --
+  ;; see spa:hingedetails
+  (spa:hingedetails)
 
   ;; -------------------------------------------------- dimensions
   ;; The order sheet's octagon panel carries three things: the overall
@@ -15835,10 +15877,12 @@
               aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov)))
       (setq aov bov))
 
-  ;; hinges are asked before anything is drawn, so a spillaway can still
-  ;; turn the spa (a round one turns too: the spillway travels with it),
-  ;; and the guide stays up across them -- it is the only spa on the
-  ;; screen until the real one is drawn below
+  ;; the auto-hinge offer and the spillaways are asked before anything
+  ;; is drawn, so a spillaway can still turn the spa (a round one turns
+  ;; too: the spillway travels with it), and the guide stays up across
+  ;; them -- it is the only spa on the screen until the real one is
+  ;; drawn below.  The grade + taper come later -- spa:hingedetails,
+  ;; below, once the second outline is settled.
   (spa:hingeask)
 
   ;; an out-of-round spa lies with its long overall west to east, unless
@@ -15907,6 +15951,11 @@
         (spa:setmode (spa:othermode))
         (spa:perround cen2 b2 a2)
         (spa:setmode mode1)))
+
+  ;; the cover is on the screen now (or the offer to add one is
+  ;; declined), so the grade + taper the hinges need is asked for --
+  ;; see spa:hingedetails
+  (spa:hingedetails)
 
   ;; A true circle takes the single overall the order sheet's round panel
   ;; shows; only an out-of-round spa needs the second one.  A round spa's
@@ -16187,7 +16236,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "091226 REV13")
+(setq tut:*version* "091526 REV14")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -16267,16 +16316,18 @@
     "    typed in full: 90, ROUNDED, DIAG, NG)."
     "    Asked one at a time, corner A's answer autofills B, C and D"
     "    -- Enter accepts."
-    "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No,"
-    "    then the taper, typed, if the block did not give it."
+    "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No."
     "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
     "    is dodged by turning the spa, and nothing already on the screen"
-    "    can be turned.  The hinges are drawn at the end all the same."
-    "    The grey guide spa stays up across these, and comes down only"
-    "    as the real outline goes up in its place."
+    "    can be turned.  The grey guide spa stays up across these, and"
+    "    comes down only as the real outline goes up in its place."
     "8.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
-    "    Skipped on Thermo-Light."))
+    "    Skipped on Thermo-Light.  Then the taper, typed, if the block"
+    "    did not give it -- asked NOW, not with step 7, because it turns"
+    "    nothing: by here the cover is on the screen, or the offer to"
+    "    add one has been declined.  The hinges are drawn at the end all"
+    "    the same."))
 
 (setq tut:*decides*
   (list

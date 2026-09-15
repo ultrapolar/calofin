@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "091226 REV13")
+(setq tut:*version* "091526 REV14")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -104,16 +104,18 @@
     "    typed in full: 90, ROUNDED, DIAG, NG)."
     "    Asked one at a time, corner A's answer autofills B, C and D"
     "    -- Enter accepts."
-    "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No,"
-    "    then the taper, typed, if the block did not give it."
+    "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No."
     "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
     "    is dodged by turning the spa, and nothing already on the screen"
-    "    can be turned.  The hinges are drawn at the end all the same."
-    "    The grey guide spa stays up across these, and comes down only"
-    "    as the real outline goes up in its place."
+    "    can be turned.  The grey guide spa stays up across these, and"
+    "    comes down only as the real outline goes up in its place."
     "8.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
-    "    Skipped on Thermo-Light."))
+    "    Skipped on Thermo-Light.  Then the taper, typed, if the block"
+    "    did not give it -- asked NOW, not with step 7, because it turns"
+    "    nothing: by here the cover is on the screen, or the offer to"
+    "    add one has been declined.  The hinges are drawn at the end all"
+    "    the same."))
 
 (setq tut:*decides*
   (list
