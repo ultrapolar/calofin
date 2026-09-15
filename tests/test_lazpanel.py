@@ -277,8 +277,10 @@ for gname in PAGES:
     assert set(mine) <= set(keys), \
         "%s: commands with no button: %r" % (gname, sorted(set(mine) - set(keys)))
     # pinned buttons carry a pin_ prefix and repeat a tool already on
-    # some page; pin_edit opens the editor.  Neither is a page command.
-    extra = set(keys) - set(mine) - {'status', 'cancel', 'pin_edit'} \
+    # some page; pin_edit and options_btn open other things.  None of
+    # them is a page command.
+    extra = set(keys) - set(mine) \
+            - {'status', 'cancel', 'pin_edit', 'options_btn'} \
             - {'filter', 'hits', 'msg', 'run'} \
             - {'tab_' + g for g in PAGES} \
             - {k for k in keys if k.startswith('pin_')} \
@@ -1164,6 +1166,27 @@ cv2.loads('(setq t:*p* (lzp:show))')
 assert str(cv2.globals.get('t:*p*')) == LIVE, \
     "the Recent button handed back %r, not %s" % (cv2.globals.get('t:*p*'), LIVE)
 print("   a Recent button launches its tool and greys when it is not loaded")
+
+
+print("== Options: settings, not a roster launch ==")
+# options_btn is wired exactly like a grid button -- rc=1, full dialog
+# teardown before anything runs -- but the pick it sets is a sentinel
+# c:LAZPANEL reads itself rather than a name lzp:launch would look up.
+# CALSET is stubbed here rather than answered: this is about ROUTING,
+# not about CALSET's own prompts, which test_lazpanel.py's CALSET
+# section below already covers.
+ov = stubbed()
+ov.loads('(setq t:*calset-ran* nil)')
+ov.loads('(defun c:CALSET () (setq t:*calset-ran* t) (princ))')
+ov.loads('(setq stub:*click* "options_btn")')
+run(ov, 'c:LAZPANEL', 'options-click')
+assert ov.globals.get('t:*calset-ran*'), "clicking Options did not run CALSET"
+assert not ov.globals.get('stub:*ran*'), \
+    "Options went through lzp:launch like a roster tool: %r" % ov.globals.get('stub:*ran*')
+assert not (ov.globals.get('lzp:*recent*') or []), \
+    "CALSET reached Recent, which is for drafting tools only"
+assert ov.globals.get('lzp:*pick*') is None, "pick not cleared after the settings launch"
+print("   clicking Options runs CALSET, and it never reaches lzp:launch or Recent")
 
 
 print("== the screen button goes up as the file loads ==")

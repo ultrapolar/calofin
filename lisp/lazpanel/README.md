@@ -311,6 +311,14 @@ its own error handler runs, the panel stays closed, and `LAZPANEL`
 brings it back. That is the right way round: the alternative is a panel
 bouncing back in front of the error you are trying to read.
 
+**The Options button.** Beside Close, on every page including Find, an
+`Options...` button runs `CALSET` -- the theme, the error folder, the
+stock folder and which tools are hidden are one click away instead of a
+typed command. It is wired exactly like a grid button -- the same full
+teardown before anything runs -- but the pick it sends is a sentinel
+`c:LAZPANEL` reads itself: `CALSET` is not on the roster, so clicking it
+never lands in Recent the way running a real tool does.
+
 **The Pinned row.** Pins are the answer to "I run four of these
 eighty-one all day": ticked tools sit in a row at the top of *every*
 page, in the order you pinned them, so the ones you actually use stop
