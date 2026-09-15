@@ -675,6 +675,28 @@ done nothing yet, while the `_End` fails at the bottom of one that has
 drawn everything, and it takes the sysvar restore behind it down too --
 so the drafter is left with snap off and a borrowed layer current.
 
+**OSMODE COMES BACK ON EVERY PATH, AND THE HANDLER IS ONE OF THEM.**
+The restore table above leads with OSMODE because object snaps are the
+setting the drafter misses most, and `tools/check_osnap.py` is the
+referee for that line: a command that can change OSMODE restores it
+before it returns AND from its `*error*` handler.  The handler half is
+the one that gets forgotten and the one that matters -- Esc at a prompt
+is the likeliest way out of a prompting command, and it is the only way
+out that never reaches the `(tool:sysrestore)` at the bottom.  Left at
+0 the failure does not look like this tool's: it looks like AutoCAD's,
+two commands later, when a line drawn by eye refuses to snap to an
+endpoint.
+
+The saved value has to be somewhere the handler can see: a local of the
+command (the handler is nested inside it, so `oos` is in scope) or the
+`tool:*sysold*` snapshot.  A helper that saves into a local of its OWN
+is out of the handler's reach however carefully it restores inline --
+which is exactly how `TUTORIALCOVERCHECK`, `TUTORIALDIMCHECK` and
+`TUTORIALLINFINCHECK` sat muting OSMODE round a `DIMLINEAR` with no
+handler that could put it back.  The three tutorials hold the drafter's
+value themselves now, the same way `TUTORIALCOVERCHECK` already held
+ATTDIA/ATTREQ/FILEDIA round the same helper.
+
 **EVERY COMMAND REPORTS ITS FAILURES.  This is not optional, and the
 lines are not yours to write.**  A tool is not finished when it draws
 and it is not finished when it prints an error -- it is finished when a
