@@ -1807,6 +1807,7 @@
                       ;; it is named here so AUTOBEAD leaves it unbeaded
                       (list (ns-entmid (cdr (last btreads)))))))))))))))
   (ns-fclear)                       ; both exits clear the form store
+  (if lzd:end (lzd:end "NORMIESTEP"))
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
@@ -1993,6 +1994,7 @@
   (princ "\n[6] Done.  One U removes the demo.  Try the other modes too:")
   (princ "\n    two lines of a corner, or a U outline (even one with")
   (princ "\n    rounded or diagonal back corners) - NORMIESTEP fills it in.")
+  (if lzd:end (lzd:end "TUTORIALNORMIESTEP"))
   (princ))
 
 (defun c:NORMIESTEPVER ()

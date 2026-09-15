@@ -3846,6 +3846,7 @@
   (cal:dimstyrestore)
   (spa:fclear)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "SPA"))
   (princ))
 
 

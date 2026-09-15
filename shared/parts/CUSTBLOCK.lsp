@@ -369,6 +369,7 @@
           go (eq v T)))
 
   (setq *error* olderr)
+  (if lzd:end (lzd:end "CUSTBLOCK"))
   (princ))
 
 (defun c:CUSTBLOCKVER ()

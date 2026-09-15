@@ -1947,6 +1947,7 @@
   ;; _End then would be closing a group that is not there
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
+  (if lzd:end (lzd:end "CONSTELLATION"))
   (princ))
 
 ;; Print the loaded version.

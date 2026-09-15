@@ -93,9 +93,27 @@ def said(vm):
     return "".join(vm.printed)
 
 
+def dxfs(vm):
+    """The reports.  A run now writes a LOG as well, so "the file the
+    VM wrote" is no longer one thing and every count here says which."""
+    return {k: v for k, v in vm.files.items() if k.endswith(".dxf")}
+
+
+def logof(vm):
+    hits = [v for k, v in vm.files.items() if k.endswith(".log")]
+    return hits[0] if hits else ""
+
+
+def records(vm):
+    return [l for l in logof(vm).split("\n") if l[:2].isdigit()]
+
+
 def only_file(vm):
-    assert len(vm.files) == 1, vm.files
-    return list(vm.files.items())[0]
+    """The one report.  Named for what it was when reports were the only
+    thing written, and kept because forty checks read it."""
+    d = dxfs(vm)
+    assert len(d) == 1, sorted(d)
+    return list(d.items())[0]
 
 
 # --------------------------------------------------------------- the DXF
@@ -299,7 +317,7 @@ vm.loads("(defun lzd:flatten (e) (car 1))")     # every entity unreadable
 vm.printed.clear()
 failing_run(vm)
 check("an entity this cannot read costs its own shape and no more",
-      len(vm.files) == 1, "the whole report was lost to one entity")
+      len(dxfs(vm)) == 1, "the whole report was lost to one entity")
 if vm.files:
     body = only_file(vm)[1]
     check("...the report still carries the transcript and the error",
@@ -432,7 +450,7 @@ print("a cancel is not a failure")
 vm = newvm()
 vm.loads('(lzd:begin "POOL" "v2.7")')
 vm.loads('(lzd:report "POOL" "v2.7" "Function cancelled")')
-check("Esc writes no file", not vm.files, list(vm.files))
+check("Esc writes no report", not dxfs(vm), sorted(dxfs(vm)))
 check("...and says nothing", not said(vm).strip(), said(vm))
 
 print("a transcript is never handed to the wrong tool")
@@ -471,7 +489,7 @@ vm = newvm(profile=None)
 vm.sysvars["DWGPREFIX"] = r"C:\jobs"
 vm.readonly_dirs.update({r"C:\jobs", r"C:\Temp"})
 failing_run(vm, "SPA", "v1.4")
-check("nothing is written", not vm.files, list(vm.files))
+check("nothing is written", not dxfs(vm), sorted(dxfs(vm)))
 check("the user is still told the command failed",
       "SPA v1.4 has FAILED" in said(vm), said(vm)[:160])
 check("...which folders were tried",
@@ -501,8 +519,8 @@ print("LAZDIAG writes it once a folder works")
 vm.readonly_dirs.clear()
 vm.printed.clear()
 vm.run("c:LAZDIAG", [])
-check("the report is written on the second try", len(vm.files) == 1,
-      list(vm.files))
+check("the report is written on the second try", len(dxfs(vm)) == 1,
+      sorted(vm.files))
 check("...under the name the failure earned it",
       "SPA-v1.4-error-" in base(only_file(vm)[0]),
       only_file(vm)[0])
@@ -728,7 +746,7 @@ failing_run(vm)
 vm.loads('(lzd:begin "POOL" "v2.7")')
 failing_run(vm)
 check("two failures in the same second write two files, not one",
-      len(vm.files) == 2, sorted(base(f) for f in vm.files))
+      len(dxfs(vm)) == 2, sorted(base(f) for f in dxfs(vm)))
 
 print("the edges: a drawing the walk cannot finish")
 
@@ -739,11 +757,146 @@ vm.loads('(lzd:ask "Pool length" "25 ft")')
 vm.printed.clear()
 failing_run(vm)
 check("a drawing that will not walk costs the geometry, not the report",
-      len(vm.files) == 1, "the whole report was lost")
+      len(dxfs(vm)) == 1, "the whole report was lost")
 if vm.files:
     check("...and the transcript and the error still arrive",
           "Pool length" in only_file(vm)[1]
           and "numberp" in only_file(vm)[1])
+
+print("the log: one line per run, whatever the run did")
+
+LOGDIR = PROFILE + "\\calofin"
+
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:ask "Pool shape" "Rectangle")')
+vm.loads('(lzd:end "POOL")')
+check("a clean run is one line and no more",
+      len(records(vm)) == 1 and "  ok " in records(vm)[0], records(vm))
+check("...and it names the tool, its version and the drawing",
+      "POOL v2.7" in records(vm)[0], records(vm)[0])
+check("a clean run does NOT carry its prompts into the log",
+      "Pool shape" not in logof(vm),
+      "an ok record should be a count, not a story")
+check("the log lives in its own folder, not among the reports",
+      logof(vm) and list(vm.files)[0] and
+      [k for k in vm.files if k.endswith(".log")][0].startswith(LOGDIR),
+      [k for k in vm.files if k.endswith(".log")])
+
+vm = newvm()
+vm.loads('(lzd:begin "SPA" "v1.4")')
+vm.loads('(lzd:ask "How should the deep end be treated?" "Radius")')
+vm.loads('(lzd:report "SPA" "v1.4" "Function cancelled")')
+check("Esc is logged as a quit, though it writes no report",
+      len(records(vm)) == 1 and "  quit" in records(vm)[0], records(vm))
+check("...naming the prompt they backed out of",
+      "deep end" in logof(vm), logof(vm))
+check("...and still no DXF", not dxfs(vm), sorted(dxfs(vm)))
+
+vm = newvm()
+vm.loads('(lzd:begin "ABHD" "v1.8")')
+vm.loads('(lzd:ask "Maximum curves" "6")')
+failing_run(vm, "ABHD", "v1.8")
+rec = logof(vm)
+check("a failure is logged FAIL, in caps so it greps out",
+      "  FAIL " in rec, rec[:80])
+check("...with the error, the report it wrote and the prompts",
+      "bad argument type" in rec and ".dxf" in rec
+      and "Maximum curves" in rec, rec)
+
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:begin "SPA" "v1.4")')      # POOL never ended: the lazy flush
+vm.loads('(lzd:end "SPA")')
+check("a run that ends without its hook is closed out by the next one",
+      len(records(vm)) == 2 and "POOL" in records(vm)[0]
+      and "SPA" in records(vm)[1], records(vm))
+
+vm = newvm()
+vm.loads('(lzd:begin "COVERCHECK" "v1.0")')
+vm.loads('(lzd:begin "COVERCHECK" "v1.0")')   # the helper's own begin
+vm.loads('(lzd:end "COVERCHECK")')
+vm.loads('(lzd:end "COVERCHECK")')           # and the command's
+check("a tool with a handler in two places logs ONE run, not two",
+      len(records(vm)) == 1, records(vm))
+
+print("the log: the edges")
+
+vm = newvm(profile=None)
+vm.sysvars["DWGPREFIX"] = ""
+vm.sysvars["TEMPPREFIX"] = r"C:\Temp"
+vm.readonly_dirs.add(r"C:\Temp")
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:end "POOL")')
+check("no writable folder anywhere: the run still finishes, silently",
+      not vm.files and not [p for p in vm.printed if "error" in p.lower()],
+      "%r %r" % (list(vm.files), vm.printed[-2:]))
+
+vm = newvm()
+vm.loads("(setq lzd:*logmax* 200)")            # a cap this run will pass
+for _i in range(12):
+    vm.loads('(lzd:begin "T%d" "v1")' % _i)
+    vm.loads('(lzd:end "T%d")' % _i)
+logs = sorted(k for k in vm.files if k.endswith(".log"))
+check("a log that outgrows its cap rolls to a new file",
+      len(logs) > 1, logs)
+check("...and the roll is named so the months still sort",
+      all("calofin-" in base(k) for k in logs), [base(k) for k in logs])
+
+vm = newvm()
+vm.loads('(lzd:begin "PO\nOL\tX" "v2\n7")')
+vm.loads('(lzd:end "PO\nOL\tX")')
+check("a newline in a tool name cannot make a record two records",
+      len(records(vm)) == 1, records(vm))
+
+vm = newvm()
+vm.loads("(setq tail (lzd:logtail 10))")
+check("the tail of a log that does not exist is nil, not an error",
+      vm.loads("tail") is None or vm.loads("tail") == [], vm.loads("tail"))
+
+vm = newvm()
+for _i in range(40):
+    vm.loads('(lzd:begin "T%d" "v1")' % _i)
+    vm.loads('(lzd:end "T%d")' % _i)
+n = vm.loads("(length (lzd:logtail 15))")
+check("the tail of a long log is capped at what was asked for",
+      n == 15, n)
+
+vm = newvm(profile=None)
+vm.env["CalofinLogDir"] = r"C:\shop\calofin-logs"
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:end "POOL")')
+check("CalofinLogDir puts the log where a shop wants it",
+      any(k.startswith(r"C:\shop\calofin-logs") for k in vm.files),
+      list(vm.files))
+
+# the log must never be the thing that breaks a command
+vm = newvm()
+vm.loads("(defun lzd:logpath ( / dir base try i sz) (car 1))")
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:end "POOL")')
+check("a log that throws does not throw at the command", True, "")
+failing_run(vm)
+check("...and a report is still written when the log is broken",
+      [k for k in vm.files if k.endswith(".dxf")], list(vm.files))
+
+print("the report carries what ran before it")
+
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:end "POOL")')
+vm.loads('(lzd:begin "SPA" "v1.4")')
+vm.loads('(lzd:report "SPA" "v1.4" "Function cancelled")')
+vm.loads('(lzd:begin "ABHD" "v1.8")')
+failing_run(vm, "ABHD", "v1.8")
+body = [v for k, v in vm.files.items() if k.endswith(".dxf")][0]
+check("the failure report lists the runs before it",
+      "WHAT ELSE HAS RUN" in body and "POOL v2.7" in body
+      and "DIMCHECK" not in body, "no history section")
+check("...including the one the drafter backed out of",
+      "quit" in body and "SPA v1.4" in body)
+check("...and names the log file so the rest can be asked for",
+      "log file" in body and ".log" in body)
 
 print("the checker that keeps this true for the tool written next")
 

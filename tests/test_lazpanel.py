@@ -2083,4 +2083,47 @@ DIAG = os.path.join(HERE, '..', 'lisp', 'lazdiag', 'LAZDIAG.lsp')
 assert '(getenv "CalofinErrorDir")' in callib.read(DIAG), DIAG
 print("   ...and CalofinErrorDir is the one LAZDIAG walks to first")
 
+print("== CALSET: Itemcolors, the per-role override cal:ink reads ==")
+vm = fresh()
+vm.run('c:CALSET', ['Itemcolors', 'Flag', '42'])
+out = ''.join(str(p) for p in vm.printed)
+assert vm.env.get('CalofinInk-FLAG') == '42', vm.env
+assert 'Flag colour is now ACI 42' in out, out
+print("   Itemcolors -> Flag -> 42 writes CalofinInk-FLAG")
+
+vm = fresh()
+vm.env['CalofinInk-ARC'] = '99'
+vm.run('c:CALSET', ['Itemcolors', 'Arc', '.'])
+assert vm.env.get('CalofinInk-ARC') == '', vm.env
+print("   ...and . clears one, back to cal:ink's own table")
+
+vm = fresh()
+vm.run('c:CALSET', ['Itemcolors', 'Point', ''])
+out = ''.join(str(p) for p in vm.printed)
+assert 'CalofinInk-POINT' not in vm.env, vm.env
+assert 'Unchanged' in out, out
+print("   an empty answer changes nothing")
+
+vm = fresh()
+vm.run('c:CALSET', ['Itemcolors', 'Olap', 'notanumber'])
+out = ''.join(str(p) for p in vm.printed)
+assert 'CalofinInk-OLAP' not in vm.env, vm.env
+assert 'Not a colour number' in out, out
+print("   text that is not a colour number is refused, not written")
+
+vm = fresh()
+vm.run('c:CALSET', ['Itemcolors', 'Back', 'Quit'])
+out = ''.join(str(p) for p in vm.printed)
+assert out.count('Change which?') == 0  # it is a prompt, not printed prose
+assert 'Nothing changed' in out, out
+print("   Back re-asks Change which? instead of writing anything")
+
+# every role Itemcolors offers has to be a role cal:ink actually
+# resolves, or the override it writes would never be read back
+LIB = os.path.join(HERE, '..', 'shared', 'parts', 'CALOFIN-LIB.lsp')
+libsrc = callib.read(LIB)
+for pair in vm.globals['lzp:*inkroles*']:
+    assert ("(%s . " % pair.b) in libsrc, pair.b
+print("   all eight Itemcolors roles are ones cal:ink resolves")
+
 print("ALL LAZPANEL TESTS PASSED")

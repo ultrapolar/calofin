@@ -1033,6 +1033,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (lab:sysrestore)
+  (if lzd:end (lzd:end "LISPLAB"))
   (princ))
 
 (defun c:LISPLABVER ()

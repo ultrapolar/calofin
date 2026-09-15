@@ -461,6 +461,34 @@ that sets one, working. Resolve once into a local before a loop: the
 measurement is a COM round trip and the review tools touch every
 entity in the drawing.
 
+A second set of roles is about what KIND of thing is being drawn
+rather than the screen: `flag`, `arc`, `olap`, `orig`, `sugg`, `point`,
+`constr`, `report` -- the eight colours COVERCHECK, DIMCHECK and
+LINFINCHECK each carried as a separate hardcoded copy before `cal:ink`
+grew a table for them. None of these vary with dark/light the way the
+first four do (they are the same ordinary ACI colours the review tools
+have always drawn in), so there is no dark/light/unmeasured spread to
+resolve -- `'auto` just answers the number the tool always drew, unless
+a drafter has overridden it:
+
+```lisp
+(setq tool:*flag-color* 'auto)   ; ACI: what a "No" answer marks (red)
+...
+(tool:set-color ent (tool:ink tool:*flag-color* 'flag))
+```
+
+Every role -- the four screen-aware ones and the eight item-type ones
+alike -- can be overridden without touching source, one role at a
+time, through `CalofinInk-<ROLE>` in the AutoCAD profile (the role
+name, uppercased): `cal:inkoverride` (`tool:inkoverride` in the
+standalone copy) reads it and wins over the table when it is set, but
+never over a knob left as a plain number. `CALSET`'s `Itemcolors` menu
+is what writes it; nothing hand-edits the profile. A tool growing a new
+item-type colour reuses an existing role, or adds one to this table
+(and to `cal:inkoverride`'s role list, and to `CALSET`'s `Itemcolors`
+keyword set and `lzp:*inkroles*`) rather than inventing a fifth kind of
+knob.
+
 **Namespace.** Every helper and global carries the file's unique
 prefix, colon-separated: `tool:helper-name`, globals with earmuffs
 `tool:*name*`. One prefix per file, no prefix reused across files.
@@ -597,8 +625,19 @@ a command that is missing any of them cannot ship:
 | --- | --- | --- |
 | top of the command | `(if lzd:begin (lzd:begin "TOOL" *tool-version*))` | which tool, which version, and where the drawing stood before it ran |
 | in the `*error*` handler | `(if lzd:report (lzd:report "TOOL" *tool-version* msg))` | the report itself: the DXF, and the words telling the drafter to send it |
-| after a selection | `(if lzd:watch (lzd:watch ss))` | the geometry the run was HANDED, not just what it drew |
-| in an ask helper | `(if lzd:ask (lzd:ask msg v))` | the transcript -- which question it died on |
+| before the command's `(princ)` | `(if lzd:end (lzd:end "TOOL"))` | the run LOG's "ok" line: a clean run, counted |
+| after a selection | `(if lzd:watch (lzd:watch ss) ss)` | the geometry the run was HANDED, not just what it drew |
+| in an ask helper | `(if lzd:ask (lzd:ask msg v) v)` | the transcript -- which question it died on |
+
+The else branch on the last two is load-bearing, not decoration: it
+makes the whole form evaluate to the variable whether LAZDIAG is loaded
+or not, so a call dropped after a `(setq ss (ssget ...))` cannot change
+what the enclosing `progn` or `cond` clause returns.
+
+Those four also feed the **run log** -- one line per run into
+`<profile>\calofin\calofin-YYYY-MM.log`, `ok` / `quit` / `FAIL` -- which
+is what turns a failure from an event into a rate, and what carries the
+runs either side of it into the report. `LAZLOG` shows it.
 
 The one thing `--fix` will NOT write is the `*error*` handler itself,
 because what belongs in one is the editorial part: which sysvars this

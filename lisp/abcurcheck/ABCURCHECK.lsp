@@ -1329,6 +1329,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (acc:sysrestore)
+  (if lzd:end (lzd:end "ABCURCHECK"))
   (princ))
 
 (defun c:ABCURCHECKSCAN ( / *error* undo-open)
@@ -1353,6 +1354,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (acc:sysrestore)
+  (if lzd:end (lzd:end "ABCURCHECKSCAN"))
   (princ))
 
 ;; Sweep the marks away again.  Findings and the comb go; the
@@ -1389,6 +1391,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (acc:sysrestore)
+  (if lzd:end (lzd:end "ABCURCHECKRESCUE"))
   (princ))
 
 (defun c:ABCURCHECKVER ()

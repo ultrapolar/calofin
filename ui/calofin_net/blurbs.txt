@@ -52,6 +52,7 @@ G2MRECONV         Undoes a G2MCONV run - layers, appearance, text and dimension 
 HEMISTEP          Hemi step layout
 HONEFILLET        Bracket two of SMARTFILLET's radii and hone between them at half inches
 LAZDIAG           Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works
+LAZLOG            Every calofin command that finished, was backed out of or FAILED - the log a report's history comes from
 LAZFORM           Fill the dimension chart in and draw the pool from it
 LAZFORMCOVER      LAZFORM for a cover sheet - the pool-bottom gate closed
 LAZSPA            LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn

@@ -940,6 +940,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'cchk:ink': 'cal:ink',
+            'cchk:inkoverride': 'cal:inkoverride',
             'cchk:ensure-layer': 'cal:ensure-layer',
             'cchk:bbox': 'cal:bbox-ent',
             'cchk:pad2': 'cal:zeropad2',
@@ -992,6 +993,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'dchk:ink': 'cal:ink',
+            'dchk:inkoverride': 'cal:inkoverride',
             'dchk:ensure-layer': 'cal:ensure-layer',
             'dchk:bbox': 'cal:bbox-ent',
             'dchk:pad2': 'cal:zeropad2',
@@ -1029,6 +1031,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'lfc:ink': 'cal:ink',
+            'lfc:inkoverride': 'cal:inkoverride',
             'lfc:ensure-layer': 'cal:ensure-layer',
             'lfc:bbox': 'cal:bbox-ent',
             'lfc:pad2': 'cal:zeropad2',
@@ -1584,7 +1587,7 @@ TOOLS = {
             'cd:2d': 'cal:2d', 'cd:v-': 'cal:v-', 'cd:v+': 'cal:v+',
             'cd:v*': 'cal:v*', 'cd:dot': 'cal:dot', 'cd:perp': 'cal:perp',
             'cd:vlen': 'cal:vlen', 'cd:unit': 'cal:unit',
-            'cd:mid': 'cal:mid',
+            'cd:mid': 'cal:mid', 'cd:cross': 'cal:cross',
             'cd:angnorm': 'cal:angnorm',
             'cd:signed-dang': 'cal:signed-dang',
             'cd:plural': 'cal:plural',

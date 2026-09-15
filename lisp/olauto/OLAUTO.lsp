@@ -1081,7 +1081,7 @@
                             (vl-string-translate " " "/" kws)
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'OLA-BACK)
         ((null v) (if dflt dflt (ola:askkw msg kws hidden dflt back)))
         (T v)))
@@ -1105,7 +1105,7 @@
                  " perimeter - one polyline, or the same"))
   (princ "\nshape exploded into lines and arcs.")
   (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC,CIRCLE"))))
-  (if lzd:watch (lzd:watch ss))
+  (if lzd:watch (lzd:watch ss) ss)
   ss)
 
 ;; ---- the report ---------------------------------------------------------
@@ -1350,6 +1350,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (ola:sysrestore)
+  (if lzd:end (lzd:end "OLAUTO"))
   (princ))
 
 (defun c:OLAUTOVER ()

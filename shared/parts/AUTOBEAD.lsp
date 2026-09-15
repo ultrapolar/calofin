@@ -685,6 +685,7 @@
               ;; know about
               (autobead-build ss dirpt sidewalls treadpts nil)
               (setq done T))))))))
+  (if lzd:end (lzd:end "AUTOBEAD"))
   (princ))
 
 ;; ---- AUTOBEADVER -----------------------------------------------------------

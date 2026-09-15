@@ -622,6 +622,7 @@
   ;; A mark is still open on the "nothing to convert" path above.
   (if mark-open
     (progn (vla-EndUndoMark doc) (setq mark-open nil)))
+  (if lzd:end (lzd:end "VSCONV"))
   (princ))
 
 (defun c:VSRECONV (/ *error* doc unlocked mark-open ss recs r ent obj ed
@@ -744,6 +745,7 @@
       (princ "\n  leaves on every object it moves.  A drawing converted with")
       (princ "\n  *vsconv-record* off, or by hand, carries none - U is the")
       (princ "\n  only way back from those.")))
+  (if lzd:end (lzd:end "VSRECONV"))
   (princ))
 
 (defun c:VSCONVVER ()

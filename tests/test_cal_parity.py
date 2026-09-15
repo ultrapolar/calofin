@@ -136,6 +136,18 @@ INPUTS = {
         '(progn (setenv "CalofinTheme" "") \'auto) \'dim',
         '(progn (setenv "CalofinTheme" "") \'auto) \'hi',
     ],
+    # cal:inkoverride reads a profile key that travels via setenv, the
+    # same trick cal:ink's own theme cases above use -- each case sets
+    # its own CalofinInk-<ROLE> and hands over the role.  'olap is
+    # never given a key, so both halves answer nil for it; the last two
+    # cases clear the keys they touched for whatever runs next.
+    "cal:inkoverride": [
+        '(progn (setenv "CalofinInk-FLAG" "42") \'flag)',
+        '(progn (setenv "CalofinInk-ARC" "7") \'arc)',
+        "'olap",
+        '(progn (setenv "CalofinInk-FLAG" "") \'flag)',
+        '(progn (setenv "CalofinInk-ARC" "") \'arc)',
+    ],
 }
 
 #: Swaps this file does not call, and why.  Every one needs something a

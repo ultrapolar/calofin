@@ -401,6 +401,7 @@
     (cons nil  'lin:st-final)
   ))
   (lin:report)
+  (if lzd:end (lzd:end "LINCHECK"))
   (princ)
 )
 

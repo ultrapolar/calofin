@@ -192,9 +192,18 @@ is `lisp/lazdiag/LAZDIAG.lsp`, and four guarded call sites reach it:
 ```lisp
 (if lzd:begin  (lzd:begin  "TOOLNAME" *toolname-version*))      ; top of the command
 (if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))  ; in *error*
-(if lzd:watch  (lzd:watch ss))                                  ; after a selection
-(if lzd:ask    (lzd:ask msg v))                                 ; in an ask helper
+(if lzd:end    (lzd:end "TOOLNAME"))                            ; before the command's (princ)
+(if lzd:watch  (lzd:watch ss) ss)                               ; after a selection
+(if lzd:ask    (lzd:ask msg v) v)                               ; in an ask helper
 ```
+
+The `watch` and `ask` lines carry an **else branch** and it is not
+decoration: it makes the whole form evaluate to the variable whether
+LAZDIAG is loaded or not, so dropping one after a
+`(setq ss (ssget ...))` cannot change what the enclosing `progn` or
+`cond` clause returns. `check_lazdiag` fails an injected call that lands
+where it would change a meaning -- last in a body, as an `(if ...)` else
+branch, or as a term of an `(and ...)`.
 
 Do not write them by hand. `python3 tools/check_lazdiag.py --fix`
 inserts and maintains all four, and `make check` runs the same check,
@@ -217,6 +226,19 @@ the skeleton in new code. Scanning only for the first spelling is how
 ABHD, ADAB, TUTORIALABHD, CABHD and LHD -- three of the largest tools
 here -- sat reporting nothing while every other command reported
 everything.
+
+**The same four calls feed the run LOG.** A report is written when
+something breaks; the log gets a line from every run, and it answers
+what a report cannot -- how often a tool fails against how many clean
+runs, what the drafter ran in the ten minutes before, and which prompt
+they quietly back out of over and over. `lzd:end` is why a clean run
+appears at all: a command has no early return, so every success falls
+through to its trailing `(princ)` and that is where the hook sits.
+Three outcomes, `ok` (one line), `quit` (and the prompt they stopped
+at) and `FAIL` (the error, the report, the last prompts). It rolls
+monthly into `<profile>\calofin\calofin-YYYY-MM.log`, `LAZLOG` shows
+it, and every failure report carries the tail of it so the one file the
+drafter sends holds the history too.
 
 What a report holds: a copy of the geometry the run drew AND of the
 selection it was handed, every point clicked labelled with the prompt
