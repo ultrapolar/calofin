@@ -103,7 +103,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.1")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.2")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -156,6 +156,10 @@
 ;; drawing, which is not a number and would not load.
 (defun lzd:num (v)
   (if (numberp v) (rtos (float v) 2 8) "0.0"))
+
+(defun lzd:pad (s w)
+  (while (< (strlen s) w) (setq s (strcat s " ")))
+  s)
 
 ;; Group codes are conventionally right-justified in three columns.  No
 ;; reader needs it; an editor showing the file to a human does.
@@ -235,6 +239,14 @@
 ;;   transcript that does span two runs of one tool says so rather than
 ;;   running them together.
 (defun lzd:begin (tool ver)
+  ;; A context still standing when a DIFFERENT tool begins belongs to a
+  ;; run that finished without failing -- lzd:report and lzd:end both
+  ;; clear it -- so this is where that run gets its "ok" line.  The
+  ;; lazy half of the logging: lzd:end is the direct one, and this
+  ;; catches the commands that do not end in a (princ) for it to sit
+  ;; before, and the session where AutoCAD was closed on the last one.
+  (if (and lzd:*tool* (not (lzd:mine-p tool)))
+    (lzd:log "ok" nil nil))
   (if (not (lzd:mine-p tool))
     (setq lzd:*tool*    (lzd:str tool)
           lzd:*started* (cal:datestr)
@@ -263,6 +275,8 @@
 ;; and case-insensitively -- a tool that ended a context it did not own
 ;; would throw away the prompts of the run still going on around it.
 (defun lzd:end (tool)
+  (if (and lzd:*tool* (or (null tool) (lzd:mine-p tool)))
+    (lzd:log "ok" nil nil))
   (if (or (null tool) (null lzd:*tool*) (lzd:mine-p tool))
     (lzd:disown))
   nil)
@@ -811,7 +825,7 @@
     (strcat "LAZPASS / shared build (CALOFIN-LIB " cal:*version* ")")
     "standalone file from lisp/"))
 
-(defun lzd:report-lines (tool ver msg nents / out)
+(defun lzd:report-lines (tool ver msg nents / out tail)
   (setq out
     (list
       "CALOFIN ERROR REPORT"
@@ -869,8 +883,24 @@
                       (list "  (nothing recorded - the tool does not call"
                             "   lzd:begin, or it failed before its first"
                             "   prompt)"))))
+  ;; What the drafter ran BEFORE this is often the cause and is
+  ;; otherwise gone the moment AutoCAD closes.  It rides in the one file
+  ;; they were told to send, so nobody has to ask them for a second one.
+  (setq out (append out
+                    (list ""
+                          "WHAT ELSE HAS RUN, NEWEST LAST"
+                          "  (from the calofin log -- the whole month of it"
+                          "   is in the file the last line below names)")))
+  (setq out (append out
+                    (if (setq tail (lzd:logtail-safe lzd:*logtail*))
+                      (mapcar '(lambda (l) (strcat "  " l)) tail)
+                      (list "  (nothing logged before this - the first"
+                            "   run recorded, or no folder would take a"
+                            "   log; LAZLOG says which)"))))
   (append out
           (list ""
+                (lzd:pair "log file" (lzd:str (lzd:logpath-safe)))
+                ""
                 "Send this file to whoever maintains calofin.  It holds"
                 "the failure and no more of your drawing than the failure"
                 "needed; your own drawing was not changed.")))
@@ -950,6 +980,171 @@
   (append geo pts (lzd:picklabels h)
           (lzd:textblock (lzd:report-lines tool ver msg nents) ext h)))
 
+;;; -------------------- the run log -------------------------------------
+;;;
+;;;  A report is written when something BREAKS.  The log is written on
+;;;  every run, and it answers the questions a report cannot:
+;;;
+;;;    which tool fails, and how often, against how many clean runs
+;;;    what the drafter ran in the ten minutes BEFORE the failure
+;;;    which prompt they back out of, over and over, without ever
+;;;      reporting it as a bug -- because backing out is not a bug, it
+;;;      is a question somebody could not answer
+;;;
+;;;  None of that survives a session otherwise.  A failure report is one
+;;;  moment; the log is the shape around it, and the shape is what says
+;;;  whether a bug is rare, constant, or only ever after SPA.
+;;;
+;;;  IT NEEDS NO WIRING OF ITS OWN.  Every command already calls
+;;;  lzd:begin at the top and lzd:report from its handler, and every ask
+;;;  helper already calls lzd:ask -- so the log rides on those.  The one
+;;;  call added for it is lzd:end, before a command's trailing (princ),
+;;;  which is where a clean run passes; a command that ends some other
+;;;  way is caught by the lazy flush in lzd:begin instead, which closes
+;;;  out whatever the last run left behind.
+;;;
+;;;  Three outcomes, and the record's size follows how much anybody will
+;;;  ever want from it:
+;;;
+;;;    ok    one line.  A clean run is a count, not a story.
+;;;    quit  one line and the prompt they stopped at.
+;;;    FAIL  the error, the report it wrote, and the last prompts --
+;;;          uppercase so it greps out of a month of runs.
+
+(setq lzd:*logdir* "calofin")    ; the folder the log lives in
+(setq lzd:*logmax* 2000000)      ; bytes before it rolls to a new file
+(setq lzd:*logasks* 12)          ; prompts a FAIL record carries
+(setq lzd:*logtail* 40)          ; lines a report carries back
+
+;; "2026-09-14 14:32:07" -- seconds, because two runs in one minute is
+;; ordinary and a log that cannot order them is a log you cannot read.
+(defun lzd:logtime ( / d dd tt)
+  (setq d  (getvar "CDATE")
+        dd (fix d)
+        tt (- d dd))
+  (strcat (itoa (fix (/ dd 10000))) "-"
+          (cal:zeropad2 (rem (fix (/ dd 100)) 100)) "-"
+          (cal:zeropad2 (rem dd 100)) " "
+          (cal:zeropad2 (fix (+ (* tt 100) 1e-6))) ":"
+          (cal:zeropad2 (rem (fix (+ (* tt 10000) 1e-4)) 100)) ":"
+          (cal:zeropad2 (rem (fix (+ (* tt 1000000) 1e-2)) 100))))
+
+;; "calofin-2026-09.log" -- one file a month.  Rotation by month rather
+;; than by size alone because "send me September" is a thing somebody
+;; asks for and "send me the third rollover" is not.
+(defun lzd:logmonth ( / dd)
+  (setq dd (fix (getvar "CDATE")))
+  (strcat "calofin-" (itoa (fix (/ dd 10000))) "-"
+          (cal:zeropad2 (rem (fix (/ dd 100)) 100)) ".log"))
+
+;; Where the log lives: a calofin folder beside the profile if there is
+;; one, else wherever a report would go.  Its own folder on purpose --
+;; Downloads is for the one file you send, and a log that accumulated
+;; there would be mistaken for one of them every month.
+(defun lzd:logfolder ( / u)
+  (cond
+    ((setq u (getenv "CalofinLogDir")) u)
+    ((setq u (getenv "USERPROFILE")) (strcat u "\\" lzd:*logdir*))
+    ((setq u (getenv "LOCALAPPDATA")) (strcat u "\\" lzd:*logdir*))
+    ((car (lzd:candidates)))))
+
+;; The month's file, rolled when it has outgrown lzd:*logmax*.  A log
+;; that grew without bound would eventually be the thing that made a
+;; drafter's AutoCAD slow, which is a worse bug than any it recorded.
+(defun lzd:logpath ( / dir base try i sz)
+  (setq dir (lzd:logfolder))
+  (if (null dir)
+    nil
+    (progn
+      (vl-mkdir dir)
+      (setq base (lzd:join dir (lzd:logmonth))
+            try  base
+            i    1)
+      (while (and (< i 20)
+                  (setq sz (vl-file-size try))
+                  (> sz lzd:*logmax*))
+        (setq i (1+ i)
+              try (strcat (substr base 1 (- (strlen base) 4))
+                          "-" (itoa i) ".log")))
+      try)))
+
+;; One record's lines, for an outcome.  Everything comes off the run
+;; context, so a caller passes only what the context cannot know.
+(defun lzd:logrec (outcome msg file / out n asks)
+  (setq out (list (strcat (lzd:logtime) "  "
+                          (lzd:pad (lzd:str outcome) 5) "  "
+                          (lzd:str (if lzd:*tool* lzd:*tool* "?"))
+                          (if lzd:*ver* (strcat " " (lzd:str lzd:*ver*)) "")
+                          "  " (lzd:buildshort)
+                          "  " (lzd:str (getvar "DWGNAME")))))
+  (if (and lzd:*step* (/= outcome "ok"))
+    (setq out (append out (list (strcat "    step  " lzd:*step*)))))
+  (if (and msg (/= outcome "ok"))
+    (setq out (append out (list (strcat "    err   " (lzd:str msg))))))
+  (if file
+    (setq out (append out (list (strcat "    file  " (lzd:str file))))))
+  ;; the prompts, newest last, only where somebody will read them
+  (if (= outcome "FAIL")
+    (progn
+      (setq asks (reverse (lzd:firstn lzd:*log* lzd:*logasks*)))
+      (foreach n asks
+        (if (= (substr n 1 4) "  ? ")
+          (setq out (append out (list (strcat "    " (substr n 3)))))))))
+  out)
+
+(defun lzd:buildshort ()
+  (if cal:*version* "LAZPASS" "standalone"))
+
+;; Append a record.  CAUGHT, and silent about its own failures: this is
+;; called from inside *error*, and a log that could not be written is
+;; not worth a second message on top of the one the drafter is already
+;; reading.  The report they send says everything the log would have.
+(defun lzd:log (outcome msg file / r)
+  (setq r (vl-catch-all-apply 'lzd:log-1 (list outcome msg file)))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:log-1 (outcome msg file / path fp l)
+  (setq path (lzd:logpath))
+  (if (null path)
+    nil
+    (progn
+      (setq fp (open path "a"))
+      (if (null fp)
+        nil
+        (progn
+          (foreach l (lzd:logrec outcome msg file) (write-line l fp))
+          (close fp)
+          path)))))
+
+;; The last N lines of this month's log, oldest first.  Read with a
+;; rolling window rather than into a list and trimmed: a month of runs
+;; is a file worth not holding twice.
+;; The two the REPORT calls, caught.  The log is a convenience; the
+;; report is the thing the drafter was told to send.  A log folder that
+;; has gone read-only, a path that will not build, a file that will not
+;; open -- none of that may cost the report, and before these were here
+;; it cost all of it: lzd:report-lines asked for the tail, the tail
+;; raised, and the outer catch turned a diagnosable failure into "could
+;; not be written".
+(defun lzd:logtail-safe (n / r)
+  (setq r (vl-catch-all-apply 'lzd:logtail (list n)))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:logpath-safe ( / r)
+  (setq r (vl-catch-all-apply 'lzd:logpath '()))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:logtail (n / path fp line buf)
+  (setq path (lzd:logpath))
+  (if (or (null path) (null (setq fp (open path "r"))))
+    nil
+    (progn
+      (while (setq line (read-line fp))
+        (setq buf (cons line buf))
+        (if (> (length buf) n) (setq buf (lzd:firstn buf n))))
+      (close fp)
+      (reverse buf))))
+
 ;;; -------------------- what the user is told ---------------------------
 
 (defun lzd:announce (tool ver path)
@@ -1019,14 +1214,25 @@
         lzd:*last* (list tool ver msg prims name)
         lzd:*lastfile* path)
   (if path (lzd:announce tool ver path) (lzd:nofile tool ver msg nil))
-  (lzd:end tool)
+  ;; logged BEFORE lzd:end, which clears the context this reads
+  (lzd:log "FAIL" msg path)
+  (lzd:disown)
   path)
 
 (defun lzd:report (tool ver msg / r)
   (cond
     ;; Esc is not a bug.  A drafter who backs out of POOL twenty times a
-    ;; day must not find twenty DXFs in Downloads.
-    ((lzd:cancel-p msg) nil)
+    ;; day must not find twenty DXFs in Downloads -- but they should
+    ;; find twenty lines in the log, because twenty backings-out of the
+    ;; same prompt is the clearest thing anybody ever says about a
+    ;; question that cannot be answered.
+    ((lzd:cancel-p msg)
+     (if (lzd:mine-p tool) (lzd:log "quit" nil nil))
+     ;; disown, NOT lzd:end -- end logs an "ok" of its own, and a run
+     ;; the drafter backed out of would have gone into the log twice,
+     ;; once as the quit it was and once as a clean run it was not
+     (lzd:disown)
+     nil)
     (lzd:*inside*
      (princ "\n[calofin] The error reporter failed while reporting an")
      (princ "\n[calofin] error -- no file written.  The original error was:")
@@ -1116,7 +1322,11 @@
   (princ "\n[calofin] Nothing has failed in this session, so this is a")
   (princ "\n[calofin] self test: a report written exactly where a real")
   (princ "\n[calofin] one would go.")
-  (lzd:disown)
+  ;; NOT a disown here.  c:LAZDIAG opened a context of its own at the
+  ;; top like every other command, and throwing it away meant the one
+  ;; command in the build that never appeared in the log was the one
+  ;; whose whole job is the log.  The context is LAZDIAG's already;
+  ;; the self test just adds a line to it.
   (lzd:say "--- LAZDIAG self test: no failure, nothing wrong")
   (setq prims (lzd:build-prims "LAZDIAG" *lazdiag-version*
                                "(self test - no failure has occurred)")
@@ -1134,7 +1344,6 @@
       (princ "\n[calofin] Set the AutoCAD environment string")
       (princ "\n[calofin] CalofinErrorDir to a folder you can write to:")
       (princ "\n[calofin]   (setenv \"CalofinErrorDir\" \"C:\\\\temp\")")))
-  (lzd:disown)
   (princ))
 
 (defun c:LAZDIAG ( / *error* oce undo-open)
@@ -1158,6 +1367,48 @@
   (if lzd:*last* (lzd:again) (lzd:selftest))
   (if undo-open (setq undo-open (lzd:undoend)))
   (setvar "CMDECHO" oce)
+  (if lzd:end (lzd:end "LAZDIAG"))
+  (princ))
+
+;;; -------------------- LAZLOG, the command -----------------------------
+
+;; What the log is for, said where somebody meets it.  Not a second
+;; diagnostic surface: the same records LAZDIAG's reports carry, shown
+;; without needing a failure first.
+(defun c:LAZLOG ( / *error* oce path sz tail l n)
+  (defun *error* (msg)
+    (if oce (setvar "CMDECHO" oce))
+    (if (and msg (not (lzd:cancel-p msg)))
+      (princ (strcat "\nLAZLOG error: " msg)))
+    (if lzd:report (lzd:report "LAZLOG" *lazdiag-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZLOG" *lazdiag-version*))
+  (setq oce (getvar "CMDECHO"))
+  (setvar "CMDECHO" 0)
+  (setq path (lzd:logpath))
+  (cond
+    ((null path)
+     (princ "\n[calofin] No folder will take a log.  Set the AutoCAD")
+     (princ "\n[calofin] environment string CalofinLogDir to one you can")
+     (princ "\n[calofin] write to:  (setenv \"CalofinLogDir\" \"C:\\\\temp\")"))
+    ((null (setq tail (lzd:logtail 60)))
+     (princ (strcat "\n[calofin] Nothing logged yet.  From now on every"
+                    " calofin command"))
+     (princ "\n[calofin] writes one line here when it finishes, backs out")
+     (princ "\n[calofin] or fails:")
+     (princ (strcat "\n[calofin]     " path)))
+    (t
+     (setq sz (vl-file-size path) n 0)
+     (princ "\n[calofin] The calofin run log -- every command that")
+     (princ "\n[calofin] finished, was backed out of, or FAILED:\n")
+     (foreach l tail (princ (strcat "\n  " l)) (setq n (1+ n)))
+     (princ (strcat "\n\n[calofin] " (itoa n) " line(s) shown, out of"))
+     (princ (strcat "\n[calofin]     " path))
+     (if sz (princ (strcat "  (" (itoa (/ sz 1024)) " KB)")))
+     (princ "\n[calofin] Send that file in with a report and the failure")
+     (princ "\n[calofin] arrives with everything you ran around it.")))
+  (setvar "CMDECHO" oce)
+  (if lzd:end (lzd:end "LAZLOG"))
   (princ))
 
 (defun c:LAZDIAGVER ()

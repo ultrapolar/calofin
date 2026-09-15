@@ -1997,6 +1997,7 @@
      (princ (strcat "\nLAZASCII: if sections 1-3 lined up, the chart can be"
                     " drawn in characters -- and a text tile, unlike an"
                     " image tile, is never wiped by a repaint."))))
+  (if lzd:end (lzd:end "LAZASCII"))
   (princ))
 
 ;;; -------------------- the text view -----------------------------------

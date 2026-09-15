@@ -1968,6 +1968,7 @@
           (princ)))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "ABCDEF"))
   (princ))
 
 ;; Print the loaded version.

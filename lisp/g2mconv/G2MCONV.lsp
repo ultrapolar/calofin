@@ -817,6 +817,7 @@
       (princ "\nG2MCONV: nothing here is on the export's layers - nothing moved.")
       (princ (strcat "\n  It converts " (g2m:namelist (g2m:sources))
                      "."))))
+  (if lzd:end (lzd:end "G2MCONV"))
   (princ))
 
 (defun c:G2MRECONV (/ *error* doc unlocked mark-open ss recs r ent obj
@@ -926,6 +927,7 @@
                        " object(s) kept their record - put it back and run"
                        " G2MRECONV again to finish them."))))
     (princ "\nG2MRECONV: nothing here carries a G2MCONV record - nothing moved."))
+  (if lzd:end (lzd:end "G2MRECONV"))
   (princ))
 
 (defun c:G2MCONVVER ()

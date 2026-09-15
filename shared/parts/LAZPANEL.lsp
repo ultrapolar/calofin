@@ -7,6 +7,7 @@
 ;;;            LAZBUTTON      put the LazPanel button toolbar on screen
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
+;;;            LAZHIDE        choose which tools stay off the panel
 ;;;            CALHELP        what a command does, at the command line
 ;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
@@ -96,6 +97,15 @@
 ;;; them twice would leave Recent saying nothing new.  It appears only
 ;;; once there is something in it.
 ;;;
+;;; A tool can also be put OUT of sight altogether.  LAZHIDE (or CALSET,
+;;; Hidden) opens the same kind of checklist LAZPIN does -- every tool
+;;; as a toggle -- and a ticked one stops appearing anywhere the panel
+;;; shows itself: no grid button, no Pinned or Recent chip, no Find hit,
+;;; not counted in the status line's total.  It is not deleted or
+;;; disabled, only unlisted -- typing its name still runs it, and
+;;; LAZHIDE always offers the WHOLE roster, so a hidden tool can always
+;;; be found again and un-hidden.
+;;;
 ;;; The *SCAN companions are on the panel;
 ;;; satellites reachable from their headline tool (TUTORIAL*
 ;;; walkthroughs, *VER reporters, *RESCUE undo companions, -CFG /
@@ -109,7 +119,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.29")
+(setq *lazpanel-version* "v3.30")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -312,6 +322,7 @@
     ("HONEFILLET"       "Corner radius, honed")
     ("LAZDIAG"          "Error report for the last failure")
     ("LAZFORM"          "Pool from a filled-in chart")
+    ("LAZLOG"           "What every command has done lately")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
     ("LAZSPA"           "Spa from a filled-in chart")
@@ -559,6 +570,7 @@
       "LOBF"
       "ABLOBF"
       "DIMSTAMP"
+      "LAZLOG"
       "MOHAMADDLE"
       "OLAUTO"
       "CLEARDIM"
@@ -672,6 +684,7 @@
       "LINTXTCHK"
       "CCPRECHECK"
       "LAZDIAG"
+      "LAZLOG"
       )
     )))
 
@@ -708,15 +721,20 @@
 (setq lzp:*iconref* nil)          ; "name" on the support path, else "path"
 (setq lzp:*page* nil)             ; the page the panel reopens on
 (setq lzp:*pins* nil)             ; the pinned tools, in pin order
+(setq lzp:*hidden* nil)           ; the tools put out of sight, no set order
 
 ;;; -------------------- roster access -----------------------------------
 
 ;; One page's commands, flattened out of its columns, in display order:
 ;; down the first column, then down the second.
+;; Filtered by lzp:group-without-hidden before it is flattened, so this
+;; is the roster AS SHOWN on the page -- the same list lzp:dcl-one
+;; renders buttons for, which is what lets lzp:show wire actions
+;; straight off it without ever naming a key the DCL does not have.
 (defun lzp:group-commands (name / g col c out)
   (foreach g lzp:*groups*
     (if (= (car g) name)
-        (foreach col (cdr g)
+        (foreach col (cdr (lzp:group-without-hidden g))
           (foreach c (lzp:col-commands col) (setq out (cons c out))))))
   (reverse out))
 
@@ -788,6 +806,22 @@
       (setq out (cons n out))))
   (reverse out))
 
+;; Is NAME on the hidden list?  lzp:*hidden* is read at load time
+;; (lzp:hidden-read, beside lzp:pins-read) and kept current by
+;; lzp:hide-toggle while the LAZHIDE dialog is open.
+(defun lzp:hidden-p (name) (if (member name lzp:*hidden*) t nil))
+
+;; The roster minus whatever has been put out of sight -- what the
+;; panel actually SHOWS: grid buttons, Find hits, Pinned and Recent
+;; chips, the status line's total.  lzp:commands stays the full,
+;; structural roster (tests/test_lazpanel.py pins it to the tree, and
+;; the LAZHIDE dialog offers every command by name so a hidden one can
+;; always be found again).
+(defun lzp:visible ( / n out)
+  (foreach n (lzp:commands)
+    (if (not (lzp:hidden-p n)) (setq out (cons n out))))
+  (reverse out))
+
 ;;; -------------------- the search --------------------------------------
 ;;  THE PROBLEM THE FIND PAGE SOLVES.  Sixty-seven commands laid out as
 ;;  a hundred and forty-eight buttons over eight pages is a lot to scan
@@ -830,10 +864,12 @@
      (<= i (1+ (- n m))))))
 
 ;; The roster narrowed to what matches, in roster order.  Name first,
-;; then caption, so the order the panel is laid out in survives.
+;; then caption, so the order the panel is laid out in survives.  A
+;; hidden tool is not a hit: it is out of sight everywhere the panel
+;; shows itself, and Find is one more place that is true.
 (defun lzp:matches (s / up out n)
   (setq up (strcase s))
-  (foreach n (lzp:commands)
+  (foreach n (lzp:visible)
     (if (or (lzp:instr n up)
             (lzp:instr (strcase (lzp:caption n)) up))
       (setq out (cons n out))))
@@ -858,7 +894,7 @@
      (strcat "no tool matches \"" lzp:*filter* "\""))
     (t
      (strcat (itoa (length lzp:*hits*)) " of "
-             (itoa (length (lzp:commands))) " match \""
+             (itoa (length (lzp:visible))) " match \""
              lzp:*filter* "\""))))
 
 ;; Re-run the search and repopulate the list.  Called from the edit
@@ -967,7 +1003,17 @@
   (if row (setq out (cons (reverse row) out)))
   (reverse out))
 
-(defun lzp:pinrows ( ) (lzp:packrow lzp:*pins* "*edit*" "Pin..."))
+;; The pinned tools that are not also hidden.  A hide wins over a pin:
+;; ticking a tool off the panel drops its chip from this row even
+;; though it stays pinned in storage, the same "stored but not shown"
+;; bargain lzp:recshown already strikes against Pinned itself -- and
+;; un-hiding it brings the chip straight back with nothing to re-pin.
+(defun lzp:pinshown ( / out n)
+  (foreach n lzp:*pins*
+    (if (not (lzp:hidden-p n)) (setq out (cons n out))))
+  (reverse out))
+
+(defun lzp:pinrows ( ) (lzp:packrow (lzp:pinshown) "*edit*" "Pin..."))
 
 (defun lzp:pinrow ( / out rows r n first)
   (setq rows (lzp:pinrows) first t)
@@ -983,7 +1029,7 @@
                 "    : button { label = \"Pin...\"; key = \"pin_edit\"; }"
                 (lzp:pin-label n))
               out)))
-    (if (and first (not lzp:*pins*))
+    (if (and first (not (lzp:pinshown)))
       (setq out (cons "    : text { label = \"nothing pinned yet\"; }" out)))
     (setq out (cons "  }" out))
     (setq first nil))
@@ -1007,10 +1053,12 @@
 ;;  (lzp:*reclimit* itself is set in the TUNABLES block at the top of the file.)
 (setq lzp:*recent* nil)           ; most recent first
 
-;; Everything remembered, minus what Pinned already shows.
+;; Everything remembered, minus what Pinned already shows and minus
+;; anything hidden -- a tool out of sight stays out of sight here too.
 (defun lzp:recshown ( / out n)
   (foreach n lzp:*recent*
-    (if (not (member n lzp:*pins*)) (setq out (cons n out))))
+    (if (and (not (member n lzp:*pins*)) (not (lzp:hidden-p n)))
+      (setq out (cons n out))))
   (reverse out))
 
 (defun lzp:recrows ( ) (lzp:packrow (lzp:recshown) nil nil))
@@ -1073,6 +1121,44 @@
   (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Recent" s))
   lzp:*recent*)
 
+;;; -------------------- hiding tools from sight ---------------------
+;;  Pin says "always show me this"; Hide says the opposite -- ticked in
+;;  LAZHIDE (or CALSET, Hidden), a tool stops being rendered anywhere
+;;  the panel shows itself.  It is not deleted or disabled: lzp:has and
+;;  lzp:launch never consult lzp:*hidden*, so the name still runs typed
+;;  and LAZHIDE always offers the WHOLE roster as toggles, the same
+;;  escape hatch a stale pin already had, so a hidden tool can always
+;;  be found again.  Stored the same way Pins and Recent are -- one
+;;  more value, "Hidden", on lzp:*pinkey* -- though nothing on the VB
+;;  side reads it yet.
+
+;; A name no longer on the roster is dropped on read, the same rule
+;; lzp:pins-read and lzp:recent-read already apply to their own lists.
+(defun lzp:hidden-read ( / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Hidden")))
+  (setq lzp:*hidden*
+    (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
+      (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
+                        (lzp:split s ";"))))
+  lzp:*hidden*)
+
+(defun lzp:hidden-write ( / s n)
+  (setq s "")
+  (foreach n lzp:*hidden*
+    (setq s (strcat s (if (= s "") "" ";") n)))
+  (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Hidden" s))
+  lzp:*hidden*)
+
+;; A tile in the LAZHIDE dialog firing.  Unlike lzp:pin-toggle there is
+;; no row to overflow -- a hidden tool costs no screen space, it simply
+;; is not drawn -- so ticking one can never be refused.
+(defun lzp:hide-toggle (name val)
+  (setq lzp:*hidden*
+    (if (= val "1")
+      (if (member name lzp:*hidden*) lzp:*hidden* (append lzp:*hidden* (list name)))
+      (vl-remove name lzp:*hidden*)))
+  (princ))
+
 ;; One page per group.  The whole roster is still one list -- the pages
 ;; are lzp:*groups* itself, so re-ordering or re-grouping the tools is
 ;; an edit to that table and nothing else.
@@ -1105,7 +1191,39 @@
       (if row (setq out (cons (reverse row) out)))
       (reverse out))))
 
+;; A headed run (heading cmd cmd ...) with every hidden command struck
+;; out of it, or nil when nothing in it is left to show -- an emptied
+;; run is dropped rather than rendered as a labelled box with nothing
+;; in it.
+(defun lzp:strip-hidden-run (run / kept)
+  (setq kept (vl-remove-if 'lzp:hidden-p (cdr run)))
+  (if kept (cons (car run) kept)))
+
+;; One column (heading entry ...), entries being bare commands or
+;; headed runs, with the hidden ones gone from either shape -- or nil
+;; when the whole column emptied out.
+(defun lzp:strip-hidden-col (col / body e)
+  (foreach e (cdr col)
+    (setq body
+      (cons (if (listp e) (lzp:strip-hidden-run e)
+              (if (lzp:hidden-p e) nil e))
+            body)))
+  (setq body (vl-remove nil (reverse body)))
+  (if body (cons (car col) body)))
+
+;; A copy of one page's group -- (title (heading cmd ...) ...) -- with
+;; every hidden command removed: column headings and run headings
+;; untouched, but a column or run left with nothing in it is dropped
+;; rather than drawn empty.  lzp:dcl-one runs this FIRST, so every
+;; layout branch below it (one column, several, headed runs) never has
+;; to know hiding exists at all.
+(defun lzp:group-without-hidden (g / col out)
+  (foreach col (cdr g)
+    (if (setq col (lzp:strip-hidden-col col)) (setq out (cons col out))))
+  (cons (car g) (reverse out)))
+
 (defun lzp:dcl-one (g / out c n col cols)
+  (setq g (lzp:group-without-hidden g))
   ;; consed newest-first and reversed at the end, so this seed list
   ;; reads BACKWARDS: the dialog line last here comes out first
   (setq out (list (strcat "  : text { key = \"status\"; width = 60; "
@@ -1218,6 +1336,33 @@
                   "is_cancel = true; fixed_width = true; } }")
           "}")))
 
+;; The hide editor: the same shape as the pin editor, every tool as a
+;; toggle in as many columns as lzp:*colbudget* needs -- the WHOLE
+;; roster, hidden or not, so a hidden tool is never harder to find than
+;; the day it was hidden.  Unlike pins there is no row of buttons this
+;; feeds, so there is no width or height budget of its own to hold to.
+(defun lzp:dcl-hidden ( / out col c)
+  (setq out (list "lazpanel_hidden : dialog {"
+                  "  label = \"LazPanel  -  hidden tools\";"
+                  (strcat "  : text { key = \"hidemsg\"; label = \"Ticked "
+                          "tools stop appearing anywhere on the panel.\"; }")
+                  "  : row {"))
+  (foreach col (lzp:wrap (lzp:commands))
+    (setq out (append out (list "    : column {")))
+    (foreach c col
+      (setq out (append out
+        (list (strcat "      : toggle { label = \"" c
+                      "\"; key = \"hd_" c "\"; }")))))
+    (setq out (append out (list "    }"))))
+  (append out
+    (list "  }" "  spacer;"
+          (strcat "  : row { alignment = centered; "
+                  ": button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; } "
+                  ": button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; } }")
+          "}")))
+
 ;; The search page.  It carries the same furniture as every other page
 ;; -- status line, tab strip, pinned row, Close -- so moving onto it
 ;; and off it does not feel like leaving the panel; what is different
@@ -1253,14 +1398,15 @@
           "  }"
           "}")))
 
-;; Every page, then the pin editor, in one generated file.  Find leads,
-;; because it is the page that does not need you to know where a tool
-;; was filed.
+;; Every page, then the pin editor and the hide editor, in one
+;; generated file.  Find leads, because it is the page that does not
+;; need you to know where a tool was filed.
 (defun lzp:dcl-lines ( / out g)
   (setq out (append (lzp:dcl-find) (list "")))
   (foreach g lzp:*groups*
     (setq out (append out (lzp:dcl-one g) (list ""))))
-  (append out (lzp:dcl-pins) (list "")))
+  (setq out (append out (lzp:dcl-pins) (list "")))
+  (append out (lzp:dcl-hidden) (list "")))
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -1369,6 +1515,22 @@
      (action_tile "cancel" "(done_dialog 0)")
      (setq rc (start_dialog))
      (if (= rc 1) (lzp:pins-write) (lzp:pins-read))
+     t)))
+
+;; The hide editor, same shape as lzp:pin-edit: Cancel re-reads the
+;; registry rather than unwinding ticks one by one.
+(defun lzp:hide-edit (dcl / n rc)
+  (cond
+    ((not (new_dialog "lazpanel_hidden" dcl)) nil)
+    (t
+     (foreach n (lzp:commands)
+       (set_tile (strcat "hd_" n) (if (lzp:hidden-p n) "1" "0"))
+       (action_tile (strcat "hd_" n)
+                    (strcat "(lzp:hide-toggle \"" n "\" $value)")))
+     (action_tile "accept" "(done_dialog 1)")
+     (action_tile "cancel" "(done_dialog 0)")
+     (setq rc (start_dialog))
+     (if (= rc 1) (lzp:hidden-write) (lzp:hidden-read))
      t)))
 
 (defun lzp:launch (name / fn)
@@ -2022,8 +2184,8 @@
           (setq lzp:*page* g
                 have (lzp:loaded))
           (set_tile "status"
-                    (strcat (itoa (length have)) " of "
-                            (itoa (length (lzp:commands)))
+                    (strcat (itoa (length (vl-remove-if 'lzp:hidden-p have)))
+                            " of " (itoa (length (lzp:visible)))
                             (if (lzp:findpage g)
                               " tools loaded - the rest are listed, not run"
                               " tools loaded - greyed are not in this session")))
@@ -2044,8 +2206,11 @@
                (if (not (member n have))
                  (mode_tile n 1)))))
           ;; the pinned row: same launch, its own keys, greyed the same
-          ;; way -- $key would read "pin_POOL", so the name is baked in
-          (foreach n lzp:*pins*
+          ;; way -- $key would read "pin_POOL", so the name is baked in.
+          ;; lzp:pinshown, not lzp:*pins* itself: a hidden-but-pinned
+          ;; tool has no button in the DCL lzp:pinrow just wrote, and
+          ;; wiring a key that is not there is an error, not a no-op.
+          (foreach n (lzp:pinshown)
             (action_tile (strcat "pin_" n)
               (strcat "(setq lzp:*pick* \"" n
                       "\" lzp:*pos* (done_dialog 1))"))
@@ -2161,6 +2326,7 @@
 (defun c:LAZPANEL ( / pick)
   (lzp:pins-read)
   (lzp:recent-read)
+  (lzp:hidden-read)
   (while (setq pick (lzp:show))
     (if (/= pick "*pins*")
       (lzp:launch pick)))
@@ -2180,6 +2346,7 @@
   (if lzd:begin (lzd:begin "LAZPIN" *lazpanel-version*))
   (lzp:pins-read)
   (lzp:recent-read)
+  (lzp:hidden-read)
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZPIN error: could not write the dialog file."))
@@ -2192,6 +2359,37 @@
      (vl-file-delete f)
      (princ (strcat "\nLAZPANEL: "
                     (itoa (length lzp:*pins*)) " tools pinned."))))
+  (if lzd:end (lzd:end "LAZPIN"))
+  (princ))
+
+;; Open the hide editor on its own, without going through the panel.
+(defun c:LAZHIDE ( / *error* f dcl)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl -- the same fix c:LAZPIN carries
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZHIDE error: " msg)))
+    (if lzd:report (lzd:report "LAZHIDE" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZHIDE" *lazpanel-version*))
+  (lzp:pins-read)
+  (lzp:recent-read)
+  (lzp:hidden-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZHIDE error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZHIDE error: could not load the dialog file.")
+     (vl-file-delete f))
+    (t
+     (lzp:hide-edit dcl)
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (princ (strcat "\nLAZPANEL: "
+                    (itoa (length lzp:*hidden*)) " tools hidden."))))
+  (if lzd:end (lzd:end "LAZHIDE"))
   (princ))
 
 (defun c:LAZBUTTON ( / *error* tb)
@@ -2216,6 +2414,7 @@
                     " dock it, click it to open the panel.")))
     (t
      (princ "\nLAZBUTTON: the menu API is unavailable - type LAZPANEL instead.")))
+  (if lzd:end (lzd:end "LAZBUTTON"))
   (princ))
 
 (defun c:LAZICON ( / *error* paths tb btn r w)
@@ -2307,6 +2506,7 @@
        (princ "\n  MSXML      : carried it, so the array is not the story"))
      (princ (strcat "\n  written    : NO - "
                     (if lzp:*iconerr* lzp:*iconerr* "no reason recorded")))))
+  (if lzd:end (lzd:end "LAZICON"))
   (princ))
 
 ;;; -------------------- the two front-desk commands ---------------------
@@ -2332,7 +2532,9 @@
   (if lzd:begin (lzd:begin "CALHELP" *lazpanel-version*))
   (setq s (getstring T "\nCommand, or any part of one <Enter = all>: "))
   (if lzd:ask (lzd:ask "Command, or any part of one" s) s)
-  (setq hits (if (= s "") (lzp:commands) (lzp:matches s)))
+  ;; lzp:visible, not lzp:commands: a tool put out of sight is out of
+  ;; sight here too, the same rule Find already runs by (lzp:matches).
+  (setq hits (if (= s "") (lzp:visible) (lzp:matches s)))
   (cond
     ((null hits)
      (princ (strcat "\nNothing here matches \"" s "\".  CALHELP on its"
@@ -2346,6 +2548,7 @@
      (foreach n hits
        (princ (strcat "\n  " (if (lzp:has n) (strcat n) (strcat "(" n ")"))
                       "  " (lzp:caption n))))))
+  (if lzd:end (lzd:end "CALHELP"))
   (princ))
 
 ;; The settings calofin keeps in the AutoCAD PROFILE, which is the one
@@ -2397,6 +2600,16 @@
     (setq v (getenv (strcat "CalofinInk-" (strcase (cdr r)))))
     (princ (strcat "\n      " (car r) ": "
                    (if (and v (/= v "")) (strcat "ACI " v) "(auto)"))))
+  ;; Not a row of lzp:*settings*: a hidden list is not one scalar in
+  ;; the profile, it is a name list in the registry, the same shape
+  ;; Pins and Recent already are -- so it gets its own line rather than
+  ;; a table row that would have nowhere to put a value.
+  (princ (strcat "\n  Hidden tools"
+                 "\n      now: " (itoa (length lzp:*hidden*))
+                 " of " (itoa (length (lzp:commands)))
+                 " off the panel -- a hidden tool still runs typed, it"
+                 " simply stops being shown"
+                 "\n      LAZHIDE picks which, or Hidden below"))
   (princ))
 
 (defun c:CALSET ( / *error* pick key v role)
@@ -2407,9 +2620,10 @@
     (if lzd:report (lzd:report "CALSET" *lazpanel-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "CALSET" *lazpanel-version*))
+  (lzp:hidden-read)
   (lzp:setshow)
-  (initget "Theme Errordir Stockdir Itemcolors Quit")
-  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Itemcolors/Quit] <Quit>: "))
+  (initget "Theme Errordir Stockdir Itemcolors Hidden Quit")
+  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Itemcolors/Hidden/Quit] <Quit>: "))
   (if lzd:ask (lzd:ask "Change which?" pick) pick)
   (setq key (cond ((= pick "Theme") "CalofinTheme")
                   ((= pick "Errordir") "CalofinErrorDir")
@@ -2446,6 +2660,9 @@
            (princ (strcat "\n" role " colour is now ACI " (itoa (atoi v))
                           ".  COVERCHECK, DIMCHECK and LINFINCHECK read it"
                           " on their next run.")))))))
+    ;; routes straight to LAZHIDE's own dialog and comes back to this
+    ;; prompt -- the same way Back re-enters CALSET below
+    ((= pick "Hidden") (c:LAZHIDE) (c:CALSET))
     ((null key) (princ "\nNothing changed."))
     ((= key "CalofinTheme")
      ;; Undo is accepted everywhere Back is, unlisted (STANDARDS 1)
@@ -2488,13 +2705,17 @@
         (princ (strcat "\n" key " cleared.")))
        (t (setenv key v)
           (princ (strcat "\n" key " is now " v "."))))))
+  (if lzd:end (lzd:end "CALSET"))
   (princ))
 
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
-                 (itoa (length (lzp:commands))) " tools on the panel across "
+                 (itoa (length (lzp:visible))) " tools on the panel across "
                  (itoa (length lzp:*groups*)) " pages, "
-                 (itoa (length lzp:*pins*)) " pinned."))
+                 (itoa (length lzp:*pins*)) " pinned"
+                 (if lzp:*hidden*
+                   (strcat ", " (itoa (length lzp:*hidden*)) " hidden.")
+                   ".")))
   (princ))
 
 ;; Once per AutoCAD SESSION, not once per drawing.  LISP globals are
@@ -2530,6 +2751,7 @@
                  " loaded.  LAZPANEL opens the panel;"
                  " LAZBUTTON puts its button on screen;"
                  " LAZPIN edits the pinned row;"
+                 " LAZHIDE picks which tools stay off it;"
                  " CALHELP says what a command does;"
                  " CALSET shows the settings.")))
 (princ)

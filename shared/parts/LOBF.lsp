@@ -935,6 +935,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "LOBF"))
   (princ))
 
 (defun c:LOBFVER ()

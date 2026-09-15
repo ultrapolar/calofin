@@ -507,6 +507,7 @@
   ;; settings back to what they were two commands ago
   (cdc:sysrestore)
   (setq *error* olderr)
+  (if lzd:end (lzd:end "CDCREATE"))
   (princ))
 
 (defun c:CDCREATEVER ()

@@ -346,6 +346,7 @@
   (if (not (member 'pool:hopcalc (atoms-family 0)))
       (princ "\nPOOL.LSP is not loaded -- APPLOAD it first, then run POOLDEMO.")
       (pooldemo:run))
+  (if lzd:end (lzd:end "POOLDEMO"))
   (princ))
 
 (defun pooldemo:run ( / *error* undo-open cells k org)
@@ -400,6 +401,7 @@
   (princ (strcat "\nPOOLDEMO complete -- " (itoa (length cells))
                  " cells drawn.  If every cell looks right, POOL.LSP is"
                  " working in this drawing."))
+  (if lzd:end (lzd:end "POOLDEMO"))
   (princ))
 
 ;; Which build is loaded - the first thing to check when a run does

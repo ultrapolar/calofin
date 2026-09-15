@@ -1147,6 +1147,7 @@
           (princ)))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "ALTABCDEF"))
   (princ))
 
 ;; format a real to 3 decimals, left-padded into WIDTH

@@ -306,6 +306,7 @@
                  (itoa n-perim) " perimeter -> " *drone-perim-layer*
                  ", "
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
+  (if lzd:end (lzd:end "DRONE"))
   (princ))
 
 (defun c:DRONEVER ()

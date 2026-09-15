@@ -1177,6 +1177,7 @@
       (lg:paddle perim)))
 
   (lg:sysrestore)
+  (if lzd:end (lzd:end "LINGUTTER"))
   (princ))
 
 (defun c:LINGUTTERSCAN ( / *error* ss)
@@ -1195,6 +1196,7 @@
     (progn
       (lg:report (lg:analyze ss))
       (princ "\nLINGUTTERSCAN: nothing changed.  Type LINGUTTER to do it.")))
+  (if lzd:end (lzd:end "LINGUTTERSCAN"))
   (princ))
 
 (defun c:LINGUTTERVER ()

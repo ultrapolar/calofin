@@ -473,7 +473,7 @@ def select_sites(src, mask):
 # an else branch so the whole form evaluates to the variable either way.
 # begin and report are not, so they are checked here.
 
-INJECTED = re.compile(r"\(if lzd:(watch|ask|report|begin) ")
+INJECTED = re.compile(r"\(if lzd:(watch|ask|report|begin|end) ")
 
 #: an atom or a form: a body's last item is often a bare symbol (the
 #: `ss` that LINGUTTER's lg:highlight returns), and a scan that counted
@@ -541,6 +541,24 @@ def misplaced(src, mask, path):
     return out
 
 
+def end_slot(src, mask, c):
+    """Where the success hook goes: in front of the COMMAND's trailing
+    (princ), the same way the report goes in front of the handler's.
+
+    That one spot catches every clean exit, because AutoLISP has no
+    early return -- a command either falls out of the bottom of its
+    defun or raises, and raising is the handler's business.  A command
+    that ends some other way returns -1 and is left alone: the lazy
+    flush in lzd:begin closes its run out at the next command instead,
+    and inventing a slot for it would mean changing what it returns."""
+    kids = children(src, mask, c["cmd_lo"] + 1, c["cmd_hi"] - 1)
+    if kids:
+        lo, hi = kids[-1]
+        if re.match(r"\(princ\s*\)", src[lo:hi]):
+            return lo
+    return -1
+
+
 def report_slot(src, mask, c):
     """Where the report call goes inside the handler: in front of its
     trailing (princ), which is the handler's return value and has to
@@ -564,9 +582,12 @@ def wire(path, src, do_fix):
     missing, edits = [], []
     for c in cmds:
         has_report = "lzd:report" in c["body"]
+        # the success hook lives in the command body, past the handler
+        has_end = "lzd:end" in src[c["err_hi"]:c["cmd_hi"]]
         # lzd:begin sits in the command body, after the handler form
         has_begin = "lzd:begin" in src[c["begin_at"]:c["cmd_hi"]]
-        if has_report and has_begin:
+        if has_report and has_begin and (has_end
+                                         or end_slot(src, mask, c) < 0):
             continue
         missing.append(c["name"])
         if not do_fix:
@@ -576,6 +597,11 @@ def wire(path, src, do_fix):
             pad = indent_of(src, at)
             edits.append((at, '(if lzd:report (lzd:report "%s" %s %s))\n%s'
                           % (c["name"], ver, c["param"], pad)))
+        if not has_end and end_slot(src, mask, c) >= 0:
+            at = end_slot(src, mask, c)
+            pad = indent_of(src, at)
+            edits.append((at, '(if lzd:end (lzd:end "%s"))\n%s'
+                          % (c["name"], pad)))
         if not has_begin:
             at = c["begin_at"]
             pad = indent_of(src, c["err_lo"])

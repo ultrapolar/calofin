@@ -1109,6 +1109,7 @@
                  (itoa total) " points, "
                  (itoa iter) " polyline(s) on layer \"" srcLayer "\" and "
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
+  (if lzd:end (lzd:end "PERPPTS"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and

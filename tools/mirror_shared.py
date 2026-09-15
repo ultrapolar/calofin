@@ -1587,7 +1587,7 @@ TOOLS = {
             'cd:2d': 'cal:2d', 'cd:v-': 'cal:v-', 'cd:v+': 'cal:v+',
             'cd:v*': 'cal:v*', 'cd:dot': 'cal:dot', 'cd:perp': 'cal:perp',
             'cd:vlen': 'cal:vlen', 'cd:unit': 'cal:unit',
-            'cd:mid': 'cal:mid',
+            'cd:mid': 'cal:mid', 'cd:cross': 'cal:cross',
             'cd:angnorm': 'cal:angnorm',
             'cd:signed-dang': 'cal:signed-dang',
             'cd:plural': 'cal:plural',

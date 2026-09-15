@@ -1156,6 +1156,7 @@
           (princ)))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "ALTABCDEF"))
   (princ))
 
 ;; right-pad a string to WIDTH

@@ -2218,6 +2218,7 @@
   ;; _End then would be closing a group that is not there
   (if undo-open (setq undo-open (cst:undoend)))
   (cst:sysrestore)
+  (if lzd:end (lzd:end "CONSTELLATION"))
   (princ))
 
 ;; Print the loaded version.

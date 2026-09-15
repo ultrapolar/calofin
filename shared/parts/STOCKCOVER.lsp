@@ -264,6 +264,7 @@
       (stock:say (strcat "stock folder set to " new))
       (stock:say (strcat (itoa (length (stock:files new))) " DWG(s) there.")))
     (stock:say "unchanged."))
+  (if lzd:end (lzd:end "STOCKCOVER-CFG"))
   (princ))
 
 ;;; -------------------------------------------------------------------
@@ -477,6 +478,7 @@
                       (setq undone nil)))))))))))
 
   (stock:restore)
+  (if lzd:end (lzd:end "STOCKCOVER"))
   (princ))
 
 ;; Which build is loaded - the first thing to check when a run does

@@ -143,6 +143,23 @@ def angdim(vm, vtx=(0.0, 0.0), a=0.0, b=math.pi / 2, arc=50.0, tang=None,
     }, 5, layer)
 
 
+def chain(vm, stops, y=0.0, dimy=20.0, texts=None):
+    """A run of continued dimensions: one dimension line, one segment
+    per gap in STOPS, each text centred in its own segment.  This is
+    what AutoCAD's DIMCONTINUE and AUTODIM both lay down."""
+    out = []
+    for i in range(len(stops) - 1):
+        a, b = stops[i], stops[i + 1]
+        out.append(dim(vm, (a, y), (b, y), (0, dimy),
+                       ((a + b) / 2.0, dimy + 6.0),
+                       text=(texts[i] if texts else '')))
+    return out
+
+
+def dimline_y(vm, e):
+    return round(grp(vm, e, 10)[1], 6)
+
+
 def line(vm, a, b, layer='0'):
     vm.loads('(entmakex (list (cons 0 "LINE") (cons 8 "%s")'
              ' (list 10 %r %r 0.0) (list 11 %r %r 0.0)))'
@@ -187,7 +204,8 @@ def plan(vm):
     """The whole analysis over everything in the drawing, as Python."""
     vm.loads('(setq SS (ssget "_X"))')
     vm.loads('(setq RECS (cd:records SS))')
-    vm.loads('(setq STATIC (cd:static-obs SS RECS))')
+    vm.loads('(setq RUNS (cd:runs RECS))')
+    vm.loads('(setq STATIC (cd:static-obs SS RECS RUNS))')
     return vm.loads('(cd:plan RECS STATIC)')
 
 
@@ -490,8 +508,11 @@ def test_a_second_run_moves_nothing():
 def test_a_text_with_nowhere_clear_is_left_as_drawn():
     vm = newvm()
     a = dim(vm, (0, 0), (100, 0), (0, 20), (50, 26), text='A-TEXT')
-    for x in range(-400, 500, 4):           # a picket fence over the track
-        line(vm, (x, 22), (x, 30))
+    # a picket fence over the track, and TALL: standing the dimension
+    # off the work is a way out now, so a fence the height of the text
+    # only proves that rows work
+    for x in range(-400, 500, 4):
+        line(vm, (x, 10), (x, 90))
     run(vm, 'c:CLEARDIM', [None, None], 'nowhere clear')
     assert p11(vm, a) == (50.0, 26.0), \
         "it was parked somewhere arbitrary: %r" % (p11(vm, a),)
@@ -507,7 +528,7 @@ def test_reach_is_a_knob():
     for x in range(-400, 500, 4):
         if 180 <= x <= 230:                 # the gap, ~130 units away
             continue
-        line(vm, (x, 22), (x, 30))
+        line(vm, (x, 10), (x, 90))
     run(vm, 'c:CLEARDIM', [None, None], 'reach default')
     assert p11(vm, a) == (50.0, 26.0), "the default reach found the far gap"
 
@@ -516,7 +537,7 @@ def test_reach_is_a_knob():
     for x in range(-400, 500, 4):
         if 180 <= x <= 230:
             continue
-        line(vm, (x, 22), (x, 30))
+        line(vm, (x, 10), (x, 90))
     vm.loads('(setq cd:*reach-f* 40.0)')
     run(vm, 'c:CLEARDIM', [None, None], 'reach widened')
     assert p11(vm, a) != (50.0, 26.0), "a wider reach still found nothing"
@@ -983,7 +1004,7 @@ def test_a_radius_text_never_crosses_its_centre():
     e = anydim(vm, {10: (0.0, 0.0), 15: (100.0, 0.0), 11: (20.0, 0.0),
                     42: 100.0, 1: 'R100'}, 4)
     for x in range(-120, 120, 3):
-        line(vm, (float(x), -10.0), (float(x), 10.0))
+        line(vm, (float(x), -60.0), (float(x), 60.0))
     run(vm, 'c:CLEARDIM', [None, None], 'radius floor')
     assert p11(vm, e)[0] >= 0.0, \
         "the text crossed the centre: %r" % (p11(vm, e),)
@@ -1030,6 +1051,174 @@ def test_a_non_linear_dimension_with_no_text_point_is_skipped():
     assert grp(vm, e, 11) is None, "it invented a text point on an arc"
     assert 'track could not be read' in said(vm), said(vm)
     print("ok  skip         -> no text point on an arc is not guessed at")
+
+
+def test_a_line_of_dimensions_is_one_run():
+    """Dimensions whose dimension lines are the same straight line read
+    as one continuous dimension with breaks, and are treated as one."""
+    vm = newvm()
+    chain(vm, [0, 100, 200, 300])
+    vm.loads('(setq RECS (cd:records (ssget "_X")))')
+    runs = vm.loads('(cd:runs RECS)')
+    assert len(runs) == 1 and sorted(runs[0]) == [0, 1, 2], runs
+    print("ok  run          -> a line of dimensions is one run")
+
+
+def test_a_parallel_line_further_out_is_a_different_run():
+    """Nested chains -- the overall dimension outside the part ones --
+    are parallel, not collinear, and moving one must not move the
+    other."""
+    vm = newvm()
+    chain(vm, [0, 100, 200], dimy=20.0)
+    chain(vm, [0, 200], dimy=60.0)
+    vm.loads('(setq RECS (cd:records (ssget "_X")))')
+    runs = vm.loads('(cd:runs RECS)')
+    assert len(runs) == 2, runs
+    print("ok  run          -> a parallel line further out is its own run")
+
+
+def test_dimensions_too_far_apart_along_the_line_are_not_one_run():
+    """A run is one continuous dimension WITH BREAKS, and a break is
+    allowed to be a real one -- but two dimensions at opposite ends of a
+    sheet that happen to line up are not a run, or moving one would move
+    the other."""
+    vm = newvm()
+    chain(vm, [0, 100])
+    chain(vm, [4000, 4100])
+    vm.loads('(setq RECS (cd:records (ssget "_X")))')
+    assert len(vm.loads('(cd:runs RECS)')) == 2
+    print("ok  run          -> a sheet-wide gap is not a break")
+
+
+def test_only_a_linear_dimension_joins_a_run():
+    """A radius keeps the CENTRE of its circle in group 10 and an
+    ordinate its feature, so there is no dimension line there to be
+    collinear with -- and pushing one "out" would move the dimension to
+    a different circle rather than clear of an obstacle."""
+    vm = newvm()
+    anydim(vm, {10: (0.0, 0.0), 15: (100.0, 0.0), 11: (60.0, 0.0),
+                42: 100.0, 1: 'R100'}, 4)
+    vm.loads('(setq R (cd:read-dim 0 (entlast)))')
+    assert field(vm, 'out') is NIL, "a radius has no outward side"
+    print("ok  run          -> only a dimension with a dimension line "
+          "joins a run")
+
+
+def test_a_run_member_stays_inside_its_own_segment():
+    vm = newvm()
+    ents = chain(vm, [0, 30, 60, 90], texts=['WIDE-TEXT-A', 'WIDE-TEXT-B',
+                                             'WIDE-TEXT-C'])
+    run(vm, 'c:CLEARDIM', [None, None], 'inside its segment')
+    for i, (lo, hi) in enumerate(((0, 30), (30, 60), (60, 90))):
+        x = p11(vm, ents[i])[0]
+        assert lo <= x <= hi, \
+            "dim %d left its own segment: %r not in %r" % (i, x, (lo, hi))
+    print("ok  run          -> a chain's text stays in its own segment")
+
+
+def test_a_crowded_run_is_staggered_not_shuffled():
+    """The headline of this pass.  Four segments 30 wide with text 40
+    wide: there is nowhere ALONG the track to go, because every text
+    overhangs its own segment whatever it does.  So the run staggers --
+    every other dimension stands a row further off the work, its own
+    dimension line with it -- and every text stays centred where it
+    belongs."""
+    vm = newvm()
+    ents = chain(vm, [0, 30, 60, 90, 120],
+                 texts=['WIDE-TEXT-A', 'WIDE-TEXT-B', 'WIDE-TEXT-C',
+                        'WIDE-TEXT-D'])
+    before = [p11(vm, e) for e in ents]
+    run(vm, 'c:CLEARDIM', [None, None], 'staggered')
+    rows = [dimline_y(vm, e) for e in ents]
+    assert rows[0] == rows[2] and rows[1] == rows[3] and rows[0] != rows[1], \
+        "expected an alternating stagger, got dimension lines at %r" % (rows,)
+    assert rows[1] > rows[0], "it staggered toward the work, not away"
+    # and nothing shuffled along: every text is still centred in its own
+    # segment, which is the whole point of staggering instead
+    for i, e in enumerate(ents):
+        assert p11(vm, e)[0] == before[i][0], \
+            "dim %d shuffled along instead of staggering: %r -> %r" \
+            % (i, before[i], p11(vm, e))
+    assert 'further off the work' in said(vm), said(vm)
+    print("ok  stagger      -> a crowded run staggers, and nothing "
+          "shuffles along")
+
+
+def test_the_whole_run_moves_together_off_an_object():
+    """An object across a whole segment cannot be slid round, and moving
+    one dimension off it and leaving its neighbours behind would trade a
+    crowded dimension for a crooked run.  So the whole run goes."""
+    vm = newvm()
+    ents = chain(vm, [0, 100, 200, 300, 400],
+                 texts=['100', '100', '100', '100'])
+    for x in range(95, 210, 3):               # a wall across segment 1
+        line(vm, (float(x), 10.0), (float(x), 31.0))
+    before = [dimline_y(vm, e) for e in ents]
+    run(vm, 'c:CLEARDIM', [None, None], 'whole run out')
+    after = [dimline_y(vm, e) for e in ents]
+    assert len(set(after)) == 1, \
+        "the run came out crooked: dimension lines at %r" % (after,)
+    assert after[0] > before[0], "it did not stand off the work at all"
+    print("ok  run move     -> an object takes the whole run out with it, "
+          "and it stays straight")
+
+
+def test_a_run_mates_own_skeleton_is_not_in_its_way():
+    """A run is one dimension with breaks, so its dimension line and its
+    extension lines are ITS OWN -- a continued chain does not merely
+    have extension lines near each other, it shares them.  Without this
+    a staggered run has nowhere to go: the step of the line and the
+    lengthened extension lines land on the neighbour's text."""
+    vm = newvm()
+    chain(vm, [0, 100, 200])
+    vm.loads('(setq RECS (cd:records (ssget "_X")) RUNS (cd:runs RECS))')
+    vm.loads('(setq OBS (cd:static-obs (ssget "_X") RECS RUNS))')
+    # every tag a run's own ink carries names both members
+    tags = [o[0] for o in vm.loads('OBS') if o[0] not in (None, NIL)]
+    assert tags, 'no tagged ink at all'
+    for t in tags:
+        assert isinstance(t, list) and sorted(t) == [0, 1], t
+    print("ok  run ink      -> a run's whole skeleton is the run's own")
+
+
+def test_staggering_can_be_turned_off():
+    vm = newvm()
+    vm.loads('(setq cd:*stagger* nil)')
+    ents = chain(vm, [0, 30, 60, 90],
+                 texts=['WIDE-TEXT-A', 'WIDE-TEXT-B', 'WIDE-TEXT-C'])
+    run(vm, 'c:CLEARDIM', [None, None], 'no stagger')
+    rows = [dimline_y(vm, e) for e in ents]
+    assert len(set(rows)) == 1, \
+        "cd:*stagger* nil should keep the run dead straight: %r" % (rows,)
+    print("ok  knob         -> cd:*stagger* nil keeps a run dead straight")
+
+
+def test_a_row_is_measured_in_text_heights():
+    vm = newvm()
+    ents = chain(vm, [0, 30, 60, 90, 120],
+                 texts=['WIDE-TEXT-A', 'WIDE-TEXT-B', 'WIDE-TEXT-C',
+                        'WIDE-TEXT-D'])
+    vm.loads('(setq cd:*row-f* 3.0)')
+    before = dimline_y(vm, ents[1])
+    run(vm, 'c:CLEARDIM', [None, None], 'row size')
+    assert abs((dimline_y(vm, ents[1]) - before) - 3.0 * TXT) < 1e-6, \
+        "a row is cd:*row-f* text heights: %r" % (dimline_y(vm, ents[1]),)
+    print("ok  knob         -> cd:*row-f* is how far one row out is")
+
+
+def test_a_lone_dimension_is_not_held_to_its_span():
+    """The span bound is a RUN rule.  A dimension on its own puts its
+    text outside its extension lines the way AutoCAD does, which is what
+    a short dimension with wide text looks like."""
+    vm = newvm()
+    a = dim(vm, (0, 0), (40, 0), (0, 20), (20, 21), text='A-TEXT')
+    for x in range(2, 39, 2):
+        line(vm, (x, 18), (x, 24))
+    run(vm, 'c:CLEARDIM', [None, None], 'lone dim')
+    x = p11(vm, a)[0]
+    assert x < 0 or x > 40, \
+        "a lone dimension may leave its own span: %r" % (x,)
+    print("ok  run          -> a lone dimension is not held to its span")
 
 
 def test_the_crossing_cross_dims_that_this_tool_failed_on():
@@ -1367,6 +1556,17 @@ if __name__ == '__main__':
     test_a_diameter_has_no_floor_under_it()
     test_an_ordinate_with_no_leader_is_skipped()
     test_a_non_linear_dimension_with_no_text_point_is_skipped()
+    test_a_line_of_dimensions_is_one_run()
+    test_a_parallel_line_further_out_is_a_different_run()
+    test_dimensions_too_far_apart_along_the_line_are_not_one_run()
+    test_only_a_linear_dimension_joins_a_run()
+    test_a_run_member_stays_inside_its_own_segment()
+    test_a_crowded_run_is_staggered_not_shuffled()
+    test_the_whole_run_moves_together_off_an_object()
+    test_a_run_mates_own_skeleton_is_not_in_its_way()
+    test_staggering_can_be_turned_off()
+    test_a_row_is_measured_in_text_heights()
+    test_a_lone_dimension_is_not_held_to_its_span()
     test_the_crossing_cross_dims_that_this_tool_failed_on()
     test_an_unreadable_track_is_skipped_and_still_blocks()
     test_two_parallel_lines_have_no_vertex()

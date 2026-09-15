@@ -189,11 +189,13 @@ assert [str(x) for x in vm.globals['test:*pages*']] == flat_rows, \
     "lzp:pages does not flatten lzp:*rows* in strip order"
 
 opens = [l for l in dcl if l.endswith(' : dialog {')]
-# one dialog per page, plus the pin editor
-assert len(opens) == len(PAGES) + 1, (
-    "%d dialogs for %d pages + the pin editor" % (len(opens), len(PAGES)))
+# one dialog per page, plus the pin editor and the hide editor
+assert len(opens) == len(PAGES) + 2, (
+    "%d dialogs for %d pages + the pin and hide editors" % (len(opens), len(PAGES)))
 assert 'lazpanel_pins : dialog {' in opens, \
     "the pin editor dialog is not in the generated file"
+assert 'lazpanel_hidden : dialog {' in opens, \
+    "the hide editor dialog is not in the generated file"
 depth = 0
 for line in dcl:
     assert line.count('"') % 2 == 0, "odd quotes: %r" % line
@@ -1722,6 +1724,59 @@ print("   Run launches the highlighted tool (%s), the panel closing first"
       % LIVE)
 
 
+print("== hidden tools: filtered from the grid, Find, Pinned and Recent ==")
+# lzp:*hidden* is a stored NAME list, the same shape lzp:*pins* and
+# lzp:*recent* already are; lzp:visible is the roster minus it, and
+# everything the panel actually RENDERS -- the grid, Find, Pinned,
+# Recent, the status line's total -- reads that instead of the full
+# lzp:commands, which stays the structural roster the tree is pinned
+# to above and what the hide editor itself still offers in full.
+hv = fresh()
+hv.loads('(setq lzp:*hidden* (list "%s"))' % LIVE)
+
+hv.loads('(setq t:*all* (lzp:commands))')
+assert LIVE in [str(x) for x in hv.globals['t:*all*']], \
+    "hiding a tool removed it from the structural roster"
+hv.loads('(setq t:*vis* (lzp:visible))')
+assert LIVE not in [str(x) for x in hv.globals['t:*vis*']], \
+    "a hidden tool is still in lzp:visible"
+assert len(hv.globals['t:*vis*']) == len(PANEL) - 1, \
+    "hiding one tool should drop the visible count by exactly one"
+
+hv.loads('(setq t:*m* (lzp:matches "%s"))' % LIVE)
+assert LIVE not in [str(x) for x in (hv.globals['t:*m*'] or [])], \
+    "a hidden tool is still a Find hit, even searched by exact name"
+
+# its page's grid loses the button, and the DCL for that page still
+# generates cleanly with no dangling key
+hv.loads('(setq t:*g* (lzp:group-commands "Pool"))')
+mine = [str(x) for x in hv.globals['t:*g*']]
+assert LIVE not in mine, "a hidden tool still has a grid button wired"
+hv.loads('(setq t:*d* (lzp:dcl-one (assoc "Pool" lzp:*groups*)))')
+dtext = '\n'.join(str(l) for l in hv.globals['t:*d*'])
+assert ('key = "%s"' % LIVE) not in dtext, \
+    "a hidden tool's button is still in the generated DCL"
+
+# pinned and recent: stored either way, shown neither way
+hv.loads('(setq lzp:*pins* (list "%s") lzp:*recent* (list "%s"))'
+         % (LIVE, LIVE))
+hv.loads('(setq t:*ps* (lzp:pinshown))')
+assert not (hv.globals['t:*ps*'] or []), \
+    "a hidden, pinned tool is still shown pinned: %r" % hv.globals['t:*ps*']
+hv.loads('(setq t:*rs* (lzp:recshown))')
+assert not (hv.globals['t:*rs*'] or []), \
+    "a hidden, recent tool is still shown recent: %r" % hv.globals['t:*rs*']
+assert LIVE in [str(x) for x in hv.globals['lzp:*pins*']], \
+    "hiding a pinned tool must only stop it showing, not drop the pin itself"
+
+# un-hiding brings it straight back, nothing else touched
+hv.loads('(setq lzp:*hidden* nil)')
+hv.loads('(setq t:*ps2* (lzp:pinshown))')
+assert LIVE in [str(x) for x in hv.globals['t:*ps2*']], \
+    "un-hiding did not bring the pinned chip back"
+print("   a hidden tool stays on the roster, off the grid, Find, Pinned and Recent")
+
+
 print("== LAZPIN: the pin editor, end to end ==")
 # c:LAZPIN was in check_registry's UNTESTED list -- the helpers it wires
 # together were covered above, but the command that wires them was run by
@@ -1810,6 +1865,97 @@ assert 'load' not in events(vm), events(vm)
 vm = pinvm(1)
 vm.loads('(defun load_dialog (f) (stub:ev "load") -1)')
 run(vm, 'c:LAZPIN', 'pins-noload')
+assert any('could not load the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert any(e.startswith('delete ') for e in events(vm)), \
+    "a dialog that would not load left its temp file behind: %r" % events(vm)
+print("   an unwritable or unloadable dialog is reported, and cleans up")
+
+
+print("== LAZHIDE: the hide editor, end to end ==")
+# The same wiring gap LAZPIN closed above: c:LAZHIDE is the only route
+# to lzp:hide-toggle, reachable solely through the action_tile string
+# the dialog fires.
+HIDE = 'AUTODIM'
+
+
+def hidevm(rc, click=None, val="1", stored=""):
+    """A stubbed session whose registry holds STORED under "Hidden",
+    with the hide dialog scripted to fire CLICK and then return RC (1
+    accept, 0 cancel)."""
+    v = stubbed()
+    v.loads('(setq t:*reg* "%s")' % stored)
+    v.loads('(defun vl-registry-read (k n) t:*reg*)')
+    v.loads('(defun vl-registry-write (k n s) (setq t:*reg* s) s)')
+    v.loads("(setq stub:*rcs* '(%d))" % rc)
+    if click:
+        v.loads('(setq stub:*click* "hd_%s" stub:*clickval* "%s")'
+                % (click, val))
+    return v
+
+
+vm = hidevm(1)
+run(vm, 'c:LAZHIDE', 'hide-close')
+assert events(vm) == DIALOG, events(vm)
+assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_hidden', \
+    "LAZHIDE opened %r, not the hidden page" % vm.globals.get('stub:*dlgname*')
+assert any('tools hidden' in str(p) for p in vm.printed), vm.printed
+print("   opens the hide page, unloads it and deletes the temp DCL")
+
+# every command on the roster gets a toggle, set from what is stored
+vm = hidevm(1, stored=HIDE)
+run(vm, 'c:LAZHIDE', 'hide-tiles')
+tiles = {str(k): str(v) for k, v in
+         ((t[0], t[1]) for t in vm.globals.get('stub:*tiles*') or [])}
+assert tiles.get('hd_%s' % HIDE) == '1', \
+    "the stored hide was not ticked: %r" % tiles.get('hd_%s' % HIDE)
+assert tiles.get('hd_%s' % LIVE) == '0', \
+    "an un-hidden tool came up ticked: %r" % tiles.get('hd_%s' % LIVE)
+assert len([k for k in tiles if k.startswith('hd_')]) == len(PANEL), \
+    "the dialog offered %d toggles for a %d-tool roster" % (
+        len([k for k in tiles if k.startswith('hd_')]), len(PANEL))
+print("   one toggle per tool, ticked to match what is stored")
+
+# accept writes the new list; the tick reached lzp:hide-toggle
+vm = hidevm(1, click=HIDE)
+run(vm, 'c:LAZHIDE', 'hide-accept')
+assert [str(x) for x in vm.globals.get('lzp:*hidden*') or []] == [HIDE], \
+    "ticking %s did not hide it: %r" % (HIDE, vm.globals.get('lzp:*hidden*'))
+assert str(vm.globals.get('t:*reg*')) == HIDE, \
+    "accept did not write the hidden list to the registry: %r" % vm.globals.get('t:*reg*')
+assert any('1 tools hidden' in str(p) for p in vm.printed), vm.printed
+print("   ticking a tool and accepting hides it, and stores it")
+
+# cancel throws the tick away by re-reading the registry, exactly as
+# the pin editor's cancel does
+vm = hidevm(0, click=HIDE)
+run(vm, 'c:LAZHIDE', 'hide-cancel')
+assert not (vm.globals.get('lzp:*hidden*') or []), \
+    "cancel kept the tick: %r" % vm.globals.get('lzp:*hidden*')
+assert str(vm.globals.get('t:*reg*')) == "", \
+    "cancel wrote to the registry: %r" % vm.globals.get('t:*reg*')
+print("   cancelling re-reads the store, so the tick is discarded")
+
+# un-ticking a stored hide, accepted, brings the tool back
+vm = hidevm(1, click=HIDE, val="0", stored=HIDE)
+run(vm, 'c:LAZHIDE', 'hide-untick')
+assert not (vm.globals.get('lzp:*hidden*') or []), \
+    "un-ticking left it hidden: %r" % vm.globals.get('lzp:*hidden*')
+assert str(vm.globals.get('t:*reg*')) == "", \
+    "un-ticking did not clear the store: %r" % vm.globals.get('t:*reg*')
+print("   un-ticking a hidden tool and accepting un-hides it")
+
+# a dialog file that cannot be written, and one that cannot be loaded:
+# both are reported, and the unloadable one still deletes its temp file
+vm = hidevm(1)
+vm.loads('(defun lzp:write-dcl () nil)')
+run(vm, 'c:LAZHIDE', 'hide-nofile')
+assert any('could not write the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert 'load' not in events(vm), events(vm)
+vm = hidevm(1)
+vm.loads('(defun load_dialog (f) (stub:ev "load") -1)')
+run(vm, 'c:LAZHIDE', 'hide-noload')
 assert any('could not load the dialog file' in str(p) for p in vm.printed), \
     vm.printed
 assert any(e.startswith('delete ') for e in events(vm)), \

@@ -349,6 +349,7 @@
         (princ "\nhelpers, so it cannot run without it.")
         (princ))
       (tutorial:run))
+  (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 
 (defun tutorial:run ( / *error* undo-open topics textonly k org going fn)
@@ -405,6 +406,7 @@
   (if undo-open (setq undo-open (pool:undoend)))
   (pool:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and

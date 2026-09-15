@@ -659,6 +659,7 @@
                        " (current style).")))))
 
   (setq *error* olderr)
+  (if lzd:end (lzd:end "CDCALLOUT"))
   (princ))
 
 (defun c:CDCALLOUTVER ()

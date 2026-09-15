@@ -379,6 +379,7 @@
   (tutp:finish)
   (tutp:say '(""
               "Tutorial finished.  Type PERPPTS to try it for real."))
+  (if lzd:end (lzd:end "TUTORIALPERPPTS"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and

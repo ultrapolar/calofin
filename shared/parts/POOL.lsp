@@ -8114,6 +8114,7 @@
   (pool:fclear)
   (setq pool:*nobottom* nil pool:*hasbottom* nil)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "POOL"))
   (princ))
 
 

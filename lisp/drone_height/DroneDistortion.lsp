@@ -232,6 +232,7 @@
             (princ "\nSCALE did not run - are the objects on a locked layer?"))))
        (setq done T))))
   (setvar "CMDECHO" cmd)
+  (if lzd:end (lzd:end "DDFIX"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -262,6 +263,7 @@
       (princ (strcat "\nSaved drone height  H = " (dd-num h)))
       (princ (strcat "\nDistortion rate: ~" (dd-num (/ 100.0 h))
                      "% size change per unit of height."))))
+  (if lzd:end (lzd:end "DDSET"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -314,6 +316,7 @@
         (princ (strcat "\nGot a non-physical H = " (dd-num h)
                        "\nCheck the sign of the height and that apparent/true sizes "
                        "match a raised (app>true) or sunken (app<true) feature.")))))
+  (if lzd:end (lzd:end "DDCAL"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -340,6 +343,7 @@
                      "% size change per unit of height")))
     (princ "\n  Drone height (H)           : NOT SET  (run DDSET or DDFIX)"))
   (princ "\n------------------------------------------------")
+  (if lzd:end (lzd:end "DDINFO"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -486,6 +490,7 @@
                (princ (strcat "\nDistortion rate: ~" (dd-num (/ 100.0 h))
                               "% size change per unit of height."))))
            (setq done T))))))
+  (if lzd:end (lzd:end "DDALT"))
   (princ))
 
 (defun c:DDFIXVER ()

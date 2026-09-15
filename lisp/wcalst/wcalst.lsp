@@ -1419,6 +1419,7 @@
   (if (> nmk 0)
     (princ (strcat " " (itoa (/ nmk 2)) " reference mark(s) carried along."))
   )
+  (if lzd:end (lzd:end "WCALST"))
   (princ)
 )
 
