@@ -434,6 +434,24 @@
                       (* 0.11 (rem (/ c 65536) 256))))
          (if (< lum 128.0) 'dark 'light))))))
 
+;; A per-ROLE override a drafter has set through CALSET's Itemcolors
+;; menu: CalofinInk-<ROLE> in the profile, or nil when none is set for
+;; this role.  One profile key per role, rather than one packed
+;; setting parsed by hand, so what CALSET writes is exactly what
+;; getint already validated -- nothing downstream re-parses a typed
+;; string.  Works for any role, fade/guide/dim/hi included, though
+;; today only the item-type roles below are reachable from CALSET.
+(defun cal:inkoverride (role / q v)
+  (setq q (assoc role '((fade . "FADE") (guide . "GUIDE") (dim . "DIM")
+                         (hi . "HI") (flag . "FLAG") (arc . "ARC")
+                         (olap . "OLAP") (orig . "ORIG") (sugg . "SUGG")
+                         (point . "POINT") (constr . "CONSTR")
+                         (report . "REPORT"))))
+  (if q
+    (progn
+      (setq v (cal:setting (strcat "CalofinInk-" (cdr q)) ""))
+      (if (/= v "") (atoi v)))))
+
 ;;  THE INK TABLE.  A colour knob set to 'auto asks for the ACI that
 ;;  suits the background it will be seen against; a knob set to a
 ;;  NUMBER is used exactly as given, so a shop that has picked its own
@@ -458,27 +476,56 @@
 ;;  pool, which is 8 on white and nearly the background itself on the
 ;;  stock dark grey.  The unmeasured column is deliberately what the
 ;;  tree did before this table existed: a session that cannot tell is
-;;  not a session that changes behaviour.
-(defun cal:ink (knob role / th)
+;;  not a session that behaves differently.
+;;
+;;  ITEM-TYPE COLOURS.  A second set of roles, alongside the four
+;;  above, for parts of a review that are not about the SCREEN at all
+;;  but about what KIND of thing is being marked -- a flagged error, an
+;;  arc whose endpoints moved, an overlap, the point as drawn versus
+;;  the one suggested, the construction line, the report text.
+;;  COVERCHECK, DIMCHECK and LINFINCHECK each carried the same eight
+;;  numbers as a separate literal copy; this table is the one place
+;;  they are decided now.
+;;
+;;    role     what it is                                    ACI
+;;    flag     what a drafter answered "No" to                 1  red
+;;    arc      an arc whose endpoints were moved                6  magenta
+;;    olap     a merged or flagged overlapping line             4  cyan
+;;    orig     the X at the point as drawn                      1  red
+;;    sugg     the + at the point the tool suggests              3  green
+;;    point    the crosses at an overlap's two ends              2  yellow
+;;    constr   the construction line through moved points       2  yellow
+;;    report   the report text                                  3  green
+;;
+;;  None of these vary with the screen the way fade/guide/dim/hi do --
+;;  they are the same ordinary ACI colours on any background the three
+;;  review tools have ever drawn on -- so there is no dark/light table
+;;  for them, only the override above and CALSET's Itemcolors menu.
+(defun cal:ink (knob role / th ov)
   ;; numberp, not (eq knob 'auto): a knob is a colour NUMBER used
   ;; exactly as given, or it is resolved.  Testing for 'auto instead
   ;; would hand back whatever a mistyped knob holds -- nil, or the
   ;; symbol AUOT -- and that reaches entmake as a DXF group 62, where
   ;; it dies a long way from the line that caused it.
-  (if (numberp knob)
-    knob
-    (progn
-      (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
-      (cond
-        ((eq role 'fade)
-         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
-        ((eq role 'guide)
-         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
-        ((eq role 'dim)
-         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
-        ((eq role 'hi)
-         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
-        (t 7)))))
+  (cond
+    ((numberp knob) knob)
+    ((setq ov (cal:inkoverride role)) ov)
+    ((setq ov (assoc role '((flag . 1) (arc . 6) (olap . 4) (orig . 1)
+                             (sugg . 3) (point . 2) (constr . 2)
+                             (report . 3))))
+     (cdr ov))
+    (t
+     (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
+     (cond
+       ((eq role 'fade)
+        (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+       ((eq role 'guide)
+        (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+       ((eq role 'dim)
+        (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+       ((eq role 'hi)
+        (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+       (t 7)))))
 
 ;;; -------------------- layers ------------------------------------------
 
@@ -57066,7 +57113,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.16")
+(setq *cchk-version* "v1.17")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -57230,12 +57277,17 @@
                                    ; 8 recedes on the first and is one of the
                                    ; most prominent things on screen on the
                                    ; second.  A number is used exactly as given
-(setq *cchk-flag-color*    1)       ; ACI: what you answered "No" to (red)
-(setq *cchk-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
-(setq *cchk-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
-(setq *cchk-orig-color*    1)       ; ACI: the X marking where you drew the point (red)
-(setq *cchk-sugg-color*    3)       ; ACI: the + marking where COVERCHECK would put it (green)
-(setq *cchk-point-color*   2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+;; The six below are 'auto too -- they do not vary with the screen the
+;; way *cchk-grey-color* does, but 'auto routes them through cchk:ink's
+;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
+;; in the profile) can override without touching source.  A number is
+;; still used exactly as given.
+(setq *cchk-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
+(setq *cchk-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
+(setq *cchk-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+(setq *cchk-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
+(setq *cchk-sugg-color*    'auto)   ; ACI: the + marking where COVERCHECK would put it (green)
+(setq *cchk-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
 
 ;; The command line and the report name these colours as they use them,
 ;; so a colour changed here is described correctly rather than still
@@ -57248,9 +57300,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *cchk-constr-layer*  "COVERCHECK-CONSTRUCTION")
-(setq *cchk-constr-color*  2)       ; ACI (yellow)
+(setq *cchk-constr-color*  'auto)   ; ACI (yellow)
 (setq *cchk-report-layer*  "COVERCHECK-REPORT")
-(setq *cchk-report-color*  3)       ; ACI (green)
+(setq *cchk-report-color*  'auto)   ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -57590,12 +57642,13 @@
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
-(defun cchk:mark-point (pt)
+(defun cchk:mark-point (pt / col)
   ;; both strokes, for a point that is simply being pointed out
-  (cchk:mark-x pt *cchk-point-color*)
-  (cchk:mark-plus pt *cchk-point-color*))
+  (setq col (cal:ink *cchk-point-color* 'point))
+  (cchk:mark-x pt col)
+  (cchk:mark-plus pt col))
 
-(defun cchk:confirm-move (label orig sugg what / ans newp)
+(defun cchk:confirm-move (label orig sugg what / ans newp ocol scol)
   ;; The point has been put where COVERCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
   ;; which: an X where you drew it, a + where we would move
@@ -57605,15 +57658,17 @@
   ;;   'move - take our suggestion
   ;;   'keep - put it back exactly where you drew it
   ;;   <point> - a spot you picked yourself (current UCS)
-  (cchk:mark-x    orig *cchk-orig-color*)
-  (cchk:mark-plus sugg *cchk-sugg-color*)
+  (setq ocol (cal:ink *cchk-orig-color* 'orig)
+        scol (cal:ink *cchk-sugg-color* 'sugg))
+  (cchk:mark-x    orig ocol)
+  (cchk:mark-plus sugg scol)
   (if (> (distance orig sugg) *cchk-same-pt*)
-    (grdraw (trans orig 0 1) (trans sugg 0 1) *cchk-sugg-color* 1))
+    (grdraw (trans orig 0 1) (trans sugg 0 1) scol 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (cchk:ptstr orig)
-                 "  (" (cchk:color-name *cchk-orig-color*) " X)"
+                 "  (" (cchk:color-name ocol) " X)"
                  "\n    Move = onto " what " " (cchk:ptstr sugg)
-                 "  (" (cchk:color-name *cchk-sugg-color*) " +), "
+                 "  (" (cchk:color-name scol) " +), "
                  (cchk:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   ;; the pick is a second question, so Back at it re-asks the first
@@ -57630,7 +57685,7 @@
        (initget "Back Undo")
        (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
-                                    (cchk:color-name *cchk-sugg-color*)
+                                    (cchk:color-name scol)
                                     " +> [Back]: ")))
        (cond
          ((and (= (type newp) 'STR) (member newp '("Back" "Undo")))
@@ -57654,7 +57709,7 @@
 (defun cchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
   ;; to the surrounding colour after (braces scope the change)
-  (strcat "{\\C" (itoa *cchk-flag-color*) ";" s "}"))
+  (strcat "{\\C" (itoa (cal:ink *cchk-flag-color* 'flag)) ";" s "}"))
 
 (defun cchk:small (s)
   ;; all-clear text renders at *cchk-green-scale* of the height the
@@ -57996,7 +58051,7 @@
                           minx miny maxx maxy
                           / mainl diml l pr nred nmain ndim nlin grps grp
                             ref h ins ins2 txt right)
-  (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
+  (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
   (foreach l lines
     (if (cchk:dimline-p l)
       (setq diml (cons l diml))
@@ -58746,7 +58801,7 @@
 
 (defun cchk:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote)
+                                              ok note meas assocnote fcol)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
   ;; anchor-held-point-count).
@@ -58790,12 +58845,13 @@
   (if (member ok '(back skip))
     (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
     (progn
-      (setq ok (eq ok 'yes))
+      (setq ok (eq ok 'yes)
+            fcol (cal:ink *cchk-flag-color* 'flag))
       (setq note (strcat
                    (if ok
                      "OK"
                      (strcat "FLAGGED to fix ("
-                             (cchk:color-name *cchk-flag-color*) ")"))
+                             (cchk:color-name fcol) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -58809,7 +58865,7 @@
                              " point(s) held at a shared anchor")
                      "")
                    (if assocnote assocnote "")))
-      (if (not ok) (cchk:set-color ent *cchk-flag-color*))
+      (if (not ok) (cchk:set-color ent fcol))
       (list h ok note (length moved) meas (length held)))))
 
 ;; --- arc review ----------------------------------------------------
@@ -58916,7 +58972,7 @@
              nil)))))
     (t nil)))
 
-(defun cchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note)
+(defun cchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
   ;; interactive review of one arc's endpoints.
   ;; Returns (handle untouched-flag report-note moved-point-count).
   (setq ed     (entget ent)
@@ -58935,16 +58991,17 @@
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
-  (if moved (cchk:set-color ent *cchk-arc-color*))
+  (setq acol (cal:ink *cchk-arc-color* 'arc))
+  (if moved (cchk:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
-                        (cchk:color-name *cchk-arc-color*) "), "
+                        (cchk:color-name acol) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
                               " endpoint(s) moved ("
-                              (cchk:color-name *cchk-arc-color*) ")"))
+                              (cchk:color-name acol) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -58953,7 +59010,7 @@
 ;; --- overlapping line review ---------------------------------------
 
 (defun cchk:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds)
+                                           ans mergeable kinds ocol)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
@@ -58999,21 +59056,22 @@
       (redraw ea 4)
       (redraw eb 4)
       (redraw)
+      (setq ocol (cal:ink *cchk-olap-color* 'olap))
       (cond
         ((= ans "Merge")
          (cchk:merge-lines la lb info)
-         (cchk:set-color ea *cchk-olap-color*)
+         (cchk:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
-                        (cchk:color-name *cchk-olap-color*) ")."))
+                        (cchk:color-name ocol) ")."))
          (list label
                (strcat "merged into one line ("
-                       (cchk:color-name *cchk-olap-color*) ")")
+                       (cchk:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (cchk:set-color ea *cchk-olap-color*)
-         (cchk:set-color eb *cchk-olap-color*)
+         (cchk:set-color ea ocol)
+         (cchk:set-color eb ocol)
          (princ (strcat "\n  Flagged to fix ("
-                        (cchk:color-name *cchk-olap-color*) ")."))
+                        (cchk:color-name ocol) ")."))
          (list label
                (strcat
                  (if (cchk:whole-line-p la)
@@ -59021,7 +59079,7 @@
                      "flagged to fix ("
                      "different layers - flagged to fix (")
                    "polyline edge - flagged to fix (")
-                 (cchk:color-name *cchk-olap-color*) ")")
+                 (cchk:color-name ocol) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -59951,8 +60009,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *cchk-constr-layer* *cchk-constr-color*)
-        (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
+        (cal:ensure-layer *cchk-constr-layer* (cal:ink *cchk-constr-color* 'constr))
+        (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -60317,7 +60375,7 @@
      ;; a rerun's leftover report/marker entities (e.g. suggested-pad
      ;; circles) must not pollute this scan's own attachment checks -
      ;; clear them before anything is collected, not after
-     (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
+     (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
      (cchk:clear-old)
      (setq i 0 nd 0 ndbad 0 na 0 nabad 0 ndanch 0)
      (repeat (sslength ss)
@@ -63027,7 +63085,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.19")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.20")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -63118,12 +63176,17 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-(setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
-(setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
-(setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
-(setq *dchk-orig-color*   1)       ; ACI: the X marking where you drew the point (red)
-(setq *dchk-sugg-color*   3)       ; ACI: the + marking where DIMCHECK would put it (green)
-(setq *dchk-point-color*  2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+;; The six below are 'auto too -- they do not vary with the screen the
+;; way *dchk-grey-color* does, but 'auto routes them through dchk:ink's
+;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
+;; in the profile) can override without touching source.  A number is
+;; still used exactly as given.
+(setq *dchk-flag-color*   'auto)   ; ACI: dimensions you answered "No" to (red)
+(setq *dchk-arc-color*    'auto)   ; ACI: arcs whose endpoints were moved (magenta)
+(setq *dchk-olap-color*   'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+(setq *dchk-orig-color*   'auto)   ; ACI: the X marking where you drew the point (red)
+(setq *dchk-sugg-color*   'auto)   ; ACI: the + marking where DIMCHECK would put it (green)
+(setq *dchk-point-color*  'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
 
 ;; The command line and the report name these colours as they use them,
 ;; so a colour changed here is described correctly rather than still
@@ -63136,9 +63199,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
-(setq *dchk-constr-color* 2)       ; ACI (yellow)
+(setq *dchk-constr-color* 'auto)   ; ACI (yellow)
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
-(setq *dchk-report-color* 3)       ; ACI (green)
+(setq *dchk-report-color* 'auto)   ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -63481,12 +63544,13 @@
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
-(defun dchk:mark-point (pt)
+(defun dchk:mark-point (pt / col)
   ;; both strokes, for a point that is simply being pointed out
-  (dchk:mark-x pt *dchk-point-color*)
-  (dchk:mark-plus pt *dchk-point-color*))
+  (setq col (cal:ink *dchk-point-color* 'point))
+  (dchk:mark-x pt col)
+  (dchk:mark-plus pt col))
 
-(defun dchk:confirm-move (label orig sugg what / ans newp)
+(defun dchk:confirm-move (label orig sugg what / ans newp ocol scol)
   ;; The point has been put where DIMCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
   ;; which: an X where you drew it, a + where we would move
@@ -63496,15 +63560,17 @@
   ;;   'move - take our suggestion
   ;;   'keep - put it back exactly where you drew it
   ;;   <point> - a spot you picked yourself (current UCS)
-  (dchk:mark-x    orig *dchk-orig-color*)
-  (dchk:mark-plus sugg *dchk-sugg-color*)
+  (setq ocol (cal:ink *dchk-orig-color* 'orig)
+        scol (cal:ink *dchk-sugg-color* 'sugg))
+  (dchk:mark-x    orig ocol)
+  (dchk:mark-plus sugg scol)
   (if (> (distance orig sugg) *dchk-same-pt*)
-    (grdraw (trans orig 0 1) (trans sugg 0 1) *dchk-sugg-color* 1))
+    (grdraw (trans orig 0 1) (trans sugg 0 1) scol 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (dchk:ptstr orig)
-                 "  (" (dchk:color-name *dchk-orig-color*) " X)"
+                 "  (" (dchk:color-name ocol) " X)"
                  "\n    Move = onto " what " " (dchk:ptstr sugg)
-                 "  (" (dchk:color-name *dchk-sugg-color*) " +), "
+                 "  (" (dchk:color-name scol) " +), "
                  (dchk:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   ;; the pick is a second question, so Back at it re-asks the first
@@ -63521,7 +63587,7 @@
        (initget "Back Undo")
        (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
-                                    (dchk:color-name *dchk-sugg-color*)
+                                    (dchk:color-name scol)
                                     " +> [Back]: ")))
        (cond
          ((and (= (type newp) 'STR) (member newp '("Back" "Undo")))
@@ -63550,7 +63616,7 @@
 (defun dchk:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
   ;; to the surrounding colour after (braces scope the change)
-  (strcat "{\\C" (itoa *dchk-flag-color*) ";" s "}"))
+  (strcat "{\\C" (itoa (cal:ink *dchk-flag-color* 'flag)) ";" s "}"))
 
 (defun dchk:small (s)
   ;; all-clear text renders at *dchk-green-scale* of the height the
@@ -64005,7 +64071,7 @@
 
 (defun dchk:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote)
+                                              ok note meas assocnote fcol)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
   ;; anchor-held-point-count).
@@ -64049,12 +64115,13 @@
   (if (member ok '(back skip))
     (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
     (progn
-      (setq ok (eq ok 'yes))
+      (setq ok (eq ok 'yes)
+            fcol (cal:ink *dchk-flag-color* 'flag))
       (setq note (strcat
                    (if ok
                      "OK"
                      (strcat "FLAGGED to fix ("
-                             (dchk:color-name *dchk-flag-color*) ")"))
+                             (dchk:color-name fcol) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -64068,7 +64135,7 @@
                              " point(s) held at a shared anchor")
                      "")
                    (if assocnote assocnote "")))
-      (if (not ok) (dchk:set-color ent *dchk-flag-color*))
+      (if (not ok) (dchk:set-color ent fcol))
       (list h ok note (length moved) meas (length held)))))
 
 ;; --- arc review ----------------------------------------------------
@@ -64175,7 +64242,7 @@
              nil)))))
     (t nil)))
 
-(defun dchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note)
+(defun dchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
   ;; interactive review of one arc's endpoints.
   ;; Returns (handle untouched-flag report-note moved-point-count).
   (setq ed     (entget ent)
@@ -64194,16 +64261,17 @@
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
-  (if moved (dchk:set-color ent *dchk-arc-color*))
+  (setq acol (cal:ink *dchk-arc-color* 'arc))
+  (if moved (dchk:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
-                        (dchk:color-name *dchk-arc-color*) "), "
+                        (dchk:color-name acol) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
                               " endpoint(s) moved ("
-                              (dchk:color-name *dchk-arc-color*) ")"))
+                              (dchk:color-name acol) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -64212,7 +64280,7 @@
 ;; --- overlapping line review ---------------------------------------
 
 (defun dchk:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds)
+                                           ans mergeable kinds ocol)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
@@ -64258,21 +64326,22 @@
       (redraw ea 4)
       (redraw eb 4)
       (redraw)
+      (setq ocol (cal:ink *dchk-olap-color* 'olap))
       (cond
         ((= ans "Merge")
          (dchk:merge-lines la lb info)
-         (dchk:set-color ea *dchk-olap-color*)
+         (dchk:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
-                        (dchk:color-name *dchk-olap-color*) ")."))
+                        (dchk:color-name ocol) ")."))
          (list label
                (strcat "merged into one line ("
-                       (dchk:color-name *dchk-olap-color*) ")")
+                       (dchk:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (dchk:set-color ea *dchk-olap-color*)
-         (dchk:set-color eb *dchk-olap-color*)
+         (dchk:set-color ea ocol)
+         (dchk:set-color eb ocol)
          (princ (strcat "\n  Flagged to fix ("
-                        (dchk:color-name *dchk-olap-color*) ")."))
+                        (dchk:color-name ocol) ")."))
          (list label
                (strcat
                  (if (dchk:whole-line-p la)
@@ -64280,7 +64349,7 @@
                      "flagged to fix ("
                      "different layers - flagged to fix (")
                    "polyline edge - flagged to fix (")
-                 (dchk:color-name *dchk-olap-color*) ")")
+                 (dchk:color-name ocol) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -64367,8 +64436,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *dchk-constr-layer* *dchk-constr-color*)
-        (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
+        (cal:ensure-layer *dchk-constr-layer* (cal:ink *dchk-constr-color* 'constr))
+        (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -64681,7 +64750,7 @@
                        "\nDimensions: " (itoa (length dims)) " checked, "
                        (itoa ndok) " correct, "
                        (itoa ndflag) " flagged to fix ("
-                       (dchk:color-name *dchk-flag-color*) ")"
+                       (dchk:color-name (cal:ink *dchk-flag-color* 'flag)) ")"
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
@@ -64692,12 +64761,12 @@
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
                        (itoa nasnap) " endpoint(s), "
-                       (dchk:color-name *dchk-arc-color*) ")"
+                       (dchk:color-name (cal:ink *dchk-arc-color* 'arc)) ")"
                        "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
                        (if olaps
                          (strcat ", " (itoa nomerged) " merged, "
                                  (itoa noflag) " flagged ("
-                                 (dchk:color-name *dchk-olap-color*) "), "
+                                 (dchk:color-name (cal:ink *dchk-olap-color* 'olap)) "), "
                                  (itoa noleft) " left as drawn")
                          "")
                        "\nReport placed on the right side of the drawing (layer "
@@ -64843,7 +64912,7 @@
                          lines)))
 
      ;; --- report (the only thing DIMSCAN writes) ------------------
-     (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
+     (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
      (dchk:clear-old)
      (setq hdr (list
                  (cons (strcat "Dimensions scanned: " (itoa nd) " ("
@@ -64922,9 +64991,9 @@
     "     then left to right, top to bottom inside each group."
     "   Every other object greys out; the one under review is zoomed to."
     "   A definition point not touching any object: you choose"
-    (strcat "     Move (" (dchk:color-name *dchk-sugg-color*)
+    (strcat "     Move (" (dchk:color-name (cal:ink *dchk-sugg-color* 'sugg))
             " +, onto the nearest object) / Keep ("
-            (dchk:color-name *dchk-orig-color*) " X, exactly")
+            (dchk:color-name (cal:ink *dchk-orig-color* 'orig)) " X, exactly")
     "     where you drew it) / Pick your own spot."
     (strcat "   A point "
             (if (= *dchk-anchor-min* 2) "two" (itoa *dchk-anchor-min*))
@@ -65065,10 +65134,10 @@
         (progn
           (princ "\n  Running DIMSCAN - it changes nothing, it only reports.")
           (princ (strcat "\n  (In the report, "
-                         (strcase (dchk:color-name *dchk-flag-color*))
+                         (strcase (dchk:color-name (cal:ink *dchk-flag-color* 'flag)))
                          " lines at full size are the problems;"))
           (princ (strcat "\n   "
-                         (dchk:color-name *dchk-report-color*)
+                         (dchk:color-name (cal:ink *dchk-report-color* 'report))
                          " lines at "
                          (rtos (* 100.0 *dchk-green-scale*) 2 0)
                          "% size are the all-clears.)"))
@@ -65133,7 +65202,7 @@
         (cond
           ((= sstep 1)
            (if (cal:ask-yn "\n  Drop that list into the drawing as a reference sheet?" "Yes")
-             (progn (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
+             (progn (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
@@ -76069,7 +76138,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.15")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.16")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -76233,12 +76302,17 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-(setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
-(setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
-(setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
-(setq *lfc-orig-color*    1)       ; ACI: the X marking where you drew the point (red)
-(setq *lfc-sugg-color*    3)       ; ACI: the + marking where LINFINCHECK would put it (green)
-(setq *lfc-point-color*   2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+;; The six below are 'auto too -- they do not vary with the screen the
+;; way *lfc-grey-color* does, but 'auto routes them through lfc:ink's
+;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
+;; in the profile) can override without touching source.  A number is
+;; still used exactly as given.
+(setq *lfc-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
+(setq *lfc-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
+(setq *lfc-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+(setq *lfc-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
+(setq *lfc-sugg-color*    'auto)   ; ACI: the + marking where LINFINCHECK would put it (green)
+(setq *lfc-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
 
 ;; The command line and the report name these colours as they use them,
 ;; so a colour changed here is described correctly rather than still
@@ -76251,9 +76325,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *lfc-constr-layer*  "LINFINCHECK-CONSTRUCTION")
-(setq *lfc-constr-color*  2)       ; ACI (yellow)
+(setq *lfc-constr-color*  'auto)   ; ACI (yellow)
 (setq *lfc-report-layer*  "LINFINCHECK-REPORT")
-(setq *lfc-report-color*  3)       ; ACI (green)
+(setq *lfc-report-color*  'auto)   ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -76595,15 +76669,16 @@
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
-(defun lfc:mark-point (pt)
+(defun lfc:mark-point (pt / col)
   ;; both strokes, for a point that is simply being pointed out
-  (lfc:mark-x pt *lfc-point-color*)
-  (lfc:mark-plus pt *lfc-point-color*))
+  (setq col (cal:ink *lfc-point-color* 'point))
+  (lfc:mark-x pt col)
+  (lfc:mark-plus pt col))
 
 (defun lfc:progress (what n total)
   (princ (strcat "\r  [" (itoa n) "/" (itoa total) "] " what "          ")))
 
-(defun lfc:confirm-move (label orig sugg what / ans newp)
+(defun lfc:confirm-move (label orig sugg what / ans newp ocol scol)
   ;; The point has been put where LINFINCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
   ;; which: an X where you drew it, a + where we would move
@@ -76613,15 +76688,17 @@
   ;;   'move - take our suggestion
   ;;   'keep - put it back exactly where you drew it
   ;;   <point> - a spot you picked yourself (current UCS)
-  (lfc:mark-x    orig *lfc-orig-color*)
-  (lfc:mark-plus sugg *lfc-sugg-color*)
+  (setq ocol (cal:ink *lfc-orig-color* 'orig)
+        scol (cal:ink *lfc-sugg-color* 'sugg))
+  (lfc:mark-x    orig ocol)
+  (lfc:mark-plus sugg scol)
   (if (> (distance orig sugg) *lfc-same-pt*)
-    (grdraw (trans orig 0 1) (trans sugg 0 1) *lfc-sugg-color* 1))
+    (grdraw (trans orig 0 1) (trans sugg 0 1) scol 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (lfc:ptstr orig)
-                 "  (" (lfc:color-name *lfc-orig-color*) " X)"
+                 "  (" (lfc:color-name ocol) " X)"
                  "\n    Move = onto " what " " (lfc:ptstr sugg)
-                 "  (" (lfc:color-name *lfc-sugg-color*) " +), "
+                 "  (" (lfc:color-name scol) " +), "
                  (lfc:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   ;; the pick is a second question, so Back at it re-asks the first
@@ -76638,7 +76715,7 @@
        (initget "Back Undo")
        (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
-                                    (lfc:color-name *lfc-sugg-color*)
+                                    (lfc:color-name scol)
                                     " +> [Back]: ")))
        (cond
          ((and (= (type newp) 'STR) (member newp '("Back" "Undo")))
@@ -76717,7 +76794,7 @@
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
   ;; to the surrounding colour after (braces scope the change)
-  (strcat "{\\C" (itoa *lfc-flag-color*) ";" s "}"))
+  (strcat "{\\C" (itoa (cal:ink *lfc-flag-color* 'flag)) ";" s "}"))
 
 (defun lfc:small (s)
   ;; all-clear text renders at *lfc-green-scale* of the height the
@@ -76902,7 +76979,7 @@
                          minx miny maxx maxy
                          / mainl diml l pr nred nmain ndim nlin grps grp
                            ref h ins ins2 txt right)
-  (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+  (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
   (foreach l lines
     (if (lfc:dimline-p l)
       (setq diml (cons l diml))
@@ -78219,7 +78296,7 @@
 
 (defun lfc:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote)
+                                              ok note meas assocnote fcol)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
   ;; anchor-held-point-count).
@@ -78263,12 +78340,13 @@
   (if (member ok '(back skip))
     (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
     (progn
-      (setq ok (eq ok 'yes))
+      (setq ok (eq ok 'yes)
+            fcol (cal:ink *lfc-flag-color* 'flag))
       (setq note (strcat
                    (if ok
                      "OK"
                      (strcat "FLAGGED to fix ("
-                             (lfc:color-name *lfc-flag-color*) ")"))
+                             (lfc:color-name fcol) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -78282,7 +78360,7 @@
                              " point(s) held at a shared anchor")
                      "")
                    (if assocnote assocnote "")))
-      (if (not ok) (lfc:set-color ent *lfc-flag-color*))
+      (if (not ok) (lfc:set-color ent fcol))
       (list h ok note (length moved) meas (length held)))))
 
 ;; --- arc review ----------------------------------------------------
@@ -78389,7 +78467,7 @@
              nil)))))
     (t nil)))
 
-(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note)
+(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
   ;; interactive review of one arc's endpoints.
   ;; Returns (handle untouched-flag report-note moved-point-count).
   (setq ed     (entget ent)
@@ -78408,16 +78486,17 @@
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
-  (if moved (lfc:set-color ent *lfc-arc-color*))
+  (setq acol (cal:ink *lfc-arc-color* 'arc))
+  (if moved (lfc:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
-                        (lfc:color-name *lfc-arc-color*) "), "
+                        (lfc:color-name acol) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
                               " endpoint(s) moved ("
-                              (lfc:color-name *lfc-arc-color*) ")"))
+                              (lfc:color-name acol) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -78426,7 +78505,7 @@
 ;; --- overlapping line review ---------------------------------------
 
 (defun lfc:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds)
+                                           ans mergeable kinds ocol)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
@@ -78472,21 +78551,22 @@
       (redraw ea 4)
       (redraw eb 4)
       (redraw)
+      (setq ocol (cal:ink *lfc-olap-color* 'olap))
       (cond
         ((= ans "Merge")
          (lfc:merge-lines la lb info)
-         (lfc:set-color ea *lfc-olap-color*)
+         (lfc:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
-                        (lfc:color-name *lfc-olap-color*) ")."))
+                        (lfc:color-name ocol) ")."))
          (list label
                (strcat "merged into one line ("
-                       (lfc:color-name *lfc-olap-color*) ")")
+                       (lfc:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (lfc:set-color ea *lfc-olap-color*)
-         (lfc:set-color eb *lfc-olap-color*)
+         (lfc:set-color ea ocol)
+         (lfc:set-color eb ocol)
          (princ (strcat "\n  Flagged to fix ("
-                        (lfc:color-name *lfc-olap-color*) ")."))
+                        (lfc:color-name ocol) ")."))
          (list label
                (strcat
                  (if (lfc:whole-line-p la)
@@ -78494,7 +78574,7 @@
                      "flagged to fix ("
                      "different layers - flagged to fix (")
                    "polyline edge - flagged to fix (")
-                 (lfc:color-name *lfc-olap-color*) ")")
+                 (lfc:color-name ocol) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -78596,8 +78676,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *lfc-constr-layer* *lfc-constr-color*)
-        (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+        (cal:ensure-layer *lfc-constr-layer* (cal:ink *lfc-constr-color* 'constr))
+        (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -78925,7 +79005,7 @@
                                           lines)))
                       (progn
                         (setq attwrong T)
-                        (lfc:set-color b *lfc-flag-color*)
+                        (lfc:set-color b (cal:ink *lfc-flag-color* 'flag))
                         (setq keep (cons b keep))
                         (setq lines (cons (strcat "Step Attachment "
                                                   (cdr (assoc 5 (entget b)))
@@ -79112,7 +79192,7 @@
         ;; mark it red automatically and keep it red
         (if (and htbad hdim)
           (progn
-            (lfc:set-color hdim *lfc-flag-color*)
+            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (princ (strcat "\n  Side view height dimension "
                            (cdr (assoc 5 (entget hdim)))
@@ -79129,7 +79209,7 @@
         (if (and hdim dimht stepht
                  (> (abs (- dimht stepht)) *lfc-height-tol*))
           (progn
-            (lfc:set-color hdim *lfc-flag-color*)
+            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (setq lines (cons (strcat "Height dim "
                                       (cdr (assoc 5 (entget hdim)))
@@ -79862,7 +79942,7 @@
      (setq bordsum (lfc:border-verdict bordbb))
 
      ;; --- report (the only thing the scan writes) --------------------
-     (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+     (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
      (lfc:clear-old)
      (setq dhdr (if lite
                   nil
@@ -80246,7 +80326,7 @@
         (cond
           ((= sstep 1)
            (if (cal:ask-yn "\n  Drop that list into the drawing as a reference sheet?" "Yes")
-             (progn (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+             (progn (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
@@ -107095,7 +107175,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.28")
+(setq *lazpanel-version* "v3.29")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -109349,6 +109429,23 @@
      ""
      "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
 
+;; The eight ITEM-TYPE roles cal:ink resolves for COVERCHECK, DIMCHECK
+;; and LINFINCHECK -- generalized off the six colours plus the two
+;; layer colours those three tools used to carry as separate hardcoded
+;; copies.  Keyed by the Itemcolors keyword -> the role cal:ink takes,
+;; which is also the CalofinInk-<ROLE> profile key (uppercased) an
+;; override lives under.  One list so Itemcolors and lzp:setshow read
+;; the same roster instead of two that can drift apart.
+(setq lzp:*inkroles*
+  '(("Flag"   . "flag")
+    ("Arc"    . "arc")
+    ("Olap"   . "olap")
+    ("Orig"   . "orig")
+    ("Sugg"   . "sugg")
+    ("Point"  . "point")
+    ("Constr" . "constr")
+    ("Report" . "report")))
+
 (defun lzp:setshow ( / r v)
   (princ "\ncalofin settings, as this session reads them:")
   (foreach r lzp:*settings*
@@ -109357,9 +109454,18 @@
                    "\n      now: " (if (and v (/= v "")) v
                                        (strcat "(unset -- " (cadr r) ")"))
                    "\n      " (caddr r))))
+  (princ (strcat "\n  Item colours (CALSET Itemcolors; CalofinInk-<ROLE> in"
+                 "\n      the profile) -- COVERCHECK/DIMCHECK/LINFINCHECK's"
+                 "\n      flag/arc/olap/orig/sugg/point/constr/report, each"
+                 "\n      auto (the shared table in CALOFIN-LIB.lsp's"
+                 "\n      cal:ink) unless overridden below:"))
+  (foreach r lzp:*inkroles*
+    (setq v (getenv (strcat "CalofinInk-" (strcase (cdr r)))))
+    (princ (strcat "\n      " (car r) ": "
+                   (if (and v (/= v "")) (strcat "ACI " v) "(auto)"))))
   (princ))
 
-(defun c:CALSET ( / *error* pick key v)
+(defun c:CALSET ( / *error* pick key v role)
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -109368,13 +109474,44 @@
     (princ))
   (if lzd:begin (lzd:begin "CALSET" *lazpanel-version*))
   (lzp:setshow)
-  (initget "Theme Errordir Stockdir Quit")
-  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Quit] <Quit>: "))
+  (initget "Theme Errordir Stockdir Itemcolors Quit")
+  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Itemcolors/Quit] <Quit>: "))
   (if lzd:ask (lzd:ask "Change which?" pick) pick)
   (setq key (cond ((= pick "Theme") "CalofinTheme")
                   ((= pick "Errordir") "CalofinErrorDir")
                   ((= pick "Stockdir") "StockCover_Folder")))
   (cond
+    ((= pick "Itemcolors")
+     ;; a second keyword picks WHICH of the eight roles, then the same
+     ;; getstring/Back/"." shape as Errordir and Stockdir below sets its
+     ;; CalofinInk-<ROLE> override -- Undo is accepted everywhere Back
+     ;; is, unlisted (STANDARDS 1)
+     (initget "Flag Arc Olap Orig Sugg Point Constr Report Back Undo")
+     (setq role (getkword
+                  "\nWhich item colour [Flag/Arc/Olap/Orig/Sugg/Point/Constr/Report/Back] <Back>: "))
+     (if lzd:ask (lzd:ask "Which item colour?" role) role)
+     (setq role (if role role "Back"))
+     (cond
+       ((member role '("Back" "Undo")) (c:CALSET))
+       (t
+        (setq key (strcat "CalofinInk-" (strcase (cdr (assoc role lzp:*inkroles*)))))
+        (setq v (getstring T (strcat "\n" role
+                                     " ACI colour (a number, Back to leave it, "
+                                     "or . for Auto): ")))
+        (if lzd:ask (lzd:ask (strcat role " colour") v) v)
+        (cond
+          ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
+          ((= v "") (princ "\nUnchanged."))
+          ((= v ".")
+           (setenv key "")
+           (princ (strcat "\n" role " colour cleared -- back to Auto.")))
+          ((= (atoi v) 0)
+           (princ "\nNot a colour number -- unchanged."))
+          (t
+           (setenv key (itoa (atoi v)))
+           (princ (strcat "\n" role " colour is now ACI " (itoa (atoi v))
+                          ".  COVERCHECK, DIMCHECK and LINFINCHECK read it"
+                          " on their next run.")))))))
     ((null key) (princ "\nNothing changed."))
     ((= key "CalofinTheme")
      ;; Undo is accepted everywhere Back is, unlisted (STANDARDS 1)

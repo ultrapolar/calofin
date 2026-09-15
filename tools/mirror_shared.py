@@ -940,6 +940,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'cchk:ink': 'cal:ink',
+            'cchk:inkoverride': 'cal:inkoverride',
             'cchk:ensure-layer': 'cal:ensure-layer',
             'cchk:bbox': 'cal:bbox-ent',
             'cchk:pad2': 'cal:zeropad2',
@@ -992,6 +993,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'dchk:ink': 'cal:ink',
+            'dchk:inkoverride': 'cal:inkoverride',
             'dchk:ensure-layer': 'cal:ensure-layer',
             'dchk:bbox': 'cal:bbox-ent',
             'dchk:pad2': 'cal:zeropad2',
@@ -1029,6 +1031,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'lfc:ink': 'cal:ink',
+            'lfc:inkoverride': 'cal:inkoverride',
             'lfc:ensure-layer': 'cal:ensure-layer',
             'lfc:bbox': 'cal:bbox-ent',
             'lfc:pad2': 'cal:zeropad2',

@@ -461,6 +461,34 @@ that sets one, working. Resolve once into a local before a loop: the
 measurement is a COM round trip and the review tools touch every
 entity in the drawing.
 
+A second set of roles is about what KIND of thing is being drawn
+rather than the screen: `flag`, `arc`, `olap`, `orig`, `sugg`, `point`,
+`constr`, `report` -- the eight colours COVERCHECK, DIMCHECK and
+LINFINCHECK each carried as a separate hardcoded copy before `cal:ink`
+grew a table for them. None of these vary with dark/light the way the
+first four do (they are the same ordinary ACI colours the review tools
+have always drawn in), so there is no dark/light/unmeasured spread to
+resolve -- `'auto` just answers the number the tool always drew, unless
+a drafter has overridden it:
+
+```lisp
+(setq tool:*flag-color* 'auto)   ; ACI: what a "No" answer marks (red)
+...
+(tool:set-color ent (tool:ink tool:*flag-color* 'flag))
+```
+
+Every role -- the four screen-aware ones and the eight item-type ones
+alike -- can be overridden without touching source, one role at a
+time, through `CalofinInk-<ROLE>` in the AutoCAD profile (the role
+name, uppercased): `cal:inkoverride` (`tool:inkoverride` in the
+standalone copy) reads it and wins over the table when it is set, but
+never over a knob left as a plain number. `CALSET`'s `Itemcolors` menu
+is what writes it; nothing hand-edits the profile. A tool growing a new
+item-type colour reuses an existing role, or adds one to this table
+(and to `cal:inkoverride`'s role list, and to `CALSET`'s `Itemcolors`
+keyword set and `lzp:*inkroles*`) rather than inventing a fifth kind of
+knob.
+
 **Namespace.** Every helper and global carries the file's unique
 prefix, colon-separated: `tool:helper-name`, globals with earmuffs
 `tool:*name*`. One prefix per file, no prefix reused across files.

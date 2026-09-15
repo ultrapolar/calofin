@@ -8,6 +8,29 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**A themeable colour space for what KIND of thing is drawn, not just
+the screen it's drawn on.** COVERCHECK v1.17, DIMCHECK v1.20,
+LINFINCHECK v2.16, LAZPANEL v3.29. `cal:ink` already answered "what ACI
+suits this background" for four roles (`fade`/`guide`/`dim`/`hi`); it
+did not know anything about what KIND of thing was being marked. Three
+review tools had separately hand-picked the answer to that question
+eight times over: `flag`/`arc`/`olap`/`orig`/`sugg`/`point`/`constr`/
+`report`, the same ACI numbers, copied byte-for-byte into COVERCHECK,
+DIMCHECK and LINFINCHECK, with nothing to stop the three copies from
+drifting apart the next time one of them changed.
+
+`cal:ink` (and each of the three tools' standalone `:ink` copies) now
+carries those eight roles too, resolved the same way a screen-aware
+role is -- `'auto` for the table, a number for exactly that number --
+except there is no dark/light spread to measure, since these are the
+same ordinary ACI colours on any background the review tools have ever
+drawn on. What IS new is `CalofinInk-<ROLE>` in the AutoCAD profile: a
+per-role override, on any of the twelve roles now, that beats the
+table but never a knob left as a plain number. `CALSET` grew an
+`Itemcolors` menu to write it, so a drafter who wants COVERCHECK's
+"flagged" markup in a different colour no longer edits three `.lsp`
+files by hand to get it consistently.
+
 **The text box was thirty times too small, so CLEARDIM did nothing.**
 v2.1.  A drawing came back with two `CROSS DIMENSIONS` diagonals
 printing on top of each other in the middle of a rectangle, and
