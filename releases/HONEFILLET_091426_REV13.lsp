@@ -1091,6 +1091,7 @@
   ;; command-s inside every later handler in the session (AutoLISP
   ;; reference, *push-error-using-command*)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "HONEFILLET"))
   (princ))
 
 (defun c:HONEFILLETVER ()

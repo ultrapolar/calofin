@@ -492,6 +492,7 @@
       (princ "\nSOCONV: nothing here is on the export's layers - nothing moved.")
       (princ (strcat "\n  It converts " (soconv:namelist (soconv:sources))
                      "."))))
+  (if lzd:end (lzd:end "SOCONV"))
   (princ))
 
 (defun c:SORECONV (/ *error* doc unlocked mark-open ss recs r ent obj
@@ -595,6 +596,7 @@
       (princ "\n  leaves on every object it moves.  A drawing converted with")
       (princ "\n  *soconv-record* off, or by hand, carries none - U is the")
       (princ "\n  only way back from those.")))
+  (if lzd:end (lzd:end "SORECONV"))
   (princ))
 
 (defun c:SOCONVVER ()

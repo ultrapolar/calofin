@@ -357,7 +357,7 @@ def test_abfind_moves_and_carries_on():
               '17m', 'No',                   # ... and tied again, same run
               None],
         'move and carry on')
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"']
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 B from 18\'-6" to 18\'-5"']
     ins = live(vm, 'INSERT', 'POINTS')
     assert len(ins) == 4, ins
     ds = dims(vm)
@@ -761,7 +761,7 @@ def test_abmove_moves_the_point():
     assert pt3(rings[0][1][10]) == pt3(P17), rings[0][1]
 
     # 3) the note says what moved and between which two readings
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
         texts(vm, 'FGStep')
 
     # 4) the ties now measure where the point is, not where it was
@@ -786,7 +786,7 @@ def test_abmove_note_placed_by_hand():
     assert len(note) == 1 and pt3(note[0][1][10]) == (900.0, 900.0), note
     assert note[0][1][40] == 6.0, note[0][1]
     # #2 is the +2" misreading of B: 18'-6" -> 18'-8"
-    assert note[0][1][1] == 'Moved Pt.17 B from 18\'-6" to 18\'-8"', note
+    assert note[0][1][1] == '- Moved Pt.17 B from 18\'-6" to 18\'-8"', note
     print("ok  ABMOVE the note goes where it is placed")
 
 
@@ -863,7 +863,7 @@ def test_abmove_the_point_is_picked():
         [(P17[0] + 4.0, P17[1] - 3.0, 0.0), 'R1B', None], 'pick pt')
     rings = live(vm, 'CIRCLE', 'FGStep')
     assert len(rings) == 1 and pt3(rings[0][1][10]) == pt3(P17), rings
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
         texts(vm, 'FGStep')
     nums = [d.get(1) for _, d in live(vm, 'ATTRIB')]
     assert nums[-1] == '17m', nums
@@ -929,7 +929,7 @@ def test_abmove_pick_on_screen():
         ['17', (want[0] + 2.0, want[1] - 1.0, 0.0), None], 'pick')
     ins = live(vm, 'INSERT', 'POINTS')
     assert pt3(ins[-1][1][10]) == pt3(want), ins[-1][1]
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 A from 21\'-1" to 21\'-4"']
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 A from 21\'-1" to 21\'-4"']
     # ... and says what it took before the note is placed
     assert any('R1A taken: A 21\'-1" -> 21\'-4"' in m for m in vm.printed), \
         vm.printed[-6:]
@@ -944,7 +944,7 @@ def test_abmove_pick_word_is_a_hint():
     want = candidates(vm)['R1A'][5]
     run(vm, 'c:ABMOVE',
         ['17', 'Pick', (want[0] + 2.0, want[1] - 1.0, 0.0), None], 'pick')
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 A from 21\'-1" to 21\'-4"']
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 A from 21\'-1" to 21\'-4"']
     assert any('Just click it' in m for m in vm.printed), vm.printed[-8:]
     print("ok  ABMOVE typed Pick is a hint - the prompt takes the click")
 
@@ -971,7 +971,7 @@ def test_abmove_click_takes_the_nearest():
     r1b = candidates(vm)['R1B'][5]
     run(vm, 'c:ABMOVE', ['17', (r1b[0] + 0.15, r1b[1] + 0.15, 0.0), None],
         'nearest')
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
         texts(vm, 'FGStep')
     print("ok  ABMOVE a click takes the nearest marker, not the first listed")
 
@@ -986,7 +986,7 @@ def test_abmove_click_on_a_tag():
     mid = (base[0] + 0.5 * width * math.cos(ang),
            base[1] + 0.5 * width * math.sin(ang), 0.0)
     run(vm, 'c:ABMOVE', ['17', mid, None], 'tag click')
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-8"'], \
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 B from 18\'-6" to 18\'-8"'], \
         texts(vm, 'FGStep')
     print("ok  ABMOVE a click on a tag picks the reading it names")
 
@@ -1006,14 +1006,14 @@ def test_abmove_a_crowded_click_asks():
     assert asked[0].startswith('\n  Which one? [R1B/'), asked[0]
     assert '/R2B' in asked[0] and '/R1A' in asked[0], asked[0]
     assert asked[0].endswith('/Back] <R1B>: '), asked[0]
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 B from 18\'-6" to 18\'-5"'], \
         texts(vm, 'FGStep')
     # the same click, answered with one of the others, moves that one
     vm = newvm()
     pts = survey(vm)
     vm.sysvars['VIEWSIZE'] = 2000.0
     run(vm, 'c:ABMOVE', ['17', click, 'R1A', None], 'tie answered')
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 A from 21\'-1" to 21\'-4"'], \
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 A from 21\'-1" to 21\'-4"'], \
         texts(vm, 'FGStep')
     # and Back there is the markers again, nothing moved yet
     vm = newvm()
@@ -1035,7 +1035,7 @@ def test_abmove_a_close_zoom_settles_it():
     run(vm, 'c:ABMOVE', ['17', (r1b[0] + 0.15, r1b[1] + 0.15, 0.0), None],
         'close zoom')
     assert [q for q, _ in vm.prompts if 'Which one?' in q] == []
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"']
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 B from 18\'-6" to 18\'-5"']
     print("ok  ABMOVE zoomed in, the click needs no asking")
 
 
@@ -1044,7 +1044,7 @@ def test_abmove_typed_tag_any_case():
     vm = newvm()
     pts = survey(vm)
     run(vm, 'c:ABMOVE', ['17', 'r1b', None], 'lower case')
-    assert texts(vm, 'FGStep') == ['Moved Pt.17 B from 18\'-6" to 18\'-5"']
+    assert texts(vm, 'FGStep') == ['- Moved Pt.17 B from 18\'-6" to 18\'-5"']
     print("ok  ABMOVE a tag typed in any case is accepted")
 
 
@@ -2556,7 +2556,7 @@ def test_a_created_point_is_noted_like_a_moved_one():
     run(vm, 'c:ABPCREATE', [200.0, 180.0, '23', None], 'clean note')
     notes = [d for _, d in live(vm, 'TEXT', 'FGStep')]
     assert len(notes) == 1, notes
-    assert notes[0][1] == 'Created Pt.23 - A 16\'-8", B 15\'-0"', notes[0][1]
+    assert notes[0][1] == '- Created Pt.23 - A 16\'-8", B 15\'-0"', notes[0][1]
     assert notes[0][40] == 6.0, notes[0]          # abf:*note-hgt*
     # beside the point, the way BPCALLOUT tucks its callout
     assert pt3(notes[0][10]) == pt3((P200[0] + 10.0, P200[1] - 10.0))
@@ -2570,7 +2570,7 @@ def test_the_note_says_which_tape_was_held_and_which_changed():
     survey(vm)
     run(vm, 'c:ABPCREATE', [SHORT[0], SHORT[1], '7A', '23', None], 'held')
     assert texts(vm, 'FGStep') == \
-        ['Created Pt.23 - B 8\'-4" held, A from 8\'-4" to 15\'-4"'], \
+        ['- Created Pt.23 - B 8\'-4" held, A from 8\'-4" to 15\'-4"'], \
         texts(vm, 'FGStep')
     # the tape named as held is the one the tag does NOT name, and the
     # reading it was held at is the one that was typed
@@ -2589,8 +2589,8 @@ def test_a_clean_round_after_a_changed_one_is_noted_clean():
         [SHORT[0], SHORT[1], '7A', '23', 200.0, 180.0, '24', None],
         'changed then clean')
     assert texts(vm, 'FGStep') == \
-        ['Created Pt.23 - B 8\'-4" held, A from 8\'-4" to 15\'-4"',
-         'Created Pt.24 - A 16\'-8", B 15\'-0"'], texts(vm, 'FGStep')
+        ['- Created Pt.23 - B 8\'-4" held, A from 8\'-4" to 15\'-4"',
+         '- Created Pt.24 - A 16\'-8", B 15\'-0"'], texts(vm, 'FGStep')
     print("ok  a clean round after a changed one is noted clean")
 
 
@@ -2614,8 +2614,35 @@ def test_abfind_and_abmove_note_the_points_they_create():
         survey(vm)
         run(vm, cmd, script, cmd + ' note')
         assert texts(vm, 'FGStep') == \
-            ['Created Pt.23 - A 16\'-8", B 15\'-0"'], (cmd, texts(vm, 'FGStep'))
+            ['- Created Pt.23 - A 16\'-8", B 15\'-0"'], (cmd, texts(vm, 'FGStep'))
     print("ok  ABFIND and ABMOVE note the points they create")
+
+
+def test_every_note_leads_with_the_bullet():
+    """abf:*note-prefix*.  A run that moves or creates several points
+    leaves a column of notes on one layer, and the bullet is what makes
+    that column read as a list when the sheet is laid out later.  It
+    goes on in abf:note, so a note worded anywhere carries it - which is
+    what this checks, by driving all three wordings through one run and
+    then emptying the knob."""
+    vm = newvm()
+    survey(vm)
+    run(vm, 'c:ABPCREATE',
+        [SHORT[0], SHORT[1], '7A', '23', 200.0, 180.0, '24', None],
+        'both created wordings')
+    run(vm, 'c:ABMOVE', ['17', 'R1B', None], 'and a moved one')
+    got = texts(vm, 'FGStep')
+    assert len(got) == 3, got
+    assert all(t.startswith('- ') for t in got), got
+
+    # the knob is the whole of it: emptied, the notes come out bare
+    vm = newvm()
+    survey(vm)
+    vm.loads('(setq abf:*note-prefix* "")')
+    run(vm, 'c:ABPCREATE', [200.0, 180.0, '23', None], 'bare')
+    assert texts(vm, 'FGStep') == ['Created Pt.23 - A 16\'-8", B 15\'-0"'], \
+        texts(vm, 'FGStep')
+    print("ok  every note leads with abf:*note-prefix*, moved and created")
 
 
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith('test_')]

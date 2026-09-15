@@ -1193,6 +1193,7 @@
     (command "_.-DIMSTYLE" "_Restore" odim))
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
+  (if lzd:end (lzd:end "PERPMARK"))
   (princ))
 
 (if (not *calofin-quiet*)

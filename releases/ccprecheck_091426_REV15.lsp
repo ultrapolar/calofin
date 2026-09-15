@@ -651,6 +651,7 @@
     (princ (strcat "\n" chk:*sum-indent* line))
   )
   (princ chk:*sum-close*)
+  (if lzd:end (lzd:end "CCPRECHECK"))
   (princ)
 )
 

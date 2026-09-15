@@ -1839,6 +1839,7 @@
           (ad:paddle plan)
           (setvar "PICKFIRST" oldpick)
           (setq oldpick nil)))))
+  (if lzd:end (lzd:end "AUTODIM"))
   (princ))
 
 (defun c:STAIRDIM (/ *error* oldcmd olddim oldlay n ss0 undo-open)
@@ -1879,6 +1880,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
+  (if lzd:end (lzd:end "STAIRDIM"))
   (princ))
 
 (defun c:FLOORDIM (/ *error* oldcmd olddim oldlay n undo-open)
@@ -1916,6 +1918,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setvar "CMDECHO" oldcmd)
+  (if lzd:end (lzd:end "FLOORDIM"))
   (princ))
 
 ;; AUTODIMSIDEPOV - dimension steps drawn in side view (elevation):
@@ -1987,6 +1990,7 @@
       (if undo-open (command "_.UNDO" "_End"))
       (setq undo-open nil)
       (setvar "CMDECHO" oldcmd)))
+  (if lzd:end (lzd:end "AUTODIMSIDEPOV"))
   (princ))
 
 (defun c:AUTODIMVER ()

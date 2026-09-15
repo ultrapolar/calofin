@@ -1154,7 +1154,7 @@
   ;; are dropped without comment; only the things somebody might
   ;; reasonably expect to work are called out.
   (setq all (ssget))
-  (if lzd:watch (lzd:watch all))
+  (if lzd:watch (lzd:watch all) all)
   (if all
     (progn
       (setq ss (ssadd) bad nil i 0)
@@ -1529,6 +1529,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "OLAUTO"))
   (princ))
 
 (defun c:OLAUTOVER ()

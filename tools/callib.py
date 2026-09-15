@@ -114,7 +114,9 @@ NOT_A_TOOL = "standards_checker"
 #: STOCKLIST is STOCKCOVER's listing companion -- both reachable without
 #: a button.  LAZPANEL is the panel itself, LAZBUTTON summons its
 #: toolbar, LAZICON reports where the button's picture came from and
-#: LAZPIN edits the pinned row: machinery, not drafting tools.  LAZASCII
+#: LAZPIN edits the pinned row: machinery, not drafting tools.  LAZHIDE
+#: is LAZPIN's opposite number -- it edits the list of tools put OUT of
+#: sight -- and carries no button for the same reason.  LAZASCII
 #: is LAZFORM's font probe -- it draws nothing and answers nothing.
 #: CALHELP reads the panel's own captions out at the command line and
 #: CALSET shows the settings calofin keeps in the AutoCAD profile:
@@ -123,7 +125,7 @@ NOT_A_TOOL = "standards_checker"
 #: expense.
 NAMED_SATELLITES = frozenset({
     "DCE", "STOCKLIST", "LAZPANEL", "LAZBUTTON", "LAZICON", "LAZPIN",
-    "LAZASCII", "CALHELP", "CALSET",
+    "LAZHIDE", "LAZASCII", "CALHELP", "CALSET",
 })
 
 

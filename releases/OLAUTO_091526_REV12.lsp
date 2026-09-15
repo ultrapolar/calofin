@@ -1211,7 +1211,7 @@
                             (vl-string-translate " " "/" kws)
                             (if back "/Back" "") "]"
                             (if dflt (strcat " <" dflt ">") "") ": ")))
-  (if lzd:ask (lzd:ask msg v))
+  (if lzd:ask (lzd:ask msg v) v)
   (cond ((member v '("Back" "Undo")) 'OLA-BACK)
         ((null v) (if dflt dflt (ola:askkw msg kws hidden dflt back)))
         (T v)))
@@ -1242,7 +1242,7 @@
   ;; are dropped without comment; only the things somebody might
   ;; reasonably expect to work are called out.
   (setq all (ssget))
-  (if lzd:watch (lzd:watch all))
+  (if lzd:watch (lzd:watch all) all)
   (if all
     (progn
       (setq ss (ssadd) bad nil i 0)
@@ -1617,6 +1617,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (ola:sysrestore)
+  (if lzd:end (lzd:end "OLAUTO"))
   (princ))
 
 (defun c:OLAUTOVER ()

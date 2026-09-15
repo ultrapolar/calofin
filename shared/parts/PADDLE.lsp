@@ -675,6 +675,7 @@
                                  " overlapping pad(s) merged into their"
                                  " neighbours where features crowd together."))))
             (princ "\nPADDLE: perimeter checked - no concave features need pads."))))
+  (if lzd:end (lzd:end "PADDLE"))
   (princ))
 
 ;; --------------------------- tutorial ------------------------------
@@ -825,6 +826,7 @@
   (princ "\nEnd of tutorial. Type PADDLE to run it on a real drawing.")
   (vla-EndUndoMark doc)
   (setq mark-open nil)
+  (if lzd:end (lzd:end "TUTORIALPADDLE"))
   (princ))
 
 (defun c:PADDLEVER ()

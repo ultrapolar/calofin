@@ -28,6 +28,14 @@ things have to hold, and this file holds them:
    it cannot do is the zero-argument probes (cal:ui), because there is
    no argument to set the theme up in -- those are here.
 
+A second, unrelated set of roles lives in the same table now:
+flag/arc/olap/orig/sugg/point/constr/report, the eight ACI numbers
+COVERCHECK, DIMCHECK and LINFINCHECK each used to carry as a separate
+hardcoded copy.  They do not vary with dark/light the way fade/guide/
+dim/hi do, so they get their own section below rather than a column in
+TABLE -- and CalofinInk-<ROLE> in the profile (CALSET's Itemcolors
+menu) can override any role, old or new, which is tested here too.
+
 Run: python3 tests/test_theme.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_theme.py
 """
@@ -230,6 +238,74 @@ for tool, src, local, cal in COPIES:
                         ok, detail = False, '%s/%s %r vs %r' % (theme, role,
                                                                 a, b)
     check('%-14s %-10s == %s' % (tool, local, cal), ok, detail)
+
+print('== the item-type roles: flag/arc/olap/orig/sugg/point/constr/report ==')
+#: generalized off the eight numbers COVERCHECK, DIMCHECK and
+#: LINFINCHECK each carried as a separate hardcoded copy.  These do
+#: not vary with the screen the way fade/guide/dim/hi do -- one number
+#: for every theme -- so there is no dark/light column to check, only
+#: that cal:ink answers it and that a number still passes through.
+ITEM_ROLES = {
+    'flag': 1, 'arc': 6, 'olap': 4, 'orig': 1,
+    'sugg': 3, 'point': 2, 'constr': 2, 'report': 3,
+}
+vm = libvm()
+ev(vm, '(setenv "CalofinTheme" "dark")')
+for role, val in sorted(ITEM_ROLES.items()):
+    check('%-6s (any theme) -> %s' % (role, val),
+          ev(vm, "(cal:ink 'auto '%s)" % role) == val)
+ev(vm, '(setenv "CalofinTheme" "light")')
+check('...still the same set under light',
+      all(ev(vm, "(cal:ink 'auto '%s)" % r) == v
+          for r, v in ITEM_ROLES.items()))
+check('a number still passes through untouched for an item-type role',
+      all(ev(vm, "(cal:ink %d '%s)" % (n, r)) == n
+          for n in (1, 8, 9, 30) for r in ITEM_ROLES))
+
+print('== CalofinInk-<ROLE>: a per-role override, any role ==')
+vm = libvm()
+ev(vm, '(setenv "CalofinInk-FLAG" "42")')
+check('an override on an item-type role beats the table',
+      ev(vm, "(cal:ink 'auto 'flag)") == 42)
+check('...and does not leak onto a role nobody overrode',
+      ev(vm, "(cal:ink 'auto 'arc)") == 6)
+ev(vm, '(setenv "CalofinTheme" "dark")')
+ev(vm, '(setenv "CalofinInk-FADE" "77")')
+check('the same mechanism works on a legacy fade/guide/dim/hi role',
+      ev(vm, "(cal:ink 'auto 'fade)") == 77)
+check('a numeric knob is used exactly as given, override or not',
+      ev(vm, "(cal:ink 1 'flag)") == 1)
+ev(vm, '(setenv "CalofinInk-FLAG" "")')
+check('clearing the override (empty string) falls back to the table',
+      ev(vm, "(cal:ink 'auto 'flag)") == 1)
+
+print('== the item-type roles: the three review tools agree with the library ==')
+#: unlike the fourteen-copy check above, this is NOT every tool with an
+#: ink table -- POOL, SPA, ABFIND and the rest have no flag/arc/olap
+#: knobs and were never asked to grow the item-type table, so holding
+#: them to it would fail them for a role they do not use.  Only the
+#: three review tools that used to hardcode these numbers by hand.
+ITEM_COPIES = [c for c in COPIES if c[0] in ('covercheck', 'dimcheck', 'linfincheck')]
+check('all three review tools carry the ink table', len(ITEM_COPIES) == 3,
+      [c[0] for c in ITEM_COPIES])
+for tool, src, local, cal in ITEM_COPIES:
+    vm = VM()
+    with open(os.path.join(REPO, src), encoding='utf-8',
+              errors='replace') as fh:
+        vm.loads(fh.read())
+    with open(LIB, encoding='utf-8') as fh:
+        vm.loads(fh.read())
+    ok, detail = True, ''
+    for role in ITEM_ROLES:
+        a = ev(vm, "(%s 'auto '%s)" % (local, role))
+        b = ev(vm, "(%s 'auto '%s)" % (cal, role))
+        if a != b:
+            ok, detail = False, '%s %r vs %r' % (role, a, b)
+    ev(vm, '(setenv "CalofinInk-OLAP" "77")')
+    a = ev(vm, "(%s 'auto 'olap)" % local)
+    if a != 77:
+        ok, detail = False, 'override not read: %r' % a
+    check('%-14s %-10s item colours == %s' % (tool, local, cal), ok, detail)
 
 print()
 if FAILS:

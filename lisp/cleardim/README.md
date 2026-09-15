@@ -108,8 +108,47 @@ keeps it; the ones that are on something go around it.
    list rather than as the first item of one. Tagging only the first
    chord would have an angular dimension fleeing the other thirty-one.
 
-4. **They are placed in three passes**, and this is where the policy
-   lives:
+4. **A line of dimensions is one dimension.** Where several dimension
+   lines are the same straight line -- what `DIMCONTINUE` lays down by
+   the handful and `AUTODIM` lays whole perimeters out as -- they are a
+   **run**: one continuous dimension with breaks in it. Three things
+   follow:
+
+   - **A run's text stays in its own segment.** AutoCAD centres each
+     text between its own extension lines, and one shuffled past them
+     reads as the dimension for the span next door. A run member has
+     *less* room along the track than a lone dimension, not more.
+   - **A run's own skeleton is its own.** Its dimension line and its
+     extension lines belong to one dimension, not several -- a continued
+     chain does not merely have extension lines near each other, it
+     **shares** them -- so a member's text never has to clear them.
+     While the run is straight this changes nothing, because every
+     member's line already *is* its own line; it is what makes a
+     staggered run possible at all.
+   - **When one member has to stand further off the work, they all go.**
+     Moving one dimension off a wall and leaving its neighbours behind
+     trades a crowded dimension for a crooked run.
+
+   Only a linear or aligned dimension joins a run. The others keep
+   something else in group 10 -- a radius keeps the **centre** of its
+   circle, an ordinate its feature -- so there is no dimension line
+   there to be collinear with, and pushing one "out" would move the
+   dimension onto a different circle rather than clear of an obstacle.
+
+5. **A crowded run is staggered.** Four segments 30 wide with text 40
+   wide has nowhere along the track to go: every text overhangs its own
+   segment whatever it does, and shuffling one along only hands the
+   crowding to its neighbour. So every other dimension stands a row
+   further off the work, its own dimension line with it, and every text
+   stays centred where it belongs.
+
+   Which of the two happens is decided by **who is in the way**:
+   run-mates alone means stagger; anything else means the whole run
+   goes. A row is `cd:*row-f*` text heights -- the unit `AUTODIM`
+   already stands its own chains off the work in.
+
+6. **They are placed in three passes**, and this is where the rest of
+   the policy lives:
 
    | Pass | Who | What happens |
    | --- | --- | --- |
@@ -123,7 +162,7 @@ keeps it; the ones that are on something go around it.
    every run: the first one read keeps its spot and the second slides.
    Nothing moves that did not have to.
 
-5. **A text that has to move goes to the nearest clear spot on its
+7. **A text that has to move goes first to the nearest clear spot on its
    track**, found by stepping outward in `cd:*step-f*` steps and then
    bisecting back toward where it started, so the move is the smallest
    one that still works. The two directions are not equal: the one that
@@ -138,7 +177,7 @@ keeps it; the ones that are on something go around it.
    worse than a text still sitting on a line, because the drafter can
    see the second one.
 
-6. **What moved is marked user-positioned** (group 70 bit 128), which
+8. **What moved is marked user-positioned** (group 70 bit 128), which
    is what stops AutoCAD putting it back at the next regen. The ordinate
    is the one family whose text does not travel alone: its leader ends
    where the text is, so group 14 moves the same step and the feature
@@ -178,6 +217,12 @@ Every knob is read when the command runs, not when the file loads, so a
 
 | Knob | Default | What changing it does |
 | --- | --- | --- |
+| `cd:*track-tol-f*` | `0.5` | How far apart two dimension lines may be across their own direction and still be the **same** track, in text heights. A chain AutoCAD continued is exact; this is for one somebody nudged |
+| `cd:*run-gap-f*` | `6.0` | How big a break may be between two dimensions on one line before they stop reading as one run, in text heights. Raise it and dimensions at opposite ends of a sheet start moving each other |
+| `cd:*row-f*` | `2.0` | How far one row out is, in text heights -- the unit `AUTODIM` already stands its own chains off the work in (`ad:*text-offsets*`) |
+| `cd:*rows*` | `3` | How many rows out a run may be pushed before it is left as drawn. A dimension four rows from the thing it measures has stopped belonging to it |
+| `cd:*stagger*` | `T` | Whether a run that crowds itself may be staggered. `nil` keeps every run dead straight and leaves the crowding reported |
+| `cd:*stagger-max*` | `3` | How many rows a run may be staggered **across**: 2 is every other dimension a row out, 3 goes out, further out, and back |
 | `cd:*charwidth*` | `0.75` | How wide one glyph is taken to be, as a fraction of the text height. The one estimate in the file: raise it and every box gets wider, so more texts are called hard to read and the ones that move end up further clear |
 | `cd:*gap-f*` | `0.4` | Breathing room around a text box on every side, as a multiple of the text height. `0.0` asks only that the ink not actually cross the letters, which is not the same as readable |
 | `cd:*step-f*` | `0.25` | How far each trial slide steps, as a multiple of the text height. Smaller finds narrower gaps and takes proportionally longer |
@@ -209,6 +254,9 @@ Every knob is read when the command runs, not when the file loads, so a
   (group 10 on a 3-point dimension, group 16 on a 2-line one). A
   dimension carrying no arc point still slides -- it simply contributes
   no arc to the obstacle list.
+- **A run only ever stands FURTHER off the work, never nearer.** There
+  is no version of "clear of an obstacle" that runs toward the thing
+  being measured.
 - **Two families have a floor under them.** An ordinate's text slid
   back past the point it is reading turns its leader round the other
   way, and a radius dimension's text on the far side of the centre is

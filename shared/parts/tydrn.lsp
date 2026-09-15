@@ -266,6 +266,7 @@
                  (itoa n-pool) " point(s) POOL -> " *tydrn-dest-layer*
                  ", "
                  (itoa n-anch) " ANCHORS point(s) -> pink."))
+  (if lzd:end (lzd:end "TYDRN"))
   (princ))
 
 ;;; ===================================================================
@@ -538,6 +539,7 @@
       (setq oldpick nil)
       (princ (strcat "\n\nTYLERDRONESUITE done - all "
                      (itoa (length stages)) " stages ran."))))
+  (if lzd:end (lzd:end "TYLERDRONESUITE"))
   (princ))
 
 

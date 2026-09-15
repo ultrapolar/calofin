@@ -658,6 +658,7 @@
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "POOLSIDE"))
   (princ))
 
 ;; The question list: the run chain, then the depths.  ONE sequence, so

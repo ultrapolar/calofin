@@ -1037,6 +1037,7 @@
                 (xyp:to-abhd ss)
                 (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
               (princ)))))))
+  (if lzd:end (lzd:end "XYPLOT"))
   (princ))
 
 ;; Print the loaded version.

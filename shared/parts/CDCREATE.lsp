@@ -464,6 +464,7 @@
   ;; settings back to what they were two commands ago
   (cal:sysrestore)
   (setq *error* olderr)
+  (if lzd:end (lzd:end "CDCREATE"))
   (princ))
 
 (defun c:CDCREATEVER ()

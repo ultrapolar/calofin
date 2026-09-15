@@ -211,6 +211,7 @@
     (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
 
   (setq *error* olderr)
+  (if lzd:end (lzd:end "DIMCONTEND"))
   (princ))
 
 ;; short alias

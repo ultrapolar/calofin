@@ -1786,6 +1786,7 @@
                       ;; it is named here so AUTOBEAD leaves it unbeaded
                       (list (cs-entmid (cdr (last btreads)))))))))))))))
   (cs-fclear)                       ; both exits clear the form store
+  (if lzd:end (lzd:end "CORNERSTP"))
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
@@ -1968,6 +1969,7 @@
   (princ "\n[5] Done.  One U removes this whole demo.  Now try it for")
   (princ "\n    real: type CORNERSTP, select two wall lines of a corner,")
   (princ "\n    and follow the same prompts you just watched.")
+  (if lzd:end (lzd:end "TUTORIALCORNERSTP"))
   (princ))
 
 (defun c:CORNERSTPVER ()

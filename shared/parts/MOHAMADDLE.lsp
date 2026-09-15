@@ -156,7 +156,7 @@
   (setq shown (vl-string-translate " " "/" (substr kws 1 (1- (strlen kws)))))
   (initget 0 kws)
   (setq v (getkword (strcat "\nPad size (inches)? [" shown "] <" dflt ">: ")))
-  (if lzd:ask (lzd:ask "Pad size (inches)?" v))
+  (if lzd:ask (lzd:ask "Pad size (inches)?" v) v)
   (if v v dflt))
 
 (defun mohamaddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
@@ -694,6 +694,7 @@
                                  " overlapping pad(s) merged into their"
                                  " neighbours where features crowd together."))))
             (princ "\nMOHAMADDLE: perimeter checked - no concave features need pads."))))
+  (if lzd:end (lzd:end "MOHAMADDLE"))
   (princ))
 
 (defun c:MOHAMADDLEVER ()

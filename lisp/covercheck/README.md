@@ -178,24 +178,34 @@ The tables below are the block, read off it:
 
 **Colours**
 
-| Global | Default | Meaning |
-| --- | --- | --- |
-| `*cchk-grey-color*` | `'auto` | ACI: everything not under review, faded (grey). `'auto` fades it the way round the drawing needs -- darker than the work on a dark background, lighter on a light one. A number is used exactly as given |
-| `*cchk-flag-color*` | `1` | ACI: what you answered "No" to (red) |
-| `*cchk-arc-color*` | `6` | ACI: arcs whose endpoints were moved (magenta) |
-| `*cchk-olap-color*` | `4` | ACI: merged or flagged overlapping lines (cyan) |
-| `*cchk-orig-color*` | `1` | ACI: the X marking where you drew the point (red) |
-| `*cchk-sugg-color*` | `3` | ACI: the + marking where COVERCHECK would put it (green) |
-| `*cchk-point-color*` | `2` | ACI: the crosses marking an overlap's two ends (yellow) |
+`*cchk-grey-color*` is `'auto` because it has to work against either
+screen background. The six below it are `'auto` too, but for a
+different reason: they are `cal:ink`'s ITEM-TYPE roles (flag, arc,
+olap, orig, sugg, point -- the same table CALOFIN-LIB.lsp's `cal:ink`
+carries, generalized off these six numbers, which COVERCHECK, DIMCHECK
+and LINFINCHECK used to keep as three separate hardcoded copies), so
+`'auto` resolves to the number named below unless CALSET's Itemcolors
+menu has set a `CalofinInk-<ROLE>` override in the profile. A number
+is still used exactly as given, same as `*cchk-grey-color*`.
+
+| Global | Default | Role | Meaning |
+| --- | --- | --- | --- |
+| `*cchk-grey-color*` | `'auto` | `fade` | ACI: everything not under review, faded (grey). `'auto` fades it the way round the drawing needs -- darker than the work on a dark background, lighter on a light one. A number is used exactly as given |
+| `*cchk-flag-color*` | `'auto` (ACI 1) | `flag` | ACI: what you answered "No" to (red) |
+| `*cchk-arc-color*` | `'auto` (ACI 6) | `arc` | ACI: arcs whose endpoints were moved (magenta) |
+| `*cchk-olap-color*` | `'auto` (ACI 4) | `olap` | ACI: merged or flagged overlapping lines (cyan) |
+| `*cchk-orig-color*` | `'auto` (ACI 1) | `orig` | ACI: the X marking where you drew the point (red) |
+| `*cchk-sugg-color*` | `'auto` (ACI 3) | `sugg` | ACI: the + marking where COVERCHECK would put it (green) |
+| `*cchk-point-color*` | `'auto` (ACI 2) | `point` | ACI: the crosses marking an overlap's two ends (yellow) |
 
 **The two layers**
 
-| Global | Default | Meaning |
-| --- | --- | --- |
-| `*cchk-constr-layer*` | `"COVERCHECK-CONSTRUCTION"` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own |
-| `*cchk-constr-color*` | `2` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (ACI (yellow)) |
-| `*cchk-report-layer*` | `"COVERCHECK-REPORT"` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own |
-| `*cchk-report-color*` | `3` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (ACI (green)) |
+| Global | Default | Role | Meaning |
+| --- | --- | --- | --- |
+| `*cchk-constr-layer*` | `"COVERCHECK-CONSTRUCTION"` | -- | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own |
+| `*cchk-constr-color*` | `'auto` (ACI 2) | `constr` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (yellow) |
+| `*cchk-report-layer*` | `"COVERCHECK-REPORT"` | -- | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own |
+| `*cchk-report-color*` | `'auto` (ACI 3) | `report` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (green) |
 
 **How the report is sized and placed**
 

@@ -74,7 +74,7 @@ lisp/drone_height/DroneHeightGPS.lsp|c:DDGPS|\nPick a point in the drawing for t
 lisp/fitabhd/FITABHD.lsp|fit:omit-loop|\n Point to leave out - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/lazdiag/LAZDIAG.lsp|lzd:paste|\nPlace the error report, far from the drawing:|the last resort after a failure - there is no earlier question to go back to, and Esc skips it
 lisp/lazpanel/LAZPANEL.lsp|c:CALHELP|\nCommand, or any part of one <Enter = all>:|the only question in the command; Enter answers it with everything
-lisp/lazpanel/LAZPANEL.lsp|c:CALSET|\nChange which? [Theme/Errordir/Stockdir/Quit] <Quit>:|first of the chain - Quit is the way out, and the value question behind it offers Back
+lisp/lazpanel/LAZPANEL.lsp|c:CALSET|\nChange which? [Theme/Errordir/Stockdir/Itemcolors/Hidden/Quit] <Quit>:|first of the chain - Quit is the way out, Hidden opens LAZHIDE's own dialog, and the value question behind Theme/Errordir/Stockdir/Itemcolors offers Back
 lisp/lhd/lhd.lsp|c:LHD|\n Point to omit - or a ringed one to restore (Enter when done):|reselection loop - clicking again undoes it
 lisp/lhd/lhd.lsp|lh:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] <2>:|the fit picker - Redo is its way back
 lisp/linfincheck/linfincheck.lsp|c:LINFINCHECK|\n Type the overall step height or pick two points <skip>:|the only question in its branch; Enter skips it

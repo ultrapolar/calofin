@@ -619,6 +619,7 @@
   (princ (strcat "\nDIMSTAMP: " (itoa count) " placed."))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "DIMSTAMP"))
   (princ))
 
 (defun c:DIMSTAMPVER ()

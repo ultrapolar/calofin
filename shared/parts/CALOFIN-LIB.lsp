@@ -362,6 +362,24 @@
                       (* 0.11 (rem (/ c 65536) 256))))
          (if (< lum 128.0) 'dark 'light))))))
 
+;; A per-ROLE override a drafter has set through CALSET's Itemcolors
+;; menu: CalofinInk-<ROLE> in the profile, or nil when none is set for
+;; this role.  One profile key per role, rather than one packed
+;; setting parsed by hand, so what CALSET writes is exactly what
+;; getint already validated -- nothing downstream re-parses a typed
+;; string.  Works for any role, fade/guide/dim/hi included, though
+;; today only the item-type roles below are reachable from CALSET.
+(defun cal:inkoverride (role / q v)
+  (setq q (assoc role '((fade . "FADE") (guide . "GUIDE") (dim . "DIM")
+                         (hi . "HI") (flag . "FLAG") (arc . "ARC")
+                         (olap . "OLAP") (orig . "ORIG") (sugg . "SUGG")
+                         (point . "POINT") (constr . "CONSTR")
+                         (report . "REPORT"))))
+  (if q
+    (progn
+      (setq v (cal:setting (strcat "CalofinInk-" (cdr q)) ""))
+      (if (/= v "") (atoi v)))))
+
 ;;  THE INK TABLE.  A colour knob set to 'auto asks for the ACI that
 ;;  suits the background it will be seen against; a knob set to a
 ;;  NUMBER is used exactly as given, so a shop that has picked its own
@@ -386,27 +404,56 @@
 ;;  pool, which is 8 on white and nearly the background itself on the
 ;;  stock dark grey.  The unmeasured column is deliberately what the
 ;;  tree did before this table existed: a session that cannot tell is
-;;  not a session that changes behaviour.
-(defun cal:ink (knob role / th)
+;;  not a session that behaves differently.
+;;
+;;  ITEM-TYPE COLOURS.  A second set of roles, alongside the four
+;;  above, for parts of a review that are not about the SCREEN at all
+;;  but about what KIND of thing is being marked -- a flagged error, an
+;;  arc whose endpoints moved, an overlap, the point as drawn versus
+;;  the one suggested, the construction line, the report text.
+;;  COVERCHECK, DIMCHECK and LINFINCHECK each carried the same eight
+;;  numbers as a separate literal copy; this table is the one place
+;;  they are decided now.
+;;
+;;    role     what it is                                    ACI
+;;    flag     what a drafter answered "No" to                 1  red
+;;    arc      an arc whose endpoints were moved                6  magenta
+;;    olap     a merged or flagged overlapping line             4  cyan
+;;    orig     the X at the point as drawn                      1  red
+;;    sugg     the + at the point the tool suggests              3  green
+;;    point    the crosses at an overlap's two ends              2  yellow
+;;    constr   the construction line through moved points       2  yellow
+;;    report   the report text                                  3  green
+;;
+;;  None of these vary with the screen the way fade/guide/dim/hi do --
+;;  they are the same ordinary ACI colours on any background the three
+;;  review tools have ever drawn on -- so there is no dark/light table
+;;  for them, only the override above and CALSET's Itemcolors menu.
+(defun cal:ink (knob role / th ov)
   ;; numberp, not (eq knob 'auto): a knob is a colour NUMBER used
   ;; exactly as given, or it is resolved.  Testing for 'auto instead
   ;; would hand back whatever a mistyped knob holds -- nil, or the
   ;; symbol AUOT -- and that reaches entmake as a DXF group 62, where
   ;; it dies a long way from the line that caused it.
-  (if (numberp knob)
-    knob
-    (progn
-      (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
-      (cond
-        ((eq role 'fade)
-         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
-        ((eq role 'guide)
-         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
-        ((eq role 'dim)
-         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
-        ((eq role 'hi)
-         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
-        (t 7)))))
+  (cond
+    ((numberp knob) knob)
+    ((setq ov (cal:inkoverride role)) ov)
+    ((setq ov (assoc role '((flag . 1) (arc . 6) (olap . 4) (orig . 1)
+                             (sugg . 3) (point . 2) (constr . 2)
+                             (report . 3))))
+     (cdr ov))
+    (t
+     (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
+     (cond
+       ((eq role 'fade)
+        (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+       ((eq role 'guide)
+        (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+       ((eq role 'dim)
+        (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+       ((eq role 'hi)
+        (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+       (t 7)))))
 
 ;;; -------------------- layers ------------------------------------------
 

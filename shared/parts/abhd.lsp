@@ -4708,6 +4708,7 @@
   (setq undo-open nil)
   (setq *error* pf-old-err)   ; restore the previous error handler
   (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
+  (if lzd:end (lzd:end "ABHD"))
   (princ))
 
 ;; ---- SIMPABHD: the same fit with nothing to decide first -------------
@@ -4801,6 +4802,7 @@
   (setq undo-open nil)
   (setq *error* pf-old-err)   ; restore the previous error handler
   (setq abhd:*nobottom* nil)  ; cover mode lasts one run only
+  (if lzd:end (lzd:end "SIMPABHD"))
   (princ))
 
 ;; ABHD for a cover sheet: the same fit, with the pool-bottom question
@@ -4994,6 +4996,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setq *error* pf-old-err)
+  (if lzd:end (lzd:end "ADAB"))
   (princ))
 
 ;; ---- TUTORIALABHD ----------------------------------------------------
@@ -5316,6 +5319,7 @@
         (t (pf:tut-checks) (pf:tut-demo)))
   (pf:temp-clear)
   (setq *error* pf-old-err)
+  (if lzd:end (lzd:end "TUTORIALABHD"))
   (princ))
 
 ;; The same tutorial under the bottom command's name, for whoever

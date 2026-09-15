@@ -910,6 +910,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (abp:sysrestore)
+  (if lzd:end (lzd:end "ABPCHECK"))
   (princ))
 
 ;; Take the report and the rings away again, leaving the drawing as it
@@ -941,6 +942,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (abp:sysrestore)
+  (if lzd:end (lzd:end "ABPCHECKRESCUE"))
   (princ))
 
 (defun c:ABPCHECKVER ()
