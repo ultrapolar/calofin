@@ -8,6 +8,42 @@ which set of them shipped together. The release name lives in
 
 ## v3.15 -- 2026-09-15
 
+**...and they are LIVE at the picks that need them.**  OASIS v9.0, SPA
+091526 REV24, PERPPTS/CPERPPTS v0.15.  "My snaps got cleared" is also
+what a drafter says when snaps are off where they expect them on, and
+the sweep found both directions of that.
+
+`PERPPTS` and `CPERPPTS` were the first shape again, one level down:
+the whole handler is `(perp:finish)`, and the bad ordering was INSIDE
+that helper -- the bare `(command)` drain at the top, the OSMODE
+restore fourteen forms below it.  `check_osnap.py` had not seen it,
+because it read only the handler's own statements and saw one call that
+both restores and can throw.  It now splices a called helper's
+statements in where the call sits, and catches it.  The cleanup puts
+the settings back first in both files.
+
+`SPA`'s base point -- the one pick that places the whole spa -- was made
+with snaps already off.  `spa:readblock` runs before SPA's three opening
+questions and ends on `spa:osdown` like every ask helper here, so OSMODE
+was 0 by the time the prompt came up, thirty lines before the
+`(setvar "OSMODE" 0)` that was supposed to be what dropped them.  The
+comment at that prompt has always said the pick is made with the
+drafter's own snaps live; the `spa:osup` that makes it true is new, and
+POOL and POOLSIDE have always held them at the identical prompt.
+
+`OASIS` had the inverse: its `oasis:osup` window wrapped the whole
+`oasis:askbottom` call, but that defun does not stop at questions -- it
+goes on to `oasis:drawbottom`, which feeds computed points to three
+`DIMALIGNED` calls and a hopper-offset cross dim.  Those four were the
+only dimensions of the run laid down with running osnap live, free to
+be pulled onto whatever the outline passed near.  Snaps drop between
+the asking and the drawing now.
+
+Neither of these last two moves OSMODE at the END of a run, which is
+why `check_osnap.py` stayed green through both: it checks what the
+drafter is left with, not what the tool works under.  Which prompt
+ought to snap is an editorial question, so it stays with the reviewer.
+
 **...and they come back even when the cleanup itself fails.**  OASIS
 v8.9, AUTOBEAD v1.9, XFTCONV/XFTRECONV v1.17, SPA 091526 REV23.  The
 first pass proved every command HAS an OSMODE restore in its `*error*`

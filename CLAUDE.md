@@ -352,9 +352,11 @@ handler that could put it back. The table-driven form counts too --
 `(tool:sysrestore)` over a snapshot whose list names `OSMODE`, with
 `OSMODE` first in that list -- and is what the bigger tools use.
 
-**FIRST means first.** An error inside `*error*` aborts the handler, so
-a restore behind a bare `(command ...)` is a restore that does not run
-on the path it was written for. Put the `setvar`s at the top -- they
+**FIRST means first, inside the helper too.** An error inside `*error*`
+aborts the handler, so a restore behind a bare `(command ...)` is a
+restore that does not run on the path it was written for -- and a
+handler that is nothing but `(tool:finish)` moves that question one
+level down, into the helper, which is where `PERPPTS` hid it. Put the `setvar`s at the top -- they
 cannot throw -- and the drain, the `-DIMSTYLE` and the `_End` after
 them. And drop the snapshot before the risky form, not after: a
 snapshot left standing makes `syssave` a no-op for the rest of the

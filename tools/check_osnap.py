@@ -385,6 +385,33 @@ def rel(path):
         return path
 
 
+def effective(stmts, dmap, depth=0, seen=None):
+    """STMTS with a called helper's own statements spliced in where it sits.
+
+    A handler is often nothing but one call -- c:PERPPTS's whole handler
+    is (perp:finish) -- and the ordering that matters is then INSIDE that
+    helper.  Reading only the handler's own forms sees a single statement
+    that both restores OSMODE and can throw, and concludes the order is
+    fine.  It is not: the drain is at the top of perp:finish and the
+    OSMODE line fourteen forms below it."""
+    if seen is None:
+        seen = set()
+    out = []
+    for st in stmts:
+        if not isinstance(st, list):
+            continue
+        callee = st[0].lower() if st and is_sym(st[0]) else None
+        if (depth < 3 and callee in dmap and callee not in seen
+                and len(st) == 1):          # a plain (helper) call, no args
+            seen.add(callee)
+            for body in dmap[callee]:
+                out += effective(body_of(body), dmap, depth + 1, seen)
+            seen.discard(callee)
+        else:
+            out.append(st)
+    return out
+
+
 def ordering(tier):
     """Handlers whose OSMODE restore sits BEHIND something that can throw.
 
@@ -405,7 +432,7 @@ def ordering(tier):
                         continue
                     seen.add(id(h))
                     risk = put = None
-                    for i, st in enumerate(body_of(h)):
+                    for i, st in enumerate(effective(body_of(h), dmap)):
                         if not isinstance(st, list):
                             continue
                         if risk is None and (unwrapped_command(st) or

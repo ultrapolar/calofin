@@ -102,6 +102,33 @@ for cmd, path, helper, args, answers in CASES:
           vm.sysvars.get("OSMODE") == OSMODE,
           "OSMODE is %r, not %r" % (vm.sysvars.get("OSMODE"), OSMODE))
 
+# The other half of the complaint.  "My snaps got cleared" is what a
+# drafter says when snaps are off where they expect them ON, too -- and
+# SPA's base point, the one pick that places the whole spa, was made
+# that way.  spa:readblock runs before SPA's three opening questions and
+# ends on spa:osdown like every ask helper here, so snaps were already
+# at 0 by the time the base-point prompt came up, thirty lines before
+# the (setvar "OSMODE" 0) that was supposed to be what dropped them.
+# The comment at that prompt has always said the pick is made with the
+# drafter's own snaps live; the spa:osup that makes it true is new.
+print("snaps are live again at the pick that places the spa")
+vm = VM()
+vm.load(os.path.join(ROOT, "lisp/spa/SPA.LSP"))
+vm.sysvars["OSMODE"] = OSMODE
+vm.loads('(defun entsel (m) nil)')            # Enter, skipping the block
+# the grouped twin is mirrored onto the library, so the snapshot pair is
+# spa:* in lisp/ and cal:* in shared/ -- ask the VM which one it loaded
+vm.loads('''(if spa:syssave
+              (spa:syssave)
+              (cal:syssave (list "OSMODE" "LUNITS" "CMDECHO" "CLAYER")))''')
+vm.loads('(spa:readblock)')
+check("spa:readblock leaves snaps down, as every ask helper here does",
+      vm.sysvars.get("OSMODE") == 0, "OSMODE is %r" % vm.sysvars.get("OSMODE"))
+vm.loads('(if spa:osup (spa:osup) (cal:osup))')
+check("spa:osup gives them back for the base-point pick",
+      vm.sysvars.get("OSMODE") == OSMODE,
+      "OSMODE is %r, not %r" % (vm.sysvars.get("OSMODE"), OSMODE))
+
 # The test lies if the injected break never reached the mute: a command
 # whose answers stopped short would "pass" with OSMODE untouched.  So
 # prove the same harness SEES a handler that does not restore.
@@ -130,4 +157,5 @@ except LispError as e:
 if FAILS:
     print("\n%d FAILED: %s" % (len(FAILS), ", ".join(FAILS)))
     sys.exit(1)
-print("\nALL OSNAP-RESTORE CHECKS PASSED (%d commands)" % len(CASES))
+print("\nALL OSNAP-RESTORE CHECKS PASSED (%d commands, plus SPA's base point)"
+      % len(CASES))
