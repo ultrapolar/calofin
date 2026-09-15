@@ -8,6 +8,14 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
+**Every AB note leads with a bullet.** `ABMOVE` and `ABPCREATE` leave a
+note per point on one layer, and a run that settles several of them
+leaves a column -- which read as loose text rather than as a list.
+`abf:*note-prefix*` (`- `) goes on inside `abf:note`, so every note
+carries it and one worded later cannot quietly miss it: one call is one
+TEXT is one line.  Set it to `""` for the bare wording.
+
+
 **A themeable colour space for what KIND of thing is drawn, not just
 the screen it's drawn on.** COVERCHECK v1.17, DIMCHECK v1.20,
 LINFINCHECK v2.16, LAZPANEL v3.30. `cal:ink` already answered "what ACI
