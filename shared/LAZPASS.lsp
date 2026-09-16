@@ -88049,7 +88049,6 @@
 
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun perp:finish (/ guard)
-    ;; cancel any command left pending by an Esc mid-PLINE/DIMALIGNED
     ;; The drafter's settings come back FIRST -- ahead of the drain
     ;; below, which is the one form in here that can throw.  A bare
     ;; (command) from *error* is legal only while a pushed error mode is
@@ -88069,6 +88068,8 @@
     ;; CLAYER last of the setvars: it is the one that can throw here, if
     ;; the layer it names was purged while the run was open
     (if clay  (setvar "CLAYER"    clay))
+    ;; now the drain: cancel any command left pending by an Esc
+    ;; mid-PLINE/DIMALIGNED
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
