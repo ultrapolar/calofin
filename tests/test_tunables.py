@@ -131,6 +131,13 @@ FILES = [
     # (ptr:*band-now* / ptr:*dir-now* are the memory now).
     ('POINTRENAMER', ROOT / 'lisp' / 'pointrenamer' / 'POINTRENAMER.lsp',
      'ptr', ROOT / 'lisp' / 'pointrenamer' / 'README.md', TUNABLES),
+    # SQUAREUP, written to the rule rather than brought to it: the
+    # sampling count, the two tolerances that decide what one wall is,
+    # the already-square floor and the tie thresholds.  Its three run
+    # globals and its entity-type list stay outside the block, the last
+    # of them marked, which is what makes it worth holding here.
+    ('SQUAREUP', ROOT / 'lisp' / 'squareup' / 'SQUAREUP.lsp', 'sq',
+     ROOT / 'lisp' / 'squareup' / 'README.md', TUNABLES),
     # the band unroller, whose numbers were spread down 1,240 lines: the
     # dart cap in the emitter, the stop line in the drawing loop, the
     # layer names at the entmake, the 1% target written out four times

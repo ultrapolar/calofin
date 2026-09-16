@@ -1705,6 +1705,82 @@ def _fillet_zero(vm, one, two):
         _move_line_end(vm, e, 11 if spick < sx else 10, x)
 
 
+#: DXF groups that carry a POINT and so travel with a rotation.  210 is
+#: the extrusion direction and is deliberately not among them: it says
+#: which way the entity's own plane faces, and a turn in that plane
+#: leaves it exactly where it was.
+_ROT_POINTS = (10, 11, 12, 13, 14, 15, 16, 17)
+
+#: ...and the groups that carry an ANGLE.  entget hands these back in
+#: RADIANS (an ARC's ends, a TEXT's or an INSERT's rotation), which is
+#: what the tree's own arc readers assume, so the turn is added in
+#: radians here too.
+_ROT_ANGLES = (50, 51)
+
+#: The one entity whose group 11 is a VECTOR from its group 10 rather
+#: than a place in the drawing: an ELLIPSE's major axis.  A vector turns
+#: about the origin, never about the base point.
+_ROT_RELATIVE = {'ELLIPSE': (11,)}
+
+
+def _rot_pt(p, base, ca, sa):
+    dx, dy = p[0] - base[0], p[1] - base[1]
+    return [base[0] + dx * ca - dy * sa,
+            base[1] + dx * sa + dy * ca] + list(p[2:])
+
+
+def _rotate_ss(vm, a):
+    """(command "_.ROTATE" ss "" [_non] base angle) -- turn a selection.
+
+    ROTATE is the whole of what a squaring-up tool DOES, so a VM that
+    files the call away and leaves the drawing where it was would let
+    a tool with the angle's sign backwards pass every test it has.  So
+    the geometry really moves: every point group about the base point,
+    every angle group by the same turn, and an ELLIPSE's major axis
+    about the origin because it is a vector and not a place.
+
+    The angle is read in DEGREES, as AutoCAD reads it off the command
+    line -- the caller is responsible for having AUNITS, ANGBASE and
+    ANGDIR zeroed, which is the same thing it is responsible for in
+    the real editor.
+    """
+    ss = next((x for x in a if isinstance(x, list) and x and x[0] == '<ss>'),
+              None)
+    if ss is None:
+        return
+    base, ang = None, None
+    for x in a[1:]:
+        if isinstance(x, bool):
+            continue
+        if isinstance(x, (int, float)):
+            ang = float(x)
+        elif isinstance(x, str):
+            try:
+                ang = float(x)
+            except ValueError:
+                pass
+        elif isinstance(x, list) and x and x[0] != '<ss>' \
+                and all(isinstance(v, (int, float)) for v in x):
+            base = [float(v) for v in x[:2]]
+    if base is None or ang is None:
+        raise LispError('_.ROTATE: no base point or no angle in %r' % (a,), vm)
+    rad = math.radians(ang)
+    ca, sa = math.cos(rad), math.sin(rad)
+    for e in ss[1:]:
+        if e in vm.deleted:
+            continue
+        rel = _ROT_RELATIVE.get(_dxf(vm, e, 0), ())
+        data = vm.entdata.get(e, [])
+        for i, g in enumerate(data):
+            if isinstance(g, list) and g and g[0] in _ROT_POINTS:
+                about = [0.0, 0.0] if g[0] in rel else base
+                data[i] = [g[0]] + _rot_pt([float(v) for v in g[1:]],
+                                           about, ca, sa)
+            elif isinstance(g, Dot) and g.a in _ROT_ANGLES \
+                    and isinstance(g.b, (int, float)):
+                data[i] = Dot(g.a, g.b + rad)
+
+
 # command + input
 @bi('command')
 def _command(vm, a):
@@ -1731,6 +1807,10 @@ def _command(vm, a):
     # -DIMSTYLE Restore really does change the current dim style, and
     # code that saves/restores it round-trips through getvar, so the
     # VM has to model it or a wrong-style restore would go unnoticed
+    # ROTATE really turns the drawing (see _rotate_ss): a tool whose
+    # whole job is the angle it passes here needs the geometry to move
+    if a and isinstance(a[0], str) and a[0].upper().lstrip('._') == 'ROTATE':
+        _rotate_ss(vm, a)
     if a and a[0] == '_.-DIMSTYLE' and len(a) >= 3 \
             and a[1] in ('_Restore', '_Save'):
         # Save writes the current settings out under a name AND leaves
