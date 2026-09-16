@@ -112125,14 +112125,22 @@
 ;;  what the profile already holds, rather than an interview you have
 ;;  to finish to change one thing.
 ;;
-;;  NOTHING IS WRITTEN UNTIL OK.  What you type lands in lzp:*setvals*,
-;;  an alist keyed by the PROFILE KEY itself, and lzp:set-write is the
-;;  single place that reaches setenv.  Cancel drops the store on the
-;;  floor.  The Hidden... button closes this dialog, runs the hide
-;;  editor on the same loaded handle and comes back -- which is why the
-;;  store is a global and not a local: the reopen repaints every box
-;;  from it, so a hop through the checklist does not cost you the
-;;  colour you had just typed.
+;;  NOTHING IN THIS DIALOG IS WRITTEN UNTIL OK.  What you type lands in
+;;  lzp:*setvals*, an alist keyed by the PROFILE KEY itself, and
+;;  lzp:set-write is the single place that reaches setenv.  Cancel drops
+;;  the store on the floor.  The Hidden... button closes this dialog,
+;;  runs the hide editor on the same loaded handle and comes back --
+;;  which is why the store is a global and not a local: the reopen
+;;  repaints every box from it, so a hop through the checklist does not
+;;  cost you the colour you had just typed.
+;;
+;;  THE HIDDEN LIST IS THE ONE EXCEPTION, and deliberately: it is its
+;;  own dialog with its own OK and Cancel, and it commits there, so
+;;  Cancel here does NOT put back a tool you hid through it.  That is
+;;  the bargain Pin... already strikes from the panel -- a sub-dialog's
+;;  OK is its own transaction -- and the alternative, silently undoing
+;;  a checklist the drafter had just accepted, is the more surprising
+;;  of the two.
 ;;
 ;;  A colour box holds an ACI number or nothing at all, and while one
 ;;  holds anything else the state line names it and OK stays greyed --
@@ -112221,44 +112229,71 @@
     (lzp:set-put "CalofinTheme" (cdr r)))
   (princ))
 
+;; A profile value, TRIMMED.  Every other reader in this tree trims
+;; before it decides anything -- lzp:ui a few hundred lines up says so
+;; in a comment ("\" dark \" typed into the profile meaning nothing at
+;; all would be a silent no-op to stare at"), and cal:themeset, the
+;; fourteen tool copies and the VB palette all do the same.  A dialog
+;; that read the raw string would SHOW Auto for a profile holding
+;; " dark ", which every tool is meanwhile drawing dark for, and then
+;; write that lie back over it the first time OK was pressed.
+(defun lzp:profread (key / v)
+  (setq v (getenv key))
+  (if v (vl-string-trim " \t" v) ""))
+
 ;; Fill the store from the profile.  Every key the dialog shows gets a
 ;; row, so a box is never painted from a nil.
 (defun lzp:set-read ( / r v)
   (setq lzp:*setvals* nil)
-  (setq v (getenv "CalofinTheme"))
+  (setq v (strcase (lzp:profread "CalofinTheme")))
   (lzp:set-put "CalofinTheme"
-               (if (and v (member (strcase v) '("DARK" "LIGHT")))
-                 (strcase v)
-                 "AUTO"))
+               (if (member v '("DARK" "LIGHT")) v "AUTO"))
   (foreach r '("CalofinErrorDir" "StockCover_Folder")
-    (setq v (getenv r))
-    (lzp:set-put r (if v v "")))
+    (lzp:set-put r (lzp:profread r)))
   (foreach r lzp:*inkroles*
-    (setq v (getenv (lzp:inkkey r)))
-    (lzp:set-put (lzp:inkkey r) (if v v "")))
+    (lzp:set-put (lzp:inkkey r) (lzp:profread (lzp:inkkey r))))
   lzp:*setvals*)
 
-;; The one place that writes.  A colour that is not a colour is written
-;; as EMPTY rather than stored: OK is greyed while one is in the box,
-;; so reaching here with a bad one means something else went wrong, and
-;; clearing the role is the answer that leaves the tool reading its own
-;; table instead of a number nobody can explain.
+;; The one place that writes.
 (defun lzp:set-write ( / r v)
   (setq v (lzp:set-get "CalofinTheme"))
-  (setenv "CalofinTheme" v)
+  ;; EMPTY is what every reader takes for auto -- lzp:ui, cal:themeset
+  ;; and the palette all treat an unset or empty value as "measure it"
+  ;; -- so writing the word AUTO would leave LAZICON and lzp:setshow
+  ;; reporting an override the drafter never set.  The registry mirror
+  ;; below already wrote it this way; now the profile agrees with it.
+  (setenv "CalofinTheme" (if (= v "AUTO") "" v))
   ;; ...and beside the pins, where the VB palette reads it
   ;; (ui/calofin_net/PaletteTheme.vb) -- the same bargain CALSET's own
-  ;; Theme branch strikes.  Auto is written as empty: the palette's own
-  ;; probe is what "auto" means there.
+  ;; Theme branch strikes.
   (vl-catch-all-apply
     'vl-registry-write
     (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
   (foreach r '("CalofinErrorDir" "StockCover_Folder")
     (setenv r (lzp:set-get r)))
+  ;; A box that does not read as a colour is LEFT ALONE rather than
+  ;; cleared.  Empty still clears -- that is how a role goes back to
+  ;; auto -- but a typo must not: erasing an override the drafter
+  ;; already had is the one outcome worse than ignoring what they just
+  ;; typed, and lzp:set-ok is not the only way this can be reached.
   (foreach r lzp:*inkroles*
     (setq v (lzp:set-get (lzp:inkkey r)))
-    (setenv (lzp:inkkey r) (if (lzp:aci-p v) v "")))
+    (if (or (= v "") (lzp:aci-p v)) (setenv (lzp:inkkey r) v)))
   lzp:*setvals*)
+
+;; OK, GUARDED.  Greying the button is not a hard stop and this file
+;; already knows it: lzp:dcl-find's own comment says "DCL fires an edit
+;; box's action BEFORE the default button's", so a click on OK with a
+;; typo still in the box fires the box (which greys OK) and then lands
+;; anyway.  LAZFORM learned this at lzf:insert -- "a guard that depends
+;; on a tile really being un-clickable is a guard that hands POOL a
+;; dropped box the day it is not" -- and this is the same guard: re-ask,
+;; and stay open rather than write.
+(defun lzp:set-ok ()
+  (if (lzp:set-badinks)
+    (lzp:set-state)
+    (done_dialog 1))
+  (princ))
 
 ;; The dialog.  The dropdown is emitted EMPTY -- DCL has no way to
 ;; write a list into a popup_list from the file, so it is filled with
@@ -112301,7 +112336,12 @@
           (strcat "    : button { label = \"Hidden...\"; "
                   "key = \"set_hidden\"; fixed_width = true; }")
           "  }"
-          "  : text { key = \"state\"; width = 60; }"
+          ;; wide enough for the longest sentence lzp:set-state can put
+          ;; in it: width is a MINIMUM in DCL, but a text tile with no
+          ;; label and no value has only this to size itself from, and
+          ;; the message that explains a greyed OK is the one message
+          ;; that must not be the one cut off
+          "  : text { key = \"state\"; width = 110; }"
           "  spacer;"
           "  : row {"
           "    alignment = centered;"
@@ -112338,7 +112378,7 @@
                     "(lzp:set-put \"StockCover_Folder\" $value)")
        (set_tile "hiddenmsg" (lzp:hiddenmsg))
        (action_tile "set_hidden" "(done_dialog 5)")
-       (action_tile "accept" "(done_dialog 1)")
+       (action_tile "accept" "(lzp:set-ok)")
        (action_tile "cancel" "(done_dialog 0)")
        (lzp:set-state)
        (setq rc (start_dialog))
