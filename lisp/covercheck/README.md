@@ -249,7 +249,13 @@ is still used exactly as given, same as `*cchk-grey-color*`.
 * The pad hunt is a **port** of PADDLE's rules carried inside this
   file (a standalone file cannot call `PADDLE.lsp`); when PADDLE's
   rules change the port must move with them -- the test below is what
-  makes that drift loud.
+  makes that drift loud. The chaining moved with PADDLE's too: the
+  walk grows at **both** ends of a chain, so an outline with one gap
+  in it reads as ONE open chain however the walk happened to start,
+  and `N open chain(s) (check for gaps)` counts holes rather than
+  where the walk began. COVERCHECK stops at reporting them -- the
+  arrow-and-fillet offer PADDLE makes is a placer's job, not a
+  checker's.
 * Object-associative dimensions are warned about before their points
   move, and their report line says so in red.
 
