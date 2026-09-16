@@ -120,3 +120,4 @@ lisp/spacheck/SPACHECK.lsp|spachk:demo-say|\n (Enter to go on)|demo / tutorial
 lisp/standards_checker/src/acady-ui.lsp|acady-ui-highlight|\nPress Enter to return to results...|pause
 lisp/standards_checker/src/acady-ui.lsp|acady-ui-zoom|\nPress Enter to return to results...|pause
 lisp/stockcover/STOCKCOVER.lsp|c:STOCKCOVER|\nStock drawing name < > :|first of its own chain - the which-one pick backs into it
+lisp/wcalst/wcalst.lsp|c:WCALST|\nOpposite corner:|the second corner of a stair window - Enter drops the window and re-asks the first corner, which offers Back

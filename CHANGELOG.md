@@ -6,6 +6,77 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.17 -- 2026-09-16
+
+**WCALST cuts its darts at the bends, not at the rungs.**  WCALST v2.0.
+
+The correction a band needs is made at the bends of the side being
+straightened: every turn there leaves the far edge `turn x width` too
+long or too short.  The emitter summed that per RUNG INTERVAL and
+released it at the rung that ended the interval, so the number of
+darts a run could cut was the number of rungs the drafter had drawn,
+not the cap they were asked for.  A band drawn as two edges and its
+two end lines -- two rungs -- got one dart, on the band's end with
+half its mouth past it; a curve drawn in 3-degree chords with a rung
+every ten of them got four darts against twenty slots and left two
+thirds of its excess in the AFTER CUTS line.  The refining pass could
+not help: a lower threshold cannot make a second dart in an interval
+that only ever yields one.  Both runs finished clean, and a run that
+finishes clean writes no report -- the only trace was `** OVER
+TARGET **` in a summary block on the sheet.
+
+The debt is now accumulated bend by bend and released where it reaches
+the threshold, at the centre of the bends that built it up: at the
+bend itself for one sharp corner, at the middle of the run for a
+stretch of gentle ones.  A bend that calls for more than one dart's
+cap is cut as several equal darts side by side, `wc:*dart-space*` of
+bottom line between them -- the shop's answer to a 15-degree corner on
+a 24-inch band, which is 6.28 of overlap at one place.  No mouth
+crosses either end of the band and no two mouths overlap.  Rungs give
+the width (still the median rung) and the far edge's feet, and nothing
+else.  The oracle band's best fit goes from 8 darts and 3.23% over
+target to 14 darts and 0.03% under it; drawn with only its two end
+rungs it now gets exactly the same fourteen.
+
+The run that showed it is in the suite now (`tests/data/wcalst_two_rung_
+band.txt`): a drafter's band, two long sides drawn as chains of lines
+and joined only by their two end lines, 87 chain nodes with no bend
+over 5 degrees.  Its sheet read TOP LINE 1140.28, DELTA 25.23 (2.23%
+long), AFTER CUTS 21.23 (1.87%) OVER TARGET -- one 4-inch dart, on the
+band's end -- and the VM reproduces every one of those figures from the
+band alone before the change.  After it: 13 darts and 2 inserts along
+the bends, 0.77% left, nothing nearer than 90 inches to either end.
+
+**The stair window is a window.**  It was a selection, and a selection
+takes whole entities: a far side drawn as one polyline came in whole,
+the entire band became the "stair section", was developed rigidly as
+one piece, had every dart dropped as stair work -- and the summary
+read a bottom line 0.00% off, because a rigid copy of the far side is
+exactly as long as the far side.  It is two corners now (`getpoint`,
+`getcorner`, repeated until Enter, Back to the tile height), and a
+far-side segment is in the section when BOTH its ends are inside one
+-- AutoCAD's own Window rule, applied to the segment rather than to
+the entity, so the polyline is clipped to the part the box was drawn
+round.  The report says how many darts fell inside the stair sections
+and were left for the hand work there, so a window that swallowed the
+band is on the command line and not only in the drawing.  The corners
+are typed answers in the LAZDIAG transcript, which is what makes a
+replay possible: `probe_report.py` answers every selection with the
+one the report carried, and the old stair selection would have been
+answered with the band.
+
+**A tile taller than the band is said.**  The apex rule bottoms out at
+`wc:*tile-clear*` above the far edge, so a 30-inch tile on a 24-inch
+band drew every dart one inch high -- correct, invisible, and read as
+missing.  The tile prompt now says the cuts will be shallow and why.
+
+Also: `wc:depth-at` past the far end of the bottom line answered with
+the NEAR end's depth (its initial value); it answers with the far
+end's.  The test VM gained `getcorner`.  `tests/test_wcalst.py` pins
+the new oracle figures and adds the two-rung band, the 3-degree curve,
+the one-polyline far side under a window, the whole band under one,
+and the tall tile.
+
 ## v3.16 -- 2026-09-16
 
 **The step count is a field on the page it redraws.**  LAZSTEP v2.0.

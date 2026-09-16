@@ -2007,6 +2007,24 @@ def _getpoint(vm, a):
     return list(v)
 
 
+@bi('getcorner')
+def _getcorner(vm, a):
+    # (getcorner basept [prompt]) -- the second corner of a window,
+    # rubber-banded from BASEPT in AutoCAD; scripted here exactly as a
+    # getpoint is: a point, nil for Enter, a string for a keyword
+    prompt = a[-1] if a and isinstance(a[-1], str) else ""
+    v = vm.pop_script(prompt, 'getcorner')
+    if v is None:
+        return NIL
+    if isinstance(v, str):
+        kw = _match_kw(vm, v)
+        if kw is None:
+            raise LispError(f"getcorner: keyword {v!r} not among "
+                            f"{vm.initget_kws!r} at {prompt!r}", vm)
+        return kw
+    return list(v)
+
+
 @bi('getstring')
 def _getstring(vm, a):
     # (getstring [cr] [prompt]) -- Enter gives "", never nil
