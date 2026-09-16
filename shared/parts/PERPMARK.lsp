@@ -37,10 +37,9 @@
 ;;;   1. Select the perimeter -- the wall the distances were taped off.
 ;;;      Any curve: a polyline (arc segments included), a line, an arc, a
 ;;;      circle, and anything else AutoCAD can measure along.
-;;;   2. Click the centre of the pool.  That is the whole of the direction
-;;;      question: a mark runs square off the wall toward the side the
-;;;      centre is on, so nothing has to be answered per point.  It is the
-;;;      one pick in the command that is a place rather than a point.
+;;;   2. Only when the wall does NOT close: click the side the pool is
+;;;      on.  A closed wall knows its own inside and is not asked --
+;;;      see below.
 ;;;   3. Name a survey point, give the distance, and repeat:
 ;;;        - click the point, or type its number; "17", "Pt.17", "#17"
 ;;;          and "017" all name the same one;
@@ -74,16 +73,43 @@
 ;;; How the direction is found
 ;;;   Each mark's base point is the point of the perimeter closest to the
 ;;;   survey point.  The perimeter's tangent there, turned 90 degrees,
-;;;   gives the two ways a mark could run; the one whose direction agrees
-;;;   with "toward the centre click" is the one used.  It is measured per
-;;;   mark rather than fixed once, so a run of marks around a corner or
-;;;   along a radius each come off their own piece of wall square.
+;;;   gives the two ways a mark could run, and the INSIDE of the pool
+;;;   says which.  It is measured per mark rather than fixed once, so a
+;;;   run of marks around a corner or along a radius each come off their
+;;;   own piece of wall square.
 ;;;
-;;;   That makes the centre click a direction, not a datum: it is never
-;;;   measured from and it does not have to be the true centroid.  What it
-;;;   has to be is unambiguously INSIDE, which on a deeply notched shape
-;;;   (a narrow L, a keyhole) is worth a thought before clicking -- see
-;;;   the README's limitations.
+;;;   A CLOSED wall defines its own inside, and that is what is used: the
+;;;   direction the wall is drawn in (its signed area) turns the tangent
+;;;   into the water at every point of it, whatever shape it is.  So the
+;;;   pool is never asked about and cannot be answered wrongly.
+;;;
+;;;   It used to be one click -- "the centre of the pool" -- and one dot
+;;;   product per mark.  That is right only for a shape with no notch in
+;;;   it: on a narrow L or a keyhole a centre clicked in one lobe sits on
+;;;   the wrong side of a wall in the other, and every mark there came out
+;;;   backwards, pointing into the deck.  A closed wall is now read
+;;;   instead of asked about, and the click survives only where there
+;;;   genuinely is no inside -- an OPEN wall, a stretch of coping traced
+;;;   on its own, where nothing but the drafter knows which side the water
+;;;   is.  A closed wall that encloses nothing measurable (a doubled-back
+;;;   trace, a figure-eight) falls back to the same click rather than
+;;;   guessing from an area near zero.
+;;;
+;;; A distance that fights its neighbours
+;;;   Three points in a row taped 40, 10 and 30 are not a wall: the wall
+;;;   between a 40 and a 30 is about 35, and the 10 is a digit that went
+;;;   in wrong.  When the round ends, any distance that sits against BOTH
+;;;   its neighbours along the wall by more than pm:*spike-tol* is named,
+;;;   with the number they put there -- and naming that point again
+;;;   replaces its distance, which is the fix.  Nothing is changed for
+;;;   the drafter: a surveyed value is the one thing a drawing tool may
+;;;   not quietly overwrite.  A real curve says nothing, however hard it
+;;;   bends -- 40, 38, 30 has every value between its neighbours, and it
+;;;   is fighting both sides at once that marks a typo.
+;;;
+;;;   A mark whose far end lands outside a closed pool is named the same
+;;;   way: the tape reached past the far wall, so either the number or
+;;;   the point is wrong.
 ;;;
 ;;; The order the polyline runs in
 ;;;   Marks are kept with their STATION -- how far along the perimeter,
@@ -150,7 +176,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.3")
+(setq *perpmark-version* "v1.4")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -206,6 +232,13 @@
 ;; segment out of the joined polyline and a zero-length normal out of
 ;; the direction test.
 (setq pm:*fuzz* 1e-6)
+
+;; How far a distance has to sit against BOTH its neighbours along the
+;; wall before the round names it: two inches.  A tape misread by less
+;; than this is inside the noise a survey carries anyway; one misread by
+;; more, in the direction neither neighbour agrees with, is a digit.
+;; Raising it hides typos, lowering it starts naming real steps.
+(setq pm:*spike-tol* 2.0)
 
 ;;; ----------------------------------------------------------------------
 ;;;  Vectors and angles
@@ -724,18 +757,80 @@
 (defun pm:m-name (m) (nth 6 m))
 (defun pm:m-ent (m) (nth 7 m))
 
-;; Which way a mark at BASE runs: square off the wall, on the side CTR is.
-;; nil when the tangent is unreadable or the centre click leaves the two
-;; sides tied -- both are re-prompts, never a guess.
-(defun pm:inward (tg base ctr / n side)
+;; Which way a mark at BASE runs: square off the wall, into the pool.
+;; SGN is the closed wall's own answer -- the sign that turns a tangent
+;; inward, from the loop's orientation -- and when it is known nothing
+;; else is consulted.  CTR is the fallback for an open wall, which has
+;; no inside: the mark runs toward the side that click was on.  nil when
+;; the tangent is unreadable, or when an open wall's click leaves the
+;; two sides tied -- both are re-prompts, never a guess.
+(defun pm:inward (tg base ctr sgn / n side)
   (setq n (if tg (cal:unit (cal:perp tg))))
-  (if (null n)
+  (cond
+    ((null n) nil)
+    ;; pm:perp turns 90 degrees counterclockwise, so on a wall drawn
+    ;; counterclockwise (positive area, sgn 1.0) the left-hand normal
+    ;; already points into the water; a wall drawn the other way round
+    ;; carries -1.0 and the same line flips it.  ABHD's hopper and slope
+    ;; lines have been built on this same sign for as long as they have
+    ;; existed.
+    (sgn (cal:v* n sgn))
+    ((null ctr) nil)
+    (t
+     (setq side (cal:dot n (cal:v- ctr base)))
+     (cond ((> side  pm:*fuzz*) n)
+           ((< side (- pm:*fuzz*)) (cal:v* n -1.0))
+           (t nil)))))
+
+;;; ----------------------------------------------------------------------
+;;;  The inside of the pool
+;;;  Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
+;;;  standalone file loads alone -- see STANDARDS.md section 4.
+;;; ----------------------------------------------------------------------
+
+;; The perimeter as a polygon, for the two tests above: every segment's
+;; start point, with an arc broken into chords about five degrees apart
+;; so a position near a curved wall is placed on the right side of it.
+;; A wall this file reads as segments is sampled from them; anything
+;; else (a SPLINE traced off a drone photo, an ELLIPSE) is walked
+;; through vlax-curve-* the same way its stations are.
+(defun pm:sample-loop (segs / out s ctr r a0 sw n k a)
+  (setq out nil)
+  (foreach s segs
+    (if (eq (car s) 'S)
+      (setq out (cons (cadr s) out))
+      (progn
+        (setq ctr (cadr s)
+              r   (caddr s)
+              a0  (nth 3 s)
+              sw  (nth 4 s)
+              n   (max 2 (fix (+ 1.0 (/ (abs sw) 0.0873))))
+              k   0)
+        (while (< k n)
+          (setq a   (+ a0 (* sw (/ (float k) (float n))))
+                out (cons (list (+ (car ctr)  (* r (cos a)))
+                                (+ (cadr ctr) (* r (sin a))))
+                          out)
+                k   (1+ k))))))
+  (reverse out))
+
+(defun pm:sample-com (en tot / out n k d p)
+  (setq out nil n 180 k 0)
+  (while (< k n)
+    (setq d (* tot (/ (float k) (float n)))
+          p (pm:comcall 'vlax-curve-getPointAtDist (list en d)))
+    (if p (setq out (cons (cal:2d p) out)))
+    (setq k (1+ k)))
+  (reverse out))
+
+;; The closed wall as a polygon, however this file can read it; nil when
+;; the wall is open or nothing usable came back.
+(defun pm:wall-loop (en segs closed tot / out)
+  (if (not closed)
     nil
     (progn
-      (setq side (cal:dot n (cal:v- ctr base)))
-      (cond ((> side  pm:*fuzz*) n)
-            ((< side (- pm:*fuzz*)) (cal:v* n -1.0))
-            (t nil)))))
+      (setq out (if segs (pm:sample-loop segs) (pm:sample-com en tot)))
+      (if (and out (> (length out) 2)) out))))
 
 ;; d wrapped into [0, tot) -- how far FORWARD along a closed perimeter,
 ;; so a run that crosses the polyline's own seam is one stretch and not
@@ -884,6 +979,62 @@
       (setq out (cons p out))))
   (reverse out))
 
+;; A taped distance, written the way the tape read it.
+(defun pm:fmt (v) (rtos v 2 2))
+
+;; What the round has to say about itself, once the last distance is in
+;; and before anything is drawn or erased.  Two things, both advisory:
+;; a distance that fights BOTH its neighbours along the wall (the digit
+;; that went in wrong), and a mark whose far end lands outside a closed
+;; pool (a tape that reached past the far wall).  Every mark is kept and
+;; drawn either way -- the drafter is the one who knows whether 10 was
+;; the number -- and both messages name the point, because naming a
+;; point again is what replaces its distance.
+(defun pm:review (marks poly / ord pairs sp e m a c out n)
+  (setq ord   (mapcar 'cdr
+                (pm:sortkey (mapcar '(lambda (m) (cons (pm:m-station m) m))
+                                    marks)))
+        pairs (mapcar '(lambda (m) (cons (pm:m-station m) (pm:m-dist m)))
+                      ord)
+        sp    (cal:spikes pairs pm:*spike-tol*))
+  (foreach e sp
+    (setq m (nth (car e) ord)
+          a (nth (1- (car e)) ord)
+          c (nth (1+ (car e)) ord))
+    (princ (strcat "
+" (pm:ptname (pm:m-name m)) " measures "
+                   (pm:fmt (pm:m-dist m)) ", against "
+                   (pm:ptname (pm:m-name a)) " ("
+                   (pm:fmt (pm:m-dist a)) ") and "
+                   (pm:ptname (pm:m-name c)) " ("
+                   (pm:fmt (pm:m-dist c))
+                   ") on both sides - the wall between them is about "
+                   (pm:fmt (cdr e)) "."))
+    (princ (strcat "
+  If that is a digit, name "
+                   (pm:ptname (pm:m-name m))
+                   " again and the new distance replaces it.")))
+  ;; a mark that left the pool: only a closed wall has an outside to
+  ;; land in, and only a mark that measured something can reach it
+  (if poly
+    (progn
+      (setq out nil)
+      (foreach m (reverse marks)
+        (if (and (> (pm:m-dist m) pm:*fuzz*)
+                 (not (cal:in-loop-p (pm:m-offs m) poly)))
+          (setq out (cons (pm:ptname (pm:m-name m)) out))))
+      (setq out (reverse out)
+            n   (length out))
+      (if out
+        (princ (strcat "
+" (pm:andjoin out T)
+                       (if (= n 1) " reaches" " reach")
+                       " past the far wall - that tape would have left"
+                       " the pool.  The mark"
+                       (if (= n 1) " is" "s are")
+                       " drawn; check the sheet.")))))
+  (princ))
+
 ;; Every mark that measured something, dimensioned where its line was,
 ;; in the STYLE the drafter picked.  Returns how many went in.  The
 ;; style is restored by the caller -- it is one of the settings the
@@ -922,7 +1073,8 @@
 (defun c:PERPMARK (/ *error* undo-open
                      sel en ed segs tot closed ctr pick cand cands loc
                      base tg nrm d ans marks stage done pts run s0 s1
-                     m0 m1 way wayasked miss sty lay odim ndims npts m)
+                     m0 m1 way wayasked miss sty lay odim ndims npts m
+                     poly sgn)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -976,7 +1128,14 @@
             ((< tot 1e-9)
              (princ "\nThat perimeter has no length."))
             (t
+             ;; a closed wall defines its own inside, and that is the
+             ;; whole of the direction question; only an open one -- or
+             ;; a closed one that encloses nothing measurable -- has to
+             ;; be asked which side the water is on
              (setq closed (pm:isclosed en segs)
+                   poly   (pm:wall-loop en segs closed tot)
+                   sgn    (if poly (cal:inward-sign poly))
+                   ctr    nil
                    cands  (pm:collect-points))
              (if (null cands)
                (progn
@@ -988,23 +1147,34 @@
                (progn
                  (princ (strcat "\n" (itoa (length cands))
                                 " survey point(s) found."))
-                 (setq stage 2))))))))
+                 (if sgn
+                   (princ (strcat "\nThe wall closes, so its own inside"
+                                  " is which way a mark runs - nothing"
+                                  " to click.")))
+                 (setq stage (if sgn 3 2)))))))))
 
-      ;; --- 2. the centre, which is the whole direction question --------
+      ;; --- 2. which side the water is on, asked only when the wall
+      ;;        cannot say: an open stretch of coping, or a closed trace
+      ;;        that doubles back and encloses nothing --------------------
       ((= stage 2)
+       (princ (if closed
+                (strcat "\nThis wall closes but encloses nothing"
+                        " measurable, so its own inside cannot be read.")
+                (strcat "\nThis wall does not close, so nothing in it says"
+                        " which side the pool is on.")))
        (princ (strcat "\nA mark runs square off the wall, toward the side"
-                      " the centre is on."))
-       (setq pick (pm:askpt "Click the centre of the pool" T))
+                      " you click."))
+       (setq pick (pm:askpt "Click a spot inside the pool" T))
        (cond
          ((eq pick 'CAL-BACK) (setq stage 1))
          ((null pick)
-          (princ "\nA point is required - click inside the pool."))
+          (princ "\nA point is required - click the side the pool is on."))
          (t (setq ctr   (cal:2d (trans pick 1 0))
                   stage 3))))
 
       ;; --- 3. name a survey point.  Enter ends the round; Back takes
       ;;        the last mark away again, and at the first one re-opens
-      ;;        the centre click ---------------------------------------
+      ;;        whichever question came before it ------------------------
       ((= stage 3)
        (setq cand (pm:askpoint "Pick a survey point, or type its number"
                                "Enter = done" T cands))
@@ -1013,7 +1183,8 @@
           (cond
             ((null marks)
              (princ "\nStepping back one question.")
-             (setq stage 2))
+             ;; the side question is only there on a wall that needed it
+             (setq stage (if sgn 1 2)))
             (t
              (princ (strcat "\nStepping back one point - "
                             (pm:ptname (pm:m-name (car marks))) " undone."))
@@ -1021,7 +1192,7 @@
          ((null cand)
           (if (null marks)
             (progn (princ "\nNothing marked.") (setq done T))
-            (setq stage 4)))
+            (progn (pm:review marks poly) (setq stage 4))))
          (t
           (setq loc (pm:locate en segs (pm:cd-pt cand)))
           (cond
@@ -1032,13 +1203,14 @@
             (t
              (setq base (car loc)
                    tg   (cadr loc)
-                   nrm  (pm:inward tg base ctr))
+                   nrm  (pm:inward tg base ctr sgn))
              (if (null nrm)
-               (princ (strcat "\nWhich side the mark runs to is a tie at "
-                              (pm:ptname (pm:cd-nm cand))
-                              " - the centre lines up with the wall there."
+               (princ (strcat "\nWhich side the mark runs to cannot be"
+                              " read at " (pm:ptname (pm:cd-nm cand))
+                              " - the wall has no direction there, or the"
+                              " side you clicked lines up with it."
                               "  Back at the first point re-opens the"
-                              " centre click."))
+                              " question before this one."))
                (setq stage 31)))))))
 
       ;; --- 3b. and the distance taped off it --------------------------

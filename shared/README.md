@@ -136,7 +136,11 @@ dotn midn proj-param axis-pt pt-line-dist`), angles (`cal:angnorm
 signed-dang ang-diff`), `cal:circumcenter`, `cal:bbox-ent` /
 `cal:bbox-ss`, lists (`cal:nthcdr sublist dedupe`), numbers
 (`cal:ceil tan`), strings (`cal:trim pad zeropad2 datestr`), entity
-creation (`cal:text cal:mtext`), `cal:block-number`, and the
+creation (`cal:text cal:mtext`), `cal:block-number`, the inside of a
+closed wall (`cal:loop-area`, `cal:inward-sign`, `cal:in-loop-p` -- which
+way to turn a tangent to point into the water, and whether a position
+landed in it), the measurement that fights both its neighbours
+(`cal:spikes`), and the
 survey-point naming PERPMARK introduced -- `cal:as-number`, `cal:canon`,
 `cal:cand-matches`, `cal:cand-nearest` and `cal:askpoint`, the one
 prompt that takes a click or a typed point number and re-asks a miss

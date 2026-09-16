@@ -241,6 +241,12 @@ TOOLS = {
             'pm:angnorm': 'cal:angnorm', 'pm:tan': 'cal:tan',
             'pm:ensure-layer': 'cal:ensure-layer',
             'pm:block-number': 'cal:block-number',
+            # the inside of a closed wall, and the measurement that
+            # fights both its neighbours
+            'pm:loop-area': 'cal:loop-area',
+            'pm:inward-sign': 'cal:inward-sign',
+            'pm:in-loop-p': 'cal:in-loop-p',
+            'pm:spikes': 'cal:spikes',
             'pm:askkw': 'cal:askkw', 'pm:askyn': 'cal:askyn',
             'pm:askdist': 'cal:askdist',
             'pm:syssave': 'cal:syssave',
@@ -1096,6 +1102,7 @@ TOOLS = {
             'pf:signed-dang': 'cal:signed-dang', 'pf:dedupe': 'cal:dedupe',
             'pf:ensure-layer': 'cal:ensure-layer', 'pf:pad': 'cal:pad',
             'pf:back-word': 'cal:back-word-p', 'pf:unit': 'cal:unit',
+            'pf:loop-area': 'cal:loop-area', 'pf:spikes': 'cal:spikes',
             # PERPMARK's survey-point naming, lifted into the library:
             # the spellings, the typed match, the click within a snap
             # radius and the one prompt that takes either

@@ -25,7 +25,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.9")
+(setq cal:*version* "v2.0")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
@@ -1006,6 +1006,102 @@
       (setq fall v))
     (setq sub (entnext sub)))
   (if val val fall))
+
+;;; -------------------- the inside of a closed loop ---------------------
+
+;; Signed area of the closed polygon PTS, by the shoelace sum: positive
+;; when it runs counterclockwise.  That SIGN is how this tree defines
+;; the inside of a pool -- turn the direction of travel 90 degrees the
+;; way the sign says and you are pointing into the water, at every
+;; point of the wall, whatever shape it is.  A clicked centre answers
+;; the same question only for a shape with no notch in it: on an L or a
+;; keyhole a centre in one lobe sits on the wrong side of a wall in the
+;; other, and the marks there come out backwards.  (ABHD's pf:loop-area,
+;; which the hopper and the slope lines have always been built on.)
+(defun cal:loop-area (pts / sum prev q)
+  (setq sum 0.0 prev (last pts))
+  (foreach q pts
+    (setq sum  (+ sum (- (* (car prev) (cadr q))
+                         (* (car q) (cadr prev))))
+          prev q))
+  (/ sum 2.0))
+
+;; Which way to turn a tangent to point INTO the loop PTS: 1.0 or -1.0,
+;; to multiply the left-hand normal (cal:perp) by.  nil when the loop
+;; encloses nothing measurable -- a figure-eight, a doubled-back trace,
+;; three points in a line -- where there is no inside to point at and
+;; the caller has to ask instead of guessing.
+(defun cal:inward-sign (pts / a)
+  (if (< (length pts) 3)
+    nil
+    (progn
+      (setq a (cal:loop-area pts))
+      (cond ((> a 1.0e-6) 1.0)
+            ((< a -1.0e-6) -1.0)))))
+
+;; T when P lies inside the closed polygon PTS -- the crossing test: a
+;; ray cast along +X crosses an odd number of edges from inside and an
+;; even number from outside.  A point exactly ON an edge may answer
+;; either way, which is why every caller here asks it about a point it
+;; has already moved clear of the wall.
+(defun cal:in-loop-p (p pts / in prev q x y yi yj)
+  (setq in nil prev (last pts) x (car p) y (cadr p))
+  (foreach q pts
+    (setq yi (cadr q) yj (cadr prev))
+    ;; the two ends straddle the ray, written as two ands rather than
+    ;; (/= (> ..) (> ..)): AutoLISP's /= is for numbers and strings, and
+    ;; handing it T and nil is a bad-argument-type nobody sees until a
+    ;; real drawing runs it
+    (if (and (or (and (> yi y) (<= yj y))
+                 (and (> yj y) (<= yi y)))
+             (< x (+ (car q)
+                     (* (- (car prev) (car q))
+                        (/ (- y yi) (- yj yi))))))
+      (setq in (not in)))
+    (setq prev q))
+  in)
+
+;;; -------------------- a measurement that fights its neighbours -------
+
+;; The entries of PAIRS that sit AGAINST the run on both sides by more
+;; than TOL -- the mis-keyed number in a series of measurements taken
+;; along one wall.  PAIRS is ((position . value) ...) in position order:
+;; how far along the wall each measurement was taken, and what it
+;; measured.
+;;
+;; The rule, and why it is this one.  A value is suspect when it is
+;; lower than BOTH its neighbours by more than TOL, or higher than both
+;; by more than TOL, AND it sits more than TOL off the straight line
+;; between them.  40, 10, 30 at three points in a row is that: the 10
+;; fights both sides, and the wall between a 40 and a 30 is about 35.
+;; Requiring it to fight BOTH neighbours is what keeps a real curve
+;; quiet -- 40, 38, 30 is a wall bending away, every value between its
+;; neighbours, and nothing is said about it however far the middle one
+;; sits off the chord.
+;;
+;; Returns ((index . what the neighbours put there) ...), oldest first,
+;; indexed into PAIRS.  The caller names the measurement and says so;
+;; nothing here changes a number, because a surveyed value is the one
+;; thing a drawing tool may not quietly overwrite.
+(defun cal:spikes (pairs tol / n i a b c span expect out)
+  (setq n (length pairs) i 1 out nil)
+  (while (< i (1- n))
+    (setq a    (nth (1- i) pairs)
+          b    (nth i pairs)
+          c    (nth (1+ i) pairs)
+          span (- (car c) (car a)))
+    (if (> span 1.0e-9)
+      (progn
+        (setq expect (+ (cdr a) (* (- (cdr c) (cdr a))
+                                   (/ (- (car b) (car a)) span))))
+        (if (and (> (abs (- (cdr b) expect)) tol)
+                 (or (and (> (- (cdr a) (cdr b)) tol)
+                          (> (- (cdr c) (cdr b)) tol))
+                     (and (> (- (cdr b) (cdr a)) tol)
+                          (> (- (cdr b) (cdr c)) tol))))
+          (setq out (cons (cons i expect) out)))))
+    (setq i (1+ i)))
+  (reverse out))
 
 ;;; -------------------- naming a survey point ---------------------------
 ;;; PERPMARK's infrastructure (pm:as-number, pm:canon, pm:matches,

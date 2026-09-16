@@ -650,6 +650,38 @@ check("a slope waypoint typed by number lands, with its own offset",
       and 'guided through 1 point(s)' in said(vm)
       and 'Pool bottom added' in said(vm), said(vm)[-400:])
 
+# an offset that fights both its neighbours along the side is named,
+# with the number the wall between them puts there -- and the line is
+# still drawn through what was actually typed
+vm, ents, pl = adab_vm()
+run(vm, 'c:ADAB', [None, [pl]] + BREAKS
+    + ['', '', '',
+       'Points', "3", "40", "4", "10", "5", "30", None,   # the Pt.2 side
+       None])                                             # the other: straight
+m = re.search(r'Pt\.4 is offset 10\.00, against ([\d.]+) and ([\d.]+) on'
+              r' both sides of it - the wall between those puts it near'
+              r' ([\d.]+)\.', said(vm))
+check("a waypoint offset against both its neighbours is named", bool(m),
+      said(vm)[-400:])
+if m:
+    lo, hi, mid = (float(m.group(i)) for i in (1, 2, 3))
+    check("...and the number it suggests sits between those neighbours",
+          min(lo, hi) < mid < max(lo, hi), (lo, hi, mid))
+check("...and the line still follows the offsets that were typed",
+      'The line follows what you typed' in said(vm)
+      and 'Pool bottom added' in said(vm), said(vm)[-200:])
+
+# a side that simply bends says nothing: every offset sits between its
+# neighbours, which is a wall, not a digit
+vm, ents, pl = adab_vm()
+run(vm, 'c:ADAB', [None, [pl]] + BREAKS
+    + ['', '', '',
+       'Points', "3", "40", "4", "38", "5", "30", None,
+       None])
+check("a side that bends away is not second-guessed",
+      'on both sides of it' not in said(vm)
+      and 'Pool bottom added' in said(vm), said(vm)[-300:])
+
 # a click on nothing at a break end is re-asked, never snapped
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl], (900.0, 900.0), SHALLOW[0], SHALLOW[1],
@@ -697,6 +729,47 @@ check("a feet-and-inches offset asks for the feet-inch dim style",
       'SIDE DIMENSION' in said(vm) and 'not in this drawing' in said(vm))
 check("the offset it was given is the one it reports",
       'offsets 42.00' in said(vm), said(vm)[-200:])
+
+
+# ---- the inside of the pool, whichever way the wall was drawn ---------
+# The bottom is pulled IN from the perimeter, and which way "in" is
+# comes from the loop's own orientation rather than from anything the
+# drafter says.  Draw the same pool the other way round and every piece
+# of the bottom still lands in the water; get the sign wrong and the
+# hopper is offset outwards, through the wall and into the deck.
+
+def bottom_geometry(vm, perim):
+    """Every point the bottom drew: the ends of each LINE and the
+    vertices of each polyline on the POOL layer, minus the perimeter
+    the run was handed."""
+    out = []
+    for e in live(vm, 'LINE', 'POOL'):
+        for code in (10, 11):
+            for g in vm.entdata.get(e, []):
+                if isinstance(g, list) and g and g[0] == code:
+                    v = g[1] if len(g) == 2 else g[1:]
+                    out.append((float(v[0]), float(v[1])))
+                elif isinstance(g, Dot) and g.a == code:
+                    out.append((float(g.b[0]), float(g.b[1])))
+    for e in live(vm, 'LWPOLYLINE', 'POOL'):
+        if e != perim:
+            out += [tuple(v) for v in pl_verts(vm, e)]
+    return out
+
+
+for label, ring in (("counterclockwise", RING), ("clockwise", RING[::-1])):
+    vm = newvm()
+    layer(vm, 'POINTS')
+    layer(vm, 'POOL', 4)
+    add_points(vm, RING)
+    pl = add_pline(vm, ring)
+    run(vm, 'c:ADAB', [None, [pl]] + BOTTOM)
+    pts = bottom_geometry(vm, pl)
+    worst = max((x / 144.0) ** 2 + (y / 84.0) ** 2 for x, y in pts)
+    check("the bottom lands inside a pool drawn %s" % label,
+          'Pool bottom added' in said(vm) and len(pts) > 8
+          and worst <= 1.0 + 1e-6,
+          "%d point(s), worst %.3f of the way out" % (len(pts), worst))
 
 
 # ----------------------------------------------------------- 7. cover mode

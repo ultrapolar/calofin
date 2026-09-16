@@ -639,6 +639,15 @@
                                     ; than this off the drawn curve (a
                                     ; quarter inch - invisible at pool
                                     ; scale, a big cut in arc count)
+(setq *PF-SPIKE-TOL*    2.0)        ; how far a slope waypoint's offset
+                                    ; has to sit against BOTH its
+                                    ; neighbours along that side before
+                                    ; the run names it: two inches.  40,
+                                    ; 10 and 30 in a row is a digit that
+                                    ; went in wrong, and the wall
+                                    ; between a 40 and a 30 is about 35.
+                                    ; Raising it hides typos, lowering
+                                    ; it starts naming real steps
 
 ;; ---- 3. GUARDS ------------------------------------------------------
 (setq *PF-EXACT-EPS*    0.001)      ; "exactly on" threshold (units):
@@ -679,7 +688,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "091526 REV19") ; announced on load.  The
+(setq pf:*version*      "091626 REV20") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -3350,6 +3359,64 @@
 (defun pf:fmt-off (def)
   (if (cdr def) (rtos (car def) 4 4) (rtos (car def) 2 2)))
 
+;; ---- an offset that fights its neighbours ----------------------------
+;; Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
+;; standalone file loads alone -- see STANDARDS.md section 4.
+
+;; The entries of PAIRS -- ((position . value) ...) in position order --
+;; that sit AGAINST the run on both sides by more than TOL.  Returns
+;; ((index . what the neighbours put there) ...).  Fighting BOTH
+;; neighbours is the test, and it is what keeps a real curve quiet: 40,
+;; 38, 30 is a wall bending away, every value between its neighbours,
+;; and nothing is said about it however far the middle one sits off the
+;; chord.  40, 10, 30 is a digit.
+(defun pf:spikes (pairs tol / n i a b c span expect out)
+  (setq n (length pairs) i 1 out nil)
+  (while (< i (1- n))
+    (setq a    (nth (1- i) pairs)
+          b    (nth i pairs)
+          c    (nth (1+ i) pairs)
+          span (- (car c) (car a)))
+    (if (> span 1.0e-9)
+      (progn
+        (setq expect (+ (cdr a) (* (- (cdr c) (cdr a))
+                                   (/ (- (car b) (car a)) span))))
+        (if (and (> (abs (- (cdr b) expect)) tol)
+                 (or (and (> (- (cdr a) (cdr b)) tol)
+                          (> (- (cdr c) (cdr b)) tol))
+                     (and (> (- (cdr b) (cdr a)) tol)
+                          (> (- (cdr b) (cdr c)) tol))))
+          (setq out (cons (cons i expect) out)))))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; Name a waypoint whose offset fights both its neighbours along this
+;; side, and say what they put there.  ANCHORS is the offset profile in
+;; order along the side -- the deep end, the waypoints, the shallow
+;; break -- and NAMES is (position . "17") for the waypoints in it.
+;; Only a waypoint is named: the two ends are pinned by the hopper and
+;; the break rather than typed as measurements of the wall.
+;;
+;; Nothing is changed.  The line follows the offsets exactly as they
+;; were given, because an offset the drafter measured is the one thing
+;; this command may not quietly overwrite -- it says what it noticed
+;; and leaves the number alone.
+(defun pf:review-offsets (anchors names / e a b c nm)
+  (foreach e (pf:spikes anchors *PF-SPIKE-TOL*)
+    (setq b  (nth (car e) anchors)
+          nm (assoc (car b) names))
+    (if nm
+      (progn
+        (setq a (nth (1- (car e)) anchors)
+              c (nth (1+ (car e)) anchors))
+        (princ (strcat "\n  (Pt." (cdr nm) " is offset "
+                       (rtos (cdr b) 2 2) ", against "
+                       (rtos (cdr a) 2 2) " and " (rtos (cdr c) 2 2)
+                       " on both sides of it - the wall between those"
+                       " puts it near " (rtos (cdr e) 2 2)
+                       ".  The line follows what you typed.)")))))
+  (princ))
+
 ;; Read an offset distance, remembering HOW it was typed - as
 ;; feet-and-inches (3'6) or as plain inches (42) - because that
 ;; choice picks the dimension style later.  Returns (value . T) for
@@ -3503,7 +3570,7 @@
 ;; (the caller draws a straight line then).
 (defun pf:slope-pts (samps sgn ia dir cnt pa pb offa waypts ea
                      / n idxs i k base cum lt prev q out j anchors wp
-                       woff wfl bk bd d dims dv fade w cj out2)
+                       woff wfl bk bd d dims dv fade w cj out2 wnames)
   (setq n (length samps))
   (if (< cnt 2)
     nil
@@ -3548,10 +3615,16 @@
                               " ignored, the breaks rule there)")))
               (T
                (setq anchors (cons (cons (nth bk cum) woff) anchors)
+                     wnames  (cons (cons (nth bk cum) (pf:pt-name wp))
+                                   wnames)
                      dims    (cons (list (nth bk base) bk wfl)
                                    dims)))))
           (setq anchors (pf:sort-car anchors)
                 anchors (append anchors (list (cons lt 0.0))))
+          ;; the profile is in order along the side now, so a waypoint
+          ;; offset that fights both its neighbours can be named before
+          ;; the line is drawn through it
+          (pf:review-offsets anchors wnames)
           (setq out nil j 0)
           (foreach q base
             (setq out (cons (pf:add q (pf:scl

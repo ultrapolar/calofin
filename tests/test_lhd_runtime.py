@@ -99,6 +99,45 @@ check('step 6 was never asked', 'Step 6 of 6' not in ''.join(vm.printed))
 check('and no interactive selection prompt fired',
       not any(p == 'ssget' for p, _ in vm.prompts), vm.prompts)
 
+def ab_pts(vm, pts, layer='POINTS'):
+    """Scanned points carrying survey numbers, the way a converted
+    export leaves them: an ab_pt insert with a numbered attribute."""
+    made = []
+    for n, (x, y) in enumerate(pts, 1):
+        before = len(vm.entities)
+        vm.loads("""
+          (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity")
+                         (cons 8 "%s") '(100 . "AcDbBlockReference")
+                         '(2 . "ab_pt") (list 10 %r %r 0.0) '(66 . 1)))
+          (entmake (list '(0 . "ATTRIB") (cons 8 "%s")
+                         '(2 . "number") (cons 1 "%d")))
+          (entmake (list '(0 . "SEQEND") (cons 8 "%s")))"""
+                 % (layer, x, y, layer, n, layer))
+        made += vm.entities[before:]
+    return made
+
+
+print('lhd -- a declaration is named by its point, clicked or typed')
+vm = newvm()
+pts = ab_pts(vm, [(0.0, 0.0), (120.0, 0.0), (120.0, 60.0), (0.0, 60.0)])
+vm.pickfirst = ['<ss>'] + pts
+vm.run('c:LHD', [1.0, None, None, 'Open',
+                 'Hold', "99", "3",            # a number nothing carries
+                 'Corner', (118.0, 2.0, 0.0),  # a click within the snap
+                 'Stretch', "1", "1", "2",     # one point twice, refused
+                 'Done', 'None'])
+said = ''.join(vm.printed)
+check('a number no point carries is named and re-asked',
+      'No survey point is numbered "99"' in said, said[:400])
+check('a held point, a corner and a stretch are all counted back',
+      '1 stretch(es), 1 corner(s) and 1 held point(s) noted' in said,
+      said[-300:])
+check('one point named for both ends of a stretch is refused',
+      'a stretch needs two different points' in said, said[-300:])
+live = [e for e in vm.entities if e not in vm.deleted]
+check('every dashed marker cleared itself afterwards',
+      not [e for e in live if vm.layer_of(e) == 'POOL-WALLS'])
+
 print('lhd -- the declare loop takes a held point and reports it')
 vm = newvm()
 pts = points(vm, [(0.0, 0.0), (120.0, 0.0), (120.0, 60.0), (0.0, 60.0)])

@@ -841,7 +841,10 @@ standalone/  generated, self-contained, dated REV-stamped twins - one
              (today: releases/ - the rename is still pending)
 shared/      BUILT - the loaded-together build: CALOFIN-LIB.lsp (the
              section-4 helpers plus ensure-layer, the vector sets,
-             circumcenter, bboxes, trim/pad/datestr, block-number, the
+             circumcenter, bboxes, trim/pad/datestr, block-number,
+             the survey-point naming (askpoint/canon/cand-*), the
+             inside of a closed loop (loop-area/inward-sign/in-loop-p)
+             and the spike rule, the
              chart-form kit the three LAZ* forms draw with (cal:img*,
              cal:formanswer) and more, all under cal:),
              CALOFIN-LOADER.lsp (APPLOAD this

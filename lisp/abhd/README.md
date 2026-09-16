@@ -320,6 +320,7 @@ starts.)
 | `*PF-CAP-RELAX*` / `*PF-CAP-TRIES*` | `1.4` / `40` | How the curve cap's refits relax the distance, and how often |
 | `*PF-PICKUP-EPS*` | `3.0` | How near the loop a point must sit for `ADAB` to take it as one of its own |
 | `*PF-BOTTOM-STEP*` / `*PF-BOTTOM-FIT*` | `6.0` / `0.25` | Hopper sampling step, and how far a sample may sit off the arcs drawn through it |
+| `*PF-SPIKE-TOL*` | `2.0` | How far a slope waypoint's offset must sit **against both** its neighbours along that side before the run names it — and names the number the wall between them puts there. Raising it hides typos; lowering it starts naming real steps |
 
 **3. Guards** — limits that keep the maths finite and the searches
 bounded. Named so each is defined once and can be read, not because
@@ -838,6 +839,25 @@ offset is dimensioned** just like the three hopper offsets. A pick
 that isn't on that side of the pool, or that lands on a break point,
 is called out and ignored; picking no points at all just gives the
 plain guided line.
+
+**An offset that fights both its neighbours is named.** 40, then 10,
+then 30 at three points in a row down one side is not a wall — the
+wall between a 40 and a 30 is about 35, and the 10 is a digit that
+went in wrong. Before the line is drawn, any waypoint offset sitting
+against **both** its neighbours by more than `*PF-SPIKE-TOL*` (2″) is
+called out with the number they put there:
+
+```
+  (Pt.4 is offset 10.00, against 40.00 and 30.00 on both sides of it -
+   the wall between those puts it near 35.00.  The line follows what
+   you typed.)
+```
+
+Nothing is changed: an offset you measured is yours, so the line is
+drawn through exactly what you gave it. A side that simply **bends**
+says nothing however hard it bends — 40, 38, 30 has every value
+between its neighbours, and it is fighting *both* sides at once that
+marks a typo rather than a curve.
 
 **Everything lands on the `POOL` layer** with the perimeter: the
 shallow break, the three-piece deep break, the hopper outline, the
