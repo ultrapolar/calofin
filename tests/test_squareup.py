@@ -470,6 +470,22 @@ check("the error is reported under the tool's name",
 check("no summary line for a run that did not finish",
       not said(vm, 'SQUAREUP done'))
 
+print("squareup -- every sysvar it borrows comes back, not just OSMODE")
+vm = fresh()
+# non-defaults on all five, so a restore that writes the WRONG value
+# back is as visible as one that writes none: ROTATE reads its angle
+# through the last three, which is why they are borrowed at all
+before = {'OSMODE': 47, 'CMDECHO': 1, 'AUNITS': 3, 'ANGBASE': 1.5707963,
+          'ANGDIR': 1}
+vm.sysvars.update(before)
+es = tilted_pool(vm, 6.0)
+vm.run('c:SQUAREUP', [None, es, [es[0]], 'Wall'])
+check("it really did turn, so the borrow happened",
+      rotate_cmd(vm) is not None)
+for name, was in before.items():
+    check("%s came back as it was" % name, vm.sysvars[name] == was,
+          "%r, was %r" % (vm.sysvars[name], was))
+
 print("squareup -- a second run still saves the drafter's real snaps")
 vm = fresh()
 vm.handle_errors = True
