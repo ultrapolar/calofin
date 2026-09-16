@@ -18,6 +18,9 @@ own name because every `lisp/` tool has to load and work alone.
    as the largest closed loop it can find in the current tab.
    Highlighting the perimeter *before* step 2 skips this prompt: a
    pickfirst selection is taken as-is.
+5. If what you gave it closes except for a gap, MOHAMADDLE draws an
+   arrow at every open joint and asks whether to close it with a zero
+   fillet before it pads anything — below.
 
 This is the size prompt itself; it has nothing in front of it to step
 back to, so it does not offer `Back`.
@@ -30,6 +33,25 @@ gets a flush row of pads; a concave corner bending more than 30° gets
 one pad on the vertex; convex geometry and gentler bends get nothing.
 "Concave" is judged from the interior of the closed loop either way it
 was drawn.
+
+## The gap in a perimeter that nearly closes
+
+`PADDLE`'s gap pass came over with the rest of the engine and works
+exactly as it does there — `lisp/paddle/README.md` has the full
+description, and the rules live in one place in prose even though the
+code is a second copy. In short: geometry that chains into a perimeter
+except for a drafting gap is recognised as one, an arrow goes in at
+every open joint, and each gap is offered a zero-radius `FILLET`
+(`Close the gap the arrow points at with a zero fillet? [Yes/No]
+<Yes>:`). Yes closes it and the run carries on into the perimeter that
+leaves; No leaves the arrow standing. A gap whose two ends are on one
+open polyline is joined in place instead of being handed to `FILLET`.
+
+The question comes **after** the size pick and before any pad goes in,
+and the arrows land on layer `PADDLE-GAP` — `PADDLE`'s own, shared
+deliberately, the way the two tools already share `PADS`. They mark
+the same thing in the same drawing, so whichever of them runs next
+clears the marks and re-marks whatever is still open.
 
 ## Pad sizes
 
@@ -78,6 +100,9 @@ Drawing units are assumed to be **inches** (architectural).
 | `*mohamaddle-cornertol*` | 30° | A joint has to bend **more than** this, into the pool, to be a sharp inside corner |
 | `*mohamaddle-arctol*` | 10° | A concave arc has to bend **more than** this in total to be a feature |
 | `*mohamaddle-fuzz*` | `0.05` | Largest gap that still counts as touching when chaining loose lines and arcs |
+| `*mohamaddle-gapmax*` | `36.0` | Furthest apart two loose ends may be and still read as a drafting gap to arrow and offer a fillet for. Wider than this is a missing wall |
+| `*mohamaddle-gap-layer*` / `*mohamaddle-gap-color*` | `"PADDLE-GAP"` / `1` | Where the gap arrows are drawn, and in what colour. `PADDLE`'s layer on purpose — the two tools mark the same thing, and each clears and re-marks it |
+| `*mohamaddle-arrow*` | `36.0` | Length of a gap arrow, tail to tip |
 
 Supported perimeter geometry: **LWPOLYLINE, 2D POLYLINE, LINE, ARC**
 in any combination — the loop just has to close. (3D/mesh polylines

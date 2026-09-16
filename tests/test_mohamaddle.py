@@ -16,7 +16,15 @@ the part that is actually new:
   * a run remembers the size it was given and offers THAT as the
     default the next time it is asked, in the same session;
   * every exit hands the session back: sysvars unchanged, no undo mark
-    left open, no raw AutoLISP message on a cancel.
+    left open, no raw AutoLISP message on a cancel;
+  * PADDLE's GAP pass came over with the engine and is reached through
+    this command's own prompts: geometry that chains into a perimeter
+    except for a drafting gap is arrowed and offered a zero fillet
+    before the pads go in, and the arrows land on PADDLE's own layer
+    because the two tools mark the same thing in the same drawing.
+    The rules behind it are PADDLE's and are proved there
+    (test_paddle.py); what is checked here is that the pass is wired
+    into MOHAMADDLE at all, and that it sits AFTER the size pick.
 
 Run: python3 tests/test_mohamaddle.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_mohamaddle.py
@@ -216,6 +224,78 @@ verts = [g[1:] for a in sq for g in a
 check("the fallback block is a 24x24 square centred on its base point",
       verts and max(abs(v[0]) for v in verts) == 12.0
       and max(abs(v[1]) for v in verts) == 12.0, f"{verts}")
+
+
+#: the same slot outline as loose lines, with the last leg 12" short of
+#: the start: one open chain, two loose ends, one gap.
+GAPPY = [((0, 0), (300, 0)), ((300, 0), (300, 168)), ((300, 168), (132, 168)),
+         ((132, 168), (132, 120)), ((132, 120), (84, 120)),
+         ((84, 120), (84, 168)), ((84, 168), (0, 168)), ((0, 168), (0, 12))]
+
+
+def gappy(vm, legs=None):
+    for a, b in (legs or GAPPY):
+        vm.loads('(entmake (list (cons 0 "LINE") (cons 8 "DEMO") '
+                 '(list 10 %.4f %.4f 0.0) (list 11 %.4f %.4f 0.0)))'
+                 % (a[0], a[1], b[0], b[1]))
+    return vm
+
+
+def arrows(vm):
+    return [e for e in vm.entities
+            if e not in vm.deleted and vm.layer_of(e) == "PADDLE-GAP"]
+
+
+print("MOHAMADDLE -- the gap pass came over with the engine")
+vm = gappy(fresh(DEMO_LAYER))
+vm.loads('(setvar "FILLETRAD" 13.5) (setvar "TRIMMODE" 0)')
+before = dict(vm.sysvars)
+n0 = len(vm.entities)
+vm.run("c:MOHAMADDLE", ["36", None, None, "Yes"])
+out = "".join(vm.printed)
+check("the size pick still came first",
+      vm.prompts and "Pad size" in vm.prompts[0][0], f"{vm.prompts[:1]}")
+check("it read the loose lines as one perimeter with a gap in it",
+      "one closed perimeter with 1 gap(s) in it" in out)
+check("it measured the gap and said where",
+      'gap 1 of 1: 12" wide, at 0.00,6.00' in out)
+check("the gap question came after the size pick",
+      [p for p, _ in vm.prompts if "zero fillet" in p]
+      and "Pad size" in vm.prompts[0][0])
+check("it filleted at radius 0, once",
+      len([c for c in vm.commands if c and c[0] == "_.FILLET"]) == 1)
+check("it said the gap closed", "1 gap(s) closed with a zero fillet" in out)
+check("the arrow came away with the gap", not arrows(vm))
+check("and the pads went in on the perimeter that left",
+      centres(vm, pads_of(vm, n0)) == sorted(CORNERS),
+      f"{centres(vm, pads_of(vm, n0))}")
+check("FILLETRAD and TRIMMODE are back where the drafter had them",
+      vm.sysvars == before,
+      {k: (before[k], vm.sysvars[k])
+       for k in before if before[k] != vm.sysvars[k]})
+check("no undo mark was left open", vm.undo_marks == 0)
+
+
+print("MOHAMADDLE -- No leaves the arrow standing, on PADDLE's own layer")
+vm = gappy(fresh(DEMO_LAYER))
+n0 = len(vm.entities)
+vm.run("c:MOHAMADDLE", ["36", None, None, "No"])
+check("nothing was filleted",
+      not [c for c in vm.commands if c and c[0] == "_.FILLET"])
+check("the arrow is there, and it is PADDLE's layer it is on",
+      len(arrows(vm)) == 1, f"{len(arrows(vm))}")
+check("no pads went in - there is no closed perimeter yet",
+      not pads_of(vm, n0)
+      and "no closed perimeter loop found" in "".join(vm.printed))
+
+
+print("MOHAMADDLE -- a closed perimeter is never asked about")
+vm = with_perimeter()
+n0 = len(vm.entities)
+vm.run("c:MOHAMADDLE", ["36", None, None])   # no gap answer to give
+check("it never asked", not any("zero fillet" in p for p, _ in vm.prompts))
+check("no arrow was drawn", not arrows(vm))
+check("and it padded the five features", len(pads_of(vm, n0)) == 5)
 
 
 print("MOHAMADDLEVER -- reports its own banner")
