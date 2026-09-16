@@ -646,6 +646,58 @@ which is where it already reads the pins. `CALSET` writes both in one
 go, for the same reason `PaletteMemory` shares the pin key: a drafter
 says which way their screen reads once, not once per surface.
 
+### Phase 5k -- the sixth tab, and something to install *(done 2026-09-16)*
+
+Two gaps, and neither was a bug anything here could see.
+
+**The pool SIDE VIEW had no tab.** `LAZSIDE` has been complete for a
+while -- a section per bottom type, built out of POOLSIDE's own run
+chain, with a state line and a recall store -- but `gen_ui_charts.py`
+read `lzf:*charts*`, `lzs:*charts*` and `lzt:chart` and stopped, so
+`lzv:chart` was the one sheet in the tree the palette could not draw.
+Every check stayed green, and the Commands tab has had a LAZSIDE button
+the whole time, so the gap read as a decision rather than an omission.
+The generator asks `lzv:chart` for each of the six types now and
+`SideFormView.vb` draws them, next to `Pool bottom` -- the same view of
+the pool, one tab picking a floor by eye and the other measuring the
+floor that was picked.
+
+Two rules travel as tables, and one deliberately does not. The bottom
+type is the ANSWER, spelled as `psd:*btypes*` spells it, and
+`tests/test_ui_charts.py` holds the two lists together in POOLSIDE's
+order. `lzv:depthkey`'s three depths are the keys an `NA` may not
+travel in -- a `REQ` item fed a nil is never asked again -- while an
+`NA` in a RUN is a real answer POOLSIDE reads back off `B`, which is
+why neither can be a blanket rule about the word. `lzv:depthbad` stays
+in the Lisp: applying it means reading three boxes, and not reading a
+box is the whole of phase 5d.
+
+**There was nothing to install.** `make check` proved the tree
+consistent and `make test` proved it drew; neither produced anything
+that could go on a CAD machine, which is a strange place for a tree
+whose whole point is the drafter's afternoon. `tools/package.py` writes
+an ApplicationPlugins bundle, zipped: the AutoLISP half is finished the
+moment it is copied, and the palette ships as sources with a Windows
+build script. The manifest names the palette either way -- the entry is
+`LoadOnCommandInvocation`, so a bundle with the DLL slot still empty
+starts identically and runs every Lisp tool in it, and a manifest that
+changed shape depending on whether a DLL was lying around would mean
+the thing you tested is not the thing you shipped.
+
+**What still wants a human with AutoCAD open**, and now finally has a
+build to do it with -- this is the list from phase 5h, plus this
+phase's own:
+
+1. The spa form with a `NotGiven` corner: confirm the `?` mark lands.
+2. Type `6'-3"` into any box and confirm it arrives as 75, not as NA.
+   That is the phase 5d bug, and the one this surface could not catch.
+3. On `Pool side`: fill a Sport in, switch to Normal, and confirm `B`,
+   `C` and `D` came across while the run letters waited.
+4. On `Pool side`: type `NA` in `D` and confirm the state line names it
+   and greys `Draw`; type `NA` in a run and confirm it does not.
+5. Pin a tool on `LAZPANEL` and confirm it is pinned on the palette --
+   one registry key, both surfaces.
+
 ## After the plan: what nothing was checking
 
 The five phases added roughly 1,240 `action_tile` callbacks across 37

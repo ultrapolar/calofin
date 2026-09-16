@@ -4,7 +4,7 @@
 
 PY ?= python3
 
-.PHONY: all check verify lint test test-shared parity fast help
+.PHONY: all check verify lint test test-shared parity fast package help
 
 all: check test
 
@@ -19,6 +19,7 @@ help:
 	@echo "make test-shared  full suite, grouped tier (shared/)"
 	@echo "make parity       full suite at BOTH tiers - the drift check"
 	@echo "make fast         quick loop: skips the slowest files, lisp/ tier"
+	@echo "make package      the installable bundle + zip, into dist/"
 
 check:
 	$(PY) tools/check_standards.py
@@ -54,3 +55,9 @@ parity:
 
 fast:
 	$(PY) tools/run_tests.py --fast
+
+# The one target that produces something a drafter can install.  Not part
+# of `all`: it writes to dist/ and the checks above read the tree, so a
+# packaging run has nothing to say about whether the tree is correct.
+package:
+	$(PY) tools/package.py

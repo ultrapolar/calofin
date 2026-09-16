@@ -6,6 +6,7 @@
 '   from       : lisp/lazform/LAZFORM.lsp   (lzf:*charts*)
 '                lisp/lazspa/LAZSPA.lsp     (lzs:*charts*)
 '                lisp/lazstep/LAZSTEP.lsp   (lzt:chart, per step count)
+'                lisp/lazside/LAZSIDE.lsp   (lzv:chart, per bottom type)
 '   regenerate : python3 tools/gen_ui_charts.py
 '   checked by : python3 tools/gen_ui_charts.py --check, which
 '                make check runs
@@ -23,7 +24,10 @@
 ' What is NOT here: which keys a page asks about given the bottom type
 ' and the in-square toggle (lzf:dead), the cross-dim mode dropdowns and
 ' the corner tables.  Those are rules rather than data, and a second
-' copy of a rule is the drift this file exists to end.
+' copy of a rule is the drift this file exists to end.  Nor is
+' lzv:depthbad, the side view's "D must be deeper than C": it is a rule
+' AND it has to read three boxes to apply, which is the one thing the
+' palette does not do.  POOLSIDE asks again at the prompt.
 
 Imports System.Collections.Generic
 
@@ -266,6 +270,66 @@ Public NotInheritable Class ChartCatalog
             Me.Strokes = strokes
             Me.Dims = dims
             Me.Cuts = cuts
+        End Sub
+    End Structure
+
+    ''' <summary>One bottom type, as lzv:*types* names it.
+    '''
+    ''' <para>Keyword is POOLSIDE's own spelling, capitals and all -- it
+    ''' is the ANSWER that travels, not a label, and "SLope" is how
+    ''' POOLSIDE's prompt spells the keyword it accepts. Title is what
+    ''' the picker shows.</para>
+    ''' </summary>
+    Public Structure SideType
+        Public ReadOnly Keyword As String
+        Public ReadOnly Title As String
+
+        Public Sub New(keyword As String, title As String)
+            Me.Keyword = keyword
+            Me.Title = title
+        End Sub
+    End Structure
+
+    ''' <summary>A question on a sheet that is not a measurement: the
+    ''' key it answers, what it asks, and the words it offers.
+    '''
+    ''' <para>The FIRST choice is the form's version of an empty box and
+    ''' sends nothing at all -- lzv:*asks* spells it "(ask)" and says
+    ''' why it is the only honest default: the prompt has a keyboard
+    ''' default of its own.</para>
+    ''' </summary>
+    Public Structure SideAsk
+        Public ReadOnly Key As String
+        Public ReadOnly Label As String
+        Public ReadOnly Choices As String()
+
+        Public Sub New(key As String, label As String, choices As String())
+            Me.Key = key
+            Me.Label = label
+            Me.Choices = choices
+        End Sub
+    End Structure
+
+    ''' <summary>A side-view sheet: the longitudinal section for one
+    ''' bottom type.
+    '''
+    ''' <para>There is no greying on one of these. A bottom type is a
+    ''' page of its own -- six floors are six different chains of
+    ''' letters -- so a letter that does not apply is not on the sheet
+    ''' at all rather than sitting on it disabled.</para>
+    ''' </summary>
+    Public Structure SideChart
+        Public ReadOnly Style As String
+        Public ReadOnly Title As String
+        Public ReadOnly Strokes As Stroke()
+        Public ReadOnly Dims As ChartDim()
+
+        Public Sub New(style As String, title As String,
+                       strokes As Stroke(), dims As ChartDim())
+            Me.Style = style
+            Me.Title = title
+            Me.Strokes = strokes
+            Me.Dims = dims
         End Sub
     End Structure
 
@@ -1680,6 +1744,118 @@ Public NotInheritable Class ChartCatalog
             New Double() {385, 445})
     }
 
+    ''' <summary>Where a side sheet's answers go: POOLSIDE's own
+    ''' entry point, as c:LAZSIDE calls it.</summary>
+    Public Const SideEntryPoint As String = "psd:run-with-answers"
+
+    ''' <summary>The six bottom types, from lzv:*types*: the
+    ''' keyword POOLSIDE answers with, and what the tab calls
+    ''' it.</summary>
+    Public Shared ReadOnly SideTypes As SideType() = {
+        New SideType("Normal", "Normal hopper"),
+        New SideType("Sport", "Sport"),
+        New SideType("Wedge", "Wedge"),
+        New SideType("SLope", "Slope"),
+        New SideType("MOdflat", "Mod flat"),
+        New SideType("SHallow", "Shallow slope")
+    }
+
+    ''' <summary>The keys lzv:depthkey calls depths - the ones
+    ''' POOLSIDE requires a number for, and therefore the ones
+    ''' an NA may not travel in.</summary>
+    Public Shared ReadOnly SideDepthKeys As String() = {
+        "c", "d", "c2"
+    }
+
+    ''' <summary>The questions on a side sheet that are not
+    ''' letters, from lzv:*asks*.</summary>
+    Public Shared ReadOnly SideAsks As SideAsk() = {
+        New SideAsk("mirror", "Put the deep end on the RIGHT", New String() {"(ask)", "Yes", "No"})
+    }
+
+    ''' <summary>Every side sheet: one per bottom type.
+    ''' LAZSIDE builds these out of the type's own run chain
+    ''' rather than keeping a table, so the generator asked it
+    ''' for each of the six.</summary>
+    Public Shared ReadOnly SideSheets As SideChart() = {
+        New SideChart("Normal", "Normal hopper",
+            New Stroke() {
+                New Stroke(New Double() {90, 230, 90, 430, 188, 660, 352, 660, 680, 430, 910, 430, 910, 230, 90, 230})
+            },
+            New ChartDim() {
+                New ChartDim("B", "b", 90, 120, 910, 120, True, "overall length, wall to wall"),
+                New ChartDim("H", "h", 90, 810, 188, 810, True, "left end to the hopper"),
+                New ChartDim("G", "g", 188, 810, 352, 810, True, "hopper pad length"),
+                New ChartDim("F", "f", 352, 810, 680, 810, True, "pad to the slope break"),
+                New ChartDim("E", "e", 680, 810, 910, 810, True, "slope break to the right end"),
+                New ChartDim("C", "c", 45, 230, 45, 430, False, "wall height (shallow depth)"),
+                New ChartDim("D", "d", 188, 230, 188, 660, False, "deep end depth")
+            }),
+        New SideChart("Sport", "Sport",
+            New Stroke() {
+                New Stroke(New Double() {90, 230, 90, 430, 188, 430, 352, 660, 598, 660, 811, 430, 910, 430, 910, 230, 90, 230})
+            },
+            New ChartDim() {
+                New ChartDim("B", "b", 90, 120, 910, 120, True, "overall length, wall to wall"),
+                New ChartDim("E2", "e2", 90, 810, 188, 810, True, "left end to the slope"),
+                New ChartDim("F2", "f2", 188, 810, 352, 810, True, "slope to the deep flat"),
+                New ChartDim("G", "g", 352, 810, 598, 810, True, "deep flat length"),
+                New ChartDim("F1", "f1", 598, 810, 811, 810, True, "deep flat to the slope"),
+                New ChartDim("E1", "e1", 811, 810, 910, 810, True, "slope to the right end"),
+                New ChartDim("C", "c", 45, 230, 45, 430, False, "wall height (shallow depth)"),
+                New ChartDim("D", "d", 352, 230, 352, 660, False, "deep end depth")
+            }),
+        New SideChart("Wedge", "Wedge",
+            New Stroke() {
+                New Stroke(New Double() {90, 230, 90, 430, 188, 660, 910, 430, 910, 230, 90, 230})
+            },
+            New ChartDim() {
+                New ChartDim("B", "b", 90, 120, 910, 120, True, "overall length, wall to wall"),
+                New ChartDim("H", "h", 90, 810, 188, 810, True, "left end to the deep line"),
+                New ChartDim("F", "f", 188, 810, 910, 810, True, "deep line to the right wall"),
+                New ChartDim("C", "c", 45, 230, 45, 430, False, "wall height (shallow depth)"),
+                New ChartDim("D", "d", 188, 230, 188, 660, False, "deep end depth")
+            }),
+        New SideChart("SLope", "Slope",
+            New Stroke() {
+                New Stroke(New Double() {90, 230, 90, 430, 188, 660, 664, 430, 910, 430, 910, 230, 90, 230})
+            },
+            New ChartDim() {
+                New ChartDim("B", "b", 90, 120, 910, 120, True, "overall length, wall to wall"),
+                New ChartDim("H", "h", 90, 810, 188, 810, True, "left end to the deep line"),
+                New ChartDim("F", "f", 188, 810, 664, 810, True, "deep line to the slope break"),
+                New ChartDim("E", "e", 664, 810, 910, 810, True, "slope break to the right end"),
+                New ChartDim("C", "c", 45, 230, 45, 430, False, "wall height (shallow depth)"),
+                New ChartDim("D", "d", 188, 230, 188, 660, False, "deep end depth")
+            }),
+        New SideChart("MOdflat", "Mod flat",
+            New Stroke() {
+                New Stroke(New Double() {90, 230, 90, 430, 172, 660, 746, 660, 910, 430, 910, 230, 90, 230})
+            },
+            New ChartDim() {
+                New ChartDim("B", "b", 90, 120, 910, 120, True, "overall length, wall to wall"),
+                New ChartDim("H", "h", 90, 810, 172, 810, True, "left end to the flat pad"),
+                New ChartDim("G", "g", 172, 810, 746, 810, True, "flat pad length"),
+                New ChartDim("F", "f", 746, 810, 910, 810, True, "pad to the right end"),
+                New ChartDim("C", "c", 45, 230, 45, 430, False, "wall height (shallow depth)"),
+                New ChartDim("D", "d", 172, 230, 172, 660, False, "deep end depth")
+            }),
+        New SideChart("SHallow", "Shallow slope",
+            New Stroke() {
+                New Stroke(New Double() {90, 230, 90, 430, 188, 660, 352, 660, 680, 530, 910, 430, 910, 230, 90, 230})
+            },
+            New ChartDim() {
+                New ChartDim("B", "b", 90, 120, 910, 120, True, "overall length, wall to wall"),
+                New ChartDim("H", "h", 90, 810, 188, 810, True, "left end to the hopper"),
+                New ChartDim("G", "g", 188, 810, 352, 810, True, "hopper pad length"),
+                New ChartDim("F", "f", 352, 810, 680, 810, True, "pad to the slope break"),
+                New ChartDim("E", "e", 680, 810, 910, 810, True, "break to the right end"),
+                New ChartDim("C", "c", 45, 230, 45, 430, False, "wall height (shallow depth)"),
+                New ChartDim("D", "d", 188, 230, 188, 660, False, "deep end depth"),
+                New ChartDim("C2", "c2", 680, 230, 680, 530, False, "depth where the shallow floor meets the break")
+            })
+    }
+
     ''' <summary>lzf:*ctreat*: what a pool corner can be. This
     ''' one IS the canonical set -- STANDARDS.md section 2 --
     ''' unlike the spa sheet, which offers the drawing legend and
@@ -2085,6 +2261,36 @@ Public NotInheritable Class ChartCatalog
             End If
         Next
         Return Nothing
+    End Function
+
+    ''' <summary>The side-view sheet for a bottom type, or one with a
+    ''' Nothing Style when there is none.</summary>
+    Public Shared Function SideChartFor(style As String) As SideChart
+        For Each c In SideSheets
+            If String.Equals(c.Style, style,
+                             StringComparison.OrdinalIgnoreCase) Then
+                Return c
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>Does POOLSIDE require a measurement for this key?
+    '''
+    ''' <para>lzv:depthkey's three, carried as the table it is. C, D and
+    ''' C2 are required measurements, so an NA in one of them is not an
+    ''' answer POOLSIDE could take: the form withholds it and the state
+    ''' line says which box, exactly as lzv:form demotes it to an empty
+    ''' box and lzv:whybad names it.</para>
+    ''' </summary>
+    Public Shared Function IsSideDepth(key As String) As Boolean
+        If key Is Nothing Then Return False
+        For Each k In SideDepthKeys
+            If String.Equals(k, key, StringComparison.OrdinalIgnoreCase) Then
+                Return True
+            End If
+        Next
+        Return False
     End Function
 
 End Class

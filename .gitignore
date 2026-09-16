@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 *.zip
 *.dxf
+
+# build output: tools/package.py rewrites it from scratch every run
+dist/

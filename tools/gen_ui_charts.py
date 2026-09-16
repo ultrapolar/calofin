@@ -22,6 +22,9 @@ tables:
     lzt:chart      the step sheets, one per routine and step count,
                    because LAZSTEP builds its chart from the count
                    rather than keeping a table of them
+    lzv:chart      the side sections, one per bottom type, built the
+                   same way -- out of that type's run chain rather
+                   than out of a table of pictures
 
 Read through ``tests/lispvm.py`` -- the AutoLISP interpreter the suites
 already drive these tools with -- rather than by regex, so what is
@@ -37,7 +40,11 @@ What this does NOT carry, and deliberately, is ``lzf:dead`` and
 ``lzs:dead``: WHICH of a page's boxes this run will actually ask about,
 given the bottom type, the in-square toggle and the mode dropdowns.
 That is a rule rather than a table, and a second copy of it in VB is the
-drift this whole exercise exists to stop.  A palette form sends what was
+drift this whole exercise exists to stop.  ``lzv:depthbad`` is left
+behind for the same reason and one more: it has to READ three boxes to
+say D is deeper than C, and reading a box is exactly what the palette
+does not do.  POOLSIDE asks again at the prompt, which is what it does
+for the panel too.  A palette form sends what was
 typed and lets the routine ask for the rest, which is the wire's
 contract already -- the cost being that the palette's state line counts
 a box the routine would not have asked for.
@@ -79,6 +86,7 @@ SOURCES = (
 )
 
 STEPS = LISP_DIR / "lazstep" / "LAZSTEP.lsp"
+SIDE = LISP_DIR / "lazside" / "LAZSIDE.lsp"
 
 
 # ------------------------------------------------------------- reading
@@ -207,6 +215,68 @@ def read_steps():
                 "cuts": [float(y) for y in (c[4] or [])],
             })
     return top, routines, out
+
+
+def read_sides():
+    """Every side-view sheet: one per bottom type, from lzv:chart.
+
+    LAZSIDE keeps no table of pictures either.  ``lzv:chart`` BUILDS the
+    section for a bottom type out of that type's run chain, depth
+    stations and nominal proportions, so the generator asks for each of
+    the six types ``lzv:*types*`` names and writes back what it drew --
+    the same bargain read_steps strikes with the count.
+
+    Three things travel beside the geometry and every one of them is a
+    TABLE, which is the test for whether it may be carried at all:
+
+      * the type word, which is POOLSIDE's own keyword, capitals and
+        all, because it is the answer that travels and not a label;
+      * ``lzv:depthkey``'s three keys, which is what makes an NA in one
+        of them an empty box rather than an answer POOLSIDE cannot use;
+      * ``lzv:*asks*``, the one question on the sheet that is not a
+        letter.
+
+    The entry point is read out of ``c:LAZSIDE`` rather than typed here.
+    LAZSTEP names its runners in ``lzt:*types*`` and LAZSIDE has only
+    the one, so it calls it in place -- but it is still the Lisp's word
+    for it, and a rename there should break this rather than ship a
+    palette calling a function that is gone.
+    """
+    vm = vm_for(SIDE)
+    src = read(SIDE)
+
+    m = re.search(r"\((psd:[A-Za-z0-9:_-]*run-with-answers) form\)", src)
+    if not m:
+        raise SystemExit("gen_ui_charts: c:LAZSIDE no longer hands its form "
+                         "to a psd: entry point -- read %s and fix this"
+                         % SIDE.name)
+    entry = m.group(1)
+
+    types = [(str(t[0]), str(t[1])) for t in vm.globals["lzv:*types*"]]
+    asks = [(str(a[0]), str(a[1]), [str(w) for w in a[2]])
+            for a in vm.globals["lzv:*asks*"]]
+
+    sheets = []
+    depths = []
+    for key, _title in types:
+        vm.loads('(setq t:*c* (lzv:chart "%s"))' % key)
+        c = vm.globals["t:*c*"]
+        vm.loads("(setq t:*outline* (nth 2 t:*c*))")
+        sheets.append({
+            "style": str(c[0]),
+            "title": str(c[1]),
+            "strokes": strokes(vm, "lzv", c[2]),
+            "dims": dims(c[3]),
+        })
+        # asked of lzv:depthkey per key rather than copied off the
+        # member list, so a fourth depth added there arrives here
+        for d in c[3]:
+            k = str(d[1])
+            vm.loads('(setq t:*d* (lzv:depthkey "%s"))' % k)
+            if vm.globals["t:*d*"] and k not in depths:
+                depths.append(k)
+
+    return entry, types, depths, asks, sheets
 
 
 def read_spa_extras():
@@ -436,6 +506,18 @@ def step_block(c, indent):
     L[-1] += ","
     L.append("%sNew Double() {%s})"
              % (inner, ", ".join(num(y) for y in c["cuts"])))
+    return L
+
+
+def side_block(c, indent):
+    L = ["%sNew SideChart(%s, %s," % (indent, vbstr(c["style"]),
+                                      vbstr(c["title"]))]
+    inner = indent + "    "
+    deep = inner + "    "
+    L += array("Stroke", stroke_lines(c["strokes"], deep), inner)
+    L[-1] += ","
+    L += array("ChartDim", dim_lines(c["dims"], deep), inner)
+    L[-1] += ")"
     return L
 
 
@@ -710,6 +792,7 @@ HEAD = """\
 '   from       : lisp/lazform/LAZFORM.lsp   (lzf:*charts*)
 '                lisp/lazspa/LAZSPA.lsp     (lzs:*charts*)
 '                lisp/lazstep/LAZSTEP.lsp   (lzt:chart, per step count)
+'                lisp/lazside/LAZSIDE.lsp   (lzv:chart, per bottom type)
 '   regenerate : python3 tools/gen_ui_charts.py
 '   checked by : python3 tools/gen_ui_charts.py --check, which
 '                make check runs
@@ -727,7 +810,10 @@ HEAD = """\
 ' What is NOT here: which keys a page asks about given the bottom type
 ' and the in-square toggle (lzf:dead), the cross-dim mode dropdowns and
 ' the corner tables.  Those are rules rather than data, and a second
-' copy of a rule is the drift this file exists to end.
+' copy of a rule is the drift this file exists to end.  Nor is
+' lzv:depthbad, the side view's "D must be deeper than C": it is a rule
+' AND it has to read three boxes to apply, which is the one thing the
+' palette does not do.  POOLSIDE asks again at the prompt.
 
 Imports System.Collections.Generic
 
@@ -972,6 +1058,66 @@ Public NotInheritable Class ChartCatalog
             Me.Cuts = cuts
         End Sub
     End Structure
+
+    ''' <summary>One bottom type, as lzv:*types* names it.
+    '''
+    ''' <para>Keyword is POOLSIDE's own spelling, capitals and all -- it
+    ''' is the ANSWER that travels, not a label, and "SLope" is how
+    ''' POOLSIDE's prompt spells the keyword it accepts. Title is what
+    ''' the picker shows.</para>
+    ''' </summary>
+    Public Structure SideType
+        Public ReadOnly Keyword As String
+        Public ReadOnly Title As String
+
+        Public Sub New(keyword As String, title As String)
+            Me.Keyword = keyword
+            Me.Title = title
+        End Sub
+    End Structure
+
+    ''' <summary>A question on a sheet that is not a measurement: the
+    ''' key it answers, what it asks, and the words it offers.
+    '''
+    ''' <para>The FIRST choice is the form's version of an empty box and
+    ''' sends nothing at all -- lzv:*asks* spells it "(ask)" and says
+    ''' why it is the only honest default: the prompt has a keyboard
+    ''' default of its own.</para>
+    ''' </summary>
+    Public Structure SideAsk
+        Public ReadOnly Key As String
+        Public ReadOnly Label As String
+        Public ReadOnly Choices As String()
+
+        Public Sub New(key As String, label As String, choices As String())
+            Me.Key = key
+            Me.Label = label
+            Me.Choices = choices
+        End Sub
+    End Structure
+
+    ''' <summary>A side-view sheet: the longitudinal section for one
+    ''' bottom type.
+    '''
+    ''' <para>There is no greying on one of these. A bottom type is a
+    ''' page of its own -- six floors are six different chains of
+    ''' letters -- so a letter that does not apply is not on the sheet
+    ''' at all rather than sitting on it disabled.</para>
+    ''' </summary>
+    Public Structure SideChart
+        Public ReadOnly Style As String
+        Public ReadOnly Title As String
+        Public ReadOnly Strokes As Stroke()
+        Public ReadOnly Dims As ChartDim()
+
+        Public Sub New(style As String, title As String,
+                       strokes As Stroke(), dims As ChartDim())
+            Me.Style = style
+            Me.Title = title
+            Me.Strokes = strokes
+            Me.Dims = dims
+        End Sub
+    End Structure
 """
 
 TAIL = """
@@ -1021,6 +1167,36 @@ TAIL = """
         Return Nothing
     End Function
 
+    ''' <summary>The side-view sheet for a bottom type, or one with a
+    ''' Nothing Style when there is none.</summary>
+    Public Shared Function SideChartFor(style As String) As SideChart
+        For Each c In SideSheets
+            If String.Equals(c.Style, style,
+                             StringComparison.OrdinalIgnoreCase) Then
+                Return c
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>Does POOLSIDE require a measurement for this key?
+    '''
+    ''' <para>lzv:depthkey's three, carried as the table it is. C, D and
+    ''' C2 are required measurements, so an NA in one of them is not an
+    ''' answer POOLSIDE could take: the form withholds it and the state
+    ''' line says which box, exactly as lzv:form demotes it to an empty
+    ''' box and lzv:whybad names it.</para>
+    ''' </summary>
+    Public Shared Function IsSideDepth(key As String) As Boolean
+        If key Is Nothing Then Return False
+        For Each k In SideDepthKeys
+            If String.Equals(k, key, StringComparison.OrdinalIgnoreCase) Then
+                Return True
+            End If
+        Next
+        Return False
+    End Function
+
 End Class
 """
 
@@ -1068,6 +1244,51 @@ def build():
     for i, c in enumerate(steps):
         block = step_block(c, "        ")
         if i < len(steps) - 1:
+            block[-1] += ","
+        L.extend(block)
+    add("    }")
+
+    entry, sidetypes, depths, asks, sides = read_sides()
+    add("")
+    add("    ''' <summary>Where a side sheet's answers go: POOLSIDE's own")
+    add("    ''' entry point, as c:LAZSIDE calls it.</summary>")
+    add("    Public Const SideEntryPoint As String = %s" % vbstr(entry))
+    add("")
+    add("    ''' <summary>The six bottom types, from lzv:*types*: the")
+    add("    ''' keyword POOLSIDE answers with, and what the tab calls")
+    add("    ''' it.</summary>")
+    add("    Public Shared ReadOnly SideTypes As SideType() = {")
+    for i, (key, title) in enumerate(sidetypes):
+        add("        New SideType(%s, %s)%s"
+            % (vbstr(key), vbstr(title),
+               "," if i < len(sidetypes) - 1 else ""))
+    add("    }")
+    add("")
+    add("    ''' <summary>The keys lzv:depthkey calls depths - the ones")
+    add("    ''' POOLSIDE requires a number for, and therefore the ones")
+    add("    ''' an NA may not travel in.</summary>")
+    add("    Public Shared ReadOnly SideDepthKeys As String() = {")
+    add("        %s" % ", ".join(vbstr(k) for k in depths))
+    add("    }")
+    add("")
+    add("    ''' <summary>The questions on a side sheet that are not")
+    add("    ''' letters, from lzv:*asks*.</summary>")
+    add("    Public Shared ReadOnly SideAsks As SideAsk() = {")
+    for i, (key, label, choices) in enumerate(asks):
+        add("        New SideAsk(%s, %s, New String() {%s})%s"
+            % (vbstr(key), vbstr(label),
+               ", ".join(vbstr(w) for w in choices),
+               "," if i < len(asks) - 1 else ""))
+    add("    }")
+    add("")
+    add("    ''' <summary>Every side sheet: one per bottom type.")
+    add("    ''' LAZSIDE builds these out of the type's own run chain")
+    add("    ''' rather than keeping a table, so the generator asked it")
+    add("    ''' for each of the six.</summary>")
+    add("    Public Shared ReadOnly SideSheets As SideChart() = {")
+    for i, c in enumerate(sides):
+        block = side_block(c, "        ")
+        if i < len(sides) - 1:
             block[-1] += ","
         L.extend(block)
     add("    }")

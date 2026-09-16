@@ -1,7 +1,8 @@
 """The palette's generated chart geometry, against the charts it copies.
 
 ``ui/calofin_net/Generated/ChartCatalog.g.vb`` is the vector charts
-LAZFORM, LAZSPA and LAZSTEP draw, written out by tools/gen_ui_charts.py.
+LAZFORM, LAZSPA, LAZSTEP and LAZSIDE draw, written out by
+tools/gen_ui_charts.py.
 It exists so the palette can draw the sheet rather than photograph it:
 with the outline in the chart's own co-ordinates a dimension box needs
 no position of its own, because it belongs at the midpoint of the line
@@ -28,7 +29,14 @@ agree with itself whatever it emitted:
 4. Every step sheet exists, one per routine per count up to
    lzt:*max-steps*, because LAZSTEP builds its chart from the count
    rather than keeping a table of them.
-5. Nothing is off the chart: every co-ordinate is inside the 0..1000
+5. Every side section exists, one per bottom type, and the six type
+   WORDS are the six POOLSIDE's own initget string accepts -- in its
+   order.  A type is not a label on this sheet, it is the answer to
+   POOLSIDE's first prompt, so a seventh added to one table and not the
+   other is a form whose Draw could only fail.  Every key a side sheet
+   could send is one POOLSIDE reads, asked of psd:chain and psd:key
+   rather than typed here.
+6. Nothing is off the chart: every co-ordinate is inside the 0..1000
    square the palette scales, which is test_lazform.py's own rule for
    the same tables.
 
@@ -229,7 +237,88 @@ for c in steps:
 check("every sheet's tread boxes match its step count", True)
 
 
-print("== 5. nothing is drawn off the sheet ==")
+print("== 5. a side section for every bottom type ==")
+
+entry, sidetypes, depths, asks, sides = gen.read_sides()
+side_body = table("ReadOnly SideSheets As SideChart() = {")
+got_sides = re.findall(r'New SideChart\("([A-Za-z0-9]+)", "([^"]*)",',
+                       side_body)
+
+check("a section for each of the %d bottom types" % len(sidetypes),
+      [g[0] for g in got_sides] == [c["style"] for c in sides],
+      repr(got_sides))
+check("SideEntryPoint is the one c:LAZSIDE calls",
+      ('Public Const SideEntryPoint As String = "%s"' % entry) in SRC,
+      entry)
+
+for c, block in zip(sides, blocks(side_body, "SideChart")):
+    check("%-8s %d dim(s), %d stroke(s)"
+          % (c["style"], len(c["dims"]), len(c["strokes"])),
+          dims_in(block) == c["dims"] and strokes_in(block) == c["strokes"],
+          repr([d for d in dims_in(block) if d not in c["dims"]][:2]))
+
+# THE TYPE IS THE ANSWER, not a label.  lzv:*types* names the six
+# keywords and POOLSIDE's psd:*btypes* is the initget string it has to
+# satisfy -- a seventh in either table alone is a page whose Draw could
+# only fail, so they are held together here rather than by anybody
+# remembering.  Read out of POOLSIDE itself, never typed.
+psd = gen.vm_for(os.path.join(REPO, 'lisp', 'poolside', 'POOLSIDE.lsp'))
+btypes = str(psd.globals["psd:*btypes*"]).split()
+check("the six type words are POOLSIDE's own, in its order",
+      [k for k, _t in sidetypes] == btypes,
+      "%r vs %r" % ([k for k, _t in sidetypes], btypes))
+check("the VB carries the same six",
+      all(('New SideType("%s", "%s")' % (k, t)) in SRC for k, t in sidetypes),
+      repr(sidetypes))
+
+# Every key a side sheet could send is one POOLSIDE reads.  The run
+# letters come back through psd:key, which is the very function that
+# spells a chart letter as a form key, so this cannot drift by spelling.
+side_reads = {"b", "style", "mirror"} | set(depths)
+for style, _t in sidetypes:
+    psd.loads('(setq t:*ch* (mapcar (function (lambda (c) (psd:key (car c))))'
+              ' (psd:chain "%s")))' % style)
+    side_reads |= {str(k) for k in psd.globals["t:*ch*"]}
+side_sent = set()
+for c in sides:
+    side_sent |= {d[1] for d in c["dims"]}
+check("every side chart key is one POOLSIDE reads",
+      side_sent <= side_reads, repr(sorted(side_sent - side_reads)))
+
+# ...and the chain a page draws is the chain POOLSIDE measures that
+# floor by.  A Sport drawn with a Normal's letters would collect four
+# answers the routine never asks for and miss five it does.
+for (style, _t), c in zip(sidetypes, sides):
+    psd.loads('(setq t:*ch* (mapcar (function (lambda (c) (psd:key (car c))))'
+              ' (psd:chain "%s")))' % style)
+    want = [str(k) for k in psd.globals["t:*ch*"]]
+    got = [d[1] for d in c["dims"] if d[1] != "b" and d[1] not in depths]
+    check("%-8s run chain is POOLSIDE's" % style, got == want,
+          "%r vs %r" % (got, want))
+
+# The depths are the keys an NA may not travel in, and the reason is
+# that POOLSIDE marks them REQ -- read off psd:items' own spelling
+# rather than asserted here.
+src_psd = read(os.path.join(REPO, 'lisp', 'poolside', 'POOLSIDE.lsp'))
+check("every depth key is REQ in POOLSIDE, which is why NA is withheld",
+      all(("(list '%s 'REQ" % k) in src_psd for k in depths), repr(depths))
+side_keys_body = table("ReadOnly SideDepthKeys As String() = {")
+check("SideDepthKeys carries exactly those",
+      ("        %s" % ", ".join('"%s"' % k for k in depths))
+      in side_keys_body, repr(depths))
+
+# The one question that is not a letter, and the word that sends
+# nothing.  POOLSIDE's default for it is No, which is exactly why
+# "(ask)" may not be a value: picking it must leave the prompt to apply
+# its own default rather than send one.
+check("the mirror question is carried with (ask) first",
+      [(k, tuple(ch)) for k, _l, ch in asks]
+      == [("mirror", ("(ask)", "Yes", "No"))], repr(asks))
+check("POOLSIDE reads that key as a keyword with its own default",
+      '(psd:fkw \'mirror "Yes No" "No")' in src_psd)
+
+
+print("== 6. nothing is drawn off the sheet ==")
 
 off = []
 for prefix in ("lzf", "lzs"):
@@ -247,10 +336,19 @@ for c in steps:
         for v in s:
             if not -50 <= v <= 1100:
                 off.append((c["routine"], v))
+for c in sides:
+    for s in c["strokes"]:
+        for v in s:
+            if not -50 <= v <= 1100:
+                off.append((c["style"], v))
+    for d in c["dims"]:
+        for v in d[2:6]:
+            if not -50 <= v <= 1100:
+                off.append((c["style"], v))
 check("every co-ordinate is on the 0..1000 sheet", not off, repr(off[:4]))
 
 
-print("== 6. the file is current, and it is well-formed VB ==")
+print("== 7. the file is current, and it is well-formed VB ==")
 
 check("gen_ui_charts --check is happy", not gen.check(), repr(gen.check()))
 
@@ -278,7 +376,10 @@ types = check_vb.declared(check_vb.vb_files())
 check("ChartCatalog declares what a form would read",
       {'Pool', 'Spa', 'StepSheets', 'StepRoutines', 'MaxSteps', 'Span',
        'Chart', 'StepChart', 'ChartDim', 'Stroke', 'ListKey', 'Gate',
-       'Mark', 'PoolChart', 'SpaChart', 'StepChartFor'}
+       'Mark', 'PoolChart', 'SpaChart', 'StepChartFor',
+       'SideSheets', 'SideTypes', 'SideAsks', 'SideDepthKeys',
+       'SideChart', 'SideType', 'SideAsk', 'SideChartFor', 'IsSideDepth',
+       'SideEntryPoint'}
       <= types.get('ChartCatalog', {}).get('members', set()),
       repr(sorted(types.get('ChartCatalog', {}).get('members', ()))))
 
@@ -287,5 +388,6 @@ print()
 if FAILS:
     print("%d FAILED: %s" % (len(FAILS), ", ".join(FAILS)))
     sys.exit(1)
-print("ALL UI CHART CHECKS PASSED (%d pool, %d spa, %d step sheets)"
-      % (len(WANT["lzf"]), len(WANT["lzs"]), len(steps)))
+print("ALL UI CHART CHECKS PASSED "
+      "(%d pool, %d spa, %d step, %d side sheets)"
+      % (len(WANT["lzf"]), len(WANT["lzs"]), len(steps), len(sides)))

@@ -98,13 +98,16 @@ Public NotInheritable Class RecallStore
     Private Sub New()
     End Sub
 
-    ''' <summary>lzf:*recallkey*, lzs:*recallkey*, lzt:*recallkey*.</summary>
+    ''' <summary>lzf:*recallkey*, lzs:*recallkey*, lzt:*recallkey*,
+    ''' lzv:*recallkey*.</summary>
     Public Const PoolKey As String =
         "HKEY_CURRENT_USER\Software\Calofin\LazForm"
     Public Const SpaKey As String =
         "HKEY_CURRENT_USER\Software\Calofin\LazSpa"
     Public Const StepKey As String =
         "HKEY_CURRENT_USER\Software\Calofin\LazStep"
+    Public Const SideKey As String =
+        "HKEY_CURRENT_USER\Software\Calofin\LazSide"
 
     ''' <summary>A sheet as one string. Anything holding a separator is
     ''' left out rather than written back wrong -- cal:kvpack's rule, and

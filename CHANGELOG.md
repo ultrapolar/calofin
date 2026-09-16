@@ -8,6 +8,70 @@ which set of them shipped together. The release name lives in
 
 ## v3.17 -- 2026-09-16
 
+**The palette grew the tab it was missing: the pool SIDE VIEW.**
+
+Every form in this tree had a surface on the palette except one.
+`LAZSIDE` has been a complete routine for a while -- a section per
+bottom type, built out of POOLSIDE's own run chain, with a state line
+and a recall store -- and `tools/gen_ui_charts.py` read `lzf:*charts*`,
+`lzs:*charts*` and `lzt:chart` and stopped there, so `lzv:chart` was
+the one sheet in the tree the palette could not draw.  Nothing was
+broken and every check was green, which is exactly why it went
+unnoticed: the Commands tab has had a LAZSIDE button the whole time,
+and pressing it opens the DCL dialog, so the gap looked like a choice.
+
+The generator asks `lzv:chart` for each of the six types now and the
+catalog carries them beside the other twenty-two sheets, with the three
+tables that travel with a section: the type keyword, `lzv:depthkey`'s
+three depths, and the one question that is not a letter.  `Pool side`
+sits next to `Pool bottom`, which is the same view of the pool -- that
+tab picks a floor by eye off the paper chart, this one measures the
+floor that was picked.
+
+Two rules make this sheet different from the others and both are
+carried as tables rather than opinions.  **The bottom type is the
+answer, not a label**: it travels as `psd:*btypes*` spells it, capitals
+and all, and `tests/test_ui_charts.py` holds the two lists together in
+POOLSIDE's order so a seventh type added to one and not the other
+fails rather than shipping a page whose Draw could only fail.  And
+**the two NA rules on this sheet are opposites** -- NA in a run means
+"not measured" and POOLSIDE reads it back off B, while NA in a depth
+lands in a `REQ` item that is never asked again, so it is withheld and
+named on the state line.  Which keys are depths is `lzv:depthkey`, and
+the form has none of them spelled in it.
+
+`lzv:depthbad` is deliberately left behind.  It is the "D must be
+deeper than C" check, and applying it means reading three boxes --
+which is the one thing this assembly does not do, and the bug the wire
+was built to fix.  POOLSIDE loops at its own prompt, exactly as it does
+for a drafter typing at the command line.
+
+**There is something to install now.**  `tools/package.py`, `make
+package`.
+
+`make check` proved the tree was consistent and `make test` proved it
+drew; neither produced anything anybody could put on a CAD machine.
+This writes an Autodesk ApplicationPlugins bundle, zipped: copy the
+folder, start AutoCAD, the tools are there.
+
+Two lanes, and only one of them needs a compiler.  The AutoLISP half is
+`LAZPASS.lsp` and the glue -- already one self-contained file -- so it
+is finished the moment it is copied, with no build, no NuGet and no
+network.  The palette is a .NET assembly and ships as SOURCES with a
+Windows `build-palette.cmd` that builds the DLL into the slot the
+manifest already points at.
+
+The manifest names the palette either way, and that is the decision
+worth writing down: the entry is `LoadOnCommandInvocation`, so AutoCAD
+does not open the assembly until somebody types CALOFIN and a bundle
+with the slot still empty starts identically and runs every Lisp tool
+in it.  Writing a different manifest depending on whether a DLL
+happened to be lying around would mean the thing you tested is not the
+thing you shipped.  `tests/test_package.py` holds every module the
+manifest names to a file that really travelled, the one exception to
+being unreachable before it is built, and the zip to what was
+assembled.
+
 **WCALST cuts its darts at the bends, not at the rungs.**  WCALST v2.0.
 
 The correction a band needs is made at the bends of the side being
