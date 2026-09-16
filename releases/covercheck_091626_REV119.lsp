@@ -225,7 +225,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.18")
+(setq *cchk-version* "v1.19")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -2629,7 +2629,32 @@
 
 ;; Chains touching segments (ends within *cchk-chain-fuzz*) end-to-end.
 ;; Returns (loops . open-count); each loop is a vertex list (x y bulge).
-(defun cchk:pv-chain (segs / loops nopen chain head tail done found rest s)
+(defun cchk:pv-revseg (s)
+  ;; SEG walked the other way: same geometry, so the bulge changes sign
+  (list (cadr s) (car s) (- (caddr s))))
+
+(defun cchk:pv-take (segs pt / found rest s)
+  ;; the first segment in SEGS with an end on PT, turned so that it
+  ;; LEAVES pt, and the rest of SEGS without it, in order
+  (setq found nil rest nil)
+  (foreach s segs
+    (if found
+        (setq rest (cons s rest))
+        (cond
+          ((<= (distance pt (car s)) *cchk-chain-fuzz*) (setq found s))
+          ((<= (distance pt (cadr s)) *cchk-chain-fuzz*) ; reversed
+           (setq found (cchk:pv-revseg s)))
+          (T (setq rest (cons s rest))))))
+  (list found (reverse rest)))
+
+(defun cchk:pv-chain (segs / loops nopen chain head tail done found rest)
+  ;; The walk grows at BOTH ends, as PADDLE's does.  Growing forward
+  ;; only splits an outline with ONE gap in it into TWO open chains
+  ;; whenever the walk starts in the middle of it -- the half ahead of
+  ;; the starting segment runs into the gap, the half behind it into
+  ;; the segment already taken -- and this count is read out to the
+  ;; drafter as "N open chain(s) (check for gaps)".  One hole has to
+  ;; count as one.
   (setq nopen 0)
   ;; drop degenerate slivers
   (setq segs (vl-remove-if
@@ -2649,22 +2674,25 @@
                                    chain)
                            loops)
                done  T))
-        (T ;; look for a segment continuing from the tail
-         (setq found nil rest nil)
-         (foreach s segs
-           (if found
-               (setq rest (cons s rest))
-               (cond
-                 ((<= (distance tail (car s)) *cchk-chain-fuzz*)
-                  (setq found s))
-                 ((<= (distance tail (cadr s)) *cchk-chain-fuzz*) ; reversed
-                  (setq found (list (cadr s) (car s) (- (caddr s)))))
-                 (T (setq rest (cons s rest))))))
-         (if found
-             (setq chain (append chain (list found))
-                   tail  (cadr found)
-                   segs  (reverse rest))
-             (setq nopen (1+ nopen) done T)))))) ; dead end: open chain
+        (T ;; a segment leaving the tail, else one arriving at the head
+         (setq rest  (cchk:pv-take segs tail)
+               found (car rest)
+               rest  (cadr rest))
+         (cond
+           (found (setq chain (append chain (list found))
+                        tail  (cadr found)
+                        segs  rest))
+           (T
+            (setq rest  (cchk:pv-take segs head)
+                  found (car rest)
+                  rest  (cadr rest))
+            (if found
+                (setq found (cchk:pv-revseg found) ; turned to arrive at head
+                      chain (cons found chain)
+                      head  (car found)
+                      segs  rest)
+                (setq nopen (1+ nopen)  ; dead end both ways
+                      done  T))))))))
   (cons (reverse loops) nopen))
 
 ;; Concave features of one closed loop: returns pads, each

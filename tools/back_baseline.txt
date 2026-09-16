@@ -85,6 +85,7 @@ lisp/lisplab/LISPLAB.lsp|c:LISPLAB|\nDemo size unit <5.0>:|demo / tutorial
 lisp/lisplab/LISPLAB.lsp|c:LISPLAB|\nPick a clear spot for the demo (about 1000 x 500 needed) <0,0>:|demo / tutorial
 lisp/lisplab/LISPLAB.lsp|lab:pause|\n--- press Enter to continue ---|pause
 lisp/lobf/LOBF.lsp|lobf:askfit|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
+lisp/mohamaddle/MOHAMADDLE.lsp|c:MOHAMADDLE|\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>:|only the selection is in front of it, and No is itself the way past it
 lisp/mohamaddle/MOHAMADDLE.lsp|mohamaddle--asksize|\nPad size (inches)? [ ] < >:|first question of its command or branch
 lisp/paddle/PADDLE.lsp|c:PADDLE|\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>:|only the selection is in front of it, and No is itself the way past it
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nDraw a live demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
