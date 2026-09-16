@@ -675,6 +675,54 @@ done nothing yet, while the `_End` fails at the bottom of one that has
 drawn everything, and it takes the sysvar restore behind it down too --
 so the drafter is left with snap off and a borrowed layer current.
 
+**OSMODE COMES BACK ON EVERY PATH, AND THE HANDLER IS ONE OF THEM.**
+The restore table above leads with OSMODE because object snaps are the
+setting the drafter misses most, and `tools/check_osnap.py` is the
+referee for that line: a command that can change OSMODE restores it
+before it returns AND from its `*error*` handler.  The handler half is
+the one that gets forgotten and the one that matters -- Esc at a prompt
+is the likeliest way out of a prompting command, and it is the only way
+out that never reaches the `(tool:sysrestore)` at the bottom.  Left at
+0 the failure does not look like this tool's: it looks like AutoCAD's,
+two commands later, when a line drawn by eye refuses to snap to an
+endpoint.
+
+A restore that is PRESENT is not a restore that RUNS.  An error raised
+inside `*error*` aborts the handler: every form after the throwing one
+is skipped, the OSMODE line included.  So nothing that can throw may
+sit in front of it.  What can throw inside a handler is a bare
+`(command ...)` -- a 2015+ engine refuses one unless the error mode was
+pushed, and even where it was, the Esc that fired the handler may have
+left a command PENDING, so the call is fed in as answers to that
+instead.  Putting back a value the run captured itself is pure `setvar`
+and cannot throw, which is why it goes first and the risky work goes
+after.  `check_osnap.py` fails a handler that has them the other way
+round.  Four did: `OASIS` opened with an unwrapped `-DIMSTYLE` restore
+-- above the very pending-command valve its own comment said must come
+first -- and `AUTOBEAD`, `XFTCONV` and `XFTRECONV` each put their drain
+loop ahead of the only OSMODE restore they have.
+
+The mirror-image rule is about the SNAPSHOT.  A `syssave` here refuses
+to overwrite one that already exists, because a second save mid-run
+would capture the zeroed OSMODE and "restore" 0 for ever.  The price is
+that a snapshot never dropped silences every later run: they save
+nothing and restore the FIRST run's values, quietly undoing whatever
+the drafter has ticked in Drafting Settings since.  So the drop must
+not sit behind a form that can throw either.  `spa:sysrestore` did --
+its `(setq spa:*sysold* nil)` was behind a bare `-DIMSTYLE` -- which
+made one failed SPA run enough to freeze the drafter's snaps at that
+run's value for the rest of the session.
+
+The saved value has to be somewhere the handler can see: a local of the
+command (the handler is nested inside it, so `oos` is in scope) or the
+`tool:*sysold*` snapshot.  A helper that saves into a local of its OWN
+is out of the handler's reach however carefully it restores inline --
+which is exactly how `TUTORIALCOVERCHECK`, `TUTORIALDIMCHECK` and
+`TUTORIALLINFINCHECK` sat muting OSMODE round a `DIMLINEAR` with no
+handler that could put it back.  The three tutorials hold the drafter's
+value themselves now, the same way `TUTORIALCOVERCHECK` already held
+ATTDIA/ATTREQ/FILEDIA round the same helper.
+
 **EVERY COMMAND REPORTS ITS FAILURES.  This is not optional, and the
 lines are not yours to write.**  A tool is not finished when it draws
 and it is not finished when it prints an error -- it is finished when a

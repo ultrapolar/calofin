@@ -66,7 +66,7 @@
 
 
 
-(setq *xft-version* "v1.16") ; printed on load and at command start so a
+(setq *xft-version* "v1.17") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -873,15 +873,23 @@
 ;;;  XFTCONV
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone guard
+(defun c:XFTCONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
                      ss base wbase i en ed typ locked
                      markers names dots dotnames r recs
                      nmade nblank ndots nleft)
 
-  (defun xft:restore ()
+  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, which is the point -- the
+  ;; handler calls it BEFORE its (command) drain, so a drain that dies
+  ;; cannot take the drafter's object snaps with it.  The pop below
+  ;; cannot move up with them: the drain needs the pushed mode.
+  (defun xft:sysback ()
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
-    (if osclay (setvar "CLAYER"  osclay))
+    (if osclay (setvar "CLAYER"  osclay)))
+
+  (defun xft:restore ()
+    (xft:sysback)
     ;; The error mode pushed below is popped HERE, on every way out --
     ;; the three quiet exits, the report, and the handler -- not in the
     ;; handler alone.  A clean run used to leave the mode stacked for
@@ -895,6 +903,13 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
+    ;; the drafter's settings come back FIRST, ahead of the drain below:
+    ;; that drain is a bare (command), the one form in this handler that
+    ;; can throw, and it used to sit in front of the only OSMODE restore
+    ;; there is -- so an Esc that died in the drain left every object
+    ;; snap unticked AND stranded the pop, which refuses command-s inside
+    ;; every later handler for the rest of the session
+    (xft:sysback)
     ;; back out of SCALE etc.  Bounded: CMDACTIVE carries a
     ;; "dialog is up" bit no keystroke from here can clear, and an
     ;; unbounded drain against it would hang with no Esc out.
@@ -1183,14 +1198,22 @@
   (reverse out)
 )
 
-(defun c:XFTRECONV ( / *error* xft:restore oscm osos osclay undone guard
+(defun c:XFTRECONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
                        ss recs runs locked r spec keep i en
                        scale base nback nrebuilt)
 
-  (defun xft:restore ()
+  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, which is the point -- the
+  ;; handler calls it BEFORE its (command) drain, so a drain that dies
+  ;; cannot take the drafter's object snaps with it.  The pop below
+  ;; cannot move up with them: the drain needs the pushed mode.
+  (defun xft:sysback ()
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
-    (if osclay (setvar "CLAYER"  osclay))
+    (if osclay (setvar "CLAYER"  osclay)))
+
+  (defun xft:restore ()
+    (xft:sysback)
     ;; popped on every way out, not in the handler alone -- see the
     ;; same note in c:XFTCONV
     (if *pop-error-mode* (*pop-error-mode*))
@@ -1199,6 +1222,13 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTRECONV error: " msg)))
+    ;; the drafter's settings come back FIRST, ahead of the drain below:
+    ;; that drain is a bare (command), the one form in this handler that
+    ;; can throw, and it used to sit in front of the only OSMODE restore
+    ;; there is -- so an Esc that died in the drain left every object
+    ;; snap unticked AND stranded the pop, which refuses command-s inside
+    ;; every later handler for the rest of the session
+    (xft:sysback)
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)

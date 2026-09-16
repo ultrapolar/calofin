@@ -8,6 +8,8 @@
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
 ;;;            LAZHIDE        choose which tools stay off the panel
+;;;            LAZSET         the settings, as a dialog
+;;;            LAZNAME        your own name for a tool, and for its button
 ;;;            CALHELP        what a command does, at the command line
 ;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
@@ -88,7 +90,17 @@
 ;;; runs the way a docked palette can -- but it no longer has to be
 ;;; reopened by hand: click, the panel closes, the tool runs to its own
 ;;; end, and the panel COMES BACK on the page and at the screen position
-;;; it was at.  Close is the way out, and is the default button.  A
+;;; it was at.  Close is the way out, and is the default button.  Beside
+;;; it, on every page including Find, an OPTIONS button opens LAZSET --
+;;; the settings as a DIALOG, with the theme on a dropdown, a box per
+;;; item colour, the two folders and a way into the hidden list, all in
+;;; front of you at once.  CALSET asks the same questions one prompt at
+;;; a time and is still there for a drafter who would rather type.
+;;; Neither is a roster launch: settings are not a drafting tool, so
+;;; clicking Options never lands in Recent the way a real one would.
+;;; Behind Names... there, or LAZNAME typed, a drafter gives a tool the
+;;; name THEY type and the words THEY want its button to say; both are
+;;; per machine, and neither touches the shipped tables.  A
 ;;; PINNED row on every page carries the handful of tools you actually
 ;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.
 ;;; A RECENT row above it carries the last five you launched, newest
@@ -119,7 +131,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.30")
+(setq *lazpanel-version* "v3.33")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -160,6 +172,22 @@
 ;; whichever surface they pinned from.  Change it here and there
 ;; together, or tests/test_palette_shell.py fails.
 (setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
+
+;; The two per-user maps LAZNAME writes, on that same key.  Named here
+;; rather than spelled at the call sites so the whole set of values this
+;; file stores can be read in one place -- tests/test_palette_shell.py
+;; holds the panel and the VB palette to the same list, and a value it
+;; cannot see is a value that can drift.  These two are LISP-SIDE ONLY:
+;; the palette has no reader for either yet.
+(setq lzp:*aliasval* "Alias")
+(setq lzp:*capval* "Caption")
+
+;; The longest caption LAZNAME will let a drafter set.  A ceiling, not a
+;; preference: tools/check_dcl.py measures the SHIPPED tables and can
+;; never see an override, so this is the only thing standing between a
+;; long rename and a page too wide to open.  40 keeps the widest
+;; category page inside the budget.
+(setq lzp:*capmax* 40)
 
 ;; How wide, in DCL character cells, a row of pinned or recent buttons
 ;; may be before the next button starts a new row.  DCL does not
@@ -370,8 +398,20 @@
     ("XYPLOT"           "X/Y offset plot")
    ))
 
+;; The drafter's own words first, then the table's.  The override is
+;; consulted HERE, in the one accessor, rather than at the five places
+;; that ask -- the search, the Find row, both grid renderers and
+;; CALHELP -- so renaming a button renames it everywhere the panel
+;; shows it, and no call site had to change to make that true.
+;;
+;; lzp:*captions* stays the file's single truth and is what
+;; tools/gen_ui_data.py generates the VB palette's catalog from, so a
+;; drafter's caption is a LISP-SIDE rename: the palette keeps the
+;; shipped words until it learns to read the same key.
 (defun lzp:caption (name / p)
-  (if (setq p (assoc name lzp:*captions*)) (cadr p) ""))
+  (cond ((setq p (assoc name lzp:*capsof*)) (cdr p))
+        ((setq p (assoc name lzp:*captions*)) (cadr p))
+        (t "")))
 
 ;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
 ;;  one entry per COLUMN, laid out side by side across the page.  The
@@ -722,6 +762,11 @@
 (setq lzp:*page* nil)             ; the page the panel reopens on
 (setq lzp:*pins* nil)             ; the pinned tools, in pin order
 (setq lzp:*hidden* nil)           ; the tools put out of sight, no set order
+(setq lzp:*aliases* nil)          ; (COMMAND . the name this drafter types)
+(setq lzp:*capsof* nil)           ; (COMMAND . the words this drafter's button says)
+(setq lzp:*aliasat* nil)          ; lzp:*aliases* as the names editor opened it
+(setq lzp:*namesel* nil)          ; the tool the names editor has selected
+(setq lzp:*names* nil)            ; the names editor's rows, in list order
 
 ;;; -------------------- roster access -----------------------------------
 
@@ -1191,6 +1236,18 @@
       (if row (setq out (cons (reverse row) out)))
       (reverse out))))
 
+;; LST in runs of N, in order.  lzp:wrap above answers a different
+;; question -- the FEWEST balanced columns a page budget allows -- and
+;; a box that wants a fixed shape, like the settings dialog's eight
+;; colour boxes three to a column, cannot ask it that way.
+(defun lzp:chunk (lst n / row out e)
+  (foreach e lst
+    (setq row (cons e row))
+    (if (= (length row) n)
+      (setq out (cons (reverse row) out) row nil)))
+  (if row (setq out (cons (reverse row) out)))
+  (reverse out))
+
 ;; A headed run (heading cmd cmd ...) with every hidden command struck
 ;; out of it, or nil when nothing in it is left to show -- an emptied
 ;; run is dropped rather than rendered as a labelled box with nothing
@@ -1302,10 +1359,16 @@
        (setq out (cons "    }" out)))
      (setq out (cons "  }" out))))
   (setq out (cons "  spacer;" out))
-  (setq out (cons (strcat "  : button { label = \"Close\"; key = \"cancel\"; "
+  (setq out (cons "  : row {" out))
+  (setq out (cons "    alignment = centered;" out))
+  (setq out (cons (strcat "    : button { label = \"Close\"; key = \"cancel\"; "
                           "is_default = true; is_cancel = true; "
-                          "fixed_width = true; alignment = centered; }")
+                          "fixed_width = true; }")
                   out))
+  (setq out (cons (strcat "    : button { label = \"Options...\"; "
+                          "key = \"options_btn\"; fixed_width = true; }")
+                  out))
+  (setq out (cons "  }" out))
   (reverse (cons "}" out)))
 
 ;; The pin editor: every tool on the panel as a toggle, in as many
@@ -1395,10 +1458,12 @@
                   "is_default = true; fixed_width = true; }")
           (strcat "    : button { label = \"Close\"; key = \"cancel\"; "
                   "is_cancel = true; fixed_width = true; }")
+          (strcat "    : button { label = \"Options...\"; "
+                  "key = \"options_btn\"; fixed_width = true; }")
           "  }"
           "}")))
 
-;; Every page, then the pin editor and the hide editor, in one
+;; Every page, then the pin, hide and settings editors, in one
 ;; generated file.  Find leads, because it is the page that does not
 ;; need you to know where a tool was filed.
 (defun lzp:dcl-lines ( / out g)
@@ -1406,7 +1471,9 @@
   (foreach g lzp:*groups*
     (setq out (append out (lzp:dcl-one g) (list ""))))
   (setq out (append out (lzp:dcl-pins) (list "")))
-  (append out (lzp:dcl-hidden) (list "")))
+  (setq out (append out (lzp:dcl-hidden) (list "")))
+  (setq out (append out (lzp:dcl-set) (list "")))
+  (append out (lzp:dcl-names) (list "")))
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -2224,6 +2291,13 @@
             (if (not (member n have))
               (mode_tile (strcat "rec_" n) 1)))
           (action_tile "pin_edit" "(setq lzp:*pos* (done_dialog 5))")
+          ;; a settings launch, not a roster one: it goes through the
+          ;; ordinary rc=1 pick path (full teardown before it runs,
+          ;; same as any button) but *options* is a sentinel c:LAZPANEL
+          ;; reads itself rather than a name lzp:launch would look up --
+          ;; CALSET is not on the roster and must never land in Recent
+          (action_tile "options_btn"
+            "(setq lzp:*pick* \"*options*\" lzp:*pos* (done_dialog 1))")
           (foreach n (lzp:pages)
             (action_tile (strcat "tab_" n)
               (strcat "(setq lzp:*go* \"" n
@@ -2328,8 +2402,10 @@
   (lzp:recent-read)
   (lzp:hidden-read)
   (while (setq pick (lzp:show))
-    (if (/= pick "*pins*")
-      (lzp:launch pick)))
+    (cond
+      ((= pick "*pins*"))            ; already handled inside lzp:show
+      ((= pick "*options*") (c:LAZSET))  ; settings, never a roster launch
+      (t (lzp:launch pick))))
   (princ))
 
 ;; Open the pin editor on its own, without going through the panel.
@@ -2708,6 +2784,630 @@
   (if lzd:end (lzd:end "CALSET"))
   (princ))
 
+;;; -------------------- the settings dialog -----------------------------
+;;  CALSET asks these same questions one prompt at a time.  This is the
+;;  panel's Options button, and it is to CALSET what LAZFORM is to
+;;  POOL: every answer in front of you at once, each box filled in from
+;;  what the profile already holds, rather than an interview you have
+;;  to finish to change one thing.
+;;
+;;  NOTHING IN THIS DIALOG IS WRITTEN UNTIL OK.  What you type lands in
+;;  lzp:*setvals*, an alist keyed by the PROFILE KEY itself, and
+;;  lzp:set-write is the single place that reaches setenv.  Cancel drops
+;;  the store on the floor.  The Hidden... button closes this dialog,
+;;  runs the hide editor on the same loaded handle and comes back --
+;;  which is why the store is a global and not a local: the reopen
+;;  repaints every box from it, so a hop through the checklist does not
+;;  cost you the colour you had just typed.
+;;
+;;  THE HIDDEN LIST IS THE ONE EXCEPTION, and deliberately: it is its
+;;  own dialog with its own OK and Cancel, and it commits there, so
+;;  Cancel here does NOT put back a tool you hid through it.  That is
+;;  the bargain Pin... already strikes from the panel -- a sub-dialog's
+;;  OK is its own transaction -- and the alternative, silently undoing
+;;  a checklist the drafter had just accepted, is the more surprising
+;;  of the two.
+;;
+;;  A colour box holds an ACI number or nothing at all, and while one
+;;  holds anything else the state line names it and OK stays greyed --
+;;  the same bargain LAZFORM's Insert strikes, for the same reason: a
+;;  value nothing can read must not be stored and then silently
+;;  ignored by the tool that goes looking for it.
+
+;; What the Theme dropdown offers -> what is stored under CalofinTheme.
+;; The order is the list order, and the INDEX is what DCL hands back.
+(setq lzp:*themes*
+  '(("Auto"  . "AUTO")
+    ("Dark"  . "DARK")
+    ("Light" . "LIGHT")))
+
+(setq lzp:*setvals* nil)          ; the pending answers, until OK
+
+;; The profile key one item-colour role's override lives under.
+(defun lzp:inkkey (r) (strcat "CalofinInk-" (strcase (cdr r))))
+
+(defun lzp:set-get (key / p)
+  (if (setq p (assoc key lzp:*setvals*)) (cdr p) ""))
+
+(defun lzp:set-put (key v)
+  (setq lzp:*setvals*
+        (cons (cons key v)
+              (vl-remove (assoc key lzp:*setvals*) lzp:*setvals*)))
+  (princ))
+
+;; mode_tile that cannot throw, for the same reason lzp:settile exists:
+;; the state line is recomputed from a tile callback, where the tiles
+;; are there, and from the tests, where they are not.
+(defun lzp:setmode (key m)
+  (vl-catch-all-apply 'mode_tile (list key m)))
+
+(defun lzp:digit-p (c)
+  (if (member c '("0" "1" "2" "3" "4" "5" "6" "7" "8" "9")) t nil))
+
+;; T when S reads as an ACI colour, 1 to 255.  Spelled out rather than
+;; handed to atoi alone: atoi answers 0 for "red" and reads "12x" as
+;; 12, so a typo would be stored as a colour and drawn in.
+(defun lzp:aci-p (s / i n ok)
+  (setq n (strlen s) i 1 ok (> n 0))
+  (while (and ok (<= i n))
+    (if (not (lzp:digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  (if (and ok (> (atoi s) 0) (< (atoi s) 256)) t nil))
+
+;; The roles whose box holds something that is not a colour.  Empty is
+;; not one of them: empty is how a role is put back to auto.
+(defun lzp:set-badinks ( / r v out)
+  (foreach r lzp:*inkroles*
+    (setq v (lzp:set-get (lzp:inkkey r)))
+    (if (and (/= v "") (not (lzp:aci-p v)))
+      (setq out (cons (car r) out))))
+  (reverse out))
+
+(defun lzp:hiddenmsg ()
+  (strcat (itoa (length lzp:*hidden*)) " of "
+          (itoa (length (lzp:commands))) " tools hidden"))
+
+;; The state line, and OK with it.  Called as each box is typed into,
+;; so the refusal arrives while the box is still in front of you.
+(defun lzp:set-state ( / bad msg b)
+  (setq bad (lzp:set-badinks) msg "")
+  (foreach b bad (setq msg (strcat msg (if (= msg "") "" ", ") b)))
+  (lzp:settile "state"
+    (if bad
+      (strcat "Not a colour number: " msg
+              " -- type 1 to 255, or empty for auto")
+      "OK writes these to your AutoCAD profile, where they survive a rebuild"))
+  (lzp:setmode "accept" (if bad 1 0))
+  (princ))
+
+;; Which entry of lzp:*themes* the profile is on now, as the index DCL
+;; wants.  An unset or unreadable value is Auto, which is index 0.
+(defun lzp:theme-index ( / v i out r)
+  (setq v (lzp:set-get "CalofinTheme") out 0 i 0)
+  (foreach r lzp:*themes*
+    (if (= (cdr r) v) (setq out i))
+    (setq i (1+ i)))
+  out)
+
+;; The dropdown firing.  $value is an INDEX, not the word.
+(defun lzp:set-theme (v / r)
+  (if (setq r (nth (atoi v) lzp:*themes*))
+    (lzp:set-put "CalofinTheme" (cdr r)))
+  (princ))
+
+;; A profile value, TRIMMED.  Every other reader in this tree trims
+;; before it decides anything -- lzp:ui a few hundred lines up says so
+;; in a comment ("\" dark \" typed into the profile meaning nothing at
+;; all would be a silent no-op to stare at"), and cal:themeset, the
+;; fourteen tool copies and the VB palette all do the same.  A dialog
+;; that read the raw string would SHOW Auto for a profile holding
+;; " dark ", which every tool is meanwhile drawing dark for, and then
+;; write that lie back over it the first time OK was pressed.
+(defun lzp:profread (key / v)
+  (setq v (getenv key))
+  (if v (vl-string-trim " \t" v) ""))
+
+;; Fill the store from the profile.  Every key the dialog shows gets a
+;; row, so a box is never painted from a nil.
+(defun lzp:set-read ( / r v)
+  (setq lzp:*setvals* nil)
+  (setq v (strcase (lzp:profread "CalofinTheme")))
+  (lzp:set-put "CalofinTheme"
+               (if (member v '("DARK" "LIGHT")) v "AUTO"))
+  (foreach r '("CalofinErrorDir" "StockCover_Folder")
+    (lzp:set-put r (lzp:profread r)))
+  (foreach r lzp:*inkroles*
+    (lzp:set-put (lzp:inkkey r) (lzp:profread (lzp:inkkey r))))
+  lzp:*setvals*)
+
+;; The one place that writes.
+(defun lzp:set-write ( / r v)
+  (setq v (lzp:set-get "CalofinTheme"))
+  ;; EMPTY is what every reader takes for auto -- lzp:ui, cal:themeset
+  ;; and the palette all treat an unset or empty value as "measure it"
+  ;; -- so writing the word AUTO would leave LAZICON and lzp:setshow
+  ;; reporting an override the drafter never set.  The registry mirror
+  ;; below already wrote it this way; now the profile agrees with it.
+  (setenv "CalofinTheme" (if (= v "AUTO") "" v))
+  ;; ...and beside the pins, where the VB palette reads it
+  ;; (ui/calofin_net/PaletteTheme.vb) -- the same bargain CALSET's own
+  ;; Theme branch strikes.
+  (vl-catch-all-apply
+    'vl-registry-write
+    (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+  (foreach r '("CalofinErrorDir" "StockCover_Folder")
+    (setenv r (lzp:set-get r)))
+  ;; A box that does not read as a colour is LEFT ALONE rather than
+  ;; cleared.  Empty still clears -- that is how a role goes back to
+  ;; auto -- but a typo must not: erasing an override the drafter
+  ;; already had is the one outcome worse than ignoring what they just
+  ;; typed, and lzp:set-ok is not the only way this can be reached.
+  (foreach r lzp:*inkroles*
+    (setq v (lzp:set-get (lzp:inkkey r)))
+    (if (or (= v "") (lzp:aci-p v)) (setenv (lzp:inkkey r) v)))
+  lzp:*setvals*)
+
+;; OK, GUARDED.  Greying the button is not a hard stop and this file
+;; already knows it: lzp:dcl-find's own comment says "DCL fires an edit
+;; box's action BEFORE the default button's", so a click on OK with a
+;; typo still in the box fires the box (which greys OK) and then lands
+;; anyway.  LAZFORM learned this at lzf:insert -- "a guard that depends
+;; on a tile really being un-clickable is a guard that hands POOL a
+;; dropped box the day it is not" -- and this is the same guard: re-ask,
+;; and stay open rather than write.
+(defun lzp:set-ok ()
+  (if (lzp:set-badinks)
+    (lzp:set-state)
+    (done_dialog 1))
+  (princ))
+
+;; The dialog.  The dropdown is emitted EMPTY -- DCL has no way to
+;; write a list into a popup_list from the file, so it is filled with
+;; start_list once the dialog is up, exactly as LAZFORM fills its
+;; corner dropdowns.
+(defun lzp:dcl-set ( / out col r)
+  (setq out (list "lazpanel_set : dialog {"
+                  "  label = \"LazPanel  -  settings\";"
+                  "  : boxed_column {"
+                  "    label = \"Ink\";"
+                  (strcat "    : popup_list { key = \"set_theme\"; "
+                          "label = \"Theme\"; edit_width = 10; }")
+                  (strcat "    : text { label = \"auto measures the drawing's"
+                          " background and AutoCAD's own theme\"; }")
+                  "  }"
+                  "  : boxed_row {"
+                  (strcat "    label = \"Item colours - COVERCHECK, DIMCHECK"
+                          " and LINFINCHECK; empty is auto\";")))
+  ;; three to a column, so the box is a block rather than one tall stack
+  (foreach col (lzp:chunk lzp:*inkroles* 3)
+    (setq out (append out (list "    : column {")))
+    (foreach r col
+      (setq out (append out
+        (list (strcat "      : edit_box { key = \"ink_" (cdr r)
+                      "\"; label = \"" (car r)
+                      "\"; edit_width = 5; fixed_width = true; }")))))
+    (setq out (append out (list "    }"))))
+  (append out
+    (list "  }"
+          "  : boxed_column {"
+          "    label = \"Folders - empty means the tool's own default\";"
+          (strcat "    : edit_box { key = \"set_errdir\"; "
+                  "label = \"Error reports\"; edit_width = 40; }")
+          (strcat "    : edit_box { key = \"set_stockdir\"; "
+                  "label = \"Stock covers \"; edit_width = 40; }")
+          "  }"
+          "  : boxed_row {"
+          "    label = \"Panel\";"
+          "    : text { key = \"hiddenmsg\"; width = 32; }"
+          (strcat "    : button { label = \"Hidden...\"; "
+                  "key = \"set_hidden\"; fixed_width = true; }")
+          (strcat "    : button { label = \"Names...\"; "
+                  "key = \"set_names\"; fixed_width = true; }")
+          "  }"
+          ;; wide enough for the longest sentence lzp:set-state can put
+          ;; in it: width is a MINIMUM in DCL, but a text tile with no
+          ;; label and no value has only this to size itself from, and
+          ;; the message that explains a greyed OK is the one message
+          ;; that must not be the one cut off
+          "  : text { key = \"state\"; width = 110; }"
+          "  spacer;"
+          "  : row {"
+          "    alignment = centered;"
+          (strcat "    : button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; }")
+          (strcat "    : button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; }")
+          "  }"
+          "}")))
+
+;; Open it, wire it, and keep reopening while the Hidden... button is
+;; the way out.  Answers "ok" when OK was pressed and nil otherwise, so
+;; the caller is what decides to write.
+(defun lzp:set-edit (dcl / rc r done out)
+  (while (not done)
+    (cond
+      ((not (new_dialog "lazpanel_set" dcl)) (setq done t))
+      (t
+       ;; the dropdown's list, which is only legal with the dialog up
+       (start_list "set_theme")
+       (foreach r lzp:*themes* (add_list (car r)))
+       (end_list)
+       (set_tile "set_theme" (itoa (lzp:theme-index)))
+       (action_tile "set_theme" "(lzp:set-theme $value)")
+       (foreach r lzp:*inkroles*
+         (set_tile (strcat "ink_" (cdr r)) (lzp:set-get (lzp:inkkey r)))
+         (action_tile (strcat "ink_" (cdr r))
+           (strcat "(lzp:set-put \"" (lzp:inkkey r) "\" $value)"
+                   " (lzp:set-state)")))
+       (set_tile "set_errdir" (lzp:set-get "CalofinErrorDir"))
+       (action_tile "set_errdir" "(lzp:set-put \"CalofinErrorDir\" $value)")
+       (set_tile "set_stockdir" (lzp:set-get "StockCover_Folder"))
+       (action_tile "set_stockdir"
+                    "(lzp:set-put \"StockCover_Folder\" $value)")
+       (set_tile "hiddenmsg" (lzp:hiddenmsg))
+       (action_tile "set_hidden" "(done_dialog 5)")
+       (action_tile "set_names" "(done_dialog 6)")
+       (action_tile "accept" "(lzp:set-ok)")
+       (action_tile "cancel" "(done_dialog 0)")
+       (lzp:set-state)
+       (setq rc (start_dialog))
+       (cond
+         ;; the hide editor, then round again: this dialog repaints
+         ;; itself from the store, so nothing typed is lost to the trip
+         ((= rc 5) (lzp:hide-edit dcl))
+         ;; ...and the names editor the same way, on the same handle
+         ((= rc 6) (lzp:name-edit dcl))
+         ((= rc 1) (setq done t out "ok"))
+         (t (setq done t))))))
+  out)
+
+(defun c:LAZSET ( / *error* f dcl ok)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl -- the same fix c:LAZPIN and c:LAZHIDE carry
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZSET error: " msg)))
+    (if lzd:report (lzd:report "LAZSET" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZSET" *lazpanel-version*))
+  (lzp:pins-read)
+  (lzp:recent-read)
+  (lzp:hidden-read)
+  (lzp:set-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZSET error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZSET error: could not load the dialog file.")
+     (vl-file-delete f))
+    (t
+     (setq ok (lzp:set-edit dcl))
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (cond
+       (ok
+        (lzp:set-write)
+        (princ (strcat "\nLAZPANEL: settings saved.  Every tool reads the"
+                       " theme and the item colours on the next colour it"
+                       " picks; the toolbar icon takes the theme at the next"
+                       " LAZBUTTON or LAZICON, and the VB palette at its"
+                       " next chart.")))
+       (t (princ "\nLAZPANEL: settings unchanged.")))))
+  (if lzd:end (lzd:end "LAZSET"))
+  (princ))
+
+;;; -------------------- names of your own --------------------------------
+;;  Two things a drafter can rename, per machine: the NAME THEY TYPE to
+;;  summon a tool, and the WORDS ITS BUTTON SAYS.  Neither touches the
+;;  shipped tables -- lzp:*captions* stays the file's single truth, and
+;;  no alias is ever written into a .lsp -- so `make check` still reads
+;;  the same tree it always did.  This is a layer over the top of it.
+;;
+;;  AN ALIAS IS A WRAPPER DEFUN, which is the shape this tree already
+;;  uses for the one alias it ships: DCE is (defun c:DCE () (c:DIMCONTEND))
+;;  and nothing else.  Built at run time it is the same form, assembled
+;;  as DATA rather than as source text -- (list 'defun sym nil (list
+;;  target)) -- because a string spliced from what the drafter typed
+;;  would go through read, and a malformed one throws from inside a
+;;  file load, where there is nothing to catch it.  The wrapper
+;;  resolves its target at CALL time, so an alias can be applied before
+;;  the tool it names is loaded, which the standalone tier gives no
+;;  guarantee about.
+;;
+;;  WHAT IS REFUSED, AND WHY EACH ONE MATTERS:
+;;    - a name that is not letters and digits, or does not start with a
+;;      letter, or is over 12 characters.  (read "c:MY TOOL") answers
+;;      c:my and (read "c:") answers c:, both silently, so the check
+;;      happens BEFORE anything reaches read and is a whitelist.
+;;    - a name the session already answers to.  This is the dangerous
+;;      one: (defun c:CHECK () ...) would retarget check_drawing.lsp's
+;;      CHECK for the whole session, and DIMARCCHECK -- which is
+;;      (c:CHECK) -- with it.  lzp:has cannot see the difference, so the
+;;      button would stay lit while running the wrong tool.
+;;    - a caption carrying ";" or "=", which are the store's own
+;;      separators, or a double quote, which lzp:dcl-one pastes straight
+;;      into DCL and which would make every page of the panel
+;;      unloadable.
+;;    - a caption over lzp:*capmax* characters.  tools/check_dcl.py
+;;      measures the SHIPPED tables and structurally cannot see a
+;;      drafter's override, so the cap is the only thing standing
+;;      between a long rename and a page that will not open.
+;;
+;;  Removing an alias stops it being remembered, but the name it
+;;  already defined answers until the drawing is closed: AutoLISP has
+;;  no way to take a defun back, and pretending otherwise would be the
+;;  lie.  The state line says so.
+
+;; Records joined with ";" as Pins, Recent and Hidden already are, but
+;; a record here is a PAIR -- NAME=VALUE.  Both separators are single
+;; characters because lzp:split compares one character at a time, which
+;; is also exactly why neither may appear in a value.
+(defun lzp:kv-read (value / s out e i)
+  (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* value)))
+  (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
+    (foreach e (lzp:split s ";")
+      (if (and (setq i (vl-string-search "=" e)) (> i 0))
+        (setq out (cons (cons (substr e 1 i) (substr e (+ i 2))) out)))))
+  ;; a name the roster no longer carries is dropped on read, exactly as
+  ;; a stale pin is: what is stored must never put a dead row on screen
+  (vl-remove-if-not '(lambda (p) (member (car p) (lzp:commands)))
+                    (reverse out)))
+
+(defun lzp:kv-write (value map / s p)
+  (setq s "")
+  (foreach p map
+    (if (/= (cdr p) "")
+      (setq s (strcat s (if (= s "") "" ";") (car p) "=" (cdr p)))))
+  (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* value s))
+  map)
+
+(defun lzp:names-read ()
+  (setq lzp:*aliases* (lzp:kv-read lzp:*aliasval*)
+        lzp:*capsof*  (lzp:kv-read lzp:*capval*))
+  lzp:*aliases*)
+
+(defun lzp:letter-p (c)
+  (if (vl-string-search c "ABCDEFGHIJKLMNOPQRSTUVWXYZ") t nil))
+
+;; Letters and digits, first one a letter, 1 to 12 characters.
+(defun lzp:alias-shape-p (s / i n c ok)
+  (setq s (strcase s) n (strlen s) i 1 ok (and (> n 0) (<= n 12)))
+  (while (and ok (<= i n))
+    (setq c (substr s i 1))
+    (if (not (or (lzp:letter-p c) (lzp:digit-p c))) (setq ok nil))
+    (if (and (= i 1) (not (lzp:letter-p c))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+;; Does this session already answer to NAME?  The names-list form of
+;; atoms-family answers nil in the slot for a name the session lacks --
+;; and the LIST it returns is truthy either way, so the car is the
+;; question and the bare call is not.
+(defun lzp:alias-taken-p (name)
+  (if (car (atoms-family 1 (list (strcase (strcat "C:" name))))) t nil))
+
+;; Why this alias cannot be used, as words, or nil when it can.  TOOL is
+;; the command it would summon; the alias it ALREADY had is allowed
+;; through, or re-opening the editor would refuse what it just showed.
+(defun lzp:alias-why (name tool / p)
+  (cond
+    ((= name "") nil)
+    ((not (lzp:alias-shape-p name))
+     "a name is letters and digits, starts with a letter, up to 12")
+    ((setq p (car (vl-remove-if-not
+                    '(lambda (q) (and (/= (car q) tool)
+                                      (= (strcase (cdr q)) (strcase name))))
+                    lzp:*aliases*)))
+     (strcat "that name is already yours for " (car p)))
+    ((and (lzp:alias-taken-p name)
+          (/= (strcase name) (strcase (lzp:alias-was tool))))
+     (strcat name " already runs something in this session"))))
+
+(defun lzp:alias-was (tool)
+  (lzp:pairval tool lzp:*aliasat*))
+
+;; Why this caption cannot be used, as words, or nil when it can.
+(defun lzp:cap-why (s)
+  (cond
+    ((> (strlen s) lzp:*capmax*)
+     (strcat "keep it to " (itoa lzp:*capmax*) " characters or the page stops opening"))
+    ((or (vl-string-search ";" s) (vl-string-search "=" s))
+     "; and = are how the list itself is stored, so a caption cannot hold one")
+    ((vl-string-search "\"" s)
+     "a double quote would break the panel's own dialog file")))
+
+;; Define one wrapper, or answer nil having done nothing.
+(defun lzp:alias-make (name tool)
+  (if (and (lzp:alias-shape-p name)
+           (not (lzp:alias-taken-p name))
+           (member tool (lzp:commands)))
+    (progn
+      (eval (list 'defun (read (strcat "c:" (strcase name))) nil
+                  (list (read (strcat "c:" tool)))))
+      t)))
+
+(defun lzp:aliases-apply ( / p n)
+  (setq n 0)
+  (foreach p lzp:*aliases*
+    (if (lzp:alias-make (cdr p) (car p)) (setq n (1+ n))))
+  n)
+
+(defun lzp:names-write ()
+  (lzp:kv-write lzp:*aliasval* lzp:*aliases*)
+  (lzp:kv-write lzp:*capval* lzp:*capsof*)
+  (lzp:aliases-apply))
+
+;; One row.  Not padded into columns: whether the dialog font is
+;; fixed-pitch is exactly what LAZASCII exists to ask, so nothing here
+;; may assume two rows line up.
+(defun lzp:namerow (n / a)
+  (setq a (lzp:pairval n lzp:*aliases*))
+  (strcat n
+          (if (/= a "") (strcat "  (type " a ")") "")
+          "  -  " (lzp:caption n)))
+
+;; A map's value, or "" when it has none.  (cdr (assoc ...)) answers nil
+;; for a tool nobody has renamed, and nil is what strcase and strlen
+;; throw on -- so every read of these two maps comes through here.
+(defun lzp:pairval (key map / p)
+  (if (setq p (assoc key map)) (cdr p) ""))
+
+(defun lzp:put-pair (key v map)
+  (cons (cons key v) (vl-remove (assoc key map) map)))
+
+(defun lzp:name-alias-put (v)
+  (if lzp:*namesel*
+    (setq lzp:*aliases*
+          (lzp:put-pair lzp:*namesel* (strcase v) lzp:*aliases*)))
+  (lzp:namerefill)
+  (lzp:name-state)
+  (princ))
+
+(defun lzp:name-cap-put (v)
+  (if lzp:*namesel*
+    (setq lzp:*capsof* (lzp:put-pair lzp:*namesel* v lzp:*capsof*)))
+  (lzp:namerefill)
+  (lzp:name-state)
+  (princ))
+
+;; What is wrong with the pair in front of the drafter, or nil.
+(defun lzp:name-why ( / a)
+  (if lzp:*namesel*
+    (cond ((setq a (lzp:alias-why (lzp:pairval lzp:*namesel* lzp:*aliases*)
+                                  lzp:*namesel*))
+           a)
+          (t (lzp:cap-why (lzp:pairval lzp:*namesel* lzp:*capsof*))))))
+
+(defun lzp:name-state ( / why)
+  (setq why (lzp:name-why))
+  (lzp:settile "namestate"
+    (cond (why why)
+          ((not lzp:*namesel*) "Pick a tool to give it names of your own")
+          (t (strcat lzp:*namesel*
+                     " - OK keeps these; a name you remove still answers"
+                     " until this drawing is closed"))))
+  (lzp:setmode "accept" (if why 1 0))
+  (princ))
+
+;; Rebuild the list and put the selection back.  A row's words change
+;; as the boxes are typed into, and a list that went on showing the old
+;; ones would be the only part of the dialog telling a different story.
+(defun lzp:namerefill ( / n i sel)
+  (setq lzp:*names* (lzp:commands) i 0 sel 0)
+  (foreach n lzp:*names*
+    (if (= n lzp:*namesel*) (setq sel i))
+    (setq i (1+ i)))
+  ;; under a catch because this runs from a tile callback, where the
+  ;; list is there, and from the tests, where it is not: start_list
+  ;; outside a dialog is an error and not a no-op
+  (vl-catch-all-apply
+    '(lambda ()
+       (start_list "names")
+       (foreach n lzp:*names* (add_list (lzp:namerow n)))
+       (end_list)
+       (if lzp:*names* (set_tile "names" (itoa sel))))
+    nil)
+  lzp:*names*)
+
+(defun lzp:namepick (v)
+  (setq lzp:*namesel* (nth (atoi v) lzp:*names*))
+  (lzp:settile "name_alias" (lzp:pairval lzp:*namesel* lzp:*aliases*))
+  (lzp:settile "name_cap" (lzp:pairval lzp:*namesel* lzp:*capsof*))
+  (lzp:name-state)
+  lzp:*namesel*)
+
+;; OK, guarded the way lzp:set-ok is, and for the same reason: DCL fires
+;; an edit box's action before the default button's, so the greying is
+;; not a stop.
+(defun lzp:name-ok ()
+  (if (lzp:name-why)
+    (lzp:name-state)
+    (done_dialog 1))
+  (princ))
+
+(defun lzp:dcl-names ( / out)
+  (setq out
+    (list "lazpanel_names : dialog {"
+          "  label = \"LazPanel  -  names of your own\";"
+          (strcat "  : text { label = \"Pick a tool, then say what you want"
+                  " to type and what you want the button to say.\"; }")
+          "  : list_box { key = \"names\"; width = 58; height = 16; }"
+          "  : boxed_column {"
+          "    label = \"The tool you picked\";"
+          (strcat "    : edit_box { key = \"name_alias\"; "
+                  "label = \"Type this to run it\"; edit_width = 14; }")
+          (strcat "    : edit_box { key = \"name_cap\"; "
+                  "label = \"Button says        \"; edit_width = 40; }")
+          (strcat "    : text { label = \"Leave a box empty to go back to"
+                  " the name calofin ships.\"; }")
+          "  }"
+          "  : text { key = \"namestate\"; width = 110; }"
+          "  spacer;"
+          "  : row {"
+          "    alignment = centered;"
+          (strcat "    : button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; }")
+          (strcat "    : button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; }")
+          "  }"
+          "}"))
+  out)
+
+;; Cancel re-reads the store rather than unwinding the edits one by
+;; one, exactly as the pin and hide editors do: what is stored is the
+;; truth, so going back to it is exact where unwinding is approximate.
+(defun lzp:name-edit (dcl / rc)
+  (cond
+    ((not (new_dialog "lazpanel_names" dcl)) nil)
+    (t
+     (setq lzp:*aliasat* lzp:*aliases*
+           lzp:*namesel* nil)
+     (lzp:namerefill)
+     (lzp:namepick "0")
+     (action_tile "names" "(lzp:namepick $value)")
+     (action_tile "name_alias" "(lzp:name-alias-put $value)")
+     (action_tile "name_cap" "(lzp:name-cap-put $value)")
+     (action_tile "accept" "(lzp:name-ok)")
+     (action_tile "cancel" "(done_dialog 0)")
+     (setq rc (start_dialog))
+     (if (= rc 1) (lzp:names-write) (lzp:names-read))
+     t)))
+
+(defun c:LAZNAME ( / *error* f dcl)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl -- the same fix c:LAZPIN and c:LAZHIDE carry
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZNAME error: " msg)))
+    (if lzd:report (lzd:report "LAZNAME" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZNAME" *lazpanel-version*))
+  (lzp:pins-read)
+  (lzp:recent-read)
+  (lzp:hidden-read)
+  (lzp:names-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZNAME error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZNAME error: could not load the dialog file.")
+     (vl-file-delete f))
+    (t
+     (lzp:name-edit dcl)
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (princ (strcat "\nLAZPANEL: "
+                    (itoa (length lzp:*aliases*)) " tool"
+                    (if (= (length lzp:*aliases*) 1) "" "s")
+                    " answer to a name of yours, "
+                    (itoa (length lzp:*capsof*)) " renamed on the panel."))))
+  (if lzd:end (lzd:end "LAZNAME"))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:visible))) " tools on the panel across "
@@ -2738,6 +3438,14 @@
 (vl-catch-all-apply
   '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
+;; The drafter's own names, and the wrappers that make them answer.
+;; Per DOCUMENT, not per session: a defun lives in the drawing's own
+;; namespace, so the blackboard's once-a-session mark is the wrong
+;; instrument here and every drawing has to be told again.  Under
+;; vl-catch-all-apply beside the rest: a file that throws as it loads
+;; takes the panel and the toolbar with it.
+(vl-catch-all-apply 'lzp:names-read nil)
+(vl-catch-all-apply 'lzp:aliases-apply nil)
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
@@ -2753,5 +3461,6 @@
                  " LAZPIN edits the pinned row;"
                  " LAZHIDE picks which tools stay off it;"
                  " CALHELP says what a command does;"
-                 " CALSET shows the settings.")))
+                 " LAZSET is the settings dialog, CALSET the prompts;"
+                 " LAZNAME gives a tool a name of your own.")))
 (princ)

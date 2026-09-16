@@ -124,7 +124,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.9")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.0")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -4847,7 +4847,10 @@
     (if lzd:report (lzd:report "FITABHD" *fitabhd-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "FITABHD" *fitabhd-version*))
-  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+  ;; no OSMODE: FITABHD never changes it, and listing it here would
+  ;; put this run's opening snapshot back over any snap the drafter
+  ;; ticked on during the seven steps -- on a clean exit.
+  (cal:syssave '("CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set

@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 69 files, 200 commands:
+;;; 69 files, 202 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -26,24 +26,24 @@
 ;;;   DRONEVER  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM  G2MCONV
 ;;;   G2MCONVVER  G2MRECONV  HEMISTEP  HEMISTEPVER  HONEFILLET  HONEFILLETVER
 ;;;   LAZASCII  LAZBUTTON  LAZDIAG  LAZDIAGVER  LAZFORM  LAZFORMCOVER
-;;;   LAZFORMVER  LAZHIDE  LAZICON  LAZLOG  LAZPANEL  LAZPANELVER
-;;;   LAZPIN  LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT
-;;;   LHD  LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE
-;;;   LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK
-;;;   LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER
-;;;   MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER
-;;;   OLAUTO  OLAUTOVER  PADDLE  PADDLEVER  PERPMARK  PERPMARKVER
-;;;   PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER
-;;;   POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD
-;;;   SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV  SPA
-;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER
-;;;   SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST
-;;;   TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN
-;;;   TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN
-;;;   TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK
-;;;   TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV
-;;;   WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV
-;;;   XYPLOT  XYPLOTVER
+;;;   LAZFORMVER  LAZHIDE  LAZICON  LAZLOG  LAZNAME  LAZPANEL
+;;;   LAZPANELVER  LAZPIN  LAZSET  LAZSPA  LAZSPAVER  LAZSTEP
+;;;   LAZSTEPVER  LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER
+;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN
+;;;   LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN
+;;;   LOBF  LOBFVER  MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER
+;;;   OASIS  OASISVER  OLAUTO  OLAUTOVER  PADDLE  PADDLEVER
+;;;   PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER
+;;;   POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER
+;;;   POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER
+;;;   SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
+;;;   SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG
+;;;   STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP
+;;;   TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP
+;;;   TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL
+;;;   TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV
+;;;   VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP
+;;;   XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -12719,11 +12719,18 @@
 ;;;  AUTO-HINGE
 ;;;  ----------
 ;;;  The command offers to auto-hinge the cover.  The offer, and the
-;;;  spillaways and the grade / taper behind it, are ASKED AS SOON AS
-;;;  THE SPA IS MEASURED -- before a line is drawn -- because their
-;;;  answers can still turn the spa (see THE QUARTER TURN below), and
-;;;  nothing already on the screen can be turned.  The hinges themselves
-;;;  are drawn at the end, on whichever outline they belong to.
+;;;  spillaways behind it, are ASKED AS SOON AS THE SPA IS MEASURED --
+;;;  before a line is drawn -- because their answers can still turn the
+;;;  spa (see THE QUARTER TURN below), and nothing already on the screen
+;;;  can be turned.
+;;;
+;;;  The grade and taper turn nothing, so they are NOT asked there.
+;;;  They wait for the cover itself to actually be on the screen: a
+;;;  water's edge start asks once the cover is drawn, or once the offer
+;;;  to add one is declined; a cover size start asks once the water's
+;;;  edge offer that follows the cover is settled the same way either
+;;;  way.  The hinges themselves are drawn at the end, on whichever
+;;;  outline they belong to.
 ;;;
 ;;;  Spillaways (corner or centred-on-a-wall) are the no-go zones, and
 ;;;  they are answered against the spa AS MEASURED; the "Spa Cover
@@ -12875,7 +12882,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091226 REV21")
+(setq spa:*version* "091526 REV24")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -14477,8 +14484,14 @@
   (cal:trim out))
 
 ;; Normalise a taper string to a foam-sheet key ("3-3 Flat" -> "3-3").
+;; A taper typed as two bare digits with the dash left off ("42" for
+;; "4-2") is understood the same way -- "#" is wcmatch for one numeric
+;; digit, so "##" is exactly two of them and nothing else, and the dash
+;; is put back before the usual patterns are tried.
 (defun spa:tapernorm (v / u)
-  (setq u (strcase v))
+  (setq u (strcase (cal:trim v)))
+  (if (wcmatch u "##")
+      (setq u (strcat (substr u 1 1) "-" (substr u 2 1))))
   (cond ((wcmatch u "*3-2*") "3-2")
         ((wcmatch u "*4-2*") "4-2")
         ((wcmatch u "*4-3*") "4-3")
@@ -14941,9 +14954,11 @@
 ;; The foam sheets a grade + taper may be cut from: (options counts got).
 ;; An Economy taper that only the Standard sheet carries falls back to
 ;; Standard; nothing on the sheet at all falls back to spa:*foamdflt*
-;; with the flag down.  It says nothing itself -- this is asked twice,
-;; once to settle which way round the spa is drawn and once to lay the
-;; hinges out -- so the caller that draws does the reporting.
+;; with the flag down.  It says nothing itself -- this is called twice,
+;; once from spa:pickturn to settle which way round the spa is drawn
+;; (taper not yet asked at that point, so it scores against the default
+;; sheet) and once from spa:hingeflow, by then with the real taper, to
+;; lay the hinges out -- so the caller that draws does the reporting.
 (defun spa:foamopts (grade taper / row r)
   (foreach r spa:*foamtab*
     (if (and (not row) (= (car r) grade) (= (cadr r) taper))
@@ -15048,26 +15063,39 @@
               (not pref))
             pref))))
 
-;; The questions the hinges need, asked BEFORE the outline is drawn:
-;; the answers can still turn the spa at that point, and nothing that is
-;; already on the screen can be turned.  Fills spa:*spills* and the
-;; grade / taper globals; returns T when the cover is to be hinged.  The
-;; offer is the form's autohinge key, exactly as it was when it came
-;; after the draw.
-(defun spa:hingeask ( / gt)
+;; The questions that can still turn the spa, asked BEFORE the outline
+;; is drawn: nothing already on the screen can be turned.  Fills
+;; spa:*spills*; returns T when the cover is to be hinged.  The offer is
+;; the form's autohinge key, exactly as it was when it came after the
+;; draw.  The grade + taper the hinges also need turn nothing, so they
+;; are not asked here -- see spa:hingedetails.
+(defun spa:hingeask ()
   (setq spa:*spills* nil
         spa:*hingeon*
         (= "Yes" (spa:askkwf 'autohinge "Auto-hinge the cover"
                              "Yes No" "Yes/No" "Yes" nil)))
   (if spa:*hingeon*
-      ;; 1 -- where hinges cannot go, then 2 -- grade + taper.  Back at
-      ;; the taper re-opens the spillaways, its previous question.
+      (setq spa:*spills* (spa:askspill)))
+  spa:*hingeon*)
+
+;; The grade + taper the hinges need -- asked once the second-outline
+;; offer is settled, not before: "Auto-hinge the cover" is spa:hingeask,
+;; above, but the taper it needs is a question about a COVER, and a
+;; water's edge start may not have drawn one yet when hinges are
+;; offered.  So it waits -- water's edge start, until the cover is
+;; drawn or the offer to add one is declined; cover size start, until
+;; the water's edge offer that follows the cover is settled the same
+;; way.  Either way that is the point every rect/oct/round flow calls
+;; this, once, right after its second outline (if any) goes down.  A
+;; no-op when autohinge was declined.  Nothing can be turned by now --
+;; both outlines are already drawn -- so Back here has nothing to
+;; reopen but itself, and simply asks again.
+(defun spa:hingedetails ( / gt)
+  (if spa:*hingeon*
       (progn
         (setq gt 'CAL-BACK)
         (while (eq gt 'CAL-BACK)
-          (setq spa:*spills* (spa:askspill)
-                gt (spa:askdetails)))))
-  spa:*hingeon*)
+          (setq gt (spa:askdetails))))))
 
 ;; The auto-hinge pass itself.  desc / x1 / x2 describe the COVER
 ;; outline; coverp nil means only the water's edge was drawn and the
@@ -15611,13 +15639,15 @@
   (spa:stages (list 'rc:sides 'rc:corners))
 
   ;; -------------------------------------------------- hinges, asked now
-  ;; The hinge questions come BEFORE anything is drawn because their
-  ;; answers can still turn the spa -- a spillaway no north-south hinge
-  ;; can dodge is dodged by turning the cover instead, and there is no
-  ;; turning it once it is on the screen.  The hinges themselves are
-  ;; drawn at the end, on whichever outline they belong to.
+  ;; The auto-hinge offer and the spillaways come BEFORE anything is
+  ;; drawn because their answers can still turn the spa -- a spillaway
+  ;; no north-south hinge can dodge is dodged by turning the cover
+  ;; instead, and there is no turning it once it is on the screen.  The
+  ;; grade + taper come later (spa:hingedetails, below, once the second
+  ;; outline is settled) and the hinges themselves are drawn at the end,
+  ;; on whichever outline they belong to.
   ;;
-  ;; The guide stays up across them, treatments and all.  It is the
+  ;; The guide stays up across these two, treatments and all.  It is the
   ;; only spa on the screen until the real one is drawn below, and
   ;; these questions name its corners and its walls -- taking it away
   ;; as the corners were answered left the drafter looking at an empty
@@ -15717,6 +15747,11 @@
         (spa:setmode (spa:othermode))
         (spa:drawrect q2 c2)
         (spa:setmode mode1)))
+
+  ;; the cover is on the screen now (or the offer to add one is
+  ;; declined), so the grade + taper the hinges need is asked for --
+  ;; see spa:hingedetails
+  (spa:hingedetails)
 
   ;; -------------------------------------------------- dimensions
   ;; Laid out the way the order sheet does it.  The COVER's overalls go
@@ -15969,9 +16004,11 @@
         (spa:valnote "V LONGER THAN A - ADJUSTED")))
 
   ;; -------------------------------------------------- hinges, asked now
-  ;; before anything is drawn, so a spillaway can still turn the spa --
-  ;; and with the guide still up, because it is the only spa on the
-  ;; screen until the real one is drawn below
+  ;; the auto-hinge offer and the spillaways, before anything is drawn,
+  ;; so a spillaway can still turn the spa -- and with the guide still
+  ;; up, because it is the only spa on the screen until the real one is
+  ;; drawn below.  The grade + taper come later -- spa:hingedetails,
+  ;; below, once the second outline is settled.
   (spa:hingeask)
 
   ;; -------------------------------------------------- orientation
@@ -16059,6 +16096,11 @@
         (spa:setmode (spa:othermode))
         (spa:perpoly (mapcar '(lambda (p) (cons p 0.0)) pts2))
         (spa:setmode mode1)))
+
+  ;; the cover is on the screen now (or the offer to add one is
+  ;; declined), so the grade + taper the hinges need is asked for --
+  ;; see spa:hingedetails
+  (spa:hingedetails)
 
   ;; -------------------------------------------------- dimensions
   ;; The order sheet's octagon panel carries three things: the overall
@@ -16205,10 +16247,12 @@
               aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov)))
       (setq aov bov))
 
-  ;; hinges are asked before anything is drawn, so a spillaway can still
-  ;; turn the spa (a round one turns too: the spillway travels with it),
-  ;; and the guide stays up across them -- it is the only spa on the
-  ;; screen until the real one is drawn below
+  ;; the auto-hinge offer and the spillaways are asked before anything
+  ;; is drawn, so a spillaway can still turn the spa (a round one turns
+  ;; too: the spillway travels with it), and the guide stays up across
+  ;; them -- it is the only spa on the screen until the real one is
+  ;; drawn below.  The grade + taper come later -- spa:hingedetails,
+  ;; below, once the second outline is settled.
   (spa:hingeask)
 
   ;; an out-of-round spa lies with its long overall west to east, unless
@@ -16277,6 +16321,11 @@
         (spa:setmode (spa:othermode))
         (spa:perround cen2 b2 a2)
         (spa:setmode mode1)))
+
+  ;; the cover is on the screen now (or the offer to add one is
+  ;; declined), so the grade + taper the hinges need is asked for --
+  ;; see spa:hingedetails
+  (spa:hingedetails)
 
   ;; A true circle takes the single overall the order sheet's round panel
   ;; shows; only an out-of-round spa needs the second one.  A round spa's
@@ -16458,8 +16507,15 @@
          (progn (princ "\nStepping back one question.") (setq sstep 1))
          (setq sstep 3)))
       ((= sstep 3)
-       ;; the base point is picked with the user's own snaps still live;
-       ;; only afterwards do snaps drop for the command-fed drawing work
+       ;; The base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work.
+       ;; spa:osup is what makes that true and it did not used to be here:
+       ;; spa:readblock runs before the three questions above and ends on
+       ;; spa:osdown like every other ask helper, so snaps were already at
+       ;; 0 by the time this prompt came up -- the one pick that places
+       ;; the whole spa, made with nothing to snap to.  POOL and POOLSIDE
+       ;; hold the drafter's snaps at the identical prompt.
+       (cal:osup)
        (if (spa:fhas 'base)
          (setq base  (spa:ftake 'base)
                sstep 4)
@@ -16473,6 +16529,9 @@
   (setq spa:*base* (if (and base (listp base))
                        (list (car base) (cadr base))
                        (list 0.0 0.0)))
+  ;; and down again for the command-fed drawing work below, whichever
+  ;; way the base point arrived -- picked, typed, or handed over by the
+  ;; form, which skips the prompt entirely
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
@@ -16558,7 +16617,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "091226 REV13")
+(setq tut:*version* "091526 REV14")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -16639,16 +16698,18 @@
     "    typed in full: 90, ROUNDED, DIAG, NG)."
     "    Asked one at a time, corner A's answer autofills B, C and D"
     "    -- Enter accepts."
-    "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No,"
-    "    then the taper, typed, if the block did not give it."
+    "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No."
     "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
     "    is dodged by turning the spa, and nothing already on the screen"
-    "    can be turned.  The hinges are drawn at the end all the same."
-    "    The grey guide spa stays up across these, and comes down only"
-    "    as the real outline goes up in its place."
+    "    can be turned.  The grey guide spa stays up across these, and"
+    "    comes down only as the real outline goes up in its place."
     "8.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
-    "    Skipped on Thermo-Light."))
+    "    Skipped on Thermo-Light.  Then the taper, typed, if the block"
+    "    did not give it -- asked NOW, not with step 7, because it turns"
+    "    nothing: by here the cover is on the screen, or the offer to"
+    "    add one has been declined.  The hinges are drawn at the end all"
+    "    the same."))
 
 (setq tut:*decides*
   (list
@@ -17297,7 +17358,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.8")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -20219,8 +20280,18 @@
       nil
       (progn
         (setq off  (car (nth 2 ans))
-              bot  (cadr (nth 2 ans))
-              done (oasis:drawbottom bot arcs base w h lt
+              bot  (cadr (nth 2 ans)))
+        ;; The questions above are answered WITH the drafter's snaps --
+        ;; the break points are picked onto the outline.  What follows is
+        ;; the drawing, fed computed points to DIMALIGNED and to the
+        ;; hopper-offset cross dim, and it needs them off like every
+        ;; other command-fed stretch of this run.  The caller's osup
+        ;; used to span both halves, so the bottom flow's four dimension
+        ;; commands were the only ones of the run laid down with running
+        ;; osnap live -- free to be pulled onto whatever the outline
+        ;; happened to pass near.
+        (cal:osdown)
+        (setq done (oasis:drawbottom bot arcs base w h lt
                                      (nth 3 ans) (nth 4 ans) off))
         (list
           (strcat "\nBottom on layer " oasis:*poollayer*
@@ -20320,8 +20391,14 @@
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
                    lt a nchk gotbot)
   (defun *error* (msg)
-    ;; user settings come back FIRST so nothing below can skip them
-    (cal:dimstyrestore)
+    ;; user settings come back FIRST so nothing below can skip them --
+    ;; and that means FIRST, which this handler did not used to be.  It
+    ;; opened with (cal:dimstyrestore), whose (command ...) is exactly
+    ;; what the valve below exists to make safe: on the Esc-mid-dimension
+    ;; the comment there describes, the style restore was fed into the
+    ;; PENDING command as answers, and a throw there took this line with
+    ;; it -- leaving the drafter with every object snap unticked.
+    ;; Nothing above this line may drive a command.
     (cal:sysrestore)
     ;; a form's leftovers go with the run that was reading them: an Esc
     ;; part-way through must not leave answers behind for the next one
@@ -20333,6 +20410,9 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
+    ;; and only now, with nothing pending, the style -- it is read-only
+    ;; to setvar, so it is the one restore here that needs a command
+    (cal:dimstyrestore)
     ;; the preview is scaffolding, not a result -- it goes whether the run
     ;; finished or the user pressed Esc part-way through the questions.
     ;; So are the pool-bottom flow's numbered tangency marks, which are
@@ -32631,7 +32711,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.8")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -32770,7 +32850,12 @@
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
 ;;;  knobs: they are what the run puts back on the way out.
-(setq acc:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;; OSMODE is deliberately NOT in this list.  none of the three ABCURCHECK commands never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(setq acc:*sysvars* '("CMDECHO" "CLAYER"))  ; saved and put back
 ;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
@@ -34784,7 +34869,7 @@
 ;;; layer everything landed on.
 ;;; ======================================================================
 
-(setq *olauto-version* "v1.2")       ; announced on load; release_lisp.py
+(setq *olauto-version* "v1.3")       ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -34935,7 +35020,12 @@
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
 ;;;  knobs: they are what the run puts back on the way out.
-(setq ola:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;; OSMODE is deliberately NOT in this list.  OLAUTO never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(setq ola:*sysvars* '("CMDECHO" "CLAYER"))  ; saved and put back
 ;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
@@ -44535,7 +44625,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.8"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.9"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -44834,11 +44924,17 @@
   ;; -- error handler: cancel stuck commands, purge temp geometry,
   ;;    restore system variables, close the undo group -------------------
   (defun *error* (msg)
+    ;; the drafter's settings come back FIRST, ahead of the flush below.
+    ;; autobead-flush is a bare (command) drain -- the one form up here
+    ;; that can throw -- and it used to sit in front of these two, so a
+    ;; drain that died left every object snap unticked and PEDITACCEPT
+    ;; at 1.  Two setvars of values this run captured itself cannot
+    ;; throw, so nothing is risked by putting them above it.
+    (if oldos (setvar "OSMODE" oldos))
+    (if oldpa (setvar "PEDITACCEPT" oldpa))
     (autobead-flush)
     (foreach e temps
       (if (and e (entget e)) (entdel e)))
-    (if oldpa (setvar "PEDITACCEPT" oldpa))
-    (if oldos (setvar "OSMODE" oldos))
     ;; only close a group that was actually opened -- an error thrown
     ;; before the _Begin below (a cancelled selection, a failed getvar)
     ;; used to run _End on nothing, which errors inside the handler
@@ -58454,7 +58550,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.17")
+(setq *cchk-version* "v1.18")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -62127,8 +62223,15 @@
   (cchk:tut-label (list (+ bx 195.0) (+ by 78.0) 0.0) 4.0 "(5) Cover Details set wrong on purpose")
   T)
 
-(defun c:TUTORIALCOVERCHECK ( / *error* oldecho att0 req0 fil0 undo-open bp)
+(defun c:TUTORIALCOVERCHECK ( / *error* oldecho os0 att0 req0 fil0
+                               undo-open bp)
   (defun *error* (msg)
+    ;; object snaps first, before anything below it can throw.
+    ;; cchk:tut-build mutes OSMODE round its DIMLINEAR and puts it
+    ;; back from a local of its own, which this handler cannot see --
+    ;; so the tutorial holds the drafter's value itself, exactly as
+    ;; it holds the three below
+    (if os0 (setvar "OSMODE" os0))
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     ;; cchk:tut-insert-details drops ATTDIA/ATTREQ/FILEDIA round its
@@ -62151,7 +62254,7 @@
       (setq bp (getpoint "\nPick a base point for the demo, clear of your real geometry <0,0>: "))
       (if lzd:ask (lzd:ask "\nPick a base point for the demo, clear of your real geometry <0,0>: " bp) bp)
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
-      (setq oldecho (getvar "CMDECHO")
+      (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE")
             att0 (getvar "ATTDIA") req0 (getvar "ATTREQ") fil0 (getvar "FILEDIA"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -62824,7 +62927,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.0")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.1")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -64749,10 +64852,13 @@
 
 ;;; -------------------- the commands -----------------------------------
 
-;; The sysvars either command changes, in the order they come back --
-;; OSMODE first, because object snaps are the setting a drafter misses
-;; most if a run is ever cut short partway.
-(defun cd:sysvars () '("OSMODE" "CMDECHO"))
+;; The sysvars either command changes, in the order they come back.
+;; OSMODE is deliberately NOT in this list.  CLEARDIM, and neither does CLEARDIMSCAN, never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(defun cd:sysvars () '("CMDECHO"))
 
 (defun c:CLEARDIM ( / *error* undo-open ss recs results n res)
   (defun *error* (msg)
@@ -64959,7 +65065,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.20")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.21")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -67044,8 +67150,14 @@
         (princ "\n  Left in place - one U removes the whole tutorial."))
       (princ))))
 
-(defun c:TUTORIALDIMCHECK ( / *error* oldecho undo-open ans l ins h sstep)
+(defun c:TUTORIALDIMCHECK ( / *error* oldecho os0 undo-open ans l ins h
+                             sstep)
   (defun *error* (msg)
+    ;; object snaps first, before anything below it can throw.
+    ;; dchk:tut-dim mutes OSMODE round its DIMLINEAR and puts it back
+    ;; from a local of its own, which this handler cannot see -- so
+    ;; the tutorial holds the drafter's value itself
+    (if os0 (setvar "OSMODE" os0))
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -67065,7 +67177,7 @@
   (if lzd:ask (lzd:ask "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: " ans) ans)
   (if (null ans) (setq ans "Both"))
   (if (= ans "LIST") (setq ans "Checks"))
-  (setq oldecho (getvar "CMDECHO"))
+  (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -69493,7 +69605,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.9")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.0")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -74216,7 +74328,10 @@
     (if lzd:report (lzd:report "FITABHD" *fitabhd-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "FITABHD" *fitabhd-version*))
-  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+  ;; no OSMODE: FITABHD never changes it, and listing it here would
+  ;; put this run's opening snapshot back over any snap the drafter
+  ;; ticked on during the seven steps -- on a clean exit.
+  (cal:syssave '("CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
@@ -78193,7 +78308,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.16")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.17")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -82350,8 +82465,14 @@
         (princ "\n  Left in place - one U removes the whole tutorial."))
       (princ))))
 
-(defun c:TUTORIALLINFINCHECK ( / *error* oldecho undo-open ans l ins h sstep)
+(defun c:TUTORIALLINFINCHECK ( / *error* oldecho os0 undo-open ans l ins h
+                                sstep)
   (defun *error* (msg)
+    ;; object snaps first, before anything below it can throw.
+    ;; lfc:tut-dim mutes OSMODE round its DIMLINEAR and puts it back
+    ;; from a local of its own, which this handler cannot see -- so
+    ;; the tutorial holds the drafter's value itself
+    (if os0 (setvar "OSMODE" os0))
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -82371,7 +82492,7 @@
   (if lzd:ask (lzd:ask "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: " ans) ans)
   (if (null ans) (setq ans "Both"))
   (if (= ans "LIST") (setq ans "Checks"))
-  (setq oldecho (getvar "CMDECHO"))
+  (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -84276,12 +84397,19 @@
 ;;;         * LINGUTTER asks once, "Keep CROSS DIMENSIONS?".  Answered
 ;;;           Yes, a dimension in a lg:*anystyles* style ("CROSS DIM*",
 ;;;           which catches "CROSS DIM", "CROSS DIMENSIONS" and "CROSS
-;;;           DIMENSIONS 0.5") is kept when every one of its attachment
-;;;           points is either inside the traced perimeter or within
-;;;           lg:*ontol* of it -- a cross dim belongs to THIS pool, not
-;;;           to a second one sitting in the same highlight.  Answered
-;;;           No, those dimensions get no exemption and are judged like
-;;;           any other style below;
+;;;           DIMENSIONS 0.5") is kept when it reads as a genuine cross
+;;;           measurement of THIS pool: both attachment points belong
+;;;           to the perimeter at all (inside it, or on it), AND either
+;;;           the two points span at least lg:*crossspan* of the
+;;;           perimeter's own width or height -- "goes full X" or "goes
+;;;           full Y" -- or they sit at two of its VERTICES, corner to
+;;;           corner along one whole edge however short.  A dim from
+;;;           one corner to some other point along that SAME edge --
+;;;           the start of a line to a point in the middle of it -- is
+;;;           never kept, regardless of span: it is reading a fraction
+;;;           of one side, not the pool.  Answered No, none of these
+;;;           dimensions gets any exemption and each is judged like any
+;;;           other style below;
 ;;;         * a dimension in a lg:*perimstyles* style ("STANDARD",
 ;;;           "SIDE STANDARD") is kept only when it is ON the perimeter
 ;;;           -- every one of its attachment points within
@@ -84324,9 +84452,10 @@
 ;;;    lg:*poollayer*    layer the perimeter is drawn on    ("POOL")
 ;;;    lg:*poolcolor*    its colour when the layer has to be created
 ;;;    lg:*anystyles*    dim styles kept when "Keep CROSS DIMENSIONS?"
-;;;                      is answered Yes and they sit inside the
-;;;                      perimeter or connected to it, as wildcard
-;;;                      patterns matched against the style name
+;;;                      is answered Yes and the dim is a genuine cross
+;;;                      measurement of this pool (see lg:cross-ok-p
+;;;                      and lg:*crossspan*), as wildcard patterns
+;;;                      matched against the style name
 ;;;    lg:*perimstyles*  dim styles kept only on the perimeter
 ;;;    lg:*keeplayers*   layers left alone entirely (nil = none)
 ;;;    lg:*skiplayers*   layers the perimeter is never traced from
@@ -84338,6 +84467,10 @@
 ;;;                      typed in cannot change what the report claims
 ;;;    lg:*cover*        how much of the highlight's extent a traced
 ;;;                      exterior must span before it is believed
+;;;    lg:*crossspan*    how much of the perimeter's own bounding box a
+;;;                      kept lg:*anystyles* dim must span, in X or Y,
+;;;                      to count as a full cross measurement rather
+;;;                      than a small local one
 ;;;    lg:*runpaddle*    T to run PADDLE at the end, nil to stop after
 ;;;                      the gut
 ;;;
@@ -84365,6 +84498,12 @@
 ;;;    * "Keep CROSS DIMENSIONS?" answered No drops every lg:*anystyles*
 ;;;      dimension like any other style not in lg:*perimstyles* -- counted
 ;;;      in the report, not silently.
+;;;    * A lg:*anystyles* dim is judged by SHAPE as well as location: a
+;;;      small one entirely inside the pool, touching nothing, is kept
+;;;      no more than a stray one outside it is -- lg:*crossspan* and
+;;;      lg:vertex-to-vertex-p are what a genuine cross measurement has
+;;;      to satisfy, and "start of one edge to a random point along
+;;;      that SAME edge" satisfies neither one, on purpose.
 ;;;    * The perimeter is always redrawn, even when it was already one
 ;;;      closed polyline on POOL, so the result is the same object
 ;;;      whatever went in.  An associative dimension attached to the old
@@ -84381,7 +84520,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.6")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.7")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -84448,6 +84587,15 @@
                                    ; perimeter: a fraction, 0.8 = 80%.
                                    ; Falling short is a warning, never a
                                    ; veto -- see the Notes
+(setq lg:*crossspan*   0.8)        ; how much of the PERIMETER's own
+                                   ; bounding box a kept lg:*anystyles*
+                                   ; dim has to span, in X or in Y, to
+                                   ; count as a full cross measurement
+                                   ; rather than a small local one; a
+                                   ; fraction, 0.8 = 80%.  A dim short
+                                   ; of this is still kept when it runs
+                                   ; corner to corner along one whole
+                                   ; edge instead -- see lg:cross-ok-p
 (setq lg:*runpaddle*   t)          ; T to hand the new perimeter to
                                    ; PADDLE and pad it; nil to stop after
                                    ; the gut and leave it unpadded
@@ -85063,20 +85211,90 @@
     (setq i (1+ i)))
   inside)
 
-;; T when every attachment point of a lg:*anystyles* dimension is either
-;; INSIDE the traced perimeter or within lg:*ontol* of it.  A cross dim
-;; runs corner to corner of the pool it belongs to; this is what tells
-;; that pool's cross dims from one sitting in the same highlight for a
-;; second pool, or a stray one that answers to nothing here.  Every, not
-;; any -- the same reasoning as lg:on-perim-p.
-(defun lg:cross-ok-p (ed vts / pts ok p)
-  (setq pts (lg:dim-pts ed)
-        ok  (and pts t))
-  (foreach p pts
-    (if (not (or (lg:pt-inside-p p vts)
-                 (<= (lg:pt-loop-dist p vts) lg:*ontol*)))
-      (setq ok nil)))
-  ok)
+;; T when P sits inside the perimeter, or on it -- the baseline "does
+;; this point belong to the pool LINGUTTER just gutted at all" test.  A
+;; point that fails this is not a fraction of an inch off; it is a
+;; stray dim, or one measuring a second pool in the same highlight.
+(defun lg:pt-belongs-p (p vts)
+  (or (lg:pt-inside-p p vts) (<= (lg:pt-loop-dist p vts) lg:*ontol*)))
+
+;; T when P sits within lg:*ontol* of a VERTEX of the perimeter -- a
+;; true corner, not merely somewhere along the edge leaving or
+;; arriving at it.
+(defun lg:at-vertex-p (p vts / hit v)
+  (foreach v vts
+    (if (<= (distance (cal:2d p) (cal:2d v)) lg:*ontol*) (setq hit t)))
+  hit)
+
+;; T when P1 and P2 both sit on some ONE perimeter edge and are NOT
+;; that edge's own two endpoints -- the start of a line to some random
+;; point in the middle of that same line.  A cross dim shaped like this
+;; measures a fraction of one side, not the pool, and is never kept
+;; regardless of span: a long enough side could otherwise make a
+;; partial reading look like it spans the pool by accident.
+;; Every edge is checked in its own right rather than classifying each
+;; point to "the" edge it sits on first: a point sitting exactly at a
+;; shared VERTEX sits on the two edges that meet there, and picking
+;; only one by iteration order could clear a partial read on whichever
+;; edge it did not pick.
+(defun lg:same-edge-partial-p (p1 p2 vts / n i a b blg d1 d2 veto)
+  (setq n (length vts) i 0 veto nil)
+  (repeat n
+    (setq a   (nth i vts)
+          b   (nth (rem (1+ i) n) vts)
+          blg (caddr a)
+          d1  (if (/= blg 0.0)
+                (lg:pt-arc-dist p1 (cal:2d a) (cal:2d b) blg)
+                (lg:pt-seg-dist p1 (cal:2d a) (cal:2d b)))
+          d2  (if (/= blg 0.0)
+                (lg:pt-arc-dist p2 (cal:2d a) (cal:2d b) blg)
+                (lg:pt-seg-dist p2 (cal:2d a) (cal:2d b))))
+    (if (and (<= d1 lg:*ontol*) (<= d2 lg:*ontol*)
+             (not (or (and (<= (distance (cal:2d p1) (cal:2d a)) lg:*ontol*)
+                           (<= (distance (cal:2d p2) (cal:2d b)) lg:*ontol*))
+                      (and (<= (distance (cal:2d p1) (cal:2d b)) lg:*ontol*)
+                           (<= (distance (cal:2d p2) (cal:2d a)) lg:*ontol*)))))
+      (setq veto t))
+    (setq i (1+ i)))
+  veto)
+
+;; T when P1-P2 spans at least lg:*crossspan* of the perimeter's own
+;; bounding box, in X or in Y -- "goes full X" or "goes full Y", an
+;; overall check dimension from one side to the other, corners or not.
+(defun lg:full-span-p (p1 p2 vts / bb w h dx dy)
+  (setq bb (lg:bbox (lg:segs-pts (lg:vts->segs T vts))))
+  (if bb
+    (progn
+      (setq w  (- (nth 2 bb) (car bb))
+            h  (- (nth 3 bb) (cadr bb))
+            dx (abs (- (car (cal:2d p1)) (car (cal:2d p2))))
+            dy (abs (- (cadr (cal:2d p1)) (cadr (cal:2d p2)))))
+      (or (and (> w 1e-9) (>= (/ dx w) lg:*crossspan*))
+          (and (> h 1e-9) (>= (/ dy h) lg:*crossspan*))))))
+
+;; T when P1 and P2 are each within lg:*ontol* of SOME vertex of the
+;; perimeter -- corner to corner, "the start of a line to the end of a
+;; line", whichever two corners they are and however short that run is.
+;; A short notch side would otherwise never pass lg:full-span-p.
+(defun lg:vertex-to-vertex-p (p1 p2 vts)
+  (and (lg:at-vertex-p p1 vts) (lg:at-vertex-p p2 vts)))
+
+;; T when a lg:*anystyles* dimension is a genuine cross dim OF THIS
+;; POOL: both attachment points belong to the perimeter at all, neither
+;; is a partial read along one same edge, and together they either span
+;; most of the pool (lg:full-span-p) or run corner to corner along one
+;; full edge (lg:vertex-to-vertex-p).  Anything else highlighted in
+;; this style -- a small dimension entirely inside touching nothing, a
+;; stray one answering to a different pool -- goes with the rest.
+(defun lg:cross-ok-p (ed vts / pts p1 p2)
+  (setq pts (lg:dim-pts ed))
+  (and (= (length pts) 2)
+       (setq p1 (car pts) p2 (cadr pts))
+       (lg:pt-belongs-p p1 vts)
+       (lg:pt-belongs-p p2 vts)
+       (not (lg:same-edge-partial-p p1 p2 vts))
+       (or (lg:full-span-p p1 p2 vts)
+           (lg:vertex-to-vertex-p p1 p2 vts))))
 
 ;;; -------------------- styles and tallies ------------------------------
 
@@ -85112,7 +85330,7 @@
           (cond
             ((lg:stylep sty lg:*anystyles*)
              (if keepcross
-               " - not inside or connected to the perimeter"
+               " - not a full span or a full perimeter edge"
                " - \"Keep CROSS DIMENSIONS?\" answered No"))
             ((lg:stylep sty lg:*perimstyles*) " - not on the perimeter")
             (t " - style not kept"))))
@@ -85296,7 +85514,8 @@
       (if keepcross
         (princ (strcat "\nLINGUTTER: keeping " (itoa nany) " dimension"
                        (lg:s nany) " in " (lg:names lg:*anystyles*)
-                       " inside the perimeter or connected to it."))
+                       " as a full-span or full-edge cross measurement"
+                       " of the pool."))
         (princ (strcat "\nLINGUTTER: \"Keep CROSS DIMENSIONS?\" answered"
                        " No - dimensions in " (lg:names lg:*anystyles*)
                        " get no exemption.")))
@@ -85620,7 +85839,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.14")
+(setq *perp-version* "v0.15")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -86044,24 +86263,35 @@
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun perp:finish (/ guard)
     ;; cancel any command left pending by an Esc mid-PLINE/DIMALIGNED
+    ;; The drafter's settings come back FIRST -- ahead of the drain
+    ;; below, which is the one form in here that can throw.  A bare
+    ;; (command) from *error* is legal only while a pushed error mode is
+    ;; actually in effect; where it is not, AutoCAD rejects it, the throw
+    ;; lands inside the handler and every line after it is skipped.  This
+    ;; whole defun WAS those lines: the handler is nothing but a call to
+    ;; it, so a rejected drain used to take the OSMODE restore, the layer,
+    ;; the creation defaults and the error-mode pop with it.  Putting back
+    ;; values this run captured itself is pure setvar and cannot throw.
+    (if os    (setvar "OSMODE"    os))
+    (if pd    (setvar "PDMODE"    pd))
+    (if cec   (setvar "CECOLOR"   cec))
+    (if celt  (setvar "CELTYPE"   celt))
+    (if celw  (setvar "CELWEIGHT" celw))
+    (if celts (setvar "CELTSCALE" celts))
+    (if plt   (setvar "PLINETYPE" plt))
+    ;; CLAYER last of the setvars: it is the one that can throw here, if
+    ;; the layer it names was purged while the run was open
+    (if clay  (setvar "CLAYER"    clay))
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
-    ;; leave the drawing's creation defaults exactly as they were found
-    (if cec   (setvar "CECOLOR"   cec))
-    (if celt  (setvar "CELTYPE"   celt))
-    (if celw  (setvar "CELWEIGHT" celw))
-    (if celts (setvar "CELTSCALE" celts))
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
-    (if clay (setvar "CLAYER"  clay))
-    (if pd   (setvar "PDMODE"  pd))
-    (if os   (setvar "OSMODE"  os))
-    (if plt  (setvar "PLINETYPE" plt))
-    (if ce   (setvar "CMDECHO" ce))
+    ;; CMDECHO after the drain, so the drain itself stays quiet
+    (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
              (setq undoOpen nil)))
@@ -86740,7 +86970,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.14")
+(setq *cperp-version* "v0.15")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -87069,23 +87299,35 @@
 
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun cperp:finish (/ guard)
+    ;; The drafter's settings come back FIRST -- ahead of the drain
+    ;; below, which is the one form in here that can throw.  A bare
+    ;; (command) from *error* is legal only while a pushed error mode is
+    ;; actually in effect; where it is not, AutoCAD rejects it, the throw
+    ;; lands inside the handler and every line after it is skipped.  This
+    ;; whole defun WAS those lines: the handler is nothing but a call to
+    ;; it, so a rejected drain used to take the OSMODE restore, the layer,
+    ;; the creation defaults and the error-mode pop with it.  Putting back
+    ;; values this run captured itself is pure setvar and cannot throw.
+    (if os    (setvar "OSMODE"    os))
+    (if pd    (setvar "PDMODE"    pd))
+    (if cec   (setvar "CECOLOR"   cec))
+    (if celt  (setvar "CELTYPE"   celt))
+    (if celw  (setvar "CELWEIGHT" celw))
+    (if celts (setvar "CELTSCALE" celts))
+    (if plt   (setvar "PLINETYPE" plt))
+    ;; CLAYER last of the setvars: it is the one that can throw here, if
+    ;; the layer it names was purged while the run was open
+    (if clay  (setvar "CLAYER"    clay))
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
-    (if cec   (setvar "CECOLOR"   cec))
-    (if celt  (setvar "CELTYPE"   celt))
-    (if celw  (setvar "CELWEIGHT" celw))
-    (if celts (setvar "CELTSCALE" celts))
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
-    (if clay (setvar "CLAYER"  clay))
-    (if pd   (setvar "PDMODE"  pd))
-    (if os   (setvar "OSMODE"  os))
-    (if plt  (setvar "PLINETYPE" plt))
-    (if ce   (setvar "CMDECHO" ce))
+    ;; CMDECHO after the drain, so the drain itself stays quiet
+    (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
              (setq undoOpen nil)))
@@ -89182,7 +89424,12 @@
 ;;; ----------------------------------------------------------------------
 
 
-(defun pm:sysvars () '("OSMODE" "CMDECHO" "CLAYER"))
+;; OSMODE is deliberately NOT in this list.  PERPMARK never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(defun pm:sysvars () '("CMDECHO" "CLAYER"))
 
 ;;; ----------------------------------------------------------------------
 ;;;  The marks
@@ -91882,7 +92129,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.16")
+(setq *spacheck-version* "v1.17")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -93653,7 +93900,7 @@
   (if (null ss)
     (prompt "\nNothing to check.")
     (progn
-      (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+      (cal:syssave '("CMDECHO" "CLAYER"))
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -100712,7 +100959,7 @@
 
 
 
-(setq *xft-version* "v1.16") ; printed on load and at command start so a
+(setq *xft-version* "v1.17") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -101519,15 +101766,23 @@
 ;;;  XFTCONV
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone guard
+(defun c:XFTCONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
                      ss base wbase i en ed typ locked
                      markers names dots dotnames r recs
                      nmade nblank ndots nleft)
 
-  (defun xft:restore ()
+  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, which is the point -- the
+  ;; handler calls it BEFORE its (command) drain, so a drain that dies
+  ;; cannot take the drafter's object snaps with it.  The pop below
+  ;; cannot move up with them: the drain needs the pushed mode.
+  (defun xft:sysback ()
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
-    (if osclay (setvar "CLAYER"  osclay))
+    (if osclay (setvar "CLAYER"  osclay)))
+
+  (defun xft:restore ()
+    (xft:sysback)
     ;; The error mode pushed below is popped HERE, on every way out --
     ;; the three quiet exits, the report, and the handler -- not in the
     ;; handler alone.  A clean run used to leave the mode stacked for
@@ -101541,6 +101796,13 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
+    ;; the drafter's settings come back FIRST, ahead of the drain below:
+    ;; that drain is a bare (command), the one form in this handler that
+    ;; can throw, and it used to sit in front of the only OSMODE restore
+    ;; there is -- so an Esc that died in the drain left every object
+    ;; snap unticked AND stranded the pop, which refuses command-s inside
+    ;; every later handler for the rest of the session
+    (xft:sysback)
     ;; back out of SCALE etc.  Bounded: CMDACTIVE carries a
     ;; "dialog is up" bit no keystroke from here can clear, and an
     ;; unbounded drain against it would hang with no Esc out.
@@ -101829,14 +102091,22 @@
   (reverse out)
 )
 
-(defun c:XFTRECONV ( / *error* xft:restore oscm osos osclay undone guard
+(defun c:XFTRECONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
                        ss recs runs locked r spec keep i en
                        scale base nback nrebuilt)
 
-  (defun xft:restore ()
+  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, which is the point -- the
+  ;; handler calls it BEFORE its (command) drain, so a drain that dies
+  ;; cannot take the drafter's object snaps with it.  The pop below
+  ;; cannot move up with them: the drain needs the pushed mode.
+  (defun xft:sysback ()
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
-    (if osclay (setvar "CLAYER"  osclay))
+    (if osclay (setvar "CLAYER"  osclay)))
+
+  (defun xft:restore ()
+    (xft:sysback)
     ;; popped on every way out, not in the handler alone -- see the
     ;; same note in c:XFTCONV
     (if *pop-error-mode* (*pop-error-mode*))
@@ -101845,6 +102115,13 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTRECONV error: " msg)))
+    ;; the drafter's settings come back FIRST, ahead of the drain below:
+    ;; that drain is a bare (command), the one form in this handler that
+    ;; can throw, and it used to sit in front of the only OSMODE restore
+    ;; there is -- so an Esc that died in the drain left every object
+    ;; snap unticked AND stranded the pop, which refuses command-s inside
+    ;; every later handler for the rest of the session
+    (xft:sysback)
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
@@ -109505,6 +109782,8 @@
 ;;;            LAZICON        report where the button picture came from
 ;;;            LAZPIN         choose the pinned tools
 ;;;            LAZHIDE        choose which tools stay off the panel
+;;;            LAZSET         the settings, as a dialog
+;;;            LAZNAME        your own name for a tool, and for its button
 ;;;            CALHELP        what a command does, at the command line
 ;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
@@ -109585,7 +109864,17 @@
 ;;; runs the way a docked palette can -- but it no longer has to be
 ;;; reopened by hand: click, the panel closes, the tool runs to its own
 ;;; end, and the panel COMES BACK on the page and at the screen position
-;;; it was at.  Close is the way out, and is the default button.  A
+;;; it was at.  Close is the way out, and is the default button.  Beside
+;;; it, on every page including Find, an OPTIONS button opens LAZSET --
+;;; the settings as a DIALOG, with the theme on a dropdown, a box per
+;;; item colour, the two folders and a way into the hidden list, all in
+;;; front of you at once.  CALSET asks the same questions one prompt at
+;;; a time and is still there for a drafter who would rather type.
+;;; Neither is a roster launch: settings are not a drafting tool, so
+;;; clicking Options never lands in Recent the way a real one would.
+;;; Behind Names... there, or LAZNAME typed, a drafter gives a tool the
+;;; name THEY type and the words THEY want its button to say; both are
+;;; per machine, and neither touches the shipped tables.  A
 ;;; PINNED row on every page carries the handful of tools you actually
 ;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.
 ;;; A RECENT row above it carries the last five you launched, newest
@@ -109616,7 +109905,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.30")
+(setq *lazpanel-version* "v3.33")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -109657,6 +109946,22 @@
 ;; whichever surface they pinned from.  Change it here and there
 ;; together, or tests/test_palette_shell.py fails.
 (setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
+
+;; The two per-user maps LAZNAME writes, on that same key.  Named here
+;; rather than spelled at the call sites so the whole set of values this
+;; file stores can be read in one place -- tests/test_palette_shell.py
+;; holds the panel and the VB palette to the same list, and a value it
+;; cannot see is a value that can drift.  These two are LISP-SIDE ONLY:
+;; the palette has no reader for either yet.
+(setq lzp:*aliasval* "Alias")
+(setq lzp:*capval* "Caption")
+
+;; The longest caption LAZNAME will let a drafter set.  A ceiling, not a
+;; preference: tools/check_dcl.py measures the SHIPPED tables and can
+;; never see an override, so this is the only thing standing between a
+;; long rename and a page too wide to open.  40 keeps the widest
+;; category page inside the budget.
+(setq lzp:*capmax* 40)
 
 ;; How wide, in DCL character cells, a row of pinned or recent buttons
 ;; may be before the next button starts a new row.  DCL does not
@@ -109867,8 +110172,20 @@
     ("XYPLOT"           "X/Y offset plot")
    ))
 
+;; The drafter's own words first, then the table's.  The override is
+;; consulted HERE, in the one accessor, rather than at the five places
+;; that ask -- the search, the Find row, both grid renderers and
+;; CALHELP -- so renaming a button renames it everywhere the panel
+;; shows it, and no call site had to change to make that true.
+;;
+;; lzp:*captions* stays the file's single truth and is what
+;; tools/gen_ui_data.py generates the VB palette's catalog from, so a
+;; drafter's caption is a LISP-SIDE rename: the palette keeps the
+;; shipped words until it learns to read the same key.
 (defun lzp:caption (name / p)
-  (if (setq p (assoc name lzp:*captions*)) (cadr p) ""))
+  (cond ((setq p (assoc name lzp:*capsof*)) (cdr p))
+        ((setq p (assoc name lzp:*captions*)) (cadr p))
+        (t "")))
 
 ;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
 ;;  one entry per COLUMN, laid out side by side across the page.  The
@@ -110219,6 +110536,11 @@
 (setq lzp:*page* nil)             ; the page the panel reopens on
 (setq lzp:*pins* nil)             ; the pinned tools, in pin order
 (setq lzp:*hidden* nil)           ; the tools put out of sight, no set order
+(setq lzp:*aliases* nil)          ; (COMMAND . the name this drafter types)
+(setq lzp:*capsof* nil)           ; (COMMAND . the words this drafter's button says)
+(setq lzp:*aliasat* nil)          ; lzp:*aliases* as the names editor opened it
+(setq lzp:*namesel* nil)          ; the tool the names editor has selected
+(setq lzp:*names* nil)            ; the names editor's rows, in list order
 
 ;;; -------------------- roster access -----------------------------------
 
@@ -110688,6 +111010,18 @@
       (if row (setq out (cons (reverse row) out)))
       (reverse out))))
 
+;; LST in runs of N, in order.  lzp:wrap above answers a different
+;; question -- the FEWEST balanced columns a page budget allows -- and
+;; a box that wants a fixed shape, like the settings dialog's eight
+;; colour boxes three to a column, cannot ask it that way.
+(defun lzp:chunk (lst n / row out e)
+  (foreach e lst
+    (setq row (cons e row))
+    (if (= (length row) n)
+      (setq out (cons (reverse row) out) row nil)))
+  (if row (setq out (cons (reverse row) out)))
+  (reverse out))
+
 ;; A headed run (heading cmd cmd ...) with every hidden command struck
 ;; out of it, or nil when nothing in it is left to show -- an emptied
 ;; run is dropped rather than rendered as a labelled box with nothing
@@ -110799,10 +111133,16 @@
        (setq out (cons "    }" out)))
      (setq out (cons "  }" out))))
   (setq out (cons "  spacer;" out))
-  (setq out (cons (strcat "  : button { label = \"Close\"; key = \"cancel\"; "
+  (setq out (cons "  : row {" out))
+  (setq out (cons "    alignment = centered;" out))
+  (setq out (cons (strcat "    : button { label = \"Close\"; key = \"cancel\"; "
                           "is_default = true; is_cancel = true; "
-                          "fixed_width = true; alignment = centered; }")
+                          "fixed_width = true; }")
                   out))
+  (setq out (cons (strcat "    : button { label = \"Options...\"; "
+                          "key = \"options_btn\"; fixed_width = true; }")
+                  out))
+  (setq out (cons "  }" out))
   (reverse (cons "}" out)))
 
 ;; The pin editor: every tool on the panel as a toggle, in as many
@@ -110892,10 +111232,12 @@
                   "is_default = true; fixed_width = true; }")
           (strcat "    : button { label = \"Close\"; key = \"cancel\"; "
                   "is_cancel = true; fixed_width = true; }")
+          (strcat "    : button { label = \"Options...\"; "
+                  "key = \"options_btn\"; fixed_width = true; }")
           "  }"
           "}")))
 
-;; Every page, then the pin editor and the hide editor, in one
+;; Every page, then the pin, hide and settings editors, in one
 ;; generated file.  Find leads, because it is the page that does not
 ;; need you to know where a tool was filed.
 (defun lzp:dcl-lines ( / out g)
@@ -110903,7 +111245,9 @@
   (foreach g lzp:*groups*
     (setq out (append out (lzp:dcl-one g) (list ""))))
   (setq out (append out (lzp:dcl-pins) (list "")))
-  (append out (lzp:dcl-hidden) (list "")))
+  (setq out (append out (lzp:dcl-hidden) (list "")))
+  (setq out (append out (lzp:dcl-set) (list "")))
+  (append out (lzp:dcl-names) (list "")))
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -111721,6 +112065,13 @@
             (if (not (member n have))
               (mode_tile (strcat "rec_" n) 1)))
           (action_tile "pin_edit" "(setq lzp:*pos* (done_dialog 5))")
+          ;; a settings launch, not a roster one: it goes through the
+          ;; ordinary rc=1 pick path (full teardown before it runs,
+          ;; same as any button) but *options* is a sentinel c:LAZPANEL
+          ;; reads itself rather than a name lzp:launch would look up --
+          ;; CALSET is not on the roster and must never land in Recent
+          (action_tile "options_btn"
+            "(setq lzp:*pick* \"*options*\" lzp:*pos* (done_dialog 1))")
           (foreach n (lzp:pages)
             (action_tile (strcat "tab_" n)
               (strcat "(setq lzp:*go* \"" n
@@ -111825,8 +112176,10 @@
   (lzp:recent-read)
   (lzp:hidden-read)
   (while (setq pick (lzp:show))
-    (if (/= pick "*pins*")
-      (lzp:launch pick)))
+    (cond
+      ((= pick "*pins*"))            ; already handled inside lzp:show
+      ((= pick "*options*") (c:LAZSET))  ; settings, never a roster launch
+      (t (lzp:launch pick))))
   (princ))
 
 ;; Open the pin editor on its own, without going through the panel.
@@ -112205,6 +112558,630 @@
   (if lzd:end (lzd:end "CALSET"))
   (princ))
 
+;;; -------------------- the settings dialog -----------------------------
+;;  CALSET asks these same questions one prompt at a time.  This is the
+;;  panel's Options button, and it is to CALSET what LAZFORM is to
+;;  POOL: every answer in front of you at once, each box filled in from
+;;  what the profile already holds, rather than an interview you have
+;;  to finish to change one thing.
+;;
+;;  NOTHING IN THIS DIALOG IS WRITTEN UNTIL OK.  What you type lands in
+;;  lzp:*setvals*, an alist keyed by the PROFILE KEY itself, and
+;;  lzp:set-write is the single place that reaches setenv.  Cancel drops
+;;  the store on the floor.  The Hidden... button closes this dialog,
+;;  runs the hide editor on the same loaded handle and comes back --
+;;  which is why the store is a global and not a local: the reopen
+;;  repaints every box from it, so a hop through the checklist does not
+;;  cost you the colour you had just typed.
+;;
+;;  THE HIDDEN LIST IS THE ONE EXCEPTION, and deliberately: it is its
+;;  own dialog with its own OK and Cancel, and it commits there, so
+;;  Cancel here does NOT put back a tool you hid through it.  That is
+;;  the bargain Pin... already strikes from the panel -- a sub-dialog's
+;;  OK is its own transaction -- and the alternative, silently undoing
+;;  a checklist the drafter had just accepted, is the more surprising
+;;  of the two.
+;;
+;;  A colour box holds an ACI number or nothing at all, and while one
+;;  holds anything else the state line names it and OK stays greyed --
+;;  the same bargain LAZFORM's Insert strikes, for the same reason: a
+;;  value nothing can read must not be stored and then silently
+;;  ignored by the tool that goes looking for it.
+
+;; What the Theme dropdown offers -> what is stored under CalofinTheme.
+;; The order is the list order, and the INDEX is what DCL hands back.
+(setq lzp:*themes*
+  '(("Auto"  . "AUTO")
+    ("Dark"  . "DARK")
+    ("Light" . "LIGHT")))
+
+(setq lzp:*setvals* nil)          ; the pending answers, until OK
+
+;; The profile key one item-colour role's override lives under.
+(defun lzp:inkkey (r) (strcat "CalofinInk-" (strcase (cdr r))))
+
+(defun lzp:set-get (key / p)
+  (if (setq p (assoc key lzp:*setvals*)) (cdr p) ""))
+
+(defun lzp:set-put (key v)
+  (setq lzp:*setvals*
+        (cons (cons key v)
+              (vl-remove (assoc key lzp:*setvals*) lzp:*setvals*)))
+  (princ))
+
+;; mode_tile that cannot throw, for the same reason lzp:settile exists:
+;; the state line is recomputed from a tile callback, where the tiles
+;; are there, and from the tests, where they are not.
+(defun lzp:setmode (key m)
+  (vl-catch-all-apply 'mode_tile (list key m)))
+
+(defun lzp:digit-p (c)
+  (if (member c '("0" "1" "2" "3" "4" "5" "6" "7" "8" "9")) t nil))
+
+;; T when S reads as an ACI colour, 1 to 255.  Spelled out rather than
+;; handed to atoi alone: atoi answers 0 for "red" and reads "12x" as
+;; 12, so a typo would be stored as a colour and drawn in.
+(defun lzp:aci-p (s / i n ok)
+  (setq n (strlen s) i 1 ok (> n 0))
+  (while (and ok (<= i n))
+    (if (not (lzp:digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  (if (and ok (> (atoi s) 0) (< (atoi s) 256)) t nil))
+
+;; The roles whose box holds something that is not a colour.  Empty is
+;; not one of them: empty is how a role is put back to auto.
+(defun lzp:set-badinks ( / r v out)
+  (foreach r lzp:*inkroles*
+    (setq v (lzp:set-get (lzp:inkkey r)))
+    (if (and (/= v "") (not (lzp:aci-p v)))
+      (setq out (cons (car r) out))))
+  (reverse out))
+
+(defun lzp:hiddenmsg ()
+  (strcat (itoa (length lzp:*hidden*)) " of "
+          (itoa (length (lzp:commands))) " tools hidden"))
+
+;; The state line, and OK with it.  Called as each box is typed into,
+;; so the refusal arrives while the box is still in front of you.
+(defun lzp:set-state ( / bad msg b)
+  (setq bad (lzp:set-badinks) msg "")
+  (foreach b bad (setq msg (strcat msg (if (= msg "") "" ", ") b)))
+  (lzp:settile "state"
+    (if bad
+      (strcat "Not a colour number: " msg
+              " -- type 1 to 255, or empty for auto")
+      "OK writes these to your AutoCAD profile, where they survive a rebuild"))
+  (lzp:setmode "accept" (if bad 1 0))
+  (princ))
+
+;; Which entry of lzp:*themes* the profile is on now, as the index DCL
+;; wants.  An unset or unreadable value is Auto, which is index 0.
+(defun lzp:theme-index ( / v i out r)
+  (setq v (lzp:set-get "CalofinTheme") out 0 i 0)
+  (foreach r lzp:*themes*
+    (if (= (cdr r) v) (setq out i))
+    (setq i (1+ i)))
+  out)
+
+;; The dropdown firing.  $value is an INDEX, not the word.
+(defun lzp:set-theme (v / r)
+  (if (setq r (nth (atoi v) lzp:*themes*))
+    (lzp:set-put "CalofinTheme" (cdr r)))
+  (princ))
+
+;; A profile value, TRIMMED.  Every other reader in this tree trims
+;; before it decides anything -- lzp:ui a few hundred lines up says so
+;; in a comment ("\" dark \" typed into the profile meaning nothing at
+;; all would be a silent no-op to stare at"), and cal:themeset, the
+;; fourteen tool copies and the VB palette all do the same.  A dialog
+;; that read the raw string would SHOW Auto for a profile holding
+;; " dark ", which every tool is meanwhile drawing dark for, and then
+;; write that lie back over it the first time OK was pressed.
+(defun lzp:profread (key / v)
+  (setq v (getenv key))
+  (if v (vl-string-trim " \t" v) ""))
+
+;; Fill the store from the profile.  Every key the dialog shows gets a
+;; row, so a box is never painted from a nil.
+(defun lzp:set-read ( / r v)
+  (setq lzp:*setvals* nil)
+  (setq v (strcase (lzp:profread "CalofinTheme")))
+  (lzp:set-put "CalofinTheme"
+               (if (member v '("DARK" "LIGHT")) v "AUTO"))
+  (foreach r '("CalofinErrorDir" "StockCover_Folder")
+    (lzp:set-put r (lzp:profread r)))
+  (foreach r lzp:*inkroles*
+    (lzp:set-put (lzp:inkkey r) (lzp:profread (lzp:inkkey r))))
+  lzp:*setvals*)
+
+;; The one place that writes.
+(defun lzp:set-write ( / r v)
+  (setq v (lzp:set-get "CalofinTheme"))
+  ;; EMPTY is what every reader takes for auto -- lzp:ui, cal:themeset
+  ;; and the palette all treat an unset or empty value as "measure it"
+  ;; -- so writing the word AUTO would leave LAZICON and lzp:setshow
+  ;; reporting an override the drafter never set.  The registry mirror
+  ;; below already wrote it this way; now the profile agrees with it.
+  (setenv "CalofinTheme" (if (= v "AUTO") "" v))
+  ;; ...and beside the pins, where the VB palette reads it
+  ;; (ui/calofin_net/PaletteTheme.vb) -- the same bargain CALSET's own
+  ;; Theme branch strikes.
+  (vl-catch-all-apply
+    'vl-registry-write
+    (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+  (foreach r '("CalofinErrorDir" "StockCover_Folder")
+    (setenv r (lzp:set-get r)))
+  ;; A box that does not read as a colour is LEFT ALONE rather than
+  ;; cleared.  Empty still clears -- that is how a role goes back to
+  ;; auto -- but a typo must not: erasing an override the drafter
+  ;; already had is the one outcome worse than ignoring what they just
+  ;; typed, and lzp:set-ok is not the only way this can be reached.
+  (foreach r lzp:*inkroles*
+    (setq v (lzp:set-get (lzp:inkkey r)))
+    (if (or (= v "") (lzp:aci-p v)) (setenv (lzp:inkkey r) v)))
+  lzp:*setvals*)
+
+;; OK, GUARDED.  Greying the button is not a hard stop and this file
+;; already knows it: lzp:dcl-find's own comment says "DCL fires an edit
+;; box's action BEFORE the default button's", so a click on OK with a
+;; typo still in the box fires the box (which greys OK) and then lands
+;; anyway.  LAZFORM learned this at lzf:insert -- "a guard that depends
+;; on a tile really being un-clickable is a guard that hands POOL a
+;; dropped box the day it is not" -- and this is the same guard: re-ask,
+;; and stay open rather than write.
+(defun lzp:set-ok ()
+  (if (lzp:set-badinks)
+    (lzp:set-state)
+    (done_dialog 1))
+  (princ))
+
+;; The dialog.  The dropdown is emitted EMPTY -- DCL has no way to
+;; write a list into a popup_list from the file, so it is filled with
+;; start_list once the dialog is up, exactly as LAZFORM fills its
+;; corner dropdowns.
+(defun lzp:dcl-set ( / out col r)
+  (setq out (list "lazpanel_set : dialog {"
+                  "  label = \"LazPanel  -  settings\";"
+                  "  : boxed_column {"
+                  "    label = \"Ink\";"
+                  (strcat "    : popup_list { key = \"set_theme\"; "
+                          "label = \"Theme\"; edit_width = 10; }")
+                  (strcat "    : text { label = \"auto measures the drawing's"
+                          " background and AutoCAD's own theme\"; }")
+                  "  }"
+                  "  : boxed_row {"
+                  (strcat "    label = \"Item colours - COVERCHECK, DIMCHECK"
+                          " and LINFINCHECK; empty is auto\";")))
+  ;; three to a column, so the box is a block rather than one tall stack
+  (foreach col (lzp:chunk lzp:*inkroles* 3)
+    (setq out (append out (list "    : column {")))
+    (foreach r col
+      (setq out (append out
+        (list (strcat "      : edit_box { key = \"ink_" (cdr r)
+                      "\"; label = \"" (car r)
+                      "\"; edit_width = 5; fixed_width = true; }")))))
+    (setq out (append out (list "    }"))))
+  (append out
+    (list "  }"
+          "  : boxed_column {"
+          "    label = \"Folders - empty means the tool's own default\";"
+          (strcat "    : edit_box { key = \"set_errdir\"; "
+                  "label = \"Error reports\"; edit_width = 40; }")
+          (strcat "    : edit_box { key = \"set_stockdir\"; "
+                  "label = \"Stock covers \"; edit_width = 40; }")
+          "  }"
+          "  : boxed_row {"
+          "    label = \"Panel\";"
+          "    : text { key = \"hiddenmsg\"; width = 32; }"
+          (strcat "    : button { label = \"Hidden...\"; "
+                  "key = \"set_hidden\"; fixed_width = true; }")
+          (strcat "    : button { label = \"Names...\"; "
+                  "key = \"set_names\"; fixed_width = true; }")
+          "  }"
+          ;; wide enough for the longest sentence lzp:set-state can put
+          ;; in it: width is a MINIMUM in DCL, but a text tile with no
+          ;; label and no value has only this to size itself from, and
+          ;; the message that explains a greyed OK is the one message
+          ;; that must not be the one cut off
+          "  : text { key = \"state\"; width = 110; }"
+          "  spacer;"
+          "  : row {"
+          "    alignment = centered;"
+          (strcat "    : button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; }")
+          (strcat "    : button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; }")
+          "  }"
+          "}")))
+
+;; Open it, wire it, and keep reopening while the Hidden... button is
+;; the way out.  Answers "ok" when OK was pressed and nil otherwise, so
+;; the caller is what decides to write.
+(defun lzp:set-edit (dcl / rc r done out)
+  (while (not done)
+    (cond
+      ((not (new_dialog "lazpanel_set" dcl)) (setq done t))
+      (t
+       ;; the dropdown's list, which is only legal with the dialog up
+       (start_list "set_theme")
+       (foreach r lzp:*themes* (add_list (car r)))
+       (end_list)
+       (set_tile "set_theme" (itoa (lzp:theme-index)))
+       (action_tile "set_theme" "(lzp:set-theme $value)")
+       (foreach r lzp:*inkroles*
+         (set_tile (strcat "ink_" (cdr r)) (lzp:set-get (lzp:inkkey r)))
+         (action_tile (strcat "ink_" (cdr r))
+           (strcat "(lzp:set-put \"" (lzp:inkkey r) "\" $value)"
+                   " (lzp:set-state)")))
+       (set_tile "set_errdir" (lzp:set-get "CalofinErrorDir"))
+       (action_tile "set_errdir" "(lzp:set-put \"CalofinErrorDir\" $value)")
+       (set_tile "set_stockdir" (lzp:set-get "StockCover_Folder"))
+       (action_tile "set_stockdir"
+                    "(lzp:set-put \"StockCover_Folder\" $value)")
+       (set_tile "hiddenmsg" (lzp:hiddenmsg))
+       (action_tile "set_hidden" "(done_dialog 5)")
+       (action_tile "set_names" "(done_dialog 6)")
+       (action_tile "accept" "(lzp:set-ok)")
+       (action_tile "cancel" "(done_dialog 0)")
+       (lzp:set-state)
+       (setq rc (start_dialog))
+       (cond
+         ;; the hide editor, then round again: this dialog repaints
+         ;; itself from the store, so nothing typed is lost to the trip
+         ((= rc 5) (lzp:hide-edit dcl))
+         ;; ...and the names editor the same way, on the same handle
+         ((= rc 6) (lzp:name-edit dcl))
+         ((= rc 1) (setq done t out "ok"))
+         (t (setq done t))))))
+  out)
+
+(defun c:LAZSET ( / *error* f dcl ok)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl -- the same fix c:LAZPIN and c:LAZHIDE carry
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZSET error: " msg)))
+    (if lzd:report (lzd:report "LAZSET" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZSET" *lazpanel-version*))
+  (lzp:pins-read)
+  (lzp:recent-read)
+  (lzp:hidden-read)
+  (lzp:set-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZSET error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZSET error: could not load the dialog file.")
+     (vl-file-delete f))
+    (t
+     (setq ok (lzp:set-edit dcl))
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (cond
+       (ok
+        (lzp:set-write)
+        (princ (strcat "\nLAZPANEL: settings saved.  Every tool reads the"
+                       " theme and the item colours on the next colour it"
+                       " picks; the toolbar icon takes the theme at the next"
+                       " LAZBUTTON or LAZICON, and the VB palette at its"
+                       " next chart.")))
+       (t (princ "\nLAZPANEL: settings unchanged.")))))
+  (if lzd:end (lzd:end "LAZSET"))
+  (princ))
+
+;;; -------------------- names of your own --------------------------------
+;;  Two things a drafter can rename, per machine: the NAME THEY TYPE to
+;;  summon a tool, and the WORDS ITS BUTTON SAYS.  Neither touches the
+;;  shipped tables -- lzp:*captions* stays the file's single truth, and
+;;  no alias is ever written into a .lsp -- so `make check` still reads
+;;  the same tree it always did.  This is a layer over the top of it.
+;;
+;;  AN ALIAS IS A WRAPPER DEFUN, which is the shape this tree already
+;;  uses for the one alias it ships: DCE is (defun c:DCE () (c:DIMCONTEND))
+;;  and nothing else.  Built at run time it is the same form, assembled
+;;  as DATA rather than as source text -- (list 'defun sym nil (list
+;;  target)) -- because a string spliced from what the drafter typed
+;;  would go through read, and a malformed one throws from inside a
+;;  file load, where there is nothing to catch it.  The wrapper
+;;  resolves its target at CALL time, so an alias can be applied before
+;;  the tool it names is loaded, which the standalone tier gives no
+;;  guarantee about.
+;;
+;;  WHAT IS REFUSED, AND WHY EACH ONE MATTERS:
+;;    - a name that is not letters and digits, or does not start with a
+;;      letter, or is over 12 characters.  (read "c:MY TOOL") answers
+;;      c:my and (read "c:") answers c:, both silently, so the check
+;;      happens BEFORE anything reaches read and is a whitelist.
+;;    - a name the session already answers to.  This is the dangerous
+;;      one: (defun c:CHECK () ...) would retarget check_drawing.lsp's
+;;      CHECK for the whole session, and DIMARCCHECK -- which is
+;;      (c:CHECK) -- with it.  lzp:has cannot see the difference, so the
+;;      button would stay lit while running the wrong tool.
+;;    - a caption carrying ";" or "=", which are the store's own
+;;      separators, or a double quote, which lzp:dcl-one pastes straight
+;;      into DCL and which would make every page of the panel
+;;      unloadable.
+;;    - a caption over lzp:*capmax* characters.  tools/check_dcl.py
+;;      measures the SHIPPED tables and structurally cannot see a
+;;      drafter's override, so the cap is the only thing standing
+;;      between a long rename and a page that will not open.
+;;
+;;  Removing an alias stops it being remembered, but the name it
+;;  already defined answers until the drawing is closed: AutoLISP has
+;;  no way to take a defun back, and pretending otherwise would be the
+;;  lie.  The state line says so.
+
+;; Records joined with ";" as Pins, Recent and Hidden already are, but
+;; a record here is a PAIR -- NAME=VALUE.  Both separators are single
+;; characters because lzp:split compares one character at a time, which
+;; is also exactly why neither may appear in a value.
+(defun lzp:kv-read (value / s out e i)
+  (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* value)))
+  (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
+    (foreach e (lzp:split s ";")
+      (if (and (setq i (vl-string-search "=" e)) (> i 0))
+        (setq out (cons (cons (substr e 1 i) (substr e (+ i 2))) out)))))
+  ;; a name the roster no longer carries is dropped on read, exactly as
+  ;; a stale pin is: what is stored must never put a dead row on screen
+  (vl-remove-if-not '(lambda (p) (member (car p) (lzp:commands)))
+                    (reverse out)))
+
+(defun lzp:kv-write (value map / s p)
+  (setq s "")
+  (foreach p map
+    (if (/= (cdr p) "")
+      (setq s (strcat s (if (= s "") "" ";") (car p) "=" (cdr p)))))
+  (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* value s))
+  map)
+
+(defun lzp:names-read ()
+  (setq lzp:*aliases* (lzp:kv-read lzp:*aliasval*)
+        lzp:*capsof*  (lzp:kv-read lzp:*capval*))
+  lzp:*aliases*)
+
+(defun lzp:letter-p (c)
+  (if (vl-string-search c "ABCDEFGHIJKLMNOPQRSTUVWXYZ") t nil))
+
+;; Letters and digits, first one a letter, 1 to 12 characters.
+(defun lzp:alias-shape-p (s / i n c ok)
+  (setq s (strcase s) n (strlen s) i 1 ok (and (> n 0) (<= n 12)))
+  (while (and ok (<= i n))
+    (setq c (substr s i 1))
+    (if (not (or (lzp:letter-p c) (lzp:digit-p c))) (setq ok nil))
+    (if (and (= i 1) (not (lzp:letter-p c))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+;; Does this session already answer to NAME?  The names-list form of
+;; atoms-family answers nil in the slot for a name the session lacks --
+;; and the LIST it returns is truthy either way, so the car is the
+;; question and the bare call is not.
+(defun lzp:alias-taken-p (name)
+  (if (car (atoms-family 1 (list (strcase (strcat "C:" name))))) t nil))
+
+;; Why this alias cannot be used, as words, or nil when it can.  TOOL is
+;; the command it would summon; the alias it ALREADY had is allowed
+;; through, or re-opening the editor would refuse what it just showed.
+(defun lzp:alias-why (name tool / p)
+  (cond
+    ((= name "") nil)
+    ((not (lzp:alias-shape-p name))
+     "a name is letters and digits, starts with a letter, up to 12")
+    ((setq p (car (vl-remove-if-not
+                    '(lambda (q) (and (/= (car q) tool)
+                                      (= (strcase (cdr q)) (strcase name))))
+                    lzp:*aliases*)))
+     (strcat "that name is already yours for " (car p)))
+    ((and (lzp:alias-taken-p name)
+          (/= (strcase name) (strcase (lzp:alias-was tool))))
+     (strcat name " already runs something in this session"))))
+
+(defun lzp:alias-was (tool)
+  (lzp:pairval tool lzp:*aliasat*))
+
+;; Why this caption cannot be used, as words, or nil when it can.
+(defun lzp:cap-why (s)
+  (cond
+    ((> (strlen s) lzp:*capmax*)
+     (strcat "keep it to " (itoa lzp:*capmax*) " characters or the page stops opening"))
+    ((or (vl-string-search ";" s) (vl-string-search "=" s))
+     "; and = are how the list itself is stored, so a caption cannot hold one")
+    ((vl-string-search "\"" s)
+     "a double quote would break the panel's own dialog file")))
+
+;; Define one wrapper, or answer nil having done nothing.
+(defun lzp:alias-make (name tool)
+  (if (and (lzp:alias-shape-p name)
+           (not (lzp:alias-taken-p name))
+           (member tool (lzp:commands)))
+    (progn
+      (eval (list 'defun (read (strcat "c:" (strcase name))) nil
+                  (list (read (strcat "c:" tool)))))
+      t)))
+
+(defun lzp:aliases-apply ( / p n)
+  (setq n 0)
+  (foreach p lzp:*aliases*
+    (if (lzp:alias-make (cdr p) (car p)) (setq n (1+ n))))
+  n)
+
+(defun lzp:names-write ()
+  (lzp:kv-write lzp:*aliasval* lzp:*aliases*)
+  (lzp:kv-write lzp:*capval* lzp:*capsof*)
+  (lzp:aliases-apply))
+
+;; One row.  Not padded into columns: whether the dialog font is
+;; fixed-pitch is exactly what LAZASCII exists to ask, so nothing here
+;; may assume two rows line up.
+(defun lzp:namerow (n / a)
+  (setq a (lzp:pairval n lzp:*aliases*))
+  (strcat n
+          (if (/= a "") (strcat "  (type " a ")") "")
+          "  -  " (lzp:caption n)))
+
+;; A map's value, or "" when it has none.  (cdr (assoc ...)) answers nil
+;; for a tool nobody has renamed, and nil is what strcase and strlen
+;; throw on -- so every read of these two maps comes through here.
+(defun lzp:pairval (key map / p)
+  (if (setq p (assoc key map)) (cdr p) ""))
+
+(defun lzp:put-pair (key v map)
+  (cons (cons key v) (vl-remove (assoc key map) map)))
+
+(defun lzp:name-alias-put (v)
+  (if lzp:*namesel*
+    (setq lzp:*aliases*
+          (lzp:put-pair lzp:*namesel* (strcase v) lzp:*aliases*)))
+  (lzp:namerefill)
+  (lzp:name-state)
+  (princ))
+
+(defun lzp:name-cap-put (v)
+  (if lzp:*namesel*
+    (setq lzp:*capsof* (lzp:put-pair lzp:*namesel* v lzp:*capsof*)))
+  (lzp:namerefill)
+  (lzp:name-state)
+  (princ))
+
+;; What is wrong with the pair in front of the drafter, or nil.
+(defun lzp:name-why ( / a)
+  (if lzp:*namesel*
+    (cond ((setq a (lzp:alias-why (lzp:pairval lzp:*namesel* lzp:*aliases*)
+                                  lzp:*namesel*))
+           a)
+          (t (lzp:cap-why (lzp:pairval lzp:*namesel* lzp:*capsof*))))))
+
+(defun lzp:name-state ( / why)
+  (setq why (lzp:name-why))
+  (lzp:settile "namestate"
+    (cond (why why)
+          ((not lzp:*namesel*) "Pick a tool to give it names of your own")
+          (t (strcat lzp:*namesel*
+                     " - OK keeps these; a name you remove still answers"
+                     " until this drawing is closed"))))
+  (lzp:setmode "accept" (if why 1 0))
+  (princ))
+
+;; Rebuild the list and put the selection back.  A row's words change
+;; as the boxes are typed into, and a list that went on showing the old
+;; ones would be the only part of the dialog telling a different story.
+(defun lzp:namerefill ( / n i sel)
+  (setq lzp:*names* (lzp:commands) i 0 sel 0)
+  (foreach n lzp:*names*
+    (if (= n lzp:*namesel*) (setq sel i))
+    (setq i (1+ i)))
+  ;; under a catch because this runs from a tile callback, where the
+  ;; list is there, and from the tests, where it is not: start_list
+  ;; outside a dialog is an error and not a no-op
+  (vl-catch-all-apply
+    '(lambda ()
+       (start_list "names")
+       (foreach n lzp:*names* (add_list (lzp:namerow n)))
+       (end_list)
+       (if lzp:*names* (set_tile "names" (itoa sel))))
+    nil)
+  lzp:*names*)
+
+(defun lzp:namepick (v)
+  (setq lzp:*namesel* (nth (atoi v) lzp:*names*))
+  (lzp:settile "name_alias" (lzp:pairval lzp:*namesel* lzp:*aliases*))
+  (lzp:settile "name_cap" (lzp:pairval lzp:*namesel* lzp:*capsof*))
+  (lzp:name-state)
+  lzp:*namesel*)
+
+;; OK, guarded the way lzp:set-ok is, and for the same reason: DCL fires
+;; an edit box's action before the default button's, so the greying is
+;; not a stop.
+(defun lzp:name-ok ()
+  (if (lzp:name-why)
+    (lzp:name-state)
+    (done_dialog 1))
+  (princ))
+
+(defun lzp:dcl-names ( / out)
+  (setq out
+    (list "lazpanel_names : dialog {"
+          "  label = \"LazPanel  -  names of your own\";"
+          (strcat "  : text { label = \"Pick a tool, then say what you want"
+                  " to type and what you want the button to say.\"; }")
+          "  : list_box { key = \"names\"; width = 58; height = 16; }"
+          "  : boxed_column {"
+          "    label = \"The tool you picked\";"
+          (strcat "    : edit_box { key = \"name_alias\"; "
+                  "label = \"Type this to run it\"; edit_width = 14; }")
+          (strcat "    : edit_box { key = \"name_cap\"; "
+                  "label = \"Button says        \"; edit_width = 40; }")
+          (strcat "    : text { label = \"Leave a box empty to go back to"
+                  " the name calofin ships.\"; }")
+          "  }"
+          "  : text { key = \"namestate\"; width = 110; }"
+          "  spacer;"
+          "  : row {"
+          "    alignment = centered;"
+          (strcat "    : button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; }")
+          (strcat "    : button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; }")
+          "  }"
+          "}"))
+  out)
+
+;; Cancel re-reads the store rather than unwinding the edits one by
+;; one, exactly as the pin and hide editors do: what is stored is the
+;; truth, so going back to it is exact where unwinding is approximate.
+(defun lzp:name-edit (dcl / rc)
+  (cond
+    ((not (new_dialog "lazpanel_names" dcl)) nil)
+    (t
+     (setq lzp:*aliasat* lzp:*aliases*
+           lzp:*namesel* nil)
+     (lzp:namerefill)
+     (lzp:namepick "0")
+     (action_tile "names" "(lzp:namepick $value)")
+     (action_tile "name_alias" "(lzp:name-alias-put $value)")
+     (action_tile "name_cap" "(lzp:name-cap-put $value)")
+     (action_tile "accept" "(lzp:name-ok)")
+     (action_tile "cancel" "(done_dialog 0)")
+     (setq rc (start_dialog))
+     (if (= rc 1) (lzp:names-write) (lzp:names-read))
+     t)))
+
+(defun c:LAZNAME ( / *error* f dcl)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl -- the same fix c:LAZPIN and c:LAZHIDE carry
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZNAME error: " msg)))
+    (if lzd:report (lzd:report "LAZNAME" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZNAME" *lazpanel-version*))
+  (lzp:pins-read)
+  (lzp:recent-read)
+  (lzp:hidden-read)
+  (lzp:names-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZNAME error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZNAME error: could not load the dialog file.")
+     (vl-file-delete f))
+    (t
+     (lzp:name-edit dcl)
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (princ (strcat "\nLAZPANEL: "
+                    (itoa (length lzp:*aliases*)) " tool"
+                    (if (= (length lzp:*aliases*) 1) "" "s")
+                    " answer to a name of yours, "
+                    (itoa (length lzp:*capsof*)) " renamed on the panel."))))
+  (if lzd:end (lzd:end "LAZNAME"))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:visible))) " tools on the panel across "
@@ -112235,6 +113212,14 @@
 (vl-catch-all-apply
   '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
+;; The drafter's own names, and the wrappers that make them answer.
+;; Per DOCUMENT, not per session: a defun lives in the drawing's own
+;; namespace, so the blackboard's once-a-session mark is the wrong
+;; instrument here and every drawing has to be told again.  Under
+;; vl-catch-all-apply beside the rest: a file that throws as it loads
+;; takes the panel and the toolbar with it.
+(vl-catch-all-apply 'lzp:names-read nil)
+(vl-catch-all-apply 'lzp:aliases-apply nil)
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
@@ -112250,7 +113235,8 @@
                  " LAZPIN edits the pinned row;"
                  " LAZHIDE picks which tools stay off it;"
                  " CALHELP says what a command does;"
-                 " CALSET shows the settings.")))
+                 " LAZSET is the settings dialog, CALSET the prompts;"
+                 " LAZNAME gives a tool a name of your own.")))
 (princ)
 
 
@@ -112290,7 +113276,7 @@
   "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA"
   "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
   "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON" "LAZICON" "CALHELP"
-  "CALSET" "LAZPANELVER"
+  "CALSET" "LAZSET" "LAZNAME" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

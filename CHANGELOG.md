@@ -8,6 +8,137 @@ which set of them shipped together. The release name lives in
 
 ## v3.15 -- 2026-09-15
 
+**Borrow only what you move: seven commands snapshotted OSMODE they
+never touched.**  PERPMARK v1.4, CLEARDIM v3.1, FITABHD v3.0, SPACHECK
+v1.17, ABCURCHECK v1.8, OLAUTO v1.3, LISPLAB v1.5.  This is the one a
+drafter meets with NOTHING going wrong.
+
+A sysvar list is not a wish, it is a promise to WRITE the value back at
+the end.  Seven commands listed `OSMODE` in theirs and never changed it
+-- `grep` for `(setvar "OSMODE"` in any of the seven returns nothing.
+So the run took a snapshot on the way in and wrote it back on the way
+out, over anything the drafter had done to their snaps in between.
+Tick Endpoint on part-way through and the clean exit takes it away
+again.  No error, no Esc, no cancelled run: just the tool finishing.
+
+Five of the seven are review tools you walk item by item -- PERPMARK's
+pick-by-pick pass, FITABHD's seven steps, SPACHECK's and ABCURCHECK's
+and CLEARDIM's item-by-item review -- which is to say the runs longest
+open and likeliest to have you reaching for the Object Snap dialog
+half way down.  `OSMODE` is out of all seven lists.
+
+`check_osnap.py` grew the rule (its fourth): a command that snapshots
+OSMODE must actually move it.  The table SPACHECK's grouped twin gets
+is typed in `tools/mirror_shared.py` rather than derived from the
+source, so that copy needed the same edit -- which is exactly why the
+check reads both tiers rather than trusting the mirror.
+`tests/test_osnap_restore.py` pins all six testable ones at both tiers:
+start with snaps off, tick them on mid-run, finish the run, and the
+tick survives.
+
+**...and they are LIVE at the picks that need them.**  OASIS v9.0, SPA
+091526 REV24, PERPPTS/CPERPPTS v0.15.  "My snaps got cleared" is also
+what a drafter says when snaps are off where they expect them on, and
+the sweep found both directions of that.
+
+`PERPPTS` and `CPERPPTS` were the first shape again, one level down:
+the whole handler is `(perp:finish)`, and the bad ordering was INSIDE
+that helper -- the bare `(command)` drain at the top, the OSMODE
+restore fourteen forms below it.  `check_osnap.py` had not seen it,
+because it read only the handler's own statements and saw one call that
+both restores and can throw.  It now splices a called helper's
+statements in where the call sits, and catches it.  The cleanup puts
+the settings back first in both files.
+
+`SPA`'s base point -- the one pick that places the whole spa -- was made
+with snaps already off.  `spa:readblock` runs before SPA's three opening
+questions and ends on `spa:osdown` like every ask helper here, so OSMODE
+was 0 by the time the prompt came up, thirty lines before the
+`(setvar "OSMODE" 0)` that was supposed to be what dropped them.  The
+comment at that prompt has always said the pick is made with the
+drafter's own snaps live; the `spa:osup` that makes it true is new, and
+POOL and POOLSIDE have always held them at the identical prompt.
+
+`OASIS` had the inverse: its `oasis:osup` window wrapped the whole
+`oasis:askbottom` call, but that defun does not stop at questions -- it
+goes on to `oasis:drawbottom`, which feeds computed points to three
+`DIMALIGNED` calls and a hopper-offset cross dim.  Those four were the
+only dimensions of the run laid down with running osnap live, free to
+be pulled onto whatever the outline passed near.  Snaps drop between
+the asking and the drawing now.
+
+Neither of these last two moves OSMODE at the END of a run, which is
+why `check_osnap.py` stayed green through both: it checks what the
+drafter is left with, not what the tool works under.  Which prompt
+ought to snap is an editorial question, so it stays with the reviewer.
+
+**...and they come back even when the cleanup itself fails.**  OASIS
+v8.9, AUTOBEAD v1.9, XFTCONV/XFTRECONV v1.17, SPA 091526 REV23.  The
+first pass proved every command HAS an OSMODE restore in its `*error*`
+handler.  It could not see whether that restore is ever REACHED.  An
+error raised inside `*error*` aborts the handler, so a restore sitting
+behind a form that can throw is a restore that does not run on the one
+path it was written for.
+
+Four handlers had them the wrong way round.  OASIS opened with
+`oasis:dimstyrestore`, the one unwrapped `-DIMSTYLE` restore in the
+standalone tier -- and it sat ABOVE the pending-command valve whose own
+comment says an Esc part-way through a dimension leaves that command
+pending and anything below would be read as answers to it.  So on
+exactly that Esc, the style restore was fed into the pending command
+and took `oasis:sysrestore` down with it.  AUTOBEAD, XFTCONV and
+XFTRECONV each put their bare-`(command)` drain ahead of the only
+OSMODE restore they have; XFTCONV's also pops the error mode, so a
+throw there stranded the pop and refused `command-s` inside every later
+handler for the rest of the session.  The settings now go back first in
+all four -- putting back a value the run captured itself is pure
+`setvar` and cannot throw -- and OASIS's `-DIMSTYLE` is wrapped in
+`vl-catch-all-apply`, the shape its six siblings already used and the
+shape the grouped build got right via `cal:dimstyrestore`.
+
+`spa:sysrestore` had the mirror-image bug: its
+`(setq spa:*sysold* nil)` sat BEHIND a bare `-DIMSTYLE`.  OSMODE came
+back, but a throw left the snapshot standing -- and `spa:syssave`
+refuses to overwrite a snapshot that exists, because a second save
+mid-run would capture the zeroed OSMODE and restore 0 for ever.  So one
+failed SPA run froze the drafter's snaps at that run's value for the
+rest of the session, silently undoing anything they ticked in Drafting
+Settings afterwards.  The snapshot is dropped before the command now,
+and the command is wrapped.
+
+`tools/check_osnap.py` grew both rules, so neither shape can come back:
+no throwable form ahead of the OSMODE restore in a handler, and no
+snapshot drop behind one.  Run against the pre-fix source it names all
+five sites.
+
+**The drafter's object snaps come back from a failed run too.**
+COVERCHECK v1.18, DIMCHECK v1.21, LINFINCHECK v2.17, and a new
+`tools/check_osnap.py` in `make check`. Forty-three commands here mute
+`OSMODE` while they feed computed points to `(command ...)`, so a
+running osnap cannot pull a pick onto nearby geometry. Forty of them
+already put it back on both the clean exit and the one that throws --
+either directly from a local of the command, which the nested `*error*`
+handler can see, or through the `tool:sysrestore` snapshot that leads
+with OSMODE.
+
+Three did not, and they were the three check tutorials. `cchk:tut-build`,
+`dchk:tut-dim` and `lfc:tut-dim` each save OSMODE into a local of their
+OWN, zero it round a `DIMLINEAR` and put it back inline -- correct as
+far as it goes, and out of reach of the command's handler, which is the
+only code that runs when the drafter hits Esc. `TUTORIALCOVERCHECK`
+already held ATTDIA/ATTREQ/FILEDIA itself for exactly that reason; all
+three now hold OSMODE the same way, restored FIRST in the handler
+before anything below it can throw. Snaps left off are not a failure
+that looks like the tool's: the drafter meets it two commands later,
+when a line drawn by eye refuses to snap to an endpoint.
+
+`check_osnap.py` is what keeps it answered. It reads each command's
+whole reach across the tier -- POOLDEMO's restore is POOL's
+`pool:sysrestore`, in another file -- and fails one that can change
+OSMODE without restoring it on the way out, or without restoring it
+from its `*error*` handler. `--list` prints all forty-three and how each
+puts it back.
+
 **A failure report can be replayed, and its inputs varied, without
 AutoCAD.**  A report said what the drafter answered and where the tool
 died; it did not say WHICH answer mattered.  Three things changed so
@@ -58,23 +189,34 @@ can be said to have changed, and a division by zero is an AutoLISP
 error -- "divide by zero" -- that reaches the handler for a real as
 much as for an int, rather than a Python one.
 
-**LINGUTTER keeps a radius call-out on the perimeter, and asks before
-it spares a cross dim.** LINGUTTER v2.6. A corner radius under a foot
-lands in `STANDARD INCHES` the same as any other short measurement --
-which is not in `lg:*perimstyles*`, so the very call-out for the corner
-`PADDLE` was about to pad used to be the thing erased. A RADIUS or
-DIAMETER dimension on the perimeter is now kept regardless of its
-style, judged on its one attachment point (DXF 10) the way
-`lg:*perimstyles*` dims are judged on 13/14.
+**LINGUTTER keeps a radius call-out on the perimeter, and judges a
+cross dim by its shape, not just where it sits.** LINGUTTER v2.7. A
+corner radius under a foot lands in `STANDARD INCHES` the same as any
+other short measurement -- which is not in `lg:*perimstyles*`, so the
+very call-out for the corner `PADDLE` was about to pad used to be the
+thing erased. A RADIUS or DIAMETER dimension on the perimeter is now
+kept regardless of its style, judged on its one attachment point (DXF
+10) the way `lg:*perimstyles*` dims are judged on 13/14.
 
 `CROSS DIM*` dims stop being kept unconditionally: LINGUTTER now asks
-"Keep CROSS DIMENSIONS?" once, and a Yes spares only the ones that
-belong to the pool just gutted -- every attachment point either inside
-the traced perimeter or within `lg:*ontol*` of it, so a cross dim
-answering to a second pool sitting in the same highlight is no longer
-swept up with it. Answered No, those dims get no exemption at all and
-are judged, and counted, like any other style. Neither question is a
-confirmation to erase -- LINGUTTER still never asks that.
+"Keep CROSS DIMENSIONS?" once, and a Yes spares only the ones that read
+as a genuine cross measurement of the pool just gutted. Both points
+first have to belong to the pool at all (inside the traced perimeter,
+or on it), and from there a dim is kept when it spans at least
+`lg:*crossspan*` of the perimeter's own width or height -- "goes full
+X" or "goes full Y" -- *or* sits at two of the perimeter's own
+vertices, corner to corner along one whole edge however short (a short
+notch side would otherwise never reach `lg:*crossspan*` on its own).
+Neither way is satisfied by a dim running from one corner to some
+other point along that SAME edge -- the start of a line to the middle
+of it -- which is dropped regardless of how much of the pool it happens
+to span; nor by a small dim sitting entirely inside the pool and
+touching nothing, which is no more a cross measurement of it than a
+stray one answering to a different pool in the same highlight.
+Answered No, every `CROSS DIM*` dim gets no exemption at all regardless
+of shape, and is judged, and counted, like any other style. Neither
+question is a confirmation to erase -- LINGUTTER still never asks
+that.
 
 **Every AB note leads with a bullet.** `ABMOVE` and `ABPCREATE` leave a
 note per point on one layer, and a run that settles several of them

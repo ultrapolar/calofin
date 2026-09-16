@@ -53,7 +53,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.8"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.9"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -356,11 +356,17 @@
   ;; -- error handler: cancel stuck commands, purge temp geometry,
   ;;    restore system variables, close the undo group -------------------
   (defun *error* (msg)
+    ;; the drafter's settings come back FIRST, ahead of the flush below.
+    ;; autobead-flush is a bare (command) drain -- the one form up here
+    ;; that can throw -- and it used to sit in front of these two, so a
+    ;; drain that died left every object snap unticked and PEDITACCEPT
+    ;; at 1.  Two setvars of values this run captured itself cannot
+    ;; throw, so nothing is risked by putting them above it.
+    (if oldos (setvar "OSMODE" oldos))
+    (if oldpa (setvar "PEDITACCEPT" oldpa))
     (autobead-flush)
     (foreach e temps
       (if (and e (entget e)) (entdel e)))
-    (if oldpa (setvar "PEDITACCEPT" oldpa))
-    (if oldos (setvar "OSMODE" oldos))
     ;; only close a group that was actually opened -- an error thrown
     ;; before the _Begin below (a cancelled selection, a failed getvar)
     ;; used to run _End on nothing, which errors inside the handler
