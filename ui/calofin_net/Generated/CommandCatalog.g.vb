@@ -157,6 +157,7 @@ Public NotInheritable Class CommandCatalog
         New Entry("STOCKCOVER", "Stock cover placement", "Replaces a highlighted perimeter with a stock cover drawing"),
         New Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"),
         New Entry("TYLERDRONESUITE", "Drone suite: tidy, pad, CDIM", "The whole drone trace in one - TYDRN, then PADDLE, then CDIM"),
+        New Entry("UPADOVER", "Pads point to point", "Pads a named stretch of wall end to end - no overlap, no gap, both ends carried past"),
         New Entry("VSCONV", "VS export onto shop layers", "Remaps a VS survey export's numbered layers onto the shop's"),
         New Entry("VSRECONV", "VS conversion, undone", "Undoes a VSCONV run - layers, properties and the dimension overrides"),
         New Entry("WCALST", "Unroll curved band", "Unrolls a curved constant-width band flat, with darts"),
@@ -196,6 +197,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("LINGUTTERSCAN", "Gut scan, changes nothing", "LINGUTTER's report only - reads the drawing, changes nothing"),
             New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
             New Entry("MOHAMADDLE", "Pads, pick a size", "PADDLE's perimeter pads with a size pick first - 24in or 36in"),
+            New Entry("UPADOVER", "Pads point to point", "Pads a named stretch of wall end to end - no overlap, no gap, both ends carried past"),
             New Entry("AUTOBEAD", "Bead offsets", "Offsets selected pool lines toward a clicked side"),
             New Entry("LAZSTEP", "Steps from a filled-in drawing", "Type the step count and the drawing follows it - fill it in and the steps are drawn"),
             New Entry("CORNERSTP", "Corner step", "Corner step layout"),
@@ -296,10 +298,10 @@ Public NotInheritable Class CommandCatalog
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "SPACOVCREATE", "CUSTBLOCK", "AUTODIM", "SPACHECK", "DIMCHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMSCAN"})
         }),
         New Page("Rest", {
-            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP", "LAZLOG", "MOHAMADDLE", "OLAUTO", "CLEARDIM", "CLEARDIMSCAN"})
+            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP", "LAZLOG", "MOHAMADDLE", "OLAUTO", "CLEARDIM", "CLEARDIMSCAN", "UPADOVER"})
         }),
         New Page("Layout", {
-            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSIDE", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "ABLOBF", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "MOHAMADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
+            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSIDE", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "ABLOBF", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "MOHAMADDLE", "UPADOVER", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
         }),
         New Page("Points", {
             New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "PERPMARK", "DRONE", "TYDRN", "TYLERDRONESUITE"})

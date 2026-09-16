@@ -1398,6 +1398,7 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*smallstyle*` | `"STANDARD INCHES"` | A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a note printed once per run. M... |
 | `pool:*crossstyle*` | `"CROSS DIMENSIONS"` | A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a note printed once per run. M... |
 | `pool:*sidestyle*` | `"SIDE STANDARD"` | A style the drawing already defines is used as it stands -- the office template wins -- and a missing one leaves the dim in the current style with a note printed once per run. M... |
+| `pool:*given-den*` | `8` | A "Given" mark reads the SAME cut-off: under 24" it is plain inches, at or past it feet-inches -- the fraction is read to the nearest 1/*given-den* (8 -> nearest eighth). |
 | `pool:*doff-min*` | `12.0` | never closer than 1 ft |
 | `pool:*doff-div*` | `18.0` | Every flow sizes its dimension offsets and its text off the pool itself, so a 12 ft spa pool and a 60 ft lap pool both come out readable. doff is the dimension stand-off, th the... |
 | `pool:*th-min*` | `3.0` | never smaller than 3" |

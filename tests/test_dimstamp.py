@@ -106,7 +106,7 @@ def test_parse_and_format_round_trip():
         ('34"', 272, None),
         ("3'-4\"", 320, 't'),
         ('34 1/2"', 276, None),
-        ("3'- 4 1/2\"", 324, 't'),
+        ("3'-4 1/2\"", 324, 't'),
     ]
     for s, eighths, hasfeet in cases:
         esc_s = s.replace('"', '\\"')
@@ -125,7 +125,7 @@ def test_reads_the_lazy_spellings():
     back out."""
     vm = newvm()
     same = {
-        "4'- 4 1/2\"": ["4'4.5", "4'-4 1/2\"", "4' 4-1/2", "4'4 1/2",
+        "4'-4 1/2\"": ["4'4.5", "4'-4 1/2\"", "4' 4-1/2", "4'4 1/2",
                         "4'-4.5\"", "  4'4.5  ", "4'4.50"],
         "4'-4\"":      ["4'4", "4'-4\"", "4'4''"],
         "4'-0\"":      ["4'"],
@@ -142,6 +142,37 @@ def test_reads_the_lazy_spellings():
     assert vm.loads("(ds:read \"4.5'\")") == "4'-6\""
     print("ok  lazy input   -> 4'4.5, 4' 4-1/2, 44.5 and the rest all"
           " read, canonically")
+
+
+def test_two_spellings_plain_and_stacked():
+    """One value, two spellings.  The PLAIN one spaces its fraction off
+    the inches, for a command line that cannot stack.  The DRAWN one
+    stacks it through AutoCAD's \\S code with NO space in front -- the
+    stack is the separation -- and that is the only one that reaches an
+    MTEXT."""
+    vm = newvm()
+    for eighths, hasfeet, plain, drawn in [
+            (272, 'nil', '34"', '34"'),                 # no fraction: same
+            (276, 'nil', '34 1/2"', '34\\S1/2;"'),
+            (320, 't', "3'-4\"", "3'-4\""),             # no fraction: same
+            (396, 't', "4'-1 1/2\"", "4'-1\\S1/2;\""),
+            (398, 't', "4'-1 3/4\"", "4'-1\\S3/4;\"")]:
+        assert vm.loads(f'(ds:format {eighths} {hasfeet})') == plain
+        assert vm.loads(f'(ds:stacked {eighths} {hasfeet})') == drawn
+    # and ds:drawn is the door between them, taking the plain spelling
+    assert vm.loads('(ds:drawn "4\'-1 1/2\\"")') == "4'-1\\S1/2;\""
+    # no space survives anywhere in a drawn fraction
+    assert ' ' not in vm.loads('(ds:stacked 396 t)')
+    print("ok  stacked      -> the drawn fraction is \\S-stacked and"
+          " space-free; the echoed one stays readable")
+
+
+def test_the_stack_separator_is_a_knob():
+    vm = newvm()
+    vm.loads('(setq ds:*stack* "#")')     # the diagonal form
+    assert vm.loads('(ds:stacked 396 t)') == "4'-1\\S1#2;\""
+    print("ok  stack knob   -> ds:*stack* picks bar, diagonal or"
+          " tolerance stacking")
 
 
 def test_rounds_to_the_nearest_eighth():
@@ -198,10 +229,10 @@ def test_suggestions_feet_combine_quarter_and_eighth():
     sugg = vm.loads("(ds:suggestions 320 t)")
     assert len(sugg) == 20, sugg
     rendered = {vm.loads(f'(ds:format {v} t)'): t for v, t in sugg}
-    assert rendered['3\'- 4 1/4"'] == 'quarter', rendered
-    assert rendered['3\'- 4 1/8"'] == 'eighth', rendered
-    assert rendered['3\'- 4 1/2"'] == 'half', rendered
-    assert rendered['3\'- 3 1/8"'] == 'eighth', rendered   # the inch below
+    assert rendered['3\'-4 1/4"'] == 'quarter', rendered
+    assert rendered['3\'-4 1/8"'] == 'eighth', rendered
+    assert rendered['3\'-4 1/2"'] == 'half', rendered
+    assert rendered['3\'-3 1/8"'] == 'eighth', rendered   # the inch below
     assert rendered['3\'-5"'] == 'jump' and rendered['3\'-3"'] == 'jump', \
         rendered
     assert rendered['3\'-7"'] == 'jump', rendered          # +3"
@@ -389,10 +420,10 @@ def test_a_lazy_answer_is_stamped_canonically_and_echoed():
              FAR,
              None], 'lazy')
     t = stamps(vm)
-    assert [x[1] for x in t] == ["4'- 4 1/2\"", '52 1/2"'], t
+    assert [x[1] for x in t] == ["4'-4\\S1/2;\"", '52\\S1/2;"'], t
     said = [p for p in vm.printed if 'read as' in p]
     assert len(said) == 2, said
-    assert "4'- 4 1/2\"" in said[0] and '52 1/2"' in said[1], said
+    assert "4'-4 1/2\"" in said[0] and '52 1/2"' in said[1], said
     # and a spelling that was ALREADY canonical says nothing extra
     vm = newvm()
     run(vm, [(0.0, 0.0), '34"', None], 'canonical already')
@@ -525,6 +556,8 @@ def test_no_local_shadows_a_function():
 if __name__ == '__main__':
     test_parse_and_format_round_trip()
     test_reads_the_lazy_spellings()
+    test_two_spellings_plain_and_stacked()
+    test_the_stack_separator_is_a_knob()
     test_rounds_to_the_nearest_eighth()
     test_rejects_what_is_not_a_measurement()
     test_tier_grading()

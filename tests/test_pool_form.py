@@ -93,7 +93,8 @@ print("== 1. full form == command line (wedge, with depths) ==")
 PROMPTS = LEAD + ["Wedge",
                   30.0, 180.0,          # H, F  (G and E pinned)
                   None, 60.0, None,     # M (takes suggestion), L, K
-                  40.0, 60.0]           # C, D
+                  40.0, 60.0,           # C, D
+                  "No"]                 # mark Given? no
 
 FULL = """'((btype . "Wedge") (h . 30.0) (f . 180.0)
             (c . 40.0) (d . 60.0))"""
@@ -249,8 +250,10 @@ print("   pool:*form* cleared once the command finished")
 # the gate is really closed and that the flag does not survive the run.
 print("== 8. cover mode: no bottom asked for, no depths, no leak ==")
 
-# every answer up to but NOT including the "Yes" that opens the bottom
-COVER = LEAD[:-1]
+# every answer up to but NOT including the "Yes" that opens the bottom,
+# plus the trailing "mark Given?" no every one of these scenarios reaches
+# (the shared LEAD's cross dims fail to close within tolerance)
+COVER = LEAD[:-1] + ["No"]
 
 
 def bottom_asked(vm):
@@ -279,7 +282,8 @@ print("   %d entities drawn, bottom never asked, %d prompts answered"
 # the guard that matters: plain POOL must be untouched by any of this
 pl = VM()
 pl.load(LSP)
-pl.run('c:POOL', LEAD + ["Wedge", 30.0, 180.0, None, 60.0, None, 40.0, 60.0])
+pl.run('c:POOL',
+       LEAD + ["Wedge", 30.0, 180.0, None, 60.0, None, 40.0, 60.0, "No"])
 assert bottom_asked(pl), "plain POOL stopped asking about the bottom"
 assert not pl.globals.get('pool:*nobottom*'), \
     "a typed POOL set the cover flag"

@@ -124,7 +124,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091226 REV27")
+(setq pool:*version* "091626 REV28")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -264,6 +264,11 @@
 (setq pool:*smallstyle*  "STANDARD INCHES")
 (setq pool:*crossstyle*  "CROSS DIMENSIONS")
 (setq pool:*sidestyle*   "SIDE STANDARD")
+
+;; A "Given" mark (below) reads the SAME cut-off: under 24" it is
+;; plain inches, at or past it feet-inches -- the fraction is read to
+;; the nearest 1/*given-den* (8 -> nearest eighth).
+(setq pool:*given-den*   8)
 
 ;; ---- how big the drawing furniture comes out
 ;;;
@@ -461,6 +466,19 @@
 (setq pool:*pvents*      nil)             ; live guide-preview entities
 (setq pool:*insq*        nil)             ; T = in-square (no cross dims)
 (setq pool:*valnotes*    nil)             ; validation problems, for the report
+(setq pool:*giveask*     nil)             ; T = mark held/failed rows "Given"
+                                          ; this run (pool:askgiven); read by
+                                          ; pool:report, cleared by pool:givendone
+(setq pool:*giventxts*   nil)             ; (ename . target) per Given mark
+                                          ; drawn this run, for pool:givendone
+(setq pool:*formrun*     nil)             ; T = pool:*form* was non-empty when
+                                          ; this run started -- a fully filled
+                                          ; sheet draws with NO questions at
+                                          ; all, and no chart offers a way to
+                                          ; answer "mark this Given" in
+                                          ; advance, so pool:askgiven skips
+                                          ; asking rather than stopping a
+                                          ; form-driven run cold
 (setq pool:*smallwarned* nil)             ; the missing-style note is once a run
 (setq pool:*sideon*      nil)             ; a SIDE STANDARD block is open
 (setq pool:*flooron*     nil)             ; a floor-dims (BOTTOM) block is open
@@ -2994,6 +3012,7 @@
   (setq rows (append rows (pool:hopgrecdsp pts doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
+  (pool:askgiven failed)
   (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report
   (setq mprims nil k 0)
@@ -3009,6 +3028,7 @@
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
+  (pool:givendone)
   (princ))
 
 ;;; -------------------- L / Lazy L pools --------------------------------
@@ -3664,6 +3684,7 @@
 
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
+  (pool:askgiven (or failed soff))
   (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report
   (setq mprims nil k 0)
@@ -3681,6 +3702,7 @@
      (princ (strcat "\n*** SIDES DO NOT CLOSE -- deep end held true, the wing"
                     " carries the error, see report table ***")))
     (t (princ "\nPool layout complete -- see the report table.")))
+  (pool:givendone)
   (princ))
 
 ;;; -------------------- report table -----------------------------------
@@ -3703,6 +3725,121 @@
 ;; and reads best that way whichever units the lengths are in.
 (defun pool:fmtdelta (dl)
   (strcat (if (< dl 0.0) "" "+") (rtos dl 2 2)))
+
+;;; -------------------- "Given" marks on a failed run ------------------
+;;;
+;;;  CROSS DIMS FAILED and SIDES DO NOT CLOSE both mean the same thing
+;;;  at the report table: a row the fit could not hold to the crew's
+;;;  own number.  Asked once, after the run (pool:askgiven), marking
+;;;  writes that number back under the row's TARGET cell as "<value>
+;;;  Given" -- read the way a tape would call it out (pool:*smalldim*
+;;;  decides plain inches vs feet-inches, the same cut-off the dimension
+;;;  style switch above uses), not the drawing's general unit
+;;;  preference pool:fmtlen follows, because the whole point of the
+;;;  mark is to read back exactly what the field sheet said.
+;;;
+;;;  Any row this run flags red earns one automatically once the
+;;;  drafter has opted in -- present or future, sides, corners or
+;;;  anything else -- and so does a cross-dimension row on a failed
+;;;  run even though cross dims carry no red flag of their own (only
+;;;  the run-level CROSS DIMS FAILED note does): pool:giverow catches
+;;;  those by their label, "X " (Grecian) or "CROSS " (every other
+;;;  shape), which every cross-dim row in this file is built with.
+;;;
+;;;  pool:*giveask* is this run's Yes/No, read by pool:report while it
+;;;  draws; pool:*giventxts* is (ename . target) for every mark that
+;;;  actually went down, so pool:givendone can flip one between
+;;;  feet-inches and plain inches by re-reading its OWN value rather
+;;;  than trying to parse its drawn text back apart.
+
+;; Greatest common divisor -- reduces a Given mark's fraction (e.g.
+;; 2/16) to the smallest terms a crew reads it in (1/8).
+(defun pool:igcd (a b) (if (= b 0) a (pool:igcd b (rem a b))))
+
+;; V (inches) as bare inches with a fraction, no feet broken out --
+;; pool:*smalldim*'s "small dimensions read in inches" applied to a
+;; Given mark's text instead of a dimension style.
+(defun pool:inchtxt (v / whole num g)
+  (setq whole (fix (+ v 1.0e-6))
+        num   (fix (+ (* (- v whole) pool:*given-den*) 0.5)))
+  (if (>= num pool:*given-den*) (setq whole (1+ whole) num 0))
+  (if (= num 0)
+      (itoa whole)
+      (progn
+        (setq g (pool:igcd num pool:*given-den*))
+        (strcat (itoa whole) " " (itoa (/ num g)) "/"
+                (itoa (/ pool:*given-den* g))))))
+
+;; The formal "as given" reading of V: plain inches under
+;; pool:*smalldim*, feet-inches (nearest 1/*given-den*) at or past it.
+(defun pool:fmtgiven (v)
+  (if (< v pool:*smalldim*)
+      (strcat (pool:inchtxt v) "\"")
+      (rtos v 4 3)))
+
+;; Ask once, after a failed run, whether to mark every row the fit
+;; could not honor with the crew's original number.  FAILP is the
+;; caller's own failed/soff test -- nothing is asked, and nothing is
+;; marked, on a run that came out clean.  Skipped outright on a
+;; form-driven run (pool:*formrun*): a fully filled sheet draws with
+;; no questions at all, and no chart has a box to answer this one in
+;; advance, so stopping to ask here would be the one question a
+;; complete sheet could not get past.
+(defun pool:askgiven (failp)
+  (setq pool:*giveask*
+    (and failp
+         (not pool:*formrun*)
+         (pool:askyn
+           "Mark the dimension(s) that could not be held at their original value as \"Given\""
+           "No" nil))))
+
+;; A row earns a Given mark once the drafter has opted in: any row
+;; already flagged red by the fit, or -- cross dims carry no red flag
+;; of their own -- a cross-dimension row's label ("X " / "CROSS ").
+;; NotGiven corners are the other "not given" this file already has --
+;; nothing was measured, so there is no value to read back, but the
+;; row earns a mark the same way: (car row) ends in "NotGiven" exactly
+;; as pool:cornerrows spells it.
+(defun pool:giverow (row)
+  (or (nth 3 row) (wcmatch (car row) "X *,CROSS *,*NotGiven")))
+
+;; Flip one Given mark between feet-inches and plain inches.  EN must
+;; be one this run actually drew (pool:*giventxts*); anything else is
+;; ignored, so a stray pick elsewhere on the drawing cannot corrupt it.
+(defun pool:flipgiven (en / v ed cur)
+  (setq v (cdr (assoc en pool:*giventxts*)))
+  (if v
+      (progn
+        (setq ed (entget en) cur (cdr (assoc 1 ed)))
+        (entmod (subst
+                  (cons 1 (strcat
+                            (if (wcmatch cur "*'*")
+                                (strcat (pool:inchtxt v) "\"")
+                                (rtos v 4 3))
+                            " Given"))
+                  (assoc 1 ed) ed)))))
+
+;; After the report is drawn: if any Given marks went down, offer to
+;; flip individual ones ft-in/in by clicking them, Enter to stop --
+;; "best of both" without asking the format up front for every one.
+;; A pick that lands on anything else is named and ignored, never an
+;; error, and clears pool:*giveask*/*giventxts* either way so the next
+;; run starts clean.
+(defun pool:givendone ( / sel en)
+  (if pool:*giventxts*
+      (progn
+        (princ (strcat "\n" (itoa (length pool:*giventxts*))
+                       " dimension(s) marked Given."))
+        (while (setq sel
+                 ((lambda (v) (if lzd:ask (lzd:ask "Select a Given dimension to switch ft-in/in (Enter when done)" v) v))
+                   (entsel
+                     "\nSelect a Given dimension to switch ft-in/in (Enter when done): ")))
+          (setq en (car sel))
+          (if (assoc en pool:*giventxts*)
+              (pool:flipgiven en)
+              (princ "\n  Not a Given mark from this run -- ignored.")))))
+  (setq pool:*giveask* nil pool:*giventxts* nil)
+  (princ))
 
 ;; Returns the table's box as (xr ytop y0) so the caller can hang the
 ;; perimeter mini-model off its right edge (pool:minimap).
@@ -3742,7 +3879,19 @@
                       (if tgt (pool:fmtlen tgt) "N/A") lay (nth 3 r))
           (pool:rtext (list (+ x (* c3 h)) y) h "-" lay (nth 3 r))))
     (pool:rtext (list (+ x (* c2 h)) y) h
-                (if act (pool:fmtlen act) "N/A") lay (nth 3 r)))
+                (if act (pool:fmtlen act) "N/A") lay (nth 3 r))
+    ;; the drafter opted in and this row is one the sheet could not
+    ;; honor: the crew's own number, read back formally, right under
+    ;; the TARGET cell it belongs to -- or, when there was never a
+    ;; number to read back (a NotGiven corner), the same "Not Given"
+    ;; a NotGiven row's label already carries, marked the same way
+    (if (and pool:*giveask* (pool:giverow r))
+        (progn
+          (setq y (- y lh))
+          (pool:textc (list (+ x (* pool:*rep-c1* h)) y) h
+                      (if tgt (strcat (pool:fmtgiven tgt) " Given") "Not Given")
+                      lay pool:*col-bad*)
+          (if tgt (setq pool:*giventxts* (cons (cons (entlast) tgt) pool:*giventxts*))))))
   (foreach n notes
     (setq y (- y (* 1.5 lh)))
     (pool:textc (list x y) (* pool:*rep-note* h) n lay pool:*col-bad*))
@@ -6803,6 +6952,7 @@
                                                    (cadr (nth (cadr lbl) corners)) nil)))))))))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
+  (pool:askgiven failed)
   (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report
   (setq mprims (list (list 'l a b) (list 'l d c)))
@@ -6816,6 +6966,7 @@
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
+  (pool:givendone)
   (princ))
 
 ;;; -------------------- round pools ------------------------------------
@@ -7379,6 +7530,7 @@
   (setq rows (append rows (pool:hopovaldsp quad tipl tipr doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
+  (pool:askgiven failed)
   (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report:
   ;; the two sides, the S1 stubs and the end arcs
@@ -7394,6 +7546,7 @@
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
+  (pool:givendone)
   (princ))
 
 ;;; -------------------- mutt pools -------------------------------------
@@ -8067,6 +8220,7 @@
   (setq rows (append rows (pool:hopmuttdsp quad tipl tipr doff th)))
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
   (setq notes (append notes pool:*valnotes*))
+  (pool:askgiven failed)
   (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the
   ;; report: sides + each end in its own style
@@ -8080,6 +8234,7 @@
   (if failed
       (princ "\n*** CROSS DIMS FAILED -- sides held true, see report table ***")
       (princ "\nPool layout complete -- see the report table."))
+  (pool:givendone)
   (princ))
 
 ;; One mutt end as mini-model primitives, per its style (ends =
@@ -8203,7 +8358,7 @@
     ;; Cover mode is the same hazard, quieter: a leaked flag draws the
     ;; next pool with no bottom and never asks why
     (pool:fclear)
-    (setq pool:*nobottom* nil pool:*hasbottom* nil)
+    (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
     (if undo-open (setq undo-open (pool:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "POOL" pool:*version* msg))
@@ -8224,7 +8379,8 @@
         ;; report lengths follow the units the DRAWING was in before
         ;; POOL switches to architectural for its prompts: a crew whose
         ;; drawing is in feet-inches gets a feet-inches report
-        pool:*ftin* (member (cdr (assoc "LUNITS" pool:*sysold*)) '(3 4)))
+        pool:*ftin* (member (cdr (assoc "LUNITS" pool:*sysold*)) '(3 4))
+        pool:*formrun* (if pool:*form* t nil))
   (setvar "CMDECHO" 0)
   (setq undo-open (pool:undobegin))
   ;; architectural units while prompting so every distance can be
@@ -8305,7 +8461,7 @@
   (if undo-open (setq undo-open (pool:undoend)))
   (pool:sysrestore)
   (pool:fclear)
-  (setq pool:*nobottom* nil pool:*hasbottom* nil)
+  (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
   (if *pop-error-mode* (*pop-error-mode*))
   (if lzd:end (lzd:end "POOL"))
   (princ))

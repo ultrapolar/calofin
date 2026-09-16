@@ -128,7 +128,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.34")
+(setq *lazpanel-version* "v3.35")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -394,6 +394,7 @@
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
+    ("UPADOVER"         "Pads point to point")
     ("VSCONV"           "VS export onto shop layers")
     ("VSRECONV"         "VS conversion, undone")
     ("WCALST"           "Unroll curved band")
@@ -511,6 +512,7 @@
     ("STOCKCOVER" "Replaces a highlighted perimeter with a stock cover drawing")
     ("TYDRN" "Text, pool-point and anchor cleanup in one pass")
     ("TYLERDRONESUITE" "The whole drone trace in one - TYDRN, then PADDLE, then CDIM")
+    ("UPADOVER" "Pads a named stretch of wall end to end - no overlap, no gap, both ends carried past")
     ("VSCONV" "Remaps a VS survey export's numbered layers onto the shop's")
     ("VSRECONV" "Undoes a VSCONV run - layers, properties and the dimension overrides")
     ("WCALST" "Unrolls a curved constant-width band flat, with darts")
@@ -621,6 +623,7 @@
     ("STOCKCOVER" "stock cover replace perimeter drawing folder align placement")
     ("TYDRN" "drone trace cleanup text points spa layer pool tidy")
     ("TYLERDRONESUITE" "suite chain drone trace tidy pad dimension selection")
+    ("UPADOVER" "stretch run between wholesale continuous flush interlock staircase shorter way round straddle")
     ("VSCONV" "survey export layers perimeter coping anchors dimensions style")
     ("VSRECONV" "undo layer colour linetype lineweight dimension style override")
     ("WCALST" "unroll curved band flat darts inserts width flatten")
@@ -838,6 +841,7 @@
       "OLAUTO"
       "CLEARDIM"
       "CLEARDIMSCAN"
+      "UPADOVER"
       )
     )
      ("Layout"
@@ -867,6 +871,7 @@
       "LINGUTTERSCAN"
       "PADDLE"
       "MOHAMADDLE"
+      "UPADOVER"
       "AUTOBEAD"
       "LAZSTEP"
       "CORNERSTP"
