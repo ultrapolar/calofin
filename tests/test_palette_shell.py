@@ -74,10 +74,16 @@ pinkey = str(vm.globals['lzp:*pinkey*'])
 check("the palette writes LAZPANEL's own registry key",
       vb_literal(pinkey) in MEM, pinkey)
 
+# Two of them are named as tunables rather than spelled at the call
+# site (LAZNAME passes the value name in), so they are read off those
+# constants -- a value this check cannot see is a value that can drift.
 values = set(re.findall(r'lzp:\*pinkey\*\s+"([A-Za-z]+)"', PANEL_SRC))
-check("the panel keeps exactly four values there",
-      values == {'Pins', 'Recent', 'Theme', 'Hidden'}, repr(sorted(values)))
-for v in sorted(values - {'Theme', 'Hidden'}):
+values |= set(re.findall(r'\(setq lzp:\*(?:alias|cap)val\* "([A-Za-z]+)"\)',
+                         PANEL_SRC))
+check("the panel keeps exactly six values there",
+      values == {'Pins', 'Recent', 'Theme', 'Hidden', 'Alias', 'Caption'},
+      repr(sorted(values)))
+for v in sorted(values - {'Theme', 'Hidden', 'Alias', 'Caption'}):
     check("the palette reads and writes %r too" % v,
           ('"%s"' % v) in MEM)
 # Theme is the third thing the two surfaces share, and it is read on
@@ -88,6 +94,13 @@ for v in sorted(values - {'Theme', 'Hidden'}):
 # on the VB side reads or writes its list yet -- the day the palette
 # grows its own hide feature this exemption comes out and the loop
 # above starts holding it to the same bargain Pins and Recent keep.
+# Alias and Caption are exempt for the same reason and are the bigger
+# divergence: LAZNAME lets a drafter rename what they type and what a
+# button says, the DCL panel honours both, and the palette shows the
+# shipped words and answers only to the shipped names until it learns
+# to read these two values.  ui/calofin_net/Generated/CommandCatalog.g.vb
+# is generated from lzp:*captions* at build time, so the rename is a
+# Lisp-side rename by construction, not an oversight.
 check("the palette reads 'Theme' out of the same key",
       '"Theme"' in THEME and vb_literal(pinkey) in THEME)
 check("...and CALSET is what writes it",

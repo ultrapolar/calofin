@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 70 files, 203 commands:
+;;; 70 files, 204 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -26,24 +26,24 @@
 ;;;   DRONEVER  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM  G2MCONV
 ;;;   G2MCONVVER  G2MRECONV  HEMISTEP  HEMISTEPVER  HONEFILLET  HONEFILLETVER
 ;;;   LAZASCII  LAZBUTTON  LAZDIAG  LAZDIAGVER  LAZFORM  LAZFORMCOVER
-;;;   LAZFORMVER  LAZHIDE  LAZICON  LAZLOG  LAZPANEL  LAZPANELVER
-;;;   LAZPIN  LAZSET  LAZSIDE  LAZSIDEVER  LAZSPA  LAZSPAVER
-;;;   LAZSTEP  LAZSTEPVER  LAZTXT  LHD  LHDVER  LINCHECK
-;;;   LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER
-;;;   LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN
-;;;   LITESPACHECKSCAN  LOBF  LOBFVER  MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP
-;;;   NORMIESTEPVER  OASIS  OASISVER  OLAUTO  OLAUTOVER  PADDLE
-;;;   PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER
-;;;   POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE
-;;;   POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV
-;;;   SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN
-;;;   SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER
-;;;   STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
-;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
-;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
-;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE
-;;;   VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV
-;;;   XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
+;;;   LAZFORMVER  LAZHIDE  LAZICON  LAZLOG  LAZNAME  LAZPANEL
+;;;   LAZPANELVER  LAZPIN  LAZSET  LAZSIDE  LAZSIDEVER  LAZSPA
+;;;   LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT  LHD  LHDVER
+;;;   LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN
+;;;   LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN
+;;;   LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER  MOHAMADDLE  MOHAMADDLEVER
+;;;   NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  OLAUTO  OLAUTOVER
+;;;   PADDLE  PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER
+;;;   POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER
+;;;   POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER
+;;;   SOCONV  SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE
+;;;   SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM
+;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB
+;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
+;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
+;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER
+;;;   TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER
+;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -85759,12 +85759,19 @@
 ;;;         * LINGUTTER asks once, "Keep CROSS DIMENSIONS?".  Answered
 ;;;           Yes, a dimension in a lg:*anystyles* style ("CROSS DIM*",
 ;;;           which catches "CROSS DIM", "CROSS DIMENSIONS" and "CROSS
-;;;           DIMENSIONS 0.5") is kept when every one of its attachment
-;;;           points is either inside the traced perimeter or within
-;;;           lg:*ontol* of it -- a cross dim belongs to THIS pool, not
-;;;           to a second one sitting in the same highlight.  Answered
-;;;           No, those dimensions get no exemption and are judged like
-;;;           any other style below;
+;;;           DIMENSIONS 0.5") is kept when it reads as a genuine cross
+;;;           measurement of THIS pool: both attachment points belong
+;;;           to the perimeter at all (inside it, or on it), AND either
+;;;           the two points span at least lg:*crossspan* of the
+;;;           perimeter's own width or height -- "goes full X" or "goes
+;;;           full Y" -- or they sit at two of its VERTICES, corner to
+;;;           corner along one whole edge however short.  A dim from
+;;;           one corner to some other point along that SAME edge --
+;;;           the start of a line to a point in the middle of it -- is
+;;;           never kept, regardless of span: it is reading a fraction
+;;;           of one side, not the pool.  Answered No, none of these
+;;;           dimensions gets any exemption and each is judged like any
+;;;           other style below;
 ;;;         * a dimension in a lg:*perimstyles* style ("STANDARD",
 ;;;           "SIDE STANDARD") is kept only when it is ON the perimeter
 ;;;           -- every one of its attachment points within
@@ -85807,9 +85814,10 @@
 ;;;    lg:*poollayer*    layer the perimeter is drawn on    ("POOL")
 ;;;    lg:*poolcolor*    its colour when the layer has to be created
 ;;;    lg:*anystyles*    dim styles kept when "Keep CROSS DIMENSIONS?"
-;;;                      is answered Yes and they sit inside the
-;;;                      perimeter or connected to it, as wildcard
-;;;                      patterns matched against the style name
+;;;                      is answered Yes and the dim is a genuine cross
+;;;                      measurement of this pool (see lg:cross-ok-p
+;;;                      and lg:*crossspan*), as wildcard patterns
+;;;                      matched against the style name
 ;;;    lg:*perimstyles*  dim styles kept only on the perimeter
 ;;;    lg:*keeplayers*   layers left alone entirely (nil = none)
 ;;;    lg:*skiplayers*   layers the perimeter is never traced from
@@ -85821,6 +85829,10 @@
 ;;;                      typed in cannot change what the report claims
 ;;;    lg:*cover*        how much of the highlight's extent a traced
 ;;;                      exterior must span before it is believed
+;;;    lg:*crossspan*    how much of the perimeter's own bounding box a
+;;;                      kept lg:*anystyles* dim must span, in X or Y,
+;;;                      to count as a full cross measurement rather
+;;;                      than a small local one
 ;;;    lg:*runpaddle*    T to run PADDLE at the end, nil to stop after
 ;;;                      the gut
 ;;;
@@ -85848,6 +85860,12 @@
 ;;;    * "Keep CROSS DIMENSIONS?" answered No drops every lg:*anystyles*
 ;;;      dimension like any other style not in lg:*perimstyles* -- counted
 ;;;      in the report, not silently.
+;;;    * A lg:*anystyles* dim is judged by SHAPE as well as location: a
+;;;      small one entirely inside the pool, touching nothing, is kept
+;;;      no more than a stray one outside it is -- lg:*crossspan* and
+;;;      lg:vertex-to-vertex-p are what a genuine cross measurement has
+;;;      to satisfy, and "start of one edge to a random point along
+;;;      that SAME edge" satisfies neither one, on purpose.
 ;;;    * The perimeter is always redrawn, even when it was already one
 ;;;      closed polyline on POOL, so the result is the same object
 ;;;      whatever went in.  An associative dimension attached to the old
@@ -85864,7 +85882,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.6")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.7")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -85931,6 +85949,15 @@
                                    ; perimeter: a fraction, 0.8 = 80%.
                                    ; Falling short is a warning, never a
                                    ; veto -- see the Notes
+(setq lg:*crossspan*   0.8)        ; how much of the PERIMETER's own
+                                   ; bounding box a kept lg:*anystyles*
+                                   ; dim has to span, in X or in Y, to
+                                   ; count as a full cross measurement
+                                   ; rather than a small local one; a
+                                   ; fraction, 0.8 = 80%.  A dim short
+                                   ; of this is still kept when it runs
+                                   ; corner to corner along one whole
+                                   ; edge instead -- see lg:cross-ok-p
 (setq lg:*runpaddle*   t)          ; T to hand the new perimeter to
                                    ; PADDLE and pad it; nil to stop after
                                    ; the gut and leave it unpadded
@@ -86546,20 +86573,90 @@
     (setq i (1+ i)))
   inside)
 
-;; T when every attachment point of a lg:*anystyles* dimension is either
-;; INSIDE the traced perimeter or within lg:*ontol* of it.  A cross dim
-;; runs corner to corner of the pool it belongs to; this is what tells
-;; that pool's cross dims from one sitting in the same highlight for a
-;; second pool, or a stray one that answers to nothing here.  Every, not
-;; any -- the same reasoning as lg:on-perim-p.
-(defun lg:cross-ok-p (ed vts / pts ok p)
-  (setq pts (lg:dim-pts ed)
-        ok  (and pts t))
-  (foreach p pts
-    (if (not (or (lg:pt-inside-p p vts)
-                 (<= (lg:pt-loop-dist p vts) lg:*ontol*)))
-      (setq ok nil)))
-  ok)
+;; T when P sits inside the perimeter, or on it -- the baseline "does
+;; this point belong to the pool LINGUTTER just gutted at all" test.  A
+;; point that fails this is not a fraction of an inch off; it is a
+;; stray dim, or one measuring a second pool in the same highlight.
+(defun lg:pt-belongs-p (p vts)
+  (or (lg:pt-inside-p p vts) (<= (lg:pt-loop-dist p vts) lg:*ontol*)))
+
+;; T when P sits within lg:*ontol* of a VERTEX of the perimeter -- a
+;; true corner, not merely somewhere along the edge leaving or
+;; arriving at it.
+(defun lg:at-vertex-p (p vts / hit v)
+  (foreach v vts
+    (if (<= (distance (cal:2d p) (cal:2d v)) lg:*ontol*) (setq hit t)))
+  hit)
+
+;; T when P1 and P2 both sit on some ONE perimeter edge and are NOT
+;; that edge's own two endpoints -- the start of a line to some random
+;; point in the middle of that same line.  A cross dim shaped like this
+;; measures a fraction of one side, not the pool, and is never kept
+;; regardless of span: a long enough side could otherwise make a
+;; partial reading look like it spans the pool by accident.
+;; Every edge is checked in its own right rather than classifying each
+;; point to "the" edge it sits on first: a point sitting exactly at a
+;; shared VERTEX sits on the two edges that meet there, and picking
+;; only one by iteration order could clear a partial read on whichever
+;; edge it did not pick.
+(defun lg:same-edge-partial-p (p1 p2 vts / n i a b blg d1 d2 veto)
+  (setq n (length vts) i 0 veto nil)
+  (repeat n
+    (setq a   (nth i vts)
+          b   (nth (rem (1+ i) n) vts)
+          blg (caddr a)
+          d1  (if (/= blg 0.0)
+                (lg:pt-arc-dist p1 (cal:2d a) (cal:2d b) blg)
+                (lg:pt-seg-dist p1 (cal:2d a) (cal:2d b)))
+          d2  (if (/= blg 0.0)
+                (lg:pt-arc-dist p2 (cal:2d a) (cal:2d b) blg)
+                (lg:pt-seg-dist p2 (cal:2d a) (cal:2d b))))
+    (if (and (<= d1 lg:*ontol*) (<= d2 lg:*ontol*)
+             (not (or (and (<= (distance (cal:2d p1) (cal:2d a)) lg:*ontol*)
+                           (<= (distance (cal:2d p2) (cal:2d b)) lg:*ontol*))
+                      (and (<= (distance (cal:2d p1) (cal:2d b)) lg:*ontol*)
+                           (<= (distance (cal:2d p2) (cal:2d a)) lg:*ontol*)))))
+      (setq veto t))
+    (setq i (1+ i)))
+  veto)
+
+;; T when P1-P2 spans at least lg:*crossspan* of the perimeter's own
+;; bounding box, in X or in Y -- "goes full X" or "goes full Y", an
+;; overall check dimension from one side to the other, corners or not.
+(defun lg:full-span-p (p1 p2 vts / bb w h dx dy)
+  (setq bb (lg:bbox (lg:segs-pts (lg:vts->segs T vts))))
+  (if bb
+    (progn
+      (setq w  (- (nth 2 bb) (car bb))
+            h  (- (nth 3 bb) (cadr bb))
+            dx (abs (- (car (cal:2d p1)) (car (cal:2d p2))))
+            dy (abs (- (cadr (cal:2d p1)) (cadr (cal:2d p2)))))
+      (or (and (> w 1e-9) (>= (/ dx w) lg:*crossspan*))
+          (and (> h 1e-9) (>= (/ dy h) lg:*crossspan*))))))
+
+;; T when P1 and P2 are each within lg:*ontol* of SOME vertex of the
+;; perimeter -- corner to corner, "the start of a line to the end of a
+;; line", whichever two corners they are and however short that run is.
+;; A short notch side would otherwise never pass lg:full-span-p.
+(defun lg:vertex-to-vertex-p (p1 p2 vts)
+  (and (lg:at-vertex-p p1 vts) (lg:at-vertex-p p2 vts)))
+
+;; T when a lg:*anystyles* dimension is a genuine cross dim OF THIS
+;; POOL: both attachment points belong to the perimeter at all, neither
+;; is a partial read along one same edge, and together they either span
+;; most of the pool (lg:full-span-p) or run corner to corner along one
+;; full edge (lg:vertex-to-vertex-p).  Anything else highlighted in
+;; this style -- a small dimension entirely inside touching nothing, a
+;; stray one answering to a different pool -- goes with the rest.
+(defun lg:cross-ok-p (ed vts / pts p1 p2)
+  (setq pts (lg:dim-pts ed))
+  (and (= (length pts) 2)
+       (setq p1 (car pts) p2 (cadr pts))
+       (lg:pt-belongs-p p1 vts)
+       (lg:pt-belongs-p p2 vts)
+       (not (lg:same-edge-partial-p p1 p2 vts))
+       (or (lg:full-span-p p1 p2 vts)
+           (lg:vertex-to-vertex-p p1 p2 vts))))
 
 ;;; -------------------- styles and tallies ------------------------------
 
@@ -86595,7 +86692,7 @@
           (cond
             ((lg:stylep sty lg:*anystyles*)
              (if keepcross
-               " - not inside or connected to the perimeter"
+               " - not a full span or a full perimeter edge"
                " - \"Keep CROSS DIMENSIONS?\" answered No"))
             ((lg:stylep sty lg:*perimstyles*) " - not on the perimeter")
             (t " - style not kept"))))
@@ -86779,7 +86876,8 @@
       (if keepcross
         (princ (strcat "\nLINGUTTER: keeping " (itoa nany) " dimension"
                        (lg:s nany) " in " (lg:names lg:*anystyles*)
-                       " inside the perimeter or connected to it."))
+                       " as a full-span or full-edge cross measurement"
+                       " of the pool."))
         (princ (strcat "\nLINGUTTER: \"Keep CROSS DIMENSIONS?\" answered"
                        " No - dimensions in " (lg:names lg:*anystyles*)
                        " get no exemption.")))
@@ -110875,6 +110973,7 @@
 ;;;            LAZPIN         choose the pinned tools
 ;;;            LAZHIDE        choose which tools stay off the panel
 ;;;            LAZSET         the settings, as a dialog
+;;;            LAZNAME        your own name for a tool, and for its button
 ;;;            CALHELP        what a command does, at the command line
 ;;;            CALSET         the settings calofin keeps in the profile
 ;;;            LAZPANELVER    print the loaded version
@@ -110962,7 +111061,10 @@
 ;;; front of you at once.  CALSET asks the same questions one prompt at
 ;;; a time and is still there for a drafter who would rather type.
 ;;; Neither is a roster launch: settings are not a drafting tool, so
-;;; clicking Options never lands in Recent the way a real one would.  A
+;;; clicking Options never lands in Recent the way a real one would.
+;;; Behind Names... there, or LAZNAME typed, a drafter gives a tool the
+;;; name THEY type and the words THEY want its button to say; both are
+;;; per machine, and neither touches the shipped tables.  A
 ;;; PINNED row on every page carries the handful of tools you actually
 ;;; run all day, remembered between sessions; Pin... or LAZPIN edits it.
 ;;; A RECENT row above it carries the last five you launched, newest
@@ -111034,6 +111136,22 @@
 ;; whichever surface they pinned from.  Change it here and there
 ;; together, or tests/test_palette_shell.py fails.
 (setq lzp:*pinkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel")
+
+;; The two per-user maps LAZNAME writes, on that same key.  Named here
+;; rather than spelled at the call sites so the whole set of values this
+;; file stores can be read in one place -- tests/test_palette_shell.py
+;; holds the panel and the VB palette to the same list, and a value it
+;; cannot see is a value that can drift.  These two are LISP-SIDE ONLY:
+;; the palette has no reader for either yet.
+(setq lzp:*aliasval* "Alias")
+(setq lzp:*capval* "Caption")
+
+;; The longest caption LAZNAME will let a drafter set.  A ceiling, not a
+;; preference: tools/check_dcl.py measures the SHIPPED tables and can
+;; never see an override, so this is the only thing standing between a
+;; long rename and a page too wide to open.  40 keeps the widest
+;; category page inside the budget.
+(setq lzp:*capmax* 40)
 
 ;; How wide, in DCL character cells, a row of pinned or recent buttons
 ;; may be before the next button starts a new row.  DCL does not
@@ -111245,8 +111363,20 @@
     ("XYPLOT"           "X/Y offset plot")
    ))
 
+;; The drafter's own words first, then the table's.  The override is
+;; consulted HERE, in the one accessor, rather than at the five places
+;; that ask -- the search, the Find row, both grid renderers and
+;; CALHELP -- so renaming a button renames it everywhere the panel
+;; shows it, and no call site had to change to make that true.
+;;
+;; lzp:*captions* stays the file's single truth and is what
+;; tools/gen_ui_data.py generates the VB palette's catalog from, so a
+;; drafter's caption is a LISP-SIDE rename: the palette keeps the
+;; shipped words until it learns to read the same key.
 (defun lzp:caption (name / p)
-  (if (setq p (assoc name lzp:*captions*)) (cadr p) ""))
+  (cond ((setq p (assoc name lzp:*capsof*)) (cdr p))
+        ((setq p (assoc name lzp:*captions*)) (cadr p))
+        (t "")))
 
 ;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
 ;;  one entry per COLUMN, laid out side by side across the page.  The
@@ -111599,6 +111729,11 @@
 (setq lzp:*page* nil)             ; the page the panel reopens on
 (setq lzp:*pins* nil)             ; the pinned tools, in pin order
 (setq lzp:*hidden* nil)           ; the tools put out of sight, no set order
+(setq lzp:*aliases* nil)          ; (COMMAND . the name this drafter types)
+(setq lzp:*capsof* nil)           ; (COMMAND . the words this drafter's button says)
+(setq lzp:*aliasat* nil)          ; lzp:*aliases* as the names editor opened it
+(setq lzp:*namesel* nil)          ; the tool the names editor has selected
+(setq lzp:*names* nil)            ; the names editor's rows, in list order
 
 ;;; -------------------- roster access -----------------------------------
 
@@ -112304,7 +112439,8 @@
     (setq out (append out (lzp:dcl-one g) (list ""))))
   (setq out (append out (lzp:dcl-pins) (list "")))
   (setq out (append out (lzp:dcl-hidden) (list "")))
-  (append out (lzp:dcl-set) (list "")))
+  (setq out (append out (lzp:dcl-set) (list "")))
+  (append out (lzp:dcl-names) (list "")))
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -113832,6 +113968,8 @@
           "    : text { key = \"hiddenmsg\"; width = 32; }"
           (strcat "    : button { label = \"Hidden...\"; "
                   "key = \"set_hidden\"; fixed_width = true; }")
+          (strcat "    : button { label = \"Names...\"; "
+                  "key = \"set_names\"; fixed_width = true; }")
           "  }"
           ;; wide enough for the longest sentence lzp:set-state can put
           ;; in it: width is a MINIMUM in DCL, but a text tile with no
@@ -113875,6 +114013,7 @@
                     "(lzp:set-put \"StockCover_Folder\" $value)")
        (set_tile "hiddenmsg" (lzp:hiddenmsg))
        (action_tile "set_hidden" "(done_dialog 5)")
+       (action_tile "set_names" "(done_dialog 6)")
        (action_tile "accept" "(lzp:set-ok)")
        (action_tile "cancel" "(done_dialog 0)")
        (lzp:set-state)
@@ -113883,6 +114022,8 @@
          ;; the hide editor, then round again: this dialog repaints
          ;; itself from the store, so nothing typed is lost to the trip
          ((= rc 5) (lzp:hide-edit dcl))
+         ;; ...and the names editor the same way, on the same handle
+         ((= rc 6) (lzp:name-edit dcl))
          ((= rc 1) (setq done t out "ok"))
          (t (setq done t))))))
   out)
@@ -113924,6 +114065,316 @@
   (if lzd:end (lzd:end "LAZSET"))
   (princ))
 
+;;; -------------------- names of your own --------------------------------
+;;  Two things a drafter can rename, per machine: the NAME THEY TYPE to
+;;  summon a tool, and the WORDS ITS BUTTON SAYS.  Neither touches the
+;;  shipped tables -- lzp:*captions* stays the file's single truth, and
+;;  no alias is ever written into a .lsp -- so `make check` still reads
+;;  the same tree it always did.  This is a layer over the top of it.
+;;
+;;  AN ALIAS IS A WRAPPER DEFUN, which is the shape this tree already
+;;  uses for the one alias it ships: DCE is (defun c:DCE () (c:DIMCONTEND))
+;;  and nothing else.  Built at run time it is the same form, assembled
+;;  as DATA rather than as source text -- (list 'defun sym nil (list
+;;  target)) -- because a string spliced from what the drafter typed
+;;  would go through read, and a malformed one throws from inside a
+;;  file load, where there is nothing to catch it.  The wrapper
+;;  resolves its target at CALL time, so an alias can be applied before
+;;  the tool it names is loaded, which the standalone tier gives no
+;;  guarantee about.
+;;
+;;  WHAT IS REFUSED, AND WHY EACH ONE MATTERS:
+;;    - a name that is not letters and digits, or does not start with a
+;;      letter, or is over 12 characters.  (read "c:MY TOOL") answers
+;;      c:my and (read "c:") answers c:, both silently, so the check
+;;      happens BEFORE anything reaches read and is a whitelist.
+;;    - a name the session already answers to.  This is the dangerous
+;;      one: (defun c:CHECK () ...) would retarget check_drawing.lsp's
+;;      CHECK for the whole session, and DIMARCCHECK -- which is
+;;      (c:CHECK) -- with it.  lzp:has cannot see the difference, so the
+;;      button would stay lit while running the wrong tool.
+;;    - a caption carrying ";" or "=", which are the store's own
+;;      separators, or a double quote, which lzp:dcl-one pastes straight
+;;      into DCL and which would make every page of the panel
+;;      unloadable.
+;;    - a caption over lzp:*capmax* characters.  tools/check_dcl.py
+;;      measures the SHIPPED tables and structurally cannot see a
+;;      drafter's override, so the cap is the only thing standing
+;;      between a long rename and a page that will not open.
+;;
+;;  Removing an alias stops it being remembered, but the name it
+;;  already defined answers until the drawing is closed: AutoLISP has
+;;  no way to take a defun back, and pretending otherwise would be the
+;;  lie.  The state line says so.
+
+;; Records joined with ";" as Pins, Recent and Hidden already are, but
+;; a record here is a PAIR -- NAME=VALUE.  Both separators are single
+;; characters because lzp:split compares one character at a time, which
+;; is also exactly why neither may appear in a value.
+(defun lzp:kv-read (value / s out e i)
+  (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* value)))
+  (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
+    (foreach e (lzp:split s ";")
+      (if (and (setq i (vl-string-search "=" e)) (> i 0))
+        (setq out (cons (cons (substr e 1 i) (substr e (+ i 2))) out)))))
+  ;; a name the roster no longer carries is dropped on read, exactly as
+  ;; a stale pin is: what is stored must never put a dead row on screen
+  (vl-remove-if-not '(lambda (p) (member (car p) (lzp:commands)))
+                    (reverse out)))
+
+(defun lzp:kv-write (value map / s p)
+  (setq s "")
+  (foreach p map
+    (if (/= (cdr p) "")
+      (setq s (strcat s (if (= s "") "" ";") (car p) "=" (cdr p)))))
+  (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* value s))
+  map)
+
+(defun lzp:names-read ()
+  (setq lzp:*aliases* (lzp:kv-read lzp:*aliasval*)
+        lzp:*capsof*  (lzp:kv-read lzp:*capval*))
+  lzp:*aliases*)
+
+(defun lzp:letter-p (c)
+  (if (vl-string-search c "ABCDEFGHIJKLMNOPQRSTUVWXYZ") t nil))
+
+;; Letters and digits, first one a letter, 1 to 12 characters.
+(defun lzp:alias-shape-p (s / i n c ok)
+  (setq s (strcase s) n (strlen s) i 1 ok (and (> n 0) (<= n 12)))
+  (while (and ok (<= i n))
+    (setq c (substr s i 1))
+    (if (not (or (lzp:letter-p c) (lzp:digit-p c))) (setq ok nil))
+    (if (and (= i 1) (not (lzp:letter-p c))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
+
+;; Does this session already answer to NAME?  The names-list form of
+;; atoms-family answers nil in the slot for a name the session lacks --
+;; and the LIST it returns is truthy either way, so the car is the
+;; question and the bare call is not.
+(defun lzp:alias-taken-p (name)
+  (if (car (atoms-family 1 (list (strcase (strcat "C:" name))))) t nil))
+
+;; Why this alias cannot be used, as words, or nil when it can.  TOOL is
+;; the command it would summon; the alias it ALREADY had is allowed
+;; through, or re-opening the editor would refuse what it just showed.
+(defun lzp:alias-why (name tool / p)
+  (cond
+    ((= name "") nil)
+    ((not (lzp:alias-shape-p name))
+     "a name is letters and digits, starts with a letter, up to 12")
+    ((setq p (car (vl-remove-if-not
+                    '(lambda (q) (and (/= (car q) tool)
+                                      (= (strcase (cdr q)) (strcase name))))
+                    lzp:*aliases*)))
+     (strcat "that name is already yours for " (car p)))
+    ((and (lzp:alias-taken-p name)
+          (/= (strcase name) (strcase (lzp:alias-was tool))))
+     (strcat name " already runs something in this session"))))
+
+(defun lzp:alias-was (tool)
+  (lzp:pairval tool lzp:*aliasat*))
+
+;; Why this caption cannot be used, as words, or nil when it can.
+(defun lzp:cap-why (s)
+  (cond
+    ((> (strlen s) lzp:*capmax*)
+     (strcat "keep it to " (itoa lzp:*capmax*) " characters or the page stops opening"))
+    ((or (vl-string-search ";" s) (vl-string-search "=" s))
+     "; and = are how the list itself is stored, so a caption cannot hold one")
+    ((vl-string-search "\"" s)
+     "a double quote would break the panel's own dialog file")))
+
+;; Define one wrapper, or answer nil having done nothing.
+(defun lzp:alias-make (name tool)
+  (if (and (lzp:alias-shape-p name)
+           (not (lzp:alias-taken-p name))
+           (member tool (lzp:commands)))
+    (progn
+      (eval (list 'defun (read (strcat "c:" (strcase name))) nil
+                  (list (read (strcat "c:" tool)))))
+      t)))
+
+(defun lzp:aliases-apply ( / p n)
+  (setq n 0)
+  (foreach p lzp:*aliases*
+    (if (lzp:alias-make (cdr p) (car p)) (setq n (1+ n))))
+  n)
+
+(defun lzp:names-write ()
+  (lzp:kv-write lzp:*aliasval* lzp:*aliases*)
+  (lzp:kv-write lzp:*capval* lzp:*capsof*)
+  (lzp:aliases-apply))
+
+;; One row.  Not padded into columns: whether the dialog font is
+;; fixed-pitch is exactly what LAZASCII exists to ask, so nothing here
+;; may assume two rows line up.
+(defun lzp:namerow (n / a)
+  (setq a (lzp:pairval n lzp:*aliases*))
+  (strcat n
+          (if (/= a "") (strcat "  (type " a ")") "")
+          "  -  " (lzp:caption n)))
+
+;; A map's value, or "" when it has none.  (cdr (assoc ...)) answers nil
+;; for a tool nobody has renamed, and nil is what strcase and strlen
+;; throw on -- so every read of these two maps comes through here.
+(defun lzp:pairval (key map / p)
+  (if (setq p (assoc key map)) (cdr p) ""))
+
+(defun lzp:put-pair (key v map)
+  (cons (cons key v) (vl-remove (assoc key map) map)))
+
+(defun lzp:name-alias-put (v)
+  (if lzp:*namesel*
+    (setq lzp:*aliases*
+          (lzp:put-pair lzp:*namesel* (strcase v) lzp:*aliases*)))
+  (lzp:namerefill)
+  (lzp:name-state)
+  (princ))
+
+(defun lzp:name-cap-put (v)
+  (if lzp:*namesel*
+    (setq lzp:*capsof* (lzp:put-pair lzp:*namesel* v lzp:*capsof*)))
+  (lzp:namerefill)
+  (lzp:name-state)
+  (princ))
+
+;; What is wrong with the pair in front of the drafter, or nil.
+(defun lzp:name-why ( / a)
+  (if lzp:*namesel*
+    (cond ((setq a (lzp:alias-why (lzp:pairval lzp:*namesel* lzp:*aliases*)
+                                  lzp:*namesel*))
+           a)
+          (t (lzp:cap-why (lzp:pairval lzp:*namesel* lzp:*capsof*))))))
+
+(defun lzp:name-state ( / why)
+  (setq why (lzp:name-why))
+  (lzp:settile "namestate"
+    (cond (why why)
+          ((not lzp:*namesel*) "Pick a tool to give it names of your own")
+          (t (strcat lzp:*namesel*
+                     " - OK keeps these; a name you remove still answers"
+                     " until this drawing is closed"))))
+  (lzp:setmode "accept" (if why 1 0))
+  (princ))
+
+;; Rebuild the list and put the selection back.  A row's words change
+;; as the boxes are typed into, and a list that went on showing the old
+;; ones would be the only part of the dialog telling a different story.
+(defun lzp:namerefill ( / n i sel)
+  (setq lzp:*names* (lzp:commands) i 0 sel 0)
+  (foreach n lzp:*names*
+    (if (= n lzp:*namesel*) (setq sel i))
+    (setq i (1+ i)))
+  ;; under a catch because this runs from a tile callback, where the
+  ;; list is there, and from the tests, where it is not: start_list
+  ;; outside a dialog is an error and not a no-op
+  (vl-catch-all-apply
+    '(lambda ()
+       (start_list "names")
+       (foreach n lzp:*names* (add_list (lzp:namerow n)))
+       (end_list)
+       (if lzp:*names* (set_tile "names" (itoa sel))))
+    nil)
+  lzp:*names*)
+
+(defun lzp:namepick (v)
+  (setq lzp:*namesel* (nth (atoi v) lzp:*names*))
+  (lzp:settile "name_alias" (lzp:pairval lzp:*namesel* lzp:*aliases*))
+  (lzp:settile "name_cap" (lzp:pairval lzp:*namesel* lzp:*capsof*))
+  (lzp:name-state)
+  lzp:*namesel*)
+
+;; OK, guarded the way lzp:set-ok is, and for the same reason: DCL fires
+;; an edit box's action before the default button's, so the greying is
+;; not a stop.
+(defun lzp:name-ok ()
+  (if (lzp:name-why)
+    (lzp:name-state)
+    (done_dialog 1))
+  (princ))
+
+(defun lzp:dcl-names ( / out)
+  (setq out
+    (list "lazpanel_names : dialog {"
+          "  label = \"LazPanel  -  names of your own\";"
+          (strcat "  : text { label = \"Pick a tool, then say what you want"
+                  " to type and what you want the button to say.\"; }")
+          "  : list_box { key = \"names\"; width = 58; height = 16; }"
+          "  : boxed_column {"
+          "    label = \"The tool you picked\";"
+          (strcat "    : edit_box { key = \"name_alias\"; "
+                  "label = \"Type this to run it\"; edit_width = 14; }")
+          (strcat "    : edit_box { key = \"name_cap\"; "
+                  "label = \"Button says        \"; edit_width = 40; }")
+          (strcat "    : text { label = \"Leave a box empty to go back to"
+                  " the name calofin ships.\"; }")
+          "  }"
+          "  : text { key = \"namestate\"; width = 110; }"
+          "  spacer;"
+          "  : row {"
+          "    alignment = centered;"
+          (strcat "    : button { label = \"OK\"; key = \"accept\"; "
+                  "is_default = true; fixed_width = true; }")
+          (strcat "    : button { label = \"Cancel\"; key = \"cancel\"; "
+                  "is_cancel = true; fixed_width = true; }")
+          "  }"
+          "}"))
+  out)
+
+;; Cancel re-reads the store rather than unwinding the edits one by
+;; one, exactly as the pin and hide editors do: what is stored is the
+;; truth, so going back to it is exact where unwinding is approximate.
+(defun lzp:name-edit (dcl / rc)
+  (cond
+    ((not (new_dialog "lazpanel_names" dcl)) nil)
+    (t
+     (setq lzp:*aliasat* lzp:*aliases*
+           lzp:*namesel* nil)
+     (lzp:namerefill)
+     (lzp:namepick "0")
+     (action_tile "names" "(lzp:namepick $value)")
+     (action_tile "name_alias" "(lzp:name-alias-put $value)")
+     (action_tile "name_cap" "(lzp:name-cap-put $value)")
+     (action_tile "accept" "(lzp:name-ok)")
+     (action_tile "cancel" "(done_dialog 0)")
+     (setq rc (start_dialog))
+     (if (= rc 1) (lzp:names-write) (lzp:names-read))
+     t)))
+
+(defun c:LAZNAME ( / *error* f dcl)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl -- the same fix c:LAZPIN and c:LAZHIDE carry
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZNAME error: " msg)))
+    (if lzd:report (lzd:report "LAZNAME" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZNAME" *lazpanel-version*))
+  (lzp:pins-read)
+  (lzp:recent-read)
+  (lzp:hidden-read)
+  (lzp:names-read)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZNAME error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZNAME error: could not load the dialog file.")
+     (vl-file-delete f))
+    (t
+     (lzp:name-edit dcl)
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (princ (strcat "\nLAZPANEL: "
+                    (itoa (length lzp:*aliases*)) " tool"
+                    (if (= (length lzp:*aliases*) 1) "" "s")
+                    " answer to a name of yours, "
+                    (itoa (length lzp:*capsof*)) " renamed on the panel."))))
+  (if lzd:end (lzd:end "LAZNAME"))
+  (princ))
+
 (defun c:LAZPANELVER ()
   (princ (strcat "\nLAZPANEL " *lazpanel-version* " (LAZPANEL.lsp) - "
                  (itoa (length (lzp:visible))) " tools on the panel across "
@@ -113954,6 +114405,14 @@
 (vl-catch-all-apply
   '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
+;; The drafter's own names, and the wrappers that make them answer.
+;; Per DOCUMENT, not per session: a defun lives in the drawing's own
+;; namespace, so the blackboard's once-a-session mark is the wrong
+;; instrument here and every drawing has to be told again.  Under
+;; vl-catch-all-apply beside the rest: a file that throws as it loads
+;; takes the panel and the toolbar with it.
+(vl-catch-all-apply 'lzp:names-read nil)
+(vl-catch-all-apply 'lzp:aliases-apply nil)
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
@@ -113969,7 +114428,8 @@
                  " LAZPIN edits the pinned row;"
                  " LAZHIDE picks which tools stay off it;"
                  " CALHELP says what a command does;"
-                 " LAZSET is the settings dialog, CALSET the prompts.")))
+                 " LAZSET is the settings dialog, CALSET the prompts;"
+                 " LAZNAME gives a tool a name of your own.")))
 (princ)
 
 
@@ -114009,7 +114469,7 @@
   "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION"
   "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM"
   "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON"
-  "LAZICON" "CALHELP" "CALSET" "LAZSET" "LAZPANELVER"
+  "LAZICON" "CALHELP" "CALSET" "LAZSET" "LAZNAME" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
