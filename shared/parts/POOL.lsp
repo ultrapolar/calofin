@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV30")
+(setq pool:*version* "091626 REV31")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -7068,15 +7068,23 @@
                           dac dbd fq quad failed a b c d cen meas notes
                           ml mr lend rend tipl tipr doff th odim pr
                           rcs rce rcarcs
-                          allpts xmax ymax ymin rows xcol xa rbox)
+                          allpts xmax ymax ymin rows xcol xcolr xa rbox)
   (setq oldclay (getvar "CLAYER"))
-  (defun rm:perfect ( / v)
-    (if pool:*insq*
-        (progn (setq perfect t) nil)
-        (progn (setq perfect (pool:askynf 'perfect
-                                          "Are both ends perfect (identical)"
-                                          nil nil))
-               nil)))
+  ;; PERFECT ENDS -- asked on every Roman, in square and out.
+  ;; Squareness is a question about the BODY: whether the
+  ;; rectangle between the two end lines is true.  It says nothing
+  ;; about whether the two ends are the same end twice, and a field
+  ;; pool whose body tapes dead square can still carry a 9" bulge at
+  ;; one end and a 14" at the other.  So the drafter decides.
+  ;;   Yes  -- the sheet as it has always been asked: one S / S1 / V
+  ;;           and one R, taken as both ends.
+  ;;   No   -- each end its own letters, and the pool is drawn,
+  ;;           dimensioned and reported end by end.
+  (defun rm:perfect ()
+    (setq perfect (pool:askynf 'perfect
+                               "Are both ends perfect (identical)"
+                               nil nil))
+    nil)
   ;; one end's tip setback for the live guide, from whatever the sheet
   ;; has so far: the taped S, else what T leaves of B, else the arc
   ;; sagitta of a given radius, else the nominal eighth of B
@@ -7358,6 +7366,12 @@
         xmax (apply 'max (mapcar 'car allpts))
         ymax (apply 'max (mapcar 'cadr allpts))
         ymin (apply 'min (mapcar 'cadr allpts)))
+  ;; ends that are not perfect put a second letter column outboard of
+  ;; the RIGHT end (below), and it is the only thing this sheet ever
+  ;; draws on that side -- so the report table has to start beyond it
+  ;; rather than on top of it
+  (if (and pool:*insq* (not perfect))
+      (setq xmax (+ xmax (* 0.9 doff))))
   (setvar "CLAYER" pool:*lay-dim*)
   (if pool:*insq*
       ;; in-square, per the field sheet: S+T+S share a row along the
@@ -7388,7 +7402,26 @@
         (pool:dimalgs (caddr lend) a
                       (list xcol (* 0.5 (+ (cadr (caddr lend)) (cadr a)))))
         ;; column 2: A, the overall width
-        (pool:dimalg a d (list xa (cadr (cal:mid a d)))))
+        (pool:dimalg a d (list xa (cadr (cal:mid a d))))
+        ;; column 3: the RIGHT end's own S1, V, S1 -- drawn only when
+        ;; the ends are not perfect.  The sheet's single column stands
+        ;; for both ends while they ARE the same end twice; once each
+        ;; end carries its own letters, the right-hand set is numbers
+        ;; nobody could read off the left column.  A perfect pool is
+        ;; unchanged: dimensioning its right end would say the same
+        ;; thing twice.
+        (if (not perfect)
+            (progn
+              (setq xcolr (+ (car tipr) (* 0.9 doff)))
+              (pool:dimalgs c (cadr rend)
+                            (list xcolr (* 0.5 (+ (cadr c)
+                                                  (cadr (cadr rend))))))
+              (pool:dimalgs (cadr rend) (caddr rend)
+                            (list xcolr (cadr (cal:mid (cadr rend)
+                                                        (caddr rend)))))
+              (pool:dimalgs (caddr rend) b
+                            (list xcolr (* 0.5 (+ (cadr (caddr rend))
+                                                  (cadr b))))))))
       (progn
         (pool:dimwalls quad rcs 0 1 (pool:outoff a b cen doff))
         (pool:dimwalls quad rcs 3 2 (pool:outoff d c cen doff))

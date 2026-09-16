@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.17, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.19, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -3033,7 +3033,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV30")
+(setq pool:*version* "091626 REV31")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -9974,15 +9974,23 @@
                           dac dbd fq quad failed a b c d cen meas notes
                           ml mr lend rend tipl tipr doff th odim pr
                           rcs rce rcarcs
-                          allpts xmax ymax ymin rows xcol xa rbox)
+                          allpts xmax ymax ymin rows xcol xcolr xa rbox)
   (setq oldclay (getvar "CLAYER"))
-  (defun rm:perfect ( / v)
-    (if pool:*insq*
-        (progn (setq perfect t) nil)
-        (progn (setq perfect (pool:askynf 'perfect
-                                          "Are both ends perfect (identical)"
-                                          nil nil))
-               nil)))
+  ;; PERFECT ENDS -- asked on every Roman, in square and out.
+  ;; Squareness is a question about the BODY: whether the
+  ;; rectangle between the two end lines is true.  It says nothing
+  ;; about whether the two ends are the same end twice, and a field
+  ;; pool whose body tapes dead square can still carry a 9" bulge at
+  ;; one end and a 14" at the other.  So the drafter decides.
+  ;;   Yes  -- the sheet as it has always been asked: one S / S1 / V
+  ;;           and one R, taken as both ends.
+  ;;   No   -- each end its own letters, and the pool is drawn,
+  ;;           dimensioned and reported end by end.
+  (defun rm:perfect ()
+    (setq perfect (pool:askynf 'perfect
+                               "Are both ends perfect (identical)"
+                               nil nil))
+    nil)
   ;; one end's tip setback for the live guide, from whatever the sheet
   ;; has so far: the taped S, else what T leaves of B, else the arc
   ;; sagitta of a given radius, else the nominal eighth of B
@@ -10264,6 +10272,12 @@
         xmax (apply 'max (mapcar 'car allpts))
         ymax (apply 'max (mapcar 'cadr allpts))
         ymin (apply 'min (mapcar 'cadr allpts)))
+  ;; ends that are not perfect put a second letter column outboard of
+  ;; the RIGHT end (below), and it is the only thing this sheet ever
+  ;; draws on that side -- so the report table has to start beyond it
+  ;; rather than on top of it
+  (if (and pool:*insq* (not perfect))
+      (setq xmax (+ xmax (* 0.9 doff))))
   (setvar "CLAYER" pool:*lay-dim*)
   (if pool:*insq*
       ;; in-square, per the field sheet: S+T+S share a row along the
@@ -10294,7 +10308,26 @@
         (pool:dimalgs (caddr lend) a
                       (list xcol (* 0.5 (+ (cadr (caddr lend)) (cadr a)))))
         ;; column 2: A, the overall width
-        (pool:dimalg a d (list xa (cadr (cal:mid a d)))))
+        (pool:dimalg a d (list xa (cadr (cal:mid a d))))
+        ;; column 3: the RIGHT end's own S1, V, S1 -- drawn only when
+        ;; the ends are not perfect.  The sheet's single column stands
+        ;; for both ends while they ARE the same end twice; once each
+        ;; end carries its own letters, the right-hand set is numbers
+        ;; nobody could read off the left column.  A perfect pool is
+        ;; unchanged: dimensioning its right end would say the same
+        ;; thing twice.
+        (if (not perfect)
+            (progn
+              (setq xcolr (+ (car tipr) (* 0.9 doff)))
+              (pool:dimalgs c (cadr rend)
+                            (list xcolr (* 0.5 (+ (cadr c)
+                                                  (cadr (cadr rend))))))
+              (pool:dimalgs (cadr rend) (caddr rend)
+                            (list xcolr (cadr (cal:mid (cadr rend)
+                                                        (caddr rend)))))
+              (pool:dimalgs (caddr rend) b
+                            (list xcolr (* 0.5 (+ (cadr (caddr rend))
+                                                  (cadr b))))))))
       (progn
         (pool:dimwalls quad rcs 0 1 (pool:outoff a b cen doff))
         (pool:dimwalls quad rcs 3 2 (pool:outoff d c cen doff))
@@ -60267,6 +60300,18 @@
 ;;;       closed loop wins; leftover open chains or other closed loops
 ;;;       are reported as AMBIGUOUS. Its area (sq ft) and its straight
 ;;;       / arc segment split are given in the report on the side.
+;;;       A perimeter does not always stay on one layer: the stretch
+;;;       the cable run carries is drawn on "CABLE" (tune
+;;;       *cchk-perim-layers*), and that layer's ByLayer geometry is
+;;;       chained in alongside the pool's so the outline still closes
+;;;       and is still measured. Only what joins the loop is used --
+;;;       a branch off to an anchor, or the cable's own loop parked
+;;;       elsewhere, is cut before the walk and counted as neither a
+;;;       gap nor a stray loop -- and where both layers leave a point
+;;;       the pool layer wins, so a borrowed layer can only ever fill
+;;;       a gap. The report names how many segments came off which
+;;;       layer, and the pads and the Cover Details grading read the
+;;;       whole perimeter, borrowed stretches included.
 ;;;     - COVER DETAILS. A block named (or containing) "Cover
 ;;;       Details" holds an OVERLAP value ("Overlap: 12''" -- only
 ;;;       12"/15"/18" exist) and a SPACING tag ("Spacing: 5x5" --
@@ -60373,7 +60418,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.19")
+(setq *cchk-version* "v1.20")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -60397,6 +60442,19 @@
 ;; template already uses.
 (setq *cchk-pool-layer*   "POOL")
 (setq *cchk-cover-layer*  "COVER")
+
+;; Layers OTHER than the pool layer that may carry a stretch of the
+;; SAME closed perimeter -- the cable run drawn on "CABLE" being the
+;; everyday one.  Their ByLayer geometry is chained in alongside the
+;; pool layer's, so an outline that hands over mid-run still closes
+;; and is still measured.  Only what actually joins the loop is used:
+;; whatever else sits on these layers is that layer's own business,
+;; and is never counted as a gap or a stray loop.  At a junction the
+;; pool layer wins, so a borrowed layer can only ever fill a gap, and
+;; a loop with no pool-layer segment in it is not the pool outline.
+;; Adding a layer here lets more geometry into the outline; '() reads
+;; the pool layer on its own, as before.
+(setq *cchk-perim-layers* '("CABLE"))
 
 ;; When no cover is drawn the sheet has to say which size IS shown.
 ;; Both notes together is an error -- a sheet shows one or the other.
@@ -62522,10 +62580,48 @@
      (if cv (cchk:pv-vts->segs (car cv) (cdr cv))))))
 
 ;; Chains touching segments (ends within *cchk-chain-fuzz*) end-to-end.
-;; Returns (loops . open-count); each loop is a vertex list (x y bulge).
+;; A segment is (start end bulge [layer]); cchk:pv-chain hands back the
+;; chains it made, closed and open, still as segments -- the layer tag
+;; is what lets cchk:pool-loop tell the pool's own geometry from a
+;; stretch borrowed off *cchk-perim-layers* once the walk has mixed the
+;; two.
 (defun cchk:pv-revseg (s)
-  ;; SEG walked the other way: same geometry, so the bulge changes sign
-  (list (cadr s) (car s) (- (caddr s))))
+  ;; SEG walked the other way: same geometry, so the bulge changes
+  ;; sign.  The layer tag (4th slot, see cchk:pv-tag-segs) rides along
+  ;; untouched -- turning a segment round does not move it.
+  (list (cadr s) (car s) (- (caddr s)) (cadddr s)))
+
+(defun cchk:pv-tag-segs (segs lay)
+  ;; stamp a run of segments with the layer they were read off: nil
+  ;; for the pool layer itself, the layer's NAME for one borrowed off
+  ;; *cchk-perim-layers*.  The tag sits in a 4th slot every other
+  ;; segment reader ignores, so an untagged segment still means the
+  ;; pool layer.
+  (mapcar '(lambda (s) (list (car s) (cadr s) (caddr s) lay)) segs))
+
+(defun cchk:pv-chain-vts (chain)
+  ;; a chain of segments as the (x y bulge) vertex list the area and
+  ;; the feature hunt read: one vertex per segment, its start point
+  ;; carrying the bulge of the segment leaving it
+  (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
+          chain))
+
+(defun cchk:pv-has-pool-p (chain)
+  ;; T when any segment of CHAIN came off the pool layer itself.  A
+  ;; chain without one is a borrowed layer's own geometry running its
+  ;; own errand, not a piece of the pool outline.
+  (vl-some '(lambda (s) (null (cadddr s))) chain))
+
+(defun cchk:pv-borrowed (chain / out hit s)
+  ;; the borrowed layers CHAIN took segments off, as ((layer . count)
+  ;; ...) in the order they were met; nil when the whole chain is the
+  ;; pool layer's own
+  (foreach s chain
+    (if (cadddr s)
+      (if (setq hit (assoc (cadddr s) out))
+        (setq out (subst (cons (car hit) (1+ (cdr hit))) hit out))
+        (setq out (append out (list (cons (cadddr s) 1)))))))
+  out)
 
 (defun cchk:pv-take (segs pt / found rest s)
   ;; the first segment in SEGS with an end on PT, turned so that it
@@ -62541,19 +62637,94 @@
           (T (setq rest (cons s rest))))))
   (list found (reverse rest)))
 
-(defun cchk:pv-chain (segs / loops nopen chain head tail done found rest)
+(defun cchk:pv-drop-slivers (segs)
+  ;; segments shorter than the chaining fuzz join nothing and would
+  ;; make every end look occupied - they go before any walk
+  (vl-remove-if
+    '(lambda (s) (<= (distance (car s) (cadr s)) *cchk-chain-fuzz*))
+    segs))
+
+(defun cchk:pv-tal-find (pt tal / hit c)
+  ;; the tally entry for PT, ends within the chaining fuzz being the
+  ;; same spot; the entry itself, so subst can replace it
+  (foreach c tal
+    (if (and (null hit) (<= (distance pt (car c)) *cchk-chain-fuzz*))
+      (setq hit c)))
+  hit)
+
+(defun cchk:pv-tally (segs / tal hit s e)
+  ;; ((point . ends-on-it) ...) over every segment end.  A point with
+  ;; one end on it is a LOOSE END: nothing carries on from there.
+  (foreach s segs
+    (foreach e (list (car s) (cadr s))
+      (if (setq hit (cchk:pv-tal-find e tal))
+        (setq tal (subst (cons (car hit) (1+ (cdr hit))) hit tal))
+        (setq tal (cons (cons e 1) tal)))))
+  tal)
+
+(defun cchk:pv-take-borrowed (segs pt / found rest s)
+  ;; the first BORROWED segment with an end on PT, and the rest of
+  ;; SEGS without it, in order; nil when nothing borrowed lands there
+  (foreach s segs
+    (if (and (null found)
+             (cadddr s)
+             (or (<= (distance pt (car s)) *cchk-chain-fuzz*)
+                 (<= (distance pt (cadr s)) *cchk-chain-fuzz*)))
+      (setq found s)
+      (setq rest (cons s rest))))
+  (if found (cons found (reverse rest))))
+
+(defun cchk:pv-prune-spurs (segs / tal q pt cut seg hit e)
+  ;; Borrowed geometry hanging by a loose end is a SPUR -- the cable
+  ;; branching off to an anchor, the tail of a run that carries on
+  ;; past the corner, a whole run that never touches the pool at all
+  ;; -- and it is not a stretch of the perimeter: what the outline
+  ;; borrows is joined at BOTH ends, which is what makes it a stretch
+  ;; rather than a branch.  Cutting spurs before the walk is what
+  ;; stops one leaving an outline vertex from being followed out of
+  ;; it, which would leave the loop open behind it.
+  ;;
+  ;; Pool-layer segments (untagged) are never cut: one hanging loose
+  ;; is the GAP the drafter is being told about.
+  ;;
+  ;; The cut walks INWARD from each loose end rather than sweeping the
+  ;; whole list again per segment: cutting one frees the end it held,
+  ;; and that end goes on the queue, so a run several hundred segments
+  ;; long costs one walk down it instead of one sweep per segment.
+  (setq tal (cchk:pv-tally segs))
+  (foreach hit tal (if (< (cdr hit) 2) (setq q (cons (car hit) q))))
+  (while q
+    (setq pt (car q)
+          q  (cdr q))
+    (if (setq cut (cchk:pv-take-borrowed segs pt))
+      (progn
+        (setq seg  (car cut)
+              segs (cdr cut))
+        ;; both its ends lose an end with it, and one left holding a
+        ;; single segment is the next loose end along the spur
+        (foreach e (list (car seg) (cadr seg))
+          (if (setq hit (cchk:pv-tal-find e tal))
+            (progn
+              (setq tal (subst (cons (car hit) (1- (cdr hit))) hit tal))
+              (if (= 2 (cdr hit)) (setq q (cons e q)))))))))
+  segs)
+
+(defun cchk:pv-chain (segs / loops opens chain head tail done found rest)
+  ;; Returns (closed-chains open-chains), both lists of SEGMENT chains
+  ;; -- cchk:pv-chain-vts turns one into the vertex list the area and
+  ;; feature hunts read, and the segments keep whatever layer tag they
+  ;; were given, so the caller can still tell which layer each stretch
+  ;; came off after the walk has mixed them.
+  ;;
   ;; The walk grows at BOTH ends, as PADDLE's does.  Growing forward
   ;; only splits an outline with ONE gap in it into TWO open chains
   ;; whenever the walk starts in the middle of it -- the half ahead of
   ;; the starting segment runs into the gap, the half behind it into
-  ;; the segment already taken -- and this count is read out to the
+  ;; the segment already taken -- and that count is read out to the
   ;; drafter as "N open chain(s) (check for gaps)".  One hole has to
   ;; count as one.
-  (setq nopen 0)
   ;; drop degenerate slivers
-  (setq segs (vl-remove-if
-               '(lambda (s) (<= (distance (car s) (cadr s)) *cchk-chain-fuzz*))
-               segs))
+  (setq segs (cchk:pv-drop-slivers segs))
   (while segs
     (setq chain (list (car segs))
           head  (car (car segs))
@@ -62564,9 +62735,7 @@
       (cond
         ;; loop closed back onto its start?
         ((and (> (length chain) 1) (<= (distance tail head) *cchk-chain-fuzz*))
-         (setq loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
-                                   chain)
-                           loops)
+         (setq loops (cons chain loops)
                done  T))
         (T ;; a segment leaving the tail, else one arriving at the head
          (setq rest  (cchk:pv-take segs tail)
@@ -62585,9 +62754,9 @@
                       chain (cons found chain)
                       head  (car found)
                       segs  rest)
-                (setq nopen (1+ nopen)  ; dead end both ways
+                (setq opens (cons chain opens)  ; dead end both ways
                       done  T))))))))
-  (cons (reverse loops) nopen))
+  (list (reverse loops) (reverse opens)))
 
 ;; Concave features of one closed loop: returns pads, each
 ;; (center rotation kind) with kind = "corner" / "arc". PADSIZE sets
@@ -62700,9 +62869,11 @@
        (or (null (assoc 370 ed))
            (= -1 (cdr (assoc 370 ed))))))
 
-(defun cchk:pool-ents (ss saved / i e ed out nskip)
-  ;; pool-outline candidates: LINE/ARC/LWPOLYLINE/POLYLINE on the pool
-  ;; layer with every property ByLayer, from the selection. SAVED (the
+(defun cchk:pool-ents (ss saved lay / i e ed out nskip)
+  ;; outline candidates on ONE layer: LINE/ARC/LWPOLYLINE/POLYLINE/
+  ;; CIRCLE on LAY with every property ByLayer, from the selection.
+  ;; LAY is the pool layer, or one of *cchk-perim-layers* when the
+  ;; perimeter hands over to another layer partway round. SAVED (the
   ;; review's colour stash) supplies the true colour of anything
   ;; currently greyed out. Returns (ents . skipped); skipped sit on
   ;; the layer but carry explicit properties.
@@ -62713,29 +62884,52 @@
           ed (entget e))
     (if (and ed
              (member (cdr (assoc 0 ed)) '("LINE" "ARC" "LWPOLYLINE" "POLYLINE" "CIRCLE"))
-             (= (strcase (cdr (assoc 8 ed))) (strcase *cchk-pool-layer*)))
+             (= (strcase (cdr (assoc 8 ed))) (strcase lay)))
       (if (cchk:bylayer-p e (cond ((assoc e saved) (cdr (assoc e saved)))
                                   ((cchk:ent-color e))))
         (setq out (cons e out))
         (setq nskip (1+ nskip)))))
   (cons (reverse out) nskip))
 
-(defun cchk:pool-loop (pents / segs e res loops best bestarea a l)
+(defun cchk:pool-loop (pents borrow / segs e bl res loops opens best
+                             bestarea a l)
   ;; the pool outline: the largest closed loop chained from the
-  ;; candidates' bulge-aware segments. Returns
-  ;;   (best-loop open-chain-count other-closed-loop-count)
-  ;; best-loop is nil when nothing closes back on itself; the other
-  ;; two counts flag an ambiguous outline (a gap, or extra geometry
-  ;; on the pool layer) even when a loop was still found.
+  ;; candidates' bulge-aware segments.  BORROW is ((layer . ents) ...)
+  ;; read off *cchk-perim-layers* -- a stretch of the same perimeter
+  ;; drawn elsewhere, chained in so an outline that hands over midway
+  ;; still closes.  Returns
+  ;;   (best-loop open-chain-count other-closed-loop-count borrowed)
+  ;; best-loop is nil when nothing closes back on itself; the two
+  ;; counts flag an ambiguous outline (a gap, or extra geometry on the
+  ;; pool layer) even when a loop was still found; BORROWED is
+  ;; ((layer . segment-count) ...) for the loop that won.
+  ;;
+  ;; Pool segments go in FIRST, so where both layers leave a point the
+  ;; walk stays on the pool layer and a borrowed one can only ever
+  ;; fill a gap.  Only chains carrying a pool segment are the pool's:
+  ;; the rest is the borrowed layer's own geometry -- a cable run off
+  ;; to an anchor, a loop of its own -- and it is neither the outline
+  ;; nor a gap in it, so it is not measured and not counted.
   (foreach e pents
-    (setq segs (append segs (cchk:pv-ent-segs e))))
+    (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) nil))))
+  (foreach bl borrow
+    (foreach e (cdr bl)
+      (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) (car bl))))))
+  ;; with nothing borrowed there is nothing to cut, and the walk is
+  ;; the one it always was
+  (if borrow
+    (setq segs (cchk:pv-prune-spurs (cchk:pv-drop-slivers segs))))
   (setq res      (cchk:pv-chain segs)
-        loops    (car res)
+        loops    (vl-remove-if-not 'cchk:pv-has-pool-p (car res))
+        opens    (vl-remove-if-not 'cchk:pv-has-pool-p (cadr res))
         bestarea 0.0)
   (foreach l loops
-    (setq a (abs (cchk:pv-area l)))
+    (setq a (abs (cchk:pv-area (cchk:pv-chain-vts l))))
     (if (> a bestarea) (setq bestarea a best l)))
-  (list best (cdr res) (max 0 (1- (length loops)))))
+  (list (if best (cchk:pv-chain-vts best))
+        (length opens)
+        (max 0 (1- (length loops)))
+        (if best (cchk:pv-borrowed best))))
 
 (defun cchk:parse-nxn (s / lst i n num a res)
   ;; the first "NxN" written in the text ("5x5", "3 X 3") as a list
@@ -62765,6 +62959,23 @@
                     (setq res (list a num)))))))
           (setq i (1+ i))))))
   res)
+
+(defun cchk:borrow-str (bwd / out b)
+  ;; the borrowed stretches as one phrase for the summary line --
+  ;; "3 segment(s) off layer 'CABLE'", one clause per layer
+  (setq out "")
+  (foreach b bwd
+    (setq out (strcat out
+                      (if (= out "") "" ", ")
+                      (itoa (cdr b)) " segment(s) off layer '" (car b) "'")))
+  out)
+
+(defun cchk:lay-list-str (lays / out l)
+  ;; a list of layer names as "'A', 'B'"
+  (setq out "")
+  (foreach l lays
+    (setq out (strcat out (if (= out "") "" ", ") "'" l "'")))
+  out)
 
 (defun cchk:nxn-str (sp)
   (strcat (itoa (car sp)) "x" (itoa (cadr sp))))
@@ -62874,6 +63085,7 @@
     (cchk:tag (entlast) "MARKER")))
 
 (defun cchk:cover-audit (ss blks live saved / pres pents lres vts narc nlin v
+                          lay xres borrow xskip sk b bwd
                           sqft det ovraw ovval ovok ovna spraw spval spna
                           arcy wantov wantsp why dashpoly cstat covered note
                           spanote replblk replp replsum padskip pk lines s f
@@ -62899,11 +63111,19 @@
       (strcat "Pool/Spa size: BOTH '" *cchk-pool-note* "' and '" *cchk-spa-note*
               "' are in the selection - ONLY ONE SIZE CAN BE SHOWN")))))
 
-  ;; --- pool outline & area (ByLayer geometry on the pool layer) ----
-  (setq pres  (cchk:pool-ents ss saved)
-        pents (car pres)
-        lres  (if pents (cchk:pool-loop pents))
+  ;; --- pool outline & area (ByLayer geometry on the pool layer, plus
+  ;; --- any stretch of the same perimeter on *cchk-perim-layers*) ---
+  (setq pres  (cchk:pool-ents ss saved *cchk-pool-layer*)
+        pents (car pres))
+  (foreach lay *cchk-perim-layers*
+    (setq xres (cchk:pool-ents ss saved lay))
+    (if (car xres)
+      (setq borrow (append borrow (list (cons lay (car xres))))))
+    (if (> (cdr xres) 0)
+      (setq xskip (append xskip (list (cons lay (cdr xres)))))))
+  (setq lres  (if pents (cchk:pool-loop pents borrow))
         vts   (car lres)
+        bwd   (cadddr lres)
         narc  0
         nlin  0)
   (if (> (cdr pres) 0)
@@ -62912,6 +63132,22 @@
                   (list (strcat "Pool: " (itoa (cdr pres)) " item(s) on layer '"
                                 *cchk-pool-layer*
                                 "' SKIPPED - properties are not ByLayer")))))
+  ;; a borrowed layer's own non-ByLayer items are that layer's own
+  ;; business and are not worth a line - UNLESS the outline came up
+  ;; short, in which case one of them is the likeliest reason why
+  (if (or (null vts) (and lres (or (> (cadr lres) 0) (> (caddr lres) 0))))
+    (foreach sk xskip
+      (setq lines
+            (append lines
+                    (list (strcat "Pool: " (itoa (cdr sk)) " item(s) on layer '"
+                                  (car sk)
+                                  "' SKIPPED - properties are not ByLayer"))))))
+  (foreach b bwd
+    (setq lines
+          (append lines
+                  (list (strcat "Pool: outline runs " (itoa (cdr b))
+                                " segment(s) along layer '" (car b)
+                                "' - chained into the perimeter")))))
   (if (and lres (or (> (cadr lres) 0) (> (caddr lres) 0)))
     (setq lines (append lines (list
       (strcat "Pool: outline on layer '" *cchk-pool-layer* "' is AMBIGUOUS -"
@@ -62934,6 +63170,7 @@
                             (itoa nlin) " straight / " (itoa narc)
                             " arc segment(s), mostly "
                             (if arcy "arcs" "straights")
+                            (if bwd (strcat ", " (cchk:borrow-str bwd)) "")
                             (if (and lres (or (> (cadr lres) 0) (> (caddr lres) 0)))
                               " (AMBIGUOUS - see detail)"
                               "")))
@@ -62957,8 +63194,13 @@
                wantsp '(3 3)
                why    (strcat "over " (rtos *cchk-area-large* 2 0) " sq ft")))))
     (setq poolsum (strcat "NOTHING closed and ByLayer found on layer '"
-                          *cchk-pool-layer*
-                          "' - area not measured (check for gaps)")))
+                          *cchk-pool-layer* "'"
+                          (if borrow
+                            (strcat " (layer "
+                                    (cchk:lay-list-str (mapcar 'car borrow))
+                                    " read in too)")
+                            "")
+                          " - area not measured (check for gaps)")))
 
   ;; --- Cover Details: Overlap & Spacing vs what the pool needs -----
   (setq det (car (vl-remove-if-not
@@ -63882,6 +64124,14 @@
   (princ "\n  exploded into lines/arcs) is chained into the pool's outline; its")
   (princ "\n  area (sq ft) and straight/arc segment mix are reported. An")
   (princ "\n  outline with gaps or extra closed loops is flagged AMBIGUOUS.")
+  (if *cchk-perim-layers*
+    (progn
+      (princ (strcat "\n  A stretch of the SAME perimeter drawn on layer "
+                     (cchk:lay-list-str *cchk-perim-layers*)))
+      (princ "\n  (tune *cchk-perim-layers*) is chained in with it, so an outline")
+      (princ "\n  that hands over midway still closes; a branch off such a run,")
+      (princ "\n  and anything else on those layers, is left out of the outline")
+      (princ "\n  and is never counted as a gap in it.")))
   (princ (strcat "\n\nCOVER DETAILS - the '" *cchk-details-block*
                  "' block's OVERLAP"))
   (princ "\n  (12\"/15\"/18\") and SPACING (NxN) values are checked against what")
@@ -112081,7 +112331,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.19")
+(setq *lazform-version* "v2.20")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -113414,10 +113664,21 @@
           "Complex answer the gate and ask their 14 or 18 diagonals at "
           "the command line."))
 
+;; And the Roman earns one for the opposite reason: its right-hand
+;; boxes decide a QUESTION rather than answering four letters, and
+;; nothing about a blank box says so on its own.  Empty means the two
+;; ends match and POOL never asks about the right one; filled means
+;; they do not, and then all four are wanted.
+(setq lzf:*romhint*
+  (strcat "Both ends: leave the four RIGHT-end boxes empty and the "
+          "pool is drawn with two identical ends; fill any one in and "
+          "all four are read."))
+
 (setq lzf:*hints*
   (list (cons "Grecian" lzf:*grechint*)
         (cons "GRSquare" lzf:*grechint*)
-        (cons "OCtagon" lzf:*grechint*)))
+        (cons "OCtagon" lzf:*grechint*)
+        (cons "ROman" lzf:*romhint*)))
 
 (defun lzf:hint (c) (cdr (assoc (car c) lzf:*hints*)))
 
@@ -114131,14 +114392,51 @@
             "c" "d" "c2" "ttc")
           lzf:*sportchain*))
 
-;; PERFECT ENDS.  In square, POOL does not ask whether a Roman's two
-;; ends are identical -- it takes them as identical and asks one end's
-;; letters only, using the left-hand answer for both.  So the sheet's
-;; right-hand halves are dead there, exactly as a Normal hopper's C is:
-;; POOL will never ask, so a number typed into one would be read by
-;; nothing.  Out of square the sheet prints both ends and answers the
-;; question itself -- see lzf:poolform.
-(setq lzf:*perfectdead* '(("ROman" "sr" "s1r" "vr" "r2")))
+;; PERFECT ENDS.  POOL asks whether a Roman's two ends are identical
+;; -- in square and out -- and takes one end's letters for both when
+;; they are.  This sheet PRINTS both ends, so it answers that question
+;; off its own boxes rather than putting it to the drafter twice: the
+;; four RIGHT-end keys below are what it reads.  Nothing typed into
+;; any of them means the ends are the same end twice, which is what
+;; the sheet has shown all along; a number in one means they are not,
+;; and left on Yes that number would be read by nothing.
+;; See lzf:endsblank, lzf:perfect and lzf:poolform.
+(setq lzf:*bothends* '(("ROman" "sr" "s1r" "vr" "r2")))
+
+;; Has anything been typed into the right-hand half?  ONE predicate,
+;; because three things have to agree about it: the answer that
+;; travels (lzf:perfect), what the page still owes (lzf:togo) and what
+;; Insert marks in red.  Read off what is TYPED and not off
+;; cal:formanswer, so a typo in one of those boxes still means the drafter
+;; is using them -- it is lzf:unreadable's to complain about, and a
+;; sheet cannot be told its ends match because it holds a typo.
+(defun lzf:endsblank (c / out k)
+  (setq out t)
+  (foreach k (cdr (assoc (car c) lzf:*bothends*))
+    (if (/= (cal:trim (lzf:get k)) "") (setq out nil)))
+  out)
+
+;; "Yes" / "No" for that question, or nil on a chart that does not
+;; carry it.
+(defun lzf:perfect (c)
+  (if (assoc (car c) lzf:*bothends*)
+      (if (lzf:endsblank c) "Yes" "No")))
+
+;; A RIGHT-HAND HALF NOBODY TOUCHED IS ITSELF AN ANSWER, so those four
+;; boxes are not owed while they are all empty: POOL is being told the
+;; ends match and will ask the left column only.  Fill any ONE of them
+;; in and the other three are owed like every other live box -- POOL
+;; asks all four once the ends are not perfect, and a box left blank
+;; there is a question that drops back to the command line, which is
+;; what Insert exists to prevent.
+;;
+;; Not a greying rule, deliberately.  Dead means POOL will never read
+;; this, so the box is greyed and nothing can be typed into it -- and
+;; here typing into it is exactly how the drafter says the ends
+;; differ.  A question you cannot answer is not a question.
+(defun lzf:endsfree ( / c)
+  (setq c lzf:*chart*)
+  (if (lzf:endsblank c) (cdr (assoc (car c) lzf:*bothends*))))
 
 ;; ONE MEASUREMENT, TWO QUESTIONS.  A Roman's straight side is asked
 ;; twice on one run: rm:letters asks it as the perimeter letter T, and
@@ -114166,9 +114464,6 @@
   ;; asked -- and nothing behind it is offered
   (if lzf:*cover*
       (setq out (append out lzf:*bottomkeys*)))
-  ;; in square, both of a Roman's ends are the left-hand one
-  (if insq
-      (setq out (append out (cdr (assoc (car c) lzf:*perfectdead*)))))
   ;; in square there are no cross dims to measure, no mode to measure
   ;; them from, and no second overall
   (if insq
@@ -114336,15 +114631,16 @@
 ;; lzf:unreadable, which is a different thing to say and says it
 ;; louder -- so the two lists and what lzf:form sends still partition
 ;; the live boxes three ways with nothing in two of them.
-(defun lzf:togo ( / c out k v a)
-  (setq c lzf:*chart*)
+(defun lzf:togo ( / c out k v a free)
+  (setq c lzf:*chart* free (lzf:endsfree))
   (foreach k (lzf:livekeys c)
     (setq v (cal:trim (lzf:get k))
           a (cal:formanswer v))
-    (if (or (= v "")
-            (and (member k lzf:*numonly*)
-                 (not (eq a 'SKIP))
-                 (not (numberp a))))
+    (if (and (not (member k free))
+             (or (= v "")
+                 (and (member k lzf:*numonly*)
+                      (not (eq a 'SKIP))
+                      (not (numberp a)))))
         (setq out (cons k out))))
   (reverse out))
 
@@ -114636,16 +114932,16 @@
              (not (member (car d)
                           (lzf:pooldead lzf:*chart* insq btype))))
         (setq out (cons (cons (read (car d)) a) out))))
-  ;; PERFECT ENDS, out of square.  POOL asks whether a Roman's two ends
-  ;; are identical, and answers the whole right-hand half of the sheet
-  ;; with the left-hand one if they are.  This sheet PRINTS both halves
-  ;; and asks for both, so it answers that question itself -- left on
-  ;; the prompt, the right-hand boxes it has just made the drafter fill
-  ;; in would be read by nothing.  In square POOL does not ask at all:
-  ;; it takes the ends as perfect, which is why lzf:*perfectdead* greys
-  ;; the right-hand boxes there.
-  (if (and (not insq) (assoc (car lzf:*chart*) lzf:*perfectdead*))
-      (setq out (cons (cons 'perfect "No") out)))
+  ;; PERFECT ENDS.  POOL asks whether a Roman's two ends are identical
+  ;; and answers the whole right-hand half of the sheet with the
+  ;; left-hand one when they are.  This sheet prints both halves, so it
+  ;; reads them and answers for itself: a right-hand half left blank is
+  ;; the drafter saying the ends are the same end twice, and one with a
+  ;; number in it would be read by nothing if the prompt were left on
+  ;; Yes.  Squareness has nothing to do with it -- that question is
+  ;; about the body.
+  (if (setq v (lzf:perfect lzf:*chart*))
+      (setq out (cons (cons 'perfect v) out)))
   ;; the gates last, so a chart cannot be talked out of the path its
   ;; own letters live on
   (foreach k (lzf:gates lzf:*chart*)
@@ -118743,7 +119039,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.17 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.19 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

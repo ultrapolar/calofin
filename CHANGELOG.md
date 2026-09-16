@@ -6,6 +6,134 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.19 -- 2026-09-16
+
+**A Roman's two ends are the drafter's call, in square as well as
+out.**  POOL 091626 REV31, LAZFORM v2.20.
+
+A Roman is a rectangle body with an arc bulging past each end line,
+and POOL has always asked one question about whether those two ends
+match -- but only on an out-of-square pool.  In square it did not ask:
+it took the ends as identical, asked one `S` / `S1` / `V` / `R` set
+and drew it at both ends.
+
+That is the wrong question to hang it on.  Squareness is about the
+BODY -- whether the rectangle between the two end lines tapes true --
+and it says nothing about the ends.  A pool whose body comes back
+dead square can still carry a 9" bulge at one end and a 14" at the
+other, which is an ordinary thing for a field pool to be: one end
+gets a step, or was poured against a wall, or was simply built a
+little differently.  A drafter with that pool in front of them had no
+way to say so.  Their choices were to call a square pool out of
+square -- which turns on the cross-dim tapes, the best-fit and the
+target/actual/delta report they did not want -- or to draw the pool
+wrong and fix the ends by hand afterwards.
+
+`Are both ends perfect (identical)` is now asked on every Roman.
+**Yes** is the sheet exactly as it has always read: one set of
+letters, taken as both ends -- nothing on that path changes but the
+one keyword answering it.
+**No** asks each end its own `S`, `S1`, `V` and `R1`/`R2`, and the
+pool is drawn, dimensioned and reported end by end.
+
+The one thing the in-square sheet could not already carry is the
+second end's letters.  Its `S1 + V + S1` column stands beside the
+LEFT end and speaks for both ends -- which it can do only while they
+are both the same end; once each end has its own numbers, the right
+end's are numbers nobody could read off that column.  So ends
+answered not-perfect get a second column outboard of the right end,
+and the in-square exterior goes from 8 linear dims to 11.  The report
+table already read end by end (`S LEFT` / `S RIGHT`, `V LEFT` / `V
+RIGHT`, `R1` / `R2`) and needed nothing.  A perfect pool is
+untouched: dimensioning its right end would only say the same thing
+twice.
+
+LAZFORM's Roman sheet prints both ends and always has.  It answered
+the question for the drafter out of square (always `No`, because the
+sheet had made them fill both halves in) and greyed the right-hand
+half in square, where POOL would never read it.  Now it reads those
+four boxes instead and answers from them, either squareness: nothing
+typed on the right means the same end twice and the question goes out
+`Yes`; a number in any one of them means it does not, and it goes out
+`No`.  So the sheet no longer forces the answer on the drafter out of
+square either -- leaving the right-hand half blank there now mirrors
+the left end instead of sending POOL back to the command line for
+four letters the sheet was never given.
+
+Which makes those four boxes the one place on any sheet where BLANK
+is an answer, so Insert had to learn it: while all four are empty
+none of them is owed, nothing is struck red and the sheet is
+finished.  Fill any one in and the other three are owed like every
+other live box -- POOL asks all four once the ends are not perfect,
+and a blank one there is a question dropping back to the command
+line, which is what Insert exists to prevent.  They are never
+greyed, which is why this is not the ordinary dead-key rule: greying
+would make it impossible to type into the boxes that are the way to
+say the ends differ.  The page carries a hint line under the form
+saying what empty means, the way the Grecians' says where their
+cross dims are typed.
+
+## v3.18 -- 2026-09-16
+
+**The pool perimeter may hand over to the CABLE layer.**  COVERCHECK
+v1.20.
+
+A perimeter does not always stay on one layer.  Where the cable run
+carries a stretch of it, the drafter draws that stretch on `CABLE` --
+and COVERCHECK read `POOL` and nothing else.  So the outline came back
+with a gap in it: no area, nothing for the Cover Details block's
+Overlap and Spacing to be graded against, and no pads suggested, on a
+drawing whose perimeter is closed and always was.  The report said
+AMBIGUOUS and named an open chain, which is true of the pool layer and
+not of the pool.
+
+`*cchk-perim-layers*` (`'("CABLE")`) names the layers that may carry a
+stretch of the SAME closed perimeter.  Their ByLayer geometry is
+chained in alongside the pool layer's, so the outline closes and is
+measured, and the pads and the grading read the whole of it.  The
+report says what it borrowed -- `outline runs 2 segment(s) along layer
+'CABLE' - chained into the perimeter` -- and the summary line carries
+the same count beside the straight/arc split.  Emptying the knob reads
+the pool layer alone, exactly as before.
+
+Only what joins the loop is used, and that takes two rules.  Pool
+segments go into the walk FIRST, so where both layers leave a point
+the walk stays on the pool layer: a borrowed layer can only ever fill
+a gap.  And borrowed geometry hanging by a loose end is CUT before the
+walk -- the branch off to an anchor, the tail of a run carrying on
+past the corner, a run that never touches the pool at all -- because
+what the outline borrows is joined at both ends, which is what makes
+it a stretch rather than a branch.  Without the cut, a branch leaving
+an outline vertex is followed out of it and the loop never closes
+behind it; which of the two the walk met first was decided by the
+order they were drawn in.  A chain with no pool segment in it is that
+layer's own business: neither the outline nor a gap in it, so it is
+counted as neither.  Pool segments are never cut -- one hanging loose
+is the gap the drafter is being told about.
+
+The cut walks INWARD from each loose end rather than sweeping the
+segment list once per segment: cutting one frees the end it held, and
+that end is where the next cut starts, so a cable run several hundred
+segments long costs one walk down it.  A 200-segment run went from 67
+seconds to 4 in the VM, against 2 for the same geometry drawn on
+`POOL` and not borrowed at all -- in line with the chaining the tool
+has always done rather than a new kind of cost.  With nothing borrowed
+the walk is the one it always was, and costs what it always did.
+
+A borrowed layer is read for ByLayer properties like the pool layer
+is, but its skipped items only get a line when the outline came up
+short: otherwise a cable layer full of explicitly-coloured geometry
+would fill the report with red SKIPPED lines about a layer that is not
+the pool's business.
+
+`cchk:pv-chain` hands back its chains as segments now rather than
+vertex lists, which is what lets the caller tell the two layers apart
+after the walk has mixed them.  `tests/test_covercheck.py` drives the
+L-pool exploded with one side on `CABLE`, drawn back-to-front so the
+walk has to turn it round, a two-segment branch drawn BEFORE it so
+entity order is not what decides whether the outline closes, and a
+cable loop of its own parked elsewhere.
+
 ## v3.17 -- 2026-09-16
 
 **The palette grew the tab it was missing: the pool SIDE VIEW.**

@@ -2590,9 +2590,11 @@ print("   %d live boxes become %d: the perimeter stays, the floor goes"
 
 
 print("== the Roman asks each end once, or twice, and never half ==")
-# In square POOL takes the two ends as identical and asks one end's
-# letters; out of square it asks whether they are, and the sheet -- which
-# PRINTS both ends -- answers that itself.
+# POOL asks whether the two ends are identical on EVERY Roman, in square
+# and out -- squareness is a question about the body.  The sheet prints
+# both ends either way, so it answers that question itself, off the
+# right-hand boxes: blank means the same end twice, a number in one of
+# them means it is not.
 rm = fresh(with_pool=True)
 rm.loads('(setq lzf:*chart* (lzf:chart "ROman") lzf:*btype* 0'
          ' lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil)')
@@ -2601,19 +2603,56 @@ rm.loads('(setq lzf:*insq* T) (setq t:*i* (lzf:livekeys lzf:*chart*))'
 RI = [str(x) for x in rm.globals['t:*i*']]
 RO = [str(x) for x in rm.globals['t:*o*']]
 for half in ('sr', 's1r', 'vr', 'r2'):
-    assert half not in RI, \
-        "%s is the right end, which an in-square Roman never asks for" % half
+    assert half in RI, "%s must be live in square too" % half
     assert half in RO, "%s must be live out of square" % half
-# and the answer to the question itself travels out of square only
+# a right-hand half nobody touched: the ends are the same end twice, and
+# the sheet says so rather than making POOL ask -- both squarenesses
+rm.loads('(foreach k (lzf:keys (lzf:chart "ROman"))'
+         ' (if (not (member k (list "sr" "s1r" "vr" "r2")))'
+         '     (lzf:put k "60")))')
+rm.loads('(setq t:*pi* (lzf:form "ROman" T "Normal"))'
+         '(setq t:*po* (lzf:form "ROman" nil "Normal"))')
+PI = dict(pair(p2) for p2 in rm.globals['t:*pi*'])
+PO = dict(pair(p2) for p2 in rm.globals['t:*po*'])
+assert str(PI.get('perfect')) == 'Yes' and str(PO.get('perfect')) == 'Yes', \
+    "a blank right-hand half is the drafter saying the ends match: %r %r" \
+    % (PI, PO)
+for half in ('sr', 's1r', 'vr', 'r2'):
+    assert half not in PI and half not in PO, \
+        "%s was never filled in, so nothing may be sent for it" % half
+# ...so those four are NOT owed while they are all empty: an answer the
+# sheet has already given is not a box Insert may hold the page for
+for sq in ('T', 'nil'):
+    rm.loads('(setq lzf:*insq* %s) (setq t:*tg* (lzf:togo))' % sq)
+    TG = [str(x) for x in (rm.globals['t:*tg*'] or [])]
+    assert TG == [], \
+        "a finished sheet still owes %r (insq=%s)" % (TG, sq)
+# and one number on the right-hand side is enough to say they differ --
+# left on Yes, the box just filled in would be read by nothing
+rm.loads('(lzf:put "r2" "70")')
+rm.loads('(setq t:*qi* (lzf:form "ROman" T "Normal"))'
+         '(setq t:*qo* (lzf:form "ROman" nil "Normal"))')
+QI = dict(pair(p2) for p2 in rm.globals['t:*qi*'])
+QO = dict(pair(p2) for p2 in rm.globals['t:*qo*'])
+assert str(QI.get('perfect')) == 'No' and str(QO.get('perfect')) == 'No', \
+    "one right-hand number means the ends are not perfect: %r %r" % (QI, QO)
+assert abs(float(QI['r2']) - 70.0) < 1e-9, QI
+# ...and now the other three ARE owed: POOL asks all four once the ends
+# are not perfect, and a blank one there is a question at the prompt
+for sq in ('T', 'nil'):
+    rm.loads('(setq lzf:*insq* %s) (setq t:*tg* (lzf:togo))' % sq)
+    TG = [str(x) for x in (rm.globals['t:*tg*'] or [])]
+    assert sorted(TG) == ['s1r', 'sr', 'vr'], \
+        "the rest of the right-hand half is owed now: %r (insq=%s)" % (TG, sq)
+rm.loads('(setq lzf:*insq* T)')
+# the rest of the page is unchanged by any of it
 rm.loads('(foreach k (lzf:keys (lzf:chart "ROman")) (lzf:put k "60"))')
 rm.loads('(setq t:*fi* (lzf:form "ROman" T "Normal"))'
          '(setq t:*fo* (lzf:form "ROman" nil "Normal"))')
 FI = dict(pair(p2) for p2 in rm.globals['t:*fi*'])
 FO = dict(pair(p2) for p2 in rm.globals['t:*fo*'])
-assert 'perfect' not in FI, \
-    "in square POOL does not ask the question, so nothing may answer it"
-assert str(FO.get('perfect')) == 'No', \
-    "out of square the sheet prints both ends and must say so: %r" % FO
+assert str(FI.get('perfect')) == 'No' and str(FO.get('perfect')) == 'No', \
+    "a sheet with both ends filled in must say they are both read: %r" % FI
 # ONE TAPE, TWO QUESTIONS: T is the perimeter letter and the hopper's
 # own check, and the box answers both
 assert 'tt' in FI and 'ttc' in FI, \
@@ -2626,7 +2665,8 @@ FW = dict(pair(p2) for p2 in rm.globals['t:*fw*'])
 assert 'tt' in FW and 'ttc' not in FW, \
     "the hopper check went out on a bottom whose hopper never asks it: %r" \
     % sorted(FW)
-print("   right-hand boxes dead in square, live out of it; T answers both")
+print("   both ends live either way; a blank right half IS the answer, and\n"
+      "   is not owed until one of its boxes is filled; T answers both")
 
 
 print("== a round pool: R3 is on the sheet now, and POOL takes it ==")

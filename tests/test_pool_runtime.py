@@ -423,7 +423,8 @@ print(f"   eight sides {min(_per):.2f}..{max(_per):.2f} "
 
 print("== R7. roman, in-square perfect, no bottom ==")
 vm = run(["Insquare", "RO"] + BASE +
-         [400.0, 260.0, "NA",      # B A T
+         ["Yes",                    # both ends perfect
+          400.0, 260.0, "NA",      # B A T
           45.0, 50.0, 160.0, "NA",  # S S1 V R(check NA)
           None,                     # anything to record? Enter = No
           "No"],
@@ -444,6 +445,52 @@ assert _ls.count(260.0) == 1, _ls      # A once
 assert not any(abs(c[1][1]) < 0.01 and abs(c[2][1]) < 0.01 for c in _dc), \
     "bottom side must not be dimensioned in-square"
 print("   roman ends drawn; sheet dims: S,S1 twice -- T,B,V,A once")
+
+print("== R7b. roman, in-square, ends NOT perfect ==")
+# squareness is a question about the BODY: a pool whose rectangle tapes
+# dead square can still carry a different bulge at each end.  Answering
+# No asks each end its own S / S1 / V / R and draws what was measured.
+vm = run(["Insquare", "RO"] + BASE +
+         ["No",                     # the ends are not the same end twice
+          400.0, 260.0, "NA",       # B A T
+          45.0, 35.0,               # S   left / right
+          50.0, 60.0,               # S1  left / right
+          160.0, 140.0,             # V   left / right
+          "NA", "NA",               # R1 / R2 (checks)
+          None,                     # anything to record? Enter = No
+          "No"],
+         "R7b")
+# the two ends really are different ends: S+T+S still closes B, and the
+# implied radii ((S^2 + (V/2)^2) / 2S) come out at 93.61 and 87.5
+_r = sorted(round(d[40], 2) for d in drawn(vm, 'ARC', 'POOL'))
+assert _r == [87.5, 93.61], _r
+# the sheet's single S1/V/S1 column speaks for both ends only while they
+# ARE both ends; here the right end gets a column of its own, so the
+# in-square 8 dims become 11
+_dc = dimcalls(vm)
+assert len(_dc) == 11, len(_dc)
+assert len(dimcalls(vm, '_.DIMRADIUS')) == 2
+_ls = sorted(round(_m.dist(c[1][:2], c[2][:2]), 1) for c in _dc)
+assert _ls == [35.0, 45.0, 50.0, 50.0, 60.0, 60.0,
+               140.0, 160.0, 260.0, 320.0, 400.0], _ls
+# and the right-hand column stands clear of the pool, on the far side of
+# it from the left one -- the two ends' letters must not share a column
+def _at(*lens):
+    return [dimloc(c)[0] for c in _dc
+            if round(_m.dist(c[1][:2], c[2][:2]), 1) in lens]
+_tipr = max(c[2][0] for c in _dc
+            if abs(_m.dist(c[1][:2], c[2][:2]) - 400.0) < 0.5)
+_left, _right = _at(50.0, 160.0), _at(60.0, 140.0)
+assert len(_left) == 3 and len(_right) == 3, (_left, _right)
+assert min(_right) > _tipr > max(_left), \
+    "the right end's letters did not land outboard of the right end: %r" \
+    % (_left, _tipr, _right)
+# the report reads end by end, as it always has
+assert reportrow(vm, "S LEFT")[1] == "45.00", reportrow(vm, "S LEFT")
+assert reportrow(vm, "S RIGHT")[1] == "35.00", reportrow(vm, "S RIGHT")
+assert reportrow(vm, "V LEFT")[1] == "160.00", reportrow(vm, "V LEFT")
+assert reportrow(vm, "V RIGHT")[1] == "140.00", reportrow(vm, "V RIGHT")
+print("   each end its own letters, its own column and its own arc")
 
 print("== R8. true L, out-of-square, diagonals NA, hopper E-skip, mirror No ==")
 vm = run(["Outofsquare", "L"] + BASE +
@@ -1690,7 +1737,8 @@ print("== R29. roman corner treatments ==")
 # spring from the treatment ends, so the pool shows 2 end arcs + 4
 # corner fillets
 vm = run(["Insquare", "RO"] + BASE +
-         [400.0, 260.0, "NA",
+         ["Yes",                    # both ends perfect
+          400.0, 260.0, "NA",
           45.0, 50.0, 160.0, "NA",
           "Yes",                    # corners modified
           "Radius", 12.0,          # all corners (assumed identical)
@@ -1855,7 +1903,7 @@ assert _marks(vm)[0] == [], _marks(vm)
 # a ROMAN body IS a rectangle, so its square corners are marked -- and on
 # the same corner (B) whether the pool is in square or out
 _ins = _marks(run(["Insquare", "RO"] + BASE +
-                  [400.0, 260.0, "NA", 45.0, 50.0, 160.0, "NA",
+                  ["Yes", 400.0, 260.0, "NA", 45.0, 50.0, 160.0, "NA",
                    "Yes", "Square", "No"], "R33c"))
 _oos = _marks(run(["Outofsquare", "RO"] + BASE +
                   ["Yes", 400.0, 260.0, "NA", 45.0, 50.0, 160.0, "NA",
@@ -1878,7 +1926,7 @@ print("== R34. no room for a cut still leaves NotGiven sayable ==")
 # "the sheet never said" is still a truthful answer -- the two SIZED
 # options are withheld, the question is still asked
 vm = run(["Insquare", "RO"] + BASE +
-         [400.0, 260.0, "NA", 45.0, 0.1, 259.8, "NA",
+         ["Yes", 400.0, 260.0, "NA", 45.0, 0.1, 259.8, "NA",
           "Yes", "NotGiven", "No"], "R34")
 _q = [p for p, a in vm.prompts if "be treated?" in p]
 assert len(_q) == 1 and "[Square/NotGiven/Back]" in _q[0], _q
@@ -1887,7 +1935,7 @@ assert [c[-2] for c in vm.commands if c and c[0] == '_.LEADER'] == ['? Typ.']
 assert hasrow(vm, "CORNER NotGiven")
 # and it can still be answered Square, as before
 vm = run(["Insquare", "RO"] + BASE +
-         [400.0, 260.0, "NA", 45.0, 0.1, 259.8, "NA",
+         ["Yes", 400.0, 260.0, "NA", 45.0, 0.1, 259.8, "NA",
           "Yes", "Square", "No"], "R34b")
 assert not hasrow(vm, "CORNER NotGiven")
 print("   the geometry limits the answer set, not what the sheet records")

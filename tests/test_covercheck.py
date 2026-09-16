@@ -222,10 +222,11 @@ install_curve_shims()
 # fixture builders and readers
 # ------------------------------------------------------------------
 
-def line(vm, p1, p2, layer='0'):
-    vm.loads('(entmakex (list (cons 0 "LINE") (cons 8 "%s")'
+def line(vm, p1, p2, layer='0', color=None):
+    vm.loads('(entmakex (list (cons 0 "LINE") (cons 8 "%s")%s'
              ' (list 10 %r %r 0.0) (list 11 %r %r 0.0)))'
-             % (layer, p1[0], p1[1], p2[0], p2[1]))
+             % (layer, '' if color is None else ' (cons 62 %d)' % color,
+                p1[0], p1[1], p2[0], p2[1]))
     return vm.entities[-1]
 
 
@@ -589,6 +590,113 @@ except LispError as e:
 print("   a point only one dim measures to is still questioned")
 
 
+# ------------------------------------------------------------------
+print("== the perimeter that hands over to the CABLE layer ==")
+
+# The same L-shaped pool, exploded into loose lines, with the side from
+# (240,120) to (120,120) drawn on CABLE instead of POOL - the everyday
+# case: the cable run carries that stretch of the perimeter.  It goes in
+# as two lines, the second drawn back-to-front, so the walk has to turn
+# one round and the turned one still has to say which layer it came off.
+# The cable layer also holds what is NOT perimeter: a two-segment branch
+# off the corner where the run starts, and a closed loop of its own
+# parked elsewhere.  Neither may reach the outline, and neither is a gap
+# in it.
+CABLE_RUN = ((240.0, 120.0), (120.0, 120.0))
+CABLE_MID = (180.0, 120.0)
+
+
+def build_split(vm, cable=True, bylayer=True, spur=True, own_loop=True):
+    ents = {}
+    # the VM refuses a LINE on a layer the drawing has not got
+    for lay in ('POOL', 'CABLE'):
+        vm.loads('(entmake (list \'(0 . "LAYER")'
+                 ' \'(100 . "AcDbSymbolTableRecord")'
+                 ' \'(100 . "AcDbLayerTableRecord") (cons 2 "%s")'
+                 ' \'(70 . 0) \'(62 . 7) \'(6 . "Continuous")))' % lay)
+    # the branch is drawn BEFORE the stretch that carries the perimeter,
+    # so the walk meets it first at the corner they share: entity order
+    # must not be what decides whether the outline closes
+    if spur:
+        ents['spur1'] = line(vm, (240.0, 120.0), (330.0, 180.0), 'CABLE')
+        ents['spur2'] = line(vm, (330.0, 180.0), (400.0, 240.0), 'CABLE')
+    if own_loop:
+        for i, (a, b) in enumerate([((600.0, 0.0), (700.0, 0.0)),
+                                    ((700.0, 0.0), (700.0, 100.0)),
+                                    ((700.0, 100.0), (600.0, 100.0)),
+                                    ((600.0, 100.0), (600.0, 0.0))]):
+            ents['own%d' % i] = line(vm, a, b, 'CABLE')
+    col = None if bylayer else 1
+    for i in range(len(POOL_PTS)):
+        a, b = POOL_PTS[i], POOL_PTS[(i + 1) % len(POOL_PTS)]
+        if cable and (a, b) == CABLE_RUN:
+            ents['run0'] = line(vm, a, CABLE_MID, 'CABLE', col)
+            ents['run1'] = line(vm, b, CABLE_MID, 'CABLE', col)  # back-to-front
+        else:
+            ents['seg%d' % i] = line(vm, a, b, 'POOL')
+    ents['details'] = block(vm, 'Cover Details', (400.0, 50.0),
+                            [('OVERLAP', "15''"), ('SPACING', '3x3')])
+    ents['title'] = block(vm, 'Tech Title', (400.0, 150.0),
+                          [('Date', today(vm))])
+    return ents
+
+
+def split_scan(setqs=None, **kw):
+    vm = VM()
+    vm.load(CHK)
+    if setqs:
+        vm.loads(setqs)
+    build_split(vm, **kw)
+    vm.run('c:COVERSCAN', [None, selectable(vm)])
+    return vm, '\n'.join(report_texts(vm))
+
+
+_vm, txt = split_scan()
+assert ("Pool: 300.0 sq ft - outline 7 straight / 0 arc segment(s), mostly"
+        " straights, 2 segment(s) off layer 'CABLE'") in txt, txt
+assert ("Pool: outline runs 2 segment(s) along layer 'CABLE'"
+        " - chained into the perimeter") in txt, txt
+assert 'AMBIGUOUS' not in txt, txt
+print("   the outline closes through CABLE: 300 sq ft, the borrow named")
+
+# the cable's own geometry is neither the outline nor a hole in it
+assert 'open chain' not in txt, txt
+assert 'other closed loop' not in txt, txt
+print("   the cable branch and the cable's own loop are left out of both")
+
+# the borrowed side carries the rules the same as a POOL one would: the
+# inside corner it ends on is still a pad spot, and the 300 sq ft it
+# helped close is still what Cover Details is graded against
+assert 'Pad SUGGESTED at (120.0000, 120.0000) (inside corner)' in txt, txt
+assert 'Cover Details: Overlap 15" - SUGGEST 12" (under 1200 sq ft)' in txt
+print("   the corner pad and the 12\"/5x5 grading come out unchanged")
+
+# the knob is the whole of it: empty, and the perimeter is 5 lines and a
+# hole, exactly as it read before the cable layer was ever looked at
+_vm, txt = split_scan("(setq *cchk-perim-layers* '())")
+assert "NOTHING closed and ByLayer found on layer 'POOL'" in txt, txt
+assert "Pool: outline on layer 'POOL' is AMBIGUOUS - 1 open chain(s)" in txt
+assert "layer 'CABLE'" not in txt, txt
+print("   *cchk-perim-layers* emptied: the gap is a gap again")
+
+# a borrowed layer is read for ByLayer properties like the pool layer
+# is - and its skipped items are only worth a line when the outline
+# came up short because of them
+_vm, txt = split_scan(bylayer=False)
+assert "Pool: 2 item(s) on layer 'CABLE' SKIPPED" in txt, txt
+assert "NOTHING closed and ByLayer found on layer 'POOL'" in txt, txt
+_vm, txt = split_scan()
+assert "on layer 'CABLE' SKIPPED" not in txt, txt
+print("   a cable stretch with explicit properties is skipped, and said so")
+
+# with the perimeter whole on POOL, a cable layer full of its own
+# geometry changes nothing at all
+_vm, txt = split_scan(cable=False)
+assert ("Pool: 300.0 sq ft - outline 6 straight / 0 arc segment(s),"
+        " mostly straights") in txt, txt
+assert "layer 'CABLE'" not in txt, txt
+assert 'AMBIGUOUS' not in txt, txt
+print("   nothing borrowed, nothing said: the report reads as it always did")
 
 
 # ------------------------------------------------------------------

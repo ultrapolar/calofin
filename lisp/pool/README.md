@@ -276,7 +276,9 @@ every edge:
   at **both** ends, per the sheet) with `B` outboard; `S1 + V + S1`
   share the left column (S1 shows at **both** corners) with `A`
   outboard; plus the two end-radius dims. The bottom side repeats `T`
-  and is not dimensioned.
+  and is not dimensioned. **Ends answered *not* perfect** get a
+  second `S1 + V + S1` column outboard of the right end — 11 — since
+  the left column is then the left end's numbers and nothing else.
 * **True Oval** — 3 linear dims: `T` above the top side, `B`
   (tip-to-tip) outboard above it, `A` outside the left arc; plus the
   two radius dims on the arcs. The bottom side and right chord repeat
@@ -556,13 +558,25 @@ Grecian sheet (`S+T+S = B` with **T absorbing**, `S1+V+S1 = A` with
 sheet with the dashed **tip-to-tip B centerline** through the middle,
 matching how B is taped.
 
-* **In-square** pools are **perfect**: one `S`/`S1`/`V` set and a
-  single radius `R` apply to both ends.
-* **Out-of-square** pools first ask **`Are both ends perfect?`** —
-  Yes keeps the single symmetric set; No asks each end's `S`, `S1`,
-  `V` and `R1`/`R2` separately. Body cross dims (A-C, B-D, NA-able,
-  drawn dashed) fit the out-of-squareness of the T×A body, and the
-  ends are built onto the fitted body.
+Every Roman is asked **`Are both ends perfect (identical)?`** first,
+in square and out. Squareness is a question about the **body** —
+whether the rectangle between the two end lines tapes true — and it
+says nothing about whether the two ends are the same end twice: a
+body that tapes dead square can still carry a 9" bulge at one end
+and a 14" at the other.
+
+* **Yes** — the sheet as it has always read: one `S`/`S1`/`V` set and
+  a single radius `R`, taken as both ends.
+* **No** — each end's `S`, `S1`, `V` and `R1`/`R2` asked separately,
+  and drawn, dimensioned and reported end by end. In square the right
+  end then gets a letter column of its own outboard of it (the
+  sheet's single `S1 + V + S1` column speaks for both ends only while
+  they *are* both ends), so the exterior goes from 8 linear dims to
+  11; out of square each end is already dimensioned on its own wall.
+
+**Out-of-square** pools then take body cross dims (A-C, B-D, NA-able,
+drawn dashed) which fit the out-of-squareness of the T×A body, and
+the ends are built onto the fitted body.
 
 An end whose radius is smaller than `V/2` can't reach its springs;
 it's drawn as a semicircle and flagged in the notes. The ends get
@@ -1055,7 +1069,7 @@ The keyword questions have named keys:
 | `crec` | the `Anything to record about the corners (radius / cut / not given)?` gate (`Yes`/`No`) — one key, whichever shape asks it |
 | `cmode` | `Radius/Cut corners -- cross dims measured from` (`Corner`/`Middle`/`Ends`) |
 | `mirror` | the L pools' `Mirror the pool (flips the wing; deep end stays left)` (`Yes`/`No`) |
-| `perfect` | the Roman's out-of-square `Are both ends perfect (identical)` (`Yes`/`No`) |
+| `perfect` | the Roman's `Are both ends perfect (identical)` (`Yes`/`No`) — asked in square and out |
 | `dstyle`, `sstyle` | the mutt's `DEEP end (left)` / `SHALLOW end (right)` styles (`Square`/`Grecian`/`ROman`/`Oval`) |
 | `btype` | `Bottom type` |
 | `htype` | Grecian `Hopper type` (`Square`/`SIX-sided`) |
