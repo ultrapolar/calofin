@@ -125,10 +125,13 @@ NOT_A_TOOL = "standards_checker"
 #: CALSET shows the settings calofin keeps in the AutoCAD profile:
 #: both are the panel's machinery wearing a command name, and a button
 #: that told you what buttons do would be a joke at the drafter's
-#: expense.
+#: expense. LAZBACKUP exports and imports LAZNAME's names and CALSET's
+#: settings as one text file -- for a new machine or a rebuilt profile,
+#: neither of which a panel button reaches either.
 NAMED_SATELLITES = frozenset({
     "DCE", "STOCKLIST", "LAZPANEL", "LAZBUTTON", "LAZICON", "LAZPIN",
     "LAZHIDE", "LAZSET", "LAZNAME", "LAZASCII", "CALHELP", "CALSET",
+    "LAZBACKUP",
 })
 
 
