@@ -232,6 +232,15 @@ class VM:
             # now reads as nil, exactly as AutoCAD answers an unknown one.
             'PDMODE': 0, 'VIEWSIZE': 100.0, 'PLINETYPE': 2, 'PICKFIRST': 1,
             'PICKBOX': 3,
+            # The angle three, which SQUAREUP zeroes round its ROTATE:
+            # decimal degrees, zero east, counterclockwise.  They belong
+            # here for the reason the paragraph above gives -- the tree
+            # writes them, so a run that puts them back has to have
+            # something to put back.  Left unseeded, getvar answered nil
+            # and a save that SKIPS a nil (the library's) left them
+            # written while a save that keeps one restored nil over the
+            # value: two tiers, two answers, from one file.
+            'AUNITS': 0, 'ANGBASE': 0.0, 'ANGDIR': 0,
             'CANNOSCALEVALUE': 1.0, 'DIMSCALE': 1.0, 'FILEDIA': 1,
             'DIMTXT': 0.18, 'TEMPPREFIX': 'C:\\Temp\\',
             'CECOLOR': 'BYLAYER', 'CELTYPE': 'BYLAYER', 'CELWEIGHT': -1,

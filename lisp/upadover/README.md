@@ -84,46 +84,72 @@ UPADOVER: 8 36" pad(s) on layer "PADS", covering the whole 20'-0" of it, end to 
 ```
 
 It is the same cover as a two-point run, laid by the same walk: the
-grid is anchored on the curve's own start point, and the far end is
+first pad is centred on the curve's own start point, and the far end is
 carried past in the usual way.
 
 ## How the pads are laid
 
-Every pad sits on **one grid** of pad-sized cells, anchored on the
-first pad -- which is centred on the start. That one fact is what the
-promise rests on: two cells of a grid either share a full edge or stand
-clear of each other, so pads laid this way can no more overlap than
-floor tiles can.
+A pad goes down wherever the run comes out from under the pads already
+there, and it goes down **one pad across** from the pad it came out of,
+along the axis it came out through. Two pads offset by exactly their own
+width on one axis meet on that line and cannot lie over each other
+whatever the other axis does -- so the other axis is left free, and
+**follows the wall**.
 
-The run is then walked end to end and **every cell it passes through
-gets a pad**. So the wall is inside a pad at every point of the run:
-the cover is not a row of pads centred on the wall with the corners
-hoped over, it is the cells the wall actually crosses. Where the run
-leaves one cell it is already inside the next, because the two share
-the edge it just crossed.
+That freedom is the whole of it. The first version laid the pads on a
+fixed grid, which is simple to prove and expensive to build: the pads
+stair-step whatever the wall is doing, and sit up to half a pad off it.
+On the drafter's own comparison drawing the same run came out as:
 
-The one place two cells meet at a point rather than along an edge is a
-grid **corner**, and a run at 45 degrees crosses one every pad. A cover
-that hung on that would be two pads touching at a corner with the wall
-threading the junction between them -- a break in everything but
-topology -- so the pad beside it goes in too and the pair share an edge
-like every other. The report counts them:
+| laid | pads |
+| --- | --- |
+| on a grid (v1.1) | 18 |
+| by hand, as wanted | 14 |
+| across the wall (v1.2) | **12** |
 
-```
-UPADOVER: 13 36" pad(s) on layer "PADS", covering 23'-7" of perimeter
-from Pt.17 to Pt.22.
-UPADOVER: 6 of them bridge a grid corner the run crosses, so the pads
-either side of it share an edge rather than a point.
-```
+and the first eight of the twelve land within an inch or two of where
+the hand-laid ones were put.
+
+How far one pad reaches is measured the same way it is laid: the run is
+followed from where it came out for as long as it stays inside the new
+pad's strip **and** the band it sweeps across that strip still fits
+inside one pad. The pad is then centred on that band -- held so it
+covers the point the run crossed the seam at, which is what keeps the
+seam closed, and so it shares at least `upad:*mincontact*` of an edge
+with its neighbour rather than touching at a corner. What it actually
+covers is then walked again rather than assumed, so a pad pulled off the
+middle of its band by those two holds cannot leave a tail behind it.
+
+A run at exactly 45 degrees is the shape that makes the last point
+matter: with no minimum contact the pads step corner to corner, which is
+a joint with no width and a break in everything but topology.
 
 The ends are **carried past, not stopped at**: the first pad is centred
 ON the start point, so the cover begins half a pad before it, and the
-pad the far end falls in runs past that end rather than stopping on it.
-Erring past the point is the safe direction.
+last pad runs past the far end rather than stopping on it. Erring past
+the point is the safe direction.
 
-Pads are square to the drawing, always. A rotated pad could not share
-an edge with the next one, and edges are what hold the cover together
--- which is why there is no `align` knob here, where `PADDLE` has one.
+Pads are square to the drawing, always. A rotated pad could not meet the
+next one along a straight edge, and those edges are what hold the cover
+together.
+
+## What it cannot pad, and says so
+
+One thing stops a cover, and it is reported rather than papered over: a
+run that comes back **within a pad's width of itself**. A slot narrower
+than a pad, or a whole loop closing back on its own first pad, has
+stretches where every pad that would cover them lies over one already
+down. Those are left bare, measured, and named:
+
+```
+UPADOVER: 2'-5" of the run is left bare - a pad there would lie over one
+already down, where the loop closes back on itself.
+```
+
+Everything else reports the other way round -- that the wall is under
+pads end to end. The run checks that for itself before it says it: the
+cover is walked against the run it was laid for rather than taken on
+trust.
 
 ## Install & run
 
@@ -145,11 +171,12 @@ At the top of the file, between the version banner and the first
 | Knob | Default | What changing it does |
 | --- | --- | --- |
 | `upad:*blkname*` | `"Pad36x36"` | The block inserted at every pad spot. `24inpad.dwg` ships `Pad36x36` and `Pad24x24`; switching it means switching `upad:*padsize*` with it |
-| `upad:*padsize*` | `36.0` | The edge of the pad, and so the pitch of the whole grid. A block that is not this size leaves gaps between pads or laps them |
+| `upad:*padsize*` | `36.0` | The edge of the pad, and so the step from one pad to the next. A block that is not this size leaves gaps between pads or laps them |
 | `upad:*blkfile*` | `"24inpad.dwg"` | The dwg the definitions are imported from when the drawing lacks them |
 | `upad:*layer*` | `"PADS"` | Where the pads land -- `PADDLE`'s layer, so a drawing padded by both has them in one place. Created when missing; thawed, unlocked and switched on when not |
 | `upad:*layercolor*` | `7` | The ACI that layer is CREATED with. An existing layer keeps its own |
 | `upad:*evenpct*` | `0.70` | How near the two ways round have to be before the shorter one stops being an answer and the question is put instead. `0.70` is "within 30% of each other"; raise it to be asked less often and guessed at more, `1.0` to be asked every time there is a choice |
+| `upad:*mincontact*` | `6.0` | How much of their shared edge two neighbouring pads must have in common. Every pad is laid exactly one pad across from the one the run came out of, so the two always meet on that line; this is how much of the line they must actually share. `0` lets them meet at a corner, which is what a run at exactly 45 degrees does if nothing stops it. `6` costs nothing on any shape tried; raising it holds neighbours closer together and buys the odd extra pad on a diagonal |
 | `upad:*samples*` | `48` | How finely the run is walked, in samples per pad width. It is the resolution the cover is worked out at: raising it can only ever find another cell the wall clips, at the price of a longer walk. Below about 8 a run could cross a corner of a cell between two samples and miss it |
 | `upad:*snap*` | `12.0` | How close a CLICK has to land to a survey point to pick it rather than the place it landed. A typed number never uses it -- a name is exact. `12.0` is what `PERPMARK`, `BPCALLOUT` and `ABFIND` snap at |
 | `upad:*onwall*` | `0.25` | How far off the perimeter a pick may sit before the run says where it landed. A quarter inch is drafting noise; more than that is worth a line, because a pick projected across the pool is how the wrong stretch gets padded quietly |
@@ -164,24 +191,27 @@ At the top of the file, between the version banner and the first
 
 - **The cover is worked out at a resolution, not symbolically.** The
   run is sampled every `upad:*padsize*` / `upad:*samples*` -- three
-  quarters of an inch on a 36" pad -- and every cell a sample lands in
-  is padded. A wall that ducks into a cell and back out again inside
-  one sample step is the one thing this could miss; on a pool wall that
-  means a feature under an inch across, which is a drafting artefact
-  rather than geometry. Raise `upad:*samples*` if you have one.
+  quarters of an inch on a 36" pad -- and the walk works off those
+  samples. The seam between two pads is the exception: where the run
+  crosses from one to the next is worked out between the samples either
+  side of it, because a seam is where a fraction of an inch of wall
+  would otherwise slip out. A feature narrower than a sample step is
+  the one thing the walk could still step over; raise
+  `upad:*samples*` if you have one.
 - **One curve, not a chained outline.** The perimeter is the entity you
   click. `PADDLE` chains loose lines and arcs into a loop because it
   scans a whole drawing; here the wall is the thing you pointed at, and
   a perimeter that is still in pieces should be joined (`PEDIT`, or
   `LINGUTTER`, which draws one) before it is padded stretch by stretch.
-- **The pads are not centred on the wall.** They are the cells the wall
-  crosses, which is what lets them interlock; only the first one is
-  centred on anything in particular. A row of pads each centred on the
-  perimeter is `PADDLE`'s shape, and it is the right one for features.
-- **More pads than a hand-drawn run would use, sometimes.** A wall at
-  45 degrees takes a bridging pad per grid corner, and that is the
-  price of a cover with no corner junctions in it. The report says how
-  many, so the count is never a surprise.
+- **The pads follow the wall but are not centred on it.** Each one is
+  centred on the band of wall it covers, which on a curve or round a
+  corner leaves it a few inches off. A row of pads each centred exactly
+  on the perimeter is `PADDLE`'s shape, and it is the right one for
+  padding features rather than covering a run.
+- **A run that comes back within a pad's width of itself cannot be
+  covered whole.** A slot narrower than 36" and the closing seam of a
+  whole loop both hit it. The run says how much it left, in feet and
+  inches; nothing is quietly doubled up or quietly missed.
 - Everything one run inserts is a single undo step. Esc at any prompt
   closes the undo group and puts `CMDECHO` back; `OSMODE` is never
   touched, so the drafter's snaps are exactly as they left them.
