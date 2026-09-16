@@ -1472,7 +1472,7 @@ try:
     vm2.run('c:POOL',
             ["Outofsquare", "Rectangle", (0.0, 0.0, 0.0),
              240.0, 240.0, 120.0, 120.0] + CORNERS + CROSS +
-            ["Yes", "Wedge", 30.0, 180.0] + REST + [40.0, 60.0])
+            ["Yes", "Wedge", 30.0, 180.0] + REST + [40.0, 60.0, "No"])
 except LispError as e:
     raise AssertionError("prompt run: %s" % e) from None
 b = snapshot(vm2)
@@ -1871,7 +1871,7 @@ go2.run('c:POOL',
          "Simple", 300.0, 300.0, "Yes",
          # A B RB RT C D LT LB -- body 12, tips 8, the order POOL asks
          "Cut", 12.0, "Cut", 12.0, "Cut", 8.0, "Cut", 8.0,
-         "Cut", 12.0, "Cut", 12.0, "Cut", 8.0, "Cut", 8.0, "No"])
+         "Cut", 12.0, "Cut", 12.0, "Cut", 8.0, "Cut", 8.0, "No", "No"])
 gd = snapshot(go2)
 assert gc == gd, (
     "the fanned-out grecian sheet drew a different pool: %d entities from "

@@ -201,7 +201,8 @@ vm = run(["Outofsquare", "Rectangle"] + BASE +
           "Yes", "Wedge",
           30.0, 180.0,                        # H, F (G and E pinned)
           None, 60.0, None,                   # M sugg=H(30): enter; L; K sugg
-          40.0, 60.0],                        # C, D depths
+          40.0, 60.0,                          # C, D depths
+          "No"],                               # mark Given? no
          "R2")
 assert drawn(vm, 'DIMENSION') or True         # dims go through (command)
 assert any(c and c[0] in ('_.DIMALIGNED', '_.DIMLINEAR')
@@ -221,7 +222,8 @@ vm = run(["Outofsquare", "Rectangle"] + BASE +
           "Back",                                 # out of cross -> cmode
           "Corner",                               # re-pick the mode
           262.0, "Back", 261.0, 262.0,            # fix a cross dim
-          "No"],                                  # no bottom
+          "No",                                   # no bottom
+          "No"],                                  # mark Given? no
          "R3")
 print("   Back walks questions, blocks, and stages without derailing")
 
@@ -520,7 +522,7 @@ vm = run(["Insquare", "LA"] + BASE +
          [354.0, 162.0, 216.0, 102.0, 294.0, 216.0,
           "No",                   # corners not modified
           "No"] +                 # no hopper detail
-         ["No"],                  # mirror
+         ["No", "No"],                  # mirror
          "R9b")
 segs = [(d[10][:2], d[11][:2]) for d in drawn(vm, 'LINE', 'POOL')]
 for pa, pb in [((0.0, 0.0), (354.0, 0.0)),          # A-B
