@@ -92346,9 +92346,13 @@
 ;;;       are solid.  (At most sf:*maxshown* previews; when more fit,
 ;;;       the routine says how many it left out rather than silently
 ;;;       stopping.)
-;;;    3. Click the arc you want.  The previews go, the corner is
-;;;       filleted for real at that radius, and the arc gets its radius
-;;;       dimension -- the number the shop needs, not just the shape.
+;;;    3. Click the one you want -- the ARC, or the R6 lettered beside
+;;;       it.  Both are that size: an arc is a hairline and the label
+;;;       is much the bigger target of the two, so a click that lands
+;;;       on the letters is an answer rather than a fan thrown away.
+;;;       The previews go, the corner is filleted for real at that
+;;;       radius, and the arc gets its radius dimension -- the number
+;;;       the shop needs, not just the shape.
 ;;;    4. It then offers the SAME radius for the rest of the corners:
 ;;;       two lines per corner until Done.  As soon as one repeat is
 ;;;       cut, the single dimension becomes "R12 Typ.", which is how the
@@ -92361,6 +92365,18 @@
 ;;;  shade.  The labels climb a rung further off the leg with each
 ;;;  preview, because consecutive tangent points sit one step apart
 ;;;  along a leg and that is not room for two labels side by side.
+;;;
+;;;  Two lines that stop short of where they MEET are the case the fan
+;;;  cannot speak for itself.  FILLET extends them to the corner, so
+;;;  every arc is drawn round a point that is on neither line -- and
+;;;  when the lines are yards from it, what lands on screen is a fan of
+;;;  green arcs floating in space with nothing to say which two lines
+;;;  they belong to.  So each leg that falls short gets a DASHED run
+;;;  from its own end out to that corner: the line FILLET is going to
+;;;  make, drawn before it exists.  It is a preview like the arcs --
+;;;  same layer, erased with them, never left behind -- and a leg that
+;;;  misses by less than sf:*gapmin* gets none, because a run shorter
+;;;  than one dash is a tick on the end of a line and reads as work.
 ;;;
 ;;;  HONEFILLET is the spinoff for the sizes BETWEEN these: same corner,
 ;;;  same picks, but it asks for two neighbouring previews and redraws
@@ -92387,6 +92403,9 @@
 ;;;    sf:*trans*      how transparent a preview is, per cent
 ;;;    sf:*ltype*      the extras' linetype, created if missing
 ;;;    sf:*ltscale*    per-arc linetype scale, nil = the drawing's
+;;;    sf:*guide*      T to run a dashed line out to a corner the
+;;;                    picked lines stop short of
+;;;    sf:*gapmin*     how far short one has to stop before it does
 ;;;    sf:*label*      T to letter each preview R6, R12 ...
 ;;;    sf:*txthgt*     height of those labels
 ;;;    sf:*rung*       how far each label climbs past the one before,
@@ -92413,6 +92432,14 @@
 ;;;    * The preview arcs are real entities on their own layer, erased
 ;;;      on the way out -- on a clean finish, on Esc, and on an error.
 ;;;      The empty layer is left behind; deleting it is a PURGE away.
+;;;      The dashed guides out to a far-off corner are previews too and
+;;;      go the same way; the run says so out loud when it draws them,
+;;;      because two new lines in a drawing are work until somebody is
+;;;      told otherwise.
+;;;    * A preview's LABEL is the same answer as its arc.  Both are on
+;;;      the list a click is looked up in, so R6 and the arc it letters
+;;;      pick the same corner; a guide line is on neither list and a
+;;;      click on one is a miss.
 ;;;    * The shades are true colours (DXF 420) and the transparency is
 ;;;      DXF 440, both per entity.  A viewport with transparency display
 ;;;      switched off (TRANSPARENCYDISPLAY 0) draws them solid, which
@@ -92435,7 +92462,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.5")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.6")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -92485,6 +92512,23 @@
                              ; quarter-scale pattern puts real gaps in
                              ; even the smallest preview.  nil = leave
                              ; the arcs at the drawing's own LTSCALE
+;; Two lines that stop short of where they MEET put the whole fan out
+;; in space: FILLET extends them to a corner that is on neither line, so
+;; the arcs are drawn round a point yards from anything the drafter can
+;; see.  A dashed run from each leg's own end out to that corner is what
+;; ties the fan back to the two lines it belongs to.
+(setq sf:*guide*      t)     ; nil = never draw one, and a far-off
+                             ; corner is a fan of green arcs floating
+                             ; in space again
+(setq sf:*gapmin*     4.5)   ; how far short of the corner a line has to
+                             ; stop before it gets one.  The stock
+                             ; DASHED pattern is 18 units and
+                             ; sf:*ltscale* takes a quarter of it, so a
+                             ; run shorter than 4.5 comes out as one
+                             ; unbroken tick on the end of the line --
+                             ; which reads as drawn work, the one thing
+                             ; a guide must never do.  nil = a guide for
+                             ; any gap at all
 (setq sf:*label*      t)
 (setq sf:*txthgt*     4.0)   ; small enough that two labels a 6" step
                              ; apart clear each other side to side
@@ -92611,13 +92655,16 @@
 ;;; -------------------- the corner ----------------------------------
 
 ;; One leg of the corner: which way the line runs from the crossing
-;; point X on the side that was CLICKED -- the side FILLET keeps -- and
-;; how far it reaches that way.  Returns (unit-direction reach), or nil
-;; when the line has no length.  The pick decides the direction and the
-;; far endpoint decides the reach, so a line whose crossing point lies
-;; off its own end (the case FILLET handles by extending it) is
-;; measured the same way as one the corner sits inside.
-(defun sf:leg (en x pk / ends a b d s u av)
+;; point X on the side that was CLICKED -- the side FILLET keeps -- how
+;; far it reaches that way, and how far short of X it STARTS.  Returns
+;; (unit-direction reach gap), or nil when the line has no length.  The
+;; pick decides the direction and the far endpoint decides the reach,
+;; so a line whose crossing point lies off its own end (the case FILLET
+;; handles by extending it) is measured the same way as one the corner
+;; sits inside.  The GAP is what that case costs the drawing: the run
+;; from X back to the nearer end, which is line FILLET will make and
+;; nobody can see yet, and 0 for a line the corner already sits on.
+(defun sf:leg (en x pk / ends a b d s u av nv)
   (setq ends (sf:ends en)
         a    (car  ends)
         b    (cadr ends)
@@ -92633,17 +92680,23 @@
                   (cal:dot d (cal:v- a x))
                   (cal:dot d (cal:v- b x)))))
       (setq u  (if (< s 0.0) (cal:v* d -1.0) d)
-            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
-      (if (> av 1e-9) (list u av)))))
+            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x)))
+            nv (min (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
+      ;; a nearer end BEHIND X is a corner the line already covers, and
+      ;; there is no gap to draw over: the negative reach is not a
+      ;; distance, so it comes back as the 0 it means
+      (if (> av 1e-9) (list u av (max 0.0 nv))))))
 
 ;; Everything about the corner two picked lines make, worked out once:
-;;   (X u1 reach1 u2 reach2 half-angle)
+;;   (X u1 reach1 u2 reach2 half-angle gap1 gap2)
 ;; X is where the two lines cross (extended if they have to be, as
 ;; FILLET extends them), each u runs from X along the side that was
 ;; clicked, and half-angle is half the turn between them -- the one
-;; number the whole fillet is built from.  nil when there is no corner:
-;; parallel lines, the same line twice, or two legs so nearly straight
-;; through that no arc could join them.
+;; number the whole fillet is built from.  The two gaps say how far
+;; short of X each line stops, which is the ground the dashed guides
+;; are drawn over and 0 for a line X sits on.  nil when there is no
+;; corner: parallel lines, the same line twice, or two legs so nearly
+;; straight through that no arc could join them.
 (defun sf:corner (e1 pk1 e2 pk2 / a b x l1 l2 th)
   (setq a (sf:ends e1)
         b (sf:ends e2)
@@ -92658,7 +92711,42 @@
           (setq th (abs (cal:signed-dang (angle '(0.0 0.0) (car l1))
                                         (angle '(0.0 0.0) (car l2)))))
           (if (and (> th sf:*minang*) (< th (- pi sf:*minang*)))
-            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0))))))))
+            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0)
+                  (caddr l1) (caddr l2))))))))
+
+;; How far leg N (1 or 2) stops SHORT of the corner, when that is far
+;; enough to be worth a guide.  nil for a line the corner sits on, and
+;; nil for one that misses it by less than sf:*gapmin*, where the run
+;; out to it would be a tick on the end of a line rather than a line
+;; going somewhere.  sf:*guide* nil turns the whole thing off, and
+;; then every caller of this is a no-op rather than each of them
+;; testing the flag for itself.
+(defun sf:gapof (geo n / g)
+  (setq g (nth (if (= n 1) 6 7) geo))
+  (if (and sf:*guide* g (> g (if sf:*gapmin* sf:*gapmin* 0.0))) g))
+
+;; What those dashed runs ARE, in words, said once a run.  A straight
+;; dashed line lands on screen beside dashed ARCS that mean something
+;; else entirely, and a drafter who finds two new lines in the drawing
+;; has to be told they are a guide rather than work somebody's tool
+;; left behind.  nil when both lines reach their corner and none was
+;; drawn -- there is nothing to explain then, and the note would be
+;; one more line to scroll past.
+(defun sf:gapnote (geo / g1 g2)
+  (setq g1 (sf:gapof geo 1)
+        g2 (sf:gapof geo 2))
+  (cond
+    ((and g1 g2)
+     (strcat "\nNeither line reaches that corner -- they stop "
+             (sf:num g1) "\" and " (sf:num g2) "\" short of it."
+             "  The dashed STRAIGHT run out to it is a guide, not"
+             " drawn work; FILLET extends the legs when the corner is"
+             " cut."))
+    ((or g1 g2)
+     (strcat "\nOne line stops " (sf:num (if g1 g1 g2)) "\" short of"
+             " that corner.  The dashed STRAIGHT run out to it is a"
+             " guide, not drawn work; FILLET extends that leg when the"
+             " corner is cut."))))
 
 ;; how far back from the corner a fillet of radius R starts
 (defun sf:tanlen (half r) (/ r (cal:tan half)))
@@ -92719,8 +92807,11 @@
 
 ;;; -------------------- previews ------------------------------------
 
-;; Remember what was drawn: everything goes on the erase list, and an
-;; arc also goes on the list a click is looked up in.
+;; Remember what was drawn: everything goes on the erase list, and
+;; anything that STANDS FOR a radius -- the arc and the label beside it
+;; both -- also goes on the list a click is looked up in.  A guide line
+;; is marked with no radius: it is drawn with the fan and erased with
+;; it, but it is not one of the answers.
 (defun sf:mark (en r)
   (if en
     (progn
@@ -92728,8 +92819,9 @@
       (if r (setq sf:*picks* (cons (cons en r) sf:*picks*)))))
   en)
 
-;; the radius a preview arc stands for, nil for anything else in the
-;; drawing
+;; the radius a preview stands for -- its arc or its label, since
+;; either one is that size -- and nil for anything else in the drawing,
+;; a guide line of this tool's own included
 (defun sf:radof (en / p)
   (setq p (assoc en sf:*picks*))
   (if p (cdr p)))
@@ -92779,6 +92871,23 @@
                     (cons 50 a1) (cons 51 a2))))
   (if (entmake dxf) (entlast)))
 
+;; One guide line, dashed, and a preview in every other way: the same
+;; layer, the same fallback colour, the same transparency, erased with
+;; the rest.  No true colour of its own -- the light-to-dark grading is
+;; how the fan says WHICH radius, and a guide stands for none of them,
+;; so it reads as the layer's plain green.
+(defun sf:draw-line (p1 p2 / dxf)
+  (setq dxf (append
+              (list '(0 . "LINE") '(100 . "AcDbEntity")
+                    (cons 8 sf:*layer*) (cons 62 sf:*color*)
+                    (cons 6 (sf:ensure-ltype)))
+              (if sf:*ltscale* (list (cons 48 sf:*ltscale*)))
+              (sf:colgroups nil)             ; entity section, as above
+              (list '(100 . "AcDbLine")
+                    (list 10 (car p1) (cadr p1) 0.0)
+                    (list 11 (car p2) (cadr p2) 0.0))))
+  (if (entmake dxf) (entlast)))
+
 ;; the radius, lettered beside a preview in that preview's own shade.
 ;; Middle-centre justified, so the text sits on the point it is given
 ;; whatever it says.
@@ -92810,14 +92919,34 @@
                                (float (/ i 2)))))))) ; integer divide:
                                                      ; the rung number
 
-;; Draw the whole fan of previews, light shade to dark.  Labels
-;; alternate between the two legs: consecutive tangent points sit one
-;; step apart along one leg, which is not room enough for two labels
-;; side by side.
+;; The dashed run from each leg's own end out to the corner, for a leg
+;; whose line stops short of it.  Two lines that meet on paper get none
+;; of this and want none; two that are yards apart get the one thing
+;; that says which corner the fan belongs to, because the point FILLET
+;; will extend them to is on neither of them.  Marked with no radius --
+;; a guide stands for no size, so a click on one is a miss like any
+;; other click on empty paper.
+(defun sf:guides (geo / u g i)
+  (setq i 1)
+  (foreach u (list (cadr geo) (cadddr geo))
+    (if (setq g (sf:gapof geo i))
+      (sf:mark (sf:draw-line (cal:v+ (car geo) (cal:v* u g)) (car geo))
+               nil))
+    (setq i (1+ i))))
+
+;; Draw the whole fan of previews, light shade to dark, over the dashed
+;; guides out to a corner the lines stop short of.  Labels alternate
+;; between the two legs: consecutive tangent points sit one step apart
+;; along one leg, which is not room enough for two labels side by
+;; side.
 (defun sf:preview (geo rads / i n r a c t1 t2 anchor col)
   (setq i 0
         n (length rads))
   (cal:ensure-layer sf:*layer* sf:*color*)
+  ;; the guides go down FIRST, so every arc sits on top of them: where a
+  ;; tangent point lands inside a gap the arc lies along the guide, and
+  ;; the arc is what a click there has to find
+  (sf:guides geo)
   (foreach r rads
     (setq a   (sf:arcpts geo r)
           c   (car   a)
@@ -92828,9 +92957,14 @@
     (if sf:*label*
       (progn
         (setq anchor (if (= 0 (rem i 2)) t1 t2))
+        ;; the label is marked with the SAME radius as its arc, so
+        ;; clicking the R6 is clicking the R6 corner.  It is much the
+        ;; bigger target of the two -- an arc is a hairline, and on a
+        ;; tight fan the near-miss that used to throw the whole thing
+        ;; away is now an answer
         (sf:mark (sf:draw-label (sf:labelpt anchor c i)
                                 (sf:rlabel r) col)
-                 nil)))
+                 r)))
     (setq i (1+ i))))
 
 ;;; -------------------- asking --------------------------------------
@@ -92868,20 +93002,26 @@
 ;; that would throw a whole fan of them away is exactly the click this
 ;; prompt invites.  Cancel is in the bracket, so there is a mouse-only
 ;; way out that does not depend on hitting anything.
-(defun sf:pickpreview ( / sel ans r)
+(defun sf:pickpreview ( / msg sel ans r)
+  ;; the question in a local: it is asked in the prompt and written down
+  ;; again in the transcript, and two copies of one string is how the
+  ;; two come to say different things
+  (setq msg "\nClick the rounded corner you want, or its label [Cancel]: ")
   (while (not ans)
     (initget "Cancel")
-    (setq sel (entsel "\nClick the rounded corner you want [Cancel]: "))
-    (if lzd:ask (lzd:ask "\nClick the rounded corner you want [Cancel]: " sel) sel)
+    (setq sel (entsel msg))
+    (if lzd:ask (lzd:ask msg sel) sel)
     (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel)
        (princ (strcat "\n  (nothing there -- click one of the green"
-                      " corners, or type Cancel)")))
+                      " corners or the R-number beside it, or type"
+                      " Cancel)")))
       ((setq r (sf:radof (car sel))) (setq ans r))
       (t (princ (strcat "\n  (that is not one of the previews -- click a"
-                        " green corner)")))))
+                        " green corner, or the R-number lettered beside"
+                        " it)")))))
   (if (eq ans 'SF-NONE) nil ans))
 
 ;;; -------------------- cutting and dimensioning --------------------
@@ -93034,7 +93174,7 @@
 ;;; -------------------- the command ---------------------------------
 
 (defun c:SMARTFILLET ( / *error* olderr odim undo-open
-                         one two geo rmax rads extra shown-extras
+                         one two geo rmax rads extra shown-extras note
                          r arc dim1 made)
 
   ;; -- restore drawing state on error / Esc.  The previews go first:
@@ -93132,6 +93272,13 @@
        (princ (strcat "\nDashed: " (sf:rlist shown-extras)
                       " -- the in-between sizes, less common than a "
                       (sf:num sf:*step*) "\" step.")))
+     ;; ...and a STRAIGHT dashed line, when there is one, is not one of
+     ;; those at all.  It goes out to a corner the picked lines stop
+     ;; short of, which is where the whole fan is drawn and where
+     ;; neither line can be seen -- said here, next to the sentence
+     ;; about the dashed arcs, because that is the one it would
+     ;; otherwise be read as
+     (if (setq note (sf:gapnote geo)) (princ note))
      ;; a cap that says nothing reads as "that is all this corner
      ;; takes", which is a different fact
      (if (> extra 0)
@@ -93141,6 +93288,12 @@
                       (if (= 1 extra) "is" "are") " not shown"
                       " -- raise sf:*maxshown* to see "
                       (if (= 1 extra) "it" "them") ".")))
+     ;; the label answers for its arc, and on a fan this tight it is
+     ;; the bigger target of the two -- worth saying, because nothing
+     ;; on screen suggests a piece of text is clickable
+     (if sf:*label*
+       (princ (strcat "\nClick an arc or the R-number beside it --"
+                      " either one is that radius.")))
 
      ;; -- 3. the one that gets cut
      (setq r (sf:pickpreview))
@@ -93212,7 +93365,8 @@
 (if (not *calofin-quiet*)
   (princ (strcat "\nSMARTFILLET " *smartfillet-version*
                  " loaded -- type SMARTFILLET, pick two lines, and click"
-                 " the rounded corner you want.")))
+                 " the rounded corner you want, or the R-number beside"
+                 " it.")))
 (princ)
 
 
@@ -93269,6 +93423,26 @@
 ;;;       cut, the single dimension becomes "R13.5 Typ.", which is how
 ;;;       the radius would be lettered by hand.
 ;;;
+;;;  Every pick in that run takes the ARC or the R-number lettered
+;;;  beside it -- both are that size.  It matters most on the honed
+;;;  fan, where the arcs sit half an inch apart and an arc is a
+;;;  hairline: the label is much the bigger target of the two, so a
+;;;  click that lands on the letters is an answer rather than a fan
+;;;  thrown away and bracketed again.
+;;;
+;;;  Two lines that stop short of where they MEET are the case neither
+;;;  fan can speak for itself.  FILLET extends them to the corner, so
+;;;  every arc is drawn round a point that is on neither line -- and
+;;;  when the lines are yards from it, what lands on screen is a fan of
+;;;  green arcs floating in space with nothing to say which two lines
+;;;  they belong to.  So each leg that falls short gets a DASHED run
+;;;  from its own end out to that corner: the line FILLET is going to
+;;;  make, drawn before it exists.  It is a preview like the arcs --
+;;;  same layer, redrawn with the honed fan, erased with either, never
+;;;  left behind -- and a leg that misses by less than hn:*gapmin*
+;;;  gets none, because a run shorter than one dash is a tick on the
+;;;  end of a line and reads as work.
+;;;
 ;;;  Telling one preview from the next is the whole job of both fans,
 ;;;  and it matters more here than it does in SMARTFILLET -- half an
 ;;;  inch of radius is a hair's difference on screen.  So three things
@@ -93303,6 +93477,9 @@
 ;;;    hn:*trans*      how transparent a preview is, per cent
 ;;;    hn:*ltype*      the dashed previews' linetype, created if missing
 ;;;    hn:*ltscale*    per-arc linetype scale, nil = the drawing's
+;;;    hn:*guide*      T to run a dashed line out to a corner the
+;;;                    picked lines stop short of
+;;;    hn:*gapmin*     how far short one has to stop before it does
 ;;;    hn:*label*      T to letter each preview R6, R13.5 ...
 ;;;    hn:*txthgt*     height of those labels
 ;;;    hn:*rung*       how far each label climbs past the one before,
@@ -93332,6 +93509,15 @@
 ;;;    * The preview arcs are real entities on their own layer, erased
 ;;;      on the way out -- on a clean finish, on Esc, and on an error.
 ;;;      The empty layer is left behind; deleting it is a PURGE away.
+;;;      The dashed guides out to a far-off corner are previews too and
+;;;      go the same way; the run says so out loud when it draws them,
+;;;      because two new lines in a drawing are work until somebody is
+;;;      told otherwise.
+;;;    * A preview's LABEL is the same answer as its arc, at the
+;;;      bracket and at the cut alike.  Both are on the list a click is
+;;;      looked up in, so R13.5 and the arc it letters pick the same
+;;;      corner; a guide line is on neither list and a click on one is
+;;;      a miss.
 ;;;    * The shades are true colours (DXF 420) and the transparency is
 ;;;      DXF 440, both per entity.  A viewport with transparency display
 ;;;      switched off (TRANSPARENCYDISPLAY 0) draws them solid, which
@@ -93354,7 +93540,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.3")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.4")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -93417,6 +93603,23 @@
                              ; quarter-scale pattern puts real gaps in
                              ; even the smallest preview.  nil = leave
                              ; the arcs at the drawing's own LTSCALE
+;; Two lines that stop short of where they MEET put the whole fan out
+;; in space: FILLET extends them to a corner that is on neither line, so
+;; the arcs are drawn round a point yards from anything the drafter can
+;; see.  A dashed run from each leg's own end out to that corner is what
+;; ties the fan back to the two lines it belongs to.
+(setq hn:*guide*      t)     ; nil = never draw one, and a far-off
+                             ; corner is a fan of green arcs floating
+                             ; in space again
+(setq hn:*gapmin*     4.5)   ; how far short of the corner a line has to
+                             ; stop before it gets one.  The stock
+                             ; DASHED pattern is 18 units and
+                             ; hn:*ltscale* takes a quarter of it, so a
+                             ; run shorter than 4.5 comes out as one
+                             ; unbroken tick on the end of the line --
+                             ; which reads as drawn work, the one thing
+                             ; a guide must never do.  nil = a guide for
+                             ; any gap at all
 (setq hn:*label*      t)
 (setq hn:*txthgt*     3.0)   ; smaller than SMARTFILLET's: R13.5 is two
                              ; characters longer than R12 and the honed
@@ -93555,13 +93758,16 @@
 ;;; -------------------- the corner ----------------------------------
 
 ;; One leg of the corner: which way the line runs from the crossing
-;; point X on the side that was CLICKED -- the side FILLET keeps -- and
-;; how far it reaches that way.  Returns (unit-direction reach), or nil
-;; when the line has no length.  The pick decides the direction and the
-;; far endpoint decides the reach, so a line whose crossing point lies
-;; off its own end (the case FILLET handles by extending it) is
-;; measured the same way as one the corner sits inside.
-(defun hn:leg (en x pk / ends a b d s u av)
+;; point X on the side that was CLICKED -- the side FILLET keeps -- how
+;; far it reaches that way, and how far short of X it STARTS.  Returns
+;; (unit-direction reach gap), or nil when the line has no length.  The
+;; pick decides the direction and the far endpoint decides the reach,
+;; so a line whose crossing point lies off its own end (the case FILLET
+;; handles by extending it) is measured the same way as one the corner
+;; sits inside.  The GAP is what that case costs the drawing: the run
+;; from X back to the nearer end, which is line FILLET will make and
+;; nobody can see yet, and 0 for a line the corner already sits on.
+(defun hn:leg (en x pk / ends a b d s u av nv)
   (setq ends (hn:ends en)
         a    (car  ends)
         b    (cadr ends)
@@ -93577,17 +93783,23 @@
                   (cal:dot d (cal:v- a x))
                   (cal:dot d (cal:v- b x)))))
       (setq u  (if (< s 0.0) (cal:v* d -1.0) d)
-            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
-      (if (> av 1e-9) (list u av)))))
+            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x)))
+            nv (min (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
+      ;; a nearer end BEHIND X is a corner the line already covers, and
+      ;; there is no gap to draw over: the negative reach is not a
+      ;; distance, so it comes back as the 0 it means
+      (if (> av 1e-9) (list u av (max 0.0 nv))))))
 
 ;; Everything about the corner two picked lines make, worked out once:
-;;   (X u1 reach1 u2 reach2 half-angle)
+;;   (X u1 reach1 u2 reach2 half-angle gap1 gap2)
 ;; X is where the two lines cross (extended if they have to be, as
 ;; FILLET extends them), each u runs from X along the side that was
 ;; clicked, and half-angle is half the turn between them -- the one
-;; number the whole fillet is built from.  nil when there is no corner:
-;; parallel lines, the same line twice, or two legs so nearly straight
-;; through that no arc could join them.
+;; number the whole fillet is built from.  The two gaps say how far
+;; short of X each line stops, which is the ground the dashed guides
+;; are drawn over and 0 for a line X sits on.  nil when there is no
+;; corner: parallel lines, the same line twice, or two legs so nearly
+;; straight through that no arc could join them.
 (defun hn:corner (e1 pk1 e2 pk2 / a b x l1 l2 th)
   (setq a (hn:ends e1)
         b (hn:ends e2)
@@ -93602,7 +93814,42 @@
           (setq th (abs (cal:signed-dang (angle '(0.0 0.0) (car l1))
                                         (angle '(0.0 0.0) (car l2)))))
           (if (and (> th hn:*minang*) (< th (- pi hn:*minang*)))
-            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0))))))))
+            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0)
+                  (caddr l1) (caddr l2))))))))
+
+;; How far leg N (1 or 2) stops SHORT of the corner, when that is far
+;; enough to be worth a guide.  nil for a line the corner sits on, and
+;; nil for one that misses it by less than hn:*gapmin*, where the run
+;; out to it would be a tick on the end of a line rather than a line
+;; going somewhere.  hn:*guide* nil turns the whole thing off, and
+;; then every caller of this is a no-op rather than each of them
+;; testing the flag for itself.
+(defun hn:gapof (geo n / g)
+  (setq g (nth (if (= n 1) 6 7) geo))
+  (if (and hn:*guide* g (> g (if hn:*gapmin* hn:*gapmin* 0.0))) g))
+
+;; What those dashed runs ARE, in words, said once a run.  A straight
+;; dashed line lands on screen beside dashed ARCS that mean something
+;; else entirely, and a drafter who finds two new lines in the drawing
+;; has to be told they are a guide rather than work somebody's tool
+;; left behind.  nil when both lines reach their corner and none was
+;; drawn -- there is nothing to explain then, and the note would be
+;; one more line to scroll past.
+(defun hn:gapnote (geo / g1 g2)
+  (setq g1 (hn:gapof geo 1)
+        g2 (hn:gapof geo 2))
+  (cond
+    ((and g1 g2)
+     (strcat "\nNeither line reaches that corner -- they stop "
+             (hn:num g1) "\" and " (hn:num g2) "\" short of it."
+             "  The dashed STRAIGHT run out to it is a guide, not"
+             " drawn work; FILLET extends the legs when the corner is"
+             " cut."))
+    ((or g1 g2)
+     (strcat "\nOne line stops " (hn:num (if g1 g1 g2)) "\" short of"
+             " that corner.  The dashed STRAIGHT run out to it is a"
+             " guide, not drawn work; FILLET extends that leg when the"
+             " corner is cut."))))
 
 ;; how far back from the corner a fillet of radius R starts
 (defun hn:tanlen (half r) (/ r (cal:tan half)))
@@ -93686,8 +93933,11 @@
 
 ;;; -------------------- previews ------------------------------------
 
-;; Remember what was drawn: everything goes on the erase list, and an
-;; arc also goes on the list a click is looked up in.
+;; Remember what was drawn: everything goes on the erase list, and
+;; anything that STANDS FOR a radius -- the arc and the label beside it
+;; both -- also goes on the list a click is looked up in.  A guide line
+;; is marked with no radius: it is drawn with the fan and erased with
+;; it, but it is not one of the answers.
 (defun hn:mark (en r)
   (if en
     (progn
@@ -93695,8 +93945,9 @@
       (if r (setq hn:*picks* (cons (cons en r) hn:*picks*)))))
   en)
 
-;; the radius a preview arc stands for, nil for anything else in the
-;; drawing
+;; the radius a preview stands for -- its arc or its label, since
+;; either one is that size -- and nil for anything else in the drawing,
+;; a guide line of this tool's own included
 (defun hn:radof (en / p)
   (setq p (assoc en hn:*picks*))
   (if p (cdr p)))
@@ -93746,6 +93997,23 @@
                     (cons 50 a1) (cons 51 a2))))
   (if (entmake dxf) (entlast)))
 
+;; One guide line, dashed, and a preview in every other way: the same
+;; layer, the same fallback colour, the same transparency, erased with
+;; the rest.  No true colour of its own -- the light-to-dark grading is
+;; how the fan says WHICH radius, and a guide stands for none of them,
+;; so it reads as the layer's plain green.
+(defun hn:draw-line (p1 p2 / dxf)
+  (setq dxf (append
+              (list '(0 . "LINE") '(100 . "AcDbEntity")
+                    (cons 8 hn:*layer*) (cons 62 hn:*color*)
+                    (cons 6 (hn:ensure-ltype)))
+              (if hn:*ltscale* (list (cons 48 hn:*ltscale*)))
+              (hn:colgroups nil)             ; entity section, as above
+              (list '(100 . "AcDbLine")
+                    (list 10 (car p1) (cadr p1) 0.0)
+                    (list 11 (car p2) (cadr p2) 0.0))))
+  (if (entmake dxf) (entlast)))
+
 ;; the radius, lettered beside a preview in that preview's own shade.
 ;; Middle-centre justified, so the text sits on the point it is given
 ;; whatever it says.
@@ -93777,15 +94045,39 @@
                                (float (/ i 2)))))))) ; integer divide:
                                                      ; the rung number
 
-;; Draw the whole fan of previews, light shade to dark.  FINE says
-;; which fan this is, and so which sizes come out dashed.  Labels
-;; alternate between the two legs: consecutive tangent points sit one
-;; step apart along one leg -- half an inch once the fan is honed --
-;; which is not room enough for two labels side by side.
+;; The dashed run from each leg's own end out to the corner, for a leg
+;; whose line stops short of it.  Two lines that meet on paper get none
+;; of this and want none; two that are yards apart get the one thing
+;; that says which corner the fan belongs to, because the point FILLET
+;; will extend them to is on neither of them.  Marked with no radius --
+;; a guide stands for no size, so a click on one is a miss like any
+;; other click on empty paper.
+(defun hn:guides (geo / u g i)
+  (setq i 1)
+  (foreach u (list (cadr geo) (cadddr geo))
+    (if (setq g (hn:gapof geo i))
+      (hn:mark (hn:draw-line (cal:v+ (car geo) (cal:v* u g)) (car geo))
+               nil))
+    (setq i (1+ i))))
+
+;; Draw the whole fan of previews, light shade to dark, over the dashed
+;; guides out to a corner the lines stop short of.  FINE says which fan
+;; this is, and so which sizes come out dashed.  Labels alternate
+;; between the two legs: consecutive tangent points sit one step apart
+;; along one leg -- half an inch once the fan is honed -- which is not
+;; room enough for two labels side by side.
+;;
+;; Called once per fan, and the guides go down again with the second
+;; one: the honed fan is drawn after hn:clear has taken the coarse one
+;; out, so anything not redrawn here is gone for the rest of the run.
 (defun hn:preview (geo rads fine / i n r a c t1 t2 anchor col)
   (setq i 0
         n (length rads))
   (cal:ensure-layer hn:*layer* hn:*color*)
+  ;; the guides go down FIRST, so every arc sits on top of them: where a
+  ;; tangent point lands inside a gap the arc lies along the guide, and
+  ;; the arc is what a click there has to find
+  (hn:guides geo)
   (foreach r rads
     (setq a   (hn:arcpts geo r)
           c   (car   a)
@@ -93796,9 +94088,14 @@
     (if hn:*label*
       (progn
         (setq anchor (if (= 0 (rem i 2)) t1 t2))
+        ;; the label is marked with the SAME radius as its arc, so
+        ;; clicking the R6 is clicking the R6 corner.  It is much the
+        ;; bigger target of the two -- an arc is a hairline, and on a
+        ;; tight fan the near-miss that used to throw the whole thing
+        ;; away is now an answer
         (hn:mark (hn:draw-label (hn:labelpt anchor c i)
                                 (hn:rlabel r) col)
-                 nil)))
+                 r)))
     (setq i (1+ i))))
 
 ;;; -------------------- asking --------------------------------------
@@ -93848,10 +94145,12 @@
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel)
        (princ (strcat "\n  (nothing there -- click one of the green"
-                      " corners, or type Cancel)")))
+                      " corners or the R-number beside it, or type"
+                      " Cancel)")))
       ((setq r (hn:radof (car sel))) (setq ans r))
       (t (princ (strcat "\n  (that is not one of the previews -- click a"
-                        " green corner)")))))
+                        " green corner, or the R-number lettered beside"
+                        " it)")))))
   (if (eq ans 'HN-NONE) nil ans))
 
 ;; The two previews the honed fan is drawn between, as (lo hi).  Both
@@ -94034,7 +94333,7 @@
 ;;; -------------------- the command ---------------------------------
 
 (defun c:HONEFILLET ( / *error* olderr odim undo-open
-                         one two geo rmax rads extra shown-extras
+                         one two geo rmax rads extra shown-extras note
                          span fines r arc dim1 made)
 
   ;; -- restore drawing state on error / Esc.  The previews go first:
@@ -94142,6 +94441,15 @@
        (princ (strcat "\nDashed: " (hn:rlist shown-extras)
                       " -- the in-between sizes, less common than a "
                       (hn:num hn:*step*) "\" step.")))
+     ;; ...and a STRAIGHT dashed line, when there is one, is not one of
+     ;; those at all.  It goes out to a corner the picked lines stop
+     ;; short of, which is where both fans are drawn and where neither
+     ;; line can be seen -- said here, next to the sentence about the
+     ;; dashed arcs, because that is the one it would otherwise be read
+     ;; as.  Once, though the guides are redrawn with the honed fan:
+     ;; the gap is a fact about the two lines, and it does not change
+     ;; when the sizes on offer do
+     (if (setq note (hn:gapnote geo)) (princ note))
      ;; a cap that says nothing reads as "that is all this corner
      ;; takes", which is a different fact
      (if (> extra 0)
@@ -94151,6 +94459,13 @@
                       (if (= 1 extra) "is" "are") " not shown"
                       " -- raise hn:*maxshown* to see "
                       (if (= 1 extra) "it" "them") ".")))
+     ;; the label answers for its arc at every pick in the run, and on
+     ;; the honed fan it is much the bigger target of the two -- worth
+     ;; saying, because nothing on screen suggests a piece of text is
+     ;; clickable
+     (if hn:*label*
+       (princ (strcat "\nClick an arc or the R-number beside it --"
+                      " either one is that radius.")))
 
      ;; -- 3. the two the answer sits between, and that range redrawn at
      ;;       half inches.  Only now is there a fan to cut from: the
@@ -94169,7 +94484,9 @@
                         " -- the whole inches solid, the rest dashed."))))
 
      ;; -- 4. the one that gets cut
-     (setq r (if span (hn:pickpreview "Click the rounded corner you want")))
+     (setq r (if span
+               (hn:pickpreview
+                 "Click the rounded corner you want, or its label")))
      (hn:clear)
      (cond
        ((null r)
@@ -94239,7 +94556,8 @@
   (princ (strcat "\nHONEFILLET " *honefillet-version*
                  " loaded -- type HONEFILLET, pick two lines, bracket two"
                  " of the corners offered, and click one of the half-inch"
-                 " sizes between them.")))
+                 " sizes between them -- the arc, or the R-number beside"
+                 " it.")))
 (princ)
 
 
