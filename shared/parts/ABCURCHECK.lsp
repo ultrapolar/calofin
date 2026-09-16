@@ -99,7 +99,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.9")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -243,7 +243,10 @@
 ;; would put its opening snapshot back over any snap the drafter ticked
 ;; on while it was up -- on a clean exit, with no error involved, which
 ;; is the likeliest way anyone meets it.  Borrow only what you move.
-(setq acc:*sysvars* '("CMDECHO" "CLAYER"))  ; saved and put back
+;; No CLAYER either: every mark is entmade with its layer named, so
+;; nothing here ever sets the current one -- and a review walked item
+;; by item is exactly where a drafter switches layers part-way.
+(setq acc:*sysvars* '("CMDECHO"))  ; saved and put back
 ;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------

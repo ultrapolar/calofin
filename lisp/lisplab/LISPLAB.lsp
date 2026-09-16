@@ -35,7 +35,7 @@
 ;;;            LISPLABVER   print the loaded version
 ;;; ======================================================================
 
-(setq *lisplab-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *lisplab-version* "v1.6")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -951,7 +951,8 @@
   ;; no OSMODE: LISPLAB changes none, so listing it would only let the
   ;; lesson put its opening snapshot back over a snap the reader
   ;; ticked on while it was up.  Borrow only what you move.
-  (lab:syssave '("CMDECHO" "CLAYER"))
+  ;; ...and no CLAYER for the same reason: the lesson only READS it
+  (lab:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command

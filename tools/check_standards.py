@@ -28,6 +28,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import build_shared_bundle
 import check_registry
+import gen_knobs
 import gen_ui_charts
 import gen_ui_data
 import mirror_shared
@@ -339,6 +340,7 @@ def check_generated(problems):
     problems.extend(build_shared_bundle.check())
     problems.extend(gen_ui_data.check())
     problems.extend(gen_ui_charts.check())
+    problems.extend(gen_knobs.check())
 
 
 def check_registrations(problems):

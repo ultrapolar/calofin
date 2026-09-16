@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 72 files, 209 commands:
+;;; 72 files, 210 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -28,23 +28,23 @@
 ;;;   LAZASCII  LAZBACKUP  LAZBUTTON  LAZDIAG  LAZDIAGVER  LAZFORM
 ;;;   LAZFORMCOVER  LAZFORMVER  LAZHIDE  LAZICON  LAZLOG  LAZNAME
 ;;;   LAZPANEL  LAZPANELVER  LAZPIN  LAZSET  LAZSIDE  LAZSIDEVER
-;;;   LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT  LHD
-;;;   LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER
-;;;   LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER
-;;;   LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER  MOHAMADDLE
-;;;   MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  OLAUTO
-;;;   OLAUTOVER  PADDLE  PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS
-;;;   PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO
-;;;   POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET
-;;;   SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV  SPA  SPACHECK
-;;;   SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER
-;;;   SQUAREUP  SQUAREUPVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER
-;;;   STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK
-;;;   TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK
-;;;   TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA
-;;;   TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  UPADOVER  UPADOVERVER
-;;;   VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV
-;;;   XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
+;;;   LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTUNE  LAZTXT
+;;;   LHD  LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE
+;;;   LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK
+;;;   LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER
+;;;   MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER
+;;;   OLAUTO  OLAUTOVER  PADDLE  PADDLEVER  PERPMARK  PERPMARKVER
+;;;   PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER
+;;;   POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD
+;;;   SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV  SPA
+;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER
+;;;   SPAVER  SQUAREUP  SQUAREUPVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG
+;;;   STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP
+;;;   TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP
+;;;   TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL
+;;;   TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  UPADOVER
+;;;   UPADOVERVER  VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER
+;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -3033,7 +3033,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV32")
+(setq pool:*version* "091626 REV33")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -3304,6 +3304,13 @@
 ;; A pool runs about twice as long as it is wide, so the width question
 ;; is offered this fraction of the length rather than asked cold.
 (setq pool:*half-ratio* 0.5)
+
+;; What the FIRST corner's treatment question offers on Enter, before
+;; there is a previous answer to reuse: "" asks cold, or one of the
+;; four words -- "Square", "Radius", "Cut", "NotGiven" -- in any case.
+;; Every corner after the first offers the answer before it, as it
+;; always has; this only decides where that chain starts.
+(setq pool:*treat-default* "")
 
 ;; A derived letter is quoted to the nearest quarter inch -- the
 ;; granularity a tape is actually read to (pool:q4).
@@ -4141,6 +4148,17 @@
         ((= v "NG") "NotGiven")
         ((= v "90") "Square")
         (t v)))
+
+;; The canonical treatment word S stands for, in any case, or nil for
+;; "" and for anything that is not one of the four -- what
+;; pool:*treat-default* is read through, since pool:askkw hands a
+;; default straight back on Enter without checking it, and "radius"
+;; typed into a settings box must not reach the corner table unspelled.
+(defun pool:treat-canon (s / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w '("Square" "Radius" "Cut" "NotGiven")
+    (if (= u (strcase w)) (setq out w)))
+  out)
 
 (defun pool:cutp (ty) (member ty '("Radius" "Cut")))
 
@@ -7261,7 +7279,7 @@
 ;; cross dims, so its true angles are not known yet -- and a pool
 ;; still called a rectangle is within a degree of 90 anyway.
 (defun pool:askcorner (subject prevty prevsz ents maxsb ang back
-                       / ty sz cols sb wed dflt szmsg nofit fk fty fsz)
+                       / ty sz cols sb wed dflt tydflt szmsg nofit fk fty fsz)
   ;; A form can answer this corner: <stem>-ty carries the treatment,
   ;; <stem>-sz the radius or cut face.  Both are consumed NOW, valid or
   ;; not -- consume-once is what keeps Back from deadlocking, and what
@@ -7298,6 +7316,9 @@
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (cal:osup)
+  ;; the answer before this one is what Enter reuses; the first corner
+  ;; has none, and offers pool:*treat-default* instead when it is set
+  (setq tydflt (if prevty prevty (pool:treat-canon pool:*treat-default*)))
   (setq ty (cond
              (fty fty)
              (nofit
@@ -7305,10 +7326,10 @@
               ;; words, and pool:askkw hands a default straight back
               ;; on Enter without checking it -- so drop it
               (pool:asktreatng subject
-                               (if (member prevty '("Square" "NotGiven"))
-                                   prevty nil)
+                               (if (member tydflt '("Square" "NotGiven"))
+                                   tydflt nil)
                                back))
-             (t (cal:asktreat subject prevty back))))
+             (t (cal:asktreat subject tydflt back))))
   (cal:osdown)
   (if (eq ty 'CAL-BACK)
       (progn (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
@@ -34249,7 +34270,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.9")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -34393,7 +34414,10 @@
 ;; would put its opening snapshot back over any snap the drafter ticked
 ;; on while it was up -- on a clean exit, with no error involved, which
 ;; is the likeliest way anyone meets it.  Borrow only what you move.
-(setq acc:*sysvars* '("CMDECHO" "CLAYER"))  ; saved and put back
+;; No CLAYER either: every mark is entmade with its layer named, so
+;; nothing here ever sets the current one -- and a review walked item
+;; by item is exactly where a drafter switches layers part-way.
+(setq acc:*sysvars* '("CMDECHO"))  ; saved and put back
 ;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
@@ -72848,7 +72872,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.0")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.1")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -77573,8 +77597,11 @@
   (if lzd:begin (lzd:begin "FITABHD" *fitabhd-version*))
   ;; no OSMODE: FITABHD never changes it, and listing it here would
   ;; put this run's opening snapshot back over any snap the drafter
-  ;; ticked on during the seven steps -- on a clean exit.
-  (cal:syssave '("CMDECHO" "CLAYER"))
+  ;; ticked on during the seven steps -- on a clean exit.  No CLAYER
+  ;; for the same reason: nothing here sets it (every entity is made
+  ;; with its layer in the entmake), so a drafter who switched layers
+  ;; part-way through would have been switched back at the end.
+  (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
@@ -98681,7 +98708,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.17")
+(setq *spacheck-version* "v1.18")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -116589,7 +116616,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.38")
+(setq *lazpanel-version* "v3.39")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -116698,6 +116725,13 @@
 ;; palette keeps the same number (PaletteMemory.RecentLimit) and
 ;; tests/test_palette_shell.py holds the two together.
 (setq lzp:*reclimit* 5)
+
+;; How many rows LAZTUNE's knob list shows at once.  A ceiling of the
+;; same kind as lzp:*colbudget*: DCL does not scroll a dialog, only a
+;; list box scrolls inside one, so this is what keeps the defaults
+;; page under the screen with a tool of ninety knobs on it.  22 puts
+;; it near 810px.
+(setq lzp:*tunerows* 22)
 
 ;;; -------------------- the roster --------------------------------------
 ;;  Two tables: lzp:*captions* names every command once, and
@@ -118193,7 +118227,8 @@
   (setq out (append out (lzp:dcl-pins) (list "")))
   (setq out (append out (lzp:dcl-hidden) (list "")))
   (setq out (append out (lzp:dcl-set) (list "")))
-  (append out (lzp:dcl-names) (list "")))
+  (setq out (append out (lzp:dcl-names) (list "")))
+  (append out (lzp:dcl-tune) (list "")))
 
 ;; The write loop, alone so it can run under vl-catch-all-apply: if a
 ;; write dies half way (disk full, quota) the handle still gets closed
@@ -118329,6 +118364,9 @@
      ;; remembered BEFORE it runs: a tool that errors out, or that is
      ;; cancelled with Escape, was still the one you reached for
      (lzp:remember name)
+     ;; ...and the drafter's own defaults re-applied right before, so a
+     ;; tool reloaded since the panel opened still runs with them
+     (lzp:knobs-apply)
      (eval (list fn)))
     (t
      (princ (strcat "\nLAZPANEL: " name
@@ -119121,6 +119159,9 @@
   (lzp:pins-read)
   (lzp:recent-read)
   (lzp:hidden-read)
+  ;; the drafter's own defaults, in case a tool was reloaded since --
+  ;; a reloaded block has put Alec's choice back
+  (lzp:knobs-apply)
   (while (setq pick (lzp:show))
     (cond
       ((= pick "*pins*"))            ; already handled inside lzp:show
@@ -119827,6 +119868,8 @@
                   "key = \"set_hidden\"; fixed_width = true; }")
           (strcat "    : button { label = \"Names...\"; "
                   "key = \"set_names\"; fixed_width = true; }")
+          (strcat "    : button { label = \"Defaults...\"; "
+                  "key = \"set_tune\"; fixed_width = true; }")
           "  }"
           ;; wide enough for the longest sentence lzp:set-state can put
           ;; in it: width is a MINIMUM in DCL, but a text tile with no
@@ -119929,6 +119972,7 @@
        (set_tile "hiddenmsg" (lzp:hiddenmsg))
        (action_tile "set_hidden" "(done_dialog 5)")
        (action_tile "set_names" "(done_dialog 6)")
+       (action_tile "set_tune" "(done_dialog 7)")
        (action_tile "accept" "(lzp:set-ok)")
        (action_tile "cancel" "(done_dialog 0)")
        (lzp:set-state)
@@ -119939,6 +119983,9 @@
          ((= rc 5) (lzp:hide-edit dcl))
          ;; ...and the names editor the same way, on the same handle
          ((= rc 6) (lzp:name-edit dcl))
+         ;; ...and the defaults editor, which reports what its OK wrote
+         ;; since this dialog's own OK has nothing to say about it
+         ((= rc 7) (lzp:tune-report (lzp:tune-edit dcl)))
          ((= rc 1) (setq done t out "ok"))
          (t (setq done t))))))
   out)
@@ -120290,6 +120337,1224 @@
   (if lzd:end (lzd:end "LAZNAME"))
   (princ))
 
+;;; -------------------- the knob catalog ---------------------------------
+;;  Every tunable of every tool, transcribed from the tunables block
+;;  at the top of its file by tools/gen_knobs.py: ((LABEL FILE (NAME
+;;  LITERAL MEANING) ...) ...), the literal as the block spells it.
+;;  This is what LAZTUNE offers a drafter, and "Alec's choice" is the
+;;  literal here.  GENERATED, between the two markers, and held current
+;;  by check_standards -- a knob added to a block and not regenerated
+;;  here fails make check rather than quietly staying un-offerable.
+;;  Only the region between the markers is written; do not edit it.
+;;; >>> lzp:*knobs* -- GENERATED by tools/gen_knobs.py, do not edit
+(setq lzp:*knobs*
+  '(
+    ("ABCDEF" "lisp/abcdef/abcdef.lsp"
+     ("abcdef:*fit-ok*" "0.20" "Quarter-inch field data that was read and typed correctly fits a rectangle well under a tenth of an inch of...")
+     ("abcdef:*fit-bad*" "0.50" "Quarter-inch field data that was read and typed correctly fits a rectangle well under a tenth of an inch of...")
+     ("abcdef:*edge-tol*" "1.0" "How far outside the rectangle a solved point may land and still be treated as rounding to be snapped back o...")
+     ("abcdef:*snap-show*" "0.001" "A snap smaller than this is not reported at all - it is arithmetic, not a finding. In inches.")
+     ("abcdef:*drop-gain*" "0.5" "With four tapes and a poor fit, each tape is left out in turn. The best three-tape fit is allowed to win, a...")
+     ("abcdef:*drop-ratio*" "3.0" "With four tapes and a poor fit, each tape is left out in turn. The best three-tape fit is allowed to win, a...")
+     ("abcdef:*drop-margin*" "0.25" "With four tapes and a poor fit, each tape is left out in turn. The best three-tape fit is allowed to win, a...")
+     ("abcdef:*swap-min*" "0.5" "Every row with three or more tapes is solved as labelled AND with the C and D columns exchanged. The sheet...")
+     ("abcdef:*swap-ratio*" "0.25" "Every row with three or more tapes is solved as labelled AND with the C and D columns exchanged. The sheet...")
+     ("abcdef:*poor-fit*" "1.0" "When the average fit over those rows is still worse than this many inches after any swap, the command warns...")
+     ("abcdef:*conf-three*" "8.0" "Every point starts at 100 and loses points for what its tapes could not show. The number is clamped to 1..9...")
+     ("abcdef:*conf-two*" "26.0" "Every point starts at 100 and loses points for what its tapes could not show. The number is clamped to 1..9...")
+     ("abcdef:*conf-fit*" "110.0" "Leftover fit error costs *conf-fit* points per inch of RMS, up to *conf-fit-max*. At the defaults a tenth o...")
+     ("abcdef:*conf-fit-max*" "55.0" "Leftover fit error costs *conf-fit* points per inch of RMS, up to *conf-fit-max*. At the defaults a tenth o...")
+     ("abcdef:*conf-spread*" "12.0" "Spread - how far the answer moves when any one tape is dropped - costs *conf-spread* points per inch, up to...")
+     ("abcdef:*conf-spread-max*" "20.0" "Spread - how far the answer moves when any one tape is dropped - costs *conf-spread* points per inch, up to...")
+     ("abcdef:*cut-bad*" "20.0" "The angle the best pair of tapes crosses at, in degrees. A shallow crossing turns a quarter inch of tape er...")
+     ("abcdef:*cut-poor*" "35.0" "The angle the best pair of tapes crosses at, in degrees. A shallow crossing turns a quarter inch of tape er...")
+     ("abcdef:*cut-fair*" "50.0" "The angle the best pair of tapes crosses at, in degrees. A shallow crossing turns a quarter inch of tape er...")
+     ("abcdef:*conf-cut-bad*" "22.0" "The angle the best pair of tapes crosses at, in degrees. A shallow crossing turns a quarter inch of tape er...")
+     ("abcdef:*conf-cut-poor*" "10.0" "The angle the best pair of tapes crosses at, in degrees. A shallow crossing turns a quarter inch of tape er...")
+     ("abcdef:*conf-cut-fair*" "3.0" "The angle the best pair of tapes crosses at, in degrees. A shallow crossing turns a quarter inch of tape er...")
+     ("abcdef:*conf-drop*" "6.0" "A dropped tape costs this much: the row needed repairing, and a repair is a judgement even when the evidenc...")
+     ("abcdef:*conf-mirror*" "25.0" "Two tapes fix a point twice over - once each side of the line joining the two corners they were measured fr...")
+     ("abcdef:*grade-high*" "90.0" "The word that goes with the number: HIGH from *grade-high* up, then GOOD, FAIR, WEAK, and POOR below *grade...")
+     ("abcdef:*grade-good*" "75.0" "The word that goes with the number: HIGH from *grade-high* up, then GOOD, FAIR, WEAK, and POOR below *grade...")
+     ("abcdef:*grade-fair*" "60.0" "The word that goes with the number: HIGH from *grade-high* up, then GOOD, FAIR, WEAK, and POOR below *grade...")
+     ("abcdef:*grade-weak*" "40.0" "The word that goes with the number: HIGH from *grade-high* up, then GOOD, FAIR, WEAK, and POOR below *grade...")
+     ("abcdef:*conf-check*" "60.0" "A point under this confidence \"wants checking\": it is counted in the summary and gets a note beside it in t...")
+     ("abcdef:*point-layer*" "\"POINTS\"" "The survey points, as the rest of the toolkit reads them: an \"ab_pt\" block on layer POINTS with the sheet's...")
+     ("abcdef:*point-block*" "\"ab_pt\"" "The survey points, as the rest of the toolkit reads them: an \"ab_pt\" block on layer POINTS with the sheet's...")
+     ("abcdef:*point-tag*" "\"number\"" "The survey points, as the rest of the toolkit reads them: an \"ab_pt\" block on layer POINTS with the sheet's...")
+     ("abcdef:*point-color*" "2" "The survey points, as the rest of the toolkit reads them: an \"ab_pt\" block on layer POINTS with the sheet's...")
+     ("abcdef:*frame-layer*" "\"ABCDEF-FRAME\"" "The rectangle with its corner letters, and the notes beside doubtful points. Colours are AutoCAD colour num...")
+     ("abcdef:*frame-color*" "1" "The rectangle with its corner letters, and the notes beside doubtful points. Colours are AutoCAD colour num...")
+     ("abcdef:*warn-layer*" "\"ABCDEF-WARN\"" "The rectangle with its corner letters, and the notes beside doubtful points. Colours are AutoCAD colour num...")
+     ("abcdef:*warn-color*" "1" "The rectangle with its corner letters, and the notes beside doubtful points. Colours are AutoCAD colour num...")
+     ("abcdef:*text-div*" "120.0" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. The bloc...")
+     ("abcdef:*text-min*" "0.5" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. The bloc...")
+     ("abcdef:*tag-scale*" "1.4" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. The bloc...")
+     ("abcdef:*tag-gap*" "1.0" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. The bloc...")
+     ("abcdef:*tag-drop*" "1.6" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. The bloc...")
+     ("abcdef:*note-off*" "0.6" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. The bloc...")
+     ("abcdef:*file-types*" "\"xlsx;xls;xlsm;csv\"" "What the file dialog offers, as a getfiled extension list. CSV is read natively; the Excel formats go throu...")
+     ("abcdef:*hdr-dist*" "'(\"FROM A\" \"FROM B\" \"FROM C\" \"FROM D\")" "Header words that identify the columns, compared upper-case as substrings: a header containing the Nth entr...")
+     ("abcdef:*hdr-name*" "'(\"NAME\" \"POINT\" \"LABEL\")" "Header words that identify the columns, compared upper-case as substrings: a header containing the Nth entr...")
+     ("abcdef:*report-suffix*" "\"_ABCDEF_report.txt\"" "The report file is the sheet's name with its extension replaced by this, written beside the sheet.")
+     ("abcdef:*apos-over*" "1.05" "A reading with no foot mark whose value is more than *apos-over* times the rectangle's diagonal, and whose...")
+     ("abcdef:*impossible*" "1.1" "A reading with no foot mark whose value is more than *apos-over* times the rectangle's diagonal, and whose...")
+     ("abcdef:*fractions*" "'(2 4 8 16 32)" "The denominators an inch fraction may have. A slash-less digit run like \"314\" is rebuilt as the one fractio...")
+     ("abcdef:*log-denom*" "32" "The correction log writes each repaired value back as feet-inches to the nearest 1/*log-denom* of an inch,...")
+     ("abcdef:*fuzz*" "1e-9" "Two lengths closer than this are the same length; also the shortest radius the solver will divide by. In in...")
+     ("abcdef:*solve-iters*" "60" "The least-squares fit: at most *solve-iters* Gauss-Newton steps, done when a step moves the point under *so...")
+     ("abcdef:*solve-step*" "1e-7" "The least-squares fit: at most *solve-iters* Gauss-Newton steps, done when a step moves the point under *so...")
+     ("abcdef:*solve-singular*" "1e-12" "The least-squares fit: at most *solve-iters* Gauss-Newton steps, done when a step moves the point under *so...")
+     ("abcdef:*seed-singular*" "1e-9" "The least-squares fit: at most *solve-iters* Gauss-Newton steps, done when a step moves the point under *so...")
+     ("abcdef:*frame-tol*" "0.001" "The corner self-check accepts a side or diagonal within this many inches of what W and H say it should be."))
+    ("ABCURCHECK" "lisp/abcurcheck/ABCURCHECK.lsp"
+     ("acc:*mark-layer*" "\"POOL-CONT\"" "findings and declarations go here")
+     ("acc:*comb-layer*" "\"POOL-COMB\"" "the curvature comb goes here")
+     ("acc:*mark-color*" "3" "ACI: the marks layer (green)")
+     ("acc:*comb-color*" "4" "ACI: the comb layer (cyan)")
+     ("acc:*gap-color*" "1" "ACI: a gap, or the kink band (red)")
+     ("acc:*corner-color*" "2" "ACI: an undeclared corner (yellow)")
+     ("acc:*decl-color*" "3" "ACI: a declared break (green)")
+     ("acc:*appid*" "\"ABCURCHECK\"" "Everything ABCURCHECK draws carries xdata under this name, so a rescue erases only its own work off a layer...")
+     ("acc:*dash-name*" "\"DASHED\"" "The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total the two must ad...")
+     ("acc:*dash-on*" "12.0" "drawing units of dash The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the...")
+     ("acc:*dash-off*" "6.0" "...and of gap -- G0: is the loop closed at all ------------------------------------- The dashed linetype de...")
+     ("acc:*fuzz*" "1.0e-4" "drawing units Closer than this and two ends are the same point -- ABHD's *PF-CHAIN-FUZZ*. Raising it forgiv...")
+     ("acc:*close-tol*" "5.0" "degrees The signed turning of a simple closed loop is 360 degrees. This is how far off that the total may s...")
+     ("acc:*cross-max*" "300" "segments The crossing scan compares every segment with every other, so it is skipped above this many segmen...")
+     ("acc:*tangent-eps*" "0.5" "degrees At or under this a joint is TANGENT -- the two sides run on into each other and there is nothing to...")
+     ("acc:*kink-tol*" "8.0" "degrees The most a joint may turn and still read as smooth, and the angle over which it stops being a kink...")
+     ("acc:*corner-ang*" "45.0" "degrees The most a joint may turn and still read as smooth, and the angle over which it stops being a kink...")
+     ("acc:*micro-len*" "3.0" "drawing units A segment shorter than this is a micro-segment, the signature of an outline traced by hand ra...")
+     ("acc:*micro-share*" "0.10" "fraction of the perimeter The share of the perimeter sitting in micro-segments that costs the whole noise s...")
+     ("acc:*excess-free*" "0.35" "turns beyond one full turn A freeform pool turns more than 360 degrees in total because it weaves; FREE is...")
+     ("acc:*excess-cap*" "1.00" "...and where it reaches zero A freeform pool turns more than 360 degrees in total because it weaves; FREE i...")
+     ("acc:*w-integrity*" "40.0" "G0: gaps, doubles, crossings What each half of the check is worth. The three are summed and printed as the...")
+     ("acc:*w-tangency*" "35.0" "the kink and corner bands What each half of the check is worth. The three are summed and printed as the den...")
+     ("acc:*w-noise*" "25.0" "micro share and turning excess What each half of the check is worth. The three are summed and printed as th...")
+     ("acc:*snap-dist*" "6.0" "drawing units How near a pick must land to a joint to declare it -- or, on Remove, to drop the declaration...")
+     ("acc:*mark-radius*" "4.0" "drawing units Radius of the rings drawn round a finding or a declaration.")
+     ("acc:*comb-step*" "12.0" "drawing units per tooth One comb tooth per this much run, and the length of the tooth at the tightest curva...")
+     ("acc:*comb-max*" "24.0" "drawing units at the tightest bend One comb tooth per this much run, and the length of the tooth at the tig...")
+     ("acc:*label-min*" "4.0" "drawing units Label text is sized against the perimeter, so it reads the same on a 20-foot spa and a 60-foo...")
+     ("acc:*label-div*" "200.0" "perimeter divided by this Label text is sized against the perimeter, so it reads the same on a 20-foot spa...")
+     ("acc:*flat-curv*" "1.0e-12" "1/drawing units A curvature below this is straight, so the comb is not drawn at all; a tooth shorter than t...")
+     ("acc:*flat-tooth*" "1.0e-6" "drawing units A curvature below this is straight, so the comb is not drawn at all; a tooth shorter than thi..."))
+    ("ABHD" "lisp/abhd/abhd.lsp"
+     ("*PF-POOL-LAYER*" "\"POOL\"" "layer holding the drawn perimeter guide, and where the kept fit, the bottom and its dims end up ---- 1. DRA...")
+     ("*PF-POOL-COLOUR*" "4" "...its colour when ABHD creates it guide, and where the kept fit, the bottom and its dims end up")
+     ("*PF-POINT-LAYER*" "\"POINTS\"" "layer holding the survey points as plain POINT entities (ab_pt blocks count on ANY layer) guide, and where...")
+     ("*PF-POINT-COLOUR*" "7" "...its colour; only the tutorial ever creates it, for the practice survey as plain POINT entities (ab_pt bl...")
+     ("*PF-POINT-BLOCK*" "\"ab_pt\"" "block name whose INSERTs mark survey points; the block's insertion point is taken as the point location eve...")
+     ("*PF-PT-TAG*" "\"number\"" "attribute tag on the point block holding the surveyed point number, used to label it as \"Pt.17\"; a block wi...")
+     ("*PF-MOVED-MARK*" "\"M\"" "a point number carrying this letter is a MOVED point - ABFIND writes \"17m\" when it copies Pt.17 to a positi...")
+     ("*PF-OUT-LAYER*" "\"POOL-FIT\"" "layer the three candidate fits preview on, with their labels is a MOVED point - ABFIND writes \"17m\" when it...")
+     ("*PF-OUT-COLOUR*" "3" "...its colour when ABHD creates it (each candidate carries its own, see *PF-COMPARE* below) preview on, wit...")
+     ("*PF-MISS-LAYER*" "\"FGStep\"" "layer the \"could not hold this point\" circles and their list go on. This may well be a layer you already us...")
+     ("*PF-MISS-COLOUR*" "1" "...its colour when ABHD creates it point\" circles and their list go on. This may well be a layer you alread...")
+     ("*PF-MISS-RADIUS*" "4.0" "radius of those circles (4 inches) also the ring on a declared corner and on a point omitted at a Redo poin...")
+     ("*PF-HOLD-RADIUS*" "(* 0.5 *PF-MISS-RADIUS*)" "the ring on a HELD point - half size, so it reads apart from a corner ring. Worked out from the line above...")
+     ("*PF-WALL-LAYER*" "\"POOL-WALLS\"" "layer the dashed markers for declared straight walls, corners and held points go on (scaffolding: swept whe...")
+     ("*PF-WALL-COLOUR*" "8" "...its colour when ABHD creates it declared straight walls, corners and held points go on (scaffolding: swe...")
+     ("*PF-BOTTOM-LAYER*" "\"POOL-BOTTOM\"" "legacy: where earlier versions of this command put the bottom geometry and dims. Everything goes on *PF-POO...")
+     ("*PF-MARK-LTYPE*" "\"DASHED\"" "linetype of the wall markers and the corner / held / omitted rings. A linetype the drawing already has is u...")
+     ("*PF-STUB-LTYPE*" "\"DASHED2\"" "linetype of the two deep-break stubs (wall to hopper corner); created the same way, with half-size dashes t...")
+     ("*PF-DIM-FTIN*" "\"SIDE DIMENSION\"" "dimension style stamped on the offset dims NOT anchored to a break point (hopper back, slope waypoints) whe...")
+     ("*PF-DIM-IN*" "\"STANDARD INCHES\"" "same dims when the offset was typed in plain inches (42). Either style missing from the drawing falls back...")
+     ("*PF-DIM-OFF*" "12.0" "the deep-end dimension string (wall-to-hopper, hopper width, hopper-to-wall) sits this far off the deep bre...")
+     ("*PF-LABEL-FRAC*" "20.0" "the on-screen candidate labels (\"1\", \"2\", \"3\" with their figures) and the list of unheld points are sized t...")
+     ("*PF-DEFAULT-FIT*" "\"2\"" "the candidate Enter keeps at the choose prompt - \"1\" (tight), \"2\" (as asked) or \"3\" (few). The standard is...")
+     ("*PF-SLOW-NOTE*" "150" "above this many distinct points the command says the ordering and fitting will take a little while")
+     ("*PF-COMPARE*" "'((\"tight\" 1 \"red\" \"most curves - least error\") (\"asked\" 2 \"yellow\" \"as asked\") (\"few\" 4 \"cyan\" \"fewest curves - still within the distance\"))" "the three candidate fits offered: the command says the ordering and fitting will take a little while")
+     ("*PF-SIMP-TOL*" "1.0" "the distance SIMPABHD fits and measures to. SIMPABHD asks no numbers at all, so this is the one it uses in...")
+     ("*PF-SIMP-COMPARE*" "'((\"tight\" 1 \"red\" \"most curves - least error\" nil nil nil) (\"pct\" 2 \"yellow\" \"10% off by 1in, a third as many curves\" 0.10 1.0 3.0) (\"hold\" 3 \"green\" \"all but the 3 worst held, half as many\" 3 1.0 2.0) (\"pct\" 4 \"cyan\" \"20% off by 1/2in, a third as many curves\" 0.20 0.5 3.0) (\"few\" 6 \"magenta\" \"fewest curves - still within the distance\" nil nil nil))" "the five candidates SIMPABHD draws measures to. SIMPABHD asks no numbers at all, so this is the one it uses...")
+     ("*PF-SIMP-DEFAULT-FIT*" "\"2\"" "the candidate Enter keeps at SIMPABHD's choose prompt. \"2\" is the middle of the road - a tenth of the point...")
+     ("*PF-TOL-MAX*" "2.0" "hard ceiling on the max-distance prompt (2 inches): further than that and the line is no longer a trace of...")
+     ("*PF-MISS-PCT*" "0.20" "share of the points (rounded UP to a whole point) that may sit off the result by up to the tolerance (an in...")
+     ("*PF-ARC-DIV*" "3.0" "the RECOMMENDED curve cap: one curve per this many survey points, rounded to the NEAREST whole curve and ne...")
+     ("*PF-ON-EPS*" "0.25" "a point within this of the result counts as ON it; only points off by more than this eat into the miss allo...")
+     ("*PF-ON-FRAC*" "0.25" "...and that threshold scales with the distance typed: this fraction of it, whichever of the two is the larg...")
+     ("*PF-TIGHT-TOL*" "0.01" "the \"tight\" candidate's accuracy target (units) - what it fits to instead of the distance typed at step 1,...")
+     ("*PF-FIT-EPS*" "0.01" "if a single arc misses any of its points by more than this, split it into several arcs that hit exactly (gu...")
+     ("*PF-ANCHOR-EPS*" "(* 2.0 *PF-FIT-EPS*)" "an arc \"passes through\" an interior survey point when the point sits within this of it - twice the fit epsi...")
+     ("*PF-CORNER-ANG*" "(/ pi 4.0)" "a point that turns more than this (45 deg) is a sharp corner: it may start or end a span but never gets bur...")
+     ("*PF-NICE-RADII*" "'(12.0 6.0 1.0)" "preferred arc-radius increments, tried in order: whole feet, half feet, whole inches (drawing units are inc...")
+     ("*PF-SNAP-EPS*" "0.02" "a nice-radius snap may move the covered points at most this far beyond where they already sat, and it may n...")
+     ("*PF-TANG-TOL*" "(/ pi 22.5)" "wiggle room from perfect tangency at each joint between two arcs (8 degrees). Being ON the points matters m...")
+     ("*PF-TANG-STEPS*" "'(1.0 1.25 1.5)" "when nothing fits inside the tangent window, stretch it by these multiples in turn rather than abandon it;...")
+     ("*PF-ARC-SLACK*" "(/ pi 3.0)" "how much further than its own points actually turn one arc may sweep (60 degrees). An arc is allowed to cur...")
+     ("*PF-FLOAT-GAIN*" "2" "an arc that floats between the points (its middle on no survey point) has to earn its keep: it is taken onl...")
+     ("*PF-DROP-PCT*" "0.10" "share of the points (rounded UP) the fit may give up on entirely: left further off than the max distance, c...")
+     ("*PF-DROP-MULT*" "2.0" "how far past the max distance a point has to be before the fit may give up on it at all. This is what separ...")
+     ("*PF-DROP-GAIN*" "2" "and every point given up must buy at least this many more points of span, or it is held after all. Whole po...")
+     ("*PF-CAP-RELAX*" "1.4" "when a fit needs more curves than the cap allows, the whole loop is refitted with the distance multiplied b...")
+     ("*PF-CAP-TRIES*" "40" "...and at most this many refits the fewest-curves result seen is kept when the cap is still not met. 40 ste...")
+     ("*PF-SNAP*" "12.0" "a CLICK within this of a survey point names that point - at a wall end, a corner, a held point, a break end...")
+     ("*PF-PICKUP-EPS*" "3.0" "a survey point within this of the selected perimeter counts as one of ITS points when ADAB gathers or trims...")
+     ("*PF-BOTTOM-STEP*" "6.0" "sampling step for the hopper offset curve (6 inches keeps it smooth without a heavy polyline); also how far...")
+     ("*PF-BOTTOM-FIT*" "0.25" "merging those samples into long arcs may leave no sample further than this off the drawn curve (a quarter i...")
+     ("*PF-SPIKE-TOL*" "2.0" "how far a slope waypoint's offset has to sit against BOTH its neighbours along that side before the run nam...")
+     ("*PF-EXACT-EPS*" "0.001" "\"exactly on\" threshold (units): two points closer than this are the same point - duplicates collapse, picks...")
+     ("*PF-CHAIN-FUZZ*" "1.0e-4" "endpoint-matching fuzz for chaining exploded segments into one closed loop two points closer than this are...")
+     ("*PF-THIN-EPS*" "0.01" "consecutive samples of an offset curve closer than this (a hundredth) collapse to one - a tight offset can...")
+     ("*PF-BULGE-CLAMP*" "1.373" "the half-angle a tangent-window edge, or a span's own permitted turn, may reach (radians): its tangent is a...")
+     ("*PF-STRAIGHT-R*" "1.0e6" "an arc whose radius reaches this is a straight line for every practical purpose: it is not snapped to a nic...")
+     ("*PF-2OPT-PASSES*" "40" "the automatic point ordering uncrosses its loop with 2-opt passes until one improves nothing, or this many..."))
+    ("ABPCHECK" "lisp/abpcheck/ABPCHECK.lsp"
+     ("abp:*pt-layer*" "\"POINTS\"" "layer holding the survey points Where the survey points live, and what a point block calls its number -- AB...")
+     ("abp:*pt-block*" "\"ab_pt\"" "block name whose INSERTs mark points Where the survey points live, and what a point block calls its number...")
+     ("abp:*pt-tag*" "\"number\"" "the attribute carrying the number Where the survey points live, and what a point block calls its number --...")
+     ("abp:*filter*" "'((0 . \"POINT,INSERT,LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE,SPLINE,ELLIPSE\"))" "What the highlight is allowed to hand the command: the points, the geometry they are measured against, and...")
+     ("abp:*uncovered-types*" "'(\"SPLINE\" \"ELLIPSE\")" "The curve types the segment math does not cover. They are counted and named in the report rather than measu...")
+     ("abp:*limit*" "1.0" "drawing units (1 inch) How far off the nearest line is too far. The command asks every run and Enter takes...")
+     ("abp:*exact-eps*" "1.0e-6" "drawing units Two points closer than this are the same shot, not two.")
+     ("abp:*plane-min*" "0.999" "cosine of the tilt, so nearer 1 is stricter How far an entity's extrusion normal (DXF 210) may lean from wo...")
+     ("abp:*miss-layer*" "\"ABPCHECK-MISS\"" "The two layers ABPCHECK writes on, created on first use. It never clears a layer wholesale: everything it d...")
+     ("abp:*miss-color*" "1" "ACI: the points that are too far off (red) The two layers ABPCHECK writes on, created on first use. It neve...")
+     ("abp:*report-layer*" "\"ABPCHECK-REPORT\"" "The two layers ABPCHECK writes on, created on first use. It never clears a layer wholesale: everything it d...")
+     ("abp:*report-color*" "3" "ACI (green) The two layers ABPCHECK writes on, created on first use. It never clears a layer wholesale: eve...")
+     ("abp:*appid*" "\"ABPCHECK\"" "renaming this orphans earlier runs The two layers ABPCHECK writes on, created on first use. It never clears...")
+     ("abp:*flag-color*" "1" "ACI: rows over the limit (red)")
+     ("abp:*advice-color*" "4" "ACI: advice, not a failure (cyan)")
+     ("abp:*green-scale*" "0.75" "height of a row that checked out")
+     ("abp:*report-chars*" "48.0" "report column width, in text heights")
+     ("abp:*ring-scale*" "1.2" "ring radius, in report text heights")
+     ("abp:*clear-shown*" "10" "rows How many within-limit points are listed before the rest are summed up in one line, so a 200-point surv...")
+     ("abp:*report-wide*" "0.25" "The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the...")
+     ("abp:*report-lead*" "1.66" "The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the...")
+     ("abp:*report-hmax*" "30.0" "The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the...")
+     ("abp:*report-hmin*" "200.0" "The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the...")
+     ("abp:*report-hfall*" "2.5" "drawing units The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, s...")
+     ("abp:*report-gap*" "0.05" "The report is scaled to the drawing, as the check family's siblings do it. WIDE: on a wide, short sheet the...")
+     ("abp:*title-scale*" "1.5" "The title is written this many times the base height, and a section heading gets this much blank line above...")
+     ("abp:*hdg-gap*" "0.4" "The title is written this many times the base height, and a section heading gets this much blank line above...")
+     ("abp:*head-lines*" "4.5" "The title is written this many times the base height, and a section heading gets this much blank line above...")
+     ("abp:*hdg-lines*" "1.4" "The title is written this many times the base height, and a section heading gets this much blank line above...")
+     ("abp:*row-indent*" "\" \"" "Findings are indented under their heading by this string.")
+     ("abp:*dist-mode*" "4" "rtos mode Distances in the report go through (rtos d mode prec): mode 4 is architectural (feet-inches), so...")
+     ("abp:*dist-prec*" "4" "2^4 = sixteenths of an inch Distances in the report go through (rtos d mode prec): mode 4 is architectural...")
+     ("abp:*tiny*" "1.0e-8" "drawing units A bounding box smaller than this has nothing to scale a report to."))
+    ("ALTABCDEF" "lisp/altabcdef/ALTABCDEF.lsp"
+     ("altabcdef:*frame-layer*" "\"ALTABCDEF-FRAME\"" "The three output layers and the colours they are created with (AutoCAD colour numbers: 1 red, 2 yellow, 3 g...")
+     ("altabcdef:*frame-color*" "1" "The three output layers and the colours they are created with (AutoCAD colour numbers: 1 red, 2 yellow, 3 g...")
+     ("altabcdef:*point-layer*" "\"ALTABCDEF-POINTS\"" "The three output layers and the colours they are created with (AutoCAD colour numbers: 1 red, 2 yellow, 3 g...")
+     ("altabcdef:*point-color*" "2" "The three output layers and the colours they are created with (AutoCAD colour numbers: 1 red, 2 yellow, 3 g...")
+     ("altabcdef:*label-layer*" "\"ALTABCDEF-LABELS\"" "The three output layers and the colours they are created with (AutoCAD colour numbers: 1 red, 2 yellow, 3 g...")
+     ("altabcdef:*label-color*" "3" "The three output layers and the colours they are created with (AutoCAD colour numbers: 1 red, 2 yellow, 3 g...")
+     ("altabcdef:*text-div*" "120.0" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. Everythi...")
+     ("altabcdef:*text-min*" "0.5" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. Everythi...")
+     ("altabcdef:*marker-scale*" "0.4" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. Everythi...")
+     ("altabcdef:*label-off*" "1.4" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. Everythi...")
+     ("altabcdef:*tag-scale*" "1.4" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. Everythi...")
+     ("altabcdef:*tag-gap*" "1.0" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. Everythi...")
+     ("altabcdef:*tag-drop*" "1.6" "Text height is the longer rectangle side divided by *text-div*, but never under *text-min* inches. Everythi...")
+     ("altabcdef:*file-types*" "\"xlsx;xls;xlsm;csv\"" "What the file dialog offers, as a getfiled extension list. CSV is read natively; the Excel formats go throu...")
+     ("altabcdef:*hdr-dist*" "'(\"FROM A\" \"FROM B\" \"FROM C\" \"FROM D\")" "Header words that identify the columns, compared upper-case as substrings: a header containing the Nth entr...")
+     ("altabcdef:*hdr-name*" "'(\"NAME\" \"POINT\" \"LABEL\")" "Header words that identify the columns, compared upper-case as substrings: a header containing the Nth entr...")
+     ("altabcdef:*min-tapes*" "2" "How many distances a row needs before it is plotted at all. Two fix a point up to a mirror, three fix it ou...")
+     ("altabcdef:*apos-over*" "1.05" "A reading with no foot mark whose value is more than *apos-over* times the rectangle's diagonal, and whose...")
+     ("altabcdef:*impossible*" "1.1" "A reading with no foot mark whose value is more than *apos-over* times the rectangle's diagonal, and whose...")
+     ("altabcdef:*fractions*" "'(2 4 8 16 32)" "The denominators an inch fraction may have. A slash-less digit run like \"314\" is rebuilt as the one fractio...")
+     ("altabcdef:*log-denom*" "32" "The correction log writes each repaired value back as feet-inches to the nearest 1/*log-denom* of an inch,...")
+     ("altabcdef:*fuzz*" "1e-9" "Two lengths closer than this are the same length; also the shortest radius the solver will divide by. In in...")
+     ("altabcdef:*solve-iters*" "60" "The least-squares fit: at most *solve-iters* Gauss-Newton steps, done when a step moves the point under *so...")
+     ("altabcdef:*solve-step*" "1e-7" "The least-squares fit: at most *solve-iters* Gauss-Newton steps, done when a step moves the point under *so...")
+     ("altabcdef:*solve-singular*" "1e-12" "The least-squares fit: at most *solve-iters* Gauss-Newton steps, done when a step moves the point under *so...")
+     ("altabcdef:*seed-singular*" "1e-9" "The least-squares fit: at most *solve-iters* Gauss-Newton steps, done when a step moves the point under *so...")
+     ("altabcdef:*frame-tol*" "0.001" "The corner self-check accepts a side or diagonal within this many inches of what the entered W and H say it...")
+     ("altabcdef:*mirror-min*" "1.0" "Two distances fix a point twice over - once each side of the line joining the two corners they were measure..."))
+    ("AUTODIM" "lisp/autodim/AutoDim.lsp"
+     ("ad:*foot-when-unitless*" "12.0" "drawing units in one foot when INSUNITS is 0 (unitless) or a unit ad:onefoot does not know: 12 for a drawin...")
+     ("ad:*style-plan*" "\"SIDE STANDARD\"" "perimeter sides, arc radii and the stairs (AUTODIM steps 2 and 3, STAIRDIM)")
+     ("ad:*style-floor*" "\"STANDARD\"" "the floor dims chains (step 4, FLOORDIM) and the stairs (AUTODIM steps 2 and 3, STAIRDIM)")
+     ("ad:*style-over*" "\"STANDARD\"" "the two overall dims (step 5) (step 4, FLOORDIM)")
+     ("ad:*style-short*" "\"STANDARD INCHES\"" "anything measuring under ad:*short-feet*, whichever of the three above it would otherwise have been (step 5)")
+     ("ad:*style-steps*" "\"STANDARD INCHES\"" "steps drawn in side view: the depth of every step and the overall, in AUTODIM's side-view route and in AUTO...")
+     ("ad:*short-feet*" "1.0" "the cut-off for the short style, in feet: a dim measuring LESS than this goes in ad:*style-short*. Exactly...")
+     ("ad:*layer*" "nil" "layer AUTODIM, STAIRDIM and FLOORDIM put their dims on: nil = whatever layer is current when the command ru...")
+     ("ad:*steps-layer*" "\"DIMENSION\"" "the same for AUTODIMSIDEPOV, whose reference drawing keeps its step dims on a layer of their own; nil = the...")
+     ("ad:*layer-color*" "7" "ACI colour a layer gets when it has to be created (7 = white/black) reference drawing keeps its step dims o...")
+     ("ad:*text-offsets*" "2.0" "how many text heights a dim stands off its geometry. The stair dims use exactly this; every other dim uses...")
+     ("ad:*perim-feet*" "1.0" "perimeter dims sit at least this far outside the plan, heading outwards its geometry. The stair dims use ex...")
+     ("ad:*over-feet*" "2.0" "the overall width sits this far above the topmost dim around the plan, the overall height this far left of...")
+     ("ad:*near-feet*" "4.0" "how far from the plan a dimension may sit and still count as one of the plan's own when the overall dims lo...")
+     ("ad:*steps-feet*" "2.0" "side-view step dims sit this far clear of the flight, and the overall the same again further out sit and st...")
+     ("ad:*same-inches*" "0.0625" "INCHES: two points this close (a sixteenth) are the same place and two measurements this close are the same...")
+     ("ad:*band-feet*" "1.0" "two dims across the same two points are the same dim when their dimension lines are within this of each oth...")
+     ("ad:*angle-tol*" "1e-3" "RADIANS: two lines within this of parallel are parallel (finding the treads), and a line within this of hor...")
+     ("ad:*merge-tol*" "1e-4" "DRAWING UNITS: two points closer than this are one. Break points on a floor dims line are merged by it so n...")
+     ("ad:*typ-note*" "\" Typ.\"" "appended to the one dim that stands for its group - the wording POOL.LSP already uses for the same job")
+     ("ad:*typ-lines*" "2" "equal straight sides it takes before one is noted and the rest left to it; below this count every one is di...")
+     ("ad:*typ-curves*" "4" "the same for equal radii. Higher than the sides on purpose: a pair or a trio of matching curves reads bette...")
+     ("ad:*typ-default*" "\"Typ\"" "the Enter answer at the question AUTODIM puts before it dimensions the perimeter: \"Typ\" notes a repeated si...")
+     ("ad:*square-share*" "0.75" "at least this share of the straight segments must run square - horizontal or vertical - so a sloping pool f...")
+     ("ad:*min-risers*" "2" "risers it takes to be a flight. 1 would let a single riser and tread pass - and with it a plan that has one...")
+     ("ad:*wall-share*" "0.9" "a vertical at least this share of the profile's full height is the back wall, not a riser - which is also w...")
+     ("ad:*join-share*" "0.01" "how far apart, as a share of the profile's height (never less than ad:*same-inches*), the foot of one riser...")
+     ("ad:*geom-types*" "\"LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE,INSERT\"" "what makes up a plan: the step-1 highlight keeps these, only these block a perimeter ray, and these are wha...")
+     ("ad:*stair-types*" "\"LINE,LWPOLYLINE\"" "what the stairs highlight (step 3, STAIRDIM) and the side-view highlight (AUTODIMSIDEPOV) keep - the tool r..."))
+    ("BPCALLOUT" "lisp/bpcallout/BPCALLOUT.lsp"
+     ("bp:*layer*" "\"FGStep\"" "layer the rings and the callout text land on - the same layer LHD puts its miss rings on. Created when the...")
+     ("bp:*layer-color*" "1" "ACI colour that layer is CREATED with (1 = red). A layer already in the drawing keeps its own text land on...")
+     ("bp:*radius*" "5.0" "ring RADIUS (5\" = a 10\" circle) halve it if a 5\" DIAMETER is wanted. Also how far an un-ring click reaches:...")
+     ("bp:*snap*" "12.0" "a pick within this of a survey point rings THAT point - the nearest one when several qualify; farther away,...")
+     ("bp:*exact-eps*" "0.001" "two ring centres this close are the same spot, so a second click on a ringed survey point un-rings it rathe...")
+     ("bp:*text-hgt*" "6.0" "TEXT height of the callout -- the callout text")
+     ("bp:*text-gap*" "10.0" "Enter at the text prompt tucks the callout this far to the right of AND below the last ring's centre -- the...")
+     ("bp:*pt-prefix*" "\"Pt.\"" "how a point is named, in the callout and on the command line: the prefix + its number, \"Pt.12\" callout this...")
+     ("bp:*tail-one*" "\" is bad\"" "what follows the name when ONE point was ringed: \"Pt.12 is bad\" callout and on the command line: the prefix...")
+     ("bp:*tail-many*" "\" are bad\"" "...and when two or more were: \"Pt.12, Pt.15 and Pt.20 are bad\" point was ringed: \"Pt.12 is bad\"")
+     ("bp:*unknown*" "\"?\"" "the number given to a ring with no readable survey point under it, so it still reads \"Pt.? is bad\" rather t...")
+     ("bp:*point-block*" "\"ab_pt\"" "block name whose INSERTs mark points wherever they sit -- what counts as a survey point. The classifier is...")
+     ("bp:*point-layer*" "\"POINTS\"" "layer whose POINTs and INSERTs are always points, whatever block points wherever they sit")
+     ("bp:*pt-tag*" "\"number\"" "attribute tag on the point block naming the point. A block without it lends its first attribute that reads..."))
+    ("CCPRECHECK" "lisp/ccprecheck/ccprecheck.lsp"
+     ("chk:*note-mark*" "\"NOTE: \"" "The summary is printed to the command line when the walk finishes, one line per thing answered or noted. Th...")
+     ("chk:*confirm-mark*" "\"CONFIRMED: \"" "The summary is printed to the command line when the walk finishes, one line per thing answered or noted. Th...")
+     ("chk:*ans-sep*" "\" -> \"" "The summary is printed to the command line when the walk finishes, one line per thing answered or noted. Th...")
+     ("chk:*val-sep*" "\" = \"" "The summary is printed to the command line when the walk finishes, one line per thing answered or noted. Th...")
+     ("chk:*note-echo*" "\"\\n >> \"" "A note is echoed to the command line as it is given, behind this.")
+     ("chk:*sum-open*" "\"\\n\\n--- Checklist summary ---\"" "The summary's own furniture: its opening and closing rules, and the indent every line inside it carries.")
+     ("chk:*sum-close*" "\"\\n--- End of checklist ---\\n\"" "The summary's own furniture: its opening and closing rules, and the indent every line inside it carries.")
+     ("chk:*sum-indent*" "\" \"" "The summary's own furniture: its opening and closing rules, and the indent every line inside it carries.")
+     ("chk:*back-words*" "'(\"B\" \"BACK\" \"U\" \"UNDO\")" "A getstring prompt cannot take initget keywords, so \"go back a step\" has to be typed like a note. These are..."))
+    ("CDCALLOUT" "lisp/cdcallout/CDCALLOUT.lsp"
+     ("cdo:*style*" "\"CROSS DIMENSIONS\"" "dimension style the dims are drawn in. NOT invented when the drawing lacks it: the dims then take the curre...")
+     ("cdo:*layer*" "\"DIMENSION\"" "layer the dims land on, ByLayer (colour, linetype and lineweight overrides stripped). Created when the draw...")
+     ("cdo:*layer-color*" "7" "ACI colour that layer is CREATED with (7 = white/black). A layer already in the drawing keeps its own (colo...")
+     ("cdo:*offset*" "0.0" "distance the dimension line is pushed off the tie it measures. 0.0 = right inbetween, on the tie itself (CD...")
+     ("cdo:*exact-eps*" "0.001" "two survey points closer than this sit on the same spot: the tie is refused, nothing to measure pushed off...")
+     ("cdo:*point-block*" "\"ab_pt\"" "block name whose INSERTs mark points wherever they sit -- what counts as a survey point. The classifier is...")
+     ("cdo:*point-layer*" "\"POINTS\"" "layer whose INSERTs are always points, whatever block they are points wherever they sit")
+     ("cdo:*pt-tag*" "\"number\"" "attribute tag on the point block naming the point. A block without it lends its first attribute that reads...")
+     ("cdo:*pick-layer*" "\"CDCALLOUT-PICK\"" "the rings round the points a doubled number names get a layer of their OWN, never the points layer: they ar...")
+     ("cdo:*pick-color*" "4" "colour of that layer, and an entity override to match: cyan, so a ring reads as a question and not as drawn...")
+     ("cdo:*pick-radius*" "9.0" "radius of one of those rings, in drawing units - wide enough to stand clear of the point block's own number...")
+     ("cdo:*pick-hgt*" "5.0" "height of the label beside it - above the 4\" point numbers drawing units - wide enough to stand clear of th...")
+     ("cdo:*pick-prefix*" "\"P\"" "what those labels are called, on screen and at the prompt: P1, P2, ... in drawing order above the 4\" point...")
+     ("cdo:*prec*" "4" "rtos precision for the distances printed in the table: 4 = 1/16\" screen and at the prompt: P1, P2, ... in d..."))
+    ("CDCREATE" "lisp/cdcreate/CDCREATE.lsp"
+     ("cdc:*style*" "\"CROSS DIMENSIONS\"" "dimension style the dims are drawn in. NOT invented when the drawing lacks it: the dims then take the curre...")
+     ("cdc:*layer*" "\"DIMENSION\"" "layer the dims land on, ByLayer (colour, linetype and lineweight overrides stripped). Created when the draw...")
+     ("cdc:*layer-color*" "7" "ACI colour that layer is CREATED with (7 = white/black). A layer already in the drawing keeps its own (colo...")
+     ("cdc:*offset*" "0.0" "distance the dimension line is pushed off the line it measures. 0.0 = on the line itself; positive = to the...")
+     ("cdc:*textpos*" "0.8" "position of the text along the dimension line, as a fraction of its length measured from the far end toward...")
+     ("cdc:*vertang*" "15.0" "degrees off vertical within which a line counts as standing up, so its text goes to the BOTTOM end rather t...")
+     ("cdc:*erase*" "T" "T erases each line once its dimension is drawn - the tie is the dimension now; nil keeps them. A line that...")
+     ("cdc:*skipdimmed*" "T" "T leaves a line alone when some dimension in model space already runs between its two ends - either way rou...")
+     ("cdc:*dupetol*" "nil" "how close two extension-line origins have to be to count as the same point, drawing units. nil = a sixteent..."))
+    ("CHECK" "lisp/check/check_drawing.lsp"
+     ("*cfchk-tol*" "1.0e-4" "drawing units A dimension point or an arc end that sits within this distance of an object is ATTACHED and l...")
+     ("*cfchk-anchor-tol*" "1.0e-4" "drawing units Two dimensions measuring to the same spot make it an ANCHOR: a point that is left exactly whe...")
+     ("*cfchk-anchor-min*" "2" "dimensions meeting at one spot ...and how many dimensions must meet there. 2 is the everyday case (the pair...")
+     ("*cfchk-curve-types*" "'(\"LINE\" \"ARC\" \"CIRCLE\" \"ELLIPSE\" \"LWPOLYLINE\" \"POLYLINE\" \"SPLINE\")" "Entity types a dimension point or an arc end may attach to. Every name must be a curve AutoCAD can measure...")
+     ("*cfchk-dim-types*" "'(0 1)" "Which kinds of dimension are audited, by the low three bits of DXF group 70: 0 = rotated (horizontal / vert...")
+     ("*cfchk-dim-color*" "1" "ACI: dimensions whose points were shifted (red)")
+     ("*cfchk-arc-color*" "6" "ACI: arcs whose endpoints were snapped (magenta)")
+     ("*cfchk-constr-layer*" "\"CHECK-CONSTRUCTION\"" "Construction lines (XLINEs) through the ORIGINAL points of every shifted dimension go on this layer, create...")
+     ("*cfchk-constr-color*" "2" "ACI (yellow) Construction lines (XLINEs) through the ORIGINAL points of every shifted dimension go on this...")
+     ("*cfchk-dist-mode*" "2" "rtos mode Distances in the command-line report go through (rtos d mode prec): mode 2 is decimal, 3 engineer...")
+     ("*cfchk-dist-prec*" "4" "places for a shift or snap distance Distances in the command-line report go through (rtos d mode prec): mod...")
+     ("*cfchk-tol-prec*" "6" "places for the tolerance in the summary Distances in the command-line report go through (rtos d mode prec):...")
+     ("*cfchk-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, a...")
+     ("*cfchk-planar-eps*" "1e-9" "dimensionless (normal components) An ARC is only audited when its extrusion normal (DXF 210) is within this..."))
+    ("CLEARDIM" "lisp/cleardim/CLEARDIM.lsp"
+     ("cd:*charwidth*" "0.75" "how wide one glyph is taken to be, as a fraction of the text height. The one estimate in the file: raise it...")
+     ("cd:*gap-f*" "0.4" "breathing room left around a text box on every side, as a multiple of the text height. 0.0 asks only that t...")
+     ("cd:*step-f*" "0.25" "how far each trial slide steps, as a multiple of the text height. Smaller finds narrower gaps and takes pro...")
+     ("cd:*reach-f*" "4.0" "how far a text may slide from where it started, each way, as a multiple of its own width. A text with nothi...")
+     ("cd:*refine*" "5" "halvings used to bisect the found spot back toward the original one, so the move is the smallest that still...")
+     ("cd:*rowtol-f*" "2.0" "how tall a \"row\" is for reading order, as a multiple of the tallest text in the sweep. Two dimensions insid...")
+     ("cd:*track-tol-f*" "0.5" "how far apart two dimension lines may be across their own direction and still be the SAME track, as a multi...")
+     ("cd:*run-gap-f*" "6.0" "how big a break may be between two dimensions on one line before they stop reading as one run, as a multipl...")
+     ("cd:*row-f*" "2.0" "how far one row out is, as a multiple of the text height -- the unit AUTODIM already stands its own chains...")
+     ("cd:*rows*" "3" "how many rows out a run or a staggered dimension may be pushed before the run is left as drawn. A dimension...")
+     ("cd:*stagger-max*" "3" "how many rows a run may be staggered ACROSS: 2 is every other dimension a row out, 3 goes out, further out,...")
+     ("cd:*stagger*" "T" "whether dimensions on one track that crowd each other may be STAGGERED -- the one in the way pushed out a r...")
+     ("cd:*arcsegs*" "32" "chords a full circle is flattened into before it is tested against a text box; an arc gets its share of the...")
+     ("cd:*skip-layers*" "'(\"DEFPOINTS\")" "layers whose entities are not ink: nothing on them is treated as an obstacle. DEFPOINTS does not plot, so t...")
+     ("cd:*obstacle-types*" "'(\"LINE\" \"LWPOLYLINE\" \"POLYLINE\" \"ARC\" \"CIRCLE\" \"TEXT\" \"MTEXT\")" "entity types read as ink under the")
+     ("cd:*dimtxt-default*" "0.18" "DIMTXT to assume when the style record carries none -- AutoCAD's own out-of-the-box value"))
+    ("CONSTELLATION" "lisp/constellation/CONSTELLATION.lsp"
+     ("cst:*space-layer*" "\"CONSTELLATION-SPACE\"" "the rectangle asked for The layer each part of the result lands on. Point one at a layer the office already...")
+     ("cst:*guide-layer*" "\"CONSTELLATION-GUIDE\"" "the starting oval, erased The layer each part of the result lands on. Point one at a layer the office alrea...")
+     ("cst:*outline-layer*" "\"CONSTELLATION\"" "the ring through A B C ... The layer each part of the result lands on. Point one at a layer the office alre...")
+     ("cst:*dim-layer*" "\"DIMENSION\"" "as AUTODIM and WCALST The layer each part of the result lands on. Point one at a layer the office already u...")
+     ("cst:*point-layer*" "\"POINTS\"" "as ABCDEF and XYPLOT The layer each part of the result lands on. Point one at a layer the office already us...")
+     ("cst:*space-color*" "'auto" "'auto picks the grey for the background; a number as given The ACI colour each of those layers is CREATED w...")
+     ("cst:*guide-color*" "4" "background; a number as given")
+     ("cst:*outline-color*" "3" "background; a number as given")
+     ("cst:*dim-color*" "2" "background; a number as given")
+     ("cst:*point-color*" "2" "background; a number as given")
+     ("cst:*point-block*" "\"ab_pt\"" "ABCDEF's survey block and its attribute tag. Move either and ABHD, CABHD, ABFIND, LHD and BPCALLOUT stop re...")
+     ("cst:*point-tag*" "\"number\"" "ABCDEF's survey block and its attribute tag. Move either and ABHD, CABHD, ABFIND, LHD and BPCALLOUT stop re...")
+     ("cst:*letters*" "\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\"" "The labels, in the order they are handed out clockwise. Shortening the string lowers the ceiling below with...")
+     ("cst:*minpts*" "3" "The count the run will accept. Raising the floor refuses small jobs the solver can do; the ceiling is read...")
+     ("cst:*maxpts*" "(strlen cst:*letters*)" "The count the run will accept. Raising the floor refuses small jobs the solver can do; the ceiling is read...")
+     ("cst:*defcount*" "4" "What Enter takes at the count prompt. Set it to the job you do most and the common case becomes one keystro...")
+     ("cst:*def-outline*" "\"Yes\"" "What Enter takes at \"Draw the outline through the points in order?\" -- \"No\" to make the ring something aske...")
+     ("cst:*sweeps*" "120" "Stress-majorization sweeps only have to get the layout into the right BASIN, which takes a few dozen; stage...")
+     ("cst:*tol*" "1.0e-6" "How far the furthest point moved in one sweep, in drawing units, below which sweeping stops early. Lowering...")
+     ("cst:*lm-iters*" "40" "The outer steps, and the damping retries allowed inside one of them before the fit is called finished. Lowe...")
+     ("cst:*lm-tries*" "8" "The outer steps, and the damping retries allowed inside one of them before the fit is called finished. Lowe...")
+     ("cst:*lm-lam*" "1.0e-3" "The damping itself: what it starts at, the floor it may fall to, and what a step that reduced the miss and...")
+     ("cst:*lm-lammin*" "1.0e-12" "The damping itself: what it starts at, the floor it may fall to, and what a step that reduced the miss and...")
+     ("cst:*lm-down*" "0.1" "The damping itself: what it starts at, the floor it may fall to, and what a step that reduced the miss and...")
+     ("cst:*lm-up*" "10.0" "The damping itself: what it starts at, the floor it may fall to, and what a step that reduced the miss and...")
+     ("cst:*lm-done*" "1.0e-14" "The sum of squared misses below which there is nothing left to gain -- about a ten-millionth of an inch, RM...")
+     ("cst:*squash*" "0.35" "A stress minimum is LOCAL, and a constellation that starts folded can stay folded, so the oval is not the o...")
+     ("cst:*shake*" "0.30" "A stress minimum is LOCAL, and a constellation that starts folded can stay folded, so the oval is not the o...")
+     ("cst:*rot-coarse*" "360" "The solved shape is spun to sit in the space: the whole circle sampled *rot-coarse* ways, then *rot-passes*...")
+     ("cst:*rot-fine*" "40" "The solved shape is spun to sit in the space: the whole circle sampled *rot-coarse* ways, then *rot-passes*...")
+     ("cst:*rot-passes*" "3" "The solved shape is spun to sit in the space: the whole circle sampled *rot-coarse* ways, then *rot-passes*...")
+     ("cst:*flag*" "0.25" "How far a dim or an arc radius may end up from what was given before it is starred and the leave-one-out te...")
+     ("cst:*over-tol*" "1.0e-6" "How far the points may reach past the space, the two axes added, before the report says so. Raise it to sto...")
+     ("cst:*texth*" "0.025" "Label height, preview marker radius and how far a perimeter dim stands off, as shares of the smaller side o...")
+     ("cst:*dotr*" "0.008" "Label height, preview marker radius and how far a perimeter dim stands off, as shares of the smaller side o...")
+     ("cst:*dimoff*" "0.060" "Label height, preview marker radius and how far a perimeter dim stands off, as shares of the smaller side o...")
+     ("cst:*texth-min*" "0.5" "Floors under the first two, in drawing units, so a tiny space still gets a label that can be read and a mar...")
+     ("cst:*dotr-min*" "0.1" "Floors under the first two, in drawing units, so a tiny space still gets a label that can be read and a mar..."))
+    ("COVERCHECK" "lisp/covercheck/covercheck.lsp"
+     ("*cchk-pool-layer*" "\"POOL\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
+     ("*cchk-cover-layer*" "\"COVER\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
+     ("*cchk-perim-layers*" "'(\"CABLE\")" "Layers OTHER than the pool layer that may carry a stretch of the SAME closed perimeter -- the cable run dra...")
+     ("*cchk-pool-note*" "\"Pool Size Shown\"" "When no cover is drawn the sheet has to say which size IS shown. Both notes together is an error -- a sheet...")
+     ("*cchk-spa-note*" "\"Spa Size Shown\"" "When no cover is drawn the sheet has to say which size IS shown. Both notes together is an error -- a sheet...")
+     ("*cchk-details-block*" "\"Cover Details\"" "The block carrying Overlap and Spacing, the block a replacement drawing has to carry, and the linetype name...")
+     ("*cchk-repl-block*" "\"Replacement Disclaimer\"" "The block carrying Overlap and Spacing, the block a replacement drawing has to carry, and the linetype name...")
+     ("*cchk-dashed-pat*" "\"*DASH*,*HIDDEN*\"" "wcmatch, case-blind The block carrying Overlap and Spacing, the block a replacement drawing has to carry, a...")
+     ("*cchk-overlap-vals*" "'(12.0 15.0 18.0)" "The only overlaps that exist, in inches. A drawing carrying anything else is wrong, not merely unusual.")
+     ("*cchk-area-small*" "1200.0" "square feet Water area decides which: under SMALL -> 12\" overlap and 5x5 spacing, over LARGE -> 18\" and 3x3...")
+     ("*cchk-area-large*" "2000.0" "square feet Water area decides which: under SMALL -> 12\" overlap and 5x5 spacing, over LARGE -> 18\" and 3x3...")
+     ("*cchk-pad-size*" "36.0" "drawing units Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, cou...")
+     ("*cchk-pad-blocks*" "'(\"Pad36x36\" \"Pad24x24\")" "Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad th...")
+     ("*cchk-pads-layer*" "\"PADS\"" "Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad th...")
+     ("*cchk-pad-near*" "18.0" "drawing units A pad centre within this of a spot (Chebyshev distance -- the pad is a square) already covers...")
+     ("*cchk-pad-maxrad*" "54.0" "drawing units The largest concave radius that still needs pads: a gentler curve than 4'-6\" does not pull th...")
+     ("*cchk-pad-cornertol*" "(/ (* 30.0 pi) 180.0)" "30 degrees, in radians A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a...")
+     ("*cchk-pad-arctol*" "(/ (* 10.0 pi) 180.0)" "10 degrees, in radians A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a...")
+     ("*cchk-chain-fuzz*" "0.05" "drawing units The widest gap that still chains two ends of an exploded outline into one loop. Raising it cl...")
+     ("*cchk-title-block*" "\"Tech Title\"" "The title block and the attribute in it carrying the date; the date must read today, written MM/DD/YYYY. Sp...")
+     ("*cchk-date-tag*" "\"Date\"" "The title block and the attribute in it carrying the date; the date must read today, written MM/DD/YYYY. Sp...")
+     ("*cchk-block-depth*" "3" "levels How many levels of nested block to search when looking for a name or a piece of text. Raising it fin...")
+     ("*cchk-tut-layer*" "\"TUTORIAL-COVERCHECK-DEMO\"" "The layer TUTORIALCOVERCHECK draws its non-pool demo geometry on.")
+     ("*cchk-tol*" "1.0e-4" "drawing units A dimension point or an arc end within this distance of an object is ATTACHED and is not ques...")
+     ("*cchk-anchor-tol*" "1.0e-4" "drawing units How close two dimension points must be to count as the same spot...")
+     ("*cchk-anchor-min*" "2" "dimensions meeting at one spot ...and how many dimensions must meet there to make it an ANCHOR: a point lef...")
+     ("*cchk-curve-types*" "'(\"LINE\" \"ARC\" \"CIRCLE\" \"ELLIPSE\" \"LWPOLYLINE\" \"POLYLINE\" \"SPLINE\")" "Entity types a dimension point or an arc end may attach to. Each must be a curve AutoCAD can measure to (vl...")
+     ("*cchk-ask-all-arc-ends*" "nil" "T = confirm EVERY arc endpoint, even ones already attached.")
+     ("*cchk-olap-fuzz*" "1.0e-4" "drawing units, sideways offset How far apart two parallel lines may sit and still be called the same line....")
+     ("*cchk-olap-dirtol*" "0.5" "degrees Two segments are only tested for overlap when their directions are within this of each other. It is...")
+     ("*cchk-olap-types*" "'(\"LINE\" \"LWPOLYLINE\" \"POLYLINE\")" "Entity types whose straight segments take part in overlap detection. Arcs, circles and splines have no stra...")
+     ("*cchk-style-order*" "'(\"STANDARD\" \"SIDE STANDARD\" \"STANDARD INCHES\" \"CROSS DIMENSIONS\")" "Dimension styles are reviewed in this order; styles not listed come afterwards (\"whatever else is left\"), s...")
+     ("*cchk-dim-layer*" "\"DIMENSION\"" "Every dimension belongs on this layer; DIMFIX-CMD is the command that moves the strays there, and is what t...")
+     ("*cchk-dimfix-cmd*" "\"CDIM\"" "Every dimension belongs on this layer; DIMFIX-CMD is the command that moves the strays there, and is what t...")
+     ("*cchk-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
+     ("*cchk-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
+     ("*cchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
+     ("*cchk-flag-color*" "'auto" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
+     ("*cchk-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*cchk-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
+     ("*cchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
+     ("*cchk-sugg-color*" "'auto" "ACI: the + marking where COVERCHECK would put it (green) 'auto fades it the way round the drawing needs --...")
+     ("*cchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*cchk-constr-layer*" "\"COVERCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
+     ("*cchk-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*cchk-report-layer*" "\"COVERCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
+     ("*cchk-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*cchk-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
+     ("*cchk-report-chars*" "45.0" "Report column width, in text heights.")
+     ("*cchk-report-wide*" "0.25" "The report is scaled to the drawing: its text height is chosen so the whole report is about as tall as the...")
+     ("*cchk-report-lead*" "1.66" "MTEXT line pitch as a multiple of text height, used to turn a line count into a height. AutoCAD's default s...")
+     ("*cchk-report-hmax*" "30.0" "...then the height is clamped: never taller than reference/HMAX, never shorter than reference/HMIN. Both ar...")
+     ("*cchk-report-hmin*" "200.0" "...then the height is clamped: never taller than reference/HMAX, never shorter than reference/HMIN. Both ar...")
+     ("*cchk-report-hfall*" "2.5" "drawing units The height used when the selection has no extents to scale against (DIMTXT x DIMSCALE is trie...")
+     ("*cchk-report-gap*" "0.05" "Gap between the drawing and the report, as a fraction of the drawing's width, and the margin left around th...")
+     ("*cchk-zoom-out*" "0.05" "Gap between the drawing and the report, as a fraction of the drawing's width, and the margin left around th...")
+     ("*cchk-zoom-margin*" "0.75" "Empty space around ONE item when the review zooms to it, as a fraction of its size.")
+     ("*cchk-mark-size*" "0.02" "fraction of VIEWSIZE Half-size of the X and + markers drawn while you answer, as a fraction of the current...")
+     ("*cchk-attn-words*" "\"*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*ASSOCIATIVE*,*DISAGREE*,*SUGGEST*,*BLANK*,*UNREADABLE*,*NOT A POLYLINE*,*LOOK AT*,*NO DASHED*,*AMBIGUOUS*,*ONLY ONE SIZE*,*NO INCHES*,*NOT TODAY*,*EXPECTED MM/DD/YYYY*,*NEEDS UPDATING*,*UPDATED TO*\"" "A report line is rendered red and full-size when it matches this pattern (wcmatch, case-blind; comma separa...")
+     ("*cchk-dist-mode*" "2" "rtos mode Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engineeri...")
+     ("*cchk-dist-prec*" "4" "decimal places Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engi...")
+     ("*cchk-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, n...")
+     ("*cchk-planar-eps*" "1e-9" "dimensionless (normal components) How far an arc's extrusion normal (DXF 210) may lean from world +Z and st...")
+     ("*cchk-flat-eps*" "1e-12" "---------------------------------------------------------------------- Below this a polyline bulge is treat..."))
+    ("DIMCHECK" "lisp/dimcheck/dimcheck.lsp"
+     ("*dchk-tol*" "1.0e-4" "drawing units A dimension point or an arc end within this distance of an object is ATTACHED and is not ques...")
+     ("*dchk-anchor-tol*" "1.0e-4" "drawing units How close two dimension points must be to count as the same spot...")
+     ("*dchk-anchor-min*" "2" "dimensions meeting at one spot ...and how many dimensions must meet there to make it an ANCHOR: a point lef...")
+     ("*dchk-curve-types*" "'(\"LINE\" \"ARC\" \"CIRCLE\" \"ELLIPSE\" \"LWPOLYLINE\" \"POLYLINE\" \"SPLINE\")" "Entity types a dimension point or an arc end may attach to. Each must be a curve AutoCAD can measure to (vl...")
+     ("*dchk-ask-all-arc-ends*" "nil" "T = confirm EVERY arc endpoint, even ones already attached.")
+     ("*dchk-olap-fuzz*" "1.0e-4" "drawing units, sideways offset How far apart two parallel lines may sit and still be called the same line....")
+     ("*dchk-olap-dirtol*" "0.5" "degrees Two segments are only tested for overlap when their directions are within this of each other. It is...")
+     ("*dchk-olap-types*" "'(\"LINE\" \"LWPOLYLINE\" \"POLYLINE\")" "Entity types whose straight segments take part in overlap detection. Arcs, circles and splines have no stra...")
+     ("*dchk-style-order*" "'(\"STANDARD\" \"SIDE STANDARD\" \"STANDARD INCHES\" \"CROSS DIMENSIONS\")" "Dimension styles are reviewed in this order; styles not listed come afterwards (\"whatever else is left\"), s...")
+     ("*dchk-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
+     ("*dchk-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
+     ("*dchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
+     ("*dchk-flag-color*" "'auto" "ACI: dimensions you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than th...")
+     ("*dchk-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*dchk-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
+     ("*dchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
+     ("*dchk-sugg-color*" "'auto" "ACI: the + marking where DIMCHECK would put it (green) 'auto fades it the way round the drawing needs -- da...")
+     ("*dchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*dchk-constr-layer*" "\"DIMCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
+     ("*dchk-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*dchk-report-layer*" "\"DIMCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
+     ("*dchk-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*dchk-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
+     ("*dchk-report-chars*" "45.0" "Report column width, in text heights.")
+     ("*dchk-sheet-chars*" "70.0" "...and the width of TUTORIALDIMCHECK's reference sheet, which is prose rather than a column of findings and...")
+     ("*dchk-report-wide*" "0.25" "The report is scaled to the drawing: its text height is chosen so the whole report is about as tall as the...")
+     ("*dchk-report-lead*" "1.66" "MTEXT line pitch as a multiple of text height, used to turn a line count into a height. AutoCAD's default s...")
+     ("*dchk-report-hmax*" "30.0" "...then the height is clamped, so a three-line report on a big sheet is not gigantic and a 200-line one is...")
+     ("*dchk-report-hmin*" "200.0" "...then the height is clamped, so a three-line report on a big sheet is not gigantic and a 200-line one is...")
+     ("*dchk-report-hfall*" "2.5" "drawing units The height used when the selection has no extents to scale against (DIMCHECK tries DIMTXT x D...")
+     ("*dchk-report-gap*" "0.05" "Gap between the drawing and the report, as a fraction of the drawing's width, and the margin left around th...")
+     ("*dchk-zoom-out*" "0.05" "Gap between the drawing and the report, as a fraction of the drawing's width, and the margin left around th...")
+     ("*dchk-zoom-margin*" "0.75" "Empty space around ONE item when the review zooms to it, as a fraction of its size.")
+     ("*dchk-mark-size*" "0.02" "fraction of VIEWSIZE Half-size of the X and + markers drawn while you answer, as a fraction of the current...")
+     ("*dchk-attn-words*" "\"*FLAGGED*,*SKIPPED*,*ENDPOINT(S) MOVED*,*ASSOCIATIVE*,*NOT ATTACHED*,*OVERLAP*\"" "A report line is rendered red and full-size when it matches this pattern (wcmatch, case-blind; comma separa...")
+     ("*dchk-dist-mode*" "2" "rtos mode Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engineeri...")
+     ("*dchk-dist-prec*" "4" "decimal places Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engi...")
+     ("*dchk-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, n...")
+     ("*dchk-planar-eps*" "1e-9" "dimensionless (normal components) How far an arc's extrusion normal (DXF 210) may lean from world +Z and st...")
+     ("*dchk-flat-eps*" "1e-12" "---------------------------------------------------------------------- Below this a polyline bulge is treat..."))
+    ("DIMSTAMP" "lisp/dimstamp/DIMSTAMP.lsp"
+     ("ds:*layer*" "\"TEXT\"" "layer the stamped MTEXT lands on. Created when the drawing lacks it; thawed, unlocked and switched on when...")
+     ("ds:*layer-color*" "7" "ACI colour that layer is CREATED with -- 7 is AutoCAD's own black-on-white/white-on-black swap. A layer alr...")
+     ("ds:*style*" "\"Attributes\"" "text style the stamp is written in. A drawing without it gets a plain variable-height style of that name ma...")
+     ("ds:*text-hgt*" "6.0" "MTEXT height of a stamp in. A drawing without it gets a plain variable-height style of that name made, and...")
+     ("ds:*text-width*" "0.0" "its defined (wrap) width; 0 is no wrap at all, so a value can never break across two lines in. A drawing wi...")
+     ("ds:*line-space*" "1.0" "line space factor, at the \"at least\" spacing style wrap at all, so a value can never break across two lines")
+     ("ds:*stack*" "\"/\"" "what separates a STACKED fraction's numerator from its denominator in the drawn MTEXT: \"/\" is the one over...")
+     ("ds:*ruler-layer*" "\"DIMSTAMP RULER\"" "layer the scratch ruler is drawn on -- its own, so the TEXT layer never carries scratch -- the ruler. Scrat...")
+     ("ds:*ruler-color*" "3" "ACI colour of the ruler, on the entities themselves so it reads the same whatever its layer says drawn on -...")
+     ("ds:*ruler-screen-x*" "0.12" "where the spine sits across the view: a fraction of the view's WIDTH in from its left edge. Raise it to mov...")
+     ("ds:*ruler-row-frac*" "0.042" "one row's share of the view's HEIGHT -- the ruler's whole size knob. Raise it for a bigger ruler with fewer...")
+     ("ds:*ruler-txt-frac*" "0.5" "the biggest row label's height, as a fraction of the row spacing HEIGHT -- the ruler's whole size knob. Rai...")
+     ("ds:*ruler-tick-frac*" "0.6" "the longest tick, same measure as a fraction of the row spacing")
+     ("ds:*ring-frac*" "0.26" "the ring round the CURRENT row, as a fraction of the row spacing. Bigger than a tick is long on purpose: th...")
+     ("ds:*current-color*" "nil" "ACI colour of that current row -- nil is ByLayer, and since the row is drawn on the STAMP's layer that mean...")
+     ("ds:*ruler-reach*" "6.0" "how far right of the spine, in row spacings, a click still counts as picking a row rather than as an empty-..."))
+    ("G2MCONV" "lisp/g2mconv/G2MCONV.lsp"
+     ("*g2mconv-map*" "'((\"1 A POOL WALL - PARED PISCINA\" \"*\" \"POOL\" \"ByLayer\" 0.4) (\"A-STAIRS - GRADAS\" \"*\" \"POOL\" \"DASHED2\" nil) (\"A-ANNO-TEXT - TEXTO\" \"*\" \"TEXT\" \"ByLayer\" 0.4) (\"A-ANNO-DIMS - DIMENSIONES\" \"TEXT,MTEXT,MULTILEADER\" \"TEXT\" \"ByLayer\" 0.4) (\"A-ANNO-DIMS - DIMENSIONES\" \"*\" \"DIMENSION\" \"ByLayer\" 0.4))" "The conversion itself, one row per rule: (source-layer entity-types destination linetype ltscale) The first...")
+     ("*g2mconv-make-dashed2*" "T" "A linetype a map row names that the drawing has not got. DASHED2 is stock and this file can make it (the sa...")
+     ("*g2mconv-colors*" "'((\"POOL\" . 4) ; cyan, as POOL.LSP and POOLSIDE create it (\"TEXT\" . 4) ; as SOCONV creates it (\"DIMENSION\" . 141))" "The color a destination layer is CREATED with, when the drawing does not carry it yet. A drawing that has t...")
+     ("*g2mconv-default-color*" "7" "The color for a destination the table above does not name - what a retuned *g2mconv-map* row pointing at a...")
+     ("*g2mconv-force-bylayer*" "T" "T, and every moved object has its color and lineweight set to BYLAYER on the way past, so it takes the dest...")
+     ("*g2mconv-text-style*" "\"Attributes\"" "The text style and height every note the run moves is put on. These are the shop drawing's own TEXTSTYLE an...")
+     ("*g2mconv-text-height*" "9.5" "The text style and height every note the run moves is put on. These are the shop drawing's own TEXTSTYLE an...")
+     ("*g2mconv-dim-style*" "\"STANDARD\"" "The dimension style every converted dimension is put on. If the drawing has no style by this name the dimen...")
+     ("*g2mconv-dim-xdata*" "\"ACAD\"" "The xdata application whose style overrides come off each dimension with the restyle. AutoCAD keeps a dimen...")
+     ("*g2mconv-deannotate*" "T" "T, and an object that arrives ANNOTATIVE stops being so: its annotative flag goes to 0 and it draws at the...")
+     ("*g2mconv-anno-xdata*" "\"AcadAnnotative\"" "The application the annotative flag lives under. AutoCAD writes it as AnnotativeData { <class> <flag> }, wh...")
+     ("*g2mconv-record*" "t" "The record G2MRECONV reads back, and the application it lives under. nil converts exactly as before and wri...")
+     ("*g2mconv-xdata-app*" "\"G2MCONV\"" "The record G2MRECONV reads back, and the application it lives under. nil converts exactly as before and wri..."))
+    ("HONEFILLET" "lisp/honefillet/HONEFILLET.lsp"
+     ("hn:*first*" "6.0" "the smallest radius in the COARSE fan --")
+     ("hn:*step*" "6.0" "the one that is only there to bracket from -- and the step between the ones after it. SMARTFILLET's fan, be...")
+     ("hn:*extras*" "'(3.0 9.0)" "radii offered BESIDES that series. A 3 or a 9 turns up, just not often enough to be the step; they are draw...")
+     ("hn:*maxshown*" "10" "how many COARSE previews may be on screen at once; nil = every radius that fits, which on a long wall is a...")
+     ("hn:*fine*" "0.5" "the honing step: what the range between the two bracketed sizes is redrawn at. Half an inch is where a radi...")
+     ("hn:*maxfine*" "14" "most honed previews at once, and so also what \"neighbouring\" MEANS here: a full 6\" bracket comes to 13 half...")
+     ("hn:*fit*" "0.98" "how much of the shorter leg a fillet may use up: 1.0 would put the tangent point exactly on the far end and...")
+     ("hn:*layer*" "\"HONE FILLET PREVIEW\"" "use up: 1.0 would put the tangent point exactly on the far end and leave a zero-length line behind")
+     ("hn:*color*" "3" "the layer's colour, and the fallback index on every preview: green, so a preview reads as a preview even wh...")
+     ("hn:*shade-lo*" "'(190 255 190)" "the SMALLEST preview's green ... index on every preview: green, so a preview reads as a preview even where...")
+     ("hn:*shade-hi*" "'(0 110 0)" "... and the largest's. The fan is graded between the two, so which arc a label belongs to is a matter of sh...")
+     ("hn:*trans*" "40" "per cent transparency on every preview, so an arc crossing another still reads. 0 or nil = solid; over 90 i...")
+     ("hn:*ltype*" "\"DASHED\"" "so an arc crossing another still reads. 0 or nil = solid; over 90 is a preview nobody can see")
+     ("hn:*ltscale*" "0.25" "the stock DASHED pattern is 18 units long, so a 6\" fillet arc (9 units of it) would come out as one unbroke...")
+     ("hn:*guide*" "t" "nil = never draw one, and a far-off corner is a fan of green arcs floating in space again long, so a 6\" fil...")
+     ("hn:*gapmin*" "4.5" "how far short of the corner a line has to stop before it gets one. The stock DASHED pattern is 18 units and...")
+     ("hn:*label*" "t" "stop before it gets one. The stock DASHED pattern is 18 units and hn:*ltscale* takes a quarter of it, so a...")
+     ("hn:*txthgt*" "3.0" "smaller than SMARTFILLET's: R13.5 is two characters longer than R12 and the honed fan sets them half an inc...")
+     ("hn:*rung*" "1.4" "and each one climbs this many text heights further off its leg than the label before it on that side, which...")
+     ("hn:*dimlayer*" "\"DIMENSION\"" "heights further off its leg than the label before it on that side, which is what carries the honed fan -- s...")
+     ("hn:*smalldim*" "24.0" "POOL's small-dimension rule, heights further off its leg than the label before it on that side, which is wh...")
+     ("hn:*smallstyle*" "\"STANDARD INCHES\"" "kept so a fillet callout matches the dims beside it heights further off its leg than the label before it on...")
+     ("hn:*dimoff*" "nil" "nil = one radius past the arc matches the dims beside it")
+     ("hn:*dimrepeat*" "nil" "one callout plus \"Typ.\" is how the sheet reads; set T to dimension every corner matches the dims beside it")
+     ("hn:*typ*" "t" "reads; set T to dimension every corner")
+     ("hn:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e...")
+     ("hn:*sysold*" "nil" "sysvar snapshot, live only mid-run")
+     ("hn:*preview*" "nil" "every entity drawn as a preview")
+     ("hn:*picks*" "nil" "(preview-arc . radius), what a click means")
+     ("hn:*smallwarned*" "nil" "the missing-style note is said once"))
+    ("LAZDIAG" "lisp/lazdiag/LAZDIAG.lsp"
+     ("lzd:*max-ents*" "400" "How many entities a report will copy. A run that drew ten thousand things before falling over is a real fai...")
+     ("lzd:*max-log*" "200" "How many transcript lines are kept. A tutorial loop can princ for ever; the last 200 lines are the ones tha...")
+     ("lzd:*subdir*" "\"Downloads\"" "Where reports go, tried in order. The first that accepts the file wins. \"\" means \"ask the drawing\" -- see l..."))
+    ("LAZFORM" "lisp/lazform/LAZFORM.lsp"
+     ("lzf:*btypes*" "'(\"Normal\" \"Sport\" \"Wedge\" \"SLope\" \"MOdflat\" \"SHallow\")" "The bottoms POOL draws, spelled as POOL's own keywords -- the capitals are each one's abbreviation at the p...")
+     ("lzf:*ctreat*" "'(\"(ask)\" \"Square\" \"Radius\" \"Cut\" \"NotGiven\")" "What a corner can be: STANDARDS.md's canonical set, \"(ask)\" first so a row left alone sends nothing and POO...")
+     ("lzf:*tabbudget*" "84" "the row of chart tabs Width budgets, in DCL character cells. DCL does not scroll: a row wider than the scre...")
+     ("lzf:*rowbudget*" "92" "a row of paired column boxes Width budgets, in DCL character cells. DCL does not scroll: a row wider than t...")
+     ("lzf:*colbudget*" "34" "the boxes beside the chart The same wall, the other way up. How many lines of generated DCL may stack in th...")
+     ("lzf:*chart-w*" "52" "The chart column: its width in cells, and its height as a share of that width (a string, because DCL reads...")
+     ("lzf:*chart-a*" "\"0.72\"" "The chart column: its width in cells, and its height as a share of that width (a string, because DCL reads...")
+     ("lzf:*poskey*" "\"LazForm_Pos\"" "Where the dialog remembers its position between restarts (the AutoCAD profile, via setenv), and where a she...")
+     ("lzf:*recallkey*" "\"HKEY_CURRENT_USER\\\\Software\\\\Calofin\\\\LazForm\"" "Where the dialog remembers its position between restarts (the AutoCAD profile, via setenv), and where a she..."))
+    ("LAZPANEL" "lisp/lazpanel/LAZPANEL.lsp"
+     ("lzp:*findname*" "\"Find\"" "The Find page's tab title. Find is a page but not a group: it stays out of lzp:*groups* -- what Rest is com...")
+     ("lzp:*tbname*" "\"LazPanel\"" "The screen-button toolbar's name, as the CUI lists it.")
+     ("lzp:*poskey*" "\"LazPanel_Pos\"" "Where the panel remembers its position between restarts: a value in the AutoCAD profile (setenv), which is...")
+     ("lzp:*pinkey*" "\"HKEY_CURRENT_USER\\\\Software\\\\Calofin\\\\LazPanel\"" "Where pins and recents live: one registry key, values \"Pins\" and \"Recent\", names joined with \";\". THE VB PA...")
+     ("lzp:*aliasval*" "\"Alias\"" "The two per-user maps LAZNAME writes, on that same key. Named here rather than spelled at the call sites so...")
+     ("lzp:*capval*" "\"Caption\"" "The two per-user maps LAZNAME writes, on that same key. Named here rather than spelled at the call sites so...")
+     ("lzp:*capmax*" "40" "The longest caption LAZNAME will let a drafter set. A ceiling, not a preference: tools/check_dcl.py measure...")
+     ("lzp:*pinbudget*" "84" "How wide, in DCL character cells, a row of pinned or recent buttons may be before the next button starts a...")
+     ("lzp:*colbudget*" "16" "How many captioned buttons may stack in ONE column before a page is split into more columns. The width budg...")
+     ("lzp:*pinrowmax*" "3" "How many rows the Pinned strip may occupy. Pins are the one part of a page whose height the DRAFTER sets, a...")
+     ("lzp:*reclimit*" "5" "How many recently launched tools are remembered, newest first. The palette keeps the same number (PaletteMe...")
+     ("lzp:*tunerows*" "22" "How many rows LAZTUNE's knob list shows at once. A ceiling of the same kind as lzp:*colbudget*: DCL does no..."))
+    ("LAZSIDE" "lisp/lazside/LAZSIDE.lsp"
+     ("lzv:*b-y*" "120" "the overall B, across the top THE FRAME THE SECTION IS DRAWN IN. Everything is in PER-MILLE of the picture,...")
+     ("lzv:*water-y*" "230" "the waterline: the top of both walls THE FRAME THE SECTION IS DRAWN IN. Everything is in PER-MILLE of the p...")
+     ("lzv:*sec-x0*" "90" "the left wall... THE FRAME THE SECTION IS DRAWN IN. Everything is in PER-MILLE of the picture, x and y, y D...")
+     ("lzv:*sec-x1*" "910" "...and the right one THE FRAME THE SECTION IS DRAWN IN. Everything is in PER-MILLE of the picture, x and y,...")
+     ("lzv:*shal-y*" "430" "the floor at depth C THE FRAME THE SECTION IS DRAWN IN. Everything is in PER-MILLE of the picture, x and y,...")
+     ("lzv:*brk-y*" "530" "...at C2, the SHallow break THE FRAME THE SECTION IS DRAWN IN. Everything is in PER-MILLE of the picture, x...")
+     ("lzv:*deep-y*" "660" "...and at D, the deep end THE FRAME THE SECTION IS DRAWN IN. Everything is in PER-MILLE of the picture, x a...")
+     ("lzv:*chain-y*" "810" "the run chain's baseline THE FRAME THE SECTION IS DRAWN IN. Everything is in PER-MILLE of the picture, x an...")
+     ("lzv:*c-x*" "45" "where C stands, outside the left wall THE FRAME THE SECTION IS DRAWN IN. Everything is in PER-MILLE of the...")
+     ("lzv:*chart-w*" "58" "The chart column: width in cells, and its height as a DCL aspect ratio (height / width of the tile itself)....")
+     ("lzv:*chart-a*" "\"0.62\"" "The chart column: width in cells, and its height as a DCL aspect ratio (height / width of the tile itself)....")
+     ("lzv:*hint-w*" "92" "How wide the hint and state lines are, in character cells. Wider than the picture beside them, because ever...")
+     ("lzv:*poskey*" "\"LazSide_Pos\"" "Where the dialog remembers its position between restarts (the AutoCAD profile, via setenv), and where a she...")
+     ("lzv:*recallkey*" "\"HKEY_CURRENT_USER\\\\Software\\\\Calofin\\\\LazSide\"" "Where the dialog remembers its position between restarts (the AutoCAD profile, via setenv), and where a she..."))
+    ("LAZSPA" "lisp/lazspa/LAZSPA.lsp"
+     ("lzs:*ctreat*" "'(\"(ask)\" \"90\" \"Radius\" \"Diagonal\")" "What a corner can be, in the SHEET LEGEND's words -- 90 / Radius / Diagonal -- with \"(ask)\" first so a row...")
+     ("lzs:*tabbudget*" "84" "Width budget for the row of chart tabs, in DCL character cells. Three charts run about 39 cells, so this ne...")
+     ("lzs:*chart-w*" "52" "The chart column: width in cells, and its total height in rows, which is spread over the bands the chart is...")
+     ("lzs:*chart-h*" "19" "The chart column: width in cells, and its total height in rows, which is spread over the bands the chart is...")
+     ("lzs:*poskey*" "\"LazSpa_Pos\"" "Where the dialog remembers its position between restarts (the AutoCAD profile, via setenv), and where a she...")
+     ("lzs:*recallkey*" "\"HKEY_CURRENT_USER\\\\Software\\\\Calofin\\\\LazSpa\"" "Where the dialog remembers its position between restarts (the AutoCAD profile, via setenv), and where a she..."))
+    ("LAZSTEP" "lisp/lazstep/LAZSTEP.lsp"
+     ("lzt:*plan-x0*" "100" "the wall, or the corner THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the picture, x and y...")
+     ("lzt:*plan-x1*" "860" "the far end of the run THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the picture, x and y,...")
+     ("lzt:*plan-yc*" "180" "the run's centre line THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the picture, x and y,...")
+     ("lzt:*plan-hh*" "120" "half the plan's opening at the far end THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the p...")
+     ("lzt:*width-x*" "930" "where a whole-run width dim stands THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the pictu...")
+     ("lzt:*chord-x1*" "860" "the last chord across a hemi curve THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the pictu...")
+     ("lzt:*curve-rx*" "840" "...whose crown sits beyond it, at x0 + this THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of...")
+     ("lzt:*tread-y0*" "385" "the tread dimension row THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the picture, x and y...")
+     ("lzt:*tread-y1*" "445" "...and the second one, when N needs it THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the p...")
+     ("lzt:*one-row*" "4" "treads that fit one row of boxes THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the picture...")
+     ("lzt:*prof-x*" "860" "top of the flight, x... THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the picture, x and y...")
+     ("lzt:*prof-y*" "540" "...and y: the profile hangs from here THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the pi...")
+     ("lzt:*prof-w*" "760" "the flight's whole run... THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the picture, x and...")
+     ("lzt:*prof-h*" "450" "...and its whole drop THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the picture, x and y,...")
+     ("lzt:*prof-gap*" "40" "how far a depth dim stands off its step THE FRAME THE CHART IS DRAWN IN. Everything is in PER-MILLE of the...")
+     ("lzt:*max-steps*" "8" "THE CEILING. DCL will not scroll and a dialog taller than the screen does not open at all, so the count has...")
+     ("lzt:*steps-nominal*" "3" "WHAT THE PICTURE SHOWS BEFORE A COUNT IS TYPED. The page opens with the count box empty -- the form invents...")
+     ("lzt:*chart-w*" "58" "The chart column: width in cells, its total height in rows spread over the bands, and the edit_width of a b...")
+     ("lzt:*chart-h*" "20" "The chart column: width in cells, its total height in rows spread over the bands, and the edit_width of a b...")
+     ("lzt:*wedge-ed*" "5" "The chart column: width in cells, its total height in rows spread over the bands, and the edit_width of a b...")
+     ("lzt:*colbudget*" "34" "HOW TALL THE ANSWER COLUMN MAY GET before it is split in two. The page is as tall as its longest column and...")
+     ("lzt:*hint-w*" "96" "How wide the hint and state lines are, in character cells. Wider than the boxes they sit under, because the...")
+     ("lzt:*poskey*" "\"LazStep_Pos\"" "Where the dialog remembers its position between restarts (the AutoCAD profile, via setenv), and where a she...")
+     ("lzt:*recallkey*" "\"HKEY_CURRENT_USER\\\\Software\\\\Calofin\\\\LazStep\"" "Where the dialog remembers its position between restarts (the AutoCAD profile, via setenv), and where a she..."))
+    ("LINCHECK" "lisp/lincheck/lincheck.lsp"
+     ("lin:*tick*" "\"[x] \"" "The report is printed to the command line, one line per item. These are the pieces every line is built from...")
+     ("lin:*note-sep*" "\" -- \"" "The report is printed to the command line, one line per item. These are the pieces every line is built from...")
+     ("lin:*ans-sep*" "\" -> \"" "The report is printed to the command line, one line per item. These are the pieces every line is built from...")
+     ("lin:*indent*" "\" \"" "A cross dimension is logged indented under its heading by this.")
+     ("lin:*head-in*" "\"== \"" "A section heading, in the report and on the command line. The two differ on purpose: the report's is quiete...")
+     ("lin:*head-out*" "\"==\"" "A section heading, in the report and on the command line. The two differ on purpose: the report's is quiete...")
+     ("lin:*head-echo-in*" "\"=== \"" "A section heading, in the report and on the command line. The two differ on purpose: the report's is quiete...")
+     ("lin:*head-echo-out*" "\"===\"" "A section heading, in the report and on the command line. The two differ on purpose: the report's is quiete...")
+     ("lin:*rule*" "\"############################################\"" "The banner the printed report is boxed in, and its title. RULE is drawn as-is, so its width is what sets th...")
+     ("lin:*title*" "\"# LINER CHECKLIST REPORT #\"" "The banner the printed report is boxed in, and its title. RULE is drawn as-is, so its width is what sets th...")
+     ("lin:*back-words*" "'(\"B\" \"BACK\" \"U\" \"UNDO\")" "A getstring prompt cannot take initget keywords, so \"go back a step\" has to be typed like a note. These are..."))
+    ("LINFINCHECK" "lisp/linfincheck/linfincheck.lsp"
+     ("*lfc-step-maxgap*" "18.0" "drawing units Treads are found as stacked parallel lines. MAXGAP is the widest spacing that still reads as...")
+     ("*lfc-step-minlines*" "3" "lines Treads are found as stacked parallel lines. MAXGAP is the widest spacing that still reads as one flig...")
+     ("*lfc-bench-minlines*" "2" "lines Treads are found as stacked parallel lines. MAXGAP is the widest spacing that still reads as one flig...")
+     ("*lfc-step-angtol*" "1.0" "degrees Treads are found as stacked parallel lines. MAXGAP is the widest spacing that still reads as one fl...")
+     ("*lfc-bead-layer*" "\"Bead Track\"" "Bead track: the layer it belongs on, and how close to the plan-view steps it has to run before it counts as...")
+     ("*lfc-bead-dist*" "18.0" "drawing units Bead track: the layer it belongs on, and how close to the plan-view steps it has to run befor...")
+     ("*lfc-attach-options*" "'(\"Bead\" \"Flaps\" \"Rod Pockets\" \"No Attachment\")" "The generic Step Attachment block lists every option with a box; if ALL of them are still showing, nobody p...")
+     ("*lfc-secured-phrase*" "\"to be secured\"" "")
+     ("*lfc-fgstep-words*" "'(\"Fiberglass Step\" \"FG Step\")" "A fiberglass step shows up under any of these names.")
+     ("*lfc-title-block*" "\"Tech Title\"" "The title block holding the wall height and the sheet date, and the two attribute tags inside it. Spaces in...")
+     ("*lfc-wallht-tag*" "\"WallHt\"" "The title block holding the wall height and the sheet date, and the two attribute tags inside it. Spaces in...")
+     ("*lfc-date-tag*" "\"Date\"" "The title block holding the wall height and the sheet date, and the two attribute tags inside it. Spaces in...")
+     ("*lfc-height-tol*" "0.25" "drawing units The step height and WallHt may differ by this much before the report says to check the wall h...")
+     ("*lfc-min-wallht*" "1.0" "drawing units ...and a WallHt below this is NONSENSICAL rather than merely wrong (0\" walls do not exist).")
+     ("*lfc-ask-phrase*" "\"Wall height\"" "The question text expected in the drawing when WallHt reads \"?\".")
+     ("*lfc-badwords*" "'(\"NOT\" \"ERROR\")" "A liner pattern field carrying one of these words was never really filled in (\"Not Supplied\", \"#ERROR\") --...")
+     ("*lfc-border-layer*" "\"border\"" "The title block border is nominally 58'-8\" x 45'-3 5/8\", or a scaled-UP whole multiple of it, on this layer...")
+     ("*lfc-border-w*" "704.0" "58'-8\" in drawing units The title block border is nominally 58'-8\" x 45'-3 5/8\", or a scaled-UP whole multi...")
+     ("*lfc-border-h*" "543.625" "45'-3 5/8\" in drawing units The title block border is nominally 58'-8\" x 45'-3 5/8\", or a scaled-UP whole m...")
+     ("*lfc-border-tol*" "0.005" "0.5%, as a fraction The title block border is nominally 58'-8\" x 45'-3 5/8\", or a scaled-UP whole multiple...")
+     ("*lfc-block-depth*" "3" "levels How many levels of nested block to search when looking for a name or a piece of text. Raising it fin...")
+     ("*lfc-tol*" "1.0e-4" "drawing units A dimension point or an arc end within this distance of an object is ATTACHED and is not ques...")
+     ("*lfc-anchor-tol*" "1.0e-4" "drawing units How close two dimension points must be to count as the same spot...")
+     ("*lfc-anchor-min*" "2" "dimensions meeting at one spot ...and how many dimensions must meet there to make it an ANCHOR: a point lef...")
+     ("*lfc-curve-types*" "'(\"LINE\" \"ARC\" \"CIRCLE\" \"ELLIPSE\" \"LWPOLYLINE\" \"POLYLINE\" \"SPLINE\")" "Entity types a dimension point or an arc end may attach to. Each must be a curve AutoCAD can measure to (vl...")
+     ("*lfc-ask-all-arc-ends*" "nil" "T = confirm EVERY arc endpoint, even ones already attached.")
+     ("*lfc-olap-fuzz*" "1.0e-4" "drawing units, sideways offset How far apart two parallel lines may sit and still be called the same line....")
+     ("*lfc-olap-dirtol*" "0.5" "degrees Two segments are only tested for overlap when their directions are within this of each other. It is...")
+     ("*lfc-olap-types*" "'(\"LINE\" \"LWPOLYLINE\" \"POLYLINE\")" "Entity types whose straight segments take part in overlap detection. Arcs, circles and splines have no stra...")
+     ("*lfc-style-order*" "'(\"STANDARD\" \"SIDE STANDARD\" \"STANDARD INCHES\" \"CROSS DIMENSIONS\")" "Dimension styles are reviewed in this order; styles not listed come afterwards (\"whatever else is left\"), s...")
+     ("*lfc-dim-layer*" "\"DIMENSION\"" "Every dimension belongs on this layer; DIMFIX-CMD is the command that moves the strays there, and is what t...")
+     ("*lfc-dimfix-cmd*" "\"CDIM\"" "Every dimension belongs on this layer; DIMFIX-CMD is the command that moves the strays there, and is what t...")
+     ("*lfc-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
+     ("*lfc-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
+     ("*lfc-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
+     ("*lfc-flag-color*" "'auto" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
+     ("*lfc-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*lfc-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
+     ("*lfc-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
+     ("*lfc-sugg-color*" "'auto" "ACI: the + marking where LINFINCHECK would put it (green) 'auto fades it the way round the drawing needs --...")
+     ("*lfc-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*lfc-constr-layer*" "\"LINFINCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
+     ("*lfc-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*lfc-report-layer*" "\"LINFINCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
+     ("*lfc-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*lfc-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
+     ("*lfc-report-chars*" "45.0" "Report column width, in text heights, and the width of the tutorial's reference sheet, which is prose rathe...")
+     ("*lfc-sheet-chars*" "70.0" "Report column width, in text heights, and the width of the tutorial's reference sheet, which is prose rathe...")
+     ("*lfc-report-wide*" "0.25" "The report is scaled to the drawing: its text height is chosen so the whole report is about as tall as the...")
+     ("*lfc-report-lead*" "1.66" "MTEXT line pitch as a multiple of text height, used to turn a line count into a height. AutoCAD's default s...")
+     ("*lfc-report-hmax*" "30.0" "...then the height is clamped: never taller than reference/HMAX, never shorter than reference/HMIN. Both ar...")
+     ("*lfc-report-hmin*" "200.0" "...then the height is clamped: never taller than reference/HMAX, never shorter than reference/HMIN. Both ar...")
+     ("*lfc-report-hfall*" "2.5" "drawing units The height used when the selection has no extents to scale against (DIMTXT x DIMSCALE is trie...")
+     ("*lfc-report-gap*" "0.05" "Gap between the drawing and the report, as a fraction of the drawing's width, and the margin left around th...")
+     ("*lfc-zoom-out*" "0.05" "Gap between the drawing and the report, as a fraction of the drawing's width, and the margin left around th...")
+     ("*lfc-zoom-margin*" "0.75" "Empty space around ONE item when the review zooms to it, as a fraction of its size.")
+     ("*lfc-mark-size*" "0.02" "fraction of VIEWSIZE Half-size of the X and + markers drawn while you answer, as a fraction of the current...")
+     ("*lfc-attn-words*" "\"*FLAGGED*,*WRONG*,*SKIPPED*,*MAGENTA*,*MISSING*,*NOTHING*,*NO SIDE VIEW*,*NO 'STEP*,*NO BLOCK*,*WORD NOT*,*WORD ERROR*,* ADD *,*MISMATCH*,*NOT CONFIRMED*,*NOT ATTACHED*,*OVERLAP*,*CHECK THE WALL HEIGHT*,*FIBERGLASS STEP*,*ASSOCIATIVE*,*DISAGREE*,*SCALED DOWN*,*STRETCHED*,*NO BORDER*,*WIPED*,*NEEDS WIPING*,*NONSENSICAL*,*EXPECTED MM/DD/YYYY*,*NO INCHES*,*NOT TODAY*,*NEEDS UPDATING*,*UPDATED TO*\"" "A report line is rendered red and full-size when it matches this pattern (wcmatch, case-blind; comma separa...")
+     ("*lfc-dist-mode*" "2" "rtos mode Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engineeri...")
+     ("*lfc-dist-prec*" "4" "decimal places Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engi...")
+     ("*lfc-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, n...")
+     ("*lfc-planar-eps*" "1e-9" "dimensionless (normal components) How far an arc's extrusion normal (DXF 210) may lean from world +Z and st...")
+     ("*lfc-flat-eps*" "1e-12" "---------------------------------------------------------------------- Below this a polyline bulge is treat..."))
+    ("LINTXTCHK" "lisp/lintxtchk/LINTXTCHK.lsp"
+     ("ltc:*height*" "12.0" "Text height, in drawing units (1 unit = 1 inch on the shop's sheets). The next two are multiples of it, so...")
+     ("ltc:*spacing*" "1.6" "Vertical distance between lines, and the horizontal indent per sub-level, both as multiples of the text hei...")
+     ("ltc:*indent*" "1.5" "Vertical distance between lines, and the horizontal indent per sub-level, both as multiples of the text hei...")
+     ("ltc:*bullet*" "\"- \"" "What every line is prefixed with. \"\" gives a plain column, \"[ ] \" gives boxes to tick.")
+     ("ltc:*items*" "(list (cons 0 \"Read all WSN (White Screen Notes), Notes from Merlin, and Customer Info\") (cons 1 \"Does this job actually require a Tech drawing?\") (cons 0 \"Verify Finished Wall Ht & Pool Depth\") (cons 1 \"Finished Wall Ht should be a single value, or \\\"Varies\\\" if needed\") (cons 0 \"Place liner pattern block (GLP) - Delete \\\"Not Supplied\\\" text\") (cons 0 \"Verify the type of pool bead, or overlap for AG, etc\") (cons 0 \"Pool perimeter & overall dims\") (cons 0 \"Verify orientation: Shallow end to the RIGHT of page\") (cons 0 \"Report ALL cross dimensions provided by customer\") (cons 0 \"Pool corners with dimensions\") (cons 1 \"Look out special mfgrs like Esther Williams (3x3, 5x5) or Foxx (37\\\" Deep)\") (cons 0 \"Look for special bottom conditions:\") (cons 1 \"Does the shallow end have a Cove?\") (cons 1 \"Does the pool have a Safety Ledge?\") (cons 1 \"Did the customer provide various depths for the bottom?\") (cons 1 \"Does the pool require a side view?\") (cons 0 \"Are hopper corners radius?\") (cons 0 \"Did you draw trowel lines accurately?\") (cons 0 \"Are steps / bench Fiberglass?\") (cons 1 \"Place FGS note or draw step outline if dimensions were provided\") (cons 1 \"Is the step Straight or Radius? Ask if not given\") (cons 0 \"Are steps / bench Vinyl-covered?\") (cons 1 \"Verify step corner type & dimensions\") (cons 1 \"Place Step Attachment block - is the attachment type provided?\") (cons 1 \"Place side views for all steps and benches\") (cons 0 \"Did you scale the titleblock? REDVIEW!\") )" "Each entry is (indent-level . \"line text\"). Level 0 is a main item, 1 a sub-item indented under the one abo..."))
+    ("LOBF" "lisp/lobf/LOBF.lsp"
+     ("lobf:*pt-layer*" "\"POINTS\"" "layer holding the survey points Where the survey points live, and what a point block calls its number -- AB...")
+     ("lobf:*pt-block*" "\"ab_pt\"" "block name whose INSERTs mark points Where the survey points live, and what a point block calls its number...")
+     ("lobf:*pt-tag*" "\"number\"" "the attribute carrying the number Where the survey points live, and what a point block calls its number --...")
+     ("lobf:*filter*" "'((0 . \"POINT,INSERT\"))" "What the highlight is allowed to hand the command. Only points are wanted -- LOBF fits a line THROUGH point...")
+     ("lobf:*exact-eps*" "1.0e-6" "drawing units Two points closer together than this are one shot, not two: a double-shot must not get two vo...")
+     ("lobf:*drastic*" "4.0" "multiples of the worst held point THE RULE THAT PICKS THE DEFAULT. Fit 2 sets one point aside; it is offere...")
+     ("lobf:*drastic-floor*" "0.5" "drawing units ...and at least this far off in its own right. Without a floor, a survey where every point is...")
+     ("lobf:*default-fit*" "\"1\"" "\"1\", \"2\" or \"3\" Which fit Enter takes when NO point stands out that way -- there is then no outlier to isol...")
+     ("lobf:*blob-ratio*" "0.2" "worst error / length of the run When fit 1's worst point is further off than this fraction of the run's own...")
+     ("lobf:*layer*" "\"LOBF\"" "the construction line kept The three layers LOBF writes on, created on first use. PREVIEW holds the three c...")
+     ("lobf:*color*" "4" "ACI (cyan) The three layers LOBF writes on, created on first use. PREVIEW holds the three candidates and th...")
+     ("lobf:*preview-layer*" "\"LOBF-PREVIEW\"" "the three candidates The three layers LOBF writes on, created on first use. PREVIEW holds the three candida...")
+     ("lobf:*preview-color*" "'auto" "ACI (grey) -- each XLINE carries its own colour. 'auto picks the grey for the background; a number is used...")
+     ("lobf:*ign-layer*" "\"LOBF-IGNORED\"" "ring round a set-aside point carries its own colour. 'auto picks the grey for the background; a number is u...")
+     ("lobf:*ign-color*" "1" "ACI (red) carries its own colour. 'auto picks the grey for the background; a number is used exactly as given")
+     ("lobf:*appid*" "\"LOBF\"" "renaming this orphans earlier runs carries its own colour. 'auto picks the grey for the background; a numbe...")
+     ("lobf:*fit-colors*" "'(3 2 6)" "ACI: green, yellow, magenta The colour each candidate is previewed in, fit 1 first. These are what the on-s...")
+     ("lobf:*label-div*" "40.0" "Label sizing, all as fractions of the run the points cover. DIV sets the text height (a bigger number is sm...")
+     ("lobf:*label-gap*" "0.08" "Label sizing, all as fractions of the run the points cover. DIV sets the text height (a bigger number is sm...")
+     ("lobf:*label-stalk*" "1.6" "text heights, times the fit number Label sizing, all as fractions of the run the points cover. DIV sets the...")
+     ("lobf:*ring-scale*" "1.2" "text heights Label sizing, all as fractions of the run the points cover. DIV sets the text height (a bigger...")
+     ("lobf:*dist-mode*" "4" "rtos mode Distances on the command line go through (rtos d mode prec): mode 4 is architectural (feet-inches...")
+     ("lobf:*dist-prec*" "5" "2^5 = thirty-seconds of an inch Distances on the command line go through (rtos d mode prec): mode 4 is arch...")
+     ("lobf:*ang-prec*" "2" "decimal places Degrees of bearing printed after each fit, so two fits that read the same to the thirty-seco...")
+     ("lobf:*tiny*" "1.0e-10" "Anything smaller than this is zero: the guard on a degenerate fit (every point on one spot), on a zero-leng..."))
+    ("OASIS" "lisp/oasis/OASIS.lsp"
+     ("oasis:*poollayer*" "\"POOL\"" "the arcs, and the pool bottom The three layers, created if the drawing has not got them and thawed, unlocke...")
+     ("oasis:*poolcolor*" "4" "The three layers, created if the drawing has not got them and thawed, unlocked and switched back on if it h...")
+     ("oasis:*dimlayer*" "\"DIMENSION\"" "every dimension, both drawings The three layers, created if the drawing has not got them and thawed, unlock...")
+     ("oasis:*dimcolor*" "2" "The three layers, created if the drawing has not got them and thawed, unlocked and switched back on if it h...")
+     ("oasis:*guidelayer*" "\"POOL-GUIDE\"" "the dashed circles, box and labels The three layers, created if the drawing has not got them and thawed, un...")
+     ("oasis:*guidecolor*" "'auto" "'auto picks it for the background: 8 on a light one, a lighter grey on a dark one, where 8 is very nearly t...")
+     ("oasis:*hicolor*" "1" "red: the part being asked about 8 on a light one, a lighter grey on a dark one, where 8 is very nearly the...")
+     ("oasis:*dimstyle*" "\"Standard\"" "the pool's own dims Two styles, because the two drawings are read differently: the pool itself is a plan an...")
+     ("oasis:*crossstyle*" "\"CROSS DIMENSIONS\"" "the check drawing's Two styles, because the two drawings are read differently: the pool itself is a plan an...")
+     ("oasis:*checkgap*" "4.0" "How far to the right of the pool the check drawing sits, measured from the pool's own right-hand bound, as...")
+     ("oasis:*topfrac*" "0.5" "Where a Center pool's top bulge sits across the X bound, as a fraction of it. 0.5 centres the hump, which i...")
+     ("oasis:*startside*" "0.75" "A radius not answered yet still needs a value for the preview to be drawable at all, so the gaps are filled...")
+     ("oasis:*starttop*" "0.5" "A radius not answered yet still needs a value for the preview to be drawable at all, so the gaps are filled...")
+     ("oasis:*startjoin*" "0.6" "A joiner has no rule of thumb of its own -- what looks right depends entirely on the bulges either side of...")
+     ("oasis:*startbig*" "1.2" "A joiner has no rule of thumb of its own -- what looks right depends entirely on the bulges either side of...")
+     ("oasis:*startclear*" "1.25" "...and whichever of those two it is, it is then lifted to at least this multiple of its own minimum. Keep i...")
+     ("oasis:*startktop*" "1.5" "The two kidneys, whose provisionals cannot be read off neighbours because the shape derives half of itself:...")
+     ("oasis:*startkleft*" "0.40" "The two kidneys, whose provisionals cannot be read off neighbours because the shape derives half of itself:...")
+     ("oasis:*startkright*" "0.45" "The two kidneys, whose provisionals cannot be read off neighbours because the shape derives half of itself:...")
+     ("oasis:*startkside*" "48.0" "The side radius a true kidney's bottom joiner is sized against when the derivation has no answer at all. Ev...")
+     ("oasis:*dimoffmin*" "12.0" "All of it scales off the pool, so a 10-foot spa and a 40-foot pool are annotated to LOOK the same rather th...")
+     ("oasis:*dimoffdiv*" "18.0" "All of it scales off the pool, so a 10-foot spa and a 40-foot pool are annotated to LOOK the same rather th...")
+     ("oasis:*radiusdrag*" "0.9" "How far a radius dimension's text is dragged off its own arc, as a fraction of that stand-off -- away from...")
+     ("oasis:*dashmin*" "2.0" "The dashed guide linetype, built rather than loaded from acad.lin (a failed load falls back to CONTINUOUS i...")
+     ("oasis:*dashdiv*" "40.0" "The dashed guide linetype, built rather than loaded from acad.lin (a failed load falls back to CONTINUOUS i...")
+     ("oasis:*pvtextdiv*" "28.0" "The preview's radius labels: how tall the text is, and how far out from its own arc it sits, in text height...")
+     ("oasis:*pvtextgap*" "1.7" "The preview's radius labels: how tall the text is, and how far out from its own arc it sits, in text height...")
+     ("oasis:*markmin*" "1.0" "The little circle the check drawing marks each centre with.")
+     ("oasis:*markdiv*" "90.0" "The little circle the check drawing marks each centre with.")
+     ("oasis:*tangmarkdiv*" "150.0" "The numbered marks the pool-bottom flow puts on every change of tangency, so one can be named: the mark's o...")
+     ("oasis:*tangtextdiv*" "34.0" "The numbered marks the pool-bottom flow puts on every change of tangency, so one can be named: the mark's o...")
+     ("oasis:*tangtextgap*" "1.6" "The numbered marks the pool-bottom flow puts on every change of tangency, so one can be named: the mark's o...")
+     ("oasis:*hopoff*" "18.0" "The hopper offset the question opens on when a session has not yet had an answer accepted. After that the s...")
+     ("oasis:*hopchord*" "24" "How many chords a GUIDED slope line is drawn with. It follows the wall with its offset easing away to nothi...")
+     ("oasis:*hopscan*" "720" "How finely the deepest point of the offset ring is looked for, in samples round the whole ring. Only the de...")
+     ("oasis:*fuzz*" "1.0e-6" "Slack for \"is this the same point / the same length\" tests, in drawing units. Measurements arrive in inches...")
+     ("oasis:*ptfuzz*" "1.0e-8" "The tighter slack the check drawing dedupes its tie measurements with. Two ties wanted between the same pai...")
+     ("oasis:*ucsfuzz*" "1.0e-8" "How far out of the world plan the current UCS may lie and still count as flat. A DIRECTION COSINE, not a le...")
+     ("oasis:*cmdguard*" "10" "Two belt-and-braces loop limits, neither reached by any input the questions admit: they are here so a bug u...")
+     ("oasis:*ringguard*" "4" "Two belt-and-braces loop limits, neither reached by any input the questions admit: they are here so a bug u..."))
+    ("OLAUTO" "lisp/olauto/OLAUTO.lsp"
+     ("ola:*new-layer*" "\"POOL\"" "the NEW perimeter ends up here The two perimeters are put onto the shop's own layers on the way out, so the...")
+     ("ola:*og-layer*" "\"Bead Track\"" "the ORIGINAL ends up here The two perimeters are put onto the shop's own layers on the way out, so the shee...")
+     ("ola:*dim-layer*" "\"DIMENSION\"" "and the error dimensions here The two perimeters are put onto the shop's own layers on the way out, so the...")
+     ("ola:*new-color*" "3" "ACI for a created POOL layer Colours used only when a layer above has to be CREATED; a layer the drawing al...")
+     ("ola:*og-color*" "1" "ACI for a created Bead Track Colours used only when a layer above has to be CREATED; a layer the drawing al...")
+     ("ola:*dim-color*" "7" "ACI for a created DIMENSION Colours used only when a layer above has to be CREATED; a layer the drawing alr...")
+     ("ola:*dim-style*" "\"STANDARD INCHES\"" "The dimension style the errors are drawn in. A drawing without it keeps whatever style is current and is to...")
+     ("ola:*dimcount*" "4" "dimensions drawn How many of the worst spots to dimension. Each one is a local worst, so raising this finds...")
+     ("ola:*peak-gap*" "0.07" "fraction of the perimeter How far apart two dimensions have to be, as a fraction of the perimeter. This is...")
+     ("ola:*peak-min*" "0.0625" "drawing units (1/16\") An error smaller than this is not worth a dimension and the spot is skipped -- so a f...")
+     ("ola:*peak-share*" "0.10" "fraction of the worst error ...and neither is one this much smaller than the worst error found. A fit alway...")
+     ("ola:*text-push*" "0.045" "fraction of the bbox diagonal How far the dimension TEXT is dragged clear of the geometry, as a fraction of...")
+     ("ola:*fitpts*" "96" "samples per perimeter Points each perimeter is walked out into for the fit. The phase search costs this SQU...")
+     ("ola:*devpts*" "240" "samples along the original Points along the ORIGINAL at which the error is measured once the fit is in. Hig...")
+     ("ola:*icp-win*" "6" "samples either side How far along the curve the polish may look for a better match, in samples either way....")
+     ("ola:*fit-tol*" "0.001" "drawing units The polish stops when no point moved further than this, or after this many passes, whichever...")
+     ("ola:*fit-max*" "60" "passes The polish stops when no point moved further than this, or after this many passes, whichever comes f...")
+     ("ola:*fuzz*" "1.0e-4" "drawing units Closer than this and two ends are the same point -- ABHD's *PF-CHAIN-FUZZ*, so a perimeter re...")
+     ("ola:*close-frac*" "0.01" "fraction of the chain length ...and the gap that still counts as closed, as a fraction of the chain's own l...")
+     ("ola:*len-warn*" "0.10" "fraction of the longer perimeter How far apart the two PERIMETER LENGTHS may be before the pick itself look...")
+     ("ola:*fit-warn*" "0.05" "fraction of the bbox diagonal ...and how big the worst error may be, against the diagonal of the original's...")
+     ("ola:*piece-frac*" "0.05" "fraction of the chain length A pick that came in as more than one piece -- a stray deck line or coping arc...")
+     ("ola:*mirror-ratio*" "0.5" "flipped residual / unflipped, at most -- mirror images ----------------------------------------------------..."))
+    ("POINTRENAMER" "lisp/pointrenamer/POINTRENAMER.lsp"
+     ("ptr:*pt-layer*" "\"POINTS\"" "layer whose blocks count as points ABPCHECK's definition of a survey point, unchanged, so the two tools nev...")
+     ("ptr:*pt-block*" "\"ab_pt\"" "block name that counts wherever it sits ABPCHECK's definition of a survey point, unchanged, so the two tool...")
+     ("ptr:*pt-tag*" "\"number\"" "the attribute the number lives in ABPCHECK's definition of a survey point, unchanged, so the two tools neve...")
+     ("ptr:*perim-layer*" "\"POOL\"" "Where the perimeter is looked for before anything is asked: the BIGGEST closed polyline on this layer insid...")
+     ("ptr:*filter*" "'((0 . \"POINT,INSERT,LWPOLYLINE,POLYLINE\"))" "What the highlight is allowed to keep, so a hatch or a dimension cannot be dragged in by a sloppy window. L...")
+     ("ptr:*vertex-skip*" "16" "Which vertices of an old-style (heavy) POLYLINE are NOT on the drawn curve, as a mask over the vertex flags...")
+     ("ptr:*band*" "6.0" "How far off the perimeter still counts as on it -- what the FIRST run of a session offers, before anyone ha...")
+     ("ptr:*dir*" "\"Clockwise\"" "Which way round the FIRST run of a session offers, on the same footing as the band. Spelled exactly as the...")
+     ("ptr:*first*" "1" "The number the count starts at, offered at every run. Unlike the band and the direction this one is NOT car...")
+     ("ptr:*sysvars*" "'(\"CMDECHO\")" "The sysvars saved on the way in and put back on the way out, however the run ends. Add a name here if a cha...")
+     ("ptr:*far-pick*" "12.0" "A start pick further than this off the perimeter is called out. The sweep still begins at the nearest spot...")
+     ("ptr:*name-width*" "8" "The width the OLD number is padded to in the old-to-new table, so the arrows line up. Widen it for a survey...")
+     ("ptr:*dist-mode*" "4" "How every distance in a prompt or a report is written -- the two arguments of (rtos d MODE PRECISION). Mode...")
+     ("ptr:*dist-prec*" "4" "How every distance in a prompt or a report is written -- the two arguments of (rtos d MODE PRECISION). Mode...")
+     ("ptr:*exact-eps*" "1.0e-6" "Two spots closer together than this are the same spot -- the test for whether a closed polyline's last vert...")
+     ("ptr:*zero-len*" "1.0e-6" "A perimeter shorter than this has nothing to sweep, so it is refused instead of divided by.")
+     ("ptr:*bulge-eps*" "1.0e-9" "Below this a bulge is a straight line rather than an arc -- and so is the chord under one, which the same f...")
+     ("ptr:*flat-eps*" "1.0e-10" "Below this a determinant has gone to zero: three points are collinear and have no circumcentre, and an arc'...")
+     ("ptr:*tiny-len2*" "1.0e-20" "Below this a segment has no direction to project onto, so the nearest spot on it is simply its start. It is...")
+     ("ptr:*whole-eps*" "1.0e-9" "How near a whole number a point's number has to read before the clash sweep counts it as one. A shot number...")
+     ("ptr:*start-whisker*" "1.0e-4" "Added to every station before it is wrapped round the loop, so that a point clicked dead-on the start sorts..."))
+    ("POOL" "lisp/pool/POOL.LSP"
+     ("pool:*side-tol*" "1.0" "side length tolerance ---- field tolerances: how far the drawn pool may sit off the tape A crew's measureme...")
+     ("pool:*cross-tol*" "2.0" "cross dimension (diagonal) tolerance ---- field tolerances: how far the drawn pool may sit off the tape A c...")
+     ("pool:*grec-step*" "0.125" "Grecian diagonal adjustment increment ---- field tolerances: how far the drawn pool may sit off the tape A...")
+     ("pool:*grec-max*" "4" "max increments each way (4 * 1/8 = 1/2) ---- field tolerances: how far the drawn pool may sit off the tape...")
+     ("pool:*capfuzz*" "1.0e-6" "How far a corner treatment may exceed its own setback cap before the size is refused and re-asked. It exist...")
+     ("pool:*lay-pool*" "\"POOL\"" "the pool perimeter and the bottom ---- output layers and their colours Made (or un-frozen, unlocked and swi...")
+     ("pool:*lay-dim*" "\"DIMENSION\"" "every dimension and corner mark ---- output layers and their colours Made (or un-frozen, unlocked and switc...")
+     ("pool:*lay-notes*" "\"POOL-NOTES\"" "guide, report, mini-model, dashed reference lines ---- output layers and their colours Made (or un-frozen,...")
+     ("pool:*col-pool*" "4" "cyan, and only when POOL is created reference lines")
+     ("pool:*col-dim*" "2" "yellow, ditto -- an existing layer keeps the colour the office gave it reference lines")
+     ("pool:*col-notes*" "3" "green, on the same terms keeps the colour the office gave it")
+     ("pool:*col-bad*" "1" "red -- a measurement the validator had to adjust, in the drawing and in the report table keeps the colour t...")
+     ("pool:*dashname*" "\"POOLDASH\"" "---- linetypes Defined here rather than loaded from acad.lin: a failed load used to fall back to CONTINUOUS...")
+     ("pool:*dashpat*" "'(12.0 -12.0)" "1 ft dash, 1 ft gap ---- linetypes Defined here rather than loaded from acad.lin: a failed load used to fal...")
+     ("pool:*dotname*" "\"POOLDOT\"" "---- linetypes Defined here rather than loaded from acad.lin: a failed load used to fall back to CONTINUOUS...")
+     ("pool:*dotpat*" "'(0.0 -1.0)" "a dot every inch; widen the gap for a sparser measuring line ---- linetypes Defined here rather than loaded...")
+     ("pool:*smalldim*" "24.0" "---- dimension styles A style the drawing already defines is used as it stands -- the office template wins...")
+     ("pool:*smallfuzz*" "1.0e-6" "---- dimension styles A style the drawing already defines is used as it stands -- the office template wins...")
+     ("pool:*smallstyle*" "\"STANDARD INCHES\"" "---- dimension styles A style the drawing already defines is used as it stands -- the office template wins...")
+     ("pool:*crossstyle*" "\"CROSS DIMENSIONS\"" "---- dimension styles A style the drawing already defines is used as it stands -- the office template wins...")
+     ("pool:*sidestyle*" "\"SIDE STANDARD\"" "---- dimension styles A style the drawing already defines is used as it stands -- the office template wins...")
+     ("pool:*given-den*" "8" "A \"Given\" mark (below) reads the SAME cut-off: under 24\" it is plain inches, at or past it feet-inches -- t...")
+     ("pool:*doff-min*" "12.0" "never closer than 1 ft ---- how big the drawing furniture comes out Every flow sizes its dimension offsets...")
+     ("pool:*doff-div*" "18.0" "---- how big the drawing furniture comes out Every flow sizes its dimension offsets and its text off the po...")
+     ("pool:*th-min*" "3.0" "never smaller than 3\" ---- how big the drawing furniture comes out Every flow sizes its dimension offsets a...")
+     ("pool:*th-div*" "70.0" "---- how big the drawing furniture comes out Every flow sizes its dimension offsets and its text off the po...")
+     ("pool:*mark-r*" "0.18" "circle radius on the corner point ---- corner marks and callouts, as multiples of doff The square-corner ma...")
+     ("pool:*mark-lead*" "1.2" "how far out the mark's own text sits ---- corner marks and callouts, as multiples of doff The square-corner...")
+     ("pool:*ng-lead*" "1.5" "where the \"Not Given\" leader leaves it ---- corner marks and callouts, as multiples of doff The square-corn...")
+     ("pool:*ng-off*" "2.05" "... and how far out that note sits ---- corner marks and callouts, as multiples of doff The square-corner m...")
+     ("pool:*rad-off*" "0.9" "radius dim, dragged out past the arc ---- corner marks and callouts, as multiples of doff The square-corner...")
+     ("pool:*cut-off*" "0.5" "cut-face dim, out past the face ---- corner marks and callouts, as multiples of doff The square-corner mark...")
+     ("pool:*mlkoff*" "30.0" "M/L/K dim line, right of the hopper ---- where the bottom's chain dimensions sit The H/G/F/E chain runs bel...")
+     ("pool:*chainoff*" "12.0" "H/G/F/E drop: at most this... ---- where the bottom's chain dimensions sit The H/G/F/E chain runs below the...")
+     ("pool:*chaindiv*" "6.0" "...and at most hopper width / this ---- where the bottom's chain dimensions sit The H/G/F/E chain runs belo...")
+     ("pool:*rep-gap*" "2.0" "doff multiples: pool -> table ---- the report table and the mini-model beside it Column positions are multi...")
+     ("pool:*rep-row*" "2.2" "h multiples: row pitch ---- the report table and the mini-model beside it Column positions are multiples of...")
+     ("pool:*rep-title*" "1.25" "h multiples: the heading's text height ---- the report table and the mini-model beside it Column positions...")
+     ("pool:*rep-note*" "1.4" "h multiples: a red failure note ---- the report table and the mini-model beside it Column positions are mul...")
+     ("pool:*rep-c1*" "20.0" "h multiples: the TARGET column ---- the report table and the mini-model beside it Column positions are mult...")
+     ("pool:*rep-c2*" "29.0" "ACTUAL, decimal inches ---- the report table and the mini-model beside it Column positions are multiples of...")
+     ("pool:*rep-c2f*" "33.0" "ACTUAL, feet-inches ---- the report table and the mini-model beside it Column positions are multiples of th...")
+     ("pool:*rep-c3*" "38.0" "DELTA, decimal inches ---- the report table and the mini-model beside it Column positions are multiples of...")
+     ("pool:*rep-c3f*" "46.0" "DELTA, feet-inches ---- the report table and the mini-model beside it Column positions are multiples of the...")
+     ("pool:*rep-w*" "46.0" "table width, decimal inches ---- the report table and the mini-model beside it Column positions are multipl...")
+     ("pool:*rep-wf*" "54.0" "table width, feet-inches ---- the report table and the mini-model beside it Column positions are multiples...")
+     ("pool:*map-gap*" "3.0" "th multiples: table -> mini-model ---- the report table and the mini-model beside it Column positions are m...")
+     ("pool:*map-size*" "24.0" "th multiples: the mini-model's box ---- the report table and the mini-model beside it Column positions are...")
+     ("pool:*pv-col*" "'auto" "guide outline: 'auto picks the grey for the background (8 is nearly the stock dark one), a number is used e...")
+     ("pool:*pvx-col*" "7" "cross-dim / measuring line (white) grey for the background (8 is nearly the stock dark one), a number is us...")
+     ("pool:*hi-col*" "1" "the element being asked for (red) grey for the background (8 is nearly the stock dark one), a number is use...")
+     ("pool:*pv-margin*" "30.0" "smallest margin round the guide's zoom grey for the background (8 is nearly the stock dark one), a number i...")
+     ("pool:*pv-churn*" "0.05" "re-zoom only when the box moved this much of its own width -- lower follows the shape more closely and flic...")
+     ("pool:*fit-iter*" "3000" "relaxation sweeps, pulling phase ---- the fitting engine Two passes, both iterative: sides held exactly tru...")
+     ("pool:*fit-polish*" "400" "sweeps of the sides-only finish ---- the fitting engine Two passes, both iterative: sides held exactly true...")
+     ("pool:*fit-quad*" "2000" "sweeps for the four-corner relaxation ---- the fitting engine Two passes, both iterative: sides held exactl...")
+     ("pool:*fit-slack*" "0.05" "how far outside a band still passes ---- the fitting engine Two passes, both iterative: sides held exactly...")
+     ("pool:*alfa-lo*" "15.0" "degrees: the flattest corner A the scan will consider The four-bar scan: the angle at corner A is swept coa...")
+     ("pool:*alfa-hi*" "165.0" "and the sharpest; narrowing the pair is faster and can miss a real fit scan will consider")
+     ("pool:*alfa-step*" "0.25" "coarse sweep; finer costs every run is faster and can miss a real fit")
+     ("pool:*alfa-fine*" "0.3" "how far either side the fine sweep runs is faster and can miss a real fit")
+     ("pool:*alfa-fstep*" "0.005" "fine sweep, and the angle the fit is finally read to is faster and can miss a real fit")
+     ("pool:*grecth-step*" "0.00087" "radians, ~ 0.05 degree The Grecian end solver: the diagonal angle is scanned for the one that reproduces th...")
+     ("pool:*grec-fit*" "0.0625" "accept an end within 1/16\" The Grecian end solver: the diagonal angle is scanned for the one that reproduce...")
+     ("pool:*half-ratio*" "0.5" "A pool runs about twice as long as it is wide, so the width question is offered this fraction of the length...")
+     ("pool:*treat-default*" "\"\"" "What the FIRST corner's treatment question offers on Enter, before there is a previous answer to reuse: \"\"...")
+     ("pool:*quarter*" "0.25" "A derived letter is quoted to the nearest quarter inch -- the granularity a tape is actually read to (pool:...")
+     ("pool:*fixfloor*" "12.0" "A sheet letter that does not close positive against its overall is lifted to a positive floor and the repor...")
+     ("pool:*hookslack*" "0.0625" "---- how far a wall dim may slide to stay ON the pool A corner UNDER 90 degrees pokes out past its own trea...")
+     ("pool:*sq90-tol*" "(* pi (/ 20.0 180.0))" "---- when a corner may be called square on the sheet How far off 90 a corner may sit and still be marked \"9...")
+     ("pool:*btypes*" "\"Normal Sport Wedge SLope MOdflat SHallow\"" "---- vocabulary Bottom-type keywords, shared by the rectangle / oval / grecian dispatchers. Normal and the...")
+     ("pool:*btshown*" "\"Normal/Sport/Wedge/SLope/MOdflat/SHallow\"" "---- vocabulary Bottom-type keywords, shared by the rectangle / oval / grecian dispatchers. Normal and the...")
+     ("pool:*grecnpts*" "(list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0) (list 410.0 125.0) (list 360.0 180.0) (list 0.0 180.0) (list -50.0 125.0) (list -50.0 55.0))" "---- nominal guide rings What the Grecian and Octagon guides look like before any measurement is in. The oc...")
+     ("pool:*octnpts*" "(list (list 87.87 0.0) (list 212.13 0.0) (list 300.0 87.87) (list 300.0 212.13) (list 212.13 300.0) (list 87.87 300.0) (list 0.0 212.13) (list 0.0 87.87))" "...and the octagon's, which a change here resizes on screen and nowhere else -- the first answer rescales i..."))
+    ("SMARTFILLET" "lisp/smartfillet/SMARTFILLET.lsp"
+     ("sf:*first*" "6.0" "the smallest radius offered, and the step")
+     ("sf:*step*" "6.0" "between the ones after it -- 6\" of radius is the smallest difference that reads on a pool plan")
+     ("sf:*extras*" "'(3.0 9.0)" "radii offered BESIDES that series. A 3 or a 9 turns up, just not often enough to be the step; they are draw...")
+     ("sf:*maxshown*" "10" "how many previews may be on screen at once; nil = every radius that fits, which on a long wall is a great m...")
+     ("sf:*fit*" "0.98" "how much of the shorter leg a fillet may use up: 1.0 would put the tangent point exactly on the far end and...")
+     ("sf:*layer*" "\"SMART FILLET PREVIEW\"" "use up: 1.0 would put the tangent point exactly on the far end and leave a zero-length line behind")
+     ("sf:*color*" "3" "the layer's colour, and the fallback index on every preview: green, so a preview reads as a preview even wh...")
+     ("sf:*shade-lo*" "'(190 255 190)" "the SMALLEST preview's green ... index on every preview: green, so a preview reads as a preview even where...")
+     ("sf:*shade-hi*" "'(0 110 0)" "... and the largest's. The fan is graded between the two, so which arc a label belongs to is a matter of sh...")
+     ("sf:*trans*" "40" "per cent transparency on every preview, so an arc crossing another still reads. 0 or nil = solid; over 90 i...")
+     ("sf:*ltype*" "\"DASHED\"" "so an arc crossing another still reads. 0 or nil = solid; over 90 is a preview nobody can see")
+     ("sf:*ltscale*" "0.25" "the stock DASHED pattern is 18 units long, so a 6\" fillet arc (9 units of it) would come out as one unbroke...")
+     ("sf:*guide*" "t" "nil = never draw one, and a far-off corner is a fan of green arcs floating in space again long, so a 6\" fil...")
+     ("sf:*gapmin*" "4.5" "how far short of the corner a line has to stop before it gets one. The stock DASHED pattern is 18 units and...")
+     ("sf:*label*" "t" "stop before it gets one. The stock DASHED pattern is 18 units and sf:*ltscale* takes a quarter of it, so a...")
+     ("sf:*txthgt*" "4.0" "small enough that two labels a 6\" step apart clear each other side to side stop before it gets one. The sto...")
+     ("sf:*rung*" "1.4" "and each one climbs this many text heights further off its leg than the label before it on that side, so th...")
+     ("sf:*dimlayer*" "\"DIMENSION\"" "heights further off its leg than the label before it on that side, so they cannot collide however tight the...")
+     ("sf:*smalldim*" "24.0" "POOL's small-dimension rule, heights further off its leg than the label before it on that side, so they can...")
+     ("sf:*smallstyle*" "\"STANDARD INCHES\"" "kept so a fillet callout matches the dims beside it heights further off its leg than the label before it on...")
+     ("sf:*dimoff*" "nil" "nil = one radius past the arc matches the dims beside it")
+     ("sf:*dimrepeat*" "nil" "one callout plus \"Typ.\" is how the sheet reads; set T to dimension every corner matches the dims beside it")
+     ("sf:*typ*" "t" "reads; set T to dimension every corner")
+     ("sf:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e...")
+     ("sf:*sysold*" "nil" "sysvar snapshot, live only mid-run")
+     ("sf:*preview*" "nil" "every entity drawn as a preview")
+     ("sf:*picks*" "nil" "(preview-arc . radius), what a click means")
+     ("sf:*smallwarned*" "nil" "the missing-style note is said once"))
+    ("SOCONV" "lisp/soconv/SOCONV.lsp"
+     ("*soconv-map*" "'((\"Pool Perimeter\" \"*\" \"POOL\") (\"Obstacles\" \"*\" \"POOL\") (\"LEICA_DISTO_POINT_ENTITY\" \"POINT\" \"POINTS\") (\"Existing Anchorss\" \"POINT\" \"POINTS\") (\"Existing Anchors\" \"POINT\" \"POINTS\") (\"Dimensions\" \"TEXT,MTEXT\" \"TEXT\") (\"Dimensions\" \"*\" \"DIMENSION\"))" "The conversion itself, one row per rule: (source-layer entity-types destination-layer) Both patterns are wc...")
+     ("*soconv-colors*" "'((\"POOL\" . 4) ; cyan, as POOL.LSP creates it (\"POINTS\" . 6) ; magenta - the pink survey points read as (\"TEXT\" . 4) (\"DIMENSION\" . 141))" "What to CREATE a destination layer with when the drawing has not got it. An existing layer is never recolou...")
+     ("*soconv-default-color*" "7" "The colour for a destination the table above does not name - what a retuned *soconv-map* row pointing at a...")
+     ("*soconv-force-bylayer*" "nil" "nil, and a moved object keeps every property it arrived with, which is what the sample conversion does. T i...")
+     ("*soconv-record*" "t" "The record SORECONV reads back, and the application it lives under. nil converts exactly as before and writ...")
+     ("*soconv-xdata-app*" "\"SOCONV\"" "The record SORECONV reads back, and the application it lives under. nil converts exactly as before and writ..."))
+    ("SPA" "lisp/spa/SPA.LSP"
+     ("spa:*dimlunit*" "5" "5 = fractional (84-1/2), 2 = decimal (84.50) ---- dimension text Every dimension is written in standard inc...")
+     ("spa:*dimprec*" "3" "5 -> 1/8\", 2 -> 3 decimal places ---- dimension text Every dimension is written in standard inches whatever...")
+     ("spa:*dimpost*" "\"\\\"\"" "---- dimension text Every dimension is written in standard inches whatever the host drawing is set to. Anyt...")
+     ("spa:*dim-asz*" "0.8" "arrow size; raise for a bolder dim The dimension furniture is sized off the drawing's note height th, so th...")
+     ("spa:*dim-exe*" "0.6" "extension line past the dim line The dimension furniture is sized off the drawing's note height th, so the...")
+     ("spa:*dim-exo*" "0.6" "extension line offset from the outline The dimension furniture is sized off the drawing's note height th, s...")
+     ("spa:*dim-gap*" "0.4" "gap round the text The dimension furniture is sized off the drawing's note height th, so the numbers read a...")
+     ("spa:*dimvars*" "'(\"DIMLUNIT\" \"DIMFRAC\" \"DIMDEC\" \"DIMZIN\" \"DIMPOST\" \"DIMTAD\" \"DIMTMOVE\" \"DIMTXT\" \"DIMASZ\" \"DIMEXE\" \"DIMEXO\" \"DIMGAP\" \"DIMSCALE\" \"DIMTIX\" \"DIMTOFL\" \"DIMATFIT\")" "The system variables the routine sets for the run and puts back afterwards. A variable this release does no...")
+     ("spa:*dimoff*" "36.0" "3 ft: cover outline -> the LEFT overall dim ---- where the dimension lines stand off The COVER's overalls g...")
+     ("spa:*topoff*" "24.0" "2 ft: cover outline -> the TOP overall dim ---- where the dimension lines stand off The COVER's overalls go...")
+     ("spa:*flatoff*" "18.0" "outline -> the inboard flat dims ---- where the dimension lines stand off The COVER's overalls go outside t...")
+     ("spa:*insetfrac*" "0.3333" "water's edge dims, a third of the way in ---- where the dimension lines stand off The COVER's overalls go o...")
+     ("spa:*lapoff*" "14.0" "how far under the cover the lap note sits ---- where the dimension lines stand off The COVER's overalls go...")
+     ("spa:*mark-r*" "0.18" "circle radius on the corner point ---- corner callouts, as multiples of doff A radius corner takes a radius...")
+     ("spa:*mark-lead*" "1.2" "how far out the mark's own text sits ---- corner callouts, as multiples of doff A radius corner takes a rad...")
+     ("spa:*ng-lead*" "1.5" "where the \"Not Given\" leader leaves it ---- corner callouts, as multiples of doff A radius corner takes a r...")
+     ("spa:*ng-off*" "2.05" "... and how far out that note sits ---- corner callouts, as multiples of doff A radius corner takes a radiu...")
+     ("spa:*rad-off*" "0.9" "radius dim, dragged out past the arc ---- corner callouts, as multiples of doff A radius corner takes a rad...")
+     ("spa:*cut-off*" "0.6" "cut-face dim, out past the face ---- corner callouts, as multiples of doff A radius corner takes a radius d...")
+     ("spa:*oct-off*" "0.8" "the octagon's one cut callout ---- corner callouts, as multiples of doff A radius corner takes a radius dim...")
+     ("spa:*doff-min*" "6.0" "never closer than 6\" ---- how big the drawing furniture comes out Both flows size their dimension offsets a...")
+     ("spa:*doff-div*" "12.0" "---- how big the drawing furniture comes out Both flows size their dimension offsets and text off the spa i...")
+     ("spa:*th-min*" "1.0" "never smaller than 1\" ---- how big the drawing furniture comes out Both flows size their dimension offsets...")
+     ("spa:*th-div*" "40.0" "---- how big the drawing furniture comes out Both flows size their dimension offsets and text off the spa i...")
+     ("spa:*hingetxth*" "5.0" "hinge label height ---- hinge lettering and linework Matched to the office template's before/after sample:...")
+     ("spa:*hingetxw*" "60.0" "hinge label MTEXT frame width ---- hinge lettering and linework Matched to the office template's before/aft...")
+     ("spa:*hingestyle*" "\"Attributes\"" "label style (Standard when absent) ---- hinge lettering and linework Matched to the office template's befor...")
+     ("spa:*hingetxoff*" "0.6" "label height multiples: line -> label ---- hinge lettering and linework Matched to the office template's be...")
+     ("spa:*hdashmult*" "20.0" "DASHED2 0.25\" dash x 20 = 5\" on paper ---- hinge lettering and linework Matched to the office template's be...")
+     ("spa:*sfx-water*" "\"Water's Edge\"" "---- the note stacked under every overall")
+     ("spa:*sfx-cover*" "\"Cover Size\"" "---- the note stacked under every overall")
+     ("spa:*lay-water*" "\"POOL\"" "water's edge perimeter (dashed) ---- output layers and their colours Made (or un-frozen, unlocked and switc...")
+     ("spa:*lay-cover*" "\"COVER\"" "cover size perimeter ---- output layers and their colours Made (or un-frozen, unlocked and switched back on...")
+     ("spa:*lay-dim*" "\"DIMENSION\"" "every dimension and corner mark ---- output layers and their colours Made (or un-frozen, unlocked and switc...")
+     ("spa:*lay-notes*" "\"SPA-NOTES\"" "the mini-model and its corner letters, the mode note, the report, and the grey input guide ---- output laye...")
+     ("spa:*lay-text*" "\"TEXT\"" "the Hinge / Velcro Hinge labels The hinges themselves are cover hardware, so they are drawn on the cover's...")
+     ("spa:*lay-hinge*" "\"COVER\"" "The hinges themselves are cover hardware, so they are drawn on the cover's layer even on a sheet that shows...")
+     ("spa:*col-water*" "4" "cyan, and only when POOL is created The hinges themselves are cover hardware, so they are drawn on the cove...")
+     ("spa:*col-cover*" "6" "magenta, ditto -- an existing layer keeps the colour the office gave it The hinges themselves are cover har...")
+     ("spa:*col-dim*" "2" "yellow, on the same terms keeps the colour the office gave it")
+     ("spa:*col-notes*" "3" "green, on the same terms keeps the colour the office gave it")
+     ("spa:*col-text*" "7" "white or black, whichever the background makes it keeps the colour the office gave it")
+     ("spa:*col-bad*" "1" "red -- a letter the validator adjusted background makes it")
+     ("spa:*col-advice*" "4" "cyan -- a recommendation, not a failure background makes it")
+     ("spa:*dashname*" "\"SPADASH\"" "---- linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTI...")
+     ("spa:*dashpat*" "'(4.0 -3.0)" "---- linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTI...")
+     ("spa:*dotname*" "\"SPADOT\"" "---- linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTI...")
+     ("spa:*dotpat*" "'(0.0 -3.0)" "---- linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTI...")
+     ("spa:*hdashname*" "\"DASHED2\"" "the stock fold-hinge pattern ---- linetypes Defined here rather than loaded from acad.lin, so a failed load...")
+     ("spa:*hdashpat*" "'(0.25 -0.125)" "---- linetypes Defined here rather than loaded from acad.lin, so a failed load can never fall back to CONTI...")
+     ("spa:*ds-cover*" "\"STANDARD INCHES\"" "---- dimension styles, one per outline A style the drawing already defines is used exactly as it stands --...")
+     ("spa:*ds-water*" "\"STANDARD INCHES 0.5\"" "---- dimension styles, one per outline A style the drawing already defines is used exactly as it stands --...")
+     ("spa:*wefactor*" "0.5" "---- dimension styles, one per outline A style the drawing already defines is used exactly as it stands --...")
+     ("spa:*gapdflt*" "6.0" "suggested cover lap over the water's edge ---- dimension styles, one per outline A style the drawing alread...")
+     ("spa:*diagoff*" "0.82842712" "Offsetting a corner by g is not the same for every treatment: a radius stays concentric (r -> r + g) and a...")
+     ("spa:*capfuzz*" "1.0e-6" "How far a corner treatment may exceed its own setback cap before the size is refused and re-asked. Float no...")
+     ("spa:*octeq*" "0.125" "How far the eight sides of an octagon may differ and still count as \"all equal\" -- a rounded-off cut face l...")
+     ("spa:*sameeps*" "0.0005" "...and how far two corners' sizes may differ and still be one treatment for the Typ. rule.")
+     ("spa:*rep-row*" "2.2" "h multiples: row pitch ---- the report table and the mini-model beside it Column positions are multiples of...")
+     ("spa:*rep-title*" "1.25" "h multiples: the heading's text height ---- the report table and the mini-model beside it Column positions...")
+     ("spa:*rep-note*" "1.4" "h multiples: a red failure note ---- the report table and the mini-model beside it Column positions are mul...")
+     ("spa:*rep-advice*" "1.15" "h multiples: a cyan recommendation ---- the report table and the mini-model beside it Column positions are...")
+     ("spa:*rep-c1*" "20.0" "h multiples: the TARGET column ---- the report table and the mini-model beside it Column positions are mult...")
+     ("spa:*rep-c2*" "29.0" "the ACTUAL column; move it out if a measurement ever runs into it ---- the report table and the mini-model...")
+     ("spa:*rep-c3*" "38.0" "the DELTA column, on the same terms measurement ever runs into it")
+     ("spa:*rep-w*" "46.0" "how wide the ruled box comes out measurement ever runs into it")
+     ("spa:*map-gap*" "3.0" "th multiples: table -> the mini-model measurement ever runs into it")
+     ("spa:*map-size*" "24.0" "th multiples: the mini-model's fit box measurement ever runs into it")
+     ("spa:*pv-col*" "'auto" "guide outline: 'auto picks the grey for the background (8 is nearly the stock dark one), a number is used e...")
+     ("spa:*pvx-col*" "7" "measuring tie (white) grey for the background (8 is nearly the stock dark one), a number is used exactly as...")
+     ("spa:*hi-col*" "1" "the element being asked for (red) The RECTANGLE guide's nominal box. The octagon and round guides keep thei...")
+     ("spa:*pv-w*" "240.0" "nominal guide width The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
+     ("spa:*pv-l*" "200.0" "nominal guide length The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
+     ("spa:*pv-th*" "12.0" "guide corner-letter height The RECTANGLE guide's nominal box. The octagon and round guides keep their own r...")
+     ("spa:*pv-tie*" "10.0" "guide tie-letter height The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring...")
+     ("spa:*pv-lbl*" "22.0" "how far a rectangle corner letter sits out The RECTANGLE guide's nominal box. The octagon and round guides...")
+     ("spa:*pv-olbl*" "20.0" "...and an octagon one, which sits tighter The RECTANGLE guide's nominal box. The octagon and round guides k...")
+     ("spa:*pv-cap*" "50.0" "biggest treatment the guide will draw, so one huge corner cannot swallow it The RECTANGLE guide's nominal b...")
+     ("spa:*pv-zoom*" "0.35" "margin round the real spa when the view leaves the guide for it (of its long side) so one huge corner canno...")
+     ("spa:*foamtab*" "(list (list \"ECONOMY\" \"3-2\" (list (cons 48.0 96.0)) (list 2)) (list \"STANDARD\" \"3-2\" (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2)) (list \"STANDARD\" \"4-2\" (list (cons 48.0 96.0) (cons 49.5 102.0)) (list 2 3 4)) (list \"STANDARD\" \"4-3\" (list (cons 48.0 144.0)) (list 2 3 4)) (list \"STANDARD\" \"5-3\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"5-4\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"ULTRA\" \"3-2\" (list (cons 48.0 144.0)) (list 2)) (list \"ULTRA\" \"4-3\" (list (cons 48.0 96.0)) (list 2 3 4)) (list \"ULTRA\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"THERMOLIGHT\" \"1-3/8\" (list (cons 53.0 nil)) (list 2 3 4 5)))" "---- the foam sheet THE SHOP DATA THIS ROUTINE IS BUILT ON. Grade and taper -- read off the Spa Cover Detai...")
+     ("spa:*foamdflt*" "(list (cons 48.0 96.0))" "assumed when nothing matches")
+     ("spa:*foamdpc*" "(list 2 3 4 5)" "and the counts it will accept")
+     ("spa:*thermotaper*" "\"1-3/8\"" "the one taper a Thermo-Light comes in")
+     ("spa:*hardtab*" "(list ; grade velcro double C hold down (list \"ECONOMY\" '(REQUEST) '(REQUEST) '(REQUEST)) (list \"STANDARD\" '(OVER 120.0) '(OVER 108.0) '(OVER 120.0)) (list \"ULTRA\" '(OVER 108.0) '(NEVER) '(OVER 96.0)) (list \"THERMOLIGHT\" '(ALWAYS) '(NEVER) '(NEVER)))" "---- hardware called for by the LONGEST hinge, per grade Each rule is (OVER <inches>) | (ALWAYS) | (NEVER)...")
+     ("spa:*hardnames*" "(list \"VELCRO HINGES\" \"DOUBLE C CHANNEL\" \"HOLD DOWN KIT\")" "What the three columns are called in the report, in the order the table above holds them -- rename one and...")
+     ("spa:*hinge-min*" "2" "a cover is never fewer pieces than this ---- the hinge placement solver The fewest pieces that fit the foam...")
+     ("spa:*hinge-try*" "3" "how many extra piece counts to try ---- the hinge placement solver The fewest pieces that fit the foam widt...")
+     ("spa:*hinge-edge*" "0.01" "keep a hinge this far off the cover's edge ---- the hinge placement solver The fewest pieces that fit the f...")
+     ("spa:*allcorners*" "\"the four corners\"" "---- vocabulary The subject the all-same round asks about, spelled ONCE: it is the label the treatment ques..."))
+    ("SPACHECK" "lisp/spacheck/SPACHECK.lsp"
+     ("spachk:*lay-cover*" "\"COVER\"" "the cover outline and the hinges Layers SPA draws on -- the audit is only as right as these are.")
+     ("spachk:*lay-water*" "\"POOL\"" "the water's edge outline Layers SPA draws on -- the audit is only as right as these are.")
+     ("spachk:*lay-dim*" "\"DIMENSION\"" "every dimension Layers SPA draws on -- the audit is only as right as these are.")
+     ("spachk:*lay-text*" "\"TEXT\"" "the hinge labels Layers SPA draws on -- the audit is only as right as these are.")
+     ("spachk:*lay-notes*" "\"SPA-NOTES\"" "corner letters, mode note, report Layers SPA draws on -- the audit is only as right as these are.")
+     ("spachk:*dimfix-cmd*" "\"CDIM\"" "CDIM is the command that moves stray dimensions onto *lay-dim*, and is what the report tells you to run whe...")
+     ("spachk:*techtitle-block*" "\"Tech Title\"" "spaces optional in the name The sheet's title block, and the attribute in it carrying the date. This is the...")
+     ("spachk:*date-tag*" "\"Date\"" "The sheet's title block, and the attribute in it carrying the date. This is the Tech Title BLOCK, not the d...")
+     ("spachk:*ds-cover*" "\"STANDARD INCHES\"" "Dimension styles, one per outline (SPA's spa:*ds-cover* / *ds-water*).")
+     ("spachk:*ds-water*" "\"STANDARD INCHES 0.5\"" "Dimension styles, one per outline (SPA's spa:*ds-cover* / *ds-water*).")
+     ("spachk:*sfx-cover*" "\"Cover Size\"" "The notes SPA stacks under an overall's measurement.")
+     ("spachk:*sfx-water*" "\"Water's Edge\"" "The notes SPA stacks under an overall's measurement.")
+     ("spachk:*sfx-lap*" "\"Overlap\"" "The notes SPA stacks under an overall's measurement.")
+     ("spachk:*topoff*" "24.0" "2 ft: cover -> the TOP overall dim SPA's standoffs (spa:*topoff* / *dimoff* / *flatoff*), and how far a dim...")
+     ("spachk:*dimoff*" "36.0" "3 ft: cover -> the LEFT overall dim SPA's standoffs (spa:*topoff* / *dimoff* / *flatoff*), and how far a di...")
+     ("spachk:*off-tol*" "2.0" "inches of slack on either standoff SPA's standoffs (spa:*topoff* / *dimoff* / *flatoff*), and how far a dim...")
+     ("spachk:*details-block*" "\"Spa Cover Details\"" "The block SPA reads the grade and taper out of.")
+     ("spachk:*liner-w*" "704.0" "58'-8\" in drawing units TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border-w* / *lfc...")
+     ("spachk:*liner-h*" "543.625" "45'-3 5/8\" in drawing units TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border-w* /...")
+     ("spachk:*title-frac*" "0.6" "spa title block = 0.6 x the liner TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border...")
+     ("spachk:*border-layer*" "\"border\"" "TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-border-w* / *lfc-border-h*); a spa sheet...")
+     ("spachk:*border-tol*" "0.005" "0.5% slack on the factor and the aspect TITLE BLOCK. The liner block is linfincheck's nominal border (*lfc-...")
+     ("spachk:*meas-tol*" "0.0625" "1/16\" -- a fractional dim rounds How close a dimension's measurement must be to the geometry it spans, and...")
+     ("spachk:*pt-tol*" "1.0e-4" "How close a dimension's measurement must be to the geometry it spans, and how close a definition point must...")
+     ("spachk:*grey-color*" "8" "ACI: reserved for fading, unused today")
+     ("spachk:*flag-color*" "1" "ACI: what you confirmed is wrong (red)")
+     ("spachk:*advice-color*" "4" "ACI: advice, not a failure (cyan)")
+     ("spachk:*green-scale*" "0.75" "all-clear text height vs the red")
+     ("spachk:*report-layer*" "\"SPACHECK-REPORT\"" "The layer the report MTEXT goes on, created on first use; the colour applies only then, so a layer already...")
+     ("spachk:*report-color*" "3" "ACI (green) The layer the report MTEXT goes on, created on first use; the colour applies only then, so a la...")
+     ("spachk:*report-chars*" "48.0" "report column width, in text heights The layer the report MTEXT goes on, created on first use; the colour a...")
+     ("spachk:*zoom-margin*" "0.75" "empty space around a zoomed item The layer the report MTEXT goes on, created on first use; the colour appli...")
+     ("spachk:*foamtab*" "(list (list \"ECONOMY\" \"3-2\" (list (cons 48.0 96.0)) (list 2)) (list \"STANDARD\" \"3-2\" (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2)) (list \"STANDARD\" \"4-2\" (list (cons 48.0 96.0) (cons 49.5 102.0)) (list 2 3 4)) (list \"STANDARD\" \"4-3\" (list (cons 48.0 144.0)) (list 2 3 4)) (list \"STANDARD\" \"5-3\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"5-4\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"ULTRA\" \"3-2\" (list (cons 48.0 144.0)) (list 2)) (list \"ULTRA\" \"4-3\" (list (cons 48.0 96.0)) (list 2 3 4)) (list \"ULTRA\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"THERMOLIGHT\" \"1-3/8\" (list (cons 53.0 nil)) (list 2 3 4 5)))" "Foam sheets, copied from SPA (spa:*foamtab*) so the audit measures against the same rules the drawing was b...")
+     ("spachk:*hardtab*" "(list (list \"ECONOMY\" '(REQUEST) '(REQUEST) '(REQUEST)) (list \"STANDARD\" '(OVER 120.0) '(OVER 108.0) '(OVER 120.0)) (list \"ULTRA\" '(OVER 108.0) '(NEVER) '(OVER 96.0)) (list \"THERMOLIGHT\" '(ALWAYS) '(NEVER) '(NEVER)))" "Hardware called for by the LONGEST hinge, per grade: (grade velcro doubleC holddown), each (OVER n) | (ALWA...")
+     ("spachk:*hallow-max*" "5" "pieces A piece count this high or higher is the table's top row (\"5 = 5+\").")
+     ("spachk:*grade-tag*" "\"GRADE\"" "The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as...")
+     ("spachk:*taper-tag*" "\"TAPER\"" "The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as...")
+     ("spachk:*grade-words*" "'((\"ECON\" . \"ECONOMY\") (\"ULTRA\" . \"ULTRA\") (\"FRP\" . \"ULTRA\") (\"THERMO\" . \"THERMOLIGHT\"))" "The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as...")
+     ("spachk:*grade-default*" "\"STANDARD\"" "the grade a value matching nothing takes ...and the taper vocabulary, matched the same way; an unrecognised...")
+     ("spachk:*taper-words*" "'((\"3-2\" . \"3-2\") (\"4-2\" . \"4-2\") (\"4-3\" . \"4-3\") (\"5-3\" . \"5-3\") (\"5-4\" . \"5-4\") (\"3-3\" . \"3-3\") (\"3/8\" . \"1-3/8\"))" "...and the taper vocabulary, matched the same way; an unrecognised taper measures against no foam row at al...")
+     ("spachk:*grade-short*" "'((\"ECONOMY\" . \"ECO\") (\"STANDARD\" . \"STD\") (\"ULTRA\" . \"ULTRA\") (\"THERMOLIGHT\" . \"THERMO\"))" "The short grade names the report prints, keyed by the canonical name.")
+     ("spachk:*outline-types*" "'(\"LWPOLYLINE\" \"POLYLINE\" \"CIRCLE\" \"ELLIPSE\")" "Entity types, by the job each does in the audit: what may be an outline at all, which of those are closed b...")
+     ("spachk:*closed-types*" "'(\"CIRCLE\" \"ELLIPSE\")" "Entity types, by the job each does in the audit: what may be an outline at all, which of those are closed b...")
+     ("spachk:*loose-types*" "'(\"LINE\" \"ARC\")" "Entity types, by the job each does in the audit: what may be an outline at all, which of those are closed b...")
+     ("spachk:*linear-types*" "'(0 1)" "Dimension subtypes whose span can be measured, by the low three bits of DXF group 70: 0 = rotated, 1 = alig...")
+     ("spachk:*velcro-word*" "\"Velcro\"" "The word SPA labels a Velcro hinge with. The arrangement audit finds those labels by it, so it has to be th...")
+     ("spachk:*report-wide*" "0.25" "The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short s...")
+     ("spachk:*report-lead*" "1.66" "The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short s...")
+     ("spachk:*report-hmax*" "30.0" "The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short s...")
+     ("spachk:*report-hmin*" "200.0" "The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short s...")
+     ("spachk:*report-hfall*" "2.5" "drawing units The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a...")
+     ("spachk:*report-gap*" "0.05" "The report is scaled to the drawing, exactly as the check family's siblings do it. WIDE: on a wide, short s...")
+     ("spachk:*col-gap*" "2.0" "Gap between the main sheet and the DIMENSION AUDIT column beside it, in text heights.")
+     ("spachk:*title-scale*" "1.5" "The title is written this many times the base height, and a section heading gets this much blank line above...")
+     ("spachk:*hdg-gap*" "0.4" "The title is written this many times the base height, and a section heading gets this much blank line above...")
+     ("spachk:*head-lines*" "4.5" "The title is written this many times the base height, and a section heading gets this much blank line above...")
+     ("spachk:*hdg-lines*" "1.4" "The title is written this many times the base height, and a section heading gets this much blank line above...")
+     ("spachk:*dim-head*" "2.5" "the same allowance for the audit column The title is written this many times the base height, and a section...")
+     ("spachk:*row-indent*" "\" \"" "Findings are indented under their heading by this string.")
+     ("spachk:*date-sep*" "\"/\"" "The sheet's date is written and read in this order, with this separator: change both together, and remember...")
+     ("spachk:*date-order*" "'(month day year)" "The sheet's date is written and read in this order, with this separator: change both together, and remember...")
+     ("spachk:*tiny*" "1.0e-6" "drawing units A border edge shorter than this has no measurable size, and a bounding box smaller than this...")
+     ("spachk:*foam-slack*" "0.01" "drawing units How close a foam sheet's dimension must come to the table's before it counts as that sheet --..."))
+    ("SPACOVCREATE" "lisp/spacovcreate/SPACOVCREATE.lsp"
+     ("scv:*offset-dflt*" "6.0" "drawing units How far the cover laps the spa, the number Enter takes. SPA offers the same 6\" as its cover-o...")
+     ("scv:*filter*" "'((0 . \"LINE,LWPOLYLINE,POLYLINE,ARC,CIRCLE,ELLIPSE,SPLINE\"))" "What the selection is allowed to hand the command. Anything not in this list is never seen, so a window dra...")
+     ("scv:*taper-dflt*" "\"4-2\"" "The grade and taper assumed when nobody gives one. THE POINT OF THESE TWO is that the run still produces a...")
+     ("scv:*grade-dflt*" "\"STANDARD\"" "The grade and taper assumed when nobody gives one. THE POINT OF THESE TWO is that the run still produces a...")
+     ("scv:*block-name*" "\"SPA COVER DETAILS\"" "The block the grade and taper are read off, and its two tags. The name is only used to warn that a DIFFEREN...")
+     ("scv:*grade-tag*" "\"GRADE\"" "The block the grade and taper are read off, and its two tags. The name is only used to warn that a DIFFEREN...")
+     ("scv:*taper-tag*" "\"TAPER\"" "The block the grade and taper are read off, and its two tags. The name is only used to warn that a DIFFEREN...")
+     ("scv:*chain-tol*" "0.05" "drawing units Two ends this close together are the same end. Raise it for a drawing whose walls were drawn...")
+     ("scv:*arcstep*" "5.0" "degrees per tessellated segment How finely an arc is chopped when one has to be measured as points -- the c...")
+     ("scv:*miterlim*" "4.0" "How far a corner may be stretched by the offset before the spike is cut back, in multiples of the offset it...")
+     ("scv:*fuzz*" "1.0e-6" "Anything smaller than this is zero: a zero-length wall, a bulge that is really a straight run, an area of n...")
+     ("scv:*lay-cover*" "\"COVER\"" "the cover outline AND the hinges The layers written on, created on first use with these colours. An existin...")
+     ("scv:*col-cover*" "6" "ACI (magenta) The layers written on, created on first use with these colours. An existing layer is used exa...")
+     ("scv:*lay-text*" "\"TEXT\"" "the Hinge / Velcro Hinge labels The layers written on, created on first use with these colours. An existing...")
+     ("scv:*col-text*" "7" "ACI (white or black, whichever reads) The layers written on, created on first use with these colours. An ex...")
+     ("scv:*lay-report*" "\"SPA-NOTES\"" "the report table beside the cover The layers written on, created on first use with these colours. An existi...")
+     ("scv:*col-report*" "3" "ACI (green) The layers written on, created on first use with these colours. An existing layer is used exact...")
+     ("scv:*col-bad*" "1" "ACI (red) -- a flagged report row The layers written on, created on first use with these colours. An existi...")
+     ("scv:*col-advice*" "4" "ACI (cyan) -- a recommendation The layers written on, created on first use with these colours. An existing...")
+     ("scv:*hdashname*" "\"DASHED2\"" "The fold hinge's linetype: the stock DASHED2 pattern, defined when the drawing lacks it, scaled so its dash...")
+     ("scv:*hdashpat*" "'(0.25 -0.125)" "The fold hinge's linetype: the stock DASHED2 pattern, defined when the drawing lacks it, scaled so its dash...")
+     ("scv:*hdashmult*" "20.0" "The fold hinge's linetype: the stock DASHED2 pattern, defined when the drawing lacks it, scaled so its dash...")
+     ("scv:*hingetxth*" "5.0" "label height The hinge labels: SPA's numbers, so the two tools' drawings stack.")
+     ("scv:*hingetxw*" "60.0" "label MTEXT frame width The hinge labels: SPA's numbers, so the two tools' drawings stack.")
+     ("scv:*hingestyle*" "\"Attributes\"" "label style (Standard when absent) The hinge labels: SPA's numbers, so the two tools' drawings stack.")
+     ("scv:*hingetxoff*" "0.6" "label heights from the line to the label The hinge labels: SPA's numbers, so the two tools' drawings stack.")
+     ("scv:*th-min*" "1.0" "smallest report lettering The report table beside the cover. Its text height is worked out from the size of...")
+     ("scv:*th-div*" "40.0" "cover size / this = lettering height The report table beside the cover. Its text height is worked out from...")
+     ("scv:*rep-gap*" "12.0" "th multiples: cover -> the table The report table beside the cover. Its text height is worked out from the...")
+     ("scv:*rep-row*" "2.2" "th multiples: row pitch The report table beside the cover. Its text height is worked out from the size of t...")
+     ("scv:*rep-title*" "1.25" "th multiples: heading text height The report table beside the cover. Its text height is worked out from the...")
+     ("scv:*rep-note*" "1.4" "th multiples: a red failure note The report table beside the cover. Its text height is worked out from the...")
+     ("scv:*rep-adv*" "1.15" "th multiples: a cyan recommendation The report table beside the cover. Its text height is worked out from t...")
+     ("scv:*rep-c1*" "22.0" "th multiples: the LIMIT column The report table beside the cover. Its text height is worked out from the si...")
+     ("scv:*rep-c2*" "32.0" "th multiples: the ACTUAL column The report table beside the cover. Its text height is worked out from the s...")
+     ("scv:*rep-w*" "44.0" "th multiples: how wide the box comes out The report table beside the cover. Its text height is worked out f...")
+     ("scv:*foamtab*" "(list (list \"ECONOMY\" \"3-2\" (list (cons 48.0 96.0)) (list 2)) (list \"STANDARD\" \"3-2\" (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2)) (list \"STANDARD\" \"4-2\" (list (cons 48.0 96.0) (cons 49.5 102.0)) (list 2 3 4)) (list \"STANDARD\" \"4-3\" (list (cons 48.0 144.0)) (list 2 3 4)) (list \"STANDARD\" \"5-3\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"5-4\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"ULTRA\" \"3-2\" (list (cons 48.0 144.0)) (list 2)) (list \"ULTRA\" \"4-3\" (list (cons 48.0 96.0)) (list 2 3 4)) (list \"ULTRA\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"THERMOLIGHT\" \"1-3/8\" (list (cons 53.0 nil)) (list 2 3 4 5)))" "-- the shop data the hinges are built on ----------------------------- THE FOAM SHEET. Grade and taper pick...")
+     ("scv:*foamdflt*" "(list (cons 48.0 96.0))" "when nothing matches at all")
+     ("scv:*foamdpc*" "(list 2 3 4 5)" "and the counts it will accept")
+     ("scv:*thermotaper*" "\"1-3/8\"" "the one taper a Thermo-Light comes in")
+     ("scv:*hardtab*" "(list ; grade velcro double C hold down (list \"ECONOMY\" '(REQUEST) '(REQUEST) '(REQUEST)) (list \"STANDARD\" '(OVER 120.0) '(OVER 108.0) '(OVER 120.0)) (list \"ULTRA\" '(OVER 108.0) '(NEVER) '(OVER 96.0)) (list \"THERMOLIGHT\" '(ALWAYS) '(NEVER) '(NEVER)))" "HARDWARE called for by the LONGEST hinge, per grade. Each rule is (OVER <inches>) | (ALWAYS) | (NEVER) | (R...")
+     ("scv:*hardnames*" "(list \"VELCRO HINGES\" \"DOUBLE C CHANNEL\" \"HOLD DOWN KIT\")" "What the three columns are called in the report, in the order the table above holds them -- rename one and...")
+     ("scv:*hinge-min*" "2" "a cover is never fewer pieces than this The placement solver. The fewest pieces that fit the foam width are...")
+     ("scv:*hinge-try*" "3" "how many extra piece counts to try The placement solver. The fewest pieces that fit the foam width are used..."))
+    ("SQUAREUP" "lisp/squareup/SQUAREUP.lsp"
+     ("sq:*arcsegs*" "12" "How many chords an arc is measured as when the SPAN is worked out. Raise it and a big sweeping arc's widest...")
+     ("sq:*fuzz*" "0.02" "How close two points have to be to count as the same one -- what decides whether two straight pieces of per...")
+     ("sq:*collinear-deg*" "1.0" "How far two touching straight pieces may differ in direction, in DEGREES, and still be read as one wall. Th...")
+     ("sq:*square-deg*" "0.01" "Under this many DEGREES out of square, the drawing is already square and nothing is turned. It is not a pre...")
+     ("sq:*tie-frac*" "0.02" "When the runner-up wall is within this FRACTION of the longest one's length and sq:*tie-deg* or more away i...")
+     ("sq:*tie-deg*" "2.0" "How far apart in DEGREES two walls have to point before a tie between them is worth mentioning. Two long si...")
+     ("sq:*about*" "'perimeter" "What the drawing turns ABOUT. 'perimeter is the middle of the perimeter's extents, which keeps the pool whe..."))
+    ("STOCKCOVER" "lisp/stockcover/STOCKCOVER.lsp"
+     ("*stock-folder*" "\"F:\\\\TechTeam\\\\2022 StockCoverTech\"" "where the stock DWGs live")
+     ("*stock-suffixes*" "'(\"_Tech\")" "tried after an exact stem match: \"5M\" -> \"5M.dwg\", then \"5M_Tech.dwg\", then \"5M*.dwg\"")
+     ("*stock-explode*" "t" "T = explode the insert so the stock geometry merges into the drawing nil = leave it as a single block refer...")
+     ("*stock-anchor-tol*" "0.25" "inches - the two anchor spans may differ this much before STOCKCOVER shouts that the wrong file was named")
+     ("*stock-env-folder*" "\"StockCover_Folder\"" "profile keys used to")
+     ("*stock-env-last*" "\"StockCover_Last\"" "remember folder + name"))
+    ("VSCONV" "lisp/vsconv/VSCONV.lsp"
+     ("*vsconv-map*" "'((\"1 Perimeter\" . \"POOL\") (\"2 Coping\" . \"POOL\") (\"3 Features\" . \"POOL\") (\"3.1 Anchors\" . \"POINTS\") (\"4 Dimensions\" . \"DIMENSION\"))" "source layer -> destination layer. The conversion IS this table: an exporter that names its layers differen...")
+     ("*vsconv-colors*" "'((\"POOL\" . 4) ; cyan, as the rest of the tree creates it (\"POINTS\" . 6) ; magenta - the pink the points show in (\"DIMENSION\" . 141))" "The color a destination layer is CREATED with, when the drawing does not carry it yet. A drawing that has t...")
+     ("*vsconv-default-color*" "7" "The color for a destination the table above does not name - what a retuned *vsconv-map* row pointing at a n...")
+     ("*vsconv-force-bylayer*" "T" "T, and every moved object has its color, linetype and lineweight set to BYLAYER on the way past, so it take...")
+     ("*vsconv-dim-style*" "\"STANDARD\"" "The dimension style every converted dimension is put on. If the drawing has no style by this name the dimen...")
+     ("*vsconv-dim-xdata*" "\"ACAD\"" "The xdata application whose style overrides come off each dimension with the restyle. AutoCAD keeps a dimen...")
+     ("*vsconv-record*" "t" "The record VSRECONV reads back, and the application it lives under. nil converts exactly as before and writ...")
+     ("*vsconv-xdata-app*" "\"VSCONV\"" "The record VSRECONV reads back, and the application it lives under. nil converts exactly as before and writ..."))
+    ("WCALST" "lisp/wcalst/wcalst.lsp"
+     ("wc:*cut-layer*" "\"AIR-B\"" "moves the straight edge, band ends, dart legs, slits and slivers to another layer")
+     ("wc:*cut-color*" "1" "recolours that layer where WCALST is the one creating it (1 = red)")
+     ("wc:*dim-layer*" "\"DIMENSION\"" "moves the end height dims, the variant labels and the length summary")
+     ("wc:*dim-color*" "3" "recolours that one on creation (3 = green)")
+     ("wc:*node-fuzz*" "3" "decimals kept when two endpoints are merged into one node: fewer welds points that are genuinely apart, mor...")
+     ("wc:*seg-min*" "1.0e-6" "shorter than this is a repeated point rather than a segment, and is dropped")
+     ("wc:*trace-turn*" "1.0472" "sharpest turn (radians, 60 deg) the trace of a long side will follow: raise it for a band with genuinely sh...")
+     ("wc:*trace-max*" "5000" "hard stop on one walk - the backstop behind the revisited-node test, and only reachable by geometry that is...")
+     ("wc:*rung-turn*" "0.7854" "how steeply (radians, 45 deg) a segment must leave the chain to count as a rung: lower it and gentle diagon...")
+     ("wc:*min-segs*" "6" "fewest segments a selection may hold before it is sent back to be re-picked")
+     ("wc:*min-chain*" "3" "fewest segments a traced side may have before the pick is sent back")
+     ("wc:*min-rungs*" "2" "fewest rungs to find between the two sides, below which there is no width to measure")
+     ("wc:*maxfeat*" "20" "the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to")
+     ("wc:*dart-cap*" "4.0" "widest mouth ONE dart may open: lower it and a big bend splits across more darts side by side, raise it for...")
+     ("wc:*dart-space*" "2.0" "bottom line left between two darts cut side by side for one bend, and between any two mouths: less packs th...")
+     ("wc:*wmin-f*" "0.04" "smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutt...")
+     ("wc:*target*" "0.01" "the after-cuts residual the refining variant aims under, as a share of the bottom line, and what OVER TARGE...")
+     ("wc:*refine*" "0.6" "how far each refining pass drops the threshold: nearer 1 refines in smaller steps and uses more of the pass...")
+     ("wc:*passes*" "10" "how many refining passes before it settles for what it has and says so")
+     ("wc:*tile-clear*" "1.0" "how far a cut clears the tile along the straight edge, and how far it stops short of the far edge")
+     ("wc:*apex-f*" "0.42" "how far down the local depth a cut stops when no tile height is given: lower it for a deeper hinge along th...")
+     ("wc:*apex-min-f*" "0.20" "closest a cut may ever come to the straightened edge, as a share of the local depth - what a band too shall...")
+     ("wc:*depth-min-f*" "0.2" "floor under the local depth, as a share of the band width, so a dip in the far edge cannot collapse a cut")
+     ("wc:*sliver-top*" "1.0" "width at the top of an insert sliver, and the narrowest one that is drawn")
+     ("wc:*sliver-extra*" "1.0" "how much longer a sliver's sides are than the slit they fill - stock to trim on fitting")
+     ("wc:*sliver-gap-f*" "0.2" "how far below the band a sliver is drawn, as a share of the width")
+     ("wc:*near-f*" "1.75" "how far off the chain (x band width) a point may sit and still be taken as part of this band, or carried al...")
+     ("wc:*over-f*" "0.05" "how far above the straight edge (x width) a developed point may land before it is read as an end-clamp arte...")
+     ("wc:*past-f*" "0.25" "how far beyond either end of the band (x width) a point may sit and still be kept")
+     ("wc:*drop-f*" "1.5" "how far below the lowest point of the selection (x width) the first straight edge lands")
+     ("wc:*stack-f*" "5.0" "the gap (x width) between the two drawings: raise it when the summaries of one run into the next")
+     ("wc:*label-f*" "0.6" "how far above its straight edge (x width) a variant label sits")
+     ("wc:*label-h-f*" "0.4" "text height of that label, as a share of the band width")
+     ("wc:*sum-x-f*" "2.0" "how far right of the band end (x width) the length summary is written")
+     ("wc:*sum-h-f*" "0.35" "text height of the summary, as a share of the band width")
+     ("wc:*sum-step-f*" "0.55" "line spacing within the summary, as a share of the band width")
+     ("wc:*dim-off-f*" "1.2" "how far out past each end (x width) the height dimension lines are placed")
+     ("wc:*dec-places*" "2" "decimals in every decimal-inch figure the report and the summary print")
+     ("wc:*arch-frac*" "8" "smallest fraction in the feet-and-inches twin printed beside it (8 = eighths, 16 = sixteenths)"))
+    ("XFTCONV" "lisp/xftconv/xftconv.lsp"
+     ("*xft-scale*" "12.0" "Scale factor applied to EVERYTHING highlighted, about the middle of its bounding box, before any point is r...")
+     ("*xft-block*" "\"ab_pt\"" "The block that replaces each marker: the template's point block, the one ABHD, POINTRENAMER and the rest of...")
+     ("*xft-block-layer*" "\"POINTS\"" "The layer the block is inserted on. Created if missing; thawed, unlocked and switched on if it is there but...")
+     ("*xft-block-layer-color*" "6" "The colour *xft-block-layer* is CREATED with when the drawing has not got it. An existing layer is never re...")
+     ("*xft-att-tag*" "\"number\"" "The attribute tag inside the block that receives the point number. The template's ab_pt calls it \"number\",...")
+     ("*xft-att-style*" "\"Attributes\"" "The text style the attribute is written in. If the drawing has no style by this name the current TEXTSTYLE...")
+     ("*xft-att-height*" "4.0" "The attribute's text height, in drawing units AFTER the scale - 4.0 is what the sample drawing shows. It is...")
+     ("*xft-att-offset*" "'(0.8697246 -3.5316825)" "Where the attribute sits relative to the point: (dx dy) in drawing units after the scale, as measured off t...")
+     ("*xft-marker-layer*" "\"LEICA_POINT\"" "The layer the X markers sit on. A wcmatch pattern - \"*\" and \",\" work - so \"LEICA_POINT,LEICA_PT\" would read...")
+     ("*xft-name-layer*" "\"LEICA_POINT_NAME\"" "The layer the point-name text sits on. Also a wcmatch pattern. It is tested BEFORE the marker layer, so a n...")
+     ("*xft-name-reach*" "6.0" "How far from a marker its name may sit, counted in that name's own text heights (so the scale leaves it alo...")
+     ("*xft-strip-prefix*" "T" "T takes the letter prefix off a Leica name: \"P22\" -> \"22\". Leica calls every point \"P<n>\", so the P is nois...")
+     ("*xft-purge-text*" "T" "T erases every TEXT / MTEXT still in the selection once the swap is done: a Leica export writes nothing but...")
+     ("*xft-dot-layer*" "\"POOL_POINTS,BREAK_LINES,CROSS_MEASUREMENTS\"" "The layers the circle markers sit on - a wcmatch comma list, so a trace that adds a fourth point layer is o...")
+     ("*xft-dot-name-layer*" "\"TEXT\"" "The layer the trace writes its point names on. It is the general text layer, shared with the captions on it...")
+     ("*xft-dot-reach*" "1.0" "How far from a circle its name may sit, in text heights. The name sits ON the centre rather than above it,...")
+     ("*xft-dot-strip-prefix*" "nil" "nil keeps a trace name whole: \"C1\" stays \"C1\". The letter is the point's family - C for a pool corner, S fo...")
+     ("*xft-dot-purge-text*" "nil" "nil leaves the trace's leftover text alone, because it is not all point names: the break lines and the diag...")
+     ("*xft-column-tol*" "0.5" "Both exports put the name in the marker's column - Leica stacks it above, the trace lands it on the centre...")
+     ("*xft-fuzz*" "1e-4" "How close two marker centres have to be, in drawing units after the scale, to count as the same point. The...")
+     ("*xft-record*" "T" "T writes a record into each block's xdata as it goes in, and that record is the only thing that lets XFTREC...")
+     ("*xft-xdata-app*" "\"XFTCONV\"" "The xdata application the record lives under. Two drawings' records cannot collide, so this only wants chan...")
+     ("*xft-num-prec*" "8" "Decimals a coordinate is written to in the record. 8 puts the round trip within 1e-8 of a drawing unit -- a...")
+     ("*xft-rebuild-color*" "7" "The colour a source layer is re-created with when XFTRECONV has to rebuild one that was PURGED after the co...")
+     ("*xft-keep-common*" "'(8 62 6 370 410)" "Which DXF groups the record carries whatever the entity type is -- layer, colour, linetype, lineweight, and...")
+     ("*xft-keep*" "'((\"LINE\" (10 11)) (\"POINT\" (10 50)) (\"CIRCLE\" (10 40)) (\"TEXT\" (1 7 10 11 40 41 50 51 71 72 73)) (\"MTEXT\" (1 3 7 10 40 41 50 71 72)))" "And the groups it carries per type: what an export writes on the five kinds of object XFTCONV erases. An ex..."))
+   ))
+;;; <<< lzp:*knobs*
+
 ;;; -------------------- carrying it with you -----------------------------
 ;;  LAZNAME's names and CALSET/LAZSET's settings already survive an
 ;;  ordinary LAZPASS rebuild: both live in the registry or the AutoCAD
@@ -120338,7 +121603,11 @@
       (progn (write-line (strcat (car p) "=" (cdr p)) fh) (setq nc (1+ nc)))))
   (write-line "[Settings]" fh)
   (foreach k (lzp:backup-keys) (write-line (strcat k "=" (lzp:profread k)) fh))
-  (list na nc (length (lzp:backup-keys))))
+  ;; ...and LAZTUNE's own defaults, one line per knob the drafter has
+  ;; set: the text they typed, exactly as the profile holds it
+  (write-line "[Knobs]" fh)
+  (foreach k (lzp:knob-index) (write-line (strcat k "=" (lzp:knob-get k)) fh))
+  (list na nc (length (lzp:backup-keys)) (length (lzp:knob-index))))
 
 (defun lzp:backup-export (path / fh counts)
   (setq fh (vl-catch-all-apply 'open (list path "w")))
@@ -120389,12 +121658,13 @@
        ((setq why (lzp:cap-why val)) (strcat key "=" val " (" why ")"))
        (t (setq lzp:*capsof* (lzp:put-pair key val lzp:*capsof*)) "")))
     ((= section "Settings") (lzp:backup-apply-setting key val))
+    ((= section "Knobs") (lzp:knob-import key val))
     (t (strcat key "=" val " (not inside a known section)"))))
 
 ;; Read every line, section by section, applying as it goes -- under
 ;; lzp:backup-import's vl-catch-all-apply, the same belt lzp:write-dcl
 ;; already wears for the write side.  (n-applied (skipped ...)).
-(defun lzp:backup-readbody (fh / line section eq key val res n skipped)
+(defun lzp:backup-readbody (fh / line section at key val res n skipped)
   (setq section "" n 0)
   (while (setq line (read-line fh))
     (cond
@@ -120403,8 +121673,8 @@
       ((and (>= (strlen line) 2) (= (substr line 1 1) "[")
             (= (substr line (strlen line) 1) "]"))
        (setq section (substr line 2 (- (strlen line) 2))))
-      ((setq eq (vl-string-search "=" line))
-       (setq key (substr line 1 eq) val (substr line (+ eq 2))
+      ((setq at (vl-string-search "=" line))
+       (setq key (substr line 1 at) val (substr line (+ at 2))
              res (lzp:backup-apply section key val))
        (if (= res "") (setq n (1+ n)) (setq skipped (cons res skipped))))
       (t (setq skipped (cons (strcat line " (not KEY=VALUE)") skipped)))))
@@ -120421,8 +121691,8 @@
        ((vl-catch-all-error-p res) nil)
        ;; the registry copy AND this session's alias wrapper defuns --
        ;; an imported name works from the next command typed, not only
-       ;; after a reload
-       (t (lzp:names-write) res)))))
+       ;; after a reload; and the imported defaults the same way
+       (t (lzp:names-write) (lzp:knobs-apply) res)))))
 
 ;; Export your names and settings to a file, or read them back from
 ;; one.  Both prompts take Back/Undo, typed, the same way CALSET's own
@@ -120452,9 +121722,12 @@
         (princ (strcat "\nWrote " (itoa (car counts)) " name"
                        (if (= (car counts) 1) "" "s") ", "
                        (itoa (cadr counts)) " caption"
-                       (if (= (cadr counts) 1) "" "s") " and "
+                       (if (= (cadr counts) 1) "" "s") ", "
                        (itoa (caddr counts)) " setting"
-                       (if (= (caddr counts) 1) "" "s") " to " path ".")))
+                       (if (= (caddr counts) 1) "" "s") " and "
+                       (itoa (cadddr counts)) " default"
+                       (if (= (cadddr counts) 1) "" "s")
+                       " of yours to " path ".")))
        (t (princ (strcat "\nCould not write " path ".")))))
     ((= pick "Import")
      (setq path (getstring T "\nFile to read the backup from, Back to leave it: "))
@@ -120473,6 +121746,421 @@
        (t (princ (strcat "\nCould not read " path ".")))))
     (t (princ "\nNothing changed.")))
   (if lzd:end (lzd:end "LAZBACKUP"))
+  (princ))
+
+;;; -------------------- LAZTUNE: a value of your own for any knob --------
+;;  Every tool's tunables block is "Alec's choice": the value the tool
+;;  ships with, chosen once for the shop.  A drafter who wants another
+;;  -- STANDARD INCHES where AutoDim's block says SIDE STANDARD, a
+;;  third of the length where POOL's says half -- used to have to ask
+;;  for the file to be changed.  LAZTUNE lets them set it themselves,
+;;  per machine, in the AutoCAD profile where CalofinTheme and the item
+;;  colours already live, with Alec's choice one button away to come
+;;  back to.  The knobs it offers are lzp:*knobs* above, transcribed
+;;  from every block by tools/gen_knobs.py.
+;;
+;;  HOW AN OVERRIDE TAKES EFFECT.  A knob is a global the tool reads
+;;  when it runs, set by the block when the file loads.  So an override
+;;  is applied by setting that global AGAIN, later: lzp:knobs-apply
+;;  runs when this file loads (LAZPASS.lsp loads LAZPANEL last, so
+;;  every tool's block has already spoken), when the panel opens, right
+;;  before a tool is launched from it, and after LAZTUNE's own OK.  A
+;;  tool APPLOADed on its own AFTER that resets its knobs to the block
+;;  until the next panel open; the grouped build never does.
+;;
+;;  WHAT IS STORED.  The drafter's value is kept as the TEXT they typed,
+;;  one profile key per knob (CalofinKnob-<name>, with : and * spelled
+;;  . and ~ so the name is a plain value name) and an index of the
+;;  names under CalofinKnobs, so the set can be walked without an
+;;  enumerable registry.  Text rather than a value because the profile
+;;  holds strings and because (read) is how a Lisp literal round-trips
+;;  -- and because LAZBACKUP carries it as text, one line per knob.
+;;
+;;  WHAT IS REFUSED.  The text is READ, never evaluated: a number, a
+;;  string, a symbol, a quoted list, or a (list ...)/(cons ...) of
+;;  those is taken as DATA, and anything else -- a call -- is refused.
+;;  Then its kind has to match Alec's choice: a string where the block
+;;  has a string, a number where it has a number (a whole number is
+;;  widened to a real when the block has one, and a colour knob may go
+;;  between a number and 'auto).  A knob whose shipped value is a form
+;;  that needs its tool loaded to evaluate -- (/ pi 4.0) -- is not
+;;  kind-checked when that cannot be told; the profile is still only
+;;  ever handed data.
+
+(setq lzp:*tunevals* nil)         ; pending answers: (name . text), "" = Alec's
+(setq lzp:*tunetool* nil)         ; which tool the dropdown is on
+(setq lzp:*tunesel* nil)          ; the highlighted knob's name
+(setq lzp:*tunenames* nil)        ; the names on the list, in row order
+
+(defun lzp:knobkey (sym)
+  (strcat "CalofinKnob-" (vl-string-translate ":*" ".~" sym)))
+
+(defun lzp:knob-index ( / v)
+  (setq v (lzp:profread "CalofinKnobs"))
+  (if (= v "") nil (lzp:split v ";")))
+
+(defun lzp:knob-index-write (syms / s k)
+  (setq s "")
+  (foreach k syms (setq s (strcat s (if (= s "") "" ";") k)))
+  (setenv "CalofinKnobs" s)
+  syms)
+
+;; The drafter's text for SYM, or nil when they have none.
+(defun lzp:knob-get (sym / v)
+  (setq v (lzp:profread (lzp:knobkey sym)))
+  (if (= v "") nil v))
+
+(defun lzp:knob-set (sym text)
+  (setenv (lzp:knobkey sym) text)
+  (if (not (member sym (lzp:knob-index)))
+    (lzp:knob-index-write (append (lzp:knob-index) (list sym))))
+  text)
+
+(defun lzp:knob-clear (sym)
+  (setenv (lzp:knobkey sym) "")
+  (lzp:knob-index-write (vl-remove sym (lzp:knob-index)))
+  nil)
+
+;; The catalog row for SYM -- (NAME LITERAL MEANING) -- or nil for a
+;; name no block has; and the label of the tool it belongs to.
+(defun lzp:knob-entry (sym / tl e out)
+  (foreach tl lzp:*knobs*
+    (foreach e (cddr tl)
+      (if (= (car e) sym) (setq out e))))
+  out)
+
+(defun lzp:knob-tool (sym / tl e out)
+  (foreach tl lzp:*knobs*
+    (foreach e (cddr tl)
+      (if (= (car e) sym) (setq out (car tl)))))
+  out)
+
+;; (read) under a catch, so garbage is a refusal and not an error
+;; thrown from inside a dialog callback.
+(defun lzp:knob-read (text / v)
+  (setq v (vl-catch-all-apply 'read (list text)))
+  (if (vl-catch-all-error-p v) 'LZP-BAD v))
+
+;; The DATA a read form stands for, or LZP-BAD.  quote hands back what
+;; it quotes; list and cons build from their arguments, each checked
+;; the same way; an atom is itself.  Anything else is a call, and a
+;; call is exactly what a profile value must never be able to make.
+(defun lzp:knob-safe (f / a out)
+  (cond
+    ((eq f 'LZP-BAD) 'LZP-BAD)
+    ((or (null f) (not (eq (type f) 'LIST))) f)
+    ((eq (car f) 'quote) (if (= (length f) 2) (cadr f) 'LZP-BAD))
+    ((eq (car f) 'list)
+     (foreach a (cdr f)
+       (setq a (lzp:knob-safe a))
+       (if (eq a 'LZP-BAD)
+         (setq out 'LZP-BAD)
+         (if (not (eq out 'LZP-BAD)) (setq out (cons a out)))))
+     (if (eq out 'LZP-BAD) out (reverse out)))
+    ((and (eq (car f) 'cons) (= (length f) 3))
+     (setq a (lzp:knob-safe (cadr f)) out (lzp:knob-safe (caddr f)))
+     (if (or (eq a 'LZP-BAD) (eq out 'LZP-BAD)) 'LZP-BAD (cons a out)))
+    (t 'LZP-BAD)))
+
+;; The drafter's TEXT as a value: (T value) when it reads as data, nil
+;; when it does not.  A list rather than the value alone, because nil
+;; is a value a knob can legitimately hold.
+(defun lzp:knob-parse (text / v)
+  (cond
+    ((= (vl-string-trim " \t" text) "") nil)
+    (t (setq v (lzp:knob-safe (lzp:knob-read text)))
+       (if (eq v 'LZP-BAD) nil (list t v)))))
+
+;; Alec's choice as a VALUE: the catalog literal read and evaluated --
+;; evaluated, because a few blocks derive one knob from another
+;; ((* 0.5 *PF-MISS-RADIUS*)) or from pi, and only a loaded tool can
+;; answer those.  (T value), or nil when it cannot be told here.  The
+;; catalog is this file's own generated table, so evaluating it is not
+;; the risk a drafter's text would be, and that text never comes here.
+(defun lzp:knob-evaltext (text) (eval (read text)))
+(defun lzp:knob-shipped (sym / e v)
+  (if (setq e (lzp:knob-entry sym))
+    (progn
+      (setq v (vl-catch-all-apply 'lzp:knob-evaltext (list (cadr e))))
+      (if (vl-catch-all-error-p v) nil (list t v)))))
+
+;; A value's kind, as the state line names it.
+(defun lzp:knob-kind (v)
+  (cond ((null v) "nil")
+        ((eq v t) "T")
+        ((eq (type v) 'STR) "a string")
+        ((eq (type v) 'INT) "a whole number")
+        ((eq (type v) 'REAL) "a number")
+        ((eq (type v) 'LIST) "a list")
+        ((eq (type v) 'SYM) "a symbol")
+        (t "something else")))
+
+;; Why NEW's kind cannot stand in for SHIPPED's, or nil when it can.
+(defun lzp:knob-typewhy (shipped new / ks kn)
+  (setq ks (lzp:knob-kind shipped) kn (lzp:knob-kind new))
+  (cond
+    ((= ks kn) nil)
+    ((and (= ks "a number") (= kn "a whole number")) nil)
+    ((and (member ks '("nil" "T")) (member kn '("nil" "T"))) nil)
+    ((and (member ks '("a symbol" "a whole number"))
+          (member kn '("a symbol" "a whole number"))) nil)
+    (t (strcat "Alec's choice is " ks ", this is " kn))))
+
+;; Why TEXT cannot be SYM's value, or nil when it can.
+(defun lzp:knob-why (sym text / p s)
+  (cond
+    ((not (lzp:knob-entry sym)) "not a knob this build has")
+    ((not (setq p (lzp:knob-parse text)))
+     "not a value: a number, \"a string\", 'a-symbol or '(a list)")
+    ((not (setq s (lzp:knob-shipped sym))) nil)
+    (t (lzp:knob-typewhy (cadr s) (cadr p)))))
+
+;; TEXT as the value to put in SYM's global: parsed, and widened to a
+;; real where Alec's choice is one.
+(defun lzp:knob-value (sym text / v s)
+  (setq v (cadr (lzp:knob-parse text)) s (lzp:knob-shipped sym))
+  (if (and s (eq (type (cadr s)) 'REAL) (eq (type v) 'INT)) (float v) v))
+
+(defun lzp:knob-apply (sym value)
+  (vl-catch-all-apply 'eval (list (list 'setq (read sym) (list 'quote value)))))
+
+;; Alec's choice, put back into this session's global.
+(defun lzp:knob-restore (sym / s)
+  (if (setq s (lzp:knob-shipped sym)) (lzp:knob-apply sym (cadr s))))
+
+;; Every stored override, applied to this session.  How many took.
+(defun lzp:knobs-apply ( / n k v)
+  (setq n 0)
+  (foreach k (lzp:knob-index)
+    (setq v (lzp:knob-get k))
+    (if (and v (not (lzp:knob-why k v)))
+      (progn (lzp:knob-apply k (lzp:knob-value k v)) (setq n (1+ n)))))
+  n)
+
+;; One imported line of LAZBACKUP's [Knobs] section: "" when applied,
+;; else the reason, the same shape lzp:backup-apply-setting answers in.
+(defun lzp:knob-import (sym text / why)
+  (cond
+    ((setq why (lzp:knob-why sym text)) (strcat sym "=" text " (" why ")"))
+    (t (lzp:knob-set sym text) "")))
+
+;; ---- the dialog
+
+(defun lzp:dcl-tune ( )
+  (list "lazpanel_tune : dialog {"
+        "  label = \"LazPanel  -  defaults: Alec's choice, or yours\";"
+        (strcat "  : popup_list { key = \"tune_tool\"; label = \"Tool\"; "
+                "edit_width = 18; }")
+        (strcat "  : list_box { key = \"tune_list\"; width = 120; height = "
+                (itoa lzp:*tunerows*) "; }")
+        "  : text { key = \"tune_meaning\"; width = 120; }"
+        "  : row {"
+        (strcat "    : edit_box { key = \"tune_val\"; label = \"Value\"; "
+                "edit_width = 48; }")
+        (strcat "    : button { label = \"Alec's choice\"; key = \"tune_reset\"; "
+                "fixed_width = true; }")
+        "  }"
+        "  : text { key = \"state\"; width = 120; }"
+        "  spacer;"
+        "  : row {"
+        "    alignment = centered;"
+        (strcat "    : button { label = \"OK\"; key = \"accept\"; "
+                "is_default = true; fixed_width = true; }")
+        (strcat "    : button { label = \"Cancel\"; key = \"cancel\"; "
+                "is_cancel = true; fixed_width = true; }")
+        "  }"
+        "}"))
+
+;; What the list shows and the box holds for SYM: the pending answer,
+;; else the stored override, else Alec's choice -- and whether it is
+;; the drafter's own.  (text yours-p)
+(defun lzp:tune-text (sym / p v e)
+  (setq e (lzp:knob-entry sym))
+  (cond
+    ((setq p (assoc sym lzp:*tunevals*))
+     (if (= (cdr p) "") (list (cadr e) nil) (list (cdr p) t)))
+    ((setq v (lzp:knob-get sym)) (list v t))
+    (t (list (cadr e) nil))))
+
+(defun lzp:trunc (s n)
+  (if (> (strlen s) n) (strcat (substr s 1 (- n 3)) "...") s))
+
+;; One row.  Not padded into columns: whether the dialog font is
+;; fixed-pitch is exactly what LAZASCII exists to ask.
+(defun lzp:tune-row (sym / e tx)
+  (setq e (lzp:knob-entry sym) tx (lzp:tune-text sym))
+  (strcat sym "  =  " (car tx)
+          (if (cadr tx) (strcat "   (yours; Alec's choice " (cadr e) ")") "")
+          "   -  " (lzp:trunc (caddr e) 60)))
+
+(defun lzp:tune-put (sym text)
+  (setq lzp:*tunevals*
+        (cons (cons sym text)
+              (vl-remove (assoc sym lzp:*tunevals*) lzp:*tunevals*))))
+
+(defun lzp:tune-bad ( / p out)
+  (foreach p lzp:*tunevals*
+    (if (and (/= (cdr p) "") (lzp:knob-why (car p) (cdr p)))
+      (setq out (cons (car p) out))))
+  (reverse out))
+
+;; The state line, and OK with it -- greyed while a pending answer
+;; will not read, and re-checked at OK (lzp:tune-ok) as every other
+;; editor here does.
+(defun lzp:tune-state ( / bad tx e)
+  (setq bad (lzp:tune-bad))
+  (lzp:settile "state"
+    (cond
+      (bad (strcat (car bad) ": "
+                   (lzp:knob-why (car bad) (cdr (assoc (car bad) lzp:*tunevals*)))))
+      ((and lzp:*tunesel* (setq e (lzp:knob-entry lzp:*tunesel*)))
+       (setq tx (lzp:tune-text lzp:*tunesel*))
+       (if (cadr tx)
+         (strcat "Yours -- Alec's choice is " (cadr e)
+                 ".  OK keeps it in your AutoCAD profile and applies it now")
+         (strcat "Alec's choice -- type a value of your own, or leave it;"
+                 " OK keeps yours in your AutoCAD profile")))
+      (t "")))
+  (lzp:setmode "accept" (if bad 1 0))
+  (princ))
+
+(defun lzp:tune-show ( / e tx)
+  (cond
+    ((and lzp:*tunesel* (setq e (lzp:knob-entry lzp:*tunesel*)))
+     (setq tx (lzp:tune-text lzp:*tunesel*))
+     (lzp:settile "tune_val" (car tx))
+     (lzp:settile "tune_meaning" (strcat lzp:*tunesel* ": " (caddr e))))
+    (t (lzp:settile "tune_val" "") (lzp:settile "tune_meaning" "")))
+  (lzp:tune-state))
+
+;; The list for the tool the dropdown is on, keeping the highlight
+;; where it was or putting it on the first row.
+(defun lzp:tune-refill ( / tl e i sel)
+  (setq tl (nth lzp:*tunetool* lzp:*knobs*) lzp:*tunenames* nil)
+  (start_list "tune_list")
+  (foreach e (cddr tl)
+    (add_list (lzp:tune-row (car e)))
+    (setq lzp:*tunenames* (append lzp:*tunenames* (list (car e)))))
+  (end_list)
+  (setq i 0 sel 0)
+  (foreach e lzp:*tunenames*
+    (if (= e lzp:*tunesel*) (setq sel i))
+    (setq i (1+ i)))
+  (setq lzp:*tunesel* (nth sel lzp:*tunenames*))
+  (if lzp:*tunenames* (set_tile "tune_list" (itoa sel)))
+  (lzp:tune-show))
+
+(defun lzp:tune-tool (v)
+  (setq lzp:*tunetool* (atoi v) lzp:*tunesel* nil)
+  (lzp:tune-refill)
+  (princ))
+
+(defun lzp:tune-pick (v)
+  (setq lzp:*tunesel* (nth (atoi v) lzp:*tunenames*))
+  (lzp:tune-show)
+  (princ))
+
+;; The value box fired.  Empty, or Alec's choice typed back in, means
+;; back to Alec's choice; anything else is kept as typed and checked,
+;; and OK is greyed while it will not read.
+(defun lzp:tune-val (v / sh)
+  (if lzp:*tunesel*
+    (progn
+      (setq sh (cadr (lzp:knob-entry lzp:*tunesel*))
+            v  (vl-string-trim " \t" v))
+      (lzp:tune-put lzp:*tunesel* (if (= v sh) "" v))
+      (lzp:tune-refill)))
+  (princ))
+
+(defun lzp:tune-reset ()
+  (if lzp:*tunesel*
+    (progn (lzp:tune-put lzp:*tunesel* "") (lzp:tune-refill)))
+  (princ))
+
+(defun lzp:tune-ok ()
+  (if (lzp:tune-bad) (lzp:tune-state) (done_dialog 1))
+  (princ))
+
+;; The one place LAZTUNE writes: every pending answer to the profile,
+;; then every override applied to this session.  (set cleared).  An
+;; answer that will not read is SKIPPED here as well as greyed at the
+;; button: DCL fires the box's action before the default button's, so
+;; OK with a bad value still in the box lands anyway -- the same
+;; reason lzp:set-write leaves an unreadable colour alone.
+(defun lzp:tune-write ( / p ns nc)
+  (setq ns 0 nc 0)
+  (foreach p (reverse lzp:*tunevals*)
+    (cond
+      ((= (cdr p) "")
+       (if (lzp:knob-get (car p))
+         (progn (lzp:knob-clear (car p))
+                (lzp:knob-restore (car p))
+                (setq nc (1+ nc)))))
+      ((not (lzp:knob-why (car p) (cdr p)))
+       (lzp:knob-set (car p) (cdr p))
+       (setq ns (1+ ns)))))
+  (lzp:knobs-apply)
+  (list ns nc))
+
+;; Open it, wire it, and hand back what OK wrote -- or nil.  The tool
+;; dropdown opens on the tool it was last left on in this session.
+(defun lzp:tune-edit (dcl / rc tl out)
+  (if (null lzp:*tunetool*) (setq lzp:*tunetool* 0))
+  (cond
+    ((not (new_dialog "lazpanel_tune" dcl)) nil)
+    (t
+     (start_list "tune_tool")
+     (foreach tl lzp:*knobs* (add_list (car tl)))
+     (end_list)
+     (set_tile "tune_tool" (itoa lzp:*tunetool*))
+     (action_tile "tune_tool" "(lzp:tune-tool $value)")
+     (action_tile "tune_list" "(lzp:tune-pick $value)")
+     (action_tile "tune_val" "(lzp:tune-val $value)")
+     (action_tile "tune_reset" "(lzp:tune-reset)")
+     (action_tile "accept" "(lzp:tune-ok)")
+     (action_tile "cancel" "(done_dialog 0)")
+     (lzp:tune-refill)
+     (setq rc (start_dialog))
+     (if (= rc 1) (setq out (lzp:tune-write)))
+     (setq lzp:*tunevals* nil)
+     out)))
+
+(defun lzp:tune-report (res)
+  (cond
+    ((null res) (princ "\nLAZPANEL: defaults unchanged."))
+    (t (princ (strcat "\nLAZPANEL: " (itoa (car res)) " knob"
+                      (if (= (car res) 1) "" "s")
+                      " set to a value of yours, " (itoa (cadr res))
+                      " back to Alec's choice -- "
+                      (itoa (length (lzp:knob-index)))
+                      " of yours in all, applied now and at every panel open."))))
+  (princ))
+
+(defun c:LAZTUNE ( / *error* f dcl res)
+  ;; an error inside a tile callback used to leak the dialog handle
+  ;; and the temp .dcl -- the same fix c:LAZPIN and c:LAZHIDE carry
+  (defun *error* (msg)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (if f (vl-file-delete f))
+    (setq lzp:*tunevals* nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZTUNE error: " msg)))
+    (if lzd:report (lzd:report "LAZTUNE" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZTUNE" *lazpanel-version*))
+  (setq lzp:*tunevals* nil)
+  (cond
+    ((not (setq f (lzp:write-dcl)))
+     (princ "\nLAZTUNE error: could not write the dialog file."))
+    ((< (setq dcl (load_dialog f)) 0)
+     (princ "\nLAZTUNE error: could not load the dialog file.")
+     (vl-file-delete f))
+    (t
+     (setq res (lzp:tune-edit dcl))
+     (unload_dialog dcl)
+     (vl-file-delete f)
+     (lzp:tune-report res)))
+  (if lzd:end (lzd:end "LAZTUNE"))
   (princ))
 
 (defun c:LAZPANELVER ()
@@ -120513,6 +122201,11 @@
 ;; takes the panel and the toolbar with it.
 (vl-catch-all-apply 'lzp:names-read nil)
 (vl-catch-all-apply 'lzp:aliases-apply nil)
+;; The drafter's own defaults (LAZTUNE), over every tool's block.  This
+;; file loads LAST in LAZPASS.lsp, which is what makes the load-time
+;; pass enough there; the panel re-applies on every open and launch for
+;; a tool reloaded on its own since.
+(vl-catch-all-apply 'lzp:knobs-apply nil)
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
@@ -120570,7 +122263,7 @@
   "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA"
   "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
   "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON" "LAZICON" "CALHELP"
-  "CALSET" "LAZSET" "LAZNAME" "LAZBACKUP" "LAZPANELVER"
+  "CALSET" "LAZSET" "LAZNAME" "LAZBACKUP" "LAZTUNE" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

@@ -124,7 +124,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.0")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.1")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -4849,8 +4849,11 @@
   (if lzd:begin (lzd:begin "FITABHD" *fitabhd-version*))
   ;; no OSMODE: FITABHD never changes it, and listing it here would
   ;; put this run's opening snapshot back over any snap the drafter
-  ;; ticked on during the seven steps -- on a clean exit.
-  (cal:syssave '("CMDECHO" "CLAYER"))
+  ;; ticked on during the seven steps -- on a clean exit.  No CLAYER
+  ;; for the same reason: nothing here sets it (every entity is made
+  ;; with its layer in the entmake), so a drafter who switched layers
+  ;; part-way through would have been switched back at the end.
+  (cal:syssave '("CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set

@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV32")
+(setq pool:*version* "091626 REV33")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -398,6 +398,13 @@
 ;; A pool runs about twice as long as it is wide, so the width question
 ;; is offered this fraction of the length rather than asked cold.
 (setq pool:*half-ratio* 0.5)
+
+;; What the FIRST corner's treatment question offers on Enter, before
+;; there is a previous answer to reuse: "" asks cold, or one of the
+;; four words -- "Square", "Radius", "Cut", "NotGiven" -- in any case.
+;; Every corner after the first offers the answer before it, as it
+;; always has; this only decides where that chain starts.
+(setq pool:*treat-default* "")
 
 ;; A derived letter is quoted to the nearest quarter inch -- the
 ;; granularity a tape is actually read to (pool:q4).
@@ -1235,6 +1242,17 @@
         ((= v "NG") "NotGiven")
         ((= v "90") "Square")
         (t v)))
+
+;; The canonical treatment word S stands for, in any case, or nil for
+;; "" and for anything that is not one of the four -- what
+;; pool:*treat-default* is read through, since pool:askkw hands a
+;; default straight back on Enter without checking it, and "radius"
+;; typed into a settings box must not reach the corner table unspelled.
+(defun pool:treat-canon (s / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w '("Square" "Radius" "Cut" "NotGiven")
+    (if (= u (strcase w)) (setq out w)))
+  out)
 
 (defun pool:cutp (ty) (member ty '("Radius" "Cut")))
 
@@ -4355,7 +4373,7 @@
 ;; cross dims, so its true angles are not known yet -- and a pool
 ;; still called a rectangle is within a degree of 90 anyway.
 (defun pool:askcorner (subject prevty prevsz ents maxsb ang back
-                       / ty sz cols sb wed dflt szmsg nofit fk fty fsz)
+                       / ty sz cols sb wed dflt tydflt szmsg nofit fk fty fsz)
   ;; A form can answer this corner: <stem>-ty carries the treatment,
   ;; <stem>-sz the radius or cut face.  Both are consumed NOW, valid or
   ;; not -- consume-once is what keeps Back from deadlocking, and what
@@ -4392,6 +4410,9 @@
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (cal:osup)
+  ;; the answer before this one is what Enter reuses; the first corner
+  ;; has none, and offers pool:*treat-default* instead when it is set
+  (setq tydflt (if prevty prevty (pool:treat-canon pool:*treat-default*)))
   (setq ty (cond
              (fty fty)
              (nofit
@@ -4399,10 +4420,10 @@
               ;; words, and pool:askkw hands a default straight back
               ;; on Enter without checking it -- so drop it
               (pool:asktreatng subject
-                               (if (member prevty '("Square" "NotGiven"))
-                                   prevty nil)
+                               (if (member tydflt '("Square" "NotGiven"))
+                                   tydflt nil)
                                back))
-             (t (cal:asktreat subject prevty back))))
+             (t (cal:asktreat subject tydflt back))))
   (cal:osdown)
   (if (eq ty 'CAL-BACK)
       (progn (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)

@@ -441,6 +441,40 @@ An import re-applies your aliases as wrapper `defun`s in THIS session
 too, the same call `LAZNAME`'s own `OK` makes, so a name works from the
 next command typed rather than only after a reload.
 
+**Defaults of your own -- "Alec's choice", or yours.** Every tool's
+tunables block is a set of choices made once for the shop: which
+dimension style `AUTODIM` puts a perimeter side in (`SIDE STANDARD`),
+what fraction of the length `POOL` offers for the width (`0.5`), what a
+layer is called, what a prompt offers on Enter. `Defaults...` in the
+settings dialog, or `LAZTUNE` typed, is where a drafter sets their own
+value for any of them, per machine, without anyone editing a file: a
+dropdown of the tools, the knobs of the one picked as a list -- name,
+value, and what changing it does, in the words the block itself
+carries -- a box to type a value into, and an `Alec's choice` button to
+put the shipped value back. The catalog behind it, `lzp:*knobs*`, is
+**generated** by `tools/gen_knobs.py` from every block in the tree (the
+same blocks `tests/test_tunables.py` already holds every knob to), so
+a knob added to any tool is on offer here at the next regeneration and
+`make check` fails until it is.
+
+An override is stored as the TEXT typed, one profile key per knob
+(`CalofinKnob-<name>`, with `:` and `*` spelled `.` and `~`) plus an
+index under `CalofinKnobs`, and applied by setting the knob's global
+again -- when `LAZPANEL.lsp` loads (it loads last in `LAZPASS.lsp`, so
+every block has spoken), when the panel opens, right before a tool is
+launched from it, and at `LAZTUNE`'s own `OK`. A tool APPLOADed on its
+own after that runs on Alec's choice until the next panel open; the
+grouped build never does. The text is **read, never evaluated**: a
+number, a string, a symbol, a quoted list or a `(list ...)`/`(cons
+...)` of those is taken as data and anything else -- a call -- is
+refused before it is even typed against, and then its kind has to
+match the shipped value's (a whole number is widened to a real where
+the block has one; a colour knob may go between a number and `'auto`).
+`OK` stays greyed while a box holds something that will not read, the
+same bargain every other editor here keeps. `LAZBACKUP` carries them
+under `[Knobs]`, one line each, through the same checks on the way
+back in.
+
 **The Pinned row.** Pins are the answer to "I run four of these
 eighty-one all day": ticked tools sit in a row at the top of *every*
 page, in the order you pinned them, so the ones you actually use stop
@@ -612,7 +646,8 @@ ones to hide) would be a joke at the drafter's expense.
 | --- | --- |
 | `CALHELP` | what a command IS, at the command line. Type any part of a name, its caption, its one-sentence blurb or a search keyword -- the same search the Find page runs, so `survey` finds `ABHD` and `cover` finds `LAZSPA` on a keyword alone -- and it prints the matches with their caption AND blurb; Enter lists every tool that is not hidden. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
 | `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it, plus a `Hidden` option that routes straight to `LAZHIDE`. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
-| `LAZBACKUP` | `[Export/Import/Quit]`, then a file -- your names and settings out to one plain text file, or back from one, for a new machine or a rebuilt profile that a registry key or an AutoCAD profile setting does not reach. See "Carrying it with you" above |
+| `LAZBACKUP` | `[Export/Import/Quit]`, then a file -- your names, settings and defaults out to one plain text file, or back from one, for a new machine or a rebuilt profile that a registry key or an AutoCAD profile setting does not reach. See "Carrying it with you" above |
+| `LAZTUNE` | your own value for any tool's knob, over the block's "Alec's choice" -- see "Defaults of your own" above. Reached from `Defaults...` in `LAZSET`, or typed |
 | `LAZHIDE` | opens the checklist of every tool, ticked to match what is currently hidden -- see "Hiding a tool" above. Accept stores the new list; Cancel re-reads the stored one, exactly as `LAZPIN`'s editor does |
 | `LAZNAME` | your own name for a tool and for its button -- see "Names of your own" above. Reached from `Names...` in `LAZSET`, or typed |
 | `LAZSET` | the same settings as a **dialog** -- theme dropdown, a box per item colour, the two folders, and `Hidden...` into the checklist. This is what the panel's `Options...` button opens; see "The settings dialog" above. Nothing is written until `OK`, and `OK` is greyed while a colour box holds something that is not a colour |
@@ -661,6 +696,7 @@ maintains them.
 | `lzp:*colbudget*` | `16` | how many captioned buttons may stack in ONE column before a page wraps into more. The height twin of the budget above, and the same wall: `Rest` reached 1085px against a 1080px screen at 28 tools and stopped opening, `Layout` had passed it at 32. Columns come out balanced, captions kept |
 | `lzp:*pinrowmax*` | `3` | how many rows the Pinned strip may occupy. The one part of a page whose height a drafter sets, so it is capped as a tool is ticked AND on the way in from the registry, where a list stored by an older build has never been through the cap |
 | `lzp:*reclimit*` | `5` | how many recently launched tools are remembered. The palette keeps the same number (`PaletteMemory.RecentLimit`) |
+| `lzp:*tunerows*` | `22` | how many rows `LAZTUNE`'s knob list shows at once. A ceiling of the same kind as `lzp:*colbudget*`: DCL does not scroll a dialog, only a list box scrolls inside one, so this is what keeps the defaults page under the screen with a tool of ninety knobs on it |
 
 ## Assumptions
 

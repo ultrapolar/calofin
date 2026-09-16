@@ -127,11 +127,14 @@ NOT_A_TOOL = "standards_checker"
 #: that told you what buttons do would be a joke at the drafter's
 #: expense. LAZBACKUP exports and imports LAZNAME's names and CALSET's
 #: settings as one text file -- for a new machine or a rebuilt profile,
-#: neither of which a panel button reaches either.
+#: neither of which a panel button reaches either. LAZTUNE is the
+#: defaults editor -- a drafter's own value for any tool's knob, over
+#: the block's "Alec's choice" -- reached from LAZSET's Defaults...
+#: button, and settings machinery for the same reason LAZSET is.
 NAMED_SATELLITES = frozenset({
     "DCE", "STOCKLIST", "LAZPANEL", "LAZBUTTON", "LAZICON", "LAZPIN",
     "LAZHIDE", "LAZSET", "LAZNAME", "LAZASCII", "CALHELP", "CALSET",
-    "LAZBACKUP",
+    "LAZBACKUP", "LAZTUNE",
 })
 
 

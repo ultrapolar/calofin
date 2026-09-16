@@ -1474,6 +1474,7 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*grecth-step*` | `0.00087` | radians, ~ 0.05 degree |
 | `pool:*grec-fit*` | `0.0625` | accept an end within 1/16" |
 | `pool:*half-ratio*` | `0.5` | A pool runs about twice as long as it is wide, so the width question is offered this fraction of the length rather than asked cold. |
+| `pool:*treat-default*` | `""` | What the FIRST corner's treatment question offers on Enter, before there is a previous answer to reuse: `""` asks cold, or one of the four words -- `Square`, `Radius`, `Cut`, `NotGiven` -- in any case. Every corner after the first offers the answer before it, as it always has; this only decides where that chain starts. |
 | `pool:*quarter*` | `0.25` | A derived letter is quoted to the nearest quarter inch -- the granularity a tape is actually read to (pool:q4). |
 | `pool:*fixfloor*` | `12.0` | A sheet letter that does not close positive against its overall is lifted to a positive floor and the report says so. The floor is the smaller of this and a share of the overall... |
 | `pool:*hookslack*` | `0.0625` | A corner UNDER 90 degrees pokes out past its own treatment, so the drawn edge near it starts a little way up the wall and the far end cannot always meet it exactly there. Splitt... |

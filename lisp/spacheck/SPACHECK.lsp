@@ -110,7 +110,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.17")
+(setq *spacheck-version* "v1.18")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1871,14 +1871,20 @@
 ;; would put its opening snapshot back over any snap the drafter ticked
 ;; on while it was up -- on a clean exit, with no error involved, which
 ;; is the likeliest way anyone meets it.  Borrow only what you move.
+;; No CLAYER either: SPACHECK draws nothing on the current layer, only
+;; the tutorial's demo does, and that one saves and puts back its own
+;; (c:TUTORIALSPACHECK's oldlay) -- listing it here would put the
+;; review's opening layer back over one the drafter switched to while
+;; walking the items.  tools/check_color.py holds this the way
+;; check_osnap holds OSMODE.
 (defun spachk:syssave ()
   (if (not spachk:*sysold*)
     (setq spachk:*sysold*
           (mapcar '(lambda (v) (cons v (getvar v)))
-                  '("CMDECHO" "CLAYER")))))
+                  '("CMDECHO")))))
 
 (defun spachk:sysrestore ( / v p)
-  (foreach v '("CMDECHO" "CLAYER")
+  (foreach v '("CMDECHO")
     (setq p (assoc v spachk:*sysold*))
     (if p (setvar v (cdr p))))
   (setq spachk:*sysold* nil))

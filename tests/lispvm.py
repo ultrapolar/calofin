@@ -917,7 +917,21 @@ def _apply(vm, a):
 
 
 BUILTINS[Sym('eval')] = lambda vm, a: vm.eval(a[0])
-BUILTINS[Sym('read')] = lambda vm, a: parse_all(a[0])[0] if a[0] else NIL
+
+
+@bi('read')
+def _read(vm, a):
+    """(read string) -- the first expression in it, NIL for an empty
+    string.  Malformed text is an AutoLISP error ("malformed list"),
+    and one vl-catch-all-apply can catch -- which is how LAZTUNE
+    refuses a half-typed value -- so it is raised as one here rather
+    than escaping as the parser's own IndexError."""
+    if not a[0]:
+        return NIL
+    try:
+        return parse_all(a[0])[0]
+    except (IndexError, ValueError, LispError):
+        raise LispError("read: malformed input", vm)
 
 # math
 BUILTINS[Sym('min')] = lambda vm, a: min(num(v) for v in a)

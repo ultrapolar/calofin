@@ -28,6 +28,7 @@ check:
 	$(PY) tools/check_back.py
 	$(PY) tools/check_lazdiag.py
 	$(PY) tools/check_osnap.py
+	$(PY) tools/check_color.py
 	$(PY) tools/check_vb.py
 	$(PY) tools/check_dcl.py
 
@@ -37,6 +38,7 @@ verify:
 	$(PY) tools/build_shared_bundle.py --check
 	$(PY) tools/gen_ui_data.py --check
 	$(PY) tools/gen_ui_charts.py --check
+	$(PY) tools/gen_knobs.py --check
 
 lint:
 	$(PY) tools/check_lisp.py

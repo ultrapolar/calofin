@@ -360,6 +360,19 @@ commands did that, five of them review tools you walk item by item.
 If the tool never calls `(setvar "OSMODE" 0)`, `OSMODE` does not belong
 in its table.
 
+**The current colour and the current layer are borrowed the same
+way.** CECOLOR and CLAYER are what every line the drafter draws AFTER
+the command is born with, and most drawing tools move CLAYER to put a
+dimension or a guide where it belongs. `tools/check_color.py` is
+`check_osnap`'s audit run for those two: put back on the clean exit AND
+from `*error*`, ahead of anything that can throw, and never listed in
+a sysvar table by a tool that does not move it (ABCURCHECK, FITABHD
+and SPACHECK all did, and each wrote its opening layer back over one
+the drafter had switched to mid-review). What calofin colours -- its
+review cues, its guide geometry, its own layers, all of them retunable
+through CALSET/LAZSET/LAZTUNE -- stays calofin's; what the drafter
+draws next stays theirs.
+
 **FIRST means first, inside the helper too.** An error inside `*error*`
 aborts the handler, so a restore behind a bare `(command ...)` is a
 restore that does not run on the path it was written for -- and a
@@ -473,6 +486,19 @@ python3 tools/check_osnap.py     # the drafter's OBJECT SNAPS survive every
                                  # Also: a restore helper may not drop its
                                  # snapshot behind such a form, or every
                                  # LATER run restores this run's OSMODE
+python3 tools/check_color.py     # the drafter's CURRENT COLOUR and CURRENT
+       [--list] [--tier T]       # LAYER survive every run: check_osnap's
+                                 # audit run for CECOLOR and CLAYER -- a
+                                 # command that moves either puts it back
+                                 # on the clean path AND from *error*,
+                                 # ahead of anything that can throw, and
+                                 # a sysvar table may not list one the
+                                 # tool never moves (the opening value
+                                 # would be written back over the
+                                 # drafter's on every clean exit).  What
+                                 # calofin colours -- its cues, its own
+                                 # layers -- stays calofin's; what the
+                                 # drafter draws next stays theirs
 python3 tools/probe_report.py    # not a check: replays a failure report in
                    REPORT.dxf    # the VM and varies its inputs one at a
                                  # time, to say which one the failure is
@@ -498,6 +524,12 @@ python3 tools/gen_ui_data.py     # rewrites the palette's catalog from
 python3 tools/gen_ui_charts.py   # the same for the palette's chart
                         [--check]# geometry, out of lzf:/lzs:/lzt:'s own
                                  # chart tables
+python3 tools/gen_knobs.py       # LAZTUNE's knob catalog (lzp:*knobs*
+                        [--check]# in LAZPANEL.lsp), transcribed from
+                                 # every tool's tunables block; a knob
+                                 # added to a block is not on offer to
+                                 # a drafter until this is re-run, and
+                                 # check_standards fails until it is
 make check                       # all of the above in one go
 ```
 

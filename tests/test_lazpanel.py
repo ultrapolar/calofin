@@ -220,10 +220,13 @@ assert [str(x) for x in vm.globals['test:*pages*']] == flat_rows, \
     "lzp:pages does not flatten lzp:*rows* in strip order"
 
 opens = [l for l in dcl if l.endswith(' : dialog {')]
-# one dialog per page, plus the pin, hide, settings and names editors
-assert len(opens) == len(PAGES) + 4, (
-    "%d dialogs for %d pages + the pin, hide, settings and names editors"
-    % (len(opens), len(PAGES)))
+# one dialog per page, plus the pin, hide, settings, names and defaults
+# editors
+assert len(opens) == len(PAGES) + 5, (
+    "%d dialogs for %d pages + the pin, hide, settings, names and "
+    "defaults editors" % (len(opens), len(PAGES)))
+assert 'lazpanel_tune : dialog {' in opens, \
+    "the defaults editor dialog is not in the generated file"
 assert 'lazpanel_pins : dialog {' in opens, \
     "the pin editor dialog is not in the generated file"
 assert 'lazpanel_hidden : dialog {' in opens, \
@@ -2474,7 +2477,7 @@ bv.env['CalofinTheme'] = 'DARK'
 bv.env['CalofinInk-FLAG'] = '3'
 bv.run('c:LAZBACKUP', ['Export', 'C:\\backup.txt'])
 out = ''.join(str(p) for p in bv.printed)
-assert 'Wrote 2 names, 1 caption and 11 settings to C:\\backup.txt.' in out, out
+assert 'Wrote 2 names, 1 caption, 11 settings and 0 defaults of yours to C:\\backup.txt.' in out, out
 content = bv.files.get('C:\\backup.txt')
 assert content is not None, "nothing was written"
 assert content.splitlines()[0].startswith('; calofin LAZBACKUP'), content
@@ -2547,6 +2550,147 @@ kv.run('c:LAZBACKUP', ['Export', 'Back', 'Quit'])
 out = ''.join(str(p) for p in kv.printed)
 assert 'Nothing changed.' in out and 'Nothing written' not in out, out
 print("   Back on the file question re-asks Backup, typed like CALSET's own")
+
+
+print("== LAZTUNE: a value of your own for any knob ==")
+# The catalog is lzp:*knobs*; the first tool's first knob is what the
+# dialog opens on, and POOL's width-to-length ratio is the example the
+# owner gave ("a third instead of half"), so it is the one driven here.
+kv = fresh()
+kv.loads('(setq t:*labels* (mapcar (quote car) lzp:*knobs*))')
+LABELS = [str(x) for x in kv.globals['t:*labels*']]
+POOLIX = LABELS.index('POOL')
+kv.loads('(setq t:*first* (car (caddr (car lzp:*knobs*))))')
+FIRSTKNOB = str(kv.globals['t:*first*'])
+kv.loads('(setq t:*n0* (length (cddr (car lzp:*knobs*))))')
+N0 = int(str(kv.globals['t:*n0*']))
+
+# opens on the first tool, list filled, first knob highlighted with
+# Alec's choice in the box
+vm = setvm([0])
+run(vm, 'c:LAZTUNE', 'tune-open')
+assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_tune', \
+    "LAZTUNE opened %r" % vm.globals.get('stub:*dlgname*')
+vm.loads('(setq t:*tl* (cdr (assoc "tune_tool" stub:*lists*)))')
+assert [str(x) for x in vm.globals['t:*tl*']] == LABELS, \
+    "the tool dropdown is not the catalog's tools"
+vm.loads('(setq t:*kl* (cdr (assoc "tune_list" stub:*lists*)))')
+rows = [str(x) for x in vm.globals['t:*kl*']]
+assert len(rows) == N0 and rows[0].startswith(FIRSTKNOB + '  =  '), rows[:2]
+assert tile(vm, 'tune_list') == '0'
+kv.loads('(setq t:*lit* (cadr (lzp:knob-entry "%s")))' % FIRSTKNOB)
+assert tile(vm, 'tune_val') == str(kv.globals['t:*lit*']), tile(vm, 'tune_val')
+assert 'Alec' in tile(vm, 'state'), tile(vm, 'state')
+assert any('defaults unchanged' in str(p) for p in vm.printed), vm.printed
+print("   opens on the first tool with Alec's choice in the box; Cancel changes nothing")
+
+# type a third for POOL's half-ratio and accept: the profile holds the
+# text, the index names the knob, and the global is already changed
+vm = setvm([1], click='tune_val', val='0.333')
+vm.loads('(setq lzp:*tunetool* %d lzp:*tunesel* "pool:*half-ratio*")' % POOLIX)
+run(vm, 'c:LAZTUNE', 'tune-set')
+assert prof(vm, 'CalofinKnob-pool.~half-ratio~') == '0.333', \
+    prof(vm, 'CalofinKnob-pool.~half-ratio~')
+assert 'pool:*half-ratio*' in prof(vm, 'CalofinKnobs'), prof(vm, 'CalofinKnobs')
+assert str(vm.globals.get('pool:*half-ratio*')) == '0.333', \
+    "the global was not set in this session: %r" % vm.globals.get('pool:*half-ratio*')
+assert any('1 knob set to a value of yours' in str(p) for p in vm.printed), vm.printed
+print("   a third instead of half: stored as text, indexed, and applied now")
+
+# a value of the wrong kind greys OK and is never written; a call is
+# refused before its kind is even looked at
+for bad in ('(command "erase")', '"STANDARD"', '(/ 1 3)'):
+    vm = setvm([1])
+    vm.loads('(setq lzp:*tunetool* %d lzp:*tunesel* "pool:*half-ratio*")' % POOLIX)
+    vm.loads('(setq stub:*click* "tune_val" stub:*clickval* %s)'
+             % ('"' + bad.replace('\\', '\\\\').replace('"', '\\"') + '"'))
+    run(vm, 'c:LAZTUNE', 'tune-bad')
+    assert 'pool:*half-ratio*' in tile(vm, 'state'), (bad, tile(vm, 'state'))
+    assert 'accept' in {str(x) for x in (vm.globals.get('stub:*disabled*') or [])}, bad
+    assert prof(vm, 'CalofinKnob-pool.~half-ratio~') == '', (bad, prof(vm, 'CalofinKnob-pool.~half-ratio~'))
+print("   a string, a call or a formula where a number goes greys OK, never written")
+
+# a string knob takes a string: AutoDim's plan style, the other example
+vm = setvm([1])
+vm.loads('(setq lzp:*tunetool* %d lzp:*tunesel* "ad:*style-plan*")' % LABELS.index('AUTODIM'))
+vm.loads('(setq stub:*click* "tune_val" stub:*clickval* "\\"STANDARD INCHES\\"")')
+run(vm, 'c:LAZTUNE', 'tune-string')
+assert prof(vm, 'CalofinKnob-ad.~style-plan~') == '"STANDARD INCHES"', \
+    prof(vm, 'CalofinKnob-ad.~style-plan~')
+assert str(vm.globals.get('ad:*style-plan*')) == 'STANDARD INCHES', vm.globals.get('ad:*style-plan*')
+print("   STANDARD INCHES where the block says SIDE STANDARD, as text that reads back")
+
+# Alec's choice: the button clears a stored override and puts the
+# shipped value back in the session
+vm = setvm([1], click='tune_reset',
+           env={'CalofinKnobs': 'pool:*half-ratio*',
+                'CalofinKnob-pool.~half-ratio~': '0.333'})
+vm.loads('(setq lzp:*tunetool* %d lzp:*tunesel* "pool:*half-ratio*")' % POOLIX)
+vm.loads('(setq pool:*half-ratio* 0.333)')
+run(vm, 'c:LAZTUNE', 'tune-reset')
+assert prof(vm, 'CalofinKnob-pool.~half-ratio~') == '', prof(vm, 'CalofinKnob-pool.~half-ratio~')
+assert 'pool:*half-ratio*' not in prof(vm, 'CalofinKnobs'), prof(vm, 'CalofinKnobs')
+assert str(vm.globals.get('pool:*half-ratio*')) == '0.5', vm.globals.get('pool:*half-ratio*')
+assert any('1 back to Alec' in str(p) for p in vm.printed), vm.printed
+print("   the Alec's choice button clears the override and restores the value")
+
+# typing Alec's choice back in is the same as the button
+vm = setvm([1], click='tune_val', val='0.5',
+           env={'CalofinKnobs': 'pool:*half-ratio*',
+                'CalofinKnob-pool.~half-ratio~': '0.333'})
+vm.loads('(setq lzp:*tunetool* %d lzp:*tunesel* "pool:*half-ratio*")' % POOLIX)
+run(vm, 'c:LAZTUNE', 'tune-retype')
+assert prof(vm, 'CalofinKnob-pool.~half-ratio~') == '', prof(vm, 'CalofinKnob-pool.~half-ratio~')
+print("   ...and so is typing the shipped value back in")
+
+# an override in the profile is applied as this file LOADS, and again
+# when the panel opens -- a tool reloaded in between has put Alec's
+# choice back and the panel puts the drafter's back over it
+lv = VM()
+lv.env['CalofinKnobs'] = 'pool:*half-ratio*'
+lv.env['CalofinKnob-pool.~half-ratio~'] = '0.333'
+lv.load(LSP)
+assert str(lv.globals.get('pool:*half-ratio*')) == '0.333', \
+    "the load-time pass did not apply the override: %r" % lv.globals.get('pool:*half-ratio*')
+vm = setvm([0], env={'CalofinKnobs': 'pool:*half-ratio*',
+                     'CalofinKnob-pool.~half-ratio~': '0.333'})
+vm.loads('(setq pool:*half-ratio* 0.5)')   # as a reload of POOL.LSP would
+run(vm, 'c:LAZPANEL', 'tune-reapply')
+assert str(vm.globals.get('pool:*half-ratio*')) == '0.333', \
+    "opening the panel did not re-apply the override"
+print("   applied as LAZPANEL loads and again at every panel open")
+
+# Defaults... in LAZSET hops to this editor on the same handle and
+# comes back, like Hidden... and Names...
+vm = setvm([7, 0, 0], click='set_tune')
+run(vm, 'c:LAZSET', 'set-tune-hop')
+assert events(vm).count('new') == 3, events(vm)
+assert 'list tune_tool' in events(vm), events(vm)
+print("   Defaults... in LAZSET opens it and comes back to the settings page")
+
+# LAZBACKUP carries the defaults: exported under [Knobs], read back
+# through the same checks LAZTUNE's own box makes
+bv = fresh()
+bv.env['CalofinKnobs'] = 'pool:*half-ratio*'
+bv.env['CalofinKnob-pool.~half-ratio~'] = '0.333'
+bv.run('c:LAZBACKUP', ['Export', 'C:\\backup.txt'])
+content = bv.files.get('C:\\backup.txt') or ''
+assert '[Knobs]\npool:*half-ratio*=0.333' in content, content
+assert 'and 1 default of yours' in ''.join(str(p) for p in bv.printed), bv.printed
+iv = fresh()
+iv.files['C:\\backup.txt'] = ('[Knobs]\n'
+                              'pool:*half-ratio*=0.25\n'
+                              'ad:*style-plan*=3\n'
+                              'zz:*nope*=1\n')
+iv.loads('(defun vl-registry-write (k n s) s)')
+iv.run('c:LAZBACKUP', ['Import', 'C:\\backup.txt'])
+out = ''.join(str(p) for p in iv.printed)
+assert '1 line applied' in out, out
+assert "ad:*style-plan*=3 (Alec's choice is a string, this is a whole number)" in out, out
+assert 'zz:*nope*=1 (not a knob this build has)' in out, out
+assert prof(iv, 'CalofinKnob-pool.~half-ratio~') == '0.25', prof(iv, 'CalofinKnob-pool.~half-ratio~')
+assert str(iv.globals.get('pool:*half-ratio*')) == '0.25', iv.globals.get('pool:*half-ratio*')
+print("   LAZBACKUP exports them under [Knobs] and imports them through the same checks")
 
 
 print("== LAZPANELVER ==")
