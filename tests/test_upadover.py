@@ -89,6 +89,17 @@ def pline(vm, pts, closed=True, layer="POOL"):
     return e
 
 
+def line(vm, a, b, layer="POOL"):
+    """A plain LINE -- the stretch somebody drew because it is the bit
+    that needs pads."""
+    e = Ent()
+    vm.entities.append(e)
+    vm.entdata[e] = [Dot(0, "LINE"), Dot(8, layer),
+                     [10, float(a[0]), float(a[1]), 0.0],
+                     [11, float(b[0]), float(b[1]), 0.0]]
+    return e
+
+
 def ab_pt(vm, x, y, number, layer="POINTS", block="ab_pt", tag="number"):
     """A survey point: the INSERT and the ATTRIB naming it."""
     e = Ent()
@@ -335,6 +346,58 @@ check("a wall that comes back within a pad of itself is not padded twice",
       len(centres(vm, n0)) == 4, f"{centres(vm, n0)}")
 
 
+# ---- Whole: the curve IS the stretch ---------------------------------
+
+print("UPADOVER -- Whole pads a line end to end, and asks nothing else")
+vm = fresh()
+per = line(vm, (0, 0), (240, 0))
+n0 = len(vm.entities)
+run(vm, [per, "Whole"], "whole line")
+cs = covers("a whole line", vm, n0, walk_pts(((0, 0), (240, 0))))
+check("the Whole keyword is offered where the first end is asked for",
+      asked(vm, "click it, or type a point number [Whole/Back]"),
+      f"{[p for p, _ in vm.prompts]}")
+check("and the second end is never asked for at all",
+      not asked(vm, "Where the pads end"))
+check("it covered the line exactly as the two-point run would",
+      cs == [(x, 0.0) for x in (0, 36, 72, 108, 144, 180, 216, 252)], f"{cs}")
+check("it said it padded the whole of it, end to end",
+      said(vm, "covering the whole 20'-0\" of it, end to end"))
+check("an open run says how long it is, and that Whole is there",
+      said(vm, "an open run, 20'-0\" long.  Whole at the next question"))
+
+print("UPADOVER -- Whole on a polyline follows its arcs too")
+vm = fresh()
+per = pline(vm, [(0, 0), (120, 0, 0.4142135623730951), (180, 60), (180, 200)],
+            closed=False)
+n0 = len(vm.entities)
+run(vm, [per, "Whole"], "whole polyline")
+covers("a whole polyline", vm, n0,
+       walk_pts(((0, 0), (120, 0)),
+                (((120, 60), 60, -math.pi / 2, 0.0)),
+                ((180, 60), (180, 200))))
+check("the whole of it is the arc's length too, not the chord's",
+      said(vm, "covering the whole 29'-6\" of it"))
+
+print("UPADOVER -- Whole on a closed perimeter goes all the way round")
+vm = fresh()
+per = rect(vm)
+n0 = len(vm.entities)
+run(vm, [per, "Whole"], "whole loop")
+cs = covers("a whole loop", vm, n0,
+            walk_pts(((0, 0), (240, 0)), ((240, 0), (240, 120)),
+                     ((240, 120), (0, 120)), ((0, 120), (0, 0))))
+check("the way round is not a question when the answer is both ways",
+      not asked(vm, "Click a spot the run passes through"))
+check("it said it came back round to where it started",
+      said(vm, "the whole 60'-0\" of it, back round to where it started"))
+check("and the closing line says the whole way round, not end to end",
+      said(vm, "under pads the whole way round")
+      and not said(vm, "both ends carried past"))
+check("the loop closes on the grid without doubling a pad",
+      len(cs) == 20, f"{len(cs)}")
+
+
 # ---- which way round --------------------------------------------------
 
 print("UPADOVER -- the shorter way round is taken without asking")
@@ -555,8 +618,8 @@ n0 = len(vm.entities)
 run(vm, [per, "4", "Back", "5", "4"], "back")
 check("Back at the end question re-opens the start question",
       [p for p, _ in vm.prompts].count(
-          "\nWhere the pads start - click it, or type a point number [Back]: ")
-      == 2)
+          "\nWhere the pads start - click it, or type a point number"
+          " [Whole/Back]: ") == 2)
 check("and the run is the one the second pair of answers asked for",
       said(vm, "from Pt.5 to Pt.4"))
 

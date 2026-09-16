@@ -10,7 +10,9 @@ laid end to end, with nothing missed and nothing doubled.
 That is `UPADOVER`. Click the perimeter, say where the pads start and
 where they end -- click the spots, or type the survey points' numbers
 the way `ABHD` and `PERPMARK` take them -- and the run comes back
-covered.
+covered. Or click a line or a polyline that already **is** the stretch
+that needs pads, answer **`Whole`**, and all of it is covered without
+an end being named at all.
 
 It is `PADDLE`'s sibling on the pad side (same block, same layer, same
 36") and `PERPMARK`'s on the question side (the same wall reader, the
@@ -19,11 +21,13 @@ nothing else can).
 
 ## What it does
 
-1. **Click the pool perimeter.** A polyline (arc segments included), a
-   line, an arc, a circle -- and anything else AutoCAD can measure
-   along, which is read through `vlax-curve-*` instead. An entity that
-   is neither is named and the question is put again.
-2. **Where the pads start**, and **where they end**. Either end is a
+1. **Click the perimeter, or the line or polyline to pad.** A polyline
+   (arc segments included), a line, an arc, a circle -- and anything
+   else AutoCAD can measure along, which is read through `vlax-curve-*`
+   instead. An entity that is neither is named and the question is put
+   again. The run says what it got and how long it is.
+2. **Where the pads start**, and **where they end** -- or **`Whole`**,
+   which pads all of it and skips both (below). Either end is a
    click anywhere on the wall **or** a survey point's number: `17`,
    `Pt.17`, `pt 17`, `#17` and `017` all name the same point, and a
    click landing within `upad:*snap*` of one **is** that point and is
@@ -63,6 +67,25 @@ its own marks cannot settle a direction.
 
 An **open** perimeter has one stretch between any two points, so it is
 never asked.
+
+## Padding the whole of it
+
+Often the stretch that needs pads is already drawn: a line down a wall,
+a polyline round a bay. Answering **`Whole`** at the first question
+pads that curve end to end -- the second question is never put, and on
+a closed perimeter the run goes all the way round and back to where it
+started:
+
+```
+Select the perimeter, or the line or polyline to pad: (pick)
+UPADOVER: an open run, 20'-0" long.  Whole at the next question pads all of it.
+Where the pads start - click it, or type a point number [Whole/Back]: Whole
+UPADOVER: 8 36" pad(s) on layer "PADS", covering the whole 20'-0" of it, end to end.
+```
+
+It is the same cover as a two-point run, laid by the same walk: the
+grid is anchored on the curve's own start point, and the far end is
+carried past in the usual way.
 
 ## How the pads are laid
 
@@ -172,13 +195,17 @@ CALOFIN_LISP_ROOT=shared python3 tests/test_upadover.py
 
 Runtime tests: the real file is loaded into `tests/lispvm.py` and
 `c:UPADOVER` is driven from a script. The three halves of the promise --
-no two pads overlapping, every pad sharing a full edge with the next,
-and no point of the run left bare -- are asserted as facts about the
-pads that landed, on a straight wall, a run round a 90-degree corner, a
-wall at 45 degrees (where the bridging pads are), a half circle and a
-notch the run doubles back through. The rest drives the questions: the
-five spellings of a point number, a click that snaps to a point and one
-that does not, a pick projected onto the wall, the shorter way round
-taken without asking and the even one asked about with one click, Back
-at each step, and Esc -- which draws nothing, leaves no undo group open
-and hands every system variable back.
+no two pads overlapping, all of them one block joined edge to edge (a
+pair meeting at a corner is not joined, which is the break the bridging
+pads exist to stop), and no point of the run left bare -- are asserted
+as facts about the pads that landed, on a straight wall, a run round a
+90-degree corner, a wall at 45 degrees (where the bridging pads are), a
+half circle, a circle, and a notch the run doubles back through. The
+rest drives the questions: the five spellings of a point number, a
+click that snaps to a point and one that does not, a pick projected
+onto the wall, the shorter way round taken without asking and the even
+one asked about with one click, `Whole` on a line, on a polyline with
+an arc in it and on a closed perimeter (where it comes back round to
+its own start without doubling a pad), Back at each step, and Esc --
+which draws nothing, leaves no undo group open and hands every system
+variable back.

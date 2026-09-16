@@ -105,7 +105,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *upadover-version* "v1.0")
+(setq *upadover-version* "v1.1")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -626,12 +626,33 @@
 ;; unwinding the caller's chain: a number nothing carries is a typo, not
 ;; an answer, and the question it belongs to is this one.
 ;;
-;; Returns (position name), name nil for a place, or UPAD-BACK.
-(defun upad:askpoint (msg back cands / v out done dupes hit)
-  (setq done nil out nil)
+;; WHOLE offers the Whole keyword -- all of the curve rather than a
+;; stretch of it -- and is answered UPAD-WHOLE.  The bracket is built
+;; from the keyword list rather than written a second time, so a click
+;; on a bracketed word always sends a word initget accepts (STANDARDS
+;; section 1).
+;;
+;; Returns (position name), name nil for a place, UPAD-WHOLE, or
+;; UPAD-BACK.
+(defun upad:askpoint (msg whole back cands / v out done dupes hit kws)
+  (setq kws  (cond ((and whole back) "Whole Back")
+                   (whole            "Whole")
+                   (back             "Back")
+                   (t                ""))
+        done nil
+        out  nil)
   (while (not done)
-    (if back (initget 129 "Back Undo") (initget 129))
-    (setq v (getpoint (strcat "\n" msg (if back " [Back]" "") ": ")))
+    ;; Undo rides along as a hidden alias for Back, unlisted
+    (if (= kws "")
+      (initget 129)
+      (initget 129 (strcat kws (if back " Undo" ""))))
+    (setq v (getpoint (strcat "\n" msg
+                              (if (= kws "")
+                                ""
+                                (strcat " ["
+                                        (vl-string-translate " " "/" kws)
+                                        "]"))
+                              ": ")))
     (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((null v)
@@ -639,6 +660,8 @@
                       " survey point's number.")))
       ((and (= (type v) 'STR) (member v '("Back" "Undo")))
        (setq out 'UPAD-BACK done T))
+      ((and (= (type v) 'STR) (= v "Whole"))
+       (setq out 'UPAD-WHOLE done T))
       ((= (type v) 'STR)
        (setq dupes (upad:matches v cands))
        (cond
@@ -945,7 +968,7 @@
 (defun c:UPADOVER (/ *error* undo-open doc space sel en ed segs tot closed
                      cands stage done pick e0 e1 loc base0 base1 s0 s1
                      lf lb sgn runlen otherlen asked pts pads delta
-                     nbridge blkname padsize e gap)
+                     nbridge blkname padsize e gap whole)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -979,8 +1002,8 @@
 
       ;; --- 1. the perimeter the run follows ---------------------------
       ((= stage 1)
-       (setq sel (entsel "\nSelect the pool perimeter: "))
-       (if lzd:ask (lzd:ask "\nSelect the pool perimeter: " sel) sel)
+       (setq sel (entsel "\nSelect the perimeter, or the line or polyline to pad: "))
+       (if lzd:ask (lzd:ask "\nSelect the perimeter, or the line or polyline to pad: " sel) sel)
        (if lzd:watch (lzd:watch sel) sel)
        (cond
          ((null sel)
@@ -1002,9 +1025,12 @@
              (setq closed (upad:isclosed en segs)
                    cands  (upad:collect-points))
              (princ (strcat "\nUPADOVER: "
-                            (if closed "a closed perimeter of "
-                              "an open perimeter of ")
-                            (upad:ft tot) "."
+                            (if closed
+                              (strcat "a closed perimeter, " (upad:ft tot)
+                                      " round.")
+                              (strcat "an open run, " (upad:ft tot)
+                                      " long."))
+                            "  Whole at the next question pads all of it."
                             (if cands
                               (strcat "  " (itoa (length cands))
                                       " survey point(s) can be named by"
@@ -1012,12 +1038,26 @@
                               "")))
              (setq stage 2))))))
 
-      ;; --- 2. where the pads start ------------------------------------
+      ;; --- 2. where the pads start -- or Whole, for all of it ---------
       ((= stage 2)
        (setq e0 (upad:askpoint "Where the pads start - click it, or type a point number"
-                               T cands))
+                               T T cands))
        (cond
          ((eq e0 'UPAD-BACK) (setq stage 1))
+         ;; the whole curve, end to end: a line or a polyline drawn as
+         ;; the stretch that needs pads IS the answer to both questions,
+         ;; so neither is put.  It starts where the curve starts, runs
+         ;; its whole length, and on a closed one comes back round to
+         ;; where it began
+         ((eq e0 'UPAD-WHOLE)
+          (setq whole    T
+                base0    (upad:point-at en segs 0.0)
+                s0       0.0
+                sgn      1.0
+                runlen   tot
+                otherlen nil
+                asked    nil
+                stage    6))
          (t
           (setq loc (upad:locate en segs (upad:cd-pt e0)))
           (if (null loc)
@@ -1032,7 +1072,7 @@
       ;; --- 3. and where they end --------------------------------------
       ((= stage 3)
        (setq e1 (upad:askpoint "Where the pads end - click it, or type a point number"
-                               T cands))
+                               nil T cands))
        (cond
          ((eq e1 'UPAD-BACK) (setq stage 2))
          (t
@@ -1059,7 +1099,8 @@
                ((< gap upad:*fuzz*)
                 (princ (strcat "\nThat is where the run already starts -"
                                " the two ends have to be different"
-                               " places on the wall.")))
+                               " places on the wall.  (Whole at the first"
+                               " question pads all of it.)")))
                (t
                 (upad:say-landed e1 base1 "end")
                 (setq stage 4))))))))
@@ -1130,9 +1171,17 @@
          (if (= (cadr e) "bridge") (setq nbridge (1+ nbridge))))
        (princ (strcat "\nUPADOVER: " (itoa (length pads)) " "
                       (upad:in padsize) " pad(s) on layer \"" upad:*layer*
-                      "\", covering " (upad:ft runlen) " of perimeter from "
-                      (upad:endname e0 "the start you clicked") " to "
-                      (upad:endname e1 "the end you clicked") "."))
+                      "\", covering "
+                      (if whole
+                        (strcat "the whole " (upad:ft runlen) " of it"
+                                (if closed
+                                  ", back round to where it started."
+                                  ", end to end."))
+                        (strcat (upad:ft runlen) " of perimeter from "
+                                (upad:endname e0 "the start you clicked")
+                                " to "
+                                (upad:endname e1 "the end you clicked")
+                                "."))))
        (if otherlen
          (princ (strcat "\nUPADOVER: "
                         (if asked "the way you clicked"
@@ -1146,9 +1195,11 @@
                         " than a point.")))
        (princ (strcat "\nUPADOVER: the pads interlock - none overlaps"
                       " another, and where the run leaves one it is"
-                      " already inside the next, so it is under pads from"
-                      " end to end with both ends carried past rather"
-                      " than stopped on."))
+                      " already inside the next, so it is under pads "
+                      (if (and whole closed)
+                        "the whole way round."
+                        (strcat "from end to end, both ends carried past"
+                                " rather than stopped on."))))
        (setq done T))))
 
   (if undo-open (setq undo-open (upad:undoend)))
