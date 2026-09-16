@@ -181,12 +181,10 @@ lisp/mohamaddle/MOHAMADDLE.lsp|mohamaddle--dodge|foreach|pad
 lisp/mohamaddle/MOHAMADDLE.lsp|mohamaddle--dodge|foreach|q
 lisp/mohamaddle/MOHAMADDLE.lsp|mohamaddle--features|foreach|ctr
 lisp/mohamaddle/MOHAMADDLE.lsp|mohamaddle--perimeters|foreach|l
-lisp/paddle/PADDLE.lsp|c:paddle|foreach|pad
 lisp/paddle/PADDLE.lsp|c:tutorialpaddle|foreach|e
 lisp/paddle/PADDLE.lsp|paddle--dodge|foreach|pad
 lisp/paddle/PADDLE.lsp|paddle--dodge|foreach|q
 lisp/paddle/PADDLE.lsp|paddle--features|foreach|ctr
-lisp/paddle/PADDLE.lsp|paddle--perimeters|foreach|l
 lisp/perp_points/cperp_points.lsp|c:cperppts|setq|guard
 lisp/perp_points/perp_points.lsp|c:perppts|setq|guard
 lisp/perp_points/perp_points.lsp|perp:dedupe|foreach|p
@@ -560,12 +558,10 @@ shared/parts/MOHAMADDLE.lsp|mohamaddle--dodge|foreach|pad
 shared/parts/MOHAMADDLE.lsp|mohamaddle--dodge|foreach|q
 shared/parts/MOHAMADDLE.lsp|mohamaddle--features|foreach|ctr
 shared/parts/MOHAMADDLE.lsp|mohamaddle--perimeters|foreach|l
-shared/parts/PADDLE.lsp|c:paddle|foreach|pad
 shared/parts/PADDLE.lsp|c:tutorialpaddle|foreach|e
 shared/parts/PADDLE.lsp|paddle--dodge|foreach|pad
 shared/parts/PADDLE.lsp|paddle--dodge|foreach|q
 shared/parts/PADDLE.lsp|paddle--features|foreach|ctr
-shared/parts/PADDLE.lsp|paddle--perimeters|foreach|l
 shared/parts/POOL.lsp|pool:askcorner|foreach|e
 shared/parts/POOL.lsp|pool:askh|foreach|e
 shared/parts/POOL.lsp|pool:asks|foreach|e

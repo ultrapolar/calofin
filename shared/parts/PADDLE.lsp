@@ -28,6 +28,12 @@
 ;;;   * a closed LWPOLYLINE or 2D POLYLINE, or
 ;;;   * loose LINEs / ARCs (or a mix of all of the above) -- PADDLE
 ;;;     chains touching segments end-to-end into closed loops.
+;;;   * geometry that is a closed perimeter EXCEPT for a gap: PADDLE
+;;;     recognises the near-miss (the chains and the gaps between them
+;;;     go round once and come back), draws an arrow at every open
+;;;     joint and offers to close it with a zero-radius FILLET.  Yes
+;;;     closes it and the run carries straight on from the perimeter
+;;;     that leaves; No leaves the arrow standing to work from.
 ;;;
 ;;; Usage:
 ;;;   Command: PADDLE
@@ -75,7 +81,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.13")
+(setq *paddle-version* "v1.14")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -130,6 +136,30 @@
 ;; doubled polyline vertex, a zero-length line), which is also what
 ;; keeps a corner drawn with a duplicate vertex from being missed.
 (setq *paddle-fuzz* 0.05)
+
+;; --- the gap in a perimeter that nearly closes ---
+;; Furthest apart two loose ends may be and still read as a DRAFTING
+;; GAP rather than a missing piece of perimeter.  Geometry that chains
+;; into a loop except here is one arrow and one question away from
+;; being paddable -- PADDLE offers the zero fillet that closes it.
+;; Geometry short of a whole wall is not, and gets the plain report it
+;; always got.  One pad wide: a hole a pad would fall through is not a
+;; gap.  Ends closer together than *paddle-fuzz* are already chained
+;; and are not a gap either.
+(setq *paddle-gapmax* 36.0)
+;; Layer the gap arrow is drawn on, and the colour index it is created
+;; with.  A plain ACI number rather than 'auto on purpose: red reads
+;; against any background a drafter can set, which is the one thing a
+;; mark saying "it is open HERE" has to do.  The arrows are PADDLE's
+;; own marks and nobody else's -- every run clears this layer and
+;; re-marks whatever is still open, so an arrow does not outlive the
+;; gap it pointed at -- so put nothing else on it.
+(setq *paddle-gap-layer* "PADDLE-GAP")
+(setq *paddle-gap-color* 1)
+;; Length of that arrow, tail to tip, in drawing units.  Its head is a
+;; third of that long and three times as wide as its shaft, which is
+;; what makes it read as an arrow at the zoom the pads are seen at.
+(setq *paddle-arrow* 36.0)
 
 ;; --- TUTORIALPADDLE ---
 ;; Layer the tutorial draws its labelled sample perimeter on, and the
@@ -309,10 +339,40 @@
      (if cv (paddle--vts->segs (car cv) (cdr cv))))))
 
 ;; ------------------- chain segments into loops ---------------------
+;; SEG walked the other way: the same geometry, so the bulge changes
+;; sign with the direction, and still owned by the same entity.
+(defun paddle--revseg (s)
+  (list (cadr s) (car s) (- (caddr s)) (cadddr s)))
+
+;; The first segment in SEGS with an end on PT (within *paddle-fuzz*),
+;; turned so that it LEAVES pt, and the rest of SEGS without it, in
+;; order: (segment rest).  (nil rest) when nothing touches pt.
+(defun paddle--take (segs pt / found rest s)
+  (setq found nil rest nil)
+  (foreach s segs
+    (if found
+        (setq rest (cons s rest))
+        (cond
+          ((<= (distance pt (car s)) *paddle-fuzz*) (setq found s))
+          ((<= (distance pt (cadr s)) *paddle-fuzz*) ; reversed
+           (setq found (paddle--revseg s)))
+          (T (setq rest (cons s rest))))))
+  (list found (reverse rest)))
+
 ;; Chains touching segments (ends within *paddle-fuzz*) end-to-end.
-;; Returns (loops . open-count); each loop is a vertex list (x y bulge).
-(defun paddle--chain (segs / loops nopen chain head tail done found rest s)
-  (setq nopen 0)
+;; Returns (loops opens): each loop is a vertex list (x y bulge), and
+;; each open chain the SEGMENTS it ran out of geometry with, in walk
+;; order -- which is what the gap pass below needs, because a segment
+;; still knows which entity it came off and a vertex does not.
+;;
+;; The walk grows at BOTH ends.  Growing forward only splits a
+;; perimeter with ONE gap in it into TWO open chains whenever the walk
+;; starts in the middle of it: the half ahead of the starting segment
+;; runs into the gap, and the half behind it then runs into the
+;; segment already taken.  Two chains meeting at a point that is not a
+;; gap is not what the drawing says -- there is one loop with one hole
+;; in it, and the arrow belongs at the hole.
+(defun paddle--chain (segs / loops opens chain head tail done found rest)
   ;; drop degenerate slivers
   (setq segs (vl-remove-if
                '(lambda (s) (<= (distance (car s) (cadr s)) *paddle-fuzz*))
@@ -331,23 +391,26 @@
                                    chain)
                            loops)
                done  T))
-        (T ;; look for a segment continuing from the tail
-         (setq found nil rest nil)
-         (foreach s segs
-           (if found
-               (setq rest (cons s rest))
-               (cond
-                 ((<= (distance tail (car s)) *paddle-fuzz*)
-                  (setq found s))
-                 ((<= (distance tail (cadr s)) *paddle-fuzz*) ; reversed
-                  (setq found (list (cadr s) (car s) (- (caddr s)))))
-                 (T (setq rest (cons s rest))))))
-         (if found
-             (setq chain (append chain (list found))
-                   tail  (cadr found)
-                   segs  (reverse rest))
-             (setq nopen (1+ nopen) done T)))))) ; dead end: open chain
-  (cons (reverse loops) nopen))
+        (T ;; a segment leaving the tail, else one arriving at the head
+         (setq rest  (paddle--take segs tail)
+               found (car rest)
+               rest  (cadr rest))
+         (cond
+           (found (setq chain (append chain (list found))
+                        tail  (cadr found)
+                        segs  rest))
+           (T
+            (setq rest  (paddle--take segs head)
+                  found (car rest)
+                  rest  (cadr rest))
+            (if found
+                (setq found (paddle--revseg found) ; turned to arrive at head
+                      chain (cons found chain)
+                      head  (car found)
+                      segs  rest)
+                (setq opens (cons chain opens) ; dead end both ways
+                      done  T))))))))
+  (list (reverse loops) (reverse opens)))
 
 ;; ------------------------ feature detection ------------------------
 ;; Returns a list of pads: (center rotation kind), kind = "corner"/"arc".
@@ -559,12 +622,387 @@
 (defun paddle--solid-loops (loops)
   (vl-remove-if '(lambda (l) (< (abs (paddle--area l)) 1e-6)) loops))
 
+;; ============= a perimeter that nearly closes =======================
+;; A drawing says "closed perimeter" long before it is one: two walls
+;; that overshoot each other by an inch, a polyline that stops a hair
+;; short of its own start, a fillet somebody erased and never redrew.
+;; PADDLE chains everything that touches, so what is left over is a set
+;; of OPEN chains -- and when those chains and the gaps between them go
+;; round once and arrive back where they started, the drawing WAS one
+;; closed perimeter with holes punched in it.  This section finds that
+;; ring and marks every hole with an arrow; c:PADDLE offers the zero
+;; fillet that closes one.
+
+;; The point at U along segment S -- 0 at the start, 1 at the end, the
+;; arc followed round when there is one.
+(defun paddle--segpt (s u / a b blg seg cen)
+  (setq a   (car s)
+        b   (cadr s)
+        blg (caddr s))
+  (if (= blg 0.0)
+      (cal:v+ a (cal:v* (cal:v- b a) u))
+      (progn
+        (setq seg (paddle--arcdata a b blg)
+              cen (caddr seg))
+        (paddle--arcpt cen (cadr seg) (+ (angle cen a) (* (car seg) u))))))
+
+;; A 2D point as the 3D one (command ...) and trans want.
+(defun paddle--3d (p) (list (car p) (cadr p) 0.0))
+
+;; Where the FILLET pick goes on an end segment, as a fraction of it
+;; measured FROM the loose end: nine tenths of the way in, right up by
+;; the end that is still attached to the rest of the perimeter.
+;;
+;; FILLET keeps the side of the pick and moves the other end, so the
+;; pick has to land past the point where the two ends cross or it keeps
+;; the wrong half.  Two ends that fall short of each other cross
+;; outside both segments, and any pick at all is past it.  Two that
+;; overshoot cross INSIDE them, as far in as the overshoot is long --
+;; so the middle of the segment, the obvious pick, is on the wrong side
+;; of the crossing as soon as a wall is run more than half its own
+;; length past its neighbour, and FILLET would then trim the perimeter
+;; and keep the overshoot.  Nine tenths is wrong only for an end
+;; segment that is overshoot nearly end to end, and is still clear of
+;; the neighbouring segment when the end belongs to a polyline.  It is
+;; a fact about the way FILLET reads a pick rather than a knob, so it
+;; is written where it is used and not in the settings block.
+
+;; The two loose ends of open chain number I, each as
+;; (point entity pick-point chain end segment): end 0 is the head the
+;; walk started from, end 1 the tail it ran out at, and SEGMENT is the
+;; one the end sits on, turned so that it always runs FROM the loose
+;; end into the chain -- which makes the pick one rule for both, and
+;; gives the gap the two lines it has to cross.
+(defun paddle--ends (chain i / sf sl)
+  (setq sf (car chain)                          ; the head's segment runs
+        sl (paddle--revseg (last chain)))       ; in; the tail's is turned
+                                                ; round so that it does too
+  (list (list (car sf) (cadddr sf) (paddle--segpt sf 0.9) i 0 sf)
+        (list (car sl) (cadddr sl) (paddle--segpt sl 0.9) i 1 sl)))
+
+;; One number per loose end, and its index in paddle--endlist's answer,
+;; so a pair, a partner and a visited mark are all comparable as
+;; numbers rather than as the lists they name.
+(defun paddle--endkey (e) (+ (* 2 (nth 3 e)) (nth 4 e)))
+
+;; Every loose end in OPENS, in chain order -- so (nth key ends) finds
+;; one again from its key.
+(defun paddle--endlist (opens / out i c)
+  (setq i 0)
+  (foreach c opens
+    (setq out (append out (paddle--ends c i))
+          i   (1+ i)))
+  out)
+
+;; Pair the loose ends off, closest first: a gap is two ends that want
+;; to be one point.  Ends further apart than *paddle-gapmax* are left
+;; unpaired -- that is a missing wall, not a gap -- ends closer
+;; together than *paddle-fuzz* are already chained and are not a gap
+;; either, and an end already spoken for cannot be paired twice.  What
+;; comes back is a set of disjoint pairs, each (end-a end-b distance).
+(defun paddle--pairs (ends / cand taken out best a b d p)
+  (foreach a ends
+    (foreach b ends
+      (if (and (< (paddle--endkey a) (paddle--endkey b)) ; each pair once
+               (> (setq d (distance (car a) (car b))) *paddle-fuzz*)
+               (<= d *paddle-gapmax*))
+          (setq cand (cons (list d a b) cand)))))
+  ;; then take them closest first.  The pick is a scan rather than a
+  ;; vl-sort because vl-sort DROPS an element that compares equal to
+  ;; another under the predicate it is given -- and two gaps exactly as
+  ;; wide as each other is not an oddity here, it is what the two ends
+  ;; of a wall left short at both of them look like.  Sorting them
+  ;; would quietly lose one, and a ring with a gap missing is not a
+  ;; ring, so the arrow would never be drawn.
+  (repeat (length cand)
+    (setq best nil)
+    (foreach p cand
+      (if (and (not (member (paddle--endkey (cadr p)) taken))
+               (not (member (paddle--endkey (caddr p)) taken))
+               (or (null best) (< (car p) (car best))))
+          (setq best p)))
+    (if best
+        (setq a     (cadr best)
+              b     (caddr best)
+              taken (cons (paddle--endkey a) (cons (paddle--endkey b) taken))
+              out   (cons (list a b (car best)) out))))
+  (reverse out))
+
+;; The end paired with E, or nil.
+(defun paddle--partner (e pairs / k out p)
+  (setq k (paddle--endkey e))
+  (foreach p pairs
+    (cond
+      ((= k (paddle--endkey (car p)))  (setq out (cadr p)))
+      ((= k (paddle--endkey (cadr p))) (setq out (car p)))))
+  out)
+
+;; One gap: the two ends that want to be one point, and how far apart
+;; they are -- the number the drafter is told before being asked about
+;; it, because an eighth of an inch and a foot are not the same
+;; question even though they read the same on screen.
+(defun paddle--gap (a b)
+  (list a b (distance (car a) (car b))))
+
+;; Walk the ring that leaves chain START by its tail: across the gap
+;; waiting there, in at whichever end of whichever chain is on the far
+;; side, out at that chain's other end, on across the next gap, and so
+;; on until the walk arrives back at the head it set out from.  A walk
+;; that does is a RING -- chain, gap, chain, gap, the whole way round.
+;; Returns (chains gaps): the chains as (index . the-end-it-came-in-by)
+;; in walk order, and the gaps as the (end end) pairs it crossed.  nil
+;; when the walk meets a loose end nothing wants, or a chain it has
+;; already walked -- a knot, not a ring.
+(defun paddle--ring (start ends pairs / here goal chains gaps nxt ci ok done)
+  (setq goal   (* 2 start)                   ; the head of START again
+        here   (nth (1+ (* 2 start)) ends)   ; leaving START by its tail
+        chains (list (cons start 0))
+        ok     nil
+        done   nil)
+  (while (not done)
+    (setq nxt (paddle--partner here pairs))
+    (cond
+      ((null nxt) (setq done T))                 ; a loose end: no ring
+      ((= (paddle--endkey nxt) goal)             ; home: the ring closes
+       (setq gaps (cons (paddle--gap here nxt) gaps)
+             ok   T
+             done T))
+      ((assoc (nth 3 nxt) chains) (setq done T)) ; a chain walked twice
+      (T (setq gaps   (cons (paddle--gap here nxt) gaps)
+               ci     (nth 3 nxt)
+               chains (cons (cons ci (nth 4 nxt)) chains)
+               here   (nth (+ (* 2 ci) (- 1 (nth 4 nxt))) ends)))))
+  (if ok (list (reverse chains) (reverse gaps))))
+
+;; The vertex list that ring would be once its gaps are closed: every
+;; chain in the order the walk met it, turned round when the walk came
+;; in by its tail, and each gap left as the straight closing segment it
+;; is about to become.  Enough to measure the area it encloses and find
+;; the middle of it, which is all the ring is read for.
+(defun paddle--ring-vts (opens chains / out c segs s end)
+  (foreach c chains
+    (setq segs (nth (car c) opens))
+    (if (= (cdr c) 1)
+        (setq segs (reverse (mapcar '(lambda (s) (paddle--revseg s)) segs))))
+    (foreach s segs
+      (setq out (cons (list (car (car s)) (cadr (car s)) (caddr s)) out)))
+    ;; and the loose end the chain stops at.  A vertex carries the
+    ;; bulge of the segment LEAVING it, and what leaves this one is the
+    ;; gap -- straight, so 0.  Leaving the point out instead would
+    ;; measure the loop with one segment per chain shortcut away, which
+    ;; is most of it when the chain is a wall or two.
+    (setq end (cadr (last segs))
+          out (cons (list (car end) (cadr end) 0.0) out)))
+  (reverse out))
+
+;; The biggest of a set of closed loops by the area it encloses -- what
+;; a ring of open chains has to beat before PADDLE reads it as the
+;; perimeter rather than as something loose beside one.
+(defun paddle--maxarea (loops / best a l)
+  (setq best 0.0)
+  (foreach l loops
+    (if (> (setq a (abs (paddle--area l))) best) (setq best a)))
+  best)
+
+;; The ring the open chains make, or the biggest of them when they make
+;; more than one -- the same rule auto-detect uses to pick between
+;; closed loops.  A ring enclosing no area (chains doubling back on
+;; each other) is not one.  Returns (vts chains gaps area).
+(defun paddle--best-ring (opens / ends pairs i seen r vts a best bestarea)
+  (setq ends     (paddle--endlist opens)
+        pairs    (paddle--pairs ends)
+        i        0
+        bestarea 0.0)
+  (repeat (length opens)
+    (if (not (member i seen))
+        (if (setq r (paddle--ring i ends pairs))
+            (progn
+              (setq seen (append seen (mapcar '(lambda (c) (car c)) (car r)))
+                    vts  (paddle--ring-vts opens (car r))
+                    a    (abs (paddle--area vts)))
+              (if (> a bestarea)
+                  (setq bestarea a
+                        best     (list vts (car r) (cadr r) a))))))
+    (setq i (1+ i)))
+  (if (> bestarea 1e-6) best))
+
+;; Where two straight segments would cross if both ran on for ever --
+;; the point a zero fillet joins them at -- or nil when they never do.
+(defun paddle--xsect (s1 s2 / a u c v den)
+  (setq a   (car s1)
+        u   (cal:v- (cadr s1) a)
+        c   (car s2)
+        v   (cal:v- (cadr s2) c)
+        den (cal:cross u v))
+  (if (> (abs den) 1e-9)
+      (cal:v+ a (cal:v* u (/ (cal:cross (cal:v- c a) v)
+                                       den)))))
+
+;; Is this gap the two ends of ONE open LWPOLYLINE, straight at both of
+;; them?  That is the polyline somebody drew round the pool and never
+;; closed, and it is the one gap FILLET must not be asked to close: two
+;; picks on one polyline joins those two segments and throws away every
+;; segment between them, which here is the whole perimeter.  It is
+;; closed by editing the polyline instead (paddle--lwclose), so this
+;; asks everything that edit needs to be safe -- one entity, its own
+;; two ends, open, straight where it is being joined.
+(defun paddle--lwgap-p (g / a b ent cv vts p q)
+  (setq a   (car g)
+        b   (cadr g)
+        ent (cadr a))
+  (and (eq ent (cadr b))
+       (= "LWPOLYLINE" (cdr (assoc 0 (entget ent))))
+       (= 0.0 (caddr (nth 5 a)))               ; straight at both ends
+       (= 0.0 (caddr (nth 5 b)))
+       (setq cv (paddle--lwverts ent))
+       (not (car cv))                          ; and not closed already
+       (> (length (cdr cv)) 2)
+       (setq vts (cdr cv)
+             p   (cal:2d (car vts))
+             q   (cal:2d (last vts)))
+       ;; the polyline's OWN two ends, and nothing else's
+       (or (and (<= (distance p (car a)) *paddle-fuzz*)
+                (<= (distance q (car b)) *paddle-fuzz*))
+           (and (<= (distance p (car b)) *paddle-fuzz*)
+                (<= (distance q (car a)) *paddle-fuzz*)))))
+
+;; Close that polyline onto itself at X: its first vertex moves to the
+;; crossing, its last one goes (it is the same point now, reached the
+;; long way round) and the closed flag goes on.  That is exactly what a
+;; zero fillet between its two end segments leaves behind -- both of
+;; them run on or trimmed back to where they cross -- done as an edit
+;; because FILLET cannot be asked for it.  Every group that is not a
+;; vertex is carried over untouched, and so is each vertex's own width
+;; and bulge.  Returns T.
+(defun paddle--lwclose (ent x / ed g chunks cur head tail)
+  (setq ed (entget ent))
+  (foreach g ed
+    (cond
+      ((= (car g) 10)                          ; a vertex, and its own
+       (if cur (setq chunks (cons (reverse cur) chunks)))   ; groups
+       (setq cur (list g)))                                 ; follow it
+      ((and cur (member (car g) '(40 41 42))) (setq cur (cons g cur)))
+      (cur (setq tail (cons g tail)))          ; after the last vertex
+      (T   (setq head (cons g head)))))        ; before the first
+  (if cur (setq chunks (cons (reverse cur) chunks)))
+  (setq chunks (reverse chunks)
+        head   (reverse head)
+        tail   (reverse tail))
+  (if (> (length chunks) 2)
+      (progn
+        (setq chunks (cons (subst (list 10 (car x) (cadr x))
+                                  (car (car chunks)) (car chunks))
+                           (cdr chunks))
+              chunks (reverse (cdr (reverse chunks))) ; the last one goes
+              head   (subst (cons 70 (logior 1 (cdr (assoc 70 ed))))
+                            (assoc 70 ed) head)
+              head   (subst (cons 90 (length chunks)) (assoc 90 ed) head))
+        (entmod (append head (apply 'append chunks) tail))
+        (entupd ent)
+        T)))
+
+;; Where a gap is: halfway between the two ends that want to be one
+;; point, which is where the arrow points and where the fillet lands.
+(defun paddle--gap-mid (g)
+  (cal:v* (cal:v+ (car (car g)) (car (cadr g))) 0.5))
+
+;; The middle of a vertex list, near enough for "which side is the
+;; inside of the loop": the arrow flies in from the other one.
+(defun paddle--centroid (vts / n)
+  (setq n (float (length vts)))
+  (list (/ (apply '+ (mapcar '(lambda (v) (car v)) vts)) n)
+        (/ (apply '+ (mapcar '(lambda (v) (cadr v)) vts)) n)))
+
+;; The arrow that says IT IS OPEN HERE: one closed polyline, tip on the
+;; gap and tail out on the side away from the inside of the loop, so it
+;; points at the joint from clear space instead of across the drawing.
+;; One entity, so taking it away again when the gap closes is one
+;; entdel.  Returns it.
+(defun paddle--arrow (tip dir lay / l h w sh nrm head back pts)
+  (setq l    *paddle-arrow*
+        h    (/ l 3.0)      ; head length
+        w    (/ l 8.0)      ; half the head's width
+        sh   (/ l 24.0)     ; half the shaft's width
+        nrm  (list (- (cadr dir)) (car dir))
+        head (cal:v- tip (cal:v* dir h))
+        back (cal:v- tip (cal:v* dir l))
+        pts  (list tip
+                   (cal:v+ head (cal:v* nrm w))
+                   (cal:v+ head (cal:v* nrm sh))
+                   (cal:v+ back (cal:v* nrm sh))
+                   (cal:v- back (cal:v* nrm sh))
+                   (cal:v- head (cal:v* nrm sh))
+                   (cal:v- head (cal:v* nrm w))))
+  (entmake (append (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 lay)
+                         '(100 . "AcDbPolyline") (cons 90 (length pts)) '(70 . 1))
+                   (mapcar '(lambda (p) (list 10 (car p) (cadr p))) pts)))
+  (entlast))
+
+;; PADDLE's own marks and nobody else's: every run clears the gap layer
+;; and re-marks whatever is still open, so an arrow does not outlive
+;; the gap it pointed at when the drafter closes one by hand.  Returns
+;; how many it took away.
+(defun paddle--clear-arrows ( / ss i n)
+  (setq n 0)
+  (if (setq ss (ssget "_X" (list (cons 8 *paddle-gap-layer*)
+                                 (cons 410 (getvar "CTAB")))))
+      (progn
+        (setq i 0)
+        (repeat (sslength ss)
+          (entdel (ssname ss i))
+          (setq i (1+ i)
+                n (1+ n)))))
+  n)
+
+;; Close one gap the way a drafter would: FILLET at radius 0, picked on
+;; each end segment up by the end of it that stays (paddle--ends).  Whether it took is read
+;; back off the drawing afterwards rather than promised here -- FILLET
+;; refuses a pair it cannot join (two ends that are parallel however
+;; far they run on, two segments of one entity it will not close), and
+;; a tool that says "if you say so" and then LOOKS is a tool that
+;; cannot be wrong about it.
+(defun paddle--dofillet (g / a b guard)
+  (setq a (car g)
+        b (cadr g))
+  (setvar "FILLETRAD" 0.0)
+  (setvar "TRIMMODE" 1)
+  (command "_.FILLET"
+           (list (cadr a) (trans (paddle--3d (caddr a)) 0 1))
+           (list (cadr b) (trans (paddle--3d (caddr b)) 0 1)))
+  ;; a FILLET that refused a pick is still asking: cancel it here, where
+  ;; the refusal costs one message, rather than letting the next command
+  ;; answer it
+  (setq guard 0)
+  (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (command)
+    (setq guard (1+ guard))))
+
+;; Is there still a loose end where this gap was?  A zero fillet that
+;; took leaves none -- the two ends are one point now, and one point
+;; chains -- and one AutoCAD refused leaves both of them exactly where
+;; the arrow is pointing.  Read over *paddle-gapmax* of the gap's
+;; middle rather than at the ends themselves, because a fillet MOVES
+;; the ends it joins and the points the gap was measured between are
+;; not where they are afterwards.
+(defun paddle--still-open-p (mid opens / open i c e)
+  (setq open nil
+        i    0)
+  (foreach c opens
+    (foreach e (paddle--ends c i)
+      (if (<= (distance (car e) mid) *paddle-gapmax*) (setq open T)))
+    (setq i (1+ i)))
+  open)
+
 ;; --------------------------- selection -----------------------------
 ;; Turns a selection set (or the whole current tab when SS is nil) into
-;; a list of closed perimeter loops (vertex lists). Auto-detect keeps
-;; only the largest loop.
-(defun paddle--perimeters (ss / auto i segs res loops nopen nflat best
-                              bestarea a)
+;; (loops opens): the closed perimeter loops, as vertex lists, and the
+;; open chains that would not close, as segments.  Auto-detect keeps
+;; only the largest loop.  Every segment carries the entity it came off
+;; so the gap pass can hand two of them to FILLET, and entities on the
+;; gap layer are skipped -- those are PADDLE's own arrows, and a run
+;; that read its own marks back as geometry would pad them.
+(defun paddle--perimeters (ss / auto i en ed segs res loops opens nflat best
+                              bestarea a l)
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
@@ -573,17 +1011,20 @@
       (progn
         (setq i 0)
         (repeat (sslength ss)
-          (setq segs (append segs (paddle--ent-segs (ssname ss i)))
-                i    (1+ i)))
+          (setq en (ssname ss i)
+                i  (1+ i))
+          ;; entget is nil for an entity a fillet consumed, and this
+          ;; same set is read again after the gap pass has filleted
+          (if (and (setq ed (entget en))
+                   (/= (strcase (cdr (assoc 8 ed)))
+                       (strcase *paddle-gap-layer*)))
+              (setq segs (append segs
+                                 (mapcar '(lambda (s) (append s (list en)))
+                                         (paddle--ent-segs en))))))
         (setq res   (paddle--chain segs)
               loops (paddle--solid-loops (car res))
               nflat (- (length (car res)) (length loops))
-              nopen (cdr res))
-        (if (> nopen 0)
-            (princ (strcat "\nPADDLE: ignored " (itoa nopen)
-                           " open chain(s) that never close back on themselves"
-                           " (check for gaps; chaining tolerance is "
-                           (rtos *paddle-fuzz* 2 2) ").")))
+              opens (cadr res))
         (if (> nflat 0)
             (princ (strcat "\nPADDLE: ignored " (itoa nflat)
                            " closed loop(s) that enclose no area"
@@ -594,16 +1035,27 @@
               (foreach l loops
                 (setq a (abs (paddle--area l)))
                 (if (> a bestarea) (setq bestarea a best l)))
+              (setq loops nil)
               (if best
                   (progn
                     (princ "\nPADDLE: auto-detected the largest closed loop as the perimeter.")
-                    (list best))))
-            loops))))
+                    (setq loops (list best))))))
+        (list loops opens))))
 
 ;; ---------------------------- command ------------------------------
-(defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss perims vts
-                   allpads delta ndodge ncorner narc)
+(defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss res perims
+                   opens vts allpads delta ndodge ncorner narc ofrad otrim
+                   oecho ring gaps ngap nring nopen marks mk g mid ctr ans
+                   xsc tried nyes nclosed nrefused nleft pad)
   (defun *error* (msg)
+    ;; the sysvars the gap pass borrows go back FIRST.  A setvar cannot
+    ;; throw and everything below it can, and an error raised inside
+    ;; *error* abandons every line after it -- the drafter would meet a
+    ;; FILLETRAD of 0 in the NEXT command they ran, which does not look
+    ;; like this one's doing.
+    (if ofrad (setvar "FILLETRAD" ofrad))
+    (if otrim (setvar "TRIMMODE" otrim))
+    (if oecho (setvar "CMDECHO" oecho))
     ;; close only the mark THIS run opened: an Esc at the perimeter
     ;; prompt comes before StartUndoMark, and closing a mark nothing
     ;; opened throws -- from inside the handler, where nothing catches
@@ -641,13 +1093,142 @@
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
         (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
         (if lzd:watch (lzd:watch ss) ss)))
-  (setq perims (paddle--perimeters ss))
+
+  ;; One undo step covers the lot: the marks this run clears, the arrows
+  ;; it draws at whatever is open, the gaps the drafter has it close,
+  ;; and the pads that follow.  It opens here rather than at the pads
+  ;; because the first thing below already writes to the drawing.
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+  (paddle--clear-arrows)
+
+  (setq res    (paddle--perimeters ss)
+        perims (car res)
+        opens  (cadr res)
+        nring  0)
+
+  ;; --- a perimeter that closes except for a gap ----------------------
+  ;; The chains and the gaps between them go round once and come back:
+  ;; that is one perimeter with holes in it, not a pile of loose lines.
+  ;; It has to enclose more than any loop that DID close, or it is
+  ;; something loose lying beside a perimeter PADDLE already has.
+  (if (and opens
+           (setq ring (paddle--best-ring opens))
+           (> (nth 3 ring) (paddle--maxarea perims)))
+      (setq gaps  (nth 2 ring)
+            ngap  (length gaps)
+            nring (length (nth 1 ring)))
+      (setq ring nil ngap 0))
+
+  (setq nopen (- (length opens) nring))
+  (if (> nopen 0)
+      (princ (strcat "\nPADDLE: ignored " (itoa nopen)
+                     " open chain(s) that never close back on themselves"
+                     " (check for gaps; chaining tolerance is "
+                     (rtos *paddle-fuzz* 2 2) ").")))
+
+  (if ring
+      (progn
+        (paddle--ensure-layer *paddle-gap-layer* *paddle-gap-color*)
+        (princ (strcat "\nPADDLE: this reads as one closed perimeter with "
+                       (itoa ngap) " gap(s) in it, not as loose geometry."
+                       " Arrow(s) drawn on layer \"" *paddle-gap-layer*
+                       "\" at the open joint(s)."))
+        ;; every arrow goes in BEFORE the first question: a drafter who
+        ;; answers No, or presses Esc at one, is left looking at the
+        ;; whole picture rather than at the one gap that got as far as
+        ;; being asked about
+        (setq ctr (paddle--centroid (car ring))) ; the inside of the loop
+        (foreach g gaps
+          (setq mid   (paddle--gap-mid g)
+                marks (cons (list (paddle--arrow
+                                    mid
+                                    (cond ((cal:unit (cal:v- ctr mid)))
+                                          ('(0.0 1.0))) ; a gap dead on the
+                                                        ; middle: any way in
+                                    *paddle-gap-layer*)
+                                  mid g)
+                            marks)))
+        (setq marks (reverse marks)
+              oecho (getvar "CMDECHO")
+              ofrad (getvar "FILLETRAD")
+              otrim (getvar "TRIMMODE")
+              nyes  0
+              ngap  0)
+        (foreach mk marks
+          (setq ngap (1+ ngap)
+                g    (caddr mk)
+                mid  (cadr mk))
+          (princ (strcat "\n  gap " (itoa ngap) " of " (itoa (length marks))
+                         ": " (paddle--in (caddr g)) " wide, at "
+                         (rtos (car mid) 2 2) "," (rtos (cadr mid) 2 2)))
+          ;; Both loose ends on ONE entity is the polyline somebody
+          ;; drew round the pool and never closed.  FILLET must not be
+          ;; asked for that one -- two picks on one polyline joins
+          ;; those two segments and throws away every segment between
+          ;; them, which here is the perimeter -- so the same join is
+          ;; made by editing the polyline: first vertex to the
+          ;; crossing, last vertex away, closed flag on, which is what
+          ;; the fillet would have left.  Anything else on one entity
+          ;; (a heavy POLYLINE, an arc at either end, two ends that
+          ;; never cross) is marked and named instead.
+          (setq xsc (if (paddle--lwgap-p g)
+                        (paddle--xsect (nth 5 (car g)) (nth 5 (cadr g)))))
+          (if (and (eq (cadr (car g)) (cadr (cadr g))) (not xsc))
+              (progn
+                (princ "\n  both ends are on one entity, and PADDLE cannot join it in")
+                (princ "\n  place. A zero fillet there is two picks on one polyline,")
+                (princ "\n  which cuts away everything between them, so it is not")
+                (princ "\n  offered. Close it (PEDIT > Close, or pull the two ends")
+                (princ "\n  together) and run PADDLE again."))
+              (progn
+                (if xsc
+                    (princ "\n  both ends are on one polyline: PADDLE joins them at the crossing itself."))
+                (initget "Yes No")
+                (setq ans (getkword "\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>: "))
+                (if lzd:ask (lzd:ask "\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>: " ans) ans)
+                (if (null ans) (setq ans "Yes"))
+                (if (= ans "Yes")
+                    (progn
+                      (setvar "CMDECHO" 0)
+                      (if xsc
+                          (paddle--lwclose (cadr (car g)) xsc)
+                          (paddle--dofillet g))
+                      (setvar "CMDECHO" oecho)
+                      (setq nyes  (1+ nyes)
+                            tried (cons (car mk) tried)))))))  ; asked for, and tried
+        (setvar "FILLETRAD" ofrad)
+        (setvar "TRIMMODE" otrim)
+        (setq nclosed 0 nrefused 0 nleft 0)
+        ;; read the drawing again: a gap that closed is not there to be
+        ;; found any more, and what it closed is a perimeter to pad
+        (if (> nyes 0)
+            (setq res    (paddle--perimeters ss)
+                  perims (car res)
+                  opens  (cadr res)))
+        (foreach mk marks
+          (if (paddle--still-open-p (cadr mk) opens)
+              (if (member (car mk) tried)
+                  (setq nrefused (1+ nrefused))
+                  (setq nleft (1+ nleft)))
+              (progn (entdel (car mk)) ; the arrow has nothing left to
+                     (setq nclosed (1+ nclosed))))) ; point at
+        (if (> nclosed 0)
+            (princ (strcat "\nPADDLE: " (itoa nclosed)
+                           " gap(s) closed with a zero fillet - carrying on"
+                           " with what that leaves.")))
+        (if (> nrefused 0)
+            (princ (strcat "\nPADDLE: FILLET would not close " (itoa nrefused)
+                           " gap(s) - the two ends do not meet even run on."
+                           " Their arrow(s) stay.")))
+        (if (> nleft 0)
+            (princ (strcat "\nPADDLE: " (itoa nleft)
+                           " gap(s) left as they are - the arrow(s) mark them."
+                           " PADDLE pads the perimeter once it closes.")))))
 
   (if (not perims)
       (princ "\nPADDLE: no closed perimeter loop found.")
       (progn
-        (vla-StartUndoMark doc)
-        (setq mark-open T)
         (paddle--ensure-block doc blkname padsize)
         (paddle--ensure-layer *paddle-layer* *paddle-layer-color*)
         (setq delta (paddle--block-delta space blkname))
@@ -661,8 +1242,6 @@
         (foreach pad allpads
           (paddle--insert-pad space blkname (car pad) (cadr pad) delta)
           (if (= (caddr pad) "corner") (setq ncorner (1+ ncorner)) (setq narc (1+ narc))))
-        (vla-EndUndoMark doc)
-        (setq mark-open nil)
         (if allpads
             (progn
               (princ (strcat "\nPADDLE: inserted " (itoa (length allpads))
@@ -675,6 +1254,8 @@
                                  " overlapping pad(s) merged into their"
                                  " neighbours where features crowd together."))))
             (princ "\nPADDLE: perimeter checked - no concave features need pads."))))
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
   (if lzd:end (lzd:end "PADDLE"))
   (princ))
 
@@ -741,7 +1322,14 @@
   (princ "\n    largest closed loop by itself. A closed polyline is ideal, but")
   (princ "\n    loose lines and arcs work too - touching ends (within ")
   (princ (strcat (rtos *paddle-fuzz* 2 2) "\") are"))
-  (princ "\n    chained together automatically.")
+  (princ "\n    chained together automatically.  Ends that ALMOST meet are a")
+  (princ (strcat "\n    GAP: up to " (paddle--in *paddle-gapmax*)
+                 " apart, and with the rest of the geometry going"))
+  (princ "\n    round once and coming back, PADDLE reads it as a perimeter with")
+  (princ "\n    a hole in it - draws an arrow at the open joint, offers to close")
+  (princ "\n    it with a zero fillet, and pads what that leaves.  Say No and the")
+  (princ (strcat "\n    arrow stays on layer \"" *paddle-gap-layer*
+                 "\" for you to work from."))
   (princ (strcat "\n 2. INSIDE CORNERS. A connection point that bends more than "
                  (rtos (/ (* *paddle-cornertol* 180.0) pi) 2 0) " degrees"))
   (princ "\n    away from straight gets one pad centered on the corner. Gentler")
