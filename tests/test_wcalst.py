@@ -8,12 +8,16 @@ the straightened side at r=200 (8 chords totalling 417.68), the far
 side at r=176 (shorter, so the excess shows up as darts), 9 radial
 rungs of exactly 24 (the band width is the MEDIAN rung).  Every number
 asserted below was worked from that geometry and confirmed against the
-real run before being pinned.
+real run before being pinned.  Each of its seven 15-degree bends
+leaves the far edge 0.2618 x 24 = 6.28 too long; the best-fit variant
+cuts that as two 3.14 darts side by side at the bend (the cap is 4),
+fourteen in all, and the fewest-cuts variant as one capped 4 per bend.
 
 Script slots, in order: the pickfirst probe (None), the band ssget,
 the entsel side pick as [ent, [x, y, 0.0]] -- the point must be a
 LIST, wc:d2 cars it -- then maxfeat getint <20>, tile height getreal
-<none>, and the stair-sections ssget (Enter = none).
+<none>, and the stair windows: a getpoint first corner (None = none /
+done), each followed by its getcorner opposite corner.
 
 Run: python3 tests/test_wcalst.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_wcalst.py
@@ -67,11 +71,16 @@ def line(p, q, lay):
                  '(10 {p[0]!r} {p[1]!r} 0.0) '(11 {q[0]!r} {q[1]!r} 0.0)))'''
 
 
+ang_o = [math.radians(30 + 15 * i) for i in range(9)]
+near_o = [(200.0 * math.cos(a), 200.0 * math.sin(a)) for a in ang_o]
+far_o = [(176.0 * math.cos(a), 176.0 * math.sin(a)) for a in ang_o]
+mid_o = [(near_o[0][0] + near_o[1][0]) / 2.0,
+         (near_o[0][1] + near_o[1][1]) / 2.0, 0.0]
+
+
 def band(vm):
     """The oracle band; returns (all entities, the side-pick answer)."""
-    ang = [math.radians(30 + 15 * i) for i in range(9)]
-    near = [(200.0 * math.cos(a), 200.0 * math.sin(a)) for a in ang]
-    far = [(176.0 * math.cos(a), 176.0 * math.sin(a)) for a in ang]
+    near, far = near_o, far_o
     ents = []
 
     def mk(src):
@@ -131,6 +140,25 @@ def edge_ys(vm):
     return sorted(ys, reverse=True)
 
 
+def dart_mouths(vm):
+    """[(centre x, mouth width), ...] per variant, top variant first,
+    read off the dart legs (the slanted lines on the cut layer): the
+    two legs of a dart share an apex and their feet are the mouth."""
+    legs = {}
+    for e in vm.entities:
+        d = vm.entdata.get(e, [])
+        if grp(d, 0) == 'LINE' and grp(d, 8) == 'AIR-B':
+            a, b = grp(d, 10), grp(d, 11)
+            if abs(a[0] - b[0]) > 1e-9 and abs(a[1] - b[1]) > 1e-9:
+                legs.setdefault((round(a[0], 6), round(a[1], 6)),
+                                []).append(b[0])
+    out = {}
+    for (ax, ay), feet in legs.items():
+        if len(feet) == 2:
+            out.setdefault(ay, []).append((ax, abs(feet[1] - feet[0])))
+    return [sorted(out[y]) for y in sorted(out, reverse=True)]
+
+
 def label_ys(vm):
     """y of the two variant labels, top first."""
     ys = []
@@ -161,6 +189,12 @@ if m:
                     encoding="ascii").read()
         check("releases/ twin is identical", twin == SRC)
 
+# the band develops from x0 = the selection's leftmost point (near[8]),
+# and its bends are the chain nodes 1..7 at 52.21 (one chord) apart
+CHORD = 2 * 200.0 * math.sin(math.radians(7.5))
+X0 = 200.0 * math.cos(math.radians(150))
+BENDS_X = [X0 + CHORD * i for i in range(1, 8)]
+
 # ----------------------------------------------------------------------
 # 1. the oracle band, Enter defaults all the way
 # ----------------------------------------------------------------------
@@ -174,10 +208,21 @@ txt = ''.join(vm.printed)
 check("developed length is the chord walk of the straightened side",
       'WCALST: developed length 417.68, band width 24.00' in txt,
       txt[-500:])
-check("the target variant cuts 8 darts and no inserts",
-      'target <1%: 8 dart(s), 0 insert(s) (max 20)' in txt, txt[-500:])
-check("the minimum-cuts variant gets there with 7",
-      'minimum cuts: 7 dart(s), 0 insert(s)' in txt, txt[-500:])
+check("the target variant cuts two darts at each of the 7 bends, under 1%",
+      'target <1%: 14 dart(s), 0 insert(s) (max 20), after cuts -0.13 (0.03%)'
+      in txt, txt[-500:])
+check("the minimum-cuts variant cuts one capped dart per bend",
+      'minimum cuts: 7 dart(s), 0 insert(s) (max 20), after cuts 15.86'
+      ' (4.31%) OVER TARGET' in txt, txt[-500:])
+mouths = dart_mouths(vm)[0]
+check("every dart sits at a bend of the straightened side, none on the band's end",
+      len(mouths) == 14 and
+      all(abs(min(abs(c - b) for b in BENDS_X) - (3.1416 + 2.0) / 2) < 0.02
+          for c, _ in mouths), repr(mouths[:4]))
+check("no two mouths overlap and each is wc:*dart-space* clear of the next",
+      all(mouths[i + 1][0] - mouths[i + 1][1] / 2
+          >= mouths[i][0] + mouths[i][1] / 2 + 2.0 - 1e-6
+          for i in range(len(mouths) - 1)), repr(mouths))
 check("the bottom line's before/after/delta are reported",
       'top line 417.68, bottom before 367.56, bottom after 411.42,'
       ' delta 43.86' in txt, txt[-500:])
@@ -221,17 +266,32 @@ vm.run('c:WCALST', [None, ents, "Back",       # side pick -> re-select
                     None, None, None])
 asked = [p for p, _ in vm.prompts]
 # the band ask princ's its text, so the prompt itself records as a
-# bare 'ssget'; the third bare one is the stair-sections ask at the end
+# bare 'ssget'
 check("Back at the side pick re-opens the band selection",
       ''.join(vm.printed).count('Select the band of lines') == 2 and
-      sum(p == 'ssget' for p in asked) == 3,
+      sum(p == 'ssget' for p in asked) == 2,
       repr(asked))
 check("Back at the cap re-opens the side pick",
       sum('Click the long side' in p for p in asked) == 3, repr(asked))
 check("Back at the tile height re-opens the cap",
       sum('Maximum darts + inserts' in p for p in asked) == 3, repr(asked))
 check("and the walked-back run still finishes on the oracle",
-      'target <1%: 8 dart(s), 0 insert(s)' in ''.join(vm.printed))
+      'target <1%: 14 dart(s), 0 insert(s)' in ''.join(vm.printed))
+
+vm = newvm()
+ents, pick = band(vm)
+vm.run('c:WCALST', [None, ents, pick, None, None,
+                    "Back",                          # stair window -> tile
+                    None,                            # tile height again
+                    [-50.0, 165.0, 0.0], None,       # a window with no 2nd corner
+                    None])                           # Enter = none
+asked = [p for p, _ in vm.prompts]
+check("Back at the stair window re-opens the tile height",
+      sum('Tile height' in p for p in asked) == 2 and
+      sum('STAIR section' in p for p in asked) == 3, repr(asked))
+check("a window with no second corner is dropped and re-asked",
+      'that window is dropped' in ''.join(vm.printed) and
+      'target <1%: 14 dart(s)' in ''.join(vm.printed))
 
 # ----------------------------------------------------------------------
 # 4. guards: too few segments, a pick outside the selection, Enter
@@ -270,12 +330,11 @@ vm = newvm()
 ents, pick = band(vm)
 vm.pickfirst = ['<ss>'] + ents
 vm.run('c:WCALST', [pick, None, None, None])
-# the one bare 'ssget' left is the stair-sections ask; the band ask
-# (its princ and its ssget) must never appear
+# the band ask (its princ and its ssget) must never appear
 check("the probe took the band; the selection was never asked",
       'Select the band of lines' not in ''.join(vm.printed) and
-      sum(p == 'ssget' for p, _ in vm.prompts) == 1 and
-      'target <1%: 8 dart(s)' in ''.join(vm.printed),
+      sum(p == 'ssget' for p, _ in vm.prompts) == 0 and
+      'target <1%: 14 dart(s)' in ''.join(vm.printed),
       repr(vm.prompts))
 
 
@@ -294,7 +353,7 @@ ents, pick = band(vm)
 vm.run('c:WCALST', [None, ents, pick, None, None, None])
 txt = ''.join(vm.printed)
 check("the band still develops with undo off",
-      'target <1%: 8 dart(s), 0 insert(s)' in txt, txt[-300:])
+      'target <1%: 14 dart(s), 0 insert(s)' in txt, txt[-300:])
 check("no undo group is opened or closed",
       [c for c in vm.commands if c] == [], repr(vm.commands))
 check("and nothing errored", 'WCALST error' not in txt, txt[-300:])
@@ -353,7 +412,7 @@ vm.run('c:WCALST', [None, ents + stray, pick, None, None, None])
 txt = ''.join(vm.printed)
 check("a segment leaving the chain the wrong way is not a rung",
       'developed length 417.68, band width 24.00' in txt and
-      'target <1%: 8 dart(s), 0 insert(s)' in txt, txt[-300:])
+      'target <1%: 14 dart(s), 0 insert(s)' in txt, txt[-300:])
 check("and the far side is still developed as the far side",
       'bottom before 367.56' in txt and
       'reference mark' not in txt, txt[-300:])
@@ -453,6 +512,121 @@ asked = [p for p, _ in vm.prompts]
 check("wc:*maxfeat* is the cap prompt's default, and the cap it applies",
       any('Maximum darts + inserts [Back] <5>' in p for p in asked) and
       '(max 5)' in ''.join(vm.printed), repr(asked))
+
+# ----------------------------------------------------------------------
+# 12. darts are released at the BENDS, not at the rungs
+# ----------------------------------------------------------------------
+# The correction was accumulated per rung interval and released at the
+# rung that ended it, so a band's dart count was bounded by its rung
+# count and not by the cap: the oracle drawn with its two END rungs
+# only got one dart -- on the band's end, half its mouth past it -- and
+# the 3-degree-chord curve below, a rung every ten chords, got four
+# darts for twenty slots with two thirds of its excess left in the
+# summary line.  Rungs set the width; the bends set the darts.
+print("darts at the bends")
+
+vm = newvm()
+ents = []
+for i in range(8):
+    mk(line(near_o[i], near_o[i + 1], 'NEAR'))
+    mk(line(far_o[i], far_o[i + 1], 'FAR'))
+for i in (0, 8):
+    mk(line(near_o[i], far_o[i], 'RUNG'))
+vm.run('c:WCALST', [None, ents, [ents[0], mid_o], None, None, None])
+txt = ''.join(vm.printed)
+check("a band drawn with its two end rungs gets the ladder's darts",
+      'target <1%: 14 dart(s), 0 insert(s) (max 20), after cuts -0.13 (0.03%)'
+      in txt and 'band width 24.00' in txt, txt[-300:])
+mouths = dart_mouths(vm)[0]
+check("and none of them on the band's end",
+      mouths and max(c + w / 2 for c, w in mouths) < X0 + 417.68 - 40,
+      repr(mouths[-2:]))
+
+vm = newvm()
+ents = []
+angg = [math.radians(30 + 3 * i) for i in range(41)]
+nearg = [(200.0 * math.cos(a), 200.0 * math.sin(a)) for a in angg]
+farg = [(176.0 * math.cos(a), 176.0 * math.sin(a)) for a in angg]
+for i in range(40):
+    mk(line(nearg[i], nearg[i + 1], 'NEAR'))
+    mk(line(farg[i], farg[i + 1], 'FAR'))
+for i in (0, 10, 20, 30, 40):
+    mk(line(nearg[i], farg[i], 'RUNG'))
+midg = [(nearg[0][0] + nearg[1][0]) / 2.0, (nearg[0][1] + nearg[1][1]) / 2.0,
+        0.0]
+vm.run('c:WCALST', [None, ents, [ents[0], midg], None, None, None])
+txt = ''.join(vm.printed)
+check("a curve in 3-degree chords with a rung every ten reaches the target",
+      'target <1%: 19 dart(s), 0 insert(s) (max 20), after cuts 1.25 (0.34%)'
+      in txt, txt[-300:])
+
+# ----------------------------------------------------------------------
+# 13. the stair window is a WINDOW, clipped to the segment
+# ----------------------------------------------------------------------
+# The stairs were a selection, and a selection takes whole entities: a
+# far side drawn as one polyline came in whole, the entire band became
+# the stair section, every dart was dropped and the summary read a
+# bottom line 0.00% off.  Two corners now, and a far-side segment is
+# in when both its ends are -- so the polyline is clipped to the part
+# that was windowed, and what the window keeps from being cut is said.
+print("the stair window")
+
+vm = newvm()
+ents = []
+for i in range(8):
+    mk(line(near_o[i], near_o[i + 1], 'NEAR'))
+pl = " ".join(f"'(10 {p[0]!r} {p[1]!r})" for p in far_o)
+mk(f"""(entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") '(8 . "FAR")
+                '(100 . "AcDbPolyline") '(90 . 9) '(70 . 0) {pl}))""")
+for i in range(9):
+    mk(line(near_o[i], far_o[i], 'RUNG'))
+# the window holds far[3]..far[5] (y 170..176) and no near-side point
+vm.run('c:WCALST', [None, ents, [ents[0], mid_o], None, None,
+                    [-50.0, 165.0, 0.0], [50.0, 180.0, 0.0], None])
+txt = ''.join(vm.printed)
+check("a window over two segments of a one-polyline far side takes just those",
+      'target <1%: 8 dart(s), 0 insert(s)' in txt and
+      '6 dart(s) fall inside the stair section(s)' in txt, txt[-400:])
+mouths = dart_mouths(vm)[0]
+check("the darts outside the window are still cut, those inside are not",
+      len(mouths) == 8 and
+      not any(BENDS_X[2] - 10 < c < BENDS_X[4] + 10 for c, _ in mouths),
+      repr(mouths))
+
+vm = newvm()
+ents = []
+for i in range(8):
+    mk(line(near_o[i], near_o[i + 1], 'NEAR'))
+    mk(line(far_o[i], far_o[i + 1], 'FAR'))
+for i in range(9):
+    mk(line(near_o[i], far_o[i], 'RUNG'))
+vm.run('c:WCALST', [None, ents, [ents[0], mid_o], None, None,
+                    [-250.0, 0.0, 0.0], [250.0, 250.0, 0.0], None])
+txt = ''.join(vm.printed)
+check("a window round the whole band says where its darts went",
+      'target <1%: 0 dart(s)' in txt and
+      '14 dart(s) fall inside the stair section(s)' in txt, txt[-400:])
+
+# ----------------------------------------------------------------------
+# 14. a tile taller than the band is said, not swallowed
+# ----------------------------------------------------------------------
+# The apex rule bottoms out at wc:*tile-clear* above the far edge, so
+# every dart came out an inch high and read as missing.
+print("a tile taller than the band")
+
+vm = newvm()
+ents, pick = band(vm)
+vm.run('c:WCALST', [None, ents, pick, None, 30.0, None])
+txt = ''.join(vm.printed)
+check("the run says the cuts will be shallow, and still cuts them",
+      'a tile 30.00 high on a band 24.00 wide leaves no room under it' in txt
+      and 'target <1%: 14 dart(s)' in txt, txt[-500:])
+
+vm = newvm()
+ents, pick = band(vm)
+vm.run('c:WCALST', [None, ents, pick, None, 6.0, None])
+check("a tile that fits says nothing",
+      'leaves no room' not in ''.join(vm.printed))
 
 # ----------------------------------------------------------------------
 print()

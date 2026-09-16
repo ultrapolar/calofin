@@ -458,7 +458,6 @@ lisp/wcalst/wcalst.lsp|c:wcalst|foreach|e
 lisp/wcalst/wcalst.lsp|c:wcalst|foreach|p
 lisp/wcalst/wcalst.lsp|c:wcalst|foreach|stq
 lisp/wcalst/wcalst.lsp|c:wcalst|foreach|vr
-lisp/wcalst/wcalst.lsp|c:wcalst|setq|fsum
 lisp/wcalst/wcalst.lsp|c:wcalst|setq|p
 lisp/wcalst/wcalst.lsp|wc:build-nodes|foreach|p
 lisp/wcalst/wcalst.lsp|wc:build-nodes|foreach|sg
@@ -895,7 +894,6 @@ shared/parts/wcalst.lsp|c:wcalst|foreach|e
 shared/parts/wcalst.lsp|c:wcalst|foreach|p
 shared/parts/wcalst.lsp|c:wcalst|foreach|stq
 shared/parts/wcalst.lsp|c:wcalst|foreach|vr
-shared/parts/wcalst.lsp|c:wcalst|setq|fsum
 shared/parts/wcalst.lsp|c:wcalst|setq|p
 shared/parts/wcalst.lsp|wc:build-nodes|foreach|p
 shared/parts/wcalst.lsp|wc:build-nodes|foreach|sg
