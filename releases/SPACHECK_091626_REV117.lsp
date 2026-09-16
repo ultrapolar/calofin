@@ -110,7 +110,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.16")
+(setq *spacheck-version* "v1.17")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1866,16 +1866,19 @@
 
 ;;; -------------------- sysvars -----------------------------------------
 
+;; OSMODE is deliberately NOT in this list.  SPACHECK never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
 (defun spachk:syssave ()
   (if (not spachk:*sysold*)
     (setq spachk:*sysold*
           (mapcar '(lambda (v) (cons v (getvar v)))
-                  '("OSMODE" "CMDECHO" "CLAYER")))))
+                  '("CMDECHO" "CLAYER")))))
 
 (defun spachk:sysrestore ( / v p)
-  ;; OSMODE first -- object snaps are the setting the user misses most
-  ;; if a run is ever cut short partway
-  (foreach v '("OSMODE" "CMDECHO" "CLAYER")
+  (foreach v '("CMDECHO" "CLAYER")
     (setq p (assoc v spachk:*sysold*))
     (if p (setvar v (cdr p))))
   (setq spachk:*sysold* nil))

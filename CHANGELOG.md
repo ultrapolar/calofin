@@ -8,6 +8,34 @@ which set of them shipped together. The release name lives in
 
 ## v3.15 -- 2026-09-15
 
+**Borrow only what you move: seven commands snapshotted OSMODE they
+never touched.**  PERPMARK v1.4, CLEARDIM v3.1, FITABHD v3.0, SPACHECK
+v1.17, ABCURCHECK v1.8, OLAUTO v1.3, LISPLAB v1.5.  This is the one a
+drafter meets with NOTHING going wrong.
+
+A sysvar list is not a wish, it is a promise to WRITE the value back at
+the end.  Seven commands listed `OSMODE` in theirs and never changed it
+-- `grep` for `(setvar "OSMODE"` in any of the seven returns nothing.
+So the run took a snapshot on the way in and wrote it back on the way
+out, over anything the drafter had done to their snaps in between.
+Tick Endpoint on part-way through and the clean exit takes it away
+again.  No error, no Esc, no cancelled run: just the tool finishing.
+
+Five of the seven are review tools you walk item by item -- PERPMARK's
+pick-by-pick pass, FITABHD's seven steps, SPACHECK's and ABCURCHECK's
+and CLEARDIM's item-by-item review -- which is to say the runs longest
+open and likeliest to have you reaching for the Object Snap dialog
+half way down.  `OSMODE` is out of all seven lists.
+
+`check_osnap.py` grew the rule (its fourth): a command that snapshots
+OSMODE must actually move it.  The table SPACHECK's grouped twin gets
+is typed in `tools/mirror_shared.py` rather than derived from the
+source, so that copy needed the same edit -- which is exactly why the
+check reads both tiers rather than trusting the mirror.
+`tests/test_osnap_restore.py` pins all six testable ones at both tiers:
+start with snaps off, tick them on mid-run, finish the run, and the
+tick survives.
+
 **...and they are LIVE at the picks that need them.**  OASIS v9.0, SPA
 091526 REV24, PERPPTS/CPERPPTS v0.15.  "My snaps got cleared" is also
 what a drafter says when snaps are off where they expect them on, and

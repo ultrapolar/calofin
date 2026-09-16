@@ -604,9 +604,15 @@ TOOLS = {
         # spachk:askkw takes a HIDDEN keyword list third and derives the
         # bracket itself, so its call sites need translating
         'askkw_hidden': True,
+        # No OSMODE: SPACHECK changes no snap of its own, and a sysvar
+        # list is a promise to write the value back -- it would put this
+        # run's opening snapshot over any snap the drafter ticked on
+        # during the item-by-item walk.  Kept in step with the table in
+        # lisp/spacheck/SPACHECK.lsp by hand, which is why it is typed
+        # twice and why check_osnap.py reads both tiers.
         'expand': {
             '(cal:syssave)':
-                ['(cal:syssave \'("OSMODE" "CMDECHO" "CLAYER"))'],
+                ['(cal:syssave \'("CMDECHO" "CLAYER"))'],
         },
     },
     # POOL is the largest file in the tree and its twin was hand-mirrored

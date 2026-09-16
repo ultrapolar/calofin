@@ -352,6 +352,14 @@ handler that could put it back. The table-driven form counts too --
 `(tool:sysrestore)` over a snapshot whose list names `OSMODE`, with
 `OSMODE` first in that list -- and is what the bigger tools use.
 
+**Borrow only what you move.** A sysvar list is a promise to write the
+value back, so a tool that lists `OSMODE` without ever muting it hands
+the drafter its OPENING snapshot at the end -- over any snap they
+ticked on while it ran, on a clean exit with no error anywhere. Seven
+commands did that, five of them review tools you walk item by item.
+If the tool never calls `(setvar "OSMODE" 0)`, `OSMODE` does not belong
+in its table.
+
 **FIRST means first, inside the helper too.** An error inside `*error*`
 aborts the handler, so a restore behind a bare `(command ...)` is a
 restore that does not run on the path it was written for -- and a

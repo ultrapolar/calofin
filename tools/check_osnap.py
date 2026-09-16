@@ -477,6 +477,45 @@ def stranding(tier):
     return out
 
 
+def borrowed_but_unmoved(tier):
+    """Commands that snapshot OSMODE and never change it.
+
+    A sysvar list is not a wish: it is a promise to WRITE the value back
+    at the end.  A tool that lists OSMODE without ever muting it puts
+    its opening snapshot back over any snap the drafter ticked on WHILE
+    IT WAS RUNNING -- on a clean exit, with no error anywhere, which is
+    the likeliest way anyone meets this.  Seven commands did that, and
+    five of them (PERPMARK, FITABHD, SPACHECK, ABCURCHECK, CLEARDIM) are
+    review tools a drafter walks item by item, with every opportunity to
+    reach for the Object Snap dialog part-way through.
+
+    Borrow only what you move."""
+    out = []
+    for path, dmap in tier.per_file.items():
+        savers = set()
+        for name, bodies in dmap.items():
+            if ("syssave" in name or "sysvar" in name) \
+                    and any(names_osmode(b) for b in bodies):
+                savers.add(name)
+        for body in dmap.values():
+            for b in body:
+                for f in walk(b):
+                    if isinstance(f, list) and f and is_sym(f[0]) \
+                            and "syssave" in f[0].lower() \
+                            and any(isinstance(a, list) and names_osmode([a])
+                                    for a in f[1:]):
+                        savers.add(f[0].lower())
+        if not savers:
+            continue
+        for cmd in sorted(n for n in dmap if n.startswith("c:")):
+            if cmd.endswith("ver"):
+                continue
+            scope = reach(called(dmap[cmd][0]), tier.dmap) | {cmd}
+            if (scope & savers) and not (scope & tier.muters):
+                out.append((path, cmd))
+    return out
+
+
 def check(tier, label):
     problems = []
     rows = audit(tier)
@@ -520,6 +559,15 @@ def check(tier, label):
             "restores THIS run's OSMODE over whatever the drafter has "
             "ticked since. Drop the snapshot before the command, or wrap "
             "the command." % (rel(path), name))
+    for path, cmd in borrowed_but_unmoved(tier):
+        problems.append(
+            "%s: %s snapshots OSMODE but never changes it, so on the way "
+            "out it writes its OPENING value back over any snap the "
+            "drafter ticked on while it was running -- on a clean exit, "
+            "no error needed. A sysvar list is a promise to write the "
+            "value back; borrow only what you move. Drop \"OSMODE\" from "
+            "this tool's list."
+            % (rel(path), cmd.upper()))
     if not problems:
         print("check_osnap: %s -- %d command%s move OSMODE, every one of "
               "them puts it back on both the clean and the failed path, "

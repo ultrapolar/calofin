@@ -129,6 +129,55 @@ check("spa:osup gives them back for the base-point pick",
       vm.sysvars.get("OSMODE") == OSMODE,
       "OSMODE is %r, not %r" % (vm.sysvars.get("OSMODE"), OSMODE))
 
+# The third shape, and the one a drafter meets WITHOUT anything going
+# wrong: a tool that snapshots OSMODE, never changes it, and writes the
+# opening value back at the end.  Tick a snap on part-way through -- and
+# these are review tools you walk item by item, so there is every
+# opportunity -- and the clean exit takes it away again.  A sysvar list
+# is a promise to write the value back; borrow only what you move.
+print("a tool that never moves OSMODE does not write it back either")
+# The grouped twins are mirrored onto the library, so the snapshot pair
+# is <tool>:* in lisp/ and cal:* in shared/.  Each row carries the
+# standalone spelling and the VM picks the one it actually loaded --
+# (if f (f) (cal:...)) reads as nil for an unbound symbol either way.
+BORROWERS = [
+    ("PERPMARK",   "lisp/perpmark/PERPMARK.lsp",     "(pm:syssave)",
+     "(pm:sysrestore)"),
+    ("CLEARDIM",   "lisp/cleardim/CLEARDIM.lsp",     "(cd:syssave (cd:sysvars))",
+     "(cd:sysrestore)"),
+    ("FITABHD",    "lisp/fitabhd/FITABHD.lsp",
+     '(fit:syssave (list "CMDECHO" "CLAYER"))', "(fit:sysrestore)"),
+    ("SPACHECK",   "lisp/spacheck/SPACHECK.lsp",     "(spachk:syssave)",
+     "(spachk:sysrestore)"),
+    ("ABCURCHECK", "lisp/abcurcheck/ABCURCHECK.lsp", "(acc:syssave acc:*sysvars*)",
+     "(acc:sysrestore)"),
+    ("OLAUTO",     "lisp/olauto/OLAUTO.lsp",         "(ola:syssave ola:*sysvars*)",
+     "(ola:sysrestore)"),
+]
+
+#: the grouped fallbacks, run when the standalone symbol is unbound
+SHARED_SAVE = '(cal:syssave (list "CMDECHO" "CLAYER"))'
+SHARED_REST = '(cal:sysrestore)'
+
+
+def either(standalone, shared):
+    """STANDALONE when this tier defines it, else the library's."""
+    fn = standalone[1:].split()[0].rstrip(")")
+    return "(if %s %s %s)" % (fn, standalone, shared)
+
+
+for tool, path, save, restore in BORROWERS:
+    vm = VM()
+    vm.load(os.path.join(ROOT, path))
+    vm.sysvars["OSMODE"] = 0              # the drafter starts with snaps off
+    vm.loads(either(save, SHARED_SAVE))   # the run takes its snapshot
+    vm.sysvars["OSMODE"] = OSMODE         # mid-run, they tick the boxes on
+    vm.loads(either(restore, SHARED_REST))  # and it finishes, cleanly
+    check("%s: a snap ticked on mid-run survives the run" % tool,
+          vm.sysvars.get("OSMODE") == OSMODE,
+          "OSMODE is %r, not the %r the drafter set"
+          % (vm.sysvars.get("OSMODE"), OSMODE))
+
 # The test lies if the injected break never reached the mute: a command
 # whose answers stopped short would "pass" with OSMODE untouched.  So
 # prove the same harness SEES a handler that does not restore.
@@ -157,5 +206,5 @@ except LispError as e:
 if FAILS:
     print("\n%d FAILED: %s" % (len(FAILS), ", ".join(FAILS)))
     sys.exit(1)
-print("\nALL OSNAP-RESTORE CHECKS PASSED (%d commands, plus SPA's base point)"
-      % len(CASES))
+print("\nALL OSNAP-RESTORE CHECKS PASSED (%d commands, plus SPA's base point"
+      " and %d borrowers)" % (len(CASES), len(BORROWERS)))

@@ -32579,7 +32579,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.8")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -32718,7 +32718,12 @@
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
 ;;;  knobs: they are what the run puts back on the way out.
-(setq acc:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;; OSMODE is deliberately NOT in this list.  none of the three ABCURCHECK commands never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(setq acc:*sysvars* '("CMDECHO" "CLAYER"))  ; saved and put back
 ;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
@@ -34732,7 +34737,7 @@
 ;;; layer everything landed on.
 ;;; ======================================================================
 
-(setq *olauto-version* "v1.2")       ; announced on load; release_lisp.py
+(setq *olauto-version* "v1.3")       ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -34883,7 +34888,12 @@
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
 ;;;  knobs: they are what the run puts back on the way out.
-(setq ola:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;; OSMODE is deliberately NOT in this list.  OLAUTO never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(setq ola:*sysvars* '("CMDECHO" "CLAYER"))  ; saved and put back
 ;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
@@ -62785,7 +62795,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.0")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.1")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -64710,10 +64720,13 @@
 
 ;;; -------------------- the commands -----------------------------------
 
-;; The sysvars either command changes, in the order they come back --
-;; OSMODE first, because object snaps are the setting a drafter misses
-;; most if a run is ever cut short partway.
-(defun cd:sysvars () '("OSMODE" "CMDECHO"))
+;; The sysvars either command changes, in the order they come back.
+;; OSMODE is deliberately NOT in this list.  CLEARDIM, and neither does CLEARDIMSCAN, never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(defun cd:sysvars () '("CMDECHO"))
 
 (defun c:CLEARDIM ( / *error* undo-open ss recs results n res)
   (defun *error* (msg)
@@ -69460,7 +69473,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.9")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.0")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -74183,7 +74196,10 @@
     (if lzd:report (lzd:report "FITABHD" *fitabhd-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "FITABHD" *fitabhd-version*))
-  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+  ;; no OSMODE: FITABHD never changes it, and listing it here would
+  ;; put this run's opening snapshot back over any snap the drafter
+  ;; ticked on during the seven steps -- on a clean exit.
+  (cal:syssave '("CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
@@ -88603,7 +88619,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.3")
+(setq *perpmark-version* "v1.4")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -89145,7 +89161,12 @@
 ;;; ----------------------------------------------------------------------
 
 
-(defun pm:sysvars () '("OSMODE" "CMDECHO" "CLAYER"))
+;; OSMODE is deliberately NOT in this list.  PERPMARK never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(defun pm:sysvars () '("CMDECHO" "CLAYER"))
 
 ;;; ----------------------------------------------------------------------
 ;;;  The marks
@@ -91706,7 +91727,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.16")
+(setq *spacheck-version* "v1.17")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -93477,7 +93498,7 @@
   (if (null ss)
     (prompt "\nNothing to check.")
     (progn
-      (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+      (cal:syssave '("CMDECHO" "CLAYER"))
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO
