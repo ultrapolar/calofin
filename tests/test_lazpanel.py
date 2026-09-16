@@ -2085,6 +2085,50 @@ assert prof(vm, 'CalofinInk-FLAG') == '', \
     "a value that is not a colour was stored: %r" % prof(vm, 'CalofinInk-FLAG')
 print("   a box that is not a colour greys OK and is never written")
 
+# ...and a typo must not ERASE the override that was already there.
+# Greying is not a hard stop: DCL fires an edit box's action before the
+# default button's, so a click on OK with "3x" in the box greys OK and
+# lands anyway.  The write skips a box it cannot read rather than
+# clearing it, which is the difference between ignoring a typo and
+# throwing away the colour the drafter had.
+vm = setvm([1], click='ink_flag', val='3x', env={'CalofinInk-FLAG': '3'})
+run(vm, 'c:LAZSET', 'set-ink-typo-keeps')
+assert prof(vm, 'CalofinInk-FLAG') == '3', \
+    "a typo erased the stored override: %r" % prof(vm, 'CalofinInk-FLAG')
+print("   ...and a typo leaves the override that was already stored alone")
+
+# the accept guard itself: OK refuses while a box is unreadable, and
+# goes through once it is fixed.  The stub forces its own rc, so this
+# drives lzp:set-ok directly rather than through start_dialog.
+gv = stubbed()
+gv.loads('(lzp:set-read)')
+gv.loads('(lzp:set-put "CalofinInk-FLAG" "3x") (setq stub:*done* nil) (lzp:set-ok)')
+assert gv.globals.get('stub:*done*') is None, \
+    "OK closed the dialog with an unreadable colour box in it"
+gv.loads('(lzp:set-put "CalofinInk-FLAG" "3") (lzp:set-ok)')
+assert str(gv.globals.get('stub:*done*')) == '1', \
+    "OK did not go through once the box was fixed: %r" % gv.globals.get('stub:*done*')
+print("   OK re-checks rather than trusting the greying, as LAZFORM's Insert does")
+
+# a padded profile value is what every other reader in the tree trims
+# before deciding: lzp:ui reads " dark " as dark, so the dialog must
+# show Dark -- and must not write AUTO back over it on the way out
+vm = setvm([1], env={'CalofinTheme': ' dark '})
+run(vm, 'c:LAZSET', 'set-theme-padded')
+assert tile(vm, 'set_theme') == '1', \
+    "a padded profile theme did not open on Dark: %r" % tile(vm, 'set_theme')
+assert prof(vm, 'CalofinTheme') == 'DARK', \
+    "OK erased a padded theme override: %r" % prof(vm, 'CalofinTheme')
+print("   a padded profile theme reads as that theme, and OK keeps it")
+
+# auto is stored as EMPTY, which is what every reader takes for auto --
+# the word would show up in LAZICON and lzp:setshow as an override
+vm = setvm([1])
+run(vm, 'c:LAZSET', 'set-theme-auto-empty')
+assert prof(vm, 'CalofinTheme') == '', \
+    "Auto was written as a word, not as empty: %r" % prof(vm, 'CalofinTheme')
+print("   Auto is stored as empty, the way every reader already spells it")
+
 # the folders are plain text, and empty is how one is cleared
 vm = setvm([1], click='set_errdir', val='C:\\reports')
 run(vm, 'c:LAZSET', 'set-errdir')
