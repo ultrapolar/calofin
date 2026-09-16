@@ -337,5 +337,7 @@ switched off, a band that closes on itself, a datum line touching a
 long side, a band flared at one end, a half-inch-deep band under a 6"
 tile, the same band drawn with only its two end rungs, a curve in
 3-degree chords with a rung every ten, a one-polyline far side under a
-stair window, and a tile taller than the band. Each of those was a
-defect before it was a test.
+stair window, a tile taller than the band, and the band of a real run
+(`tests/data/wcalst_two_rung_band.txt`: two long sides as chains of
+lines joined only by their end lines) that came back with one dart on
+its end. Each of those was a defect before it was a test.

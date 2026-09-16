@@ -152,11 +152,18 @@ def dart_mouths(vm):
             if abs(a[0] - b[0]) > 1e-9 and abs(a[1] - b[1]) > 1e-9:
                 legs.setdefault((round(a[0], 6), round(a[1], 6)),
                                 []).append(b[0])
-    out = {}
+    # an apex sits below its own variant's straight edge and above the
+    # next variant's, so the edges split the darts between the variants
+    # (the apex height varies with the local band depth, so it cannot
+    # be the key itself)
+    edges = edge_ys(vm) + [-1e18]
+    out = [[] for _ in edges[:-1]]
     for (ax, ay), feet in legs.items():
         if len(feet) == 2:
-            out.setdefault(ay, []).append((ax, abs(feet[1] - feet[0])))
-    return [sorted(out[y]) for y in sorted(out, reverse=True)]
+            k = next(i for i in range(len(edges) - 1)
+                     if edges[i] >= ay > edges[i + 1])
+            out[k].append((ax, abs(feet[1] - feet[0])))
+    return [sorted(v) for v in out]
 
 
 def label_ys(vm):
@@ -627,6 +634,52 @@ ents, pick = band(vm)
 vm.run('c:WCALST', [None, ents, pick, None, 6.0, None])
 check("a tile that fits says nothing",
       'leaves no room' not in ''.join(vm.printed))
+
+# ----------------------------------------------------------------------
+# 15. the run that showed it: a real band, two edges joined at the ends
+# ----------------------------------------------------------------------
+# tests/data/wcalst_two_rung_band.txt is the band of a drafter's run as
+# they drew it: two long sides as chains of LINEs, joined only by the
+# two end lines, 87 chain nodes, no bend over 5 degrees.  v1.9 found its
+# two rungs -- the end lines -- put the whole 25.23 of excess on the
+# rung that ended the one interval, and cut ONE dart, capped at 4, on
+# the band's end with half its mouth past it: AFTER CUTS 21.23 (1.87%)
+# OVER TARGET on the sheet, and no report, because nothing had failed.
+# The figures below are the sheet's, reproduced in the VM to the
+# hundredth before the emitter was changed.
+print("the two-rung band of a real run")
+
+vm = newvm()
+ents = []
+rows = [ln.split() for ln in open(os.path.join(HERE, 'data',
+                                                'wcalst_two_rung_band.txt'))
+        if ln.strip() and not ln.startswith('#')]
+for x1, y1, x2, y2 in rows:
+    mk(line((float(x1), float(y1)), (float(x2), float(y2)), 'NEAR'))
+# the drafter picked the upper side at its left end, (-2009.9, -204.7)
+first = min(range(len(rows)),
+            key=lambda i: min(math.hypot(float(rows[i][0]) + 2009.9,
+                                         float(rows[i][1]) + 204.7),
+                              math.hypot(float(rows[i][2]) + 2009.9,
+                                         float(rows[i][3]) + 204.7)))
+r = [float(v) for v in rows[first]]
+vm.run('c:WCALST', [None, ents,
+                    [ents[first], [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2, 0.0]],
+                    None, None, None])
+txt = ''.join(vm.printed)
+check("the band reads as the sheet did: 1140.28 long, 23.63 wide, 25.23 over",
+      'developed length 1140.28, band width 23.63' in txt and
+      'bottom before 1132.88, bottom after 1158.12, delta 25.23 (2.23%)'
+      in txt, txt[-400:])
+check("the excess is cut along the bends, under target",
+      'target <1%: 13 dart(s), 2 insert(s) (max 20), after cuts 8.69 (0.77%)'
+      in txt, txt[-400:])
+mouths = dart_mouths(vm)[0]
+x_end = -2009.91 + 1140.28
+check("thirteen darts, every one inside the band and none on its end",
+      len(mouths) == 13 and
+      all(c - w / 2 > -2009.91 and c + w / 2 < x_end - 50 for c, w in mouths),
+      repr(mouths[-3:]))
 
 # ----------------------------------------------------------------------
 print()

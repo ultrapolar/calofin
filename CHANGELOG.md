@@ -38,6 +38,15 @@ else.  The oracle band's best fit goes from 8 darts and 3.23% over
 target to 14 darts and 0.03% under it; drawn with only its two end
 rungs it now gets exactly the same fourteen.
 
+The run that showed it is in the suite now (`tests/data/wcalst_two_rung_
+band.txt`): a drafter's band, two long sides drawn as chains of lines
+and joined only by their two end lines, 87 chain nodes with no bend
+over 5 degrees.  Its sheet read TOP LINE 1140.28, DELTA 25.23 (2.23%
+long), AFTER CUTS 21.23 (1.87%) OVER TARGET -- one 4-inch dart, on the
+band's end -- and the VM reproduces every one of those figures from the
+band alone before the change.  After it: 13 darts and 2 inserts along
+the bends, 0.77% left, nothing nearer than 90 inches to either end.
+
 **The stair window is a window.**  It was a selection, and a selection
 takes whole entities: a far side drawn as one polyline came in whole,
 the entire band became the "stair section", was developed rigidly as
