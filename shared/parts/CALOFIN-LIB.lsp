@@ -25,7 +25,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.8")
+(setq cal:*version* "v2.0")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
@@ -210,7 +210,8 @@
 ;; POOL/SPA tutorials keep their own pauses -- theirs can stop the
 ;; tutorial, and the two disagree about which answer means stop.
 (defun cal:pause ()
-  (getstring "\n--- press Enter to continue ---")
+  ((lambda (v) (if lzd:ask (lzd:ask "\n--- press Enter to continue ---" v) v))
+    (getstring "\n--- press Enter to continue ---"))
   (princ))
 
 ;;; -------------------- system variables --------------------------------
@@ -362,6 +363,24 @@
                       (* 0.11 (rem (/ c 65536) 256))))
          (if (< lum 128.0) 'dark 'light))))))
 
+;; A per-ROLE override a drafter has set through CALSET's Itemcolors
+;; menu: CalofinInk-<ROLE> in the profile, or nil when none is set for
+;; this role.  One profile key per role, rather than one packed
+;; setting parsed by hand, so what CALSET writes is exactly what
+;; getint already validated -- nothing downstream re-parses a typed
+;; string.  Works for any role, fade/guide/dim/hi included, though
+;; today only the item-type roles below are reachable from CALSET.
+(defun cal:inkoverride (role / q v)
+  (setq q (assoc role '((fade . "FADE") (guide . "GUIDE") (dim . "DIM")
+                         (hi . "HI") (flag . "FLAG") (arc . "ARC")
+                         (olap . "OLAP") (orig . "ORIG") (sugg . "SUGG")
+                         (point . "POINT") (constr . "CONSTR")
+                         (report . "REPORT"))))
+  (if q
+    (progn
+      (setq v (cal:setting (strcat "CalofinInk-" (cdr q)) ""))
+      (if (/= v "") (atoi v)))))
+
 ;;  THE INK TABLE.  A colour knob set to 'auto asks for the ACI that
 ;;  suits the background it will be seen against; a knob set to a
 ;;  NUMBER is used exactly as given, so a shop that has picked its own
@@ -386,27 +405,56 @@
 ;;  pool, which is 8 on white and nearly the background itself on the
 ;;  stock dark grey.  The unmeasured column is deliberately what the
 ;;  tree did before this table existed: a session that cannot tell is
-;;  not a session that changes behaviour.
-(defun cal:ink (knob role / th)
+;;  not a session that behaves differently.
+;;
+;;  ITEM-TYPE COLOURS.  A second set of roles, alongside the four
+;;  above, for parts of a review that are not about the SCREEN at all
+;;  but about what KIND of thing is being marked -- a flagged error, an
+;;  arc whose endpoints moved, an overlap, the point as drawn versus
+;;  the one suggested, the construction line, the report text.
+;;  COVERCHECK, DIMCHECK and LINFINCHECK each carried the same eight
+;;  numbers as a separate literal copy; this table is the one place
+;;  they are decided now.
+;;
+;;    role     what it is                                    ACI
+;;    flag     what a drafter answered "No" to                 1  red
+;;    arc      an arc whose endpoints were moved                6  magenta
+;;    olap     a merged or flagged overlapping line             4  cyan
+;;    orig     the X at the point as drawn                      1  red
+;;    sugg     the + at the point the tool suggests              3  green
+;;    point    the crosses at an overlap's two ends              2  yellow
+;;    constr   the construction line through moved points       2  yellow
+;;    report   the report text                                  3  green
+;;
+;;  None of these vary with the screen the way fade/guide/dim/hi do --
+;;  they are the same ordinary ACI colours on any background the three
+;;  review tools have ever drawn on -- so there is no dark/light table
+;;  for them, only the override above and CALSET's Itemcolors menu.
+(defun cal:ink (knob role / th ov)
   ;; numberp, not (eq knob 'auto): a knob is a colour NUMBER used
   ;; exactly as given, or it is resolved.  Testing for 'auto instead
   ;; would hand back whatever a mistyped knob holds -- nil, or the
   ;; symbol AUOT -- and that reaches entmake as a DXF group 62, where
   ;; it dies a long way from the line that caused it.
-  (if (numberp knob)
-    knob
-    (progn
-      (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
-      (cond
-        ((eq role 'fade)
-         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
-        ((eq role 'guide)
-         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
-        ((eq role 'dim)
-         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
-        ((eq role 'hi)
-         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
-        (t 7)))))
+  (cond
+    ((numberp knob) knob)
+    ((setq ov (cal:inkoverride role)) ov)
+    ((setq ov (assoc role '((flag . 1) (arc . 6) (olap . 4) (orig . 1)
+                             (sugg . 3) (point . 2) (constr . 2)
+                             (report . 3))))
+     (cdr ov))
+    (t
+     (setq th (if (member role '(dim hi)) (cal:ui) (cal:bg)))
+     (cond
+       ((eq role 'fade)
+        (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+       ((eq role 'guide)
+        (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+       ((eq role 'dim)
+        (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+       ((eq role 'hi)
+        (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+       (t 7)))))
 
 ;;; -------------------- layers ------------------------------------------
 
@@ -958,6 +1006,211 @@
       (setq fall v))
     (setq sub (entnext sub)))
   (if val val fall))
+
+;;; -------------------- the inside of a closed loop ---------------------
+
+;; Signed area of the closed polygon PTS, by the shoelace sum: positive
+;; when it runs counterclockwise.  That SIGN is how this tree defines
+;; the inside of a pool -- turn the direction of travel 90 degrees the
+;; way the sign says and you are pointing into the water, at every
+;; point of the wall, whatever shape it is.  A clicked centre answers
+;; the same question only for a shape with no notch in it: on an L or a
+;; keyhole a centre in one lobe sits on the wrong side of a wall in the
+;; other, and the marks there come out backwards.  (ABHD's pf:loop-area,
+;; which the hopper and the slope lines have always been built on.)
+(defun cal:loop-area (pts / sum prev q)
+  (setq sum 0.0 prev (last pts))
+  (foreach q pts
+    (setq sum  (+ sum (- (* (car prev) (cadr q))
+                         (* (car q) (cadr prev))))
+          prev q))
+  (/ sum 2.0))
+
+;; Which way to turn a tangent to point INTO the loop PTS: 1.0 or -1.0,
+;; to multiply the left-hand normal (cal:perp) by.  nil when the loop
+;; encloses nothing measurable -- a figure-eight, a doubled-back trace,
+;; three points in a line -- where there is no inside to point at and
+;; the caller has to ask instead of guessing.
+(defun cal:inward-sign (pts / a)
+  (if (< (length pts) 3)
+    nil
+    (progn
+      (setq a (cal:loop-area pts))
+      (cond ((> a 1.0e-6) 1.0)
+            ((< a -1.0e-6) -1.0)))))
+
+;; T when P lies inside the closed polygon PTS -- the crossing test: a
+;; ray cast along +X crosses an odd number of edges from inside and an
+;; even number from outside.  A point exactly ON an edge may answer
+;; either way, which is why every caller here asks it about a point it
+;; has already moved clear of the wall.
+(defun cal:in-loop-p (p pts / in prev q x y yi yj)
+  (setq in nil prev (last pts) x (car p) y (cadr p))
+  (foreach q pts
+    (setq yi (cadr q) yj (cadr prev))
+    ;; the two ends straddle the ray, written as two ands rather than
+    ;; (/= (> ..) (> ..)): AutoLISP's /= is for numbers and strings, and
+    ;; handing it T and nil is a bad-argument-type nobody sees until a
+    ;; real drawing runs it
+    (if (and (or (and (> yi y) (<= yj y))
+                 (and (> yj y) (<= yi y)))
+             (< x (+ (car q)
+                     (* (- (car prev) (car q))
+                        (/ (- y yi) (- yj yi))))))
+      (setq in (not in)))
+    (setq prev q))
+  in)
+
+;;; -------------------- a measurement that fights its neighbours -------
+
+;; The entries of PAIRS that sit AGAINST the run on both sides by more
+;; than TOL -- the mis-keyed number in a series of measurements taken
+;; along one wall.  PAIRS is ((position . value) ...) in position order:
+;; how far along the wall each measurement was taken, and what it
+;; measured.
+;;
+;; The rule, and why it is this one.  A value is suspect when it is
+;; lower than BOTH its neighbours by more than TOL, or higher than both
+;; by more than TOL, AND it sits more than TOL off the straight line
+;; between them.  40, 10, 30 at three points in a row is that: the 10
+;; fights both sides, and the wall between a 40 and a 30 is about 35.
+;; Requiring it to fight BOTH neighbours is what keeps a real curve
+;; quiet -- 40, 38, 30 is a wall bending away, every value between its
+;; neighbours, and nothing is said about it however far the middle one
+;; sits off the chord.
+;;
+;; Returns ((index . what the neighbours put there) ...), oldest first,
+;; indexed into PAIRS.  The caller names the measurement and says so;
+;; nothing here changes a number, because a surveyed value is the one
+;; thing a drawing tool may not quietly overwrite.
+(defun cal:spikes (pairs tol / n i a b c span expect out)
+  (setq n (length pairs) i 1 out nil)
+  (while (< i (1- n))
+    (setq a    (nth (1- i) pairs)
+          b    (nth i pairs)
+          c    (nth (1+ i) pairs)
+          span (- (car c) (car a)))
+    (if (> span 1.0e-9)
+      (progn
+        (setq expect (+ (cdr a) (* (- (cdr c) (cdr a))
+                                   (/ (- (car b) (car a)) span))))
+        (if (and (> (abs (- (cdr b) expect)) tol)
+                 (or (and (> (- (cdr a) (cdr b)) tol)
+                          (> (- (cdr c) (cdr b)) tol))
+                     (and (> (- (cdr b) (cdr a)) tol)
+                          (> (- (cdr b) (cdr c)) tol))))
+          (setq out (cons (cons i expect) out)))))
+    (setq i (1+ i)))
+  (reverse out))
+
+;;; -------------------- naming a survey point ---------------------------
+;;; PERPMARK's infrastructure (pm:as-number, pm:canon, pm:matches,
+;;; pm:nearest and pm:askpoint, PERPMARK.lsp), lifted for the fitters
+;;; ABHD, CABHD, LHD, ABLOBF and FITABHD, which ask about survey points
+;;; at every declaration -- the wall runs from Pt.17 to Pt.22, Pt.9 is
+;;; a corner, Pt.30 is held, leave Pt.41 out -- and used to take a
+;;; PLACE for each and snap it to whatever point was nearest, however
+;;; far off the click landed.  A question about a point NAMES one: a
+;;; click within SNAP of a point picks it, a typed number finds it,
+;;; and a miss is re-asked where it stands.
+;;;
+;;; A candidate is (position name ...): the point as the tool holds it
+;;; and what the prompts call it.  The tools keep their own classifier
+;;; (which entities are survey points, and what a moved point is) and
+;;; hand the list in; the tag reader above is what names a block.
+
+;; The NUMBER a typed point name carries: the spelling with the spaces,
+;; the hashes and the "Pt." prefix taken off, and nothing else touched.
+;; Only the dot right after PT is a prefix dot - a point genuinely named
+;; "40.5" keeps its decimal.  (ABFIND's abf:as-number.)
+(defun cal:as-number (s / out i ch)
+  (setq out "" i 1)
+  (while (<= i (strlen s))
+    (setq ch (substr s i 1))
+    (if (not (member ch '(" " "#")))
+      (setq out (strcat out ch)))
+    (setq i (1+ i)))
+  (if (and (>= (strlen out) 2) (= (strcase (substr out 1 2)) "PT"))
+    (progn
+      (setq out (substr out 3))
+      (if (= (substr out 1 1) ".") (setq out (substr out 2)))))
+  out)
+
+;; One comparable form for a point number, so "35", "Pt.35", "pt 35",
+;; "#35" and "035" all meet in the middle.  (ABFIND's abf:canon.)
+(defun cal:canon (s)
+  (setq s (cal:as-number (strcase s)))
+  (if (distof s 2)
+    (rtos (distof s 2) 2 8)
+    s))
+
+;; Every candidate whose name is the number typed.  More than one is a
+;; sheet that numbers two points the same, and is asked about rather
+;; than guessed at.
+(defun cal:cand-matches (s cands / want out c)
+  (setq want (cal:canon s) out nil)
+  (foreach c cands
+    (if (= (cal:canon (cadr c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;; The candidate nearest PK, when one sits within SNAP of it.  A typed
+;; number never comes here - a name is exact.
+(defun cal:cand-nearest (pk cands snap / best bd c d)
+  (setq best nil bd nil)
+  (foreach c cands
+    (setq d (distance (cal:2d pk) (cal:2d (car c))))
+    (if (and (<= d snap) (or (null bd) (< d bd)))
+      (setq best c bd d)))
+  best)
+
+;; A survey point, clicked or typed.  One prompt takes both: (initget
+;; 128) is arbitrary input, which hands typed text back from getpoint as
+;; the string it is where a click comes back as the point it is.  The
+;; misses are re-asked HERE rather than unwinding the caller's chain --
+;; a number nothing carries and a click on nothing are typos, not
+;; answers, and the question they belong to is this one.  TAIL is the
+;; prose inside the angle brackets on a prompt whose Enter means
+;; something - "Enter = done", the point Enter takes - and nil when a
+;; point is required.  CANDS are the (position name) candidates and
+;; SNAP how close a click has to land.  Returns the candidate, nil for
+;; Enter, or CAL-BACK.
+(defun cal:askpoint (msg tail back cands snap / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (if lzd:ask (lzd:ask msg v) v)
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'CAL-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (cal:cand-matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (cal:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (cal:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (cal:cand-nearest v cands snap))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
 
 ;;; ----------------------------------------------------------------------
 ;; Quiet inside the whole build, on the same rule every member

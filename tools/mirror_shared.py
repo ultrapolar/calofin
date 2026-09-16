@@ -227,7 +227,11 @@ TOOLS = {
     # library has no answer for -- the segment walk over the perimeter,
     # the mark record, the survey-point classifier (BPCALLOUT's and
     # ABFIND's, which are not in the library either) and pm:askpoint,
-    # the pick-or-type prompt none of the tools before it needed.
+    # the pick-or-type prompt.  That prompt IS in the library now, as
+    # cal:askpoint, lifted from here for ABHD and its family -- but the
+    # library's takes the snap radius as an argument where pm:askpoint
+    # reads pm:*snap* itself, so PERPMARK keeps its own copy until its
+    # arity is moved in a pass of its own.
     'PERPMARK': {
         'src': 'lisp/perpmark/PERPMARK.lsp',
         'swap': {
@@ -237,6 +241,12 @@ TOOLS = {
             'pm:angnorm': 'cal:angnorm', 'pm:tan': 'cal:tan',
             'pm:ensure-layer': 'cal:ensure-layer',
             'pm:block-number': 'cal:block-number',
+            # the inside of a closed wall, and the measurement that
+            # fights both its neighbours
+            'pm:loop-area': 'cal:loop-area',
+            'pm:inward-sign': 'cal:inward-sign',
+            'pm:in-loop-p': 'cal:in-loop-p',
+            'pm:spikes': 'cal:spikes',
             'pm:askkw': 'cal:askkw', 'pm:askyn': 'cal:askyn',
             'pm:askdist': 'cal:askdist',
             'pm:syssave': 'cal:syssave',
@@ -304,6 +314,10 @@ TOOLS = {
             'fit:dedupe': 'cal:dedupe', 'fit:tan': 'cal:tan',
             'fit:ceil': 'cal:ceil',
             'fit:block-number': 'cal:block-number',
+            'fit:as-number': 'cal:as-number', 'fit:canon': 'cal:canon',
+            'fit:cand-matches': 'cal:cand-matches',
+            'fit:cand-nearest': 'cal:cand-nearest',
+            'fit:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         # fit:askkw already takes the SHOWN bracket third, like the
@@ -450,6 +464,10 @@ TOOLS = {
             'abl:dedupe': 'cal:dedupe',
             'abl:block-number': 'cal:block-number',
             'abl:ensure-layer': 'cal:ensure-layer', 'abl:pad': 'cal:pad',
+            'abl:as-number': 'cal:as-number', 'abl:canon': 'cal:canon',
+            'abl:cand-matches': 'cal:cand-matches',
+            'abl:cand-nearest': 'cal:cand-nearest',
+            'abl:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         'expand': {
@@ -458,6 +476,7 @@ TOOLS = {
             '(cal:dedupe pts)':
                 ['(cal:dedupe pts *ABL-EXACT-EPS*)'],
         },
+        'symbols': {'ABL-BACK': 'CAL-BACK'},
     },
     # LOBF was written against the library from the start (STANDARDS
     # section 6): its vector set, the sysvar pair, ensure-layer, pad,
@@ -591,9 +610,15 @@ TOOLS = {
         # spachk:askkw takes a HIDDEN keyword list third and derives the
         # bracket itself, so its call sites need translating
         'askkw_hidden': True,
+        # No OSMODE: SPACHECK changes no snap of its own, and a sysvar
+        # list is a promise to write the value back -- it would put this
+        # run's opening snapshot over any snap the drafter ticked on
+        # during the item-by-item walk.  Kept in step with the table in
+        # lisp/spacheck/SPACHECK.lsp by hand, which is why it is typed
+        # twice and why check_osnap.py reads both tiers.
         'expand': {
             '(cal:syssave)':
-                ['(cal:syssave \'("OSMODE" "CMDECHO" "CLAYER"))'],
+                ['(cal:syssave \'("CMDECHO" "CLAYER"))'],
         },
     },
     # POOL is the largest file in the tree and its twin was hand-mirrored
@@ -852,6 +877,62 @@ TOOLS = {
         # table the twin no longer carries
         'replace': [(FONT_PROSE, FONT_PROSE_SHARED)],
     },
+    'LAZSIDE': {
+        'src': 'lisp/lazside/LAZSIDE.lsp',
+        # The fourth chart form, and the same kit: it draws into a DCL
+        # image tile, which takes line segments and nothing else, so it
+        # carries the same copy of the machinery the other three did.
+        # The library has it; these are the swaps, and the map is also
+        # the written statement that the copies are the same code --
+        # let one drift and --check fails on the next regeneration.
+        'swap': {
+            # the ink table: one body, and the library's is it
+            'lzv:ink': 'cal:ink',
+            'lzv:glyph': 'cal:imgglyph',
+            'lzv:text': 'cal:imgtext',
+            'lzv:textw': 'cal:imgtextw',
+            'lzv:texth': 'cal:imgtexth',
+            'lzv:plinepx': 'cal:imgpline',
+            'lzv:flatten': 'cal:imgflatten',
+            'lzv:arcpts': 'cal:imgarcpts',
+            'lzv:trim': 'cal:trim',
+            'lzv:answer': 'cal:formanswer',
+            'lzv:plural': 'cal:plural',
+            'lzv:join': 'cal:andjoin',
+            # the key=value record a recalled sheet is stored as
+            'lzv:kvsplit': 'cal:kvsplit',
+            'lzv:kvhas': 'cal:kvhas',
+            'lzv:kvpack': 'cal:kvpack',
+            'lzv:kvunpack': 'cal:kvunpack',
+        },
+        # the font, its metrics and the tile palette are constants, so
+        # they move as globals: dropped here, renamed at every mention
+        # by 'symbols' below (a bare global is never "(name", so the
+        # swap map's call-site rewrite would not see it)
+        'drop_globals': ['lzv:*font*', 'lzv:*font-w*',
+                         'lzv:*font-h*', 'lzv:*font-adv*',
+                         'lzv:*col-line*', 'lzv:*col-back*',
+                         'lzv:*col-dim*', 'lzv:*col-val*',
+                         'lzv:*col-hi*'],
+        'symbols': {
+            # the prose names it too, and prose that names a helper the
+            # twin does not define is the drift this file exists to stop
+            'lzv:answer': 'cal:formanswer',
+            'lzv:*font-adv*': 'cal:*imgfont-adv*',
+            'lzv:*font-w*': 'cal:*imgfont-w*',
+            'lzv:*font-h*': 'cal:*imgfont-h*',
+            'lzv:*font*': 'cal:*imgfont*',
+            'lzv:*col-line*': 'cal:*imgcol-line*',
+            'lzv:*col-back*': 'cal:*imgcol-back*',
+            'lzv:*col-dim*': 'cal:*imgcol-dim*',
+            'lzv:*col-val*': 'cal:*imgcol-val*',
+            'lzv:*col-hi*': 'cal:*imgcol-hi*',
+        },
+        # the section header survives the drop -- top_span stops at a
+        # ;;; block -- so the prose under it would be left explaining a
+        # table the twin no longer carries
+        'replace': [(FONT_PROSE, FONT_PROSE_SHARED)],
+    },
     'LAZSTEP': {
         'src': 'lisp/lazstep/LAZSTEP.lsp',
         # THE CHART-FORM KIT.  All three forms draw into a DCL image
@@ -940,6 +1021,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'cchk:ink': 'cal:ink',
+            'cchk:inkoverride': 'cal:inkoverride',
             'cchk:ensure-layer': 'cal:ensure-layer',
             'cchk:bbox': 'cal:bbox-ent',
             'cchk:pad2': 'cal:zeropad2',
@@ -992,6 +1074,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'dchk:ink': 'cal:ink',
+            'dchk:inkoverride': 'cal:inkoverride',
             'dchk:ensure-layer': 'cal:ensure-layer',
             'dchk:bbox': 'cal:bbox-ent',
             'dchk:pad2': 'cal:zeropad2',
@@ -1029,6 +1112,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'lfc:ink': 'cal:ink',
+            'lfc:inkoverride': 'cal:inkoverride',
             'lfc:ensure-layer': 'cal:ensure-layer',
             'lfc:bbox': 'cal:bbox-ent',
             'lfc:pad2': 'cal:zeropad2',
@@ -1080,12 +1164,23 @@ TOOLS = {
             'pf:signed-dang': 'cal:signed-dang', 'pf:dedupe': 'cal:dedupe',
             'pf:ensure-layer': 'cal:ensure-layer', 'pf:pad': 'cal:pad',
             'pf:back-word': 'cal:back-word-p', 'pf:unit': 'cal:unit',
+            'pf:loop-area': 'cal:loop-area', 'pf:spikes': 'cal:spikes',
+            # PERPMARK's survey-point naming, lifted into the library:
+            # the spellings, the typed match, the click within a snap
+            # radius and the one prompt that takes either
+            'pf:as-number': 'cal:as-number', 'pf:canon': 'cal:canon',
+            'pf:cand-matches': 'cal:cand-matches',
+            'pf:cand-nearest': 'cal:cand-nearest',
+            'pf:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         'expand': {
             '(cal:dedupe pts)':
                 ['(cal:dedupe pts *PF-EXACT-EPS*)'],
         },
+        # the Back sentinel travels with cal:askpoint, and every
+        # question in the run tests for it by name
+        'symbols': {'PF-BACK': 'CAL-BACK'},
     },
     # CABHD is ABHD's perimeter half and carries the same kit under
     # cab:, minus the bottom-only pieces; same dedupe epsilon growth.
@@ -1101,12 +1196,17 @@ TOOLS = {
             'cab:norm-ang': 'cal:angnorm',
             'cab:signed-dang': 'cal:signed-dang', 'cab:dedupe': 'cal:dedupe',
             'cab:ensure-layer': 'cal:ensure-layer', 'cab:pad': 'cal:pad',
+            'cab:as-number': 'cal:as-number', 'cab:canon': 'cal:canon',
+            'cab:cand-matches': 'cal:cand-matches',
+            'cab:cand-nearest': 'cal:cand-nearest',
+            'cab:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         'expand': {
             '(cal:dedupe pts)':
                 ['(cal:dedupe pts *CAB-EXACT-EPS*)'],
         },
+        'symbols': {'CAB-BACK': 'CAL-BACK'},
     },
     # ABHD's kit again under lh:, plus block-number -- the library's
     # takes the attribute tag as an argument where lh: read *LH-PT-TAG*
@@ -1123,6 +1223,10 @@ TOOLS = {
             'lh:signed-dang': 'cal:signed-dang', 'lh:dedupe': 'cal:dedupe',
             'lh:block-number': 'cal:block-number',
             'lh:ensure-layer': 'cal:ensure-layer', 'lh:pad': 'cal:pad',
+            'lh:as-number': 'cal:as-number', 'lh:canon': 'cal:canon',
+            'lh:cand-matches': 'cal:cand-matches',
+            'lh:cand-nearest': 'cal:cand-nearest',
+            'lh:askpoint': 'cal:askpoint',
         },
         'drop_globals': [],
         'expand': {
@@ -1131,6 +1235,7 @@ TOOLS = {
             '(cal:dedupe pts)':
                 ['(cal:dedupe pts *LH-EXACT-EPS*)'],
         },
+        'symbols': {'LH-BACK': 'CAL-BACK'},
     },
     # OASIS asks through askkw/askdist and swaps the sysvar, dimstyle,
     # osnap and layer helpers.  Its Back sentinel rides the SWAP map,
@@ -1566,6 +1671,47 @@ TOOLS = {
             '(cal:block-number en)':
                 ['(cal:block-number en bp:*pt-tag*)'],
         },
+    },
+    # Written against the library from the start, so the swap is a
+    # straight rename: the 2-D vector set, the two angle helpers the
+    # dimension arc is walked with, cal:plural (whose number-first shape
+    # the report was worded around rather than the other way up), and
+    # the sysvar pair.  cd:sysvars stays behind to supply the list
+    # cal:syssave takes as an argument -- which is why there is no
+    # expand rule here where PERPMARK needs one.  cd:on-track,
+    # cd:layer-locked-p and the whole separating-axis kit are this
+    # tool's own: the library has no convex-polygon overlap test, and
+    # cal:layer-usable-p asks a different question (frozen and off as
+    # well as locked, which is not what entmod refuses).
+    'CLEARDIM': {
+        'src': 'lisp/cleardim/CLEARDIM.lsp',
+        'swap': {
+            'cd:2d': 'cal:2d', 'cd:v-': 'cal:v-', 'cd:v+': 'cal:v+',
+            'cd:v*': 'cal:v*', 'cd:dot': 'cal:dot', 'cd:perp': 'cal:perp',
+            'cd:vlen': 'cal:vlen', 'cd:unit': 'cal:unit',
+            'cd:mid': 'cal:mid', 'cd:cross': 'cal:cross',
+            'cd:angnorm': 'cal:angnorm',
+            'cd:signed-dang': 'cal:signed-dang',
+            'cd:plural': 'cal:plural',
+            'cd:syssave': 'cal:syssave',
+            'cd:sysrestore': 'cal:sysrestore',
+        },
+        'drop_globals': [],
+        # the heading over a section the swap empties: what is left under
+        # it is the one helper that is about a dimension rather than a
+        # vector, and "strictly 2-element results" was describing the
+        # nine the library now supplies
+        'replace': [(
+            ";;; -------------------- 2-D vector helpers ---------------"
+            "--------------\n"
+            ";;; Strictly 2-element results; inputs may be 2- or "
+            "3-element.\n",
+            ";;; -------------------- 2-D vector helpers ---------------"
+            "--------------\n"
+            ";;; The set itself is CALOFIN-LIB.lsp's, under cal:.  What is"
+            " left\n"
+            ";;; here is the one that is about a dimension rather than a"
+            " vector.\n")],
     },
 }
 

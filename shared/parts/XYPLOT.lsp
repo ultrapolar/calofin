@@ -774,6 +774,7 @@
        ;; even under a rotated UCS (entmake writes WCS)
        (initget "Back Undo")
        (setq base (getpoint "\nInsertion point for the origin (X=0, Y=0) <0,0> [Back]: "))
+       (if lzd:ask (lzd:ask "\nInsertion point for the origin (X=0, Y=0) <0,0> [Back]: " base) base)
        (if (= (type base) 'STR) (setq stage 1) (setq done T)))))
   (if (eq done 'quit)
     (progn (princ "\nCancelled.") (princ))
@@ -977,6 +978,7 @@
                 (xyp:to-abhd ss)
                 (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
               (princ)))))))
+  (if lzd:end (lzd:end "XYPLOT"))
   (princ))
 
 ;; Print the loaded version.

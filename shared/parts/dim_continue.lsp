@@ -109,6 +109,7 @@
     (setq en nil ss nil pl nil kept nil)
     (while (null en)
       (setq tref (entsel "\nSelect the dimension to continue: "))
+      (if lzd:ask (lzd:ask "\nSelect the dimension to continue: " tref) tref)
       (if lzd:watch (lzd:watch tref) tref)
       (cond
         ((null tref)                                 ; Enter / miss -> quit
@@ -204,6 +205,7 @@
         (initget "Yes No")
         (setq ans (getkword
           "\nContinue from another dimension? [Yes/No] <No>: "))
+        (if lzd:ask (lzd:ask "\nContinue from another dimension? [Yes/No] <No>: " ans) ans)
         (setq again (equal ans "Yes")))))
 
   ;; put the user's dimension style back if any pass moved it
@@ -211,6 +213,7 @@
     (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
 
   (setq *error* olderr)
+  (if lzd:end (lzd:end "DIMCONTEND"))
   (princ))
 
 ;; short alias

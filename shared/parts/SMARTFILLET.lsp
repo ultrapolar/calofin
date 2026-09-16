@@ -530,6 +530,7 @@
   (while (not ans)
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
     (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
@@ -553,6 +554,7 @@
   (while (not ans)
     (initget "Cancel")
     (setq sel (entsel "\nClick the rounded corner you want [Cancel]: "))
+    (if lzd:ask (lzd:ask "\nClick the rounded corner you want [Cancel]: " sel) sel)
     (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
@@ -875,6 +877,7 @@
   ;; command-s inside every later handler in the session (AutoLISP
   ;; reference, *push-error-using-command*)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "SMARTFILLET"))
   (princ))
 
 (defun c:SMARTFILLETVER ()

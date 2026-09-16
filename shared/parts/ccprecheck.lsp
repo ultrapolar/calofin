@@ -162,6 +162,7 @@
                                  " (type value/notes"
                                  (if back ", B = back" "")
                                  " or press Enter): ")))
+  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") val) val)
   (cond
     ((and back (cal:back-word-p val)) 'CHK-BACK)
     ((= val "") (chk:log (strcat chk:*confirm-mark* item)) val)
@@ -649,6 +650,7 @@
     (princ (strcat "\n" chk:*sum-indent* line))
   )
   (princ chk:*sum-close*)
+  (if lzd:end (lzd:end "CCPRECHECK"))
   (princ)
 )
 

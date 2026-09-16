@@ -229,7 +229,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.8")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -3151,8 +3151,18 @@
       nil
       (progn
         (setq off  (car (nth 2 ans))
-              bot  (cadr (nth 2 ans))
-              done (oasis:drawbottom bot arcs base w h lt
+              bot  (cadr (nth 2 ans)))
+        ;; The questions above are answered WITH the drafter's snaps --
+        ;; the break points are picked onto the outline.  What follows is
+        ;; the drawing, fed computed points to DIMALIGNED and to the
+        ;; hopper-offset cross dim, and it needs them off like every
+        ;; other command-fed stretch of this run.  The caller's osup
+        ;; used to span both halves, so the bottom flow's four dimension
+        ;; commands were the only ones of the run laid down with running
+        ;; osnap live -- free to be pulled onto whatever the outline
+        ;; happened to pass near.
+        (cal:osdown)
+        (setq done (oasis:drawbottom bot arcs base w h lt
                                      (nth 3 ans) (nth 4 ans) off))
         (list
           (strcat "\nBottom on layer " oasis:*poollayer*
@@ -3252,8 +3262,14 @@
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
                    lt a nchk gotbot)
   (defun *error* (msg)
-    ;; user settings come back FIRST so nothing below can skip them
-    (cal:dimstyrestore)
+    ;; user settings come back FIRST so nothing below can skip them --
+    ;; and that means FIRST, which this handler did not used to be.  It
+    ;; opened with (cal:dimstyrestore), whose (command ...) is exactly
+    ;; what the valve below exists to make safe: on the Esc-mid-dimension
+    ;; the comment there describes, the style restore was fed into the
+    ;; PENDING command as answers, and a throw there took this line with
+    ;; it -- leaving the drafter with every object snap unticked.
+    ;; Nothing above this line may drive a command.
     (cal:sysrestore)
     ;; a form's leftovers go with the run that was reading them: an Esc
     ;; part-way through must not leave answers behind for the next one
@@ -3265,6 +3281,9 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
+    ;; and only now, with nothing pending, the style -- it is read-only
+    ;; to setvar, so it is the one restore here that needs a command
+    (cal:dimstyrestore)
     ;; the preview is scaffolding, not a result -- it goes whether the run
     ;; finished or the user pressed Esc part-way through the questions.
     ;; So are the pool-bottom flow's numbered tangency marks, which are
@@ -3481,6 +3500,7 @@
   ;; refuses command-s inside every later handler in the session
   ;; (AutoLISP reference, *push-error-using-command*)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "OASIS"))
   (princ))
 
 (defun c:OASISVER ()

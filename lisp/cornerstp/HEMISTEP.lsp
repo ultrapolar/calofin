@@ -227,7 +227,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.17") ; printed on load and at command start so a
+(setq *hs-version* "v3.18") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -775,6 +775,12 @@
 ;;;  through to the prompt when it does not fit.  Selections and
 ;;;  point picks are never form-answered.
 ;;;
+;;;  BEADING IS THREE KEYS, not one.  bead is whether to bead at all,
+;;;  beadsides is All/Some/None along the step side walls, and
+;;;  beadnums is the step numbers Some asks for, as the string the
+;;;  prompt would have taken ("1 3 5").  The whole chain comes off a
+;;;  sheet now; the side to bead TOWARD is a pick and stays here.
+;;;
 ;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used - removed.
 ;;;  Otherwise Back deadlocks: step back onto a form-answered question,
 ;;;  it answers itself instantly and walks forward again, and there is
@@ -1012,6 +1018,7 @@
              (while (null side)
                (setq pt (getpoint (trans sp 0 1)
                           "\nPick a point on the side the steps go: "))
+               (if lzd:ask (lzd:ask "\nPick a point on the side the steps go: " pt) pt)
                (if (null pt)
                  (progn (princ "\nNo direction picked - nothing drawn.")
                         (exit)))
@@ -1035,6 +1042,7 @@
            (while (null sp)
              (setq pt (getpoint
                         "\nPick the point on the curve to measure from: "))
+             (if lzd:ask (lzd:ask "\nPick the point on the curve to measure from: " pt) pt)
              (if (null pt)
                (progn (princ "\nNothing picked - nothing drawn.") (exit)))
              (setq pt   (trans pt 1 0)
@@ -1057,6 +1065,7 @@
      (while (null dir)
        (setq pt (getpoint (trans sp 0 1)
                           "\nPick a point on the side the steps go: "))
+       (if lzd:ask (lzd:ask "\nPick a point on the side the steps go: " pt) pt)
        (if (null pt)
          (progn (princ "\nNo direction picked - nothing drawn.") (exit)))
        (setq side (hs-dot (hs-vec sp (trans pt 1 0)) (hs-perp u)))
@@ -1090,7 +1099,8 @@
        (if (null (setq fkey (hs-fkw 'dims "Yes No" "Yes")))
          (progn
            (initget "Yes No")
-           (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))))
+           (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))
+           (if lzd:ask (lzd:ask "\nDimension the steps? [Yes/No] <Yes>: " fkey) fkey)))
        (setq dimflag (/= "No" fkey))
        (if dimflag
          (progn
@@ -1119,6 +1129,7 @@
              (initget 6 "Back Undo")
              (setq wid (getdist
                          "\nWidth of the step at the wall [Back] <Enter = none>: "))
+             (if lzd:ask (lzd:ask "\nWidth of the step at the wall [Back] <Enter = none>: " wid) wid)
              (if (hs-back-kw wid)
                (progn (princ "\n  Stepping back one question.")
                       (setq wid nil hstep 1))
@@ -1172,6 +1183,7 @@
                                       (strcat " <Enter = done, Same = "
                                               (rtos lastdep) ">: ")
                                       " <Enter = done>: "))))
+                (if lzd:ask (lzd:ask (getvar "LASTPROMPT") dep) dep)
                 (if (= (type dep) 'STR)
                   (cond
                     ((or (= dep "Back") (= dep "Undo"))
@@ -1210,6 +1222,7 @@
                                        (lastwid (strcat "<Enter = "
                                                         (rtos lastwid) ">: "))
                                        (T ": ")))))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") wid) wid)
           (if (= (type wid) 'STR) (setq wid lastwid))))
       (if (null wid)
         (cond
@@ -1315,7 +1328,8 @@
             (progn
               (initget 6)
               (setq dep (getdist (strcat "\nDistance from the last step to the back"
-                                         " of the curve <Enter = none>: ")))))
+                                         " of the curve <Enter = none>: ")))
+              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") dep) dep)))
           (if (and dep (= (type dep) 'REAL))
             (progn
               (setq crown (hs-add pprev (hs-scl dir dep)))
@@ -1338,7 +1352,8 @@
               (initget "Yes No")
               (setq fkey (getkword (strcat "\nDraw the reconstructed boundary"
                                            " through the step ends? [Yes/No]"
-                                           " <Yes>: ")))))
+                                           " <Yes>: ")))
+              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)))
           (if (/= "No" fkey)
             ;; Deepest step - side A - across the first step - side B.
             ;; The start point is NOT made a vertex: near the crown the
@@ -1378,7 +1393,8 @@
       (if (null (setq fkey (hs-fkw 'profile "Yes No" "Yes")))
         (progn
           (initget "Yes No")
-          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))))
+          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
+          (if lzd:ask (lzd:ask "\nAdd a side profile? [Yes/No] <Yes>: " fkey) fkey)))
       (if (/= "No" fkey)
         (progn
           ;; step treads, top step first: sort the logged axis distances
@@ -1428,7 +1444,8 @@
                                       (rtos (car drops)) ">: "))
                              (T (strcat "\nStep " (itoa jx)
                                         " - step depth [Back] <"
-                                        (rtos (car drops)) ">: ")))))))
+                                        (rtos (car drops)) ">: ")))))
+                (if lzd:ask (lzd:ask (getvar "LASTPROMPT") dd) dd)))
             (cond
               ((and (= (type dd) 'STR)
                     (or (= dd "Back") (= dd "Undo")))
@@ -1445,6 +1462,7 @@
            (initget "Back Undo")
            (setq ptop (getpoint (strcat "\nPick the top of " wnoun
                                         " for the side profile [Back]: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ptop) ptop)
            (if (hs-back-kw ptop)
              (progn (princ "\n  Stepping back one step.")
                     (setq drops (cdr drops)
@@ -1553,7 +1571,8 @@
              (if (null (setq fkey (hs-fkw 'bead "Yes No" "Yes")))
                (progn
                  (initget "Yes No")
-                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
+                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))
+                 (if lzd:ask (lzd:ask "\nBead the steps? [Yes/No] <Yes>: " fkey) fkey)))
              (setq bstep (if (/= "No" fkey) 2 5)))
             ((= bstep 2)
              (setq btreads (hs-treadents slog)
@@ -1563,12 +1582,21 @@
                (progn
                  ;; every tread but the last is beaded - the side walls
                  ;; are the question, and None leaves them bare
-                 (initget "All Some None Back Undo")
-                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
-                                                      " beaded side walls?"
-                                                      " [All/Some/None/Back]"
-                                                      " <All>: ")))
-                                   ("All")))
+                 ;; the form can answer this one: a sheet that said
+                 ;; All or None has nothing left to ask here.  Back is
+                 ;; not reachable from a form answer -- there is no
+                 ;; prompt to step back from, and the question above it
+                 ;; came off the same sheet
+                 (if (null (setq bside (hs-fkw 'beadsides
+                                               "All Some None" "All")))
+                   (progn
+                     (initget "All Some None Back Undo")
+                     (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                                          (getkword (strcat "\nWhich steps have"
+                                                            " beaded side walls?"
+                                                            " [All/Some/None/Back]"
+                                                            " <All>: "))))
+                                       ("All")))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -1578,8 +1606,17 @@
                (setq bstep 4)
                (progn
                  (princ (strcat "\n  Steps drawn: " (hs-numsay btreads)))
-                 (setq s (getstring T (strcat "\nStep numbers with"
-                                              " beaded sides (B = back): ")))
+                 ;; ...and this one, as the string the prompt would
+                 ;; have taken: "1 3 5".  Anything that is not a string
+                 ;; is no answer at all rather than one the number
+                 ;; reader would have to guess at
+                 (if (hs-fhas 'beadnums)
+                   (progn (setq s (hs-ftake 'beadnums))
+                          (if (/= (type s) 'STR) (setq s "")))
+                   (progn
+                     (setq s (getstring T (strcat "\nStep numbers with"
+                                                  " beaded sides (B = back): ")))
+                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)))
                  (if (hs-back-word s)
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
@@ -1597,6 +1634,7 @@
             ((= bstep 4)
              (initget "Back Undo")
              (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
+             (if lzd:ask (lzd:ask "\nClick the side to bead toward [Back]: " bdir) bdir)
              (if (hs-back-kw bdir)
                (progn (princ "\n  Stepping back one question.")
                       (setq bstep (if (= bside "Some") 3 2)))
@@ -1630,13 +1668,15 @@
                       ;; it is named here so AUTOBEAD leaves it unbeaded
                       (list (hs-entmid (cdr (last btreads)))))))))))))))
   (hs-fclear)                       ; both exits clear the form store
+  (if lzd:end (lzd:end "HEMISTEP"))
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
 
 (defun hs-tut-pause ( )
   (princ "\n      --- press Enter to continue ---")
-  (getstring)
+  ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+    (getstring))
   (princ))
 
 (defun hs-tut-text (pt h s)
@@ -1720,11 +1760,13 @@
   (hs-tut-pause)
 
   (initget "Yes No")
-  (if (= "No" (getkword (strcat "\nDraw a demonstration in this drawing?"
-                                " [Yes/No] <Yes>: ")))
+  (if (= "No" ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                (getkword (strcat "\nDraw a demonstration in this drawing?"
+                                  " [Yes/No] <Yes>: "))))
     (progn (princ "\nTutorial done - type HEMISTEP to use it for real.")
            (exit)))
   (setq pt (getpoint "\nPick a clear spot (about 300 x 150 needed): "))
+  (if lzd:ask (lzd:ask "\nPick a clear spot (about 300 x 150 needed): " pt) pt)
   (if (null pt)
     (progn (princ "\nNo spot picked - tutorial done.") (exit)))
   (setq org  (trans pt 1 0)
@@ -1803,6 +1845,7 @@
   (princ "\n    an arc and run HEMISTEP selecting it (plus an axis line if")
   (princ "\n    you have one) - Enter at any width fits that step to the")
   (princ "\n    curve exactly.")
+  (if lzd:end (lzd:end "TUTORIALHEMISTEP"))
   (princ))
 
 (defun c:HEMISTEPVER ()

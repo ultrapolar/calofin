@@ -666,6 +666,7 @@
     (progn
       (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
                                 dflt "): ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
       (if lzd:watch (lzd:watch sel) sel)
       (if sel
         (progn
@@ -935,6 +936,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "LOBF"))
   (princ))
 
 (defun c:LOBFVER ()

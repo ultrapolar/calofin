@@ -19,6 +19,21 @@ PADDLE's segment reading changes, port the change into LINGUTTER.lsp and
 this goes green again.  (--chain is not ported: chaining finds a loop,
 which is the guess the outer-face walk exists to stop making.)
 
+P4a and P4b are the two keep rules layered on top of the original two:
+a radius or diameter dim survives on the perimeter regardless of its
+style, and a CROSS DIM* dim only survives "Keep CROSS DIMENSIONS?"
+answered Yes AND reading as a genuine cross measurement of the pool --
+both points belonging to it at all, and either a span of at least
+lg:*crossspan* in X or Y or two of the perimeter's own vertices, corner
+to corner along one whole edge.  Neither is satisfied by one corner to
+some other point along that SAME edge -- the start of a line to the
+middle of it -- which is dropped whatever it spans, nor by a small dim
+sitting entirely inside touching nothing.  Answered No, a CROSS DIM*
+dim gets no exemption at all regardless of shape.  Every c:LINGUTTER /
+c:LINGUTTERSCAN run past P4 now scripts an answer to that question as
+the run's last argument, the same way a highlighted set is scripted as
+the first.
+
 P11 and P12 are the contingencies: the knobs set wrong, and the knob
 block itself -- every knob above the first defun, explained at the knob,
 with working state kept out of it.
@@ -150,28 +165,30 @@ def alive_of(vm, etype):
     return [e for e in alive(vm) if dxf(vm, e).get(0) == etype]
 
 
-def analyze(vm, ss='(ssget "_X")'):
+def analyze(vm, ss='(ssget "_X")', keepcross=True):
     """lg:analyze over a highlighted set, unpacked into a dict.  The
-    default hands it everything, which is what most of these checks
-    want; the scoping checks pass a set of their own."""
-    r = vm.loads("(lg:analyze %s)" % ss)
+    default hands it everything and answers "Keep CROSS DIMENSIONS?"
+    Yes, which is what most of these checks want; the scoping checks
+    pass a set of their own, and the keep-rule checks pass keepcross."""
+    r = vm.loads('(lg:analyze %s %s)' % (ss, "T" if keepcross else "nil"))
     return {
         'vts': r[0] if r[0] is not NIL else None,
         'gap': r[1] if r[1] is not NIL else None,
         'kill': list(r[2]) if r[2] is not NIL else [],
         'nany': int(r[3]),
         'nperim': int(r[4]),
-        'dropped': dict((d.a, int(d.b)) for d in (r[5] or [])),
-        'nother': int(r[6]),
-        'nspared': int(r[7]),
+        'nrad': int(r[5]),
+        'dropped': dict((d.a, int(d.b)) for d in (r[6] or [])),
+        'nother': int(r[7]),
+        'nspared': int(r[8]),
     }
 
 
-def analyze_sel(vm, ents):
+def analyze_sel(vm, ents, keepcross=True):
     """lg:analyze over exactly ENTS, handed over the way AutoCAD hands a
     pickfirst set to a command."""
     vm.pickfirst = ['<ss>'] + list(ents)
-    return analyze(vm, '(ssget "_I")')
+    return analyze(vm, '(ssget "_I")', keepcross=keepcross)
 
 
 def loop_xy(vts):
@@ -416,7 +433,7 @@ check("P3b the wrap is convex - every bulge is zero",
 # and the report says what it did, because a hull gives PADDLE nothing
 vm = newvm()
 rectangle(vm, 0, 0, 300, 200, gap=100.0)
-vm.loads('(lg:report (lg:analyze (ssget "_X")))')
+vm.loads('(lg:report (lg:analyze (ssget "_X") T) T)')
 out = "".join(str(x) for x in vm.printed)
 check("P3b the report calls a wrap a wrap",
       "wrapped" in out and "convex hull" in out, out[-300:])
@@ -435,8 +452,12 @@ def keepvm():
     rectangle(vm, 0, 0, 300, 200)
     rectangle(vm, 100, 60, 200, 140)
     d = {
-        'cross_long': dim(vm, "CROSS DIMENSIONS", (0, 0), (300, 200)),
-        'cross_short': dim(vm, "CROSS DIM", (0, 200), (300, 0)),
+        # a hair off the exact corners: still corner to corner for any
+        # practical purpose, but unambiguously INSIDE the perimeter
+        # rather than sitting exactly on one of its own vertices, which
+        # a point-in-polygon test resolves either way
+        'cross_long': dim(vm, "CROSS DIMENSIONS", (1, 1), (299, 199)),
+        'cross_short': dim(vm, "CROSS DIM", (1, 199), (299, 1)),
         'std_perim': dim(vm, "STANDARD", (0, 0), (300, 0)),
         'std_hopper': dim(vm, "STANDARD", (100, 60), (200, 60)),
         'side_perim': dim(vm, "SIDE STANDARD", (0, 0), (0, 200)),
@@ -471,8 +492,10 @@ for name in ('text', 'point', 'insert'):
     check(f"P4 the {name} goes", d[name] in kill)
 check("P4 the traced geometry goes too", len(kill) == 14, len(kill))
 check("P4 two kept for their style", res['nany'] == 2, res['nany'])
-check("P4 three kept for sitting on the perimeter",
-      res['nperim'] == 3, res['nperim'])
+check("P4 two kept for sitting on the perimeter, by style",
+      res['nperim'] == 2, res['nperim'])
+check("P4 ...and the radius dim is kept SEPARATELY, regardless of style",
+      res['nrad'] == 1, res['nrad'])
 check("P4 eleven non-dimension objects erased",
       res['nother'] == 11, res['nother'])
 check("P4 the dropped dims are counted by reason",
@@ -511,6 +534,146 @@ check("P4 a dim a fraction off the line is still on it",
       near not in set(res['kill']))
 check("P4 a dim 4 units in from it is not, at either end",
       far in set(res['kill']))
+
+
+# ------------------------------- P4a. radius/diameter, style aside
+
+print("== P4a. a RADIUS or DIAMETER dim on the perimeter, any style ==")
+
+# THE bug this rule exists for: AUTODIM puts a corner radius under a
+# foot in "STANDARD INCHES", which is not in lg:*perimstyles* -- the
+# very call-out for the corner PADDLE is about to pad used to be the
+# thing LINGUTTER erased.
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200)
+inches_rad = rdim(vm, "STANDARD INCHES", (0, 100))     # on the left side
+res = analyze(vm)
+check("P4a a radius dim in STANDARD INCHES on the perimeter is kept",
+      inches_rad not in set(res['kill']))
+check("P4a ...counted regardless of style, not as a perimstyle dim",
+      res['nrad'] == 1 and res['nperim'] == 0, (res['nrad'], res['nperim']))
+
+# a diameter dim behaves the same way (DXF 70 low bits == 3)
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200)
+dia = vm.loads('(entmakex (list (cons 0 "DIMENSION") (cons 8 "DIMENSION")'
+               ' (cons 410 "Model") (cons 70 3) (cons 3 "STANDARD INCHES")'
+               ' (list 10 0.0 100.0 0.0)))')
+res = analyze(vm)
+check("P4a a diameter dim on the perimeter is kept the same way",
+      dia not in set(res['kill']) and res['nrad'] == 1, res['nrad'])
+
+# off the perimeter, style buys a radius dim nothing either -- it goes
+# with the rest, exactly like any other dimension on the hopper
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200)
+rectangle(vm, 100, 60, 200, 140)
+hopper_rad = rdim(vm, "SIDE STANDARD", (200, 100))      # on the hopper
+res = analyze(vm)
+check("P4a a radius dim off the perimeter still goes",
+      hopper_rad in set(res['kill']))
+check("P4a ...it is judged by lg:on-perim-p like any other, not spared",
+      res['dropped'] == {"SIDE STANDARD - not on the perimeter": 1},
+      res['dropped'])
+
+
+# ------------------------- P4b. "Keep CROSS DIMENSIONS?" and where it sits
+
+print("== P4b. CROSS DIMENSIONS: asked, and judged by location ==")
+
+
+def crossvm():
+    """The pool alone, with a cross dim in each of the situations the
+    Yes answer has to tell apart."""
+    vm = newvm()
+    rectangle(vm, 0, 0, 300, 200)
+    d = {
+        # corner to corner: a real diagonal, spans full X AND full Y,
+        # and both ends happen to be vertices too
+        'corner': dim(vm, "CROSS DIMENSIONS", (0, 0), (300, 200)),
+        # side to side through the MIDDLE of each side, at neither
+        # corner: still "goes full Y" - an overall check dim
+        'midspan': dim(vm, "CROSS DIMENSIONS 0.5", (150, 0), (150, 200)),
+        # a small dim entirely inside, touching nothing, spanning
+        # nowhere near the pool - not a cross measurement of it at all
+        'small': dim(vm, "CROSS DIMENSIONS 0.5", (20, 20), (80, 80)),
+        # one end at a corner, the other partway along that SAME side -
+        # a fraction of one side, not the pool - even though it spans
+        # most of the width (250 of 300, over lg:*crossspan*)
+        'partial': dim(vm, "CROSS DIM", (0, 0), (250, 0)),
+        # neither inside nor anywhere near the perimeter
+        'stray': dim(vm, "CROSS DIM", (350, 50), (380, 80)),
+    }
+    return vm, d
+
+
+vm, d = crossvm()
+res = analyze(vm, keepcross=True)
+kill = set(res['kill'])
+check("P4b corner to corner: a real diagonal, kept",
+      d['corner'] not in kill)
+check("P4b side to side through the middle: still goes full Y, kept",
+      d['midspan'] not in kill)
+check("P4b a small dim entirely inside, touching nothing: dropped",
+      d['small'] in kill)
+check("P4b corner to a random point along the SAME side: dropped even"
+      " though it spans most of the width",
+      d['partial'] in kill)
+check("P4b neither inside nor touching the perimeter: dropped",
+      d['stray'] in kill)
+check("P4b two of the four counted as kept for style",
+      res['nany'] == 2, res['nany'])
+check("P4b the other two are named by reason",
+      res['dropped']
+      == {"CROSS DIMENSIONS 0.5 - not a full span or a full perimeter"
+          " edge": 1,
+          "CROSS DIM - not a full span or a full perimeter edge": 2},
+      res['dropped'])
+
+# a short SIDE, corner to corner, that would never pass lg:*crossspan*
+# on its own - an L-shaped perimeter so one side is short relative to
+# the whole shape's bounding box
+vm = newvm()
+for a, b in [((0, 0), (300, 0)), ((300, 0), (300, 120)),
+             ((300, 120), (120, 120)), ((120, 120), (120, 300)),
+             ((120, 300), (0, 300)), ((0, 300), (0, 0))]:
+    line(vm, a, b)
+short_edge = dim(vm, "CROSS DIMENSIONS", (300, 120), (120, 120))
+short_partial = dim(vm, "CROSS DIM", (300, 120), (200, 120))
+res = analyze(vm, keepcross=True)
+kill = set(res['kill'])
+check("P4b a short side corner to corner is kept on vertices alone",
+      short_edge not in kill)
+check("P4b ...but a corner to a random point on that SAME short side"
+      " is still dropped", short_partial in kill)
+check("P4b the short edge's span really is under lg:*crossspan*",
+      180.0 / 300.0 < 0.8)
+
+# Answered No, none of the CROSS-style dims gets the exemption -- they
+# are judged like any other style not in lg:*perimstyles*, and named
+# as such
+vm, d = crossvm()
+res = analyze(vm, keepcross=False)
+kill = set(res['kill'])
+check("P4b answered No: every CROSS-style dim goes",
+      all(d[k] in kill for k in d))
+check("P4b ...zero kept for style", res['nany'] == 0, res['nany'])
+check("P4b ...and the reason names the answer, not the geometry",
+      res['dropped']
+      == {'CROSS DIMENSIONS - "Keep CROSS DIMENSIONS?" answered No': 1,
+          'CROSS DIMENSIONS 0.5 - "Keep CROSS DIMENSIONS?" answered No': 2,
+          'CROSS DIM - "Keep CROSS DIMENSIONS?" answered No': 2},
+      res['dropped'])
+
+# a radius dim on the perimeter needs no exemption from the CROSS
+# DIMENSIONS question at all -- the two rules do not interact
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200)
+rad = rdim(vm, "SIDE STANDARD", (300, 100))
+res = analyze(vm, keepcross=False)
+check("P4b a radius dim on the perimeter is kept whichever way that"
+      " question is answered",
+      rad not in set(res['kill']) and res['nrad'] == 1, res['nrad'])
 
 
 # ------------------------------------------------------ P5. the whole run
@@ -574,29 +737,32 @@ check("P5 ...and carries the same vertices and bulges",
       f"{flat(list(after[1:]))} != {flat([list(v) for v in before])}")
 
 
-# ---------------------------------------------------- P6. it asks first
+# ------------------------------------------------- P6. no confirmation asked
 
-print("== P6. it asks before erasing, and No means no ==")
+print("== P6. it erases without asking ==")
 
 vm, d = keepvm()
 vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
 n = len(alive(vm))
-vm.run('c:LINGUTTER', [alive(vm), "No"])
+vm.run('c:LINGUTTER', [alive(vm), "Yes"])
 out = "".join(str(x) for x in vm.printed)
-check("P6 No erases nothing", len(alive(vm)) == n, len(alive(vm)))
-check("P6 ...and draws nothing", not alive_of(vm, 'LWPOLYLINE'))
-check("P6 ...and does not run PADDLE", "STUB-PADDLE-RAN" not in out)
-check("P6 the question defaults to No",
-      any("<No>" in str(p[0]) for p in vm.prompts), vm.prompts)
-check("P6 the bracket is the keyword list",
-      any("[Yes/No]" in str(p[0]) for p in vm.prompts), vm.prompts)
+check("P6 it erases the objects it did not keep, unasked",
+      len(alive(vm)) < n, len(alive(vm)))
+check("P6 ...and draws the perimeter", len(alive_of(vm, 'LWPOLYLINE')) == 1)
+check("P6 ...and hands off to PADDLE", "STUB-PADDLE-RAN" in out)
+check("P6 it asks nothing to CONFIRM the erase - only which objects to"
+      " gut and whether to keep CROSS DIMENSIONS",
+      vm.prompts and all(
+          'ssget' in str(p[0]) or 'CROSS DIMENSIONS' in str(p[0])
+          for p in vm.prompts),
+      vm.prompts)
 
-# no perimeter, no question at all
+# no perimeter, nothing erased either
 vm = newvm()
 line(vm, (0, 0), (300, 0))
 n = len(alive(vm))
-vm.run('c:LINGUTTER', [alive(vm)])
-check("P6 with no perimeter it never asks", len(alive(vm)) == n)
+vm.run('c:LINGUTTER', [alive(vm), "Yes"])
+check("P6 with no perimeter nothing is erased", len(alive(vm)) == n)
 
 
 # ------------------------------------------------------ P7. the dry run
@@ -606,15 +772,17 @@ print("== P7. LINGUTTERSCAN changes nothing ==")
 vm, d = keepvm()
 vm.loads('(defun c:PADDLE ( / ) (princ "\\nSTUB-PADDLE-RAN") (princ))')
 n = len(alive(vm))
-vm.run('c:LINGUTTERSCAN', [alive(vm)])
+vm.run('c:LINGUTTERSCAN', [alive(vm), "Yes"])
 out = "".join(str(x) for x in vm.printed)
 check("P7 nothing is erased", len(alive(vm)) == n, len(alive(vm)))
 check("P7 nothing is drawn", not alive_of(vm, 'LWPOLYLINE'))
 check("P7 PADDLE is not run", "STUB-PADDLE-RAN" not in out)
 check("P7 it still reports the same numbers",
       "perimeter traced" in out and "STANDARD - not on the perimeter" in out)
-check("P7 it asks nothing", vm.prompts and all(
-    'ssget' in str(p[0]) for p in vm.prompts), vm.prompts)
+check("P7 it asks only which objects to gut and the CROSS DIMENSIONS"
+      " question", vm.prompts and all(
+    'ssget' in str(p[0]) or 'CROSS DIMENSIONS' in str(p[0])
+    for p in vm.prompts), vm.prompts)
 
 
 # ------------------------------------------- P8. PADDLE not in the session
@@ -792,7 +960,7 @@ vm = newvm()
 rectangle(vm, 0, 0, 300, 200, gap=100.0)
 vm.loads('(setq lg:*snaps* nil)')
 try:
-    vm.loads('(lg:report (lg:analyze (ssget "_X")))')
+    vm.loads('(lg:report (lg:analyze (ssget "_X") T) T)')
     out = "".join(str(x) for x in vm.printed)
     check("P11 an empty ladder still reports the wrap instead of erroring",
           "wrapped" in out and "convex hull" in out, out[-200:])
@@ -813,7 +981,9 @@ vm.loads('(setq lg:*ontol* -1.0)')
 res = analyze(vm)
 check("P11 a negative on-perimeter tolerance keeps no perimeter dim",
       res['nperim'] == 0, res['nperim'])
-check("P11 ...and the styled-anywhere ones are still kept",
+check("P11 ...the radial-on-perimeter rule needs on-perim-p too, and goes",
+      res['nrad'] == 0, res['nrad'])
+check("P11 ...and the ones genuinely INSIDE the perimeter are still kept",
       res['nany'] == 2, res['nany'])
 
 vm, d = keepvm()
@@ -834,7 +1004,8 @@ SRC = open(LINGUTTER, encoding="utf-8").read()
 SRC_LINES = SRC.splitlines()
 KNOBS = ["lg:*poollayer*", "lg:*poolcolor*", "lg:*anystyles*",
          "lg:*perimstyles*", "lg:*keeplayers*", "lg:*skiplayers*",
-         "lg:*ontol*", "lg:*snaps*", "lg:*cover*", "lg:*runpaddle*"]
+         "lg:*ontol*", "lg:*snaps*", "lg:*cover*", "lg:*crossspan*",
+         "lg:*runpaddle*"]
 
 
 def setq_line(name):

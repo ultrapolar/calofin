@@ -30,11 +30,13 @@ can still be clicked, it just cannot be typed.
 1. **Select the perimeter** -- the wall the distances were taped off.
    Any curve: a polyline (arc segments included), a line, an arc, a
    circle, and anything else AutoCAD can measure along.
-2. **Click the centre of the pool.** That is the whole of the direction
-   question: a mark runs square off the wall toward the side the centre
-   is on, so nothing has to be answered per point. It is the one pick in
-   the command that is a place rather than a point. `Back` re-opens the
-   selection.
+2. **Only when the wall does not close: click the side the pool is
+   on.** A closed wall defines its own inside and is asked nothing --
+   see [How the direction is found](#how-the-direction-is-found). An
+   open one (a stretch of coping traced on its own) has no inside, so
+   the one pick in the command that is a place rather than a point
+   survives there: a mark runs square off the wall toward the side you
+   click. `Back` re-opens the selection.
 3. **Name a survey point, give the distance, and repeat.**
 
    ```
@@ -63,21 +65,72 @@ can still be clicked, it just cannot be typed.
    zero and the run starts on the wall itself -- which is how a step
    that dies back into the wall is drawn. The two can be named in
    either order: the marks say which way round the run goes (below).
-6. The polyline goes in on the perimeter's own layer and properties,
-   every circle is erased, and every line becomes a `SIDE STANDARD`
-   dimension on layer `DIMENSION`.
+6. **The dimension style**, last, and only when there is a polyline to
+   draw:
+
+   ```
+   Dimension style - STANDARD INCHES or SIDE STANDARD? [STandard/SIde/Back] <STandard>:
+   ```
+
+   `PERPPTS` and `CPERPPTS` ask this in exactly these words -- one
+   question, one vocabulary. A pair of ends with nothing between them is
+   reported instead of being asked a question it would throw away.
+7. The polyline goes in on the perimeter's own layer and properties,
+   every circle is erased, and every line becomes a dimension in that
+   style on layer `DIMENSION`.
 
 ### How the direction is found
 
 Each mark's base point is the point of the perimeter closest to the
 survey point. The perimeter's tangent there, turned 90 degrees, gives
-the two ways a mark could run; the one whose direction agrees with
-"toward the centre click" is the one used. It is worked out per mark
-rather than fixed once, so a run of marks round a corner or along a
-radius each come off their own piece of wall square.
+the two ways a mark could run, and the **inside of the pool** says
+which. It is worked out per mark rather than fixed once, so a run of
+marks round a corner or along a radius each come off their own piece
+of wall square.
 
-That makes the centre click a DIRECTION, not a datum: it is never
-measured from and it does not have to be the true centroid.
+**A closed wall defines its own inside**, and that is what is used:
+the direction the wall is drawn in — its signed area — turns the
+tangent into the water at every point of it, whatever shape it is. So
+the pool is never asked about and cannot be answered wrongly. The same
+sign has driven `ABHD`'s hopper and slope lines for as long as they
+have existed.
+
+> Before v1.5 it was one click — "the centre of the pool" — and one
+> dot product per mark. That is right only for a shape with no notch
+> in it: on a narrow L or a keyhole a centre clicked in one lobe sits
+> on the wrong side of a wall in the other, and every mark there came
+> out backwards, pointing into the deck.
+
+The click survives exactly where there genuinely is no inside: an
+**open** wall, where nothing but the drafter knows which side the
+water is on. A closed wall that encloses nothing measurable — a
+doubled-back trace, a figure-eight — falls back to the same click
+rather than guessing from an area near zero.
+
+### A distance that fights its neighbours
+
+Three points in a row taped 40, 10 and 30 are not a wall: the wall
+between a 40 and a 30 is about 35, and the 10 is a digit that went in
+wrong. When the round ends, any distance sitting against **both** its
+neighbours along the wall by more than `pm:*spike-tol*` (2″) is named,
+with the number they put there:
+
+```
+Pt.2 measures 10.00, against Pt.1 (40.00) and Pt.3 (30.00) on both
+sides - the wall between them is about 35.00.
+  If that is a digit, name Pt.2 again and the new distance replaces it.
+```
+
+Nothing is changed for you — a surveyed value is the one thing a
+drawing tool may not quietly overwrite — and naming that point again
+is the fix, which it already was. A real curve says nothing however
+hard it bends: 40, 38, 30 has every value between its neighbours, and
+it is fighting *both* sides at once that marks a typo.
+
+A mark whose far end lands **outside** a closed pool is named the same
+way (`Pt.7 reaches past the far wall`): the tape reached past the far
+wall, so either the number or the point is wrong. The mark is drawn
+either way.
 
 ### The order the polyline runs in
 
@@ -116,7 +169,7 @@ number of marks, so which way round it goes is yours to say.
 Click a spot the run passes through [Back]:
 ```
 
-One click, on a spot the run passes through. Like the centre click it is
+One click, on a spot the run passes through. Like the side click it is
 a DIRECTION and not a datum: it is projected onto the wall only to ask
 which arc it fell on. A tie needs at least two marks to be a tie, and
 marks that ARE the two ends do not vote (an end sits on both arcs), so
@@ -150,7 +203,8 @@ At the top of the file, between the version banner and the first
 | `pm:*markcolor*` | `1` | The ACI that layer is CREATED with, on a drawing that lacks it. A number, not `'auto`: these marks are the measurement record and are meant to be seen, not to recede |
 | `pm:*dimlayer*` | `"DIMENSION"` | Where the dimensions land |
 | `pm:*dimcolor*` | `7` | The ACI that layer is created with |
-| `pm:*dimstyle*` | `"SIDE STANDARD"` | The dimension style to draw in. A drawing without it keeps its current style and is told so |
+| `pm:*dimstyle-std*` | `"STANDARD INCHES"` | The style the `STandard` answer draws in -- the Enter answer. The question is built from this name, so renaming it renames what the prompt offers; the KEYWORD stays `STandard`, which is the vocabulary all three perp tools share |
+| `pm:*dimstyle-side*` | `"SIDE STANDARD"` | The same for the `SIde` answer. A drawing that has neither style keeps its current one and is told so |
 | `pm:*point-block*` | `"ab_pt"` | The block whose INSERTs are survey points wherever they sit. Shared with `BPCALLOUT`, `CDCALLOUT`, `ABFIND` and `LHD` -- change it in all of them or the tools disagree about what the drawing holds |
 | `pm:*point-layer*` | `"POINTS"` | The layer whose POINTs and INSERTs are survey points whatever block they are |
 | `pm:*pt-tag*` | `"number"` | The attribute tag that names a point. A block without it lends its first attribute that reads as a number instead |
@@ -158,6 +212,7 @@ At the top of the file, between the version banner and the first
 | `pm:*pt-prefix*` | `"Pt."` | How a point is named in the prompts and the report |
 | `pm:*snap*` | `12.0` | How close a CLICK has to land to a survey point to pick it. A typed number never uses it -- a name is exact. `12.0` is what `BPCALLOUT` and `ABFIND` snap at, so a drafter's aim carries between the three |
 | `pm:*fuzz*` | `1e-6` | What counts as the same point: it keeps a zero-length segment out of the joined polyline and a zero-length normal out of the direction test |
+| `pm:*spike-tol*` | `2.0` | How far a distance has to sit **against both** its neighbours along the wall before the round names it, and names the number they put there. Raising it hides typos; lowering it starts naming real steps |
 
 ## Notes & limitations
 
@@ -166,12 +221,11 @@ At the top of the file, between the version banner and the first
   between those ends can reach them all -- the arc with more of them is
   taken and the rest are named. If that is not what you meant, the ends
   are what to change.
-- **The centre click has to be unambiguously inside.** Which way a mark
-  runs is decided by the sign of one dot product, so on a deeply
-  notched shape -- a narrow L, a keyhole -- a centre clicked in one
-  lobe can sit on the wrong side of a wall in the other. Click it
-  where it is clearly inside the part of the pool being measured, and
-  read the marks before answering step 4.
+- **An open wall's side click has to be unambiguously inside.** On an
+  open wall the direction is decided by the sign of one dot product
+  against the spot you clicked, so a click near the line of the wall
+  itself leaves the two sides tied and is re-asked. A closed wall does
+  not use the click at all and is not exposed to this.
 - **The joined polyline is straight-segmented.** The marks are the
   spots the sheet names, not a dense sample, so they are joined with
   straight runs. A curved feature that has to FOLLOW a radiused wall is
@@ -204,8 +258,13 @@ Runtime tests: the real file is loaded into `tests/lispvm.py` and
 `c:PERPMARK` is driven from a script, so the naming (a click landing on
 the right point, a typed number finding it, the five spellings meeting
 in the middle, a bad number and a duplicate number re-asked), the
-projection, the direction, the stations, the wall order, the seam wrap,
+projection, the direction (a closed wall marking inward whichever way
+round it was drawn, an L marking inward on both its arms, an open wall
+still asking), the round's own review of its numbers (the 10 between a
+40 and a 30 named, a real bend left alone, a tape that reached past the
+far wall named), the stations, the wall order, the seam wrap,
 the ends being nameable in either order, the tie click and what it
-leaves out, the run ends deciding by identity, the six `Back` steps and
-the session the command hands back are all measured against the file
-that actually ships.
+leaves out, the run ends deciding by identity, the dimension style with
+both its answers and its Enter, the seven `Back` steps and the session
+the command hands back are all measured against the file that actually
+ships.

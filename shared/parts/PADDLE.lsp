@@ -675,6 +675,7 @@
                                  " overlapping pad(s) merged into their"
                                  " neighbours where features crowd together."))))
             (princ "\nPADDLE: perimeter checked - no concave features need pads."))))
+  (if lzd:end (lzd:end "PADDLE"))
   (princ))
 
 ;; --------------------------- tutorial ------------------------------
@@ -683,7 +684,8 @@
 ;; feature and pads it step by step.
 
 (defun paddle--pause ()
-  (getstring "\n  [ press ENTER to continue ]")
+  ((lambda (v) (if lzd:ask (lzd:ask "\n  [ press ENTER to continue ]" v) v))
+    (getstring "\n  [ press ENTER to continue ]"))
   (princ))
 
 ;; the sample perimeter: straight walls, a 2-degree kink (ignored),
@@ -768,11 +770,13 @@
   (princ (strcat "\n    \"" *paddle-layer* "\", as a single undo step."))
   (paddle--pause)
   (initget "Yes No")
-  (if (/= (getkword "\nDraw a live demonstration in this drawing? [Yes/No] <Yes>: ") "No")
+  (if (/= ((lambda (v) (if lzd:ask (lzd:ask "\nDraw a live demonstration in this drawing? [Yes/No] <Yes>: " v) v))
+            (getkword "\nDraw a live demonstration in this drawing? [Yes/No] <Yes>: ")) "No")
       (progn
         (setq lay *paddle-demo-layer*)
         (vla-put-Color (vla-Add (vla-get-Layers doc) lay) *paddle-demo-color*)
         (setq base (getpoint "\nPick a clear spot for the demo <0,0>: "))
+        (if lzd:ask (lzd:ask "\nPick a clear spot for the demo <0,0>: " base) base)
         (if (not base) (setq base '(0.0 0.0 0.0)))
         (setq pl   (paddle--demo-pline base lay)
               ents (list pl))
@@ -820,11 +824,13 @@
                        " pad(s) along the curve, on layer \"" *paddle-layer* "\"."))
         (paddle--pause)
         (initget "Yes No")
-        (if (= (getkword "\nErase the demonstration? [Yes/No] <No>: ") "Yes")
+        (if (= ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demonstration? [Yes/No] <No>: " v) v))
+                 (getkword "\nErase the demonstration? [Yes/No] <No>: ")) "Yes")
             (foreach e ents (entdel e)))))
   (princ "\nEnd of tutorial. Type PADDLE to run it on a real drawing.")
   (vla-EndUndoMark doc)
   (setq mark-open nil)
+  (if lzd:end (lzd:end "TUTORIALPADDLE"))
   (princ))
 
 (defun c:PADDLEVER ()

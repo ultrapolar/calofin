@@ -28,6 +28,20 @@
 ;;; ordered BETWEEN those two: a nearest-neighbour walk from the start,
 ;;; the end forced last, then 2-opt uncrossing with both ends pinned.
 ;;;
+;;; NAMING A POINT: the two ends, and every other question about a
+;;; survey point - a stretch end, a corner, a held point, a point to
+;;; omit - are asked PERPMARK's way, because each is a question about
+;;; a point the drawing already holds and not about a place: click the
+;;; point, or type its number ("17", "Pt.17", "pt 17", "#17" and "017"
+;;; all name the same one).  A click has to land within *ABL-SNAP* of
+;;; a point to pick it; a click on nothing, a number nothing carries
+;;; and a number two points share are re-asked where they stand,
+;;; never snapped to whatever was nearest.  A stretch, corner or hold
+;;; is declared before the points are selected, so it is matched to
+;;; the selection afterwards by the point's own identity - and one
+;;; declared on a point that was not selected is named and dropped,
+;;; not snapped onto some other point.
+;;;
 ;;; WHAT COUNTS AS A POINT - ABHD's survey classifier:
 ;;;   * an INSERT of the survey point block ("ab_pt"), on any layer;
 ;;;     the number attribute it carries names it in reports AND is what
@@ -69,7 +83,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.2")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.3")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -87,6 +101,14 @@
 (setq *ABL-MISS-RADIUS*  4.0)        ; radius of those rings (4 inches)
 (setq *ABL-PT-TAG*       "number")   ; attribute tag on the point block
                                     ; naming the point, as in "Pt.17"
+(setq *ABL-SNAP*         12.0)       ; a CLICK within this of a survey
+                                    ; point names that point - at a
+                                    ; run end, a stretch end, a corner,
+                                    ; a held point, a point to omit.  A
+                                    ; typed number never uses it: a
+                                    ; name is exact.  12.0 is what
+                                    ; BPCALLOUT, ABFIND and PERPMARK
+                                    ; snap at
 (setq *ABL-WALL-LAYER*   "POOL-WALLS") ; layer for the dashed markers of
                                     ; declared straight stretches
 (setq *ABL-TOL-MAX*      2.0)        ; hard ceiling on the max-distance
@@ -525,32 +547,6 @@
       (setq k (cdr p))))
   (if k k 0))
 
-;; The lowest and highest survey number in QS, as (lo . hi).
-(defun abl:key-range (qs / lo hi k q)
-  (foreach q qs
-    (setq k (abl:pt-key q))
-    (if (or (null lo) (< k lo)) (setq lo k))
-    (if (or (null hi) (> k hi)) (setq hi k)))
-  (if lo (cons lo hi)))
-
-;; The point in QS whose survey number is N, or nil when no point
-;; carries it.  The first one read wins -- see abl:count-key, which is
-;; what stops that being a silent choice.
-(defun abl:pt-of-key (n qs / out q)
-  (foreach q qs
-    (if (and (null out) (= (abl:pt-key q) n)) (setq out q)))
-  out)
-
-;; How many points in QS carry survey number N.  Two points sharing one
-;; is a mistake in the SURVEY, not in the drawing, and typing that
-;; number is the moment it becomes visible -- so it is counted and said
-;; rather than resolved quietly in favour of whichever was read first.
-(defun abl:count-key (n qs / c q)
-  (setq c 0)
-  (foreach q qs
-    (if (= (abl:pt-key q) n) (setq c (1+ c))))
-  c)
-
 ;; What to call the survey point at Q.
 (defun abl:pt-name (q / nm p)
   (setq nm nil)
@@ -566,6 +562,92 @@
     (setq d (cal:dist p q))
     (if (or (null bd) (< d bd)) (setq best q bd d)))
   best)
+
+;; ---- naming a survey point -------------------------------------------
+;; A declaration is ABOUT a survey point - the wall runs from Pt.17 to
+;; Pt.22, Pt.9 is a corner, Pt.30 is held, Pt.41 is left out - so every
+;; question below NAMES one rather than placing it.  This is PERPMARK's
+;; infrastructure, carried here under this file's own prefix so the
+;; standalone file loads alone (STANDARDS section 4; the grouped build
+;; takes it from CALOFIN-LIB): one prompt takes a click OR a typed
+;; number - "17", "Pt.17", "pt 17", "#17" and "017" all name the same
+;; point - a click has to land within *ABL-SNAP* of a point to pick it,
+;; and every miss - a click on nothing, a number nothing carries, a
+;; number two points share - is re-asked where it stands.  What used to
+;; happen: a click ANYWHERE was snapped to the nearest survey point
+;; after the selection, however far off it landed, and a wall end that
+;; took the wrong point was a bad fit with no visible cause.
+;;
+;; A candidate is (position name): where the point is, and what the
+;; prompts and the report call it.  The position is its IDENTITY - it
+;; is what the fitter holds, and what a declaration made before the
+;; selection is matched to once the selection is in hand.
+
+;; Every survey point in the DRAWING as a candidate, for the
+;; declarations asked before the selection exists (step 4).  The
+;; classifier is the selection's own: an ab_pt INSERT wherever it
+;; sits, any other INSERT on the POINTS layer, and a plain POINT on
+;; ANY layer.  A point with no readable number is called "?": it can
+;; be clicked, not typed.
+(defun abl:collect-points ( / ss i en ed typ nm out)
+  (setq out nil
+        ss  (ssget "_X" '((0 . "INSERT,POINT"))))
+  (if ss
+    (progn
+      (setq i 0)
+      (repeat (sslength ss)
+        (setq en  (ssname ss i)
+              ed  (entget en)
+              typ (cdr (assoc 0 ed))
+              nm  nil)
+        (cond
+          ((= typ "INSERT")
+           (if (or (= (strcase (cdr (assoc 2 ed)))
+                      (strcase *ABL-POINT-BLOCK*))
+                   (= (strcase (cdr (assoc 8 ed)))
+                      (strcase *ABL-POINT-LAYER*)))
+             (progn
+               (setq nm (cal:block-number en *ABL-PT-TAG*))
+               (setq out (cons (list (cal:2d (cdr (assoc 10 ed)))
+                                     (if (and nm (/= nm "")) nm "?"))
+                               out)))))
+          ((= typ "POINT")
+           (setq out (cons (list (cal:2d (cdr (assoc 10 ed))) "?") out))))
+        (setq i (1+ i)))))
+  (reverse out))
+
+;; The candidates for points already in hand - the selection's, or the
+;; omit list's - named the way the report names them.
+(defun abl:cands-of (qs)
+  (mapcar '(lambda (q) (list q (abl:pt-name q))) qs))
+
+;; T when the named point is one of DPTS.  When it is not, the WHAT
+;; declared on it is named and dropped: it is a declaration about a
+;; point the selection does not hold, never a near miss to be snapped
+;; onto some other point.
+(defun abl:declared-in (cand dpts what)
+  (if (abl:memb (car cand) dpts)
+    T
+    (progn
+      (princ (strcat "\n  (Pt." (cadr cand) " is not among the selected"
+                     " points - the " what " declared on it is dropped)"))
+      nil)))
+
+;; The second end of a stretch from C1: required, and a different point
+;; from C1 - the same one again is refused and re-asked where it
+;; stands.  Returns the candidate or CAL-BACK.
+(defun abl:ask-wall-end (c1 cands / c2)
+  (setq c2 (cal:askpoint (strcat "  Second end, from Pt." (cadr c1)
+                                " - pick it or type its number")
+                        nil T cands *ABL-SNAP*))
+  (while (and (not (eq c2 'CAL-BACK))
+              (< (cal:dist (car c1) (car c2)) *ABL-EXACT-EPS*))
+    (princ (strcat "\n  That is Pt." (cadr c1)
+                   " again - a stretch needs two different points."))
+    (setq c2 (cal:askpoint (strcat "  Second end, from Pt." (cadr c1)
+                                  " - pick it or type its number")
+                          nil T cands *ABL-SNAP*)))
+  c2)
 
 ;; Index of point P in TOUR (exact-point fuzz), or nil.
 (defun abl:tour-index (p tour / i k q)
@@ -1544,9 +1626,11 @@
       (initget "1 2 3 All None Redo")
       (setq pick (getkword
                    "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: "))
+      (if lzd:ask (lzd:ask "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: " pick) pick)
       (if (null pick)
         (progn
           (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+          (if lzd:ask (lzd:ask "\n  Pick the outline to keep (or Enter for 2): " sel) sel)
           (if lzd:watch (lzd:watch sel) sel)
           (if sel
             (progn
@@ -1610,7 +1694,7 @@
 ;; ---- the numeric parameters ------------------------------------------
 
 ;; Each takes BACK: non-nil adds Back (and its hidden Undo synonym) to
-;; the prompt and returns ABL-BACK when it is answered, so the caller
+;; the prompt and returns CAL-BACK when it is answered, so the caller
 ;; can re-open the step before it.  Offering Back never loosens the
 ;; value check - initget keeps its bits either way.
 
@@ -1622,7 +1706,7 @@
                              (if back " [Back]" "") ": ")))
   (if lzd:ask (lzd:ask "abl:ask-tol" tol) tol)
   (cond
-    ((abl:back-kw tol) 'ABL-BACK)
+    ((abl:back-kw tol) 'CAL-BACK)
     (T
      (if (null tol) (setq tol *ABL-TOL*))
      (if (> tol *ABL-TOL-MAX*)
@@ -1644,7 +1728,7 @@
                             (if back " [Back]" "") ": ")))
   (if lzd:ask (lzd:ask "abl:ask-pct" pct) pct)
   (cond
-    ((abl:back-kw pct) 'ABL-BACK)
+    ((abl:back-kw pct) 'CAL-BACK)
     ((null pct) def)
     ((> pct 100)
      (princ "\n  (more than 100 makes no sense - using 100)")
@@ -1660,7 +1744,7 @@
                            (if back " [None/Back]" "") ": ")))
   (if lzd:ask (lzd:ask "abl:ask-cap" mx) mx)
   (cond
-    ((abl:back-kw mx) 'ABL-BACK)
+    ((abl:back-kw mx) 'CAL-BACK)
     (T
      (cond ((null mx) nil)                         ; Enter: keep as-is
            ((eq 'STR (type mx)) (setq *ABL-MAX-ARCS* nil))
@@ -1671,61 +1755,35 @@
 ;; The one thing ABLOBF asks that neither ABHD nor LHD does up front: a
 ;; run that does not close has to start somewhere and stop somewhere,
 ;; and only the drafter knows where.  An end is named by clicking it or
-;; by typing the survey number it already carries in the drawing --
-;; typing wins where the points crowd and a click cannot separate two of
-;; them.  Enter takes the automatic choice, which is the farthest-apart
-;; pair: right often enough to be the default, and wrong exactly when
-;; the run doubles back on itself, which is when you pick by hand.
+;; by typing the survey number it already carries in the drawing -- one
+;; prompt takes both, PERPMARK's abl:askpoint -- and typing wins where
+;; the points crowd and a click cannot separate two of them.  Enter
+;; takes the automatic choice, which is the farthest-apart pair: right
+;; often enough to be the default, and wrong exactly when the run
+;; doubles back on itself, which is when you pick by hand.
 
 ;; One end of the run.  DFLT is the point Enter takes.  OTHER, when
 ;; given, is the end already chosen -- picking it twice would ask for a
 ;; run of no length, so it is refused and re-asked rather than fitted.
-;; Returns the point, or ABL-BACK.
-(defun abl:ask-end (msg dpts dflt other back / v q done out rng)
-  (setq done nil out nil rng (abl:key-range dpts))
-  (while (null done)
-    (setq done T)
-    (if back (initget "Number Back Undo") (initget "Number"))
-    (setq v (getpoint (strcat "\n  " msg " [Number"
-                              (if back "/Back" "") "] <Pt."
-                              (abl:pt-name dflt) ">: ")))
-    (if lzd:ask (lzd:ask msg v) v)
+;; A number no point carries, a number two points share and a click on
+;; nothing are re-asked by abl:askpoint where they stand.  Returns the
+;; point, or CAL-BACK.
+(defun abl:ask-end (msg dpts dflt other back / v out)
+  (setq out nil)
+  (while (null out)
+    (setq v (cal:askpoint (strcat "  " msg " - pick it or type its number")
+                          (strcat "Pt." (abl:pt-name dflt))
+                          back (abl:cands-of dpts) *ABL-SNAP*))
     (cond
-      ((abl:back-kw v) (setq out 'ABL-BACK))
+      ((eq v 'CAL-BACK) (setq out v))
       ((null v) (setq out dflt))                  ; Enter: the offer
-      ((and (eq 'STR (type v)) (= v "Number"))
-       (initget 4)
-       (setq v (getint (strcat "\n    Survey number"
-                               (if rng
-                                 (strcat " (" (itoa (car rng)) " to "
-                                         (itoa (cdr rng)) ")")
-                                 "")
-                               ", or Enter to pick instead: ")))
-       (cond
-         ((null v) (setq done nil))               ; Enter: back to the pick
-         ((setq q (abl:pt-of-key v dpts))
-          (setq out q)
-          (princ (strcat "  - Pt." (abl:pt-name q)))
-          (if (> (abl:count-key v dpts) 1)
-            (princ (strcat "\n    (WARNING: " (itoa (abl:count-key v dpts))
-                           " selected points carry the number " (itoa v)
-                           " - taking the one at "
-                           (rtos (car q) 2 2) "," (rtos (cadr q) 2 2)
-                           ".  Two points with one number is a fault in"
-                           " the survey; click the end instead to be"
-                           " sure of it.)"))))
-         (T
-          (princ (strcat "\n  No selected point carries the number "
-                         (itoa v) " - try again."))
-          (setq done nil))))
-      (T (setq out (abl:snap-break v dpts)))))
-  ;; a run from a point to itself is not a run
-  (if (and out other (not (eq out 'ABL-BACK))
-           (< (cal:dist out other) *ABL-EXACT-EPS*))
-    (progn
-      (princ "\n  That is the other end - the run needs two different points.")
-      (abl:ask-end msg dpts dflt other back))
-    out))
+      ;; a run from a point to itself is not a run
+      ((and other (< (cal:dist (car v) other) *ABL-EXACT-EPS*))
+       (princ "\n  That is the other end - the run needs two different points."))
+      (T
+       (setq out (car v))
+       (princ (strcat "  - Pt." (abl:pt-name out))))))
+  out)
 
 ;; ---- redo-time editing of walls and corners --------------------------
 
@@ -1743,47 +1801,33 @@
       (setq keep (cons en keep))))
   (setq abl-temp (reverse keep)))
 
-;; Snap a picked point onto the nearest survey point.
-(defun abl:snap-break (p dpts / q)
-  (setq p (cal:2d p)
-        q (abl:nearest p dpts))
-  (if (null q)
-    p
-    (progn
-      (if (> (cal:dist p q) (* 3.0 *ABL-TOL*))
-        (princ "\n  (picked well away from any survey point - snapped to the nearest one)"))
-      q)))
-
 ;; Add or remove declared straight stretches.
-(defun abl:edit-walls (dpts / ans wp1 wp2 w1 w2 best bd w d res)
-  (setq ans T res nil)
+(defun abl:edit-walls (dpts / cands ans c1 c2 wp1 best bd w d res)
+  (setq ans T res nil cands (abl:cands-of dpts))
   (while ans
     (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
                 "\n  Straight stretches (" (itoa (length abl-walls))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq abl-phase "picking a straight stretch")
-       (initget "Back Undo")
-       (setq wp1 (getpoint "\n  First end of the straight stretch [Back]: "))
-       (if (abl:back-kw wp1) (setq wp1 nil wp2 nil)
+       (setq c1 (cal:askpoint
+                  "  First end of the straight stretch - pick it or type its number"
+                  "Enter = none" T cands *ABL-SNAP*)
+             c2 nil)
+       (if (and c1 (not (eq c1 'CAL-BACK)))
          (progn
-           (initget "Back Undo")
-           (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
-           (if (abl:back-kw wp2) (setq wp2 nil))))
-       (if wp2
+           (setq c2 (abl:ask-wall-end c1 cands))
+           (if (eq c2 'CAL-BACK) (setq c2 nil))))
+       (if c2
          (progn
-           (setq w1 (abl:snap-break wp1 dpts)
-                 w2 (abl:snap-break wp2 dpts))
-           (if (< (cal:dist w1 w2) *ABL-EXACT-EPS*)
-             (princ "\n  (both ends landed on the same survey point - ignored)")
-             (progn
-               (setq abl-walls (append abl-walls (list (list w1 w2))))
-               (abl:temp-add (abl:tag-mine (abl:draw-wall-marker w1 w2)))
-               (princ (strcat "\n  stretch Pt." (abl:pt-name w1)
-                              " - Pt." (abl:pt-name w2) " added")))))))
+           (setq abl-walls (append abl-walls (list (list (car c1) (car c2)))))
+           (abl:temp-add (abl:tag-mine (abl:draw-wall-marker (car c1) (car c2))))
+           (princ (strcat "\n  stretch Pt." (cadr c1)
+                          " - Pt." (cadr c2) " added")))))
       ((= ans "Remove")
        (if (null abl-walls)
          (princ "\n  (no straight stretches to remove)")
@@ -1791,6 +1835,7 @@
            (setq abl-phase "removing a straight stretch")
            (initget "Back Undo")
            (setq wp1 (getpoint "\n  Pick near the straight stretch to remove [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick near the straight stretch to remove [Back]: " wp1) wp1)
            (if (abl:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
@@ -1808,47 +1853,44 @@
                               " - Pt." (abl:pt-name (cadr best))
                               " removed")))))))
       (T (setq ans nil))))
-  (if res 'ABL-BACK))
+  (if res 'CAL-BACK))
 
 ;; Add or remove declared sharp corners the same way.
-(defun abl:edit-corners (dpts / ans wp1 w1 best bd w res)
-  (setq ans T res nil)
+(defun abl:edit-corners (dpts / cands ans c best w res)
+  (setq ans T res nil cands (abl:cands-of dpts))
   (while ans
     (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
                 "\n  Sharp corners (" (itoa (length abl-corners))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq abl-phase "picking a sharp corner")
-       (initget "Back Undo")
-       (setq wp1 (getpoint "\n  Corner point [Back]: "))
-       (if (abl:back-kw wp1) (setq wp1 nil))
-       (if wp1
-         (progn
-           (setq w1 (abl:snap-break wp1 dpts))
-           (if (abl:memb w1 abl-corners)
-             (princ "\n  (that corner is already declared)")
-             (progn
-               (setq abl-corners (append abl-corners (list w1)))
-               (abl:temp-add (abl:tag-mine (abl:draw-corner-marker w1)))
-               (princ (strcat "\n  corner Pt." (abl:pt-name w1)
-                              " added")))))))
+       (setq c (cal:askpoint "  Corner point - pick it or type its number"
+                            "Enter = none" T cands *ABL-SNAP*))
+       (if (and c (not (eq c 'CAL-BACK)))
+         (if (abl:memb (car c) abl-corners)
+           (princ "\n  (that corner is already declared)")
+           (progn
+             (setq abl-corners (append abl-corners (list (car c))))
+             (abl:temp-add (abl:tag-mine (abl:draw-corner-marker (car c))))
+             (princ (strcat "\n  corner Pt." (cadr c) " added"))))))
       ((= ans "Remove")
        (if (null abl-corners)
          (princ "\n  (no declared corners to remove)")
          (progn
            (setq abl-phase "removing a sharp corner")
-           (initget "Back Undo")
-           (setq wp1 (getpoint "\n  Pick the declared corner to remove [Back]: "))
-           (if (abl:back-kw wp1) (setq wp1 nil))
-           (if wp1
-             (progn
-               (setq wp1 (cal:2d wp1) best nil bd nil)
-               (foreach w abl-corners
-                 (if (or (null bd) (< (cal:dist wp1 w) bd))
-                   (setq best w bd (cal:dist wp1 w))))
+           (setq c (cal:askpoint
+                     "  The declared corner to remove - pick it or type its number"
+                     "Enter = none" T cands *ABL-SNAP*))
+           (cond
+             ((or (null c) (eq c 'CAL-BACK)) nil)
+             ((not (abl:memb (car c) abl-corners))
+              (princ (strcat "\n  (Pt." (cadr c) " is not a declared corner)")))
+             (T
+               (setq best (abl:nearest (car c) abl-corners))
                (setq abl-corners (abl:remove best abl-corners))
                ;; the rings share their look with the omit markers;
                ;; redraw the corner and hold rings (spent omit rings
@@ -1861,47 +1903,44 @@
                (princ (strcat "\n  corner Pt." (abl:pt-name best)
                               " removed")))))))
       (T (setq ans nil))))
-  (if res 'ABL-BACK))
+  (if res 'CAL-BACK))
 
 ;; Add or remove HELD points the same way.
-(defun abl:edit-holds (dpts / ans wp1 w1 best bd w res)
-  (setq ans T res nil)
+(defun abl:edit-holds (dpts / cands ans c best w res)
+  (setq ans T res nil cands (abl:cands-of dpts))
   (while ans
     (initget "Add Remove Keep Back Undo")
     (setq ans (getkword (strcat
                 "\n  Held points (" (itoa (length abl-holds))
                 " declared) - [Add/Remove/Keep/Back] <Keep>: ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
     (cond
       ((member ans '("Back" "Undo")) (setq ans nil res T))
       ((= ans "Add")
        (setq abl-phase "picking a held point")
-       (initget "Back Undo")
-       (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
-       (if (abl:back-kw wp1) (setq wp1 nil))
-       (if wp1
-         (progn
-           (setq w1 (abl:snap-break wp1 dpts))
-           (if (abl:memb w1 abl-holds)
-             (princ "\n  (that point is already held)")
-             (progn
-               (setq abl-holds (append abl-holds (list w1)))
-               (abl:temp-add (abl:tag-mine (abl:draw-hold-marker w1)))
-               (princ (strcat "\n  held Pt." (abl:pt-name w1)
-                              " added")))))))
+       (setq c (cal:askpoint "  Point to hold exactly - pick it or type its number"
+                            "Enter = none" T cands *ABL-SNAP*))
+       (if (and c (not (eq c 'CAL-BACK)))
+         (if (abl:memb (car c) abl-holds)
+           (princ "\n  (that point is already held)")
+           (progn
+             (setq abl-holds (append abl-holds (list (car c))))
+             (abl:temp-add (abl:tag-mine (abl:draw-hold-marker (car c))))
+             (princ (strcat "\n  held Pt." (cadr c) " added"))))))
       ((= ans "Remove")
        (if (null abl-holds)
          (princ "\n  (no held points to remove)")
          (progn
            (setq abl-phase "removing a held point")
-           (initget "Back Undo")
-           (setq wp1 (getpoint "\n  Pick the held point to release [Back]: "))
-           (if (abl:back-kw wp1) (setq wp1 nil))
-           (if wp1
-             (progn
-               (setq wp1 (cal:2d wp1) best nil bd nil)
-               (foreach w abl-holds
-                 (if (or (null bd) (< (cal:dist wp1 w) bd))
-                   (setq best w bd (cal:dist wp1 w))))
+           (setq c (cal:askpoint
+                     "  The held point to release - pick it or type its number"
+                     "Enter = none" T cands *ABL-SNAP*))
+           (cond
+             ((or (null c) (eq c 'CAL-BACK)) nil)
+             ((not (abl:memb (car c) abl-holds))
+              (princ (strcat "\n  (Pt." (cadr c) " is not a held point)")))
+             (T
+               (setq best (abl:nearest (car c) abl-holds))
                (setq abl-holds (abl:remove best abl-holds))
                ;; redraw the rings to match what is left
                (abl:sweep-marks "CIRCLE")
@@ -1912,11 +1951,11 @@
                (princ (strcat "\n  held Pt." (abl:pt-name best)
                               " released")))))))
       (T (setq ans nil))))
-  (if res 'ABL-BACK))
+  (if res 'CAL-BACK))
 
 ;; ---- the command -----------------------------------------------------
 (defun c:ABLOBF ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
-                   step rstep estep mk decls reselect
+                   step rstep estep mk decls reselect cands cand c c1 c2
                    ss i en ed lay typ ext nocs far
                    pts dpts allow tour stale npt
                    v e1 e2
@@ -2003,7 +2042,7 @@
                       (itoa (fix (+ 0.5 (* 100.0 *ABL-MISS-PCT*))))
                       " percent."))
        (setq v (abl:ask-pct *ABL-MISS-PCT* T))
-       (if (eq v 'ABL-BACK)
+       (if (eq v 'CAL-BACK)
          (progn (princ "\n  Stepping back one question.")
                 (setq step 1))
          (setq abl-miss-pct v
@@ -2014,7 +2053,7 @@
        (setq abl-phase "reading the curve limit")
        (princ "\n\n  Step 3 of 6 - limit how many curves the result may use?")
        (princ "\n  Type a whole number, or None for no limit.")
-       (if (eq (abl:ask-cap T) 'ABL-BACK)
+       (if (eq (abl:ask-cap T) 'CAL-BACK)
          (progn (princ "\n  Stepping back one question.")
                 (setq step 2))
          (setq step 4)))
@@ -2037,14 +2076,19 @@
              go       T)
        (princ "\n\n  Step 4 of 6 - any dead-straight stretches, sharp corners, or points")
        (princ "\n  to hold ABSOLUTELY?  A held point can never be fudged: the line")
-       (princ "\n  passes through it exactly, in every candidate.  Each is picked by")
-       (princ "\n  its point(s), snapping to the survey points; dashed markers")
+       (princ "\n  passes through it exactly, in every candidate.  Each is named by")
+       (princ "\n  its point(s) - click the point, or type its number; dashed markers")
        (princ "\n  confirm them and clear themselves afterwards.")
        (setq step 5)                    ; unless a Back below says otherwise
+       ;; the points are named before any are selected, so the whole
+       ;; drawing's are the candidates here; the selection decides
+       ;; afterwards which of the declarations it holds
+       (if (null cands) (setq cands (abl:collect-points)))
        (while go
          (initget "Stretch Corner Hold Done Back Undo")
          (setq ans (getkword
                      "\n  Declare a stretch, corner or held point - or Done to fit? [Stretch/Corner/Hold/Done/Back] <Done>: "))
+         (if lzd:ask (lzd:ask "\n  Declare a stretch, corner or held point - or Done to fit? [Stretch/Corner/Hold/Done/Back] <Done>: " ans) ans)
          (cond
            ((member ans '("Back" "Undo"))
             (if decls
@@ -2063,42 +2107,47 @@
                 (setq decls (cdr decls)))
               (progn (princ "\n  Already at the first declaration.")
                      (setq go nil step 3))))
+           ((and (null cands) (member ans '("Stretch" "Corner" "Hold")))
+            (princ "\n  (no survey points in this drawing to declare on - nothing to name)"))
            ((= ans "Hold")
             (setq abl-phase "picking a held point")
-            (initget "Back Undo")
-            (setq wp1 (getpoint "\n  Point to hold exactly [Back]: "))
-            (if (and wp1 (not (abl:back-kw wp1)))
+            (setq c (cal:askpoint "  Point to hold exactly - pick it or type its number"
+                                  "Enter = none" T cands *ABL-SNAP*))
+            (if (and c (not (eq c 'CAL-BACK)))
               (progn
-                (setq wp1      (cal:2d wp1)
-                      rawholds (cons wp1 rawholds)
-                      mk       (abl:temp-add (abl:tag-mine (abl:draw-hold-marker wp1)))
-                      decls    (cons (cons "Hold" mk) decls)))))
+                (setq rawholds (cons c rawholds)
+                      mk       (abl:temp-add (abl:tag-mine
+                                 (abl:draw-hold-marker (car c))))
+                      decls    (cons (cons "Hold" mk) decls))
+                (princ (strcat "\n  Held Pt." (cadr c) ".")))))
            ((= ans "Stretch")
             (setq abl-phase "picking a straight stretch")
-            (initget "Back Undo")
-            (setq wp1 (getpoint "\n  First end of the straight stretch [Back]: "))
-            (if (abl:back-kw wp1) (setq wp1 nil wp2 nil)
+            (setq c1 (cal:askpoint
+                       "  First end of the straight stretch - pick it or type its number"
+                       "Enter = none" T cands *ABL-SNAP*)
+                  c2 nil)
+            (if (and c1 (not (eq c1 'CAL-BACK)))
               (progn
-                (initget "Back Undo")
-                (setq wp2 (if wp1 (getpoint wp1 "\n  Second end [Back]: ")))
-                (if (abl:back-kw wp2) (setq wp2 nil))))
-            (if wp2
+                (setq c2 (abl:ask-wall-end c1 cands))
+                (if (eq c2 'CAL-BACK) (setq c2 nil))))
+            (if c2
               (progn
-                (setq wp1      (cal:2d wp1)
-                      wp2      (cal:2d wp2)
-                      mk       (abl:temp-add (abl:tag-mine (abl:draw-wall-marker wp1 wp2)))
-                      rawwalls (cons (list wp1 wp2) rawwalls)
-                      decls    (cons (cons "Stretch" mk) decls)))))
+                (setq mk       (abl:temp-add (abl:tag-mine
+                                 (abl:draw-wall-marker (car c1) (car c2))))
+                      rawwalls (cons (list c1 c2) rawwalls)
+                      decls    (cons (cons "Stretch" mk) decls))
+                (princ (strcat "\n  Stretch Pt." (cadr c1) " - Pt." (cadr c2) ".")))))
            ((= ans "Corner")
             (setq abl-phase "picking a sharp corner")
-            (initget "Back Undo")
-            (setq wp1 (getpoint "\n  Corner point [Back]: "))
-            (if (and wp1 (not (abl:back-kw wp1)))
+            (setq c (cal:askpoint "  Corner point - pick it or type its number"
+                                  "Enter = none" T cands *ABL-SNAP*))
+            (if (and c (not (eq c 'CAL-BACK)))
               (progn
-                (setq wp1     (cal:2d wp1)
-                      mk      (abl:temp-add (abl:tag-mine (abl:draw-corner-marker wp1)))
-                      rawcnrs (cons wp1 rawcnrs)
-                      decls   (cons (cons "Corner" mk) decls)))))
+                (setq mk      (abl:temp-add (abl:tag-mine
+                                (abl:draw-corner-marker (car c))))
+                      rawcnrs (cons c rawcnrs)
+                      decls   (cons (cons "Corner" mk) decls))
+                (princ (strcat "\n  Corner Pt." (cadr c) ".")))))
            (T (setq go nil))))
        (if (= step 5)
          (progn
@@ -2173,41 +2222,28 @@
                          "  Set UCS to World and flatten them first.")))
         (setq dpts  (if pts (cal:dedupe pts *ABL-EXACT-EPS*))
               allow (cal:ceil (* (abl:misspct) (length dpts))))
-        ;; snap the declared stretch ends and corners onto actual points
+        ;; a declaration was made on a NAMED point before the selection
+        ;; existed, so it is matched to the selection by that point's
+        ;; own identity - and one made on a point the selection does
+        ;; not hold is named and dropped, never snapped onto another
         (setq abl-walls nil)
         (foreach w rawwalls
-          (setq w1 (abl:nearest (car w) dpts)
-                w2 (abl:nearest (cadr w) dpts))
-          (cond
-            ((or (null w1) (null w2)) nil)
-            ((< (cal:dist w1 w2) *ABL-EXACT-EPS*)
-             (princ "\n  (both ends of a declared stretch landed on the same survey point - that stretch is ignored)"))
-            (T
-             (if (or (> (cal:dist (car w) w1) (* 3.0 tol))
-                     (> (cal:dist (cadr w) w2) (* 3.0 tol)))
-               (princ "\n  (a declared stretch end was picked well away from any survey point - snapped to the nearest one)"))
-             (setq abl-walls (cons (list w1 w2) abl-walls)))))
+          (if (and (abl:declared-in (car w) dpts "stretch")
+                   (abl:declared-in (cadr w) dpts "stretch"))
+            (setq abl-walls (cons (list (car (car w)) (car (cadr w)))
+                                  abl-walls))))
         (setq abl-walls (reverse abl-walls))
         (setq abl-corners nil)
         (foreach w rawcnrs
-          (setq w1 (abl:nearest w dpts))
-          (if w1
-            (progn
-              (if (> (cal:dist w w1) (* 3.0 tol))
-                (princ "\n  (a declared corner was picked well away from any survey point - snapped to the nearest one)"))
-              (setq abl-corners (cons w1 abl-corners)))))
+          (if (abl:declared-in w dpts "corner")
+            (setq abl-corners (cons (car w) abl-corners))))
         (setq abl-corners (reverse abl-corners))
-        ;; held points snap onto survey points the same way; duplicates
-        ;; collapse to one
+        ;; duplicates collapse to one
         (setq abl-holds nil)
         (foreach w rawholds
-          (setq w1 (abl:nearest w dpts))
-          (if w1
-            (progn
-              (if (> (cal:dist w w1) (* 3.0 tol))
-                (princ "\n  (a held point was picked well away from any survey point - snapped to the nearest one)"))
-              (if (not (abl:memb w1 abl-holds))
-                (setq abl-holds (cons w1 abl-holds))))))
+          (if (and (abl:declared-in w dpts "hold")
+                   (not (abl:memb (car w) abl-holds)))
+            (setq abl-holds (cons (car w) abl-holds))))
         (setq abl-holds (reverse abl-holds))
         (if (> (length dpts) 150)
           (princ (strcat "\nABLOBF: " (itoa (length dpts))
@@ -2255,7 +2291,7 @@
                 (setq abl-phase "picking the point the run starts at"
                       v (abl:ask-end "Point the run STARTS at" dpts
                                      (car far) nil T))
-                (if (eq v 'ABL-BACK)
+                (if (eq v 'CAL-BACK)
                   (progn (princ "\n  Stepping back to the selection.")
                          (setq reselect T abl-pick nil estep 3))
                   (setq e1 v estep 2)))
@@ -2265,7 +2301,7 @@
                           "Point the run ENDS at" dpts
                           ;; never offer the end already taken
                           (abl:far-from e1 dpts) e1 T))
-                (if (eq v 'ABL-BACK)
+                (if (eq v 'CAL-BACK)
                   (progn (princ "\n  Stepping back one question.")
                          (setq estep 1))
                   (setq e2 v estep 3)))))
@@ -2286,22 +2322,24 @@
                          (setq abl-phase "picking points to omit"
                                omits    nil)
                          (princ "\n\nRedoing the fit.  Any points to leave out this time?")
-                         (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
-                         (princ "\n  anything the line should not chase; each gets a dashed ring.")
+                         (princ "\n  Name each one - click it, or type its number (Enter for none):")
+                         (princ "\n  mis-shots, duplicates, anything the line should not chase;")
+                         (princ "\n  each gets a dashed ring.")
                          (if abl-omitted
                            (princ (strcat "\n  " (itoa (length abl-omitted))
                                           " point(s) are already out -"
-                                          " picking one of those puts it"
+                                          " naming one of those puts it"
                                           " BACK IN.")))
-                         (while (setq wp1 (getpoint
-                                            "\n  Point to omit - or a ringed one to restore (Enter when done): "))
-                           (setq wp1 (cal:2d wp1)
-                                 w1  (abl:nearest wp1 dpts)
-                                 w2  (abl:nearest wp1 (mapcar 'car abl-omitted)))
+                         (while (setq cand (cal:askpoint
+                                             "  Point to omit, or a ringed one to restore - pick it or type its number"
+                                             "Enter = done" nil
+                                             (abl:cands-of
+                                               (append dpts (mapcar 'car abl-omitted)))
+                                             *ABL-SNAP*))
+                           (setq w1 (car cand)
+                                 w2 (abl:nearest w1 (mapcar 'car abl-omitted)))
                            (cond
-                             ((and w2 (or (null w1)
-                                          (<= (cal:dist wp1 w2)
-                                              (cal:dist wp1 w1))))
+                             ((and w2 (< (cal:dist w1 w2) *ABL-EXACT-EPS*))
                               (setq ent        (assoc w2 abl-omitted)
                                     pts        (append pts (cadr ent))
                                     dpts       (cal:dedupe pts *ABL-EXACT-EPS*)
@@ -2390,12 +2428,12 @@
                                   (setq rstep 2))
                                  ((= rstep 2)
                                   (setq abl-phase "editing sharp corners")
-                                  (setq rstep (if (eq (abl:edit-corners dpts) 'ABL-BACK)
+                                  (setq rstep (if (eq (abl:edit-corners dpts) 'CAL-BACK)
                                                 (progn (princ "\n  Stepping back one question.") 1)
                                                 3)))
                                  ((= rstep 3)
                                   (setq abl-phase "editing held points")
-                                  (setq rstep (if (eq (abl:edit-holds dpts) 'ABL-BACK)
+                                  (setq rstep (if (eq (abl:edit-holds dpts) 'CAL-BACK)
                                                 (progn (princ "\n  Stepping back one question.") 2)
                                                 4)))
                                  ((= rstep 4)
@@ -2408,7 +2446,7 @@
                                             "Point the run STARTS at"
                                             dpts e1 nil T))
                                   (cond
-                                    ((eq v 'ABL-BACK)
+                                    ((eq v 'CAL-BACK)
                                      (princ "\n  Stepping back one question.")
                                      (setq rstep 3))
                                     (T
@@ -2421,7 +2459,7 @@
                                                   (abl:far-from e1 dpts)
                                                   e2)
                                                 e1 T))
-                                     (if (eq v 'ABL-BACK)
+                                     (if (eq v 'CAL-BACK)
                                        ;; back to the START ask, which is
                                        ;; the top of this same step
                                        (progn (princ "\n  Stepping back one question.")
@@ -2431,20 +2469,20 @@
                                   (princ "\n\n  New settings - Enter keeps each one as it is.")
                                   (setq abl-phase "reading the tolerance"
                                         v        (abl:ask-tol T))
-                                  (if (eq v 'ABL-BACK)
+                                  (if (eq v 'CAL-BACK)
                                     (progn (princ "\n  Stepping back one question.")
                                            (setq rstep 4))
                                     (setq tol v rstep 6)))
                                  ((= rstep 6)
                                   (setq abl-phase "reading the miss percentage"
                                         v        (abl:ask-pct abl-miss-pct T))
-                                  (if (eq v 'ABL-BACK)
+                                  (if (eq v 'CAL-BACK)
                                     (progn (princ "\n  Stepping back one question.")
                                            (setq rstep 5))
                                     (setq abl-miss-pct v rstep 7)))
                                  ((= rstep 7)
                                   (setq abl-phase "reading the curve limit")
-                                  (setq rstep (if (eq (abl:ask-cap T) 'ABL-BACK)
+                                  (setq rstep (if (eq (abl:ask-cap T) 'CAL-BACK)
                                                 (progn (princ "\n  Stepping back one question.") 6)
                                                 8)))))
                              (setq allow (cal:ceil (* (abl:misspct)
@@ -2468,6 +2506,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (setq *error* abl-old-err)   ; restore the previous error handler
+  (if lzd:end (lzd:end "ABLOBF"))
   (princ))
 
 (defun c:ABLOBFVER ()

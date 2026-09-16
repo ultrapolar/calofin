@@ -123,6 +123,7 @@
 ;; DD-BACK instead - the caller re-opens its previous question.
 (defun dd-parse-height (prompt back / s sign fpos ftxt itxt feet inch)
   (setq s (getstring T prompt))
+  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
   (cond
     ((or (null s) (= (vl-string-trim " \t" s) "")) nil)
     ((and back (cal:back-word-p s)) 'DD-BACK)
@@ -183,6 +184,7 @@
        (setq h (getreal (strcat "\nDrone height above the deck, in FEET"
                                 (if cur-h (strcat " <" (dd-num cur-h) ">") "")
                                 " [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") h) h)
        (cond
          ((= (type h) 'STR) (setq stage 1))
          (t
@@ -231,6 +233,7 @@
             (princ "\nSCALE did not run - are the objects on a locked layer?"))))
        (setq done T))))
   (setvar "CMDECHO" cmd)
+  (if lzd:end (lzd:end "DDFIX"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -252,6 +255,7 @@
   (setq h (getreal (strcat "\nDrone height ABOVE THE DECK, in FEET"
                            (if cur-h (strcat " <" (dd-num cur-h) ">") "")
                            ": ")))
+  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") h) h)
   (if (and (null h) cur-h) (setq h cur-h))   ; <Enter> keeps the current value
   (cond
     ((null h)   (princ "\nNo height set."))
@@ -261,6 +265,7 @@
       (princ (strcat "\nSaved drone height  H = " (dd-num h)))
       (princ (strcat "\nDistortion rate: ~" (dd-num (/ 100.0 h))
                      "% size change per unit of height."))))
+  (if lzd:end (lzd:end "DDSET"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -287,10 +292,12 @@
     (cond
       ((= stage 1)
        (setq lapp (getdist "\nApparent (traced) size in the drawing - type it or pick 2 points: "))
+       (if lzd:ask (lzd:ask "\nApparent (traced) size in the drawing - type it or pick 2 points: " lapp) lapp)
        (setq stage 2))
       ((= stage 2)
        (initget "Back Undo")
        (setq ltrue (getreal "\nTrue size measured on site [Back]: "))
+       (if lzd:ask (lzd:ask "\nTrue size measured on site [Back]: " ltrue) ltrue)
        (if (= (type ltrue) 'STR) (setq stage 1) (setq stage 3)))
       (t
        (setq z (dd-parse-height
@@ -313,6 +320,7 @@
         (princ (strcat "\nGot a non-physical H = " (dd-num h)
                        "\nCheck the sign of the height and that apparent/true sizes "
                        "match a raised (app>true) or sunken (app<true) feature.")))))
+  (if lzd:end (lzd:end "DDCAL"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -339,6 +347,7 @@
                      "% size change per unit of height")))
     (princ "\n  Drone height (H)           : NOT SET  (run DDSET or DDFIX)"))
   (princ "\n------------------------------------------------")
+  (if lzd:end (lzd:end "DDINFO"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -458,6 +467,7 @@
        (initget "Yes No Back Undo")
        (setq ans (getkword
                    "\nUse this to set the drone height H? [Yes/No/Back] <Yes>: "))
+       (if lzd:ask (lzd:ask "\nUse this to set the drone height H? [Yes/No/Back] <Yes>: " ans) ans)
        (if (null ans) (setq ans "Yes"))
        (cond
          ((member ans '("Back" "Undo")) (setq stage 1))
@@ -468,6 +478,7 @@
        (initget "Back Undo")
        (setq off (getreal (strcat "\nTake-off point vs deck, in FEET"
                                   "\n  (+ if take-off ABOVE deck, - if BELOW, Enter if it took off FROM the deck) [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") off) off)
        (if (= (type off) 'STR)
          (setq stage 2)
          (progn
@@ -485,6 +496,7 @@
                (princ (strcat "\nDistortion rate: ~" (dd-num (/ 100.0 h))
                               "% size change per unit of height."))))
            (setq done T))))))
+  (if lzd:end (lzd:end "DDALT"))
   (princ))
 
 (defun c:DDFIXVER ()

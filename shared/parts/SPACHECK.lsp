@@ -113,7 +113,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.16")
+(setq *spacheck-version* "v1.17")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1854,6 +1854,7 @@
                          "")
                      "\nReport written on layer " spachk:*report-layer*
                      "; nothing else was changed."))))
+  (if lzd:end (lzd:end "SPACHECK"))
   (princ))
 
 ;;; --- SPACHECK: the audits, then a walk of what they flagged ------------
@@ -1883,7 +1884,7 @@
   (if (null ss)
     (prompt "\nNothing to check.")
     (progn
-      (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+      (cal:syssave '("CMDECHO" "CLAYER"))
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -1941,6 +1942,7 @@
                      (if (= 1 marked) "" "s") " marked red"
                      "\nReport written on layer " spachk:*report-layer*
                      ".  SPACHECKRESCUE puts the colours back."))))
+  (if lzd:end (lzd:end "SPACHECK"))
   (princ))
 
 ;;; --- SPACHECKRESCUE: put every colour back -----------------------------
@@ -1970,6 +1972,7 @@
   (setvar "CMDECHO" oldecho)
   (princ (strcat "\nSPACHECKRESCUE: " (itoa n) " colour"
                  (if (= 1 n) "" "s") " put back, report removed."))
+  (if lzd:end (lzd:end "SPACHECKRESCUE"))
   (princ))
 
 ;;; --- TUTORIALSPACHECK: every check spelled out -------------------------
@@ -2161,7 +2164,8 @@
   (if ent (spachk:zoom-ent ent))
   (princ (strcat "\n\n--- " (itoa n) " of " (itoa of) ": " title " ---"))
   (foreach l lines (princ (strcat "\n  " l)))
-  (getstring "\n  (Enter to go on) "))
+  ((lambda (v) (if lzd:ask (lzd:ask "\n  (Enter to go on) " v) v))
+    (getstring "\n  (Enter to go on) ")))
 
 (defun spachk:demo (/ base x y e cov wat lay)
   (setq spachk:*demo-ents* nil)
@@ -2172,6 +2176,7 @@
                      (list spachk:*border-layer* 8))
     (cal:ensure-layer (car lay) (cadr lay)))
   (setq base (getpoint "\nPick an empty spot for the practice drawing: "))
+  (if lzd:ask (lzd:ask "\nPick an empty spot for the practice drawing: " base) base)
   (if (null base)
     (princ "\nNo spot picked - demo skipped.")
     (progn
@@ -2309,6 +2314,7 @@
     (spachk:demo))
   (setvar "CLAYER" oldlay)
   (setvar "CMDECHO" oldecho)
+  (if lzd:end (lzd:end "TUTORIALSPACHECK"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and

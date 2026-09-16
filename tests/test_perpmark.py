@@ -15,7 +15,7 @@ including the pair that wraps past a closed polyline's own seam.
 The scripted answers are the prompts in order: the perimeter for entsel,
 a point for the centre, then point/distance per mark (a point is a click
 [x, y, 0.0] or a typed string), nil for the Enter that ends the round,
-the Yes/No, and the two run ends.
+the Yes/No, the two run ends and the dimension style.
 
 Run: python3 tests/test_perpmark.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_perpmark.py
@@ -32,10 +32,16 @@ from lispvm import VM, Ent, Dot, LispError  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 LSP = os.path.join(HERE, '..', 'lisp', 'perpmark', 'PERPMARK.lsp')
 
+#: the answer to the dimension-style question, which every run that
+#: actually draws has to give.  Its own test drives both answers and the
+#: Enter; everywhere else it is scaffolding, so one spelling is enough.
+STY = "SIde"
+
 
 # ---- drawing scaffolding ---------------------------------------------
 
-def newvm(dimstyles=('STANDARD', 'SIDE STANDARD')):
+def newvm(dimstyles=('STANDARD', 'STANDARD INCHES',
+                     'SIDE STANDARD')):
     vm = VM()
     vm.load(LSP)
     for s in dimstyles:
@@ -156,11 +162,11 @@ def test_the_whole_run():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 5, 20, 60, 100, 115)   # Pt.1 .. Pt.5
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "2", 12.0,
              "3", 18.0,
              "4", 12.0,
-             None, "Yes", "1", "5"])
+             None, "Yes", "1", "5", STY])
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(5, 0), (20, 12), (60, 18), (100, 12), (115, 0)]), \
         verts(vm, drawn_pline(vm))
@@ -179,7 +185,7 @@ def test_a_mark_is_a_circle_and_a_line_of_the_same_size():
     vm = newvm()
     rect(vm)
     ab_pt(vm, 40, 0, 7)
-    run(vm, [vm.entities[0], [60., 30., 0.], "7", 9.0, None, "No"])
+    run(vm, [vm.entities[0], "7", 9.0, None, "No"])
     circ = live(vm, 'CIRCLE')
     line = live(vm, 'LINE')
     assert len(circ) == 1 and len(line) == 1, (circ, line)
@@ -194,7 +200,7 @@ def test_no_leaves_every_circle_and_line_alone():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 20, 80)
-    run(vm, [vm.entities[0], [60., 30., 0.], "1", 12.0, "2", 6.0, None, "No"])
+    run(vm, [vm.entities[0], "1", 12.0, "2", 6.0, None, "No"])
     assert len(live(vm, 'CIRCLE')) == 2
     assert len(live(vm, 'LINE')) == 2
     assert len(live(vm, 'DIMENSION')) == 0
@@ -211,7 +217,7 @@ def test_nothing_marked():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 20)
-    run(vm, [vm.entities[0], [60., 30., 0.], None])
+    run(vm, [vm.entities[0], None])
     assert len(live(vm, 'LWPOLYLINE')) == 1
     assert live(vm, 'CIRCLE') == [] and live(vm, 'LINE') == []
     assert not any('polyline through' in p[0] for p in vm.prompts), vm.prompts
@@ -234,7 +240,7 @@ def test_a_point_is_named_by_click_or_by_number():
     rect(vm)
     ab_pt(vm, 20, 0, 2)
     ab_pt(vm, 60, 0, 3)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "2", 6.0,                 # typed
              [60., 1., 0.], 18.0,      # clicked, a hair off the point
              None, "No"])
@@ -248,7 +254,7 @@ def test_the_spellings_of_a_number_all_meet_in_the_middle():
         vm = newvm()
         rect(vm)
         ab_pt(vm, 40, 0, 17)
-        run(vm, [vm.entities[0], [60., 30., 0.], typed, 9.0, None, "No"])
+        run(vm, [vm.entities[0], typed, 9.0, None, "No"])
         assert len(live(vm, 'LINE')) == 1, (typed, live(vm, 'LINE'))
     print("ok  spellings   -> 17, Pt.17, pt 17, #17 and 017 all name Pt.17")
 
@@ -257,7 +263,7 @@ def test_the_distance_prompt_names_the_point():
     vm = newvm()
     rect(vm)
     ab_pt(vm, 40, 0, 17)
-    run(vm, [vm.entities[0], [60., 30., 0.], "17", 9.0, None, "No"])
+    run(vm, [vm.entities[0], "17", 9.0, None, "No"])
     assert any("Distance from the perimeter at Pt.17" in p[0]
                for p in vm.prompts), vm.prompts
     print("ok  names it    -> 'Distance from the perimeter at Pt.17'")
@@ -267,7 +273,7 @@ def test_a_number_nothing_carries_is_re_asked():
     vm = newvm()
     rect(vm)
     ab_pt(vm, 40, 0, 3)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "99",                     # nothing is numbered 99
              "3", 9.0, None, "No"])
     assert said(vm, 'No survey point is numbered "99"'), vm.printed
@@ -280,7 +286,7 @@ def test_two_points_with_one_number_are_asked_about():
     rect(vm)
     ab_pt(vm, 20, 0, 4)
     ab_pt(vm, 90, 0, 4)               # the sheet numbers two points 4
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "4",                      # ambiguous -> re-asked
              [90., 0., 0.], 9.0, None, "No"])
     assert said(vm, "2 points are numbered"), vm.printed
@@ -292,7 +298,7 @@ def test_a_click_on_nothing_is_re_asked():
     vm = newvm()
     rect(vm)
     ab_pt(vm, 40, 0, 3)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              [40., 200., 0.],          # nowhere near a point
              "3", 9.0, None, "No"])
     assert said(vm, "No survey point there"), vm.printed
@@ -305,7 +311,7 @@ def test_the_snap_is_how_close_a_click_has_to_land():
     vm.loads('(setq pm:*snap* 12.0)')
     rect(vm)
     ab_pt(vm, 40, 0, 3)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              [40., 13., 0.],           # 13 away: past the snap
              [40., 11., 0.], 9.0,      # 11 away: inside it
              None, "No"])
@@ -318,7 +324,7 @@ def test_a_point_with_no_readable_number_can_still_be_clicked():
     vm = newvm()
     rect(vm)
     ab_pt(vm, 40, 0, None)            # a block with no attribute at all
-    run(vm, [vm.entities[0], [60., 30., 0.], [40., 0., 0.], 9.0, None, "No"])
+    run(vm, [vm.entities[0], [40., 0., 0.], 9.0, None, "No"])
     assert len(live(vm, 'LINE')) == 1
     assert any("at Pt.?" in p[0] for p in vm.prompts), vm.prompts
     print("ok  unnumbered  -> clickable, and called Pt.? in the prompts")
@@ -330,7 +336,7 @@ def test_a_plain_point_on_the_points_layer_counts():
     e = Ent()
     vm.entities.append(e)
     vm.entdata[e] = [Dot(0, 'POINT'), Dot(8, 'POINTS'), [10, 40.0, 0.0, 0.0]]
-    run(vm, [vm.entities[0], [60., 30., 0.], [40., 0., 0.], 9.0, None, "No"])
+    run(vm, [vm.entities[0], [40., 0., 0.], 9.0, None, "No"])
     assert len(live(vm, 'LINE')) == 1
     print("ok  plain POINT -> the family's classifier, not just ab_pt")
 
@@ -341,7 +347,7 @@ def test_naming_a_point_twice_replaces_its_mark():
     vm = newvm()
     rect(vm)
     ab_pt(vm, 40, 0, 3)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "3", 9.0,
              "3", 21.0,
              None, "No"])
@@ -358,23 +364,59 @@ def test_a_point_off_the_wall_is_projected_onto_it():
     vm = newvm()
     rect(vm)
     ab_pt(vm, 37, -9, 3)
-    run(vm, [vm.entities[0], [60., 30., 0.], "3", 12.0, None, "No"])
+    run(vm, [vm.entities[0], "3", 12.0, None, "No"])
     assert pts_near([live(vm, 'CIRCLE')[0][10][:2]], [(37, 0)])
     line = live(vm, 'LINE')[0]
     assert pts_near([line[10][:2], line[11][:2]], [(37, 0), (37, 12)]), line
     print("ok  projection  -> a point 9 off the wall marks the wall")
 
 
-def test_the_centre_click_decides_which_way_a_mark_runs():
+def test_a_closed_wall_marks_inward_whichever_way_it_is_drawn():
+    """A closed wall defines its own inside, so nothing is clicked and
+    nothing can be answered wrongly: the same pool drawn the other way
+    round marks the same way."""
     ends = []
-    for centre in ([60., 30., 0.], [60., -30., 0.]):
+    for pts in ([(0, 0), (120, 0), (120, 60), (0, 60)],          # CCW
+                [(0, 0), (0, 60), (120, 60), (120, 0)]):         # CW
         vm = newvm()
-        rect(vm)
+        pline(vm, pts)
         ab_pt(vm, 40, 0, 3)
-        run(vm, [vm.entities[0], centre, "3", 10.0, None, "No"])
+        run(vm, [vm.entities[0], "3", 10.0, None, "No"])
+        ends.append(round(live(vm, 'LINE')[0][11][1], 6))
+    assert ends == [10.0, 10.0], ends
+    assert said(vm, "The wall closes"), vm.printed
+    print("ok  inward      -> a closed wall marks into the water, either way")
+
+
+def test_a_notched_pool_marks_into_the_water_on_every_wall():
+    """The shape a clicked centre got wrong.  On this L the arm's wall
+    faces -X while the bottom lobe is off to the +X side, so a centre
+    clicked in the lobe put the mark at (50, 80) -- out through the wall
+    and into the deck.  The wall's own inside puts it at (30, 80)."""
+    vm = newvm()
+    pline(vm, [(0, 0), (120, 0), (120, 40), (40, 40), (40, 120), (0, 120)])
+    ab_pt(vm, 40, 80, 1)                       # on the arm's right wall
+    ab_pt(vm, 60, 0, 2)                        # on the lobe's bottom wall
+    run(vm, [vm.entities[0], "1", 10.0, "2", 10.0, None, "No"])
+    got = sorted(tuple(round(c, 6) for c in ln[11][:2])
+                 for ln in live(vm, 'LINE'))
+    assert got == [(30.0, 80.0), (60.0, 10.0)], got
+    print("ok  notched     -> both walls mark inward, lobe and arm alike")
+
+
+def test_an_open_wall_still_asks_which_side_the_pool_is_on():
+    """A stretch of wall on its own has no inside, so the question
+    survives exactly where it is the only answer there is."""
+    ends = []
+    for side in ([60., 30., 0.], [60., -30., 0.]):
+        vm = newvm()
+        pline(vm, [(0, 0), (120, 0)], closed=False)
+        ab_pt(vm, 40, 0, 3)
+        run(vm, [vm.entities[0], side, "3", 10.0, None, "No"])
         ends.append(round(live(vm, 'LINE')[0][11][1], 6))
     assert ends == [10.0, -10.0], ends
-    print("ok  direction   -> the mark follows the centre click, both ways")
+    assert said(vm, "does not close"), vm.printed
+    print("ok  open wall   -> the side click still decides, both ways")
 
 
 def test_marks_come_off_an_arc_radially():
@@ -424,7 +466,8 @@ def test_a_curve_this_file_cannot_read_is_measured_through_vlax_curve():
       (defun vlax-curve-getDistAtParam (e prm) prm)
       (defun vlax-curve-isClosed (e) nil)
     ''')
-    run(vm, [e, [50., 40., 0.], "2", 7.0, "3", 4.0, None, "Yes", "1", "4"])
+    run(vm, [e, [50., 40., 0.], "2", 7.0, "3", 4.0, None, "Yes",
+             "1", "4", STY])
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(10, 0), (30, 7), (70, 4), (90, 0)]), \
         verts(vm, drawn_pline(vm))
@@ -437,11 +480,11 @@ def test_the_polyline_runs_in_wall_order_not_naming_order():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 0, 20, 60, 100, 120)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "4", 12.0,
              "2", 6.0,
              "3", 18.0,
-             None, "Yes", "1", "5"])
+             None, "Yes", "1", "5", STY])
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(0, 0), (20, 6), (60, 18), (100, 12), (120, 0)]), \
         verts(vm, drawn_pline(vm))
@@ -456,7 +499,7 @@ def test_a_run_picked_backwards_comes_out_backwards():
     bottom_wall_points(vm, 10, 20, 60, 100, 110)
     run(vm, [vm.entities[0], [60., 30., 0.],
              "2", 6.0, "3", 18.0, "4", 12.0,
-             None, "Yes", "5", "1"])
+             None, "Yes", "5", "1", STY])
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(110, 0), (100, 12), (60, 18), (20, 6), (10, 0)]), \
         verts(vm, drawn_pline(vm))
@@ -474,9 +517,9 @@ def test_the_marks_decide_which_way_round_a_closed_wall_the_run_goes():
         vm = newvm()
         rect(vm)
         bottom_wall_points(vm, 5, 20, 60, 100, 115)
-        run(vm, [vm.entities[0], [60., 30., 0.],
+        run(vm, [vm.entities[0],
                  "2", 12.0, "3", 18.0, "4", 12.0,
-                 None, "Yes", ends[0], ends[1]])
+                 None, "Yes", ends[0], ends[1], STY])
         assert pts_near(verts(vm, drawn_pline(vm)), want), \
             (ends, verts(vm, drawn_pline(vm)))
         assert not said(vm, "outside the run"), vm.printed
@@ -500,9 +543,9 @@ def test_a_tie_asks_which_way_the_run_passes():
         ab_pt(vm, 115, 60, 4)          # station 185 - the run's end
         ab_pt(vm, 60, 60, 5)           # station 240 - the far arc
         ab_pt(vm, 20, 60, 6)           # station 280 - the far arc
-        run(vm, [vm.entities[0], [60., 30., 0.],
+        run(vm, [vm.entities[0],
                  "2", 12.0, "3", 18.0, "5", 9.0, "6", 6.0,
-                 None, "Yes", "1", "4", click])
+                 None, "Yes", "1", "4", click, STY])
         assert pts_near(verts(vm, drawn_pline(vm)), want), \
             (click, verts(vm, drawn_pline(vm)))
         assert said(vm, missed + " sit outside the run"), vm.printed
@@ -515,8 +558,8 @@ def test_a_tie_is_only_asked_about_when_it_is_really_a_tie():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 20, 60)
-    run(vm, [vm.entities[0], [60., 30., 0.],
-             "1", 6.0, "2", 18.0, None, "Yes", "1", "2"])
+    run(vm, [vm.entities[0],
+             "1", 6.0, "2", 18.0, None, "Yes", "1", "2", STY])
     assert not any('passes through' in p[0] for p in vm.prompts), vm.prompts
     assert pts_near(verts(vm, drawn_pline(vm)), [(20, 6), (60, 18)])
     print("ok  no tie      -> the question is only put when it has to be")
@@ -531,11 +574,11 @@ def test_back_at_the_which_way_click_re_opens_the_end():
     ab_pt(vm, 115, 60, 4)
     ab_pt(vm, 60, 60, 5)
     ab_pt(vm, 20, 60, 6)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "2", 12.0, "3", 18.0, "5", 9.0, "6", 6.0,
              None, "Yes", "1", "4",
              "Back",                   # the tie click -> back to the end
-             "5"])                     # ending AT Pt.5 breaks the tie: two
+             "5", STY])                     # ending AT Pt.5 breaks the tie: two
                                        # marks near, one far, no question
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(5, 0), (20, 12), (60, 18), (60, 51)]), \
@@ -551,9 +594,9 @@ def test_the_run_stops_at_the_points_that_end_it():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 10, 20, 60, 100, 70)   # Pt.5 is at x=70
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "2", 6.0, "3", 18.0, "4", 12.0,
-             None, "Yes", "1", "5"])
+             None, "Yes", "1", "5", STY])
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(10, 0), (20, 6), (60, 18), (70, 0)]), \
         verts(vm, drawn_pline(vm))
@@ -572,9 +615,9 @@ def test_a_run_wraps_past_a_closed_polylines_seam():
     ab_pt(vm, 60, 0, 3)       # station 60 - outside the run
     ab_pt(vm, 0, 10, 4)       # station 350, the run's start
     ab_pt(vm, 20, 0, 5)       # station 20, the run's end
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "1", 8.0, "2", 6.0, "3", 18.0,
-             None, "Yes", "4", "5"])
+             None, "Yes", "4", "5", STY])
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(0, 10), (8, 5), (10, 6), (20, 0)]), \
         verts(vm, drawn_pline(vm))
@@ -587,9 +630,9 @@ def test_a_run_end_at_a_taped_point_takes_its_distance():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 20, 60)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "1", 6.0, "2", 18.0,
-             None, "Yes", "1", "2"])
+             None, "Yes", "1", "2", STY])
     assert pts_near(verts(vm, drawn_pline(vm)), [(20, 6), (60, 18)]), \
         verts(vm, drawn_pline(vm))
     print("ok  end taped   -> the run starts where the tape reached")
@@ -601,8 +644,8 @@ def test_a_run_end_at_an_untaped_point_measures_zero():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 30, 60, 90)
-    run(vm, [vm.entities[0], [60., 30., 0.], "2", 18.0,
-             None, "Yes", "1", "3"])
+    run(vm, [vm.entities[0], "2", 18.0,
+             None, "Yes", "1", "3", STY])
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(30, 0), (60, 18), (90, 0)]), verts(vm, drawn_pline(vm))
     print("ok  end at zero -> an untaped point ties back into the wall")
@@ -616,8 +659,8 @@ def test_identity_decides_a_run_end_not_nearness():
     ab_pt(vm, 30, 0, 1)       # untaped, the run's start
     ab_pt(vm, 31, 0, 2)       # taped, an inch away
     ab_pt(vm, 90, 0, 3)
-    run(vm, [vm.entities[0], [60., 30., 0.], "2", 18.0,
-             None, "Yes", "1", "3"])
+    run(vm, [vm.entities[0], "2", 18.0,
+             None, "Yes", "1", "3", STY])
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(30, 0), (31, 18), (90, 0)]), verts(vm, drawn_pline(vm))
     print("ok  identity    -> the point named is the point used, not its "
@@ -629,7 +672,7 @@ def test_two_ends_with_nothing_between_them_erase_nothing():
     rect(vm)
     ab_pt(vm, 40, 0, 1)
     ab_pt(vm, 60, 0, 2)
-    run(vm, [vm.entities[0], [60., 30., 0.], "2", 18.0,
+    run(vm, [vm.entities[0], "2", 18.0,
              None, "Yes", "1", "1"])
     assert len(live(vm, 'LWPOLYLINE')) == 1, "no polyline was drawable"
     assert len(live(vm, 'CIRCLE')) == 1 and len(live(vm, 'LINE')) == 1, \
@@ -643,7 +686,7 @@ def test_back_takes_the_last_mark_away():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 20, 60)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "1", 12.0, "2", 18.0,
              "Back",
              None, "No"])
@@ -654,24 +697,43 @@ def test_back_takes_the_last_mark_away():
     print("ok  back a mark -> the last circle and line go, named")
 
 
-def test_back_at_the_first_mark_re_opens_the_centre_question():
+def test_back_at_the_first_mark_re_opens_the_side_question():
+    """On an open wall the question before the first mark is the side
+    click, and Back re-opens it."""
     vm = newvm()
-    rect(vm)
+    pline(vm, [(0, 0), (120, 0)], closed=False)
     ab_pt(vm, 40, 0, 1)
     run(vm, [vm.entities[0], [60., 30., 0.],
-             "Back",                       # no marks yet -> the centre
+             "Back",                       # no marks yet -> the side
              [60., -30., 0.],              # answered the other way
              "1", 10.0, None, "No"])
     assert near(live(vm, 'LINE')[0][11][1], -10.0), live(vm, 'LINE')
     assert said(vm, "Stepping back one question"), vm.printed
-    print("ok  back to ctr -> the centre question is re-asked and re-used")
+    print("ok  back to side-> the side question is re-asked and re-used")
+
+
+def test_back_at_the_first_mark_re_opens_the_selection_on_a_closed_wall():
+    """A closed wall is asked nothing, so the question in front of the
+    first mark is the selection itself."""
+    vm = newvm()
+    rect(vm)
+    other = pline(vm, [(200, 0), (320, 0)], closed=False, layer='OTHER')
+    ab_pt(vm, 240, 0, 1)
+    run(vm, [vm.entities[0],
+             "Back",                       # no marks yet -> the selection
+             other, [260., 30., 0.],       # a different wall, open
+             "1", 9.0, None, "No"])
+    ln = live(vm, 'LINE')[0]
+    assert pts_near([ln[10][:2], ln[11][:2]], [(240, 0), (240, 9)]), ln
+    assert said(vm, "Stepping back one question"), vm.printed
+    print("ok  back to sel -> a closed wall steps back to the selection")
 
 
 def test_back_at_the_distance_re_asks_the_point():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 20, 80)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "1", "Back",
              "2", 5.0, None, "No"])
     circ = live(vm, 'CIRCLE')
@@ -683,7 +745,7 @@ def test_back_at_the_polyline_question_carries_on_marking():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 20, 60)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "1", 6.0,
              None, "Back",                 # not done after all
              "2", 18.0,
@@ -696,25 +758,13 @@ def test_back_walks_the_two_run_ends():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 30, 60, 40, 90)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "2", 18.0, None, "Yes",
              "1", "Back",                  # back to the start point
-             "3", "4"])
+             "3", "4", STY])
     assert pts_near(verts(vm, drawn_pline(vm)),
                     [(40, 0), (60, 18), (90, 0)]), verts(vm, drawn_pline(vm))
     print("ok  back at end -> the start point is re-asked and replaced")
-
-
-def test_back_at_the_centre_re_opens_the_selection():
-    vm = newvm()
-    rect(vm)
-    other = pline(vm, [(200, 0), (320, 0)], closed=False, layer='OTHER')
-    ab_pt(vm, 240, 0, 1)
-    run(vm, [vm.entities[0], "Back",
-             other, [260., 30., 0.], "1", 9.0, None, "No"])
-    ln = live(vm, 'LINE')[0]
-    assert pts_near([ln[10][:2], ln[11][:2]], [(240, 0), (240, 9)]), ln
-    print("ok  back to sel -> a second perimeter can be selected instead")
 
 
 # ---- output placement --------------------------------------------------
@@ -725,11 +775,55 @@ def test_the_polyline_inherits_the_perimeter():
           extra=[Dot(62, 3), Dot(6, 'HIDDEN'), Dot(370, 25), Dot(48, 2.0)])
     bottom_wall_points(vm, 20, 60, 100)
     run(vm, [vm.entities[0], [60., 30., 0.], "2", 18.0,
-             None, "Yes", "1", "3"])
+             None, "Yes", "1", "3", STY])
     g = groups(vm, drawn_pline(vm))
     assert g[8] == 'WALLS' and g[62] == 3 and g[6] == 'HIDDEN' \
         and g[370] == 25 and g[48] == 2.0, g
     print("ok  inherits    -> layer, colour, linetype, weight and scale")
+
+
+# ---- what the round says about its own numbers ------------------------
+
+def test_a_distance_that_fights_both_neighbours_is_named():
+    """40, 10 and 30 at three points in a row is a digit, not a wall.
+    The round names it, says what the neighbours put there, and changes
+    nothing: a surveyed number is the drafter's to correct."""
+    vm = newvm()
+    rect(vm)
+    bottom_wall_points(vm, 20, 40, 60)
+    run(vm, [vm.entities[0], "1", 40.0, "2", 10.0, "3", 30.0, None, "No"])
+    assert said(vm, "Pt.2 measures 10.00, against Pt.1 (40.00) and "
+                    "Pt.3 (30.00) on both sides - the wall between them "
+                    "is about 35.00."), vm.printed
+    assert said(vm, "name Pt.2 again and the new distance replaces it"), \
+        vm.printed
+    assert sorted(round(c[40], 6) for c in live(vm, 'CIRCLE')) \
+        == [10.0, 30.0, 40.0], live(vm, 'CIRCLE')
+    print("ok  spike       -> the 10 between a 40 and a 30 is named, not moved")
+
+
+def test_a_wall_that_bends_is_not_second_guessed():
+    """40, 38, 30 is a wall bending away: every value sits between its
+    neighbours, so nothing is said however far the middle one is off the
+    chord between them."""
+    vm = newvm()
+    rect(vm)
+    bottom_wall_points(vm, 20, 40, 60)
+    run(vm, [vm.entities[0], "1", 40.0, "2", 38.0, "3", 30.0, None, "No"])
+    assert not said(vm, "on both sides"), vm.printed
+    print("ok  real curve  -> a bend is left alone")
+
+
+def test_a_mark_that_reaches_past_the_far_wall_is_named():
+    """The pool is 60 deep and the tape read 84: one of the two is
+    wrong.  The mark is drawn anyway and the point is named."""
+    vm = newvm()
+    rect(vm)
+    ab_pt(vm, 40, 0, 7)
+    run(vm, [vm.entities[0], "7", 84.0, None, "No"])
+    assert said(vm, "Pt.7 reaches past the far wall"), vm.printed
+    assert len(live(vm, 'LINE')) == 1, live(vm, 'LINE')
+    print("ok  off the map -> a tape that left the pool is named")
 
 
 def test_the_layers_are_created_and_the_settings_come_back():
@@ -738,8 +832,8 @@ def test_the_layers_are_created_and_the_settings_come_back():
     vm.sysvars['OSMODE'] = 33
     rect(vm)
     bottom_wall_points(vm, 20, 60, 100)
-    run(vm, [vm.entities[0], [60., 30., 0.], "2", 18.0,
-             None, "Yes", "1", "3"])
+    run(vm, [vm.entities[0], "2", 18.0,
+             None, "Yes", "1", "3", STY])
     assert 'PERPMARK' in vm.tables['LAYER'], sorted(vm.tables['LAYER'])
     assert 'DIMENSION' in vm.tables['LAYER'], sorted(vm.tables['LAYER'])
     assert vm.sysvars['CLAYER'] == '0', vm.sysvars['CLAYER']
@@ -752,28 +846,80 @@ def test_a_drawing_without_the_style_is_told_so():
     vm = newvm(dimstyles=('STANDARD',))
     rect(vm)
     bottom_wall_points(vm, 20, 60, 100)
-    run(vm, [vm.entities[0], [60., 30., 0.], "2", 18.0,
-             None, "Yes", "1", "3"])
+    run(vm, [vm.entities[0], "2", 18.0,
+             None, "Yes", "1", "3", STY])
     assert said(vm, "SIDE STANDARD") and said(vm, "not in this drawing"), \
-        vm.printed
+        vm.printed   # STY answers SIde, and this drawing has no such style
     assert len(live(vm, 'DIMENSION')) == 1, "the dimension still goes in"
     print("ok  no style    -> says so and dimensions in the current style")
 
 
 def test_the_knobs_reach_the_output():
-    vm = newvm(dimstyles=('STANDARD', 'CROSS DIMENSIONS'))
+    vm = newvm(dimstyles=('STANDARD', 'CROSS DIMENSIONS', 'PLAN'))
     vm.loads('(setq pm:*marklayer* "SCRATCH" pm:*markcolor* 5 '
              '       pm:*dimlayer* "DIMS" pm:*dimcolor* 2 '
-             '       pm:*dimstyle* "CROSS DIMENSIONS" pm:*pt-prefix* "P")')
+             '       pm:*dimstyle-std* "PLAN" '
+             '       pm:*dimstyle-side* "CROSS DIMENSIONS" '
+             '       pm:*pt-prefix* "P")')
     rect(vm)
     bottom_wall_points(vm, 20, 60, 100)
-    run(vm, [vm.entities[0], [60., 30., 0.], "2", 18.0,
-             None, "Yes", "1", "3"])
+    run(vm, [vm.entities[0], "2", 18.0,
+             None, "Yes", "1", "3", STY])
     assert live(vm, 'DIMENSION')[0][8] == 'DIMS'
     assert live(vm, 'DIMENSION')[0][3] == 'CROSS DIMENSIONS'
     assert 'SCRATCH' in vm.tables['LAYER'] and 'DIMS' in vm.tables['LAYER']
     assert any("at P2" in p[0] for p in vm.prompts), vm.prompts
-    print("ok  knobs       -> layers, colours, dim style and the prefix")
+    # a renamed style renames it in the question too, so the prompt can
+    # never offer a style the routine would not draw in
+    assert any("Dimension style - PLAN or CROSS DIMENSIONS?" in p[0]
+               for p in vm.prompts), vm.prompts
+    print("ok  knobs       -> layers, colours, both dim styles and the prefix")
+
+
+def test_the_dimension_style_is_asked_the_way_perppts_asks_it():
+    """PERPPTS and CPERPPTS put this question in exactly these words, and
+    one vocabulary repo-wide is the point (STANDARDS section 3)."""
+    for answer, want in (("STandard", "STANDARD INCHES"),
+                         ("SIde", "SIDE STANDARD"),
+                         (None, "STANDARD INCHES")):        # Enter
+        vm = newvm()
+        rect(vm)
+        bottom_wall_points(vm, 20, 60, 100)
+        run(vm, [vm.entities[0], "2", 18.0,
+                 None, "Yes", "1", "3", answer])
+        assert live(vm, 'DIMENSION')[0][3] == want, (answer, live(vm, 'DIMENSION'))
+        assert said(vm, 'in "' + want + '"'), vm.printed
+    assert any(p[0] == "\nDimension style - STANDARD INCHES or SIDE "
+                       "STANDARD? [STandard/SIde/Back] <STandard>: "
+               for p in vm.prompts), vm.prompts
+    print("ok  style asked -> PERPPTS's words, both answers and the Enter")
+
+
+def test_the_style_is_not_asked_when_there_is_nothing_to_draw():
+    """Two ends with nothing between them: the run is worked out first,
+    so the question is never put only to have its answer thrown away."""
+    vm = newvm()
+    rect(vm)
+    ab_pt(vm, 40, 0, 1)
+    ab_pt(vm, 60, 0, 2)
+    run(vm, [vm.entities[0], "2", 18.0,
+             None, "Yes", "1", "1"])
+    assert not any('Dimension style' in p[0] for p in vm.prompts), vm.prompts
+    print("ok  style skip  -> not asked when there is no polyline to draw")
+
+
+def test_back_at_the_style_re_opens_the_end():
+    vm = newvm()
+    rect(vm)
+    bottom_wall_points(vm, 20, 60, 100, 110)
+    run(vm, [vm.entities[0], "2", 18.0,
+             None, "Yes", "1", "3",
+             "Back",                   # the style question -> the end
+             "4", STY])
+    assert sum(1 for p in vm.prompts if 'run ends at' in p[0]) == 2, vm.prompts
+    assert pts_near(verts(vm, drawn_pline(vm)),
+                    [(20, 0), (60, 18), (110, 0)]), verts(vm, drawn_pline(vm))
+    print("ok  back at sty -> the end point is re-asked and replaced")
 
 
 def test_the_point_classifier_is_the_familys():
@@ -784,7 +930,7 @@ def test_the_point_classifier_is_the_familys():
     ab_pt(vm, 20, 0, 1, layer='RANDOM')            # ab_pt off POINTS
     ab_pt(vm, 60, 0, 2, block='SOMETHINGELSE')     # other block, on POINTS
     ab_pt(vm, 90, 0, 3, layer='RANDOM', block='TREE')   # neither
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "1", 6.0, "2", 8.0,
              "3",                                  # not a survey point
              None, "No"])
@@ -799,9 +945,9 @@ def test_one_undo_group_wraps_the_whole_run():
     vm = newvm()
     rect(vm)
     bottom_wall_points(vm, 10, 20, 60, 100)
-    run(vm, [vm.entities[0], [60., 30., 0.],
+    run(vm, [vm.entities[0],
              "2", 6.0, "3", 18.0,
-             None, "Yes", "1", "4"])
+             None, "Yes", "1", "4", STY])
     marks = [c[1] for c in vm.commands if c and c[0] == '_.UNDO']
     assert marks == ['_Begin', '_End'], marks
     print("ok  undo group  -> one Begin, one End, the marks inside both")
@@ -814,8 +960,8 @@ def test_undo_off():
     vm.sysvars['UNDOCTL'] = 0
     rect(vm)
     bottom_wall_points(vm, 20, 60, 100)
-    run(vm, [vm.entities[0], [60., 30., 0.], "2", 18.0,
-             None, "Yes", "1", "3"])
+    run(vm, [vm.entities[0], "2", 18.0,
+             None, "Yes", "1", "3", STY])
     assert not [c for c in vm.commands if c and c[0] == '_.UNDO'], vm.commands
     assert len(live(vm, 'DIMENSION')) == 1, "and the run still finishes"
     print("ok  undo off    -> no group opened, none closed, run completes")
@@ -833,7 +979,7 @@ def test_esc_mid_round():
     def esc(_vm):
         raise LispError('Function cancelled', _vm)
 
-    vm.run('c:PERPMARK', [vm.entities[0], [60., 30., 0.],
+    vm.run('c:PERPMARK', [vm.entities[0],
                           "1", 6.0, "2", esc])
     assert vm.sysvars['OSMODE'] == 33, vm.sysvars['OSMODE']
     assert vm.undo_groups == 0
@@ -886,7 +1032,9 @@ if __name__ == '__main__':
     test_a_plain_point_on_the_points_layer_counts()
     test_naming_a_point_twice_replaces_its_mark()
     test_a_point_off_the_wall_is_projected_onto_it()
-    test_the_centre_click_decides_which_way_a_mark_runs()
+    test_a_closed_wall_marks_inward_whichever_way_it_is_drawn()
+    test_a_notched_pool_marks_into_the_water_on_every_wall()
+    test_an_open_wall_still_asks_which_side_the_pool_is_on()
     test_marks_come_off_an_arc_radially()
     test_marks_come_off_a_bulged_polyline_segment_radially()
     test_a_curve_this_file_cannot_read_is_measured_through_vlax_curve()
@@ -903,15 +1051,21 @@ if __name__ == '__main__':
     test_identity_decides_a_run_end_not_nearness()
     test_two_ends_with_nothing_between_them_erase_nothing()
     test_back_takes_the_last_mark_away()
-    test_back_at_the_first_mark_re_opens_the_centre_question()
+    test_back_at_the_first_mark_re_opens_the_side_question()
+    test_back_at_the_first_mark_re_opens_the_selection_on_a_closed_wall()
     test_back_at_the_distance_re_asks_the_point()
     test_back_at_the_polyline_question_carries_on_marking()
     test_back_walks_the_two_run_ends()
-    test_back_at_the_centre_re_opens_the_selection()
     test_the_polyline_inherits_the_perimeter()
+    test_a_distance_that_fights_both_neighbours_is_named()
+    test_a_wall_that_bends_is_not_second_guessed()
+    test_a_mark_that_reaches_past_the_far_wall_is_named()
     test_the_layers_are_created_and_the_settings_come_back()
     test_a_drawing_without_the_style_is_told_so()
     test_the_knobs_reach_the_output()
+    test_the_dimension_style_is_asked_the_way_perppts_asks_it()
+    test_the_style_is_not_asked_when_there_is_nothing_to_draw()
+    test_back_at_the_style_re_opens_the_end()
     test_the_point_classifier_is_the_familys()
     test_one_undo_group_wraps_the_whole_run()
     test_undo_off()

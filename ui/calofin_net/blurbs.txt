@@ -30,6 +30,8 @@ CCPRECHECK        Walks the Tech Flow Chart decision tree
 CDCALLOUT         Cross-dimensions from Pt.## to Pt.## by typed number
 CDCREATE          Turns every highlighted line into a cross dimension
 CHECK             General drawing check
+CLEARDIM          Slides dimension text along its own dimension line until it is readable
+CLEARDIMSCAN      Names the dimension text CLEARDIM would move, and moves nothing
 CONSTELLATION     Places points from the distances between them, inside a known box
 CORNERSTP         Corner step layout
 COVERCHECK        Cover check
@@ -50,10 +52,12 @@ G2MRECONV         Undoes a G2MCONV run - layers, appearance, text and dimension 
 HEMISTEP          Hemi step layout
 HONEFILLET        Bracket two of SMARTFILLET's radii and hone between them at half inches
 LAZDIAG           Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works
+LAZLOG            Every calofin command that finished, was backed out of or FAILED - the log a report's history comes from
 LAZFORM           Fill the dimension chart in and draw the pool from it
 LAZFORMCOVER      LAZFORM for a cover sheet - the pool-bottom gate closed
+LAZSIDE           Read the section, type the letters beside it, and POOLSIDE draws the side view
 LAZSPA            LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn
-LAZSTEP           Say how many steps, then fill in the drawing built for that count
+LAZSTEP           Type the step count and the drawing follows it - fill it in and the steps are drawn
 LAZTXT            LAZFORM's chart built from DCL tiles instead of vectors
 LHD               Laser-point outline fit, open or closed
 LINCHECK          Line / text check

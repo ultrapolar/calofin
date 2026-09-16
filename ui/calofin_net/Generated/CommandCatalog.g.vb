@@ -93,6 +93,8 @@ Public NotInheritable Class CommandCatalog
         New Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"),
         New Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"),
         New Entry("CHECK", "Drawing check", "General drawing check"),
+        New Entry("CLEARDIM", "Clear crowded dim text", "Slides dimension text along its own dimension line until it is readable"),
+        New Entry("CLEARDIMSCAN", "Crowded dim text scan", "Names the dimension text CLEARDIM would move, and moves nothing"),
         New Entry("CONSTELLATION", "Points from cross dims", "Places points from the distances between them, inside a known box"),
         New Entry("CORNERSTP", "Corner step", "Corner step layout"),
         New Entry("COVERCHECK", "Cover review", "Cover check"),
@@ -115,8 +117,10 @@ Public NotInheritable Class CommandCatalog
         New Entry("LAZDIAG", "Error report for the last failure", "Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works"),
         New Entry("LAZFORM", "Pool from a filled-in chart", "Fill the dimension chart in and draw the pool from it"),
         New Entry("LAZFORMCOVER", "Chart to pool, no bottom", "LAZFORM for a cover sheet - the pool-bottom gate closed"),
+        New Entry("LAZLOG", "What every command has done lately", "Every calofin command that finished, was backed out of or FAILED - the log a report's history comes from"),
+        New Entry("LAZSIDE", "Side view from a filled-in section", "Read the section, type the letters beside it, and POOLSIDE draws the side view"),
         New Entry("LAZSPA", "Spa from a filled-in chart", "LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn"),
-        New Entry("LAZSTEP", "Steps from a filled-in drawing", "Say how many steps, then fill in the drawing built for that count"),
+        New Entry("LAZSTEP", "Steps from a filled-in drawing", "Type the step count and the drawing follows it - fill it in and the steps are drawn"),
         New Entry("LAZTXT", "The same form, drawn in tiles", "LAZFORM's chart built from DCL tiles instead of vectors"),
         New Entry("LHD", "Laser outline fit", "Laser-point outline fit, open or closed"),
         New Entry("LINCHECK", "Line checklist", "Line / text check"),
@@ -170,6 +174,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("LAZFORM", "Pool from a filled-in chart", "Fill the dimension chart in and draw the pool from it"),
             New Entry("LAZTXT", "The same form, drawn in tiles", "LAZFORM's chart built from DCL tiles instead of vectors"),
             New Entry("LAZFORMCOVER", "Chart to pool, no bottom", "LAZFORM for a cover sheet - the pool-bottom gate closed"),
+            New Entry("LAZSIDE", "Side view from a filled-in section", "Read the section, type the letters beside it, and POOLSIDE draws the side view"),
             New Entry("LAZSPA", "Spa from a filled-in chart", "LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn"),
             New Entry("SPA", "Spa template", "Spa / hot-tub template layout"),
             New Entry("SPACOVCREATE", "Spa cover from the spa", "Offsets a selected spa outline into its cover and hinges it to the taper"),
@@ -192,7 +197,7 @@ Public NotInheritable Class CommandCatalog
             New Entry("PADDLE", "Paddle pads", "Paddle perimeter pads"),
             New Entry("MOHAMADDLE", "Pads, pick a size", "PADDLE's perimeter pads with a size pick first - 24in or 36in"),
             New Entry("AUTOBEAD", "Bead offsets", "Offsets selected pool lines toward a clicked side"),
-            New Entry("LAZSTEP", "Steps from a filled-in drawing", "Say how many steps, then fill in the drawing built for that count"),
+            New Entry("LAZSTEP", "Steps from a filled-in drawing", "Type the step count and the drawing follows it - fill it in and the steps are drawn"),
             New Entry("CORNERSTP", "Corner step", "Corner step layout"),
             New Entry("HEMISTEP", "Hemi step", "Hemi step layout"),
             New Entry("NORMIESTEP", "Normie step", "Normie step layout"),
@@ -228,7 +233,9 @@ Public NotInheritable Class CommandCatalog
             New Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"),
             New Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"),
             New Entry("BPCALLOUT", "Bad point callout", "Rings clicked bad points and writes the callout"),
-            New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next")
+            New Entry("DIMSTAMP", "Stamp dimension text", "Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next"),
+            New Entry("CLEARDIM", "Clear crowded dim text", "Slides dimension text along its own dimension line until it is readable"),
+            New Entry("CLEARDIMSCAN", "Crowded dim text scan", "Names the dimension text CLEARDIM would move, and moves nothing")
         }},
         {"Converters", {
             New Entry("XFTCONV", "Survey import cleanup", "Cleans up a Leica XFT/DXF import or a site trace"),
@@ -261,7 +268,8 @@ Public NotInheritable Class CommandCatalog
             New Entry("LITESPACHECKSCAN", "Spa scan, no dims", "Spa rules only - skips the dimension audit"),
             New Entry("LINTXTCHK", "Liner checklist text", "Places the vinyl-liner QA checklist as drawing text"),
             New Entry("CCPRECHECK", "Tech flow chart", "Walks the Tech Flow Chart decision tree"),
-            New Entry("LAZDIAG", "Error report for the last failure", "Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works")
+            New Entry("LAZDIAG", "Error report for the last failure", "Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works"),
+            New Entry("LAZLOG", "What every command has done lately", "Every calofin command that finished, was backed out of or FAILED - the log a report's history comes from")
         }}
     }
 
@@ -271,7 +279,7 @@ Public NotInheritable Class CommandCatalog
     ''' page answers what a tool IS.</summary>
     Public Shared ReadOnly Pages As Page() = {
         New Page("Pool", {
-            New Column("Shape", {"POOL", "POOLSIDE", "LAZFORM", "LAZTXT", "OASIS", "ABHD", "SIMPABHD", "ADAB", "FITABHD"}),
+            New Column("Shape", {"POOL", "POOLSIDE", "LAZSIDE", "LAZFORM", "LAZTXT", "OASIS", "ABHD", "SIMPABHD", "ADAB", "FITABHD"}),
             New Column("Points", {"ABFIND", "ABMOVE", "ABPCREATE", "CDCREATE", "CDCALLOUT", "BPCALLOUT"}),
             New Column("Steps", {"LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "AUTOBEAD", "PERPPTS", "CPERPPTS", "PERPMARK"}),
             New Column("Converters", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"}),
@@ -288,22 +296,22 @@ Public NotInheritable Class CommandCatalog
             New Column("Shape, dims & check", {"SPA", "LAZSPA", "SPACOVCREATE", "CUSTBLOCK", "AUTODIM", "SPACHECK", "DIMCHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "DIMSCAN"})
         }),
         New Page("Rest", {
-            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP", "MOHAMADDLE", "OLAUTO"})
+            New Column("", {"POOLDEMO", "CABHD", "LHD", "SMARTFILLET", "HONEFILLET", "WCALST", "ABCDEF", "ALTABCDEF", "XYPLOT", "DRONE", "TYDRN", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CHECK", "DIMARCCHECK", "ABCURCHECK", "ABCURCHECKSCAN", "ABPCHECK", "LINCHECK", "LINTXTCHK", "CCPRECHECK", "POINTRENAMER", "CONSTELLATION", "TYLERDRONESUITE", "LAZDIAG", "LOBF", "ABLOBF", "DIMSTAMP", "LAZLOG", "MOHAMADDLE", "OLAUTO", "CLEARDIM", "CLEARDIMSCAN"})
         }),
         New Page("Layout", {
-            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "ABLOBF", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "MOHAMADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
+            New Column("", {"LAZFORM", "LAZTXT", "LAZFORMCOVER", "LAZSIDE", "LAZSPA", "SPA", "SPACOVCREATE", "POOL", "POOLCOVER", "POOLSIDE", "POOLDEMO", "OASIS", "FITABHD", "FITABHDCOVER", "ABHD", "ABHDCOVER", "SIMPABHD", "ADAB", "CABHD", "LHD", "ABLOBF", "LINGUTTER", "LINGUTTERSCAN", "PADDLE", "MOHAMADDLE", "AUTOBEAD", "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP", "SMARTFILLET", "HONEFILLET", "STOCKCOVER", "WCALST", "CUSTBLOCK"})
         }),
         New Page("Points", {
             New Column("", {"ABCDEF", "ALTABCDEF", "XYPLOT", "CONSTELLATION", "LOBF", "ABFIND", "ABMOVE", "ABPCREATE", "POINTRENAMER", "PERPPTS", "CPERPPTS", "PERPMARK", "DRONE", "TYDRN", "TYLERDRONESUITE"})
         }),
         New Page("Dimensions", {
-            New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT", "DIMSTAMP"})
+            New Column("", {"AUTODIM", "AUTODIMSIDEPOV", "STAIRDIM", "FLOORDIM", "DIMCONTEND", "CDCREATE", "CDCALLOUT", "BPCALLOUT", "DIMSTAMP", "CLEARDIM", "CLEARDIMSCAN"})
         }),
         New Page("Converters", {
             New Column("", {"XFTCONV", "SOCONV", "VSCONV", "G2MCONV", "XFTRECONV", "SORECONV", "VSRECONV", "G2MRECONV"})
         }),
         New Page("Checking", {
-            New Column("", {"CHECK", "DIMARCCHECK", "DIMCHECK", "DIMSCAN", "ABCURCHECK", "ABCURCHECKSCAN", "OLAUTO", "ABPCHECK", "LINCHECK", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "LINTXTCHK", "CCPRECHECK", "LAZDIAG"})
+            New Column("", {"CHECK", "DIMARCCHECK", "DIMCHECK", "DIMSCAN", "ABCURCHECK", "ABCURCHECKSCAN", "OLAUTO", "ABPCHECK", "LINCHECK", "LINFINCHECK", "LINFINSCAN", "LITELINFINSCAN", "COVERCHECK", "COVERSCAN", "LITECOVERSCAN", "SPACHECK", "SPACHECKSCAN", "LITESPACHECKSCAN", "LINTXTCHK", "CCPRECHECK", "LAZDIAG", "LAZLOG"})
         })
     }
 

@@ -69,7 +69,40 @@ INPUTS = {
     "cal:axis-pt": ["'(1.0 2.0) '(1.0 0.0) 3.0",
                     "'(0.0 0.0) '(0.0 1.0) -2.5"],
     "cal:back-word-p": ['"Back"', '"back"', '"B"', '"Next"', '""'],
+    "cal:as-number": ['"17"', '"Pt.17"', '"pt 17"', '"#17"', '"017"',
+                      '"40.5"', '"PT.40.5"', '"P"', '""'],
+    "cal:canon": ['"17"', '"Pt.17"', '"pt 17"', '"#17"', '"017"',
+                  '"40.5"', '"17m"', '""'],
+    "cal:cand-matches": [
+        '"pt 3" (list (list (list 0.0 0.0) "3") (list (list 1.0 1.0) "03")'
+        ' (list (list 2.0 2.0) "4"))',
+        '"9" (list (list (list 0.0 0.0) "3"))', '"3" nil'],
+    "cal:cand-nearest": [
+        '(list 1.0 1.0 0.0) (list (list (list 0.0 0.0) "3")'
+        ' (list (list 20.0 20.0) "4")) 12.0',
+        '(list 50.0 50.0) (list (list (list 0.0 0.0) "3")) 12.0',
+        '(list 5.0 0.0) (list (list (list 0.0 0.0) "3")'
+        ' (list (list 8.0 0.0) "4")) 12.0'],
     "cal:ceil": ["1.0", "1.2", "-1.2", "0.0", "5.99"],
+    "cal:loop-area": ["'((0.0 0.0) (120.0 0.0) (120.0 60.0) (0.0 60.0))", "'((0.0 0.0) (0.0 60.0) (120.0 60.0) (120.0 0.0))",
+                      "'((0.0 0.0) (4.0 0.0) (0.0 3.0))",
+                      "'((0.0 0.0) (1.0 1.0) (2.0 2.0))"],
+    "cal:inward-sign": ["'((0.0 0.0) (120.0 0.0) (120.0 60.0) (0.0 60.0))", "'((0.0 0.0) (0.0 60.0) (120.0 60.0) (120.0 0.0))", "'((0.0 0.0) (120.0 0.0) (120.0 40.0) (40.0 40.0) (40.0 120.0) (0.0 120.0))",
+                        "'((0.0 0.0) (1.0 1.0) (2.0 2.0))",
+                        "'((0.0 0.0) (1.0 1.0))"],
+    "cal:in-loop-p": ["(list 60.0 30.0) '((0.0 0.0) (120.0 0.0) (120.0 60.0) (0.0 60.0))",
+                      "(list 200.0 30.0) '((0.0 0.0) (120.0 0.0) (120.0 60.0) (0.0 60.0))",
+                      "(list 60.0 -5.0) '((0.0 0.0) (120.0 0.0) (120.0 60.0) (0.0 60.0))",
+                      "(list 20.0 100.0) '((0.0 0.0) (120.0 0.0) (120.0 40.0) (40.0 40.0) (40.0 120.0) (0.0 120.0))",
+                      "(list 100.0 100.0) '((0.0 0.0) (120.0 0.0) (120.0 40.0) (40.0 40.0) (40.0 120.0) (0.0 120.0))"],
+    "cal:spikes": ["'((0.0 . 40.0) (12.0 . 10.0) (24.0 . 30.0)) 2.0",
+                   "'((0.0 . 40.0) (12.0 . 38.0) (24.0 . 30.0)) 2.0",
+                   "'((0.0 . 40.0) (12.0 . 42.0) (24.0 . 30.0)) 2.0",
+                   "'((0.0 . 10.0) (12.0 . 40.0) (24.0 . 12.0)) 2.0",
+                   "'((0.0 . 40.0) (12.0 . 10.0) (24.0 . 30.0)"
+                   " (36.0 . 90.0) (48.0 . 32.0)) 2.0",
+                   "'((0.0 . 40.0) (12.0 . 10.0)) 2.0",
+                   "nil 2.0"],
     "cal:circumcenter": ["'(0.0 0.0) '(4.0 0.0) '(0.0 4.0)",
                          "'(1.0 1.0) '(3.0 1.0) '(2.0 4.0)",
                          "'(0.0 0.0) '(1.0 1.0) '(2.0 2.0)"],
@@ -136,6 +169,18 @@ INPUTS = {
         '(progn (setenv "CalofinTheme" "") \'auto) \'dim',
         '(progn (setenv "CalofinTheme" "") \'auto) \'hi',
     ],
+    # cal:inkoverride reads a profile key that travels via setenv, the
+    # same trick cal:ink's own theme cases above use -- each case sets
+    # its own CalofinInk-<ROLE> and hands over the role.  'olap is
+    # never given a key, so both halves answer nil for it; the last two
+    # cases clear the keys they touched for whatever runs next.
+    "cal:inkoverride": [
+        '(progn (setenv "CalofinInk-FLAG" "42") \'flag)',
+        '(progn (setenv "CalofinInk-ARC" "7") \'arc)',
+        "'olap",
+        '(progn (setenv "CalofinInk-FLAG" "") \'flag)',
+        '(progn (setenv "CalofinInk-ARC" "") \'arc)',
+    ],
 }
 
 #: Swaps this file does not call, and why.  Every one needs something a
@@ -153,6 +198,7 @@ SKIP = {
     "cal:ask-yn": "asks",
     "cal:ask-yn-nav": "asks",
     "cal:pause": "asks",
+    "cal:askpoint": "asks",
     "cal:syssave": "session state, and the mirror expands its arity",
     "cal:sysrestore": "session state",
     "cal:dimstysave": "session state",

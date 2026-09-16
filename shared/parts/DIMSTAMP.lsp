@@ -620,6 +620,7 @@
                  " value, or type a new one; Enter when done."))
   (setq count 0 rulerents nil)
   (setq pk (getpoint "\nClick a point to place text (Enter when done): "))
+  (if lzd:ask (lzd:ask "\nClick a point to place text (Enter when done): " pk) pk)
   (if pk
     (progn
       (setq lasttext (ds:ask-first))
@@ -647,6 +648,7 @@
   (princ (strcat "\nDIMSTAMP: " (itoa count) " placed."))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "DIMSTAMP"))
   (princ))
 
 (defun c:DIMSTAMPVER ()

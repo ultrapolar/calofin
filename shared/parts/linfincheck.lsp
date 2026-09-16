@@ -278,7 +278,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.15")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.17")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -442,12 +442,17 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-(setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
-(setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
-(setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
-(setq *lfc-orig-color*    1)       ; ACI: the X marking where you drew the point (red)
-(setq *lfc-sugg-color*    3)       ; ACI: the + marking where LINFINCHECK would put it (green)
-(setq *lfc-point-color*   2)       ; ACI: the crosses marking an overlap's two ends (yellow)
+;; The six below are 'auto too -- they do not vary with the screen the
+;; way *lfc-grey-color* does, but 'auto routes them through lfc:ink's
+;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
+;; in the profile) can override without touching source.  A number is
+;; still used exactly as given.
+(setq *lfc-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
+(setq *lfc-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
+(setq *lfc-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+(setq *lfc-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
+(setq *lfc-sugg-color*    'auto)   ; ACI: the + marking where LINFINCHECK would put it (green)
+(setq *lfc-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
 
 ;; The command line and the report name these colours as they use them,
 ;; so a colour changed here is described correctly rather than still
@@ -460,9 +465,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *lfc-constr-layer*  "LINFINCHECK-CONSTRUCTION")
-(setq *lfc-constr-color*  2)       ; ACI (yellow)
+(setq *lfc-constr-color*  'auto)   ; ACI (yellow)
 (setq *lfc-report-layer*  "LINFINCHECK-REPORT")
-(setq *lfc-report-color*  3)       ; ACI (green)
+(setq *lfc-report-color*  'auto)   ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -671,6 +676,7 @@
     (princ (strcat "\nLINFINCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
     (princ "\nLINFINCHECKRESCUE: nothing to restore - no LINFINCHECK markers in the drawing."))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
+  (if lzd:end (lzd:end "LINFINCHECKRESCUE"))
   (princ))
 
 ;; --- small helpers -------------------------------------------------
@@ -804,15 +810,16 @@
   (grdraw (list (- (car p) s) (cadr p)) (list (+ (car p) s) (cadr p)) col 1)
   (grdraw (list (car p) (- (cadr p) s)) (list (car p) (+ (cadr p) s)) col 1))
 
-(defun lfc:mark-point (pt)
+(defun lfc:mark-point (pt / col)
   ;; both strokes, for a point that is simply being pointed out
-  (lfc:mark-x pt *lfc-point-color*)
-  (lfc:mark-plus pt *lfc-point-color*))
+  (setq col (cal:ink *lfc-point-color* 'point))
+  (lfc:mark-x pt col)
+  (lfc:mark-plus pt col))
 
 (defun lfc:progress (what n total)
   (princ (strcat "\r  [" (itoa n) "/" (itoa total) "] " what "          ")))
 
-(defun lfc:confirm-move (label orig sugg what / ans newp)
+(defun lfc:confirm-move (label orig sugg what / ans newp ocol scol)
   ;; The point has been put where LINFINCHECK thinks it belongs, but BOTH
   ;; spots are marked and spelled out so there is no doubt which is
   ;; which: an X where you drew it, a + where we would move
@@ -822,15 +829,17 @@
   ;;   'move - take our suggestion
   ;;   'keep - put it back exactly where you drew it
   ;;   <point> - a spot you picked yourself (current UCS)
-  (lfc:mark-x    orig *lfc-orig-color*)
-  (lfc:mark-plus sugg *lfc-sugg-color*)
+  (setq ocol (cal:ink *lfc-orig-color* 'orig)
+        scol (cal:ink *lfc-sugg-color* 'sugg))
+  (lfc:mark-x    orig ocol)
+  (lfc:mark-plus sugg scol)
   (if (> (distance orig sugg) *lfc-same-pt*)
-    (grdraw (trans orig 0 1) (trans sugg 0 1) *lfc-sugg-color* 1))
+    (grdraw (trans orig 0 1) (trans sugg 0 1) scol 1))
   (princ (strcat "\n  " label " - which spot is right?"
                  "\n    Keep = where you drew it   " (lfc:ptstr orig)
-                 "  (" (lfc:color-name *lfc-orig-color*) " X)"
+                 "  (" (lfc:color-name ocol) " X)"
                  "\n    Move = onto " what " " (lfc:ptstr sugg)
-                 "  (" (lfc:color-name *lfc-sugg-color*) " +), "
+                 "  (" (lfc:color-name scol) " +), "
                  (lfc:dist (distance orig sugg)) " away"
                  "\n    Pick = somewhere else you point at"))
   ;; the pick is a second question, so Back at it re-asks the first
@@ -840,6 +849,7 @@
     (initget "Move Keep Pick")
     (setq ans (getkword
                 "\n  [Move/Keep/Pick] <Move>: "))
+    (if lzd:ask (lzd:ask "\n  [Move/Keep/Pick] <Move>: " ans) ans)
     (cond
       ((or (null ans) (= ans "Move")) (setq ans 'move))
       ((= ans "Keep") (setq ans 'keep))
@@ -847,8 +857,9 @@
        (initget "Back Undo")
        (setq newp (getpoint (strcat "\n  Pick the spot for " label
                                     " <Move to the "
-                                    (lfc:color-name *lfc-sugg-color*)
+                                    (lfc:color-name scol)
                                     " +> [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") newp) newp)
        (cond
          ((and (= (type newp) 'STR) (member newp '("Back" "Undo")))
           (princ "\n  Stepping back one question.")
@@ -926,7 +937,7 @@
 (defun lfc:red (s)
   ;; wrap an MTEXT run so it renders in the flag colour, reverting
   ;; to the surrounding colour after (braces scope the change)
-  (strcat "{\\C" (itoa *lfc-flag-color*) ";" s "}"))
+  (strcat "{\\C" (itoa (cal:ink *lfc-flag-color* 'flag)) ";" s "}"))
 
 (defun lfc:small (s)
   ;; all-clear text renders at *lfc-green-scale* of the height the
@@ -1111,7 +1122,7 @@
                          minx miny maxx maxy
                          / mainl diml l pr nred nmain ndim nlin grps grp
                            ref h ins ins2 txt right)
-  (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+  (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
   (foreach l lines
     (if (lfc:dimline-p l)
       (setq diml (cons l diml))
@@ -2428,7 +2439,7 @@
 
 (defun lfc:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote)
+                                              ok note meas assocnote fcol)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
   ;; anchor-held-point-count).
@@ -2472,12 +2483,13 @@
   (if (member ok '(back skip))
     (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
     (progn
-      (setq ok (eq ok 'yes))
+      (setq ok (eq ok 'yes)
+            fcol (cal:ink *lfc-flag-color* 'flag))
       (setq note (strcat
                    (if ok
                      "OK"
                      (strcat "FLAGGED to fix ("
-                             (lfc:color-name *lfc-flag-color*) ")"))
+                             (lfc:color-name fcol) ")"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -2491,7 +2503,7 @@
                              " point(s) held at a shared anchor")
                      "")
                    (if assocnote assocnote "")))
-      (if (not ok) (lfc:set-color ent *lfc-flag-color*))
+      (if (not ok) (lfc:set-color ent fcol))
       (list h ok note (length moved) meas (length held)))))
 
 ;; --- arc review ----------------------------------------------------
@@ -2598,7 +2610,7 @@
              nil)))))
     (t nil)))
 
-(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note)
+(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
   ;; interactive review of one arc's endpoints.
   ;; Returns (handle untouched-flag report-note moved-point-count).
   (setq ed     (entget ent)
@@ -2617,16 +2629,17 @@
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
-  (if moved (lfc:set-color ent *lfc-arc-color*))
+  (setq acol (cal:ink *lfc-arc-color* 'arc))
+  (if moved (lfc:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
-                        (lfc:color-name *lfc-arc-color*) "), "
+                        (lfc:color-name acol) "), "
                         (itoa (length kept)) " kept where you drew them"))
                (moved (strcat (itoa (length moved))
                               " endpoint(s) moved ("
-                              (lfc:color-name *lfc-arc-color*) ")"))
+                              (lfc:color-name acol) ")"))
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
@@ -2635,7 +2648,7 @@
 ;; --- overlapping line review ---------------------------------------
 
 (defun lfc:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds)
+                                           ans mergeable kinds ocol)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
@@ -2668,6 +2681,7 @@
           (initget "Merge Flag Leave")
           (setq ans (getkword
                       "\n  Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>: "))
+          (if lzd:ask (lzd:ask "\n  Merge into one line, Flag to fix, or Leave as is? [Merge/Flag/Leave] <Merge>: " ans) ans)
           (if (null ans) (setq ans "Merge")))
         (progn
           (princ (if (= (strcase lay1) (strcase lay2))
@@ -2677,25 +2691,27 @@
           (initget "Flag Leave")
           (setq ans (getkword
                       "\n  Flag to fix, or Leave as is? [Flag/Leave] <Flag>: "))
+          (if lzd:ask (lzd:ask "\n  Flag to fix, or Leave as is? [Flag/Leave] <Flag>: " ans) ans)
           (if (null ans) (setq ans "Flag"))))
       (redraw ea 4)
       (redraw eb 4)
       (redraw)
+      (setq ocol (cal:ink *lfc-olap-color* 'olap))
       (cond
         ((= ans "Merge")
          (lfc:merge-lines la lb info)
-         (lfc:set-color ea *lfc-olap-color*)
+         (lfc:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
-                        (lfc:color-name *lfc-olap-color*) ")."))
+                        (lfc:color-name ocol) ")."))
          (list label
                (strcat "merged into one line ("
-                       (lfc:color-name *lfc-olap-color*) ")")
+                       (lfc:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (lfc:set-color ea *lfc-olap-color*)
-         (lfc:set-color eb *lfc-olap-color*)
+         (lfc:set-color ea ocol)
+         (lfc:set-color eb ocol)
          (princ (strcat "\n  Flagged to fix ("
-                        (lfc:color-name *lfc-olap-color*) ")."))
+                        (lfc:color-name ocol) ")."))
          (list label
                (strcat
                  (if (lfc:whole-line-p la)
@@ -2703,7 +2719,7 @@
                      "flagged to fix ("
                      "different layers - flagged to fix (")
                    "polyline edge - flagged to fix (")
-                 (lfc:color-name *lfc-olap-color*) ")")
+                 (lfc:color-name ocol) ")")
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -2805,8 +2821,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *lfc-constr-layer* *lfc-constr-color*)
-        (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+        (cal:ensure-layer *lfc-constr-layer* (cal:ink *lfc-constr-color* 'constr))
+        (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -3134,7 +3150,7 @@
                                           lines)))
                       (progn
                         (setq attwrong T)
-                        (lfc:set-color b *lfc-flag-color*)
+                        (lfc:set-color b (cal:ink *lfc-flag-color* 'flag))
                         (setq keep (cons b keep))
                         (setq lines (cons (strcat "Step Attachment "
                                                   (cdr (assoc 5 (entget b)))
@@ -3244,7 +3260,8 @@
              (if svbb (setq stepht (- (cadr (cadr svbb)) (cadr (car svbb))))))
             ((eq svmode 'user)               ; user says it exists elsewhere
              (princ "\n  Confirm the overall step height against the Tech Title.")
-             (setq stepht (getdist "\n  Type the overall step height or pick two points <skip>: ")))))
+             (setq stepht (getdist "\n  Type the overall step height or pick two points <skip>: "))
+             (if lzd:ask (lzd:ask "\n  Type the overall step height or pick two points <skip>: " stepht) stepht))))
         ;; every Tech Title block: those in the selection, else
         ;; drawing-wide; the one nearest the checked area wins, and
         ;; titles that disagree on WallHt are called out
@@ -3321,7 +3338,7 @@
         ;; mark it red automatically and keep it red
         (if (and htbad hdim)
           (progn
-            (lfc:set-color hdim *lfc-flag-color*)
+            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (princ (strcat "\n  Side view height dimension "
                            (cdr (assoc 5 (entget hdim)))
@@ -3338,7 +3355,7 @@
         (if (and hdim dimht stepht
                  (> (abs (- dimht stepht)) *lfc-height-tol*))
           (progn
-            (lfc:set-color hdim *lfc-flag-color*)
+            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (setq lines (cons (strcat "Height dim "
                                       (cdr (assoc 5 (entget hdim)))
@@ -3686,6 +3703,7 @@
                                  *lfc-constr-layer* ".")
                          "")
                        "\nOne UNDO reverts everything LINFINCHECK changed (including the report)."))))))
+  (if lzd:end (lzd:end "LINFINCHECK"))
   (princ))
 
 ;; --- LINFINSCAN / LITELINFINSCAN: the read-only twins -----------------
@@ -4071,7 +4089,7 @@
      (setq bordsum (lfc:border-verdict bordbb))
 
      ;; --- report (the only thing the scan writes) --------------------
-     (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+     (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
      (lfc:clear-old)
      (setq dhdr (if lite
                   nil
@@ -4136,6 +4154,7 @@
                     (if datesum (strcat "\nDate: " datesum) "")
                     "\nReport written on layer " *lfc-report-layer*
                     "; nothing else was changed."))))
+  (if lzd:end (lzd:end "LINFINCHECK"))
   (princ))
 
 
@@ -4264,7 +4283,8 @@
 
 (defun lfc:tut-pause (msg)
   (princ (strcat "\n  " msg))
-  (getstring "\n  --- press Enter to continue ---")
+  ((lambda (v) (if lzd:ask (lzd:ask "\n  --- press Enter to continue ---" v) v))
+    (getstring "\n  --- press Enter to continue ---"))
   (princ))
 
 (defun lfc:tut-line (p1 p2 lay)
@@ -4291,6 +4311,7 @@
 (defun lfc:tut-demo (/ org ox oy made e ss2 i)
   (princ "\n\n--- DEMO: a practice drawing with faults planted in it ---")
   (setq org (getpoint "\n  Pick an empty spot for the practice drawing: "))
+  (if lzd:ask (lzd:ask "\n  Pick an empty spot for the practice drawing: " org) org)
   (if (null org)
     (princ "\n  Cancelled - nothing drawn.")
     (progn
@@ -4414,8 +4435,14 @@
         (princ "\n  Left in place - one U removes the whole tutorial."))
       (princ))))
 
-(defun c:TUTORIALLINFINCHECK ( / *error* oldecho undo-open ans l ins h sstep)
+(defun c:TUTORIALLINFINCHECK ( / *error* oldecho os0 undo-open ans l ins h
+                                sstep)
   (defun *error* (msg)
+    ;; object snaps first, before anything below it can throw.
+    ;; lfc:tut-dim mutes OSMODE round its DIMLINEAR and puts it back
+    ;; from a local of its own, which this handler cannot see -- so
+    ;; the tutorial holds the drafter's value itself
+    (if os0 (setvar "OSMODE" os0))
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -4432,9 +4459,10 @@
   (initget "Checks Demo Both LIST")
   (setq ans (getkword
               "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: "))
+  (if lzd:ask (lzd:ask "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: " ans) ans)
   (if (null ans) (setq ans "Both"))
   (if (= ans "LIST") (setq ans "Checks"))
-  (setq oldecho (getvar "CMDECHO"))
+  (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -4455,13 +4483,14 @@
         (cond
           ((= sstep 1)
            (if (cal:ask-yn "\n  Drop that list into the drawing as a reference sheet?" "Yes")
-             (progn (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
+             (progn (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
            (initget "Back Undo")
            (setq ins (getpoint
                        "\n  Pick the top-left corner for the sheet [Back]: "))
+           (if lzd:ask (lzd:ask "\n  Pick the top-left corner for the sheet [Back]: " ins) ins)
            (cond
              ((and (= (type ins) 'STR) (member ins '("Back" "Undo")))
               (princ "\n  Stepping back one question.")
@@ -4474,6 +4503,7 @@
            (initget "Back Undo")
            (setq h (getdist (strcat "\n  Text height <"
                                     (rtos *lfc-report-hfall*) "> [Back]: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") h) h)
            (if (and (= (type h) 'STR) (member h '("Back" "Undo")))
              (progn (princ "\n  Stepping back one question.")
                     (setq sstep 2))
@@ -4496,6 +4526,7 @@
                  "\n  LINFINSCAN first if you want to look without touching anything;"
                  "\n  LINFINCHECK to review and fix; LINFINCHECKRESCUE to undo the marks."
                  "\n  One U undoes everything this tutorial drew."))
+  (if lzd:end (lzd:end "TUTORIALLINFINCHECK"))
   (princ))
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))

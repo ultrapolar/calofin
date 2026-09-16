@@ -74,16 +74,33 @@ pinkey = str(vm.globals['lzp:*pinkey*'])
 check("the palette writes LAZPANEL's own registry key",
       vb_literal(pinkey) in MEM, pinkey)
 
+# Two of them are named as tunables rather than spelled at the call
+# site (LAZNAME passes the value name in), so they are read off those
+# constants -- a value this check cannot see is a value that can drift.
 values = set(re.findall(r'lzp:\*pinkey\*\s+"([A-Za-z]+)"', PANEL_SRC))
-check("the panel keeps exactly three values there",
-      values == {'Pins', 'Recent', 'Theme'}, repr(sorted(values)))
-for v in sorted(values - {'Theme'}):
+values |= set(re.findall(r'\(setq lzp:\*(?:alias|cap)val\* "([A-Za-z]+)"\)',
+                         PANEL_SRC))
+check("the panel keeps exactly six values there",
+      values == {'Pins', 'Recent', 'Theme', 'Hidden', 'Alias', 'Caption'},
+      repr(sorted(values)))
+for v in sorted(values - {'Theme', 'Hidden', 'Alias', 'Caption'}):
     check("the palette reads and writes %r too" % v,
           ('"%s"' % v) in MEM)
 # Theme is the third thing the two surfaces share, and it is read on
 # the palette side by PaletteTheme rather than PaletteMemory: CALSET
 # writes it here so a drafter who has said which way their screen
-# reads has said it to both surfaces, exactly as a pin does.
+# reads has said it to both surfaces, exactly as a pin does.  Hidden
+# is NOT shared: LAZHIDE is a Lisp-only settings command, and nothing
+# on the VB side reads or writes its list yet -- the day the palette
+# grows its own hide feature this exemption comes out and the loop
+# above starts holding it to the same bargain Pins and Recent keep.
+# Alias and Caption are exempt for the same reason and are the bigger
+# divergence: LAZNAME lets a drafter rename what they type and what a
+# button says, the DCL panel honours both, and the palette shows the
+# shipped words and answers only to the shipped names until it learns
+# to read these two values.  ui/calofin_net/Generated/CommandCatalog.g.vb
+# is generated from lzp:*captions* at build time, so the rename is a
+# Lisp-side rename by construction, not an oversight.
 check("the palette reads 'Theme' out of the same key",
       '"Theme"' in THEME and vb_literal(pinkey) in THEME)
 check("...and CALSET is what writes it",
@@ -167,8 +184,16 @@ check("the panel spells the substring search out rather than wcmatch",
 check("the palette uses Contains, not a pattern matcher",
       '.Contains(needle)' in VB and 'Regex' not in VB)
 check("both search the caption as well as the name",
-      '(lzp:instr (strcase (lzp:caption n)) up)' in PANEL_SRC
+      '(setq cap (strcase (lzp:caption n))' in PANEL_SRC
+      and '(lzp:instr n w) (lzp:instr cap w)' in PANEL_SRC
       and 'e.Caption.ToUpperInvariant().Contains(needle)' in VB)
+# the panel also searches the one-sentence blurb and the keyword list --
+# two fields the palette has no reader for yet, the same kind of
+# exemption Alias and Caption carry in section 1: a LISP-SIDE widening
+# of the search, not a parity gap, until the palette learns to read
+# either.
+check("...and the blurb and keyword list too, Lisp-side only for now",
+      '(lzp:instr kw w) (lzp:instr bl w)' in PANEL_SRC)
 
 # lzp:fill selects the top hit so a search and Enter runs it
 check("the top hit is selected for you, both sides",

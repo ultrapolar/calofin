@@ -1402,8 +1402,9 @@
 ;; has 325 pair names and initget cannot carry them, so Back and Done
 ;; are typed words too and the prompt says so.
 (defun cst:askpair (n dflt / s)
-  (setq s (cal:trim (getstring (strcat "\n  Pair to dimension <" dflt
-                                       "> (B = back, D = done): "))))
+  (setq s (cal:trim ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                      (getstring (strcat "\n  Pair to dimension <" dflt
+                                         "> (B = back, D = done): ")))))
   (cond ((= s "") (cst:parsepair dflt n))
         ((cal:back-word-p s) 'CAL-BACK)
         ((member (strcase s) '("D" "DONE")) 'CST-DONE)
@@ -1474,8 +1475,9 @@
 ;; for the same reason, so Back and Done are typed words too.
 (defun cst:askrun (n / str ls)
   (setq str (cal:trim
-              (getstring (strcat "\n  Points on the arc <Enter = done>"
-                                 " (B = back): "))))
+              ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                (getstring (strcat "\n  Points on the arc <Enter = done>"
+                                   " (B = back): ")))))
   (cond ((= str "") 'CST-DONE)
         ((cal:back-word-p str) 'CAL-BACK)
         ((member (strcase str) '("D" "DONE")) 'CST-DONE)
@@ -1947,6 +1949,7 @@
   ;; _End then would be closing a group that is not there
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
+  (if lzd:end (lzd:end "CONSTELLATION"))
   (princ))
 
 ;; Print the loaded version.

@@ -863,6 +863,7 @@
   (if back (initget "Back Undo"))
   (setq ht (getreal (strcat "\nAnnotation text height <" (ddg-n1 cur) ">"
                             (if back " [Back]" "") ": ")))
+  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ht) ht)
   (if (= (type ht) 'STR)
     'DDG-BACK
     (progn
@@ -1078,6 +1079,7 @@
                ;; 3) click a point in the drawing for the report
                ((= stage 1)
                 (setq pt (getpoint "\nPick a point in the drawing for the height report: "))
+                (if lzd:ask (lzd:ask "\nPick a point in the drawing for the height report: " pt) pt)
                 (if (null pt)
                   (progn (princ "\nAborted - no point picked.") (setq done T))
                   (setq stage (if (= mode "BARO") 7 2))))
@@ -1089,6 +1091,7 @@
                ((= stage 7)
                 (initget "Back Undo")
                 (setq off (getreal "\nTake-off point vs the deck, in FEET (+ above, - below) [Back] <0>: "))
+                (if lzd:ask (lzd:ask "\nTake-off point vs the deck, in FEET (+ above, - below) [Back] <0>: " off) off)
                 (cond
                   ((= (type off) 'STR) (setq stage 1))
                   (t
@@ -1130,6 +1133,7 @@
                ((= stage 3)
                 (initget "Back Undo")
                 (setq gft (getreal "\nGround elevation at the site in FEET, if you know it (Enter to abort) [Back]: "))
+                (if lzd:ask (lzd:ask "\nGround elevation at the site in FEET, if you know it (Enter to abort) [Back]: " gft) gft)
                 (cond
                   ((= (type gft) 'STR) (setq stage 1))
                   ((null gft) (princ "\nAborted - H unchanged.") (setq done T))
@@ -1244,6 +1248,7 @@
                 (initget "Yes No Back Undo")
                 (setq ans (getkword (strcat "\nSave H = " (ddg-n1 hsel)
                                             " ft for DDFIX? [Yes/No/Back] <Yes>: ")))
+                (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
                 (if (null ans) (setq ans "Yes"))
                 (cond
                   ((member ans '("Back" "Undo"))
@@ -1266,6 +1271,7 @@
                                   "% size change per unit of height."))
                    (setq done T))
                   (t (princ "\nH unchanged.") (setq done T))))))))))))
+  (if lzd:end (lzd:end "DDGPS"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -1289,10 +1295,12 @@
     (if (= stage 1)
       (progn
         (setq lat (getreal "\nLatitude  (decimal degrees, negative = South): "))
+        (if lzd:ask (lzd:ask "\nLatitude  (decimal degrees, negative = South): " lat) lat)
         (setq stage 2))
       (progn
         (initget "Back Undo")
         (setq lon (getreal "\nLongitude (decimal degrees, negative = West) [Back]: "))
+        (if lzd:ask (lzd:ask "\nLongitude (decimal degrees, negative = West) [Back]: " lon) lon)
         (if (= (type lon) 'STR) (setq stage 1) (setq done T)))))
   (cond
     ((or (null lat) (null lon)) (princ "\nNeed both numbers."))
@@ -1312,6 +1320,7 @@
            (cadr g)
            (list ""
                  "Check the internet connection / firewall, then try again."))))))
+  (if lzd:end (lzd:end "DDELEV"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -1409,6 +1418,7 @@
                          (if (nth 0 m) "  (DJI datum, not sea level)" ""))))))
        (setq out (append out (list "Could not get ANY bytes out of this file."))))
      (ddg-report "DDGPS READ TEST" out)))
+  (if lzd:end (lzd:end "DDTEST"))
   (princ))
 
 (defun c:DDGPSVER ()

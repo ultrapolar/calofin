@@ -4513,6 +4513,45 @@ def test_leaving_points_out_toggles():
     print("  points can be left out of a Redo, and put back")
 
 
+def test_a_point_to_leave_out_is_named():
+    """The omit prompt names a survey point rather than taking a place:
+    a typed number finds it, a click within the snap radius finds it,
+    and a click on nothing is re-asked where it stands instead of
+    dragging in whatever was nearest."""
+    from lispvm import VM
+    vm = VM()
+    vm.load(LISP_FILE)
+    vm.loads("(setq fit-pts nil fit-ptnames nil fit-npt 0 fit-nmoved 0"
+             " fit-omit nil)")
+    for n, (x, y) in enumerate([(0.0, 0.0), (100.0, 0.0), (100.0, 50.0)], 1):
+        vm.loads('(fit:add-point (list %r %r) "%d")' % (x, y, n))
+    assert len(vm.loads("(fit:active)")) == 3
+
+    # a number nothing carries is named and re-asked; then "3" names the
+    # third point, and Enter ends the loop
+    vm.script = ["99", "3", None]
+    vm.loads("(fit:omit-loop)")
+    said = "".join(vm.printed)
+    assert 'No survey point is numbered "99"' in said, said[-200:]
+    assert "leaving out Pt.3" in said, said[-200:]
+    assert len(vm.loads("(fit:active)")) == 2, vm.loads("(fit:active)")
+
+    # naming it again puts it back
+    vm.script = ["Pt.3", None]
+    vm.loads("(fit:omit-loop)")
+    assert "Pt.3 back in" in "".join(vm.printed)
+    assert len(vm.loads("(fit:active)")) == 3
+
+    # a click on nothing is re-asked, never snapped to the nearest
+    vm.printed = []
+    vm.script = [[900.0, 900.0, 0.0], [99.0, 1.0, 0.0], None]
+    vm.loads("(fit:omit-loop)")
+    said = "".join(vm.printed)
+    assert "No survey point there" in said, said[-200:]
+    assert "leaving out Pt.2" in said, said[-200:]
+    print("  a point to leave out is named, clicked or typed")
+
+
 def paren_depth(src):
     depth = 0
     in_str = in_comment = esc = False
@@ -4757,6 +4796,7 @@ def main():
     test_lisp_engine_matches_mirror()
     test_the_questions_run_and_step_back()
     test_leaving_points_out_toggles()
+    test_a_point_to_leave_out_is_named()
     test_a_moved_point_is_not_a_survey_point()
     test_the_command_wraps_the_fit()
     print("\nall tests passed")

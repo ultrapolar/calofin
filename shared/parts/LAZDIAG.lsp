@@ -103,7 +103,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.1")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.3")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -142,6 +142,10 @@
 (setq lzd:*mark* nil)      ; entlast at the start: what this run drew is
                            ; everything after it
 (setq lzd:*log* nil)       ; the transcript, newest first
+(setq lzd:*answers* nil)
+(setq lzd:*nsel* 0)              ; how many of lzd:gather's entities were watched INPUT   ; (prompt . value) pairs, newest first --
+                           ; the same answers as VALUES, for the
+                           ; oddities pass that reads them as numbers
 (setq lzd:*step* nil)      ; the last breadcrumb
 (setq lzd:*watch* nil)     ; enames the tool registered as its input
 (setq lzd:*pts* nil)       ; (label . point) for every point picked
@@ -156,6 +160,10 @@
 ;; drawing, which is not a number and would not load.
 (defun lzd:num (v)
   (if (numberp v) (rtos (float v) 2 8) "0.0"))
+
+(defun lzd:pad (s w)
+  (while (< (strlen s) w) (setq s (strcat s " ")))
+  s)
 
 ;; Group codes are conventionally right-justified in three columns.  No
 ;; reader needs it; an editor showing the file to a human does.
@@ -235,11 +243,20 @@
 ;;   transcript that does span two runs of one tool says so rather than
 ;;   running them together.
 (defun lzd:begin (tool ver)
+  ;; A context still standing when a DIFFERENT tool begins belongs to a
+  ;; run that finished without failing -- lzd:report and lzd:end both
+  ;; clear it -- so this is where that run gets its "ok" line.  The
+  ;; lazy half of the logging: lzd:end is the direct one, and this
+  ;; catches the commands that do not end in a (princ) for it to sit
+  ;; before, and the session where AutoCAD was closed on the last one.
+  (if (and lzd:*tool* (not (lzd:mine-p tool)))
+    (lzd:log "ok" nil nil))
   (if (not (lzd:mine-p tool))
     (setq lzd:*tool*    (lzd:str tool)
           lzd:*started* (cal:datestr)
           lzd:*mark*    (entlast)
           lzd:*log*     nil
+          lzd:*answers* nil
           lzd:*step*    nil
           lzd:*watch*   nil
           lzd:*pts*     nil))
@@ -263,6 +280,8 @@
 ;; and case-insensitively -- a tool that ended a context it did not own
 ;; would throw away the prompts of the run still going on around it.
 (defun lzd:end (tool)
+  (if (and lzd:*tool* (or (null tool) (lzd:mine-p tool)))
+    (lzd:log "ok" nil nil))
   (if (or (null tool) (null lzd:*tool*) (lzd:mine-p tool))
     (lzd:disown))
   nil)
@@ -285,10 +304,64 @@
 ;; A prompt and what came back.  This is the call the ask helpers make,
 ;; and it is the whole reason a report can say which question the run
 ;; died on.
+;; An answer as something a REPLAY can read back, not only a person.
+;; lzd:str is for showing; this is for the transcript, where the type
+;; has to survive: a getstring that returned "25" and a getdist that
+;; returned 25.0 look the same on a page and are not the same to the
+;; prompt that asked, and a probe feeding "25" to a getdist would fail
+;; on the feed and prove nothing about the bug.
+;;
+;;   nil          Enter, or NA
+;;   25.5         a number, decimal whatever LUNITS says
+;;   "Radius"     a string -- a keyword, a note, a typed dimension
+;;   (x y z)      a point; Z always written
+;;   <ent>        an entity -- re-found by its geometry on replay
+;;   (<ent> (x y z))  an entsel pick: the entity and where it was clicked
+;;   'POOL-BACK   a symbol
+(defun lzd:enc (v / s x)
+  (cond
+    ((null v) "nil")
+    ((eq v T) "T")
+    ((= (type v) 'STR)
+     (strcat "\"" (lzd:quote (lzd:str v)) "\""))
+    ((= (type v) 'INT) (itoa v))
+    ((= (type v) 'REAL) (lzd:real v))
+    ((= (type v) 'SYM) (strcat "'" (vl-princ-to-string v)))
+    ((= (type v) 'ENAME) "<ent>")
+    ((and (listp v) (numberp (car v)))
+     (strcat "(" (lzd:num (car v)) " " (lzd:num (cadr v)) " "
+             (lzd:num (if (caddr v) (caddr v) 0.0)) ")"))
+    ((and (listp v) (= (type (car v)) 'ENAME))
+     (strcat "(<ent> " (lzd:enc (cadr v)) ")"))
+    ((listp v)
+     (setq s "(")
+     (foreach x v (setq s (strcat s (if (= s "(") "" " ") (lzd:enc x))))
+     (strcat s ")"))
+    (t (lzd:str v))))
+
+;; A string's own double quotes, escaped, so the reader of the
+;; transcript can tell where the answer ends.
+;; A REAL keeps its point: rtos under DIMZIN 8 writes 12.0 as "12", and
+;; a replay that read that back as an INT would hand the tool integer
+;; arithmetic it never had -- (/ 100 12) is 8, (/ 100 12.0) is not.
+(defun lzd:real (v / s)
+  (setq s (lzd:num v))
+  (if (wcmatch s "*`.*") s (strcat s ".0")))
+
+(defun lzd:quote (s / out i c n)
+  (setq out "" i 1 n (strlen s))
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (setq out (strcat out (if (= c "\"") "\\\"" c)) i (1+ i)))
+  out)
+
 (defun lzd:ask (prompt answer)
   (lzd:step prompt)
   (lzd:say (strcat "  ? " (lzd:str prompt)
-                   "   -> " (lzd:str answer)))
+                   "   -> " (lzd:enc answer)))
+  (setq lzd:*answers* (cons (cons (lzd:str prompt) answer) lzd:*answers*))
+  (if (> (length lzd:*answers*) lzd:*max-log*)
+    (setq lzd:*answers* (lzd:firstn lzd:*answers* lzd:*max-log*)))
   answer)
 
 ;; The breadcrumb that stands in for a line number.  The last one set is
@@ -318,7 +391,12 @@
     ((= (type x) 'PICKSET)
      (setq i 0)
      (while (< i (sslength x))
-       (setq lzd:*watch* (cons (ssname x i) lzd:*watch*) i (1+ i))))
+       (setq lzd:*watch* (cons (ssname x i) lzd:*watch*) i (1+ i)))
+     ;; and a line in the transcript, between the prompts it was made
+     ;; between: a reader sees WHEN the tool took its selection, and
+     ;; tools/probe_report.py, replaying the transcript, knows which
+     ;; step to hand the copied geometry back at
+     (lzd:say (strcat "  ? selection   -> <selection of " (itoa i) ">")))
     ((listp x) (foreach e x (lzd:watch e))))
   x)
 
@@ -360,10 +438,10 @@
   (if (vl-catch-all-error-p r) nil r))
 
 (defun lzd:gather ( / out e n)
-  (setq n 0)
+  (setq n 0 lzd:*nsel* 0)
   (foreach e (reverse lzd:*watch*)
     (if (and (< n lzd:*max-ents*) (entget e) (not (member e out)))
-      (setq out (cons e out) n (1+ n))))
+      (setq out (cons e out) n (1+ n) lzd:*nsel* n)))
   (foreach e (lzd:drawn)
     (if (and (< n lzd:*max-ents*) (not (member e out)))
       (setq out (cons e out) n (1+ n))))
@@ -811,7 +889,75 @@
     (strcat "LAZPASS / shared build (CALOFIN-LIB " cal:*version* ")")
     "standalone file from lisp/"))
 
-(defun lzd:report-lines (tool ver msg nents / out)
+;;; -------------------- what is odd about the inputs -------------------
+;;; The first thing anybody diagnosing a failure does is read the
+;;; answers looking for the one that should not be there: the zero, the
+;;; negative, the length that equals the width, the two clicks on one
+;;; spot.  That pass is mechanical, so it is done here and written into
+;;; the report -- above the transcript, where it reads as the summary
+;;; of it.  It flags; it does not judge.  A zero can be a legitimate
+;;; answer, and the report says "zero", not "wrong".
+
+(defun lzd:numeric-p (v) (or (= (type v) 'INT) (= (type v) 'REAL)))
+
+(defun lzd:point-p (v)
+  (and (listp v) (numberp (car v)) (numberp (cadr v))))
+
+;; The flags for one numeric answer, against the others.
+(defun lzd:oddnum (prompt v others / out o)
+  (setq out nil)
+  (cond ((= v 0) (setq out (cons "zero" out)))
+        ((< v 0) (setq out (cons "negative" out)))
+        ((< (abs v) 0.01) (setq out (cons "tiny" out)))
+        ((> (abs v) 100000.0) (setq out (cons "huge" out))))
+  (foreach o others
+    (if (and (/= (car o) prompt) (lzd:numeric-p (cdr o))
+             (equal (float v) (float (cdr o)) 1e-9)
+             (/= v 0))
+      (setq out (cons (strcat "equals " (car o)) out))))
+  (reverse out))
+
+;; The flags for one picked point, against the other picks.
+(defun lzd:oddpt (prompt p others / out o)
+  (foreach o others
+    (if (and (/= (car o) prompt) (lzd:point-p (cdr o))
+             (< (distance (list (car p) (cadr p))
+                          (list (car (cdr o)) (cadr (cdr o))))
+                1e-6))
+      (setq out (cons (strcat "same spot as " (car o)) out))))
+  (reverse out))
+
+;; The section's lines.  Counts first, then one line per answer that
+;; drew a flag, then a word when nothing did -- because "nothing odd
+;; about the inputs" is itself a finding, and the more useful one when
+;; the bug turns out to be in the code.
+(defun lzd:oddities ( / all nn nk np ne out a v f flag line)
+  (setq all (reverse lzd:*answers*) nn 0 nk 0 np 0 ne 0)
+  (foreach a all
+    (setq v (cdr a))
+    (cond ((null v) (setq ne (1+ ne)))
+          ((lzd:numeric-p v) (setq nn (1+ nn)))
+          ((lzd:point-p v) (setq np (1+ np)))
+          ((= (type v) 'STR) (setq nk (1+ nk)))))
+  (setq out (list "THE INPUTS, AND WHAT IS ODD ABOUT THEM"
+                  (strcat "  " (itoa (length all)) " answers: "
+                          (itoa nn) " numbers, " (itoa nk) " words, "
+                          (itoa np) " points, " (itoa ne) " Enter/NA")))
+  (foreach a all
+    (setq v (cdr a) f nil)
+    (cond ((lzd:numeric-p v) (setq f (lzd:oddnum (car a) v all)))
+          ((lzd:point-p v) (setq f (lzd:oddpt (car a) v all))))
+    (if f
+      (progn
+        (setq line (strcat "  ODD  " (car a) " = " (lzd:enc v)))
+        (foreach flag f (setq line (strcat line "   " flag)))
+        (setq out (append out (list line))))))
+  (if (= (length out) 2)
+    (append out (list "  (nothing stands out - the values are ordinary, so"
+                      "   look at the code before the inputs)"))
+    out))
+
+(defun lzd:report-lines (tool ver msg nents nsel nselp / out tail)
   (setq out
     (list
       "CALOFIN ERROR REPORT"
@@ -850,6 +996,12 @@
                                      (strcat " (TRUNCATED at lzd:*max-ents* = "
                                              (itoa lzd:*max-ents*) ")")
                                      "")))
+      (lzd:pair "selected" (if (> nsel 0)
+                             (strcat (itoa nsel) " entities handed to the run"
+                                     " = the first " (itoa nselp)
+                                     " in this file; the rest it drew")
+                             (strcat "none watched (nothing was selected, or"
+                                     " the run swept the whole drawing)")))
       (lzd:pair "picked points" (length lzd:*pts*))
       (lzd:pair "on layers" (strcat lzd:*errlayer* " = this report, "
                                     lzd:*picklayer* " = the clicks"))
@@ -861,16 +1013,33 @@
       "  transcript below says how it got there.  Between them they name"
       "  the prompt it died at, which is the question a line number"
       "  would have answered."
-      ""
-      "THE RUN, PROMPT BY PROMPT"))
+      ""))
+  (setq out (append out (lzd:oddities)))
+  (setq out (append out (list "" "THE RUN, PROMPT BY PROMPT")))
   (setq out (append out
                     (if lzd:*log*
                       (reverse lzd:*log*)
                       (list "  (nothing recorded - the tool does not call"
                             "   lzd:begin, or it failed before its first"
                             "   prompt)"))))
+  ;; What the drafter ran BEFORE this is often the cause and is
+  ;; otherwise gone the moment AutoCAD closes.  It rides in the one file
+  ;; they were told to send, so nobody has to ask them for a second one.
+  (setq out (append out
+                    (list ""
+                          "WHAT ELSE HAS RUN, NEWEST LAST"
+                          "  (from the calofin log -- the whole month of it"
+                          "   is in the file the last line below names)")))
+  (setq out (append out
+                    (if (setq tail (lzd:logtail-safe lzd:*logtail*))
+                      (mapcar '(lambda (l) (strcat "  " l)) tail)
+                      (list "  (nothing logged before this - the first"
+                            "   run recorded, or no folder would take a"
+                            "   log; LAZLOG says which)"))))
   (append out
           (list ""
+                (lzd:pair "log file" (lzd:str (lzd:logpath-safe)))
+                ""
                 "Send this file to whoever maintains calofin.  It holds"
                 "the failure and no more of your drawing than the failure"
                 "needed; your own drawing was not changed.")))
@@ -934,8 +1103,15 @@
                 0.0))
     r))
 
-(defun lzd:build-prims (tool ver msg / geo pts ext h nents e)
-  (setq geo nil nents 0)
+;; T for a primitive lzd:prim-out will actually write -- the one it
+;; drops is a PLINE with no vertices.  Counted so the report can say
+;; how many of the file's entities are the run's INPUT.
+(defun lzd:written-p (pr)
+  (not (and (= (car pr) "PLINE") (null (nth 3 pr)))))
+
+(defun lzd:build-prims (tool ver msg / geo pts ext h nents nsel nselp
+                                        e i pr prims)
+  (setq geo nil nents 0 nsel 0 nselp 0 i 0)
   ;; lzd:gather walks the drawing from an ename snapshotted before the
   ;; run; a tool that erased that entity on its way past leaves entnext
   ;; walking from something that no longer exists.  Caught here so a
@@ -943,12 +1119,187 @@
   ;; report -- the transcript and the error are the half that always
   ;; survives.
   (foreach e (lzd:gather-safe)
-    (setq geo (append geo (lzd:flatten-safe e)) nents (1+ nents)))
+    (setq prims (lzd:flatten-safe e))
+    ;; lzd:gather puts the watched input first, lzd:*nsel* of it: the
+    ;; report says how many entities of the file those are, so a replay
+    ;; can hand the tool its input WITHOUT the output the failed run
+    ;; left beside it
+    (if (< i lzd:*nsel*)
+      (progn
+        (setq nsel (1+ nsel))
+        (foreach pr prims (if (lzd:written-p pr) (setq nselp (1+ nselp))))))
+    (setq geo (append geo prims) nents (1+ nents) i (1+ i)))
   (setq pts (lzd:pickpts)
         ext (lzd:extent (append geo pts))
         h   (lzd:textheight ext))
   (append geo pts (lzd:picklabels h)
-          (lzd:textblock (lzd:report-lines tool ver msg nents) ext h)))
+          (lzd:textblock (lzd:report-lines tool ver msg nents nsel nselp)
+                         ext h)))
+
+;;; -------------------- the run log -------------------------------------
+;;;
+;;;  A report is written when something BREAKS.  The log is written on
+;;;  every run, and it answers the questions a report cannot:
+;;;
+;;;    which tool fails, and how often, against how many clean runs
+;;;    what the drafter ran in the ten minutes BEFORE the failure
+;;;    which prompt they back out of, over and over, without ever
+;;;      reporting it as a bug -- because backing out is not a bug, it
+;;;      is a question somebody could not answer
+;;;
+;;;  None of that survives a session otherwise.  A failure report is one
+;;;  moment; the log is the shape around it, and the shape is what says
+;;;  whether a bug is rare, constant, or only ever after SPA.
+;;;
+;;;  IT NEEDS NO WIRING OF ITS OWN.  Every command already calls
+;;;  lzd:begin at the top and lzd:report from its handler, and every ask
+;;;  helper already calls lzd:ask -- so the log rides on those.  The one
+;;;  call added for it is lzd:end, before a command's trailing (princ),
+;;;  which is where a clean run passes; a command that ends some other
+;;;  way is caught by the lazy flush in lzd:begin instead, which closes
+;;;  out whatever the last run left behind.
+;;;
+;;;  Three outcomes, and the record's size follows how much anybody will
+;;;  ever want from it:
+;;;
+;;;    ok    one line.  A clean run is a count, not a story.
+;;;    quit  one line and the prompt they stopped at.
+;;;    FAIL  the error, the report it wrote, and the last prompts --
+;;;          uppercase so it greps out of a month of runs.
+
+(setq lzd:*logdir* "calofin")    ; the folder the log lives in
+(setq lzd:*logmax* 2000000)      ; bytes before it rolls to a new file
+(setq lzd:*logasks* 12)          ; prompts a FAIL record carries
+(setq lzd:*logtail* 40)          ; lines a report carries back
+
+;; "2026-09-14 14:32:07" -- seconds, because two runs in one minute is
+;; ordinary and a log that cannot order them is a log you cannot read.
+(defun lzd:logtime ( / d dd tt)
+  (setq d  (getvar "CDATE")
+        dd (fix d)
+        tt (- d dd))
+  (strcat (itoa (fix (/ dd 10000))) "-"
+          (cal:zeropad2 (rem (fix (/ dd 100)) 100)) "-"
+          (cal:zeropad2 (rem dd 100)) " "
+          (cal:zeropad2 (fix (+ (* tt 100) 1e-6))) ":"
+          (cal:zeropad2 (rem (fix (+ (* tt 10000) 1e-4)) 100)) ":"
+          (cal:zeropad2 (rem (fix (+ (* tt 1000000) 1e-2)) 100))))
+
+;; "calofin-2026-09.log" -- one file a month.  Rotation by month rather
+;; than by size alone because "send me September" is a thing somebody
+;; asks for and "send me the third rollover" is not.
+(defun lzd:logmonth ( / dd)
+  (setq dd (fix (getvar "CDATE")))
+  (strcat "calofin-" (itoa (fix (/ dd 10000))) "-"
+          (cal:zeropad2 (rem (fix (/ dd 100)) 100)) ".log"))
+
+;; Where the log lives: a calofin folder beside the profile if there is
+;; one, else wherever a report would go.  Its own folder on purpose --
+;; Downloads is for the one file you send, and a log that accumulated
+;; there would be mistaken for one of them every month.
+(defun lzd:logfolder ( / u)
+  (cond
+    ((setq u (getenv "CalofinLogDir")) u)
+    ((setq u (getenv "USERPROFILE")) (strcat u "\\" lzd:*logdir*))
+    ((setq u (getenv "LOCALAPPDATA")) (strcat u "\\" lzd:*logdir*))
+    ((car (lzd:candidates)))))
+
+;; The month's file, rolled when it has outgrown lzd:*logmax*.  A log
+;; that grew without bound would eventually be the thing that made a
+;; drafter's AutoCAD slow, which is a worse bug than any it recorded.
+(defun lzd:logpath ( / dir base try i sz)
+  (setq dir (lzd:logfolder))
+  (if (null dir)
+    nil
+    (progn
+      (vl-mkdir dir)
+      (setq base (lzd:join dir (lzd:logmonth))
+            try  base
+            i    1)
+      (while (and (< i 20)
+                  (setq sz (vl-file-size try))
+                  (> sz lzd:*logmax*))
+        (setq i (1+ i)
+              try (strcat (substr base 1 (- (strlen base) 4))
+                          "-" (itoa i) ".log")))
+      try)))
+
+;; One record's lines, for an outcome.  Everything comes off the run
+;; context, so a caller passes only what the context cannot know.
+(defun lzd:logrec (outcome msg file / out n asks)
+  (setq out (list (strcat (lzd:logtime) "  "
+                          (lzd:pad (lzd:str outcome) 5) "  "
+                          (lzd:str (if lzd:*tool* lzd:*tool* "?"))
+                          (if lzd:*ver* (strcat " " (lzd:str lzd:*ver*)) "")
+                          "  " (lzd:buildshort)
+                          "  " (lzd:str (getvar "DWGNAME")))))
+  (if (and lzd:*step* (/= outcome "ok"))
+    (setq out (append out (list (strcat "    step  " lzd:*step*)))))
+  (if (and msg (/= outcome "ok"))
+    (setq out (append out (list (strcat "    err   " (lzd:str msg))))))
+  (if file
+    (setq out (append out (list (strcat "    file  " (lzd:str file))))))
+  ;; the prompts, newest last, only where somebody will read them
+  (if (= outcome "FAIL")
+    (progn
+      (setq asks (reverse (lzd:firstn lzd:*log* lzd:*logasks*)))
+      (foreach n asks
+        (if (= (substr n 1 4) "  ? ")
+          (setq out (append out (list (strcat "    " (substr n 3)))))))))
+  out)
+
+(defun lzd:buildshort ()
+  (if cal:*version* "LAZPASS" "standalone"))
+
+;; Append a record.  CAUGHT, and silent about its own failures: this is
+;; called from inside *error*, and a log that could not be written is
+;; not worth a second message on top of the one the drafter is already
+;; reading.  The report they send says everything the log would have.
+(defun lzd:log (outcome msg file / r)
+  (setq r (vl-catch-all-apply 'lzd:log-1 (list outcome msg file)))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:log-1 (outcome msg file / path fp l)
+  (setq path (lzd:logpath))
+  (if (null path)
+    nil
+    (progn
+      (setq fp (open path "a"))
+      (if (null fp)
+        nil
+        (progn
+          (foreach l (lzd:logrec outcome msg file) (write-line l fp))
+          (close fp)
+          path)))))
+
+;; The last N lines of this month's log, oldest first.  Read with a
+;; rolling window rather than into a list and trimmed: a month of runs
+;; is a file worth not holding twice.
+;; The two the REPORT calls, caught.  The log is a convenience; the
+;; report is the thing the drafter was told to send.  A log folder that
+;; has gone read-only, a path that will not build, a file that will not
+;; open -- none of that may cost the report, and before these were here
+;; it cost all of it: lzd:report-lines asked for the tail, the tail
+;; raised, and the outer catch turned a diagnosable failure into "could
+;; not be written".
+(defun lzd:logtail-safe (n / r)
+  (setq r (vl-catch-all-apply 'lzd:logtail (list n)))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:logpath-safe ( / r)
+  (setq r (vl-catch-all-apply 'lzd:logpath '()))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:logtail (n / path fp line buf)
+  (setq path (lzd:logpath))
+  (if (or (null path) (null (setq fp (open path "r"))))
+    nil
+    (progn
+      (while (setq line (read-line fp))
+        (setq buf (cons line buf))
+        (if (> (length buf) n) (setq buf (lzd:firstn buf n))))
+      (close fp)
+      (reverse buf))))
 
 ;;; -------------------- what the user is told ---------------------------
 
@@ -1007,8 +1358,8 @@
        (= (strcase (lzd:str tool)) (strcase lzd:*tool*))))
 
 (defun lzd:disown ()
-  (setq lzd:*tool* nil lzd:*ver* nil lzd:*log* nil lzd:*step* nil
-        lzd:*watch* nil lzd:*pts* nil lzd:*mark* nil)
+  (setq lzd:*tool* nil lzd:*ver* nil lzd:*log* nil lzd:*answers* nil
+        lzd:*step* nil lzd:*watch* nil lzd:*pts* nil lzd:*mark* nil)
   nil)
 
 (defun lzd:report-1 (tool ver msg / prims name path)
@@ -1019,14 +1370,25 @@
         lzd:*last* (list tool ver msg prims name)
         lzd:*lastfile* path)
   (if path (lzd:announce tool ver path) (lzd:nofile tool ver msg nil))
-  (lzd:end tool)
+  ;; logged BEFORE lzd:end, which clears the context this reads
+  (lzd:log "FAIL" msg path)
+  (lzd:disown)
   path)
 
 (defun lzd:report (tool ver msg / r)
   (cond
     ;; Esc is not a bug.  A drafter who backs out of POOL twenty times a
-    ;; day must not find twenty DXFs in Downloads.
-    ((lzd:cancel-p msg) nil)
+    ;; day must not find twenty DXFs in Downloads -- but they should
+    ;; find twenty lines in the log, because twenty backings-out of the
+    ;; same prompt is the clearest thing anybody ever says about a
+    ;; question that cannot be answered.
+    ((lzd:cancel-p msg)
+     (if (lzd:mine-p tool) (lzd:log "quit" nil nil))
+     ;; disown, NOT lzd:end -- end logs an "ok" of its own, and a run
+     ;; the drafter backed out of would have gone into the log twice,
+     ;; once as the quit it was and once as a clean run it was not
+     (lzd:disown)
+     nil)
     (lzd:*inside*
      (princ "\n[calofin] The error reporter failed while reporting an")
      (princ "\n[calofin] error -- no file written.  The original error was:")
@@ -1064,6 +1426,7 @@
   (princ "\n[calofin] spot well clear of your work -- off to one side of")
   (princ "\n[calofin] everything, not on the sheet.")
   (setq p (getpoint "\nPlace the error report, far from the drawing: "))
+  (if lzd:ask (lzd:ask "\nPlace the error report, far from the drawing: " p) p)
   (if (null p)
     (progn (princ "\n[calofin] Nothing placed.") nil)
     (progn
@@ -1116,7 +1479,11 @@
   (princ "\n[calofin] Nothing has failed in this session, so this is a")
   (princ "\n[calofin] self test: a report written exactly where a real")
   (princ "\n[calofin] one would go.")
-  (lzd:disown)
+  ;; NOT a disown here.  c:LAZDIAG opened a context of its own at the
+  ;; top like every other command, and throwing it away meant the one
+  ;; command in the build that never appeared in the log was the one
+  ;; whose whole job is the log.  The context is LAZDIAG's already;
+  ;; the self test just adds a line to it.
   (lzd:say "--- LAZDIAG self test: no failure, nothing wrong")
   (setq prims (lzd:build-prims "LAZDIAG" *lazdiag-version*
                                "(self test - no failure has occurred)")
@@ -1134,7 +1501,6 @@
       (princ "\n[calofin] Set the AutoCAD environment string")
       (princ "\n[calofin] CalofinErrorDir to a folder you can write to:")
       (princ "\n[calofin]   (setenv \"CalofinErrorDir\" \"C:\\\\temp\")")))
-  (lzd:disown)
   (princ))
 
 (defun c:LAZDIAG ( / *error* oce undo-open)
@@ -1158,6 +1524,48 @@
   (if lzd:*last* (lzd:again) (lzd:selftest))
   (if undo-open (setq undo-open (lzd:undoend)))
   (setvar "CMDECHO" oce)
+  (if lzd:end (lzd:end "LAZDIAG"))
+  (princ))
+
+;;; -------------------- LAZLOG, the command -----------------------------
+
+;; What the log is for, said where somebody meets it.  Not a second
+;; diagnostic surface: the same records LAZDIAG's reports carry, shown
+;; without needing a failure first.
+(defun c:LAZLOG ( / *error* oce path sz tail l n)
+  (defun *error* (msg)
+    (if oce (setvar "CMDECHO" oce))
+    (if (and msg (not (lzd:cancel-p msg)))
+      (princ (strcat "\nLAZLOG error: " msg)))
+    (if lzd:report (lzd:report "LAZLOG" *lazdiag-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZLOG" *lazdiag-version*))
+  (setq oce (getvar "CMDECHO"))
+  (setvar "CMDECHO" 0)
+  (setq path (lzd:logpath))
+  (cond
+    ((null path)
+     (princ "\n[calofin] No folder will take a log.  Set the AutoCAD")
+     (princ "\n[calofin] environment string CalofinLogDir to one you can")
+     (princ "\n[calofin] write to:  (setenv \"CalofinLogDir\" \"C:\\\\temp\")"))
+    ((null (setq tail (lzd:logtail 60)))
+     (princ (strcat "\n[calofin] Nothing logged yet.  From now on every"
+                    " calofin command"))
+     (princ "\n[calofin] writes one line here when it finishes, backs out")
+     (princ "\n[calofin] or fails:")
+     (princ (strcat "\n[calofin]     " path)))
+    (t
+     (setq sz (vl-file-size path) n 0)
+     (princ "\n[calofin] The calofin run log -- every command that")
+     (princ "\n[calofin] finished, was backed out of, or FAILED:\n")
+     (foreach l tail (princ (strcat "\n  " l)) (setq n (1+ n)))
+     (princ (strcat "\n\n[calofin] " (itoa n) " line(s) shown, out of"))
+     (princ (strcat "\n[calofin]     " path))
+     (if sz (princ (strcat "  (" (itoa (/ sz 1024)) " KB)")))
+     (princ "\n[calofin] Send that file in with a report and the failure")
+     (princ "\n[calofin] arrives with everything you ran around it.")))
+  (setvar "CMDECHO" oce)
+  (if lzd:end (lzd:end "LAZLOG"))
   (princ))
 
 (defun c:LAZDIAGVER ()

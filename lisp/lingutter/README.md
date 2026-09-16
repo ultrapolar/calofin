@@ -8,8 +8,8 @@ else it was shown.
 
 An as-built sheet carries far more than the next station needs: the
 hopper and its slope lines, steps, survey points and their labels, the
-notes. LINGUTTER guts one pool back in a single pass, and asks before it
-does.
+notes. LINGUTTER guts one pool back in a single pass, straight through
+— it does not ask first.
 
 > **It works only inside the highlight.** Window the pool — before
 > typing the command or at its prompt — and everything below happens to
@@ -69,12 +69,13 @@ does.
    bulges, **ByLayer** — no per-entity colour, linetype or lineweight —
    so the result is one polyline whatever went in: one polyline, or
    fifty loose lines and arcs.
-4. **Keeps two kinds of dimension**, and nothing else highlighted
+4. **Keeps three kinds of dimension**, and nothing else highlighted
    survives:
 
    | Kept | Rule |
    | --- | --- |
-   | `CROSS DIM*` — matches both `CROSS DIM` and this repo's `CROSS DIMENSIONS` | **wherever it sits.** A cross dim spans the pool, so most of it is nowhere near the edge |
+   | any **radius or diameter** dimension | **on the perimeter** — regardless of its style. A corner radius under a foot lands in `STANDARD INCHES` like any other short measurement, and that call-out is not the thing to erase |
+   | `CROSS DIM*` — matches `CROSS DIM`, `CROSS DIMENSIONS` and `CROSS DIMENSIONS 0.5` | only when **"Keep CROSS DIMENSIONS?"** is answered Yes, and only when it reads as a **genuine cross measurement of this pool** (below) |
    | `STANDARD`, `SIDE STANDARD` | **only on the perimeter** — every one of its attachment points within `lg:*ontol*` of the loop |
 
    A dimension's *attachment* points are DXF 13 and 14, the two measured
@@ -85,9 +86,45 @@ does.
    attach it, and are not tested — a radius dim on a 3" fillet would
    otherwise be judged by a centre point 3" inside the pool.
 
-   *Every* attachment point has to be on the perimeter, not just one: a
-   dim running from the pool edge in to the hopper is measuring the
-   hopper.
+   *Every* attachment point has to pass its rule, not just one: a dim
+   running from the pool edge in to the hopper is measuring the hopper,
+   and a cross dim with one end nowhere near this pool is not this
+   pool's to keep.
+
+   **A "genuine cross measurement"** is judged by shape, not just
+   location. Both attachment points first have to belong to the pool at
+   all — inside the traced perimeter, or on it — and from there a
+   `CROSS DIM*` dimension is kept when *either*:
+
+   * it spans at least `lg:*crossspan*` (80% by default) of the
+     perimeter's own width or height — **"goes full X"** or **"goes
+     full Y"** — corner to corner, side to side through the middle,
+     however it is drawn, *or*
+   * its two points sit at two of the perimeter's own **vertices** —
+     **the start of one side to the end of it**, corner to corner along
+     one whole edge, however short that edge is (a short notch side
+     would otherwise never reach `lg:*crossspan*` on its own).
+
+   Whichever of those two ways it qualifies, a dimension is **never**
+   kept when both of its points sit on the SAME single perimeter edge
+   and are not that edge's own two endpoints — the start of a line to
+   some random point in the middle of that *same* line. That shape is
+   read as a fraction of one side, not the pool, and is dropped even
+   when it happens to span more than `lg:*crossspan*` on its own (a
+   long enough side could otherwise make a partial reading look like it
+   spans the pool by accident). A small `CROSS DIM*` dimension sitting
+   entirely inside the pool, touching nothing and spanning neither a
+   corner-to-corner run nor most of the pool, gets no exemption either
+   — it goes with the rest, the same as a stray one that answers to a
+   different pool in the same highlight.
+
+   `LINGUTTER` asks **"Keep CROSS DIMENSIONS?"** once, before it reports
+   what it found. Answered No, every `CROSS DIM*` dimension gets no
+   exemption regardless of its shape, and is judged like any other
+   style not in `lg:*perimstyles*` — dropped, and counted in the report
+   like everything else. The radius/diameter rule above does not go
+   through this question at all: a radius dim on the perimeter is kept
+   either way.
 5. **Erases everything else it was shown** — text, blocks, points,
    hatches, the geometry the perimeter was traced from, and dimensions
    in any other style. `VIEWPORT` entities are never erased, and a layer
@@ -103,9 +140,9 @@ Before erasing anything it prints exactly what it found in the
 highlight — how many
 vertices the perimeter has and how far round it is, how many dimensions
 are kept under each rule, and **how many are dropped, counted by
-reason** — then asks, defaulting to `No`. Nothing disappears silently:
-a `STANDARD INCHES` dim sitting on the perimeter is reported as
-`3 x STANDARD INCHES - style not kept`, not quietly deleted.
+reason** — then erases it, without asking first. Nothing disappears
+silently: a `STANDARD INCHES` dim sitting on the perimeter is reported
+as `3 x STANDARD INCHES - style not kept`, not quietly deleted.
 
 The whole run is one undo group, so a single `U` puts the drawing back.
 
@@ -134,9 +171,22 @@ The whole run is one undo group, so a single `U` puts the drawing back.
    sweeps, so it sweeps only what you showed it — highlight nothing and
    it says so and stops.
 
-**Run `LINGUTTERSCAN` first on a sheet you care about.** It answers the
-one question worth knowing in advance: did it find the right loop, and
-is it about to drop a dimension you wanted?
+   Then, whenever something was highlighted, both commands ask once:
+
+   ```
+   Keep CROSS DIMENSIONS? [Yes/No] <Yes>:
+   ```
+
+   Answered Yes, a `CROSS DIM*` dimension inside the perimeter or
+   connected to it survives; answered No, it gets no exemption and is
+   judged like any other style. This is the only question either
+   command asks — it is not a confirmation to erase, which neither
+   command ever asks for.
+
+**Run `LINGUTTERSCAN` first on a sheet you care about.** LINGUTTER does
+not confirm before it erases, so this is the one chance to see what it
+would keep and drop beforehand: did it find the right loop, and is it
+about to drop a dimension you wanted?
 
 ## Tunables
 
@@ -147,13 +197,14 @@ needs different names.
 | --- | --- | --- |
 | `lg:*poollayer*` | `"POOL"` | layer the perimeter is drawn on |
 | `lg:*poolcolor*` | `4` (cyan) | its colour, when the layer has to be created |
-| `lg:*anystyles*` | `("CROSS DIM*")` | dim styles kept wherever they sit, as wildcard patterns matched against the style name |
+| `lg:*anystyles*` | `("CROSS DIM*")` | dim styles kept when "Keep CROSS DIMENSIONS?" is Yes and the dim reads as a genuine cross measurement of the pool, as wildcard patterns matched against the style name |
 | `lg:*perimstyles*` | `("STANDARD" "SIDE STANDARD")` | dim styles kept only on the perimeter |
 | `lg:*keeplayers*` | `nil` | layers left alone entirely |
 | `lg:*skiplayers*` | `("DEFPOINTS" "DIMENSION")` | layers the perimeter is never traced from |
 | `lg:*ontol*` | `1.0` | how far a dim's attachment point may sit off the perimeter and still count as on it |
 | `lg:*snaps*` | `(0.05 6.0 24.0)` | the snap ladder: how far apart two ends may be and still count as one point, tried tightest first |
 | `lg:*cover*` | `0.8` | how much of the highlight's extent a traced exterior must span before it is believed |
+| `lg:*crossspan*` | `0.8` | how much of the perimeter's own bounding box a kept `lg:*anystyles*` dim must span, in X or Y, to count as a full cross measurement rather than a small local one |
 | `lg:*runpaddle*` | `T` | `nil` to stop after the gut |
 
 The style lists are wildcards, so `lg:*anystyles*` catches a drawing
@@ -178,9 +229,21 @@ so an outline drawn closed still traces.
 
 * **`STANDARD INCHES` is deliberately not in `lg:*perimstyles*`.** The
   two styles kept on the perimeter are `STANDARD` and `SIDE STANDARD`.
-  A perimeter side under 12" that `AUTODIM` put in `STANDARD INCHES`
+  A perimeter SIDE under 12" that `AUTODIM` put in `STANDARD INCHES`
   therefore goes with the rest — reported by style, never silently. Add
-  the style to `lg:*perimstyles*` to keep those too.
+  the style to `lg:*perimstyles*` to keep those too. A RADIUS or
+  DIAMETER dim is not caught by this: `AUTODIM` puts a corner radius
+  under 12" in `STANDARD INCHES` too, and that one is kept, style
+  aside, whenever it sits on the perimeter.
+* **"Keep CROSS DIMENSIONS?" answered No** drops every `lg:*anystyles*`
+  dimension like any other style not in `lg:*perimstyles*` — counted in
+  the report, not silently.
+* **A `lg:*anystyles*` dim is judged by shape, not just location.** A
+  small one entirely inside the pool, touching nothing, is kept no more
+  than a stray one outside it is — `lg:*crossspan*` and vertex-to-vertex
+  are what a genuine cross measurement has to satisfy. "The start of
+  one edge to a random point along that SAME edge" satisfies neither
+  one on purpose, even when it spans most of the pool by accident.
 * The perimeter is **always redrawn**, even when it was already one
   closed polyline on `POOL`, so the result is the same object whatever
   went in. An *associative* dimension attached to the old geometry
@@ -239,8 +302,25 @@ that has to survive as a bulge, traces with a 3" gap and a 24" one,
 dimensions in all four styles on and off the perimeter, a radius dim, a
 dim with only one end on the edge, a viewport, `lg:*keeplayers*`, and
 the whole command end to end — the redrawn polyline, the five surviving
-dimensions, the undo group, the restored `OSMODE`, `No` meaning no, and
-`LINGUTTERSCAN` changing nothing.
+dimensions, the undo group, the restored `OSMODE`, that it erases
+without asking, and `LINGUTTERSCAN` changing nothing.
+
+A radius or diameter dim on the perimeter in a style that is neither
+`lg:*anystyles*` nor `lg:*perimstyles*` (`STANDARD INCHES`, the one
+`AUTODIM` actually uses under a foot) is its own section, and a short
+side of an L-shaped perimeter proves the same rule holds corner to
+corner regardless of style there too.
+
+"Keep CROSS DIMENSIONS?" is its own section as well: answered Yes, a
+cross dim corner to corner, one running side to side through the
+middle of each side (still "goes full Y"), a short perimeter edge kept
+on its two vertices alone (under `lg:*crossspan*` on its own), a small
+one entirely inside touching nothing, one from a corner to a random
+point along that SAME side (dropped even though it spans most of the
+width), and a stray one touching neither are all told apart; answered
+No, every one of them loses its exemption and is named by the answer
+in the drop tally, while the radius/diameter rule is shown not to care
+which way that question goes.
 
 The scoping has a section of its own: a pool beside a *bigger* closed
 rectangle with its own clutter — a title block border is exactly this

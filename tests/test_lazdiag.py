@@ -30,6 +30,7 @@ Run: python3 tests/test_lazdiag.py
 """
 
 import os
+import re
 import sys
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,7 +38,7 @@ REPO_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, TESTS_DIR)
 sys.path.insert(0, os.path.join(REPO_DIR, "tools"))
 
-from lispvm import VM, LispError  # noqa: E402
+from lispvm import VM, LispError, Sym  # noqa: E402
 
 LSP = os.path.join(REPO_DIR, "lisp", "lazdiag", "LAZDIAG.lsp")
 #: POOL, for the one check that drives a REAL prompt through a REAL
@@ -93,9 +94,27 @@ def said(vm):
     return "".join(vm.printed)
 
 
+def dxfs(vm):
+    """The reports.  A run now writes a LOG as well, so "the file the
+    VM wrote" is no longer one thing and every count here says which."""
+    return {k: v for k, v in vm.files.items() if k.endswith(".dxf")}
+
+
+def logof(vm):
+    hits = [v for k, v in vm.files.items() if k.endswith(".log")]
+    return hits[0] if hits else ""
+
+
+def records(vm):
+    return [l for l in logof(vm).split("\n") if l[:2].isdigit()]
+
+
 def only_file(vm):
-    assert len(vm.files) == 1, vm.files
-    return list(vm.files.items())[0]
+    """The one report.  Named for what it was when reports were the only
+    thing written, and kept because forty checks read it."""
+    d = dxfs(vm)
+    assert len(d) == 1, sorted(d)
+    return list(d.items())[0]
 
 
 # --------------------------------------------------------------- the DXF
@@ -299,7 +318,7 @@ vm.loads("(defun lzd:flatten (e) (car 1))")     # every entity unreadable
 vm.printed.clear()
 failing_run(vm)
 check("an entity this cannot read costs its own shape and no more",
-      len(vm.files) == 1, "the whole report was lost to one entity")
+      len(dxfs(vm)) == 1, "the whole report was lost to one entity")
 if vm.files:
     body = only_file(vm)[1]
     check("...the report still carries the transcript and the error",
@@ -432,7 +451,7 @@ print("a cancel is not a failure")
 vm = newvm()
 vm.loads('(lzd:begin "POOL" "v2.7")')
 vm.loads('(lzd:report "POOL" "v2.7" "Function cancelled")')
-check("Esc writes no file", not vm.files, list(vm.files))
+check("Esc writes no report", not dxfs(vm), sorted(dxfs(vm)))
 check("...and says nothing", not said(vm).strip(), said(vm))
 
 print("a transcript is never handed to the wrong tool")
@@ -471,7 +490,7 @@ vm = newvm(profile=None)
 vm.sysvars["DWGPREFIX"] = r"C:\jobs"
 vm.readonly_dirs.update({r"C:\jobs", r"C:\Temp"})
 failing_run(vm, "SPA", "v1.4")
-check("nothing is written", not vm.files, list(vm.files))
+check("nothing is written", not dxfs(vm), sorted(dxfs(vm)))
 check("the user is still told the command failed",
       "SPA v1.4 has FAILED" in said(vm), said(vm)[:160])
 check("...which folders were tried",
@@ -501,8 +520,8 @@ print("LAZDIAG writes it once a folder works")
 vm.readonly_dirs.clear()
 vm.printed.clear()
 vm.run("c:LAZDIAG", [])
-check("the report is written on the second try", len(vm.files) == 1,
-      list(vm.files))
+check("the report is written on the second try", len(dxfs(vm)) == 1,
+      sorted(vm.files))
 check("...under the name the failure earned it",
       "SPA-v1.4-error-" in base(only_file(vm)[0]),
       only_file(vm)[0])
@@ -728,7 +747,7 @@ failing_run(vm)
 vm.loads('(lzd:begin "POOL" "v2.7")')
 failing_run(vm)
 check("two failures in the same second write two files, not one",
-      len(vm.files) == 2, sorted(base(f) for f in vm.files))
+      len(dxfs(vm)) == 2, sorted(base(f) for f in dxfs(vm)))
 
 print("the edges: a drawing the walk cannot finish")
 
@@ -739,11 +758,146 @@ vm.loads('(lzd:ask "Pool length" "25 ft")')
 vm.printed.clear()
 failing_run(vm)
 check("a drawing that will not walk costs the geometry, not the report",
-      len(vm.files) == 1, "the whole report was lost")
+      len(dxfs(vm)) == 1, "the whole report was lost")
 if vm.files:
     check("...and the transcript and the error still arrive",
           "Pool length" in only_file(vm)[1]
           and "numberp" in only_file(vm)[1])
+
+print("the log: one line per run, whatever the run did")
+
+LOGDIR = PROFILE + "\\calofin"
+
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:ask "Pool shape" "Rectangle")')
+vm.loads('(lzd:end "POOL")')
+check("a clean run is one line and no more",
+      len(records(vm)) == 1 and "  ok " in records(vm)[0], records(vm))
+check("...and it names the tool, its version and the drawing",
+      "POOL v2.7" in records(vm)[0], records(vm)[0])
+check("a clean run does NOT carry its prompts into the log",
+      "Pool shape" not in logof(vm),
+      "an ok record should be a count, not a story")
+check("the log lives in its own folder, not among the reports",
+      logof(vm) and list(vm.files)[0] and
+      [k for k in vm.files if k.endswith(".log")][0].startswith(LOGDIR),
+      [k for k in vm.files if k.endswith(".log")])
+
+vm = newvm()
+vm.loads('(lzd:begin "SPA" "v1.4")')
+vm.loads('(lzd:ask "How should the deep end be treated?" "Radius")')
+vm.loads('(lzd:report "SPA" "v1.4" "Function cancelled")')
+check("Esc is logged as a quit, though it writes no report",
+      len(records(vm)) == 1 and "  quit" in records(vm)[0], records(vm))
+check("...naming the prompt they backed out of",
+      "deep end" in logof(vm), logof(vm))
+check("...and still no DXF", not dxfs(vm), sorted(dxfs(vm)))
+
+vm = newvm()
+vm.loads('(lzd:begin "ABHD" "v1.8")')
+vm.loads('(lzd:ask "Maximum curves" "6")')
+failing_run(vm, "ABHD", "v1.8")
+rec = logof(vm)
+check("a failure is logged FAIL, in caps so it greps out",
+      "  FAIL " in rec, rec[:80])
+check("...with the error, the report it wrote and the prompts",
+      "bad argument type" in rec and ".dxf" in rec
+      and "Maximum curves" in rec, rec)
+
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:begin "SPA" "v1.4")')      # POOL never ended: the lazy flush
+vm.loads('(lzd:end "SPA")')
+check("a run that ends without its hook is closed out by the next one",
+      len(records(vm)) == 2 and "POOL" in records(vm)[0]
+      and "SPA" in records(vm)[1], records(vm))
+
+vm = newvm()
+vm.loads('(lzd:begin "COVERCHECK" "v1.0")')
+vm.loads('(lzd:begin "COVERCHECK" "v1.0")')   # the helper's own begin
+vm.loads('(lzd:end "COVERCHECK")')
+vm.loads('(lzd:end "COVERCHECK")')           # and the command's
+check("a tool with a handler in two places logs ONE run, not two",
+      len(records(vm)) == 1, records(vm))
+
+print("the log: the edges")
+
+vm = newvm(profile=None)
+vm.sysvars["DWGPREFIX"] = ""
+vm.sysvars["TEMPPREFIX"] = r"C:\Temp"
+vm.readonly_dirs.add(r"C:\Temp")
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:end "POOL")')
+check("no writable folder anywhere: the run still finishes, silently",
+      not vm.files and not [p for p in vm.printed if "error" in p.lower()],
+      "%r %r" % (list(vm.files), vm.printed[-2:]))
+
+vm = newvm()
+vm.loads("(setq lzd:*logmax* 200)")            # a cap this run will pass
+for _i in range(12):
+    vm.loads('(lzd:begin "T%d" "v1")' % _i)
+    vm.loads('(lzd:end "T%d")' % _i)
+logs = sorted(k for k in vm.files if k.endswith(".log"))
+check("a log that outgrows its cap rolls to a new file",
+      len(logs) > 1, logs)
+check("...and the roll is named so the months still sort",
+      all("calofin-" in base(k) for k in logs), [base(k) for k in logs])
+
+vm = newvm()
+vm.loads('(lzd:begin "PO\nOL\tX" "v2\n7")')
+vm.loads('(lzd:end "PO\nOL\tX")')
+check("a newline in a tool name cannot make a record two records",
+      len(records(vm)) == 1, records(vm))
+
+vm = newvm()
+vm.loads("(setq tail (lzd:logtail 10))")
+check("the tail of a log that does not exist is nil, not an error",
+      vm.loads("tail") is None or vm.loads("tail") == [], vm.loads("tail"))
+
+vm = newvm()
+for _i in range(40):
+    vm.loads('(lzd:begin "T%d" "v1")' % _i)
+    vm.loads('(lzd:end "T%d")' % _i)
+n = vm.loads("(length (lzd:logtail 15))")
+check("the tail of a long log is capped at what was asked for",
+      n == 15, n)
+
+vm = newvm(profile=None)
+vm.env["CalofinLogDir"] = r"C:\shop\calofin-logs"
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:end "POOL")')
+check("CalofinLogDir puts the log where a shop wants it",
+      any(k.startswith(r"C:\shop\calofin-logs") for k in vm.files),
+      list(vm.files))
+
+# the log must never be the thing that breaks a command
+vm = newvm()
+vm.loads("(defun lzd:logpath ( / dir base try i sz) (car 1))")
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:end "POOL")')
+check("a log that throws does not throw at the command", True, "")
+failing_run(vm)
+check("...and a report is still written when the log is broken",
+      [k for k in vm.files if k.endswith(".dxf")], list(vm.files))
+
+print("the report carries what ran before it")
+
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:end "POOL")')
+vm.loads('(lzd:begin "SPA" "v1.4")')
+vm.loads('(lzd:report "SPA" "v1.4" "Function cancelled")')
+vm.loads('(lzd:begin "ABHD" "v1.8")')
+failing_run(vm, "ABHD", "v1.8")
+body = [v for k, v in vm.files.items() if k.endswith(".dxf")][0]
+check("the failure report lists the runs before it",
+      "WHAT ELSE HAS RUN" in body and "POOL v2.7" in body
+      and "DIMCHECK" not in body, "no history section")
+check("...including the one the drafter backed out of",
+      "quit" in body and "SPA v1.4" in body)
+check("...and names the log file so the rest can be asked for",
+      "log file" in body and ".log" in body)
 
 print("the checker that keeps this true for the tool written next")
 
@@ -797,6 +951,164 @@ check("a command that does something with no handler is named",
       naked == ["DEMOBARE"], naked)
 check("...and a version reporter is not, though it prints \"(commands:\"",
       "DEMOVER" not in naked, naked)
+
+print("every input is in the transcript, wherever the call sits")
+
+# A transcript that had the ask helpers' answers could be read.  One
+# that has EVERY answer can be replayed -- tools/probe_report.py feeds
+# it back to the same tool in this VM -- and a replay is out of step the
+# moment one prompt went unrecorded.  So the codemod has to reach the
+# inputs no helper takes: the (setq p (getpoint)) that is a while's
+# test, the getkword inside an (= ...), the getstring that only pauses.
+# Dropping a record in after a while's test would run it only when the
+# test passed, and the transcript would be short exactly the answer
+# that ended the loop; those calls are wrapped instead.
+INPUTS = r"""(setq *demo-version* "v1.0")
+(defun demo:askint (msg / v)
+  (setq v (getint msg))
+  (if v v 3))
+(defun demo:pause ()
+  (getstring "\n--- press Enter ---")
+  (princ))
+(defun demo:two ( / a b)
+  (setq a (getdist "\nA: ") b 2))
+(defun c:DEMOC ( / *error* p k n a b)
+  (defun *error* (msg)
+    (princ (strcat "\nDEMOC error: " msg))
+    (princ))
+  (setq p (getpoint "\nBase: "))
+  (while (setq p (getpoint "\nNext: "))
+    (setq n (demo:askint (strcat "\nHow many <" (itoa 3) ">: "))))
+  (initget "Yes No")
+  (if (= "Yes" (getkword "\nGo? [Yes/No]: ")) (demo:pause))
+  (initget "Alpha Beta")
+  (cond ((setq k (getkword "\nWhich? ")) (princ k))
+        (t (setq k (getstring)) (princ k)))
+  (setq a 1 b (getreal "\nB: "))
+  (demo:two)
+  (princ))
+"""
+missing, wired = cz.wire("INPUTS.lsp", INPUTS, True)
+imask = cz.code_mask(wired)
+check("every input call is named as unrecorded", len(missing) == 10,
+      "%d: %s" % (len(missing), missing))
+check("a setq that is a body statement takes the record after it",
+      '(setq p (getpoint "\\nBase: "))\n  (if lzd:ask (lzd:ask "\\nBase: " p) p)'
+      in wired)
+check("a while's test is wrapped, so the nil that ends the loop is written down",
+      '(while (setq p ((lambda (v) (if lzd:ask (lzd:ask "\\nNext: " v) v))'
+      in wired)
+check("a getkword read in place is wrapped where it is",
+      '(= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\\nGo? [Yes/No]: " v) v))'
+      in wired)
+check("a cond clause's test is wrapped, its body is not",
+      '(cond ((setq k ((lambda (v)' in wired
+      and re.search(r'\(t \(setq k \(getstring\)\)\s+'
+                    r'\(if lzd:ask \(lzd:ask \(getvar "LASTPROMPT"\) k\) k\)',
+                    wired))
+check("a getstring that only pauses is recorded too",
+      '((lambda (v) (if lzd:ask (lzd:ask "\\n--- press Enter ---" v) v))\n'
+      '    (getstring "\\n--- press Enter ---"))' in wired)
+check("a multi-pair setq keeps its value: the get in its later pair is wrapped",
+      '(setq a 1 b ((lambda (v)' in wired)
+check("...and one that sits last in its body is wrapped, not followed",
+      '(setq a ((lambda (v) (if lzd:ask (lzd:ask "\\nA: " v) v))\n'
+      in wired and '(getdist "\\nA: ")) b 2))' in wired)
+check("an ask helper is recorded once, with its msg as the label",
+      wired.count("(lzd:ask msg v)") == 1
+      and wired.count('(lzd:ask "(getvar') == 0,
+      wired.count("(lzd:ask msg v)"))
+check("a prompt built at run time is labelled with LASTPROMPT",
+      wired.count('(lzd:ask (getvar "LASTPROMPT") k) k)') == 1)
+check("nothing landed where it changes a meaning",
+      not cz.misplaced(wired, imask, "INPUTS.lsp"),
+      cz.misplaced(wired, imask, "INPUTS.lsp"))
+again, twice = cz.wire("INPUTS.lsp", wired, True)
+check("a second --fix is a no-op, not a second record", twice == wired
+      and not again, again)
+
+SCRIPT = [(1.0, 2.0, 0.0), (3.0, 4.0, 0.0), 5, None, "Yes", "",
+          None, "x", 2.5, 7.0]
+vm = newvm()
+vm.loads(wired)
+vm.run("c:DEMOC", SCRIPT)
+check("the run asks ten times, ends clean and is logged as ok",
+      len(vm.prompts) == 10 and "  ok " in logof(vm)
+      and not any("error" in s.lower() for s in vm.printed),
+      (len(vm.prompts), vm.printed[-3:]))
+
+
+def boom(_vm):
+    raise LispError("bad argument type: numberp: nil", _vm)
+
+
+# the same run, failed at the tenth prompt: the report's transcript has
+# to carry the nine answers that came before it, every kind of site
+vm = newvm()
+vm.loads(wired)
+vm.handle_errors = True
+vm.run("c:DEMOC", SCRIPT[:-1] + [boom])
+path, body = only_file(vm)
+check("a failure at the tenth prompt reports the nine answers before it",
+      body.count("   -> ") == 9, body.count("   -> "))
+check("...the loop-ending Enter among them, as nil",
+      re.search(r"Next: +-> nil", body)
+      and len(re.findall(r"Next: +-> ", body)) == 2)
+check("...the pause, the keyword and the wrapped getreal too",
+      re.search(r"press Enter --- +-> \"\"", body)
+      and re.search(r"Go\? \[Yes/No\]: +-> \"Yes\"", body)
+      and re.search(r"B: +-> 2\.5", body))
+vm = VM()
+vm.loads(wired)
+vm.run("c:DEMOC", SCRIPT)
+check("without LAZDIAG the same run asks the same ten and says nothing",
+      len(vm.prompts) == 10 and not any("error" in s.lower()
+                                        for s in vm.printed),
+      (len(vm.prompts), vm.printed[-3:]))
+vm.script = [7.0, None]
+check("a wrapped call hands its answer straight back",
+      vm.loads("(demo:two)") == 2 and vm.loads('(demo:askint "n")') == 3)
+
+print("the report says what is odd about the inputs")
+
+# The values a run was given, read against each other: a zero, a
+# negative, two lengths that are the same number, two picks on one
+# spot.  And when nothing is -- that is written down too, because it
+# points at the code instead of the inputs.
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+for form in ('(lzd:ask "Radius" 0.0)', '(lzd:ask "Width" 12.0)',
+             '(lzd:ask "Length" 12.0)', '(lzd:ask "Depth" -3.0)',
+             '(lzd:ask "First corner" (list 1.0 2.0 0.0))',
+             '(lzd:ask "Second corner" (list 1.0 2.0 0.0))',
+             '(lzd:ask "Treatment" "Radius")', '(lzd:ask "Skip" nil)'):
+    vm.loads(form)
+failing_run(vm)
+path, body = only_file(vm)
+check("the section is in the report",
+      "THE INPUTS, AND WHAT IS ODD ABOUT THEM" in body)
+check("...with the answers counted by kind",
+      "8 answers: 4 numbers, 1 words, 2 points, 1 Enter/NA" in body)
+check("a zero is flagged", re.search(r"ODD  Radius = 0(\.0+)?\s+zero", body))
+check("a negative is flagged",
+      re.search(r"ODD  Depth = -3(\.0+)?\s+negative", body))
+check("two equal numbers name each other",
+      re.search(r"ODD  Width = 12(\.0+)?\s+equals Length", body)
+      and re.search(r"ODD  Length = 12(\.0+)?\s+equals Width", body))
+check("two picks on one spot name each other",
+      "same spot as Second corner" in body
+      and "same spot as First corner" in body)
+check("an ordinary word and an Enter draw no flag",
+      "ODD  Treatment" not in body and "ODD  Skip" not in body)
+vm = newvm()
+vm.loads('(lzd:begin "POOL" "v2.7")')
+vm.loads('(lzd:ask "Radius" 5.0)')
+vm.loads('(lzd:ask "Width" 12.0)')
+vm.loads('(lzd:ask "Corner" (list 3.0 4.0 0.0))')
+failing_run(vm)
+path, body = only_file(vm)
+check("ordinary inputs say so, in words",
+      "nothing stands out" in body and "ODD  " not in body)
 
 if failures:
     print("\n%d LAZDIAG check(s) FAILED" % len(failures))

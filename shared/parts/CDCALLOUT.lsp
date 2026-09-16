@@ -550,6 +550,7 @@
                       (if dimlist
                         "\nFrom point number (Enter when done) [Back]: "
                         "\nFrom point number (Enter when done): ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s1) s1)
            (cond
              ((= s1 "") (setq done t))
              ((cal:back-word-p s1)
@@ -579,6 +580,7 @@
           (t
            (setq s2 (getstring (strcat "\nTo point number (from Pt."
                                        (cdr a) ") [Back]: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s2) s2)
            (cond
              ((= s2 "")
               (princ "\n  No second point -- this one skipped.")
@@ -637,6 +639,7 @@
                        " (current style).")))))
 
   (setq *error* olderr)
+  (if lzd:end (lzd:end "CDCALLOUT"))
   (princ))
 
 (defun c:CDCALLOUTVER ()

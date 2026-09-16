@@ -6,7 +6,528 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
-## Unreleased
+## v3.16 -- 2026-09-16
+
+**The step count is a field on the page it redraws.**  LAZSTEP v2.0.
+
+It was two pages: the count on the first, the drawing built for it on
+the second.  So the one thing you could not see while typing the number
+was the picture the number describes, and going from 5 to 6 meant Back,
+retype, Next -- three keystrokes to change one digit, with the drawing
+off screen for all three of them.
+
+One page now.  The drawing stands on the left and everything asked
+about it in the column beside it, the count at the head of that column.
+Type a number and the picture follows it: five steps draw five treads,
+and the boxes come with them -- five tread boxes, five width boxes, six
+depth boxes, no more and no fewer.  DCL cannot add a tile to a dialog
+that is already up, so a count that MOVES still closes the page and
+opens the one that number needs; what changed is that it reopens as
+*itself*, in the same place, with everything typed still in it.  A
+count that matches the drawing already on screen rebuilds nothing at
+all and simply brings its boxes alive.
+
+Until a count is given the picture is a NOMINAL one and every dimension
+box on it is greyed.  The form invents no answers and `steps` is an
+answer that TRAVELS, so the box opens empty -- but a page with no
+drawing on it is a page with nothing to read.  Greyed is the honest
+middle: the picture teaches the letters, and nothing on it is a
+question this run will reach or a value that could travel.  One rule
+(`lzt:skip`) says so, and the greying, the state line and `lzt:form`
+all read it, so they cannot come apart.
+
+The page carries TWO state lines now -- the run's and the hand-off's --
+and **Insert is held back by either**, because a page with one button
+cannot have two opinions about it.  `NORMIESTEP`'s single width moved
+onto the drawing, where its letter W is: it used to appear on both
+pages, and on one page that is two tiles with one key, which is not a
+dialog DCL will open.  The answer column splits in two once it is
+taller than `lzt:*colbudget*`, the way LAZFORM's does, because the page
+is as tall as its longest column and the count, the run and the drawing
+now share one.
+
+**Beading is three questions, and all three come off the sheet.**
+CORNERSTP v4.7, HEMISTEP v3.18, NORMIESTEP v3.11.
+
+Every one of the three step routines ends the same way: bead at all,
+which steps carry the bead along their side walls, and -- for Some --
+which step numbers.  Only the first was form-answerable, so a sheet
+that said Yes still stopped twice at the command line *after* the
+drawing was finished, which is the worst place to be asked anything.
+`beadsides` and `beadnums` join `bead`, held to the same keyword list
+the live prompt holds you to; the side to bead TOWARD is a pick and
+stays in the drawing.
+
+**The side view has a form.**  LAZSIDE v1.0, POOLSIDE v1.6.
+
+LAZFORM's argument applied to the section alone: the longitudinal
+section on the left as one whole picture, a labelled box against every
+letter it carries, and POOLSIDE run from what was typed.  Six bottom
+types, six tabs -- and the tab you are on IS the answer POOLSIDE's
+first prompt asks for, so a sheet cannot be filled in for one floor and
+drawn as another.
+
+POOLSIDE had no answer store at all: it asked every letter at the
+command line, every time.  It has POOL's now, same shape and same three
+states, keyed by the letters themselves (`psd:key` spells them, so the
+form and the prompts cannot drift) with `style` and `mirror` alongside.
+An answer is spent as it is read, which is what keeps Back working and
+what gives the two range checks their way out; an answer the prompt
+itself would have refused -- a negative run, an NA where a measurement
+is required -- is spent and then asked for properly.
+
+Two things the form knows that a prompt cannot.  A DEPTH has no NA, so
+an NA in C, D or C2 is demoted to an empty box and the line says so
+rather than leaving you to meet it at the prompt.  And the DEPTH PAIR:
+POOLSIDE loops until D is deeper than C and C2 sits between them, which
+is right at a prompt and wrong to hand a sheet to -- the run would draw
+half a section and then stop to argue.  A form can see both numbers at
+once, so it greys Insert and says which one is wrong.
+
+The section is not a stored picture: it is built from POOLSIDE's own
+run chain, depth stations and nominal proportions, carried across
+because a `lisp/` file has to load alone -- and `tests/test_lazside.py`
+re-reads all three out of POOLSIDE.lsp and holds them against the copy
+entry by entry, the same bargain LAZFORM strikes with OASIS's reference
+outlines.
+
+## v3.15 -- 2026-09-15
+
+**Borrow only what you move: seven commands snapshotted OSMODE they
+never touched.**  PERPMARK v1.4, CLEARDIM v3.1, FITABHD v3.0, SPACHECK
+v1.17, ABCURCHECK v1.8, OLAUTO v1.3, LISPLAB v1.5.  This is the one a
+drafter meets with NOTHING going wrong.
+
+A sysvar list is not a wish, it is a promise to WRITE the value back at
+the end.  Seven commands listed `OSMODE` in theirs and never changed it
+-- `grep` for `(setvar "OSMODE"` in any of the seven returns nothing.
+So the run took a snapshot on the way in and wrote it back on the way
+out, over anything the drafter had done to their snaps in between.
+Tick Endpoint on part-way through and the clean exit takes it away
+again.  No error, no Esc, no cancelled run: just the tool finishing.
+
+Five of the seven are review tools you walk item by item -- PERPMARK's
+pick-by-pick pass, FITABHD's seven steps, SPACHECK's and ABCURCHECK's
+and CLEARDIM's item-by-item review -- which is to say the runs longest
+open and likeliest to have you reaching for the Object Snap dialog
+half way down.  `OSMODE` is out of all seven lists.
+
+`check_osnap.py` grew the rule (its fourth): a command that snapshots
+OSMODE must actually move it.  The table SPACHECK's grouped twin gets
+is typed in `tools/mirror_shared.py` rather than derived from the
+source, so that copy needed the same edit -- which is exactly why the
+check reads both tiers rather than trusting the mirror.
+`tests/test_osnap_restore.py` pins all six testable ones at both tiers:
+start with snaps off, tick them on mid-run, finish the run, and the
+tick survives.
+
+**...and they are LIVE at the picks that need them.**  OASIS v9.0, SPA
+091526 REV24, PERPPTS/CPERPPTS v0.15.  "My snaps got cleared" is also
+what a drafter says when snaps are off where they expect them on, and
+the sweep found both directions of that.
+
+`PERPPTS` and `CPERPPTS` were the first shape again, one level down:
+the whole handler is `(perp:finish)`, and the bad ordering was INSIDE
+that helper -- the bare `(command)` drain at the top, the OSMODE
+restore fourteen forms below it.  `check_osnap.py` had not seen it,
+because it read only the handler's own statements and saw one call that
+both restores and can throw.  It now splices a called helper's
+statements in where the call sits, and catches it.  The cleanup puts
+the settings back first in both files.
+
+`SPA`'s base point -- the one pick that places the whole spa -- was made
+with snaps already off.  `spa:readblock` runs before SPA's three opening
+questions and ends on `spa:osdown` like every ask helper here, so OSMODE
+was 0 by the time the prompt came up, thirty lines before the
+`(setvar "OSMODE" 0)` that was supposed to be what dropped them.  The
+comment at that prompt has always said the pick is made with the
+drafter's own snaps live; the `spa:osup` that makes it true is new, and
+POOL and POOLSIDE have always held them at the identical prompt.
+
+`OASIS` had the inverse: its `oasis:osup` window wrapped the whole
+`oasis:askbottom` call, but that defun does not stop at questions -- it
+goes on to `oasis:drawbottom`, which feeds computed points to three
+`DIMALIGNED` calls and a hopper-offset cross dim.  Those four were the
+only dimensions of the run laid down with running osnap live, free to
+be pulled onto whatever the outline passed near.  Snaps drop between
+the asking and the drawing now.
+
+Neither of these last two moves OSMODE at the END of a run, which is
+why `check_osnap.py` stayed green through both: it checks what the
+drafter is left with, not what the tool works under.  Which prompt
+ought to snap is an editorial question, so it stays with the reviewer.
+
+**...and they come back even when the cleanup itself fails.**  OASIS
+v8.9, AUTOBEAD v1.9, XFTCONV/XFTRECONV v1.17, SPA 091526 REV23.  The
+first pass proved every command HAS an OSMODE restore in its `*error*`
+handler.  It could not see whether that restore is ever REACHED.  An
+error raised inside `*error*` aborts the handler, so a restore sitting
+behind a form that can throw is a restore that does not run on the one
+path it was written for.
+
+Four handlers had them the wrong way round.  OASIS opened with
+`oasis:dimstyrestore`, the one unwrapped `-DIMSTYLE` restore in the
+standalone tier -- and it sat ABOVE the pending-command valve whose own
+comment says an Esc part-way through a dimension leaves that command
+pending and anything below would be read as answers to it.  So on
+exactly that Esc, the style restore was fed into the pending command
+and took `oasis:sysrestore` down with it.  AUTOBEAD, XFTCONV and
+XFTRECONV each put their bare-`(command)` drain ahead of the only
+OSMODE restore they have; XFTCONV's also pops the error mode, so a
+throw there stranded the pop and refused `command-s` inside every later
+handler for the rest of the session.  The settings now go back first in
+all four -- putting back a value the run captured itself is pure
+`setvar` and cannot throw -- and OASIS's `-DIMSTYLE` is wrapped in
+`vl-catch-all-apply`, the shape its six siblings already used and the
+shape the grouped build got right via `cal:dimstyrestore`.
+
+`spa:sysrestore` had the mirror-image bug: its
+`(setq spa:*sysold* nil)` sat BEHIND a bare `-DIMSTYLE`.  OSMODE came
+back, but a throw left the snapshot standing -- and `spa:syssave`
+refuses to overwrite a snapshot that exists, because a second save
+mid-run would capture the zeroed OSMODE and restore 0 for ever.  So one
+failed SPA run froze the drafter's snaps at that run's value for the
+rest of the session, silently undoing anything they ticked in Drafting
+Settings afterwards.  The snapshot is dropped before the command now,
+and the command is wrapped.
+
+`tools/check_osnap.py` grew both rules, so neither shape can come back:
+no throwable form ahead of the OSMODE restore in a handler, and no
+snapshot drop behind one.  Run against the pre-fix source it names all
+five sites.
+
+**The drafter's object snaps come back from a failed run too.**
+COVERCHECK v1.18, DIMCHECK v1.21, LINFINCHECK v2.17, and a new
+`tools/check_osnap.py` in `make check`. Forty-three commands here mute
+`OSMODE` while they feed computed points to `(command ...)`, so a
+running osnap cannot pull a pick onto nearby geometry. Forty of them
+already put it back on both the clean exit and the one that throws --
+either directly from a local of the command, which the nested `*error*`
+handler can see, or through the `tool:sysrestore` snapshot that leads
+with OSMODE.
+
+Three did not, and they were the three check tutorials. `cchk:tut-build`,
+`dchk:tut-dim` and `lfc:tut-dim` each save OSMODE into a local of their
+OWN, zero it round a `DIMLINEAR` and put it back inline -- correct as
+far as it goes, and out of reach of the command's handler, which is the
+only code that runs when the drafter hits Esc. `TUTORIALCOVERCHECK`
+already held ATTDIA/ATTREQ/FILEDIA itself for exactly that reason; all
+three now hold OSMODE the same way, restored FIRST in the handler
+before anything below it can throw. Snaps left off are not a failure
+that looks like the tool's: the drafter meets it two commands later,
+when a line drawn by eye refuses to snap to an endpoint.
+
+`check_osnap.py` is what keeps it answered. It reads each command's
+whole reach across the tier -- POOLDEMO's restore is POOL's
+`pool:sysrestore`, in another file -- and fails one that can change
+OSMODE without restoring it on the way out, or without restoring it
+from its `*error*` handler. `--list` prints all forty-three and how each
+puts it back.
+
+**A failure report can be replayed, and its inputs varied, without
+AutoCAD.**  A report said what the drafter answered and where the tool
+died; it did not say WHICH answer mattered.  Three things changed so
+that it can:
+
+* **Every input is in the transcript, typed.**  `check_lazdiag --fix`
+  reached only the ask helpers before -- 97 of the tree's 410 input
+  sites.  It now records every `get*` and `entsel`: after a
+  `(setq v (getX ...))` that is a body statement, and wrapped as
+  `((lambda (v) (if lzd:ask (lzd:ask "prompt" v) v)) (getX ...))`
+  where the answer is read in place -- a `while`'s test, a keyword
+  inside `(= ...)`, the `getstring` that only pauses -- so the `nil`
+  that ends a loop is written down like any other answer.  The codemod
+  tells a body statement from a value something reads, because a
+  record dropped in after a `while`'s test would have run only when
+  the test passed.  The answers are typed on the way out (`nil`,
+  `12.5`, `"Yes"`, `(x y z)`, `(<ent> (x y z))`; a real keeps its
+  point whatever DIMZIN does to `rtos`), a selection gets a line of
+  its own at the step it was taken, and the report says how many of
+  the entities it copied were the run's INPUT and where they sit in
+  the file.  311 sites wired; a second `--fix` is a no-op.
+* **THE INPUTS, AND WHAT IS ODD ABOUT THEM.**  A new report section
+  reads the answers against each other: a zero, a negative, a tiny or
+  a huge number, two lengths that are the same number, two picks on
+  one spot -- and says when nothing stands out, because ordinary
+  inputs point at the code.
+* **`tools/probe_report.py REPORT.dxf`.**  Loads the tool the report
+  names at the version it names (its `releases/` twin when there is
+  one) into the test VM, hands it the report's geometry and answers,
+  and confirms the same failure comes back.  Then one answer at a time
+  -- 1, 0, half, double, a step either side, ten times, a thousand; a
+  point moved -- and a verdict per answer: NOT this value (the same
+  failure whatever it is), THIS value (any other runs clean), or a
+  boundary (fails up to 4, passes from 20: a range the tool never
+  checks).  A tool that selects is handed the copied input back at
+  its `ssget`, without the output the failed run drew beside it.  When
+  the control run does not reproduce -- a whole-drawing sweep the
+  report could not carry, a file dialog -- it says so rather than
+  probing.  Writes `REPORT.probe.txt` beside the report, `.probe.json`
+  with `--json`.
+
+LAZDIAG v1.3.  `tests/test_lazdiag_probe.py` makes reports the way real
+ones are made -- fixture tools wired by the codemod, run beside
+LAZDIAG, failed -- and probes them; `tests/test_lazdiag.py` covers the
+codemod's placement rules and the oddities section.  Two VM fixes on
+the way: `LASTPROMPT` is what AutoCAD showed last, not a setting a run
+can be said to have changed, and a division by zero is an AutoLISP
+error -- "divide by zero" -- that reaches the handler for a real as
+much as for an int, rather than a Python one.
+
+**LINGUTTER keeps a radius call-out on the perimeter, and judges a
+cross dim by its shape, not just where it sits.** LINGUTTER v2.7. A
+corner radius under a foot lands in `STANDARD INCHES` the same as any
+other short measurement -- which is not in `lg:*perimstyles*`, so the
+very call-out for the corner `PADDLE` was about to pad used to be the
+thing erased. A RADIUS or DIAMETER dimension on the perimeter is now
+kept regardless of its style, judged on its one attachment point (DXF
+10) the way `lg:*perimstyles*` dims are judged on 13/14.
+
+`CROSS DIM*` dims stop being kept unconditionally: LINGUTTER now asks
+"Keep CROSS DIMENSIONS?" once, and a Yes spares only the ones that read
+as a genuine cross measurement of the pool just gutted. Both points
+first have to belong to the pool at all (inside the traced perimeter,
+or on it), and from there a dim is kept when it spans at least
+`lg:*crossspan*` of the perimeter's own width or height -- "goes full
+X" or "goes full Y" -- *or* sits at two of the perimeter's own
+vertices, corner to corner along one whole edge however short (a short
+notch side would otherwise never reach `lg:*crossspan*` on its own).
+Neither way is satisfied by a dim running from one corner to some
+other point along that SAME edge -- the start of a line to the middle
+of it -- which is dropped regardless of how much of the pool it happens
+to span; nor by a small dim sitting entirely inside the pool and
+touching nothing, which is no more a cross measurement of it than a
+stray one answering to a different pool in the same highlight.
+Answered No, every `CROSS DIM*` dim gets no exemption at all regardless
+of shape, and is judged, and counted, like any other style. Neither
+question is a confirmation to erase -- LINGUTTER still never asks
+that.
+
+**Every AB note leads with a bullet.** `ABMOVE` and `ABPCREATE` leave a
+note per point on one layer, and a run that settles several of them
+leaves a column -- which read as loose text rather than as a list.
+`abf:*note-prefix*` (`- `) goes on inside `abf:note`, so every note
+carries it and one worded later cannot quietly miss it: one call is one
+TEXT is one line.  Set it to `""` for the bare wording.
+
+
+**A themeable colour space for what KIND of thing is drawn, not just
+the screen it's drawn on.** COVERCHECK v1.17, DIMCHECK v1.20,
+LINFINCHECK v2.16, LAZPANEL v3.30. `cal:ink` already answered "what ACI
+suits this background" for four roles (`fade`/`guide`/`dim`/`hi`); it
+did not know anything about what KIND of thing was being marked. Three
+review tools had separately hand-picked the answer to that question
+eight times over: `flag`/`arc`/`olap`/`orig`/`sugg`/`point`/`constr`/
+`report`, the same ACI numbers, copied byte-for-byte into COVERCHECK,
+DIMCHECK and LINFINCHECK, with nothing to stop the three copies from
+drifting apart the next time one of them changed.
+
+`cal:ink` (and each of the three tools' standalone `:ink` copies) now
+carries those eight roles too, resolved the same way a screen-aware
+role is -- `'auto` for the table, a number for exactly that number --
+except there is no dark/light spread to measure, since these are the
+same ordinary ACI colours on any background the review tools have ever
+drawn on. What IS new is `CalofinInk-<ROLE>` in the AutoCAD profile: a
+per-role override, on any of the twelve roles now, that beats the
+table but never a knob left as a plain number. `CALSET` grew an
+`Itemcolors` menu to write it, so a drafter who wants COVERCHECK's
+"flagged" markup in a different colour no longer edits three `.lsp`
+files by hand to get it consistently.
+
+**A line of dimensions is one dimension.**  `CLEARDIM` v3.0.  Where
+several dimension lines are the same straight line -- what
+`DIMCONTINUE` lays down by the handful and `AUTODIM` lays whole
+perimeters out as -- they are a RUN now: one continuous dimension with
+breaks in it.  Three things follow, and all three are what a drafter
+would do.
+
+**A run's text stays in its own segment.**  AutoCAD centres each text
+between its own extension lines, and one shuffled past them reads as
+the dimension for the span next door.  So a run member has LESS room
+along the track than a lone dimension, not more -- which is the thing
+that was quietly wrong before: a chain of short dimensions came out
+with its texts slid two segments along, each one sitting over somebody
+else's span.
+
+**A run's own skeleton is its own.**  Its dimension line and its
+extension lines belong to one dimension, not several: a continued chain
+does not merely have extension lines near each other, it SHARES them --
+the line at the end of one segment is the line at the start of the
+next.  While a run is straight this changes nothing, because every
+member's line already IS its own line.  It is what makes a staggered
+run possible at all: without it, the step of a staggered dimension's
+line and its lengthened extension lines land on the neighbour's text
+and there is nowhere left to go.
+
+**When one member has to stand further off the work, they all go.**
+Moving one dimension off a wall and leaving its neighbours behind
+trades a crowded dimension for a crooked run.
+
+And when a run's own members are what crowd each other -- four segments
+thirty wide with text forty wide, where there is nowhere along the
+track to go because every text overhangs its own segment whatever it
+does -- the run is STAGGERED: every other dimension stands a row
+further off the work, its own dimension line with it, and every text
+stays centred where it belongs.  Which of the two happens is decided by
+WHO is in the way: run-mates alone means stagger, anything else means
+the whole run goes.  A row is `cd:*row-f*` text heights, the unit
+AUTODIM already stands its own chains off the work in
+(`ad:*text-offsets*`).
+
+Only a linear or aligned dimension joins a run: a radius keeps the
+CENTRE of its circle in group 10 and an ordinate its feature, so there
+is no dimension line there to be collinear with, and pushing one "out"
+would move the dimension onto a different circle rather than clear of
+an obstacle.
+
+The new move is a real one -- group 10 and group 11 together, the
+definition points left alone so the extension lines stretch and the
+dimension goes on measuring exactly what it measured.  A run only ever
+stands FURTHER off the work, never nearer; there is no version of
+"clear of an obstacle" that runs toward the thing being measured.
+
+`tests/test_cleardim.py` is at 77 and runs at both tiers.
+
+**The text box was thirty times too small, so CLEARDIM did nothing.**
+v2.1.  A drawing came back with two `CROSS DIMENSIONS` diagonals
+printing on top of each other in the middle of a rectangle, and
+`CLEARDIM` had reported the sheet "6 already clear - left alone".
+
+The measurement was wrong, three times over, and the first one was
+fatal:
+
+* **A text style with a fixed height beats DIMTXT.**  A dimension style
+  is entitled to leave DIMTXT at its 0.18 DXF default and keep the real
+  height on the text style it points at through DIMTXSTY (group 340) --
+  and every style in that drawing did.  Reading DIMTXT alone made a
+  6-unit text measure 0.18.  Every box was a speck, nothing could
+  overlap anything, and the whole sheet was "clear".  The fixed height
+  is used exactly as it stands, DIMSCALE included: that drawing keeps
+  STANDARD at DIMSCALE 1.5 pointing at an 8-unit style, and the MTEXT
+  in the dimension's own block is 8.0 high, not 12.
+* **Markup is not letters.**  150 of the 152 MTEXTs in it carry
+  formatting, and counting `\A1;2{\H1.000000x;\S3/4;}"` as 26 glyphs
+  instead of about 4 does not err on the safe side -- it fills a sheet
+  with obstacles that are not there and leaves every dimension with
+  nowhere clear to go.  `%%d` codes, `\A;` `\H;` `\f;` `{}` markup,
+  the `\L` `\O` `\K` toggles and a stacked `\S1/2;` (as wide as its
+  longer half) are all read for what they DRAW now.  An MTEXT split
+  across group 3 chunks is measured whole rather than by its tail.
+* **A measurement is spelled the way its STYLE says**, off DIMLUNIT
+  (277) and DIMDEC (271), not the drawing's LUNITS and LUPREC.  That
+  drawing reads 1/8" off its styles and 1/16" off its header, and
+  `33'-3"` is half the width of `33'-2 15/16"`.  The text style's own
+  width factor is read too.
+
+Against that drawing's model space the answer is now four dimensions
+left alone and the two diagonals slid apart, which is the whole of what
+was wanted.  Every string the tool works out for those six dimensions
+matches the MTEXT in the dimension's own block character for character
+-- which is the check that says the units reading is right and not just
+different.  `tests/test_cleardim.py` is at 66, the last of them that
+drawing's own geometry, groups and all.
+
+**Every dimension has a track now, not just the straight ones.**
+`CLEARDIM` v2.0. v1.0 moved linear and aligned text and counted the
+other four families in the report as "on a track that is not a straight
+dimension line" -- true, and not much use to a drafter whose angular
+callout is the one sitting on a wall. All four have a track; none of
+them is a straight dimension line:
+
+| Family | Its track |
+| --- | --- |
+| angular, 2-line and 3-point | the dimension ARC, about the angle's vertex |
+| radius, diameter | the radial line it is measured along |
+| ordinate | the leader, along the axis it reads |
+
+The track is an abstraction now rather than a base point and a
+direction, and its parameter is a DISTANCE in every case -- an arc
+length round an arc rather than an angle. That is what lets
+`cd:*step-f*` and `cd:*reach-f*` go on meaning the same thing on a
+dimension arc as on a straight dimension line, instead of needing a
+second pair of knobs kept in step with the first. What "stays on its
+track" means differs by shape and is the same in substance: a linear
+text keeps its offset above the dimension line to the last decimal, an
+angular one keeps the RADIUS it rides at, and the box TURNS as it goes
+round, because text set along a dimension arc turns with it unless
+`DIMTIH` holds it upright.
+
+The vertex is the one thing that has to be right, and the two kinds of
+angular dimension keep it in different places: a 3-point one writes it
+into group 15 outright, while a 2-line one keeps no vertex at all -- it
+is where the two measured lines cross, on the INFINITE lines rather than
+the drawn segments. So it is checked before it is trusted: the sweep
+between the two rays IS the angle the dimension measures, and group 42
+is what it measured, so a vertex those two disagree about is refused and
+the dimension is left alone. A track guessed wrong does not move text
+along the dimension, it moves it OFF it, which is the one thing this
+tool exists not to do. Parallel lines, a missing leader end and a
+missing text point are refused the same way, and every refusal is
+counted in the report.
+
+The radius and diameter layouts are the repo's own: `AutoDim`'s
+`ad:raddimpts` already says a radius dimension puts the CENTRE in group
+10 and a point on the circle in 15, while a diameter writes the two ENDS
+of the diameter and has no centre of its own.
+
+The ordinate is the one family whose text does not travel alone. Its
+leader ends where the text is, so group 14 moves the same step and the
+feature point never moves; writing group 11 by itself would leave the
+text off the end of its own leader. Its preferred direction is simply
+further out, because a leader is made longer to get its text clear and
+never shorter back onto the work.
+
+Two families needed a floor putting under them, which the straight
+ones never did: an ordinate's text slid back past the point it is
+reading turns its leader round the other way, and a radius dimension's
+text on the far side of the centre is measuring from nowhere. A
+diameter's is welcome either side, which is what its centre being the
+MIDDLE of its two points means, and an arc needs no floor at all -- a
+text at a fixed radius can never reach the vertex.
+
+One bug found on the way in: a dimension's own ink was tagged to it by
+first element, which works for a dimension line and not for an arc --
+tagging only the first chord would have had every angular dimension
+fleeing the other thirty-one. What a text RIDES is its own list now,
+separate from what the dimension merely draws.
+
+`tests/test_cleardim.py` is at 66 and runs at both tiers.
+
+**Dimension text that is hard to read, slid until it is not.**
+`CLEARDIM` is new. A dimension's text has one track -- the dimension
+line it belongs to -- and moving along it is free: the dimension still
+measures what it measured and nothing about the drawing changes.
+Moving it OFF the line is not, so `CLEARDIM` never does; the
+across-the-track offset a text goes in with is the one it comes out
+with. Hard to read is anything under the letters -- another
+dimension's text, a wall line, a polyline edge, an arc, a circle, a
+`TEXT` or `MTEXT`, and the dimension lines and extension lines of the
+other dimensions in the sweep, plus its own extension lines, which
+cross its track at right angles. Its own dimension line is the one
+thing that is not ink, because AutoCAD breaks that around the text.
+
+The rule that decides who gives way is the one a drafter would use:
+**the one that is already good does not move.** Text that cannot move
+goes down first and keeps its spot; then text already clear of
+everything fixed keeps its spot too; only then is the text that is on
+something routed around all of it. Each pass runs in reading order, so
+two texts that are each clear of the drawing but not of each other come
+out the same way every run -- the first one read keeps its spot, the
+second slides -- and nothing moves that did not have to. A text that
+must move goes to the nearest clear spot, stepped outward and then
+bisected back so the move is the smallest one that works, trying the
+way back toward the middle of its own dimension line first. A text with
+nowhere clear inside `cd:*reach-f*` is left exactly where it was and
+named in the report: a text parked somewhere arbitrary is worse than
+one the drafter can still see sitting on a line.
+
+Angular, radius, diameter and ordinate dimensions are counted by kind
+and left alone -- their tracks are an arc, a radial line and a leader,
+not the straight dimension line this file knows how to walk -- and so
+is a dimension on a locked layer or with its text suppressed. All of
+them are still ink everything else has to clear. `CLEARDIMSCAN` is the
+same analysis with the writing left out, and the whole run is one undo
+group.
 
 **A created point says so on the sheet.** `ABPCREATE` plots a point the
 survey never placed, and until now the drawing could not tell one from
@@ -111,133 +632,63 @@ in one place only, the panel, on whichever page the tool was filed on.
 the one place a setting survives a rebuild, since `releases/` and
 `LAZPASS.lsp` are generated.
 
-## v3.12 -- 2026-09-11
+## v3.14 -- 2026-09-14
 
-**A dialog that does not fit does not open.** DCL does not scroll in
-either direction: a page wider or taller than the screen is not
-clipped and is not scrolled -- AutoCAD refuses it outright, with
-`Dialog too large to fit on screen. Requested Size = (436, 1085)
-Maximum Size = (1920, 1080)`, and the command dies where it stands.
-LAZPANEL's **Rest** page had reached exactly that, so clicking Rest did
-nothing but raise the error. Rest is the page that could least afford
-it: it is COMPUTED -- every tool not on Pool, Cover or Spa lands there
--- so the page that stopped opening is the page every newly registered
-tool joins, and it would have broken again at the next one regardless.
+A report is written when something breaks. That is one moment, and a
+moment does not tell you whether a bug is rare, constant, or only ever
+after SPA. **Every run is logged now**, and the log answers what a
+report cannot: how often a tool fails against how many clean runs, what
+the drafter ran in the ten minutes before, and which prompt they quietly
+back out of over and over -- because backing out is not a bug, it is a
+question somebody could not answer.
 
-Nothing in the tree could have caught it, because a dialog's size is
-written down nowhere: it is the sum of whatever the generator emitted.
-So it is computed now. `tools/dclsize.py` reads generated DCL as a tile
-tree and measures it; its constants are fitted to the report above and
-reproduce both of that report's numbers exactly. `tools/check_dcl.py`
-drives every generator to its tallest REACHABLE state -- pins and
-recents full, every chart, every step count -- and fails the build on
-anything within 60px of the limit. It is in `make check`, and
-`tests/test_dcl_size.py` puts the same measurement in `make test`.
+One line per run, into `<profile>\calofin\calofin-YYYY-MM.log`:
 
-Five dialogs were over, only one of which anyone had clicked:
+    2026-09-14 14:30:02  ok     POOL v2.7  LAZPASS  job1234.dwg
+    2026-09-14 14:31:40  quit   SPA v1.4  LAZPASS  job1234.dwg
+        step  How should the deep end be treated?
+    2026-09-14 14:33:07  FAIL   ABHD 091026 REV18  LAZPASS  job1234.dwg
+        step  Maximum curves
+        err   bad argument type: numberp: nil
+        file  C:\Users\dm\Downloads\ABHD-...-error-....dxf
+        ? Maximum curves   -> 6
 
-- **Rest** (1085px) and **Layout** (1189px) now wrap into balanced
-  columns at `lzp:*colbudget*`, captions and all -- a category page is
-  where you go to find out what a tool IS, so losing the captions to
-  gain the width would have cost the page its purpose.
-- **LAZFORM's Roman and Grecian** charts (1141px each) pack the boxes
-  beside the picture into two columns instead of one stack. Four more
-  charts were within 20px of the line and came down with them. The
-  picture is only ~260px tall, so the room was always there, sideways.
-- **LAZASCII** (1557px), whose whole job is to be looked at, lays its
-  five sections out in three columns.
+The record's size follows what anybody will want from it: a clean run is
+a count, not a story; a quit is the prompt they stopped at; a FAIL is
+the error, the report it wrote and the last prompts, in caps so it greps
+out of a month of runs.
 
-And the two strips whose height a DRAFTER sets are capped. The note
-beside the pinned row said "pin thirty tools and you get a tall panel,
-never a broken one"; that was true at 56 tools in three columns and is
-not true at 82 -- thirty pins is 1053px, 27px under the wall, and the
-next pin goes through it. Pinned is held to `lzp:*pinrowmax*` rows, at
-the tick and again on the way in from the registry, where a list stored
-by an older build has never been through the cap. Recent was capped
-only as it was WRITTEN, so a stored value that predates the limit came
-back whole onto every page at once; it is trimmed on read as well.
+**It needed no new wiring.** Every command already calls `lzd:begin` at
+the top and `lzd:report` from its handler, so the log rides on those.
+The one call added is `lzd:end`, before a command's trailing `(princ)` --
+which catches every clean exit, because AutoLISP has no early return:
+a command either falls out of the bottom of its defun or raises, and
+raising is the handler's business. A command that ends some other way
+is closed out by the lazy flush at the next `lzd:begin` instead.
 
-The pin editor had the same fault from the other end -- three fixed
-columns was 28 rows at 82 tools, the same 1085px, on the one dialog
-that grows every time ANY tool is added. It shares the page budget now,
-so it cannot drift out of step again.
+**Every failure report now carries the runs around it.** What the
+drafter did before a crash is often the cause and is otherwise gone the
+moment AutoCAD closes; it rides in the one file they were already told
+to send, so nobody has to ask them for a second one. `LAZLOG` shows the
+log and names the file.
 
-Worst page a drafter can build, pins and recents full: 941px.
+Four things the edge tests found, all of them paths a real machine takes:
 
-## v3.7 -- 2026-09-10
+* a broken log destroyed the REPORT. `lzd:report-lines` asked the log
+  for its tail, the tail raised on a read-only folder, and the outer
+  catch turned a diagnosable failure into "could not be written". The
+  log is a convenience; the report is the thing the drafter was told to
+  send, and it does not depend on the log working any more.
+* a cancel was logged twice, once as the `quit` it was and once as a
+  clean run it was not -- `lzd:end` logs, and the cancel path was
+  calling it.
+* the one command that never appeared in the log was `LAZDIAG`, whose
+  whole job is the log: its self test threw away the context `c:LAZDIAG`
+  had just opened.
+* a tool with a handler in two places (`c:COVERCHECK` and `cchk:scan`)
+  would have logged one run as two.
 
-One pass, one idea: a question you can answer is a question you should
-be able to un-answer. `Back` (with `U` for `Undo` beside it) was already
-the repo-wide convention and already worked at most measurement
-prompts -- but a lot of the questions that decide what a run even IS
-were still one-way. Getting the pool shape wrong meant quitting POOL;
-mistyping ABHD's miss percentage meant quitting ABHD; picking the wrong
-side to bead meant Escape and a re-selection.
-
-**Every question chain that had a predecessor now has a way back to
-it.** ABHD, CABHD and LHD walk their settings chains (seven, eight and
-six announced steps) in both directions, declaration loops included --
-Back there takes back the wall, corner or held point declared last,
-dashed marker and all, and off the first item it re-opens the Yes/No
-that started the loop. CORNERSTP's six options do the same, and because
-two of them are only asked when the corner has a diagonal, the chain
-carries a DIRECTION: a question this run never put is stepped over on
-the way back rather than stopped on. POOL, SPA and POOLSIDE open with
-their shape and their base point as one chain. PERPPTS and CPERPPTS
-grew Back at the width amount, the join and the dimension style;
-NORMIESTEP at its corner-treatment sizes; the three step tools at their
-bead questions; DIMCHECK, COVERCHECK and LINFINCHECK at the Move/Keep/
-Pick pick and their reference sheet; AUTOBEAD at its clicked steps;
-ABCURCHECK at its declarations; BPCALLOUT at its callout text;
-STOCKCOVER at "which one?".
-
-**A first question that opens a sub-block backs out of it.** FITABHD's
-pool bottom asks for the deep end and then four measurements; the four
-stepped backwards through each other and the pick did not, so a Yes you
-did not mean was Escape or nothing. It re-opens the "add the bottom?"
-question now, and the first break re-opens the pick. CORNERSTP's
-outside-in runs ask a width for the outermost step - a setting, not a
-tread - and it moved in front of the undo group to join the option
-chain, where Back at it lands on the dimension question (outside in
-never asks about a bench, so that step is passed over).
-
-**A question straight after a selection re-opens that selection.**
-`WCALST`, `XFTCONV`, `AUTOBEAD` and `AUTODIM` already did this; CABHD's
-point cutoff and LHD's output height do it now, which means the two
-questions that decide what a fit even IS are reachable again without
-quitting. Nothing is drawn at that point and the classifier rebuilds
-every list it fills, so the second pass starts clean. HEMISTEP's width
-at the wall was in the same position for a different reason -- it was
-asked after the undo group opened -- so it moved in front of it and
-now re-opens the dimension question.
-
-**Two more pairs closed on the way out.** ABFIND ties two stakes and
-asks for them in order; Back at the second re-asks the first, but only
-when the first was CLICKED - a drawing that numbers it makes the
-re-ask find the same point and walk forward, which is a deadlock rather
-than a way back. DIMCHECK's and LINFINCHECK's reference sheet is three
-questions and now chains all three.
-
-**What still has no Back has a reason, and the reasons are written
-down.** The root `README.md` names four: a selection cannot be typed
-at, a question past committed geometry answers to the draw-as-you-go
-rule instead (Back at the prompt inside the loop takes the last step
-back, drawing and all), a re-ask that is itself the correction of a
-failed range check, and a question the run would answer the same way
-twice. Of 338 prompt sites in the tree, the 119 that offer no Back all
-fall into one of those, plus the pauses, the demos and the first
-question of each command.
-
-**`U` works wherever `B` does**, which was already true and is now
-proven rather than trusted: `tests/test_back_nav.py` reads every `.lsp`
-in the tier for the invariant the prompt text cannot show you -- Undo
-beside every Back in every `initget` list, the typed `B`/`BACK`/`U`/
-`UNDO` predicate spelled the same way everywhere and matched case-
-folded, and no file that accepts the keyword and then only tests for
-`"Back"`. The other half of the same test walks each threaded chain
-backwards through the interpreter, at both tiers.
-
-## v3.11 -- 2026-09-14
+## v3.13 -- 2026-09-14
 
 An audit of the two passes above, and what it turned up.
 
@@ -295,6 +746,60 @@ the drafter to send it, and left no undo group, error mode or entity
 behind. At both tiers. The roster is computed and the exclusions are
 read out of `test_cancel_paths.py`, so a command added later is swept
 by construction.
+
+## v3.12 -- 2026-09-11
+
+**A dialog that does not fit does not open.** DCL does not scroll in
+either direction: a page wider or taller than the screen is not
+clipped and is not scrolled -- AutoCAD refuses it outright, with
+`Dialog too large to fit on screen. Requested Size = (436, 1085)
+Maximum Size = (1920, 1080)`, and the command dies where it stands.
+LAZPANEL's **Rest** page had reached exactly that, so clicking Rest did
+nothing but raise the error. Rest is the page that could least afford
+it: it is COMPUTED -- every tool not on Pool, Cover or Spa lands there
+-- so the page that stopped opening is the page every newly registered
+tool joins, and it would have broken again at the next one regardless.
+
+Nothing in the tree could have caught it, because a dialog's size is
+written down nowhere: it is the sum of whatever the generator emitted.
+So it is computed now. `tools/dclsize.py` reads generated DCL as a tile
+tree and measures it; its constants are fitted to the report above and
+reproduce both of that report's numbers exactly. `tools/check_dcl.py`
+drives every generator to its tallest REACHABLE state -- pins and
+recents full, every chart, every step count -- and fails the build on
+anything within 60px of the limit. It is in `make check`, and
+`tests/test_dcl_size.py` puts the same measurement in `make test`.
+
+Five dialogs were over, only one of which anyone had clicked:
+
+- **Rest** (1085px) and **Layout** (1189px) now wrap into balanced
+  columns at `lzp:*colbudget*`, captions and all -- a category page is
+  where you go to find out what a tool IS, so losing the captions to
+  gain the width would have cost the page its purpose.
+- **LAZFORM's Roman and Grecian** charts (1141px each) pack the boxes
+  beside the picture into two columns instead of one stack. Four more
+  charts were within 20px of the line and came down with them. The
+  picture is only ~260px tall, so the room was always there, sideways.
+- **LAZASCII** (1557px), whose whole job is to be looked at, lays its
+  five sections out in three columns.
+
+And the two strips whose height a DRAFTER sets are capped. The note
+beside the pinned row said "pin thirty tools and you get a tall panel,
+never a broken one"; that was true at 56 tools in three columns and is
+not true at 82 -- thirty pins is 1053px, 27px under the wall, and the
+next pin goes through it. Pinned is held to `lzp:*pinrowmax*` rows, at
+the tick and again on the way in from the registry, where a list stored
+by an older build has never been through the cap. Recent was capped
+only as it was WRITTEN, so a stored value that predates the limit came
+back whole onto every page at once; it is trimmed on read as well.
+
+The pin editor had the same fault from the other end -- three fixed
+columns was 28 rows at 82 tools, the same 1085px, on the one dialog
+that grows every time ANY tool is added. It shares the page budget now,
+so it cannot drift out of step again.
+
+Worst page a drafter can build, pins and recents full: 941px.
+
 ## v3.11 -- 2026-09-11
 
 Three changes to the AB perimeter fitters, all of them about the same
@@ -508,6 +1013,79 @@ adding a second word for one answer is a worse prompt, not a kinder
 one. That rule, and the two conditions that have to hold before `Same`
 appears at all, are now in STANDARDS' keyword table beside Yes/No and
 the rest -- it had been an ad-hoc word in three files until now.
+
+## v3.7 -- 2026-09-10
+
+One pass, one idea: a question you can answer is a question you should
+be able to un-answer. `Back` (with `U` for `Undo` beside it) was already
+the repo-wide convention and already worked at most measurement
+prompts -- but a lot of the questions that decide what a run even IS
+were still one-way. Getting the pool shape wrong meant quitting POOL;
+mistyping ABHD's miss percentage meant quitting ABHD; picking the wrong
+side to bead meant Escape and a re-selection.
+
+**Every question chain that had a predecessor now has a way back to
+it.** ABHD, CABHD and LHD walk their settings chains (seven, eight and
+six announced steps) in both directions, declaration loops included --
+Back there takes back the wall, corner or held point declared last,
+dashed marker and all, and off the first item it re-opens the Yes/No
+that started the loop. CORNERSTP's six options do the same, and because
+two of them are only asked when the corner has a diagonal, the chain
+carries a DIRECTION: a question this run never put is stepped over on
+the way back rather than stopped on. POOL, SPA and POOLSIDE open with
+their shape and their base point as one chain. PERPPTS and CPERPPTS
+grew Back at the width amount, the join and the dimension style;
+NORMIESTEP at its corner-treatment sizes; the three step tools at their
+bead questions; DIMCHECK, COVERCHECK and LINFINCHECK at the Move/Keep/
+Pick pick and their reference sheet; AUTOBEAD at its clicked steps;
+ABCURCHECK at its declarations; BPCALLOUT at its callout text;
+STOCKCOVER at "which one?".
+
+**A first question that opens a sub-block backs out of it.** FITABHD's
+pool bottom asks for the deep end and then four measurements; the four
+stepped backwards through each other and the pick did not, so a Yes you
+did not mean was Escape or nothing. It re-opens the "add the bottom?"
+question now, and the first break re-opens the pick. CORNERSTP's
+outside-in runs ask a width for the outermost step - a setting, not a
+tread - and it moved in front of the undo group to join the option
+chain, where Back at it lands on the dimension question (outside in
+never asks about a bench, so that step is passed over).
+
+**A question straight after a selection re-opens that selection.**
+`WCALST`, `XFTCONV`, `AUTOBEAD` and `AUTODIM` already did this; CABHD's
+point cutoff and LHD's output height do it now, which means the two
+questions that decide what a fit even IS are reachable again without
+quitting. Nothing is drawn at that point and the classifier rebuilds
+every list it fills, so the second pass starts clean. HEMISTEP's width
+at the wall was in the same position for a different reason -- it was
+asked after the undo group opened -- so it moved in front of it and
+now re-opens the dimension question.
+
+**Two more pairs closed on the way out.** ABFIND ties two stakes and
+asks for them in order; Back at the second re-asks the first, but only
+when the first was CLICKED - a drawing that numbers it makes the
+re-ask find the same point and walk forward, which is a deadlock rather
+than a way back. DIMCHECK's and LINFINCHECK's reference sheet is three
+questions and now chains all three.
+
+**What still has no Back has a reason, and the reasons are written
+down.** The root `README.md` names four: a selection cannot be typed
+at, a question past committed geometry answers to the draw-as-you-go
+rule instead (Back at the prompt inside the loop takes the last step
+back, drawing and all), a re-ask that is itself the correction of a
+failed range check, and a question the run would answer the same way
+twice. Of 338 prompt sites in the tree, the 119 that offer no Back all
+fall into one of those, plus the pauses, the demos and the first
+question of each command.
+
+**`U` works wherever `B` does**, which was already true and is now
+proven rather than trusted: `tests/test_back_nav.py` reads every `.lsp`
+in the tier for the invariant the prompt text cannot show you -- Undo
+beside every Back in every `initget` list, the typed `B`/`BACK`/`U`/
+`UNDO` predicate spelled the same way everywhere and matched case-
+folded, and no file that accepts the keyword and then only tests for
+`"Back"`. The other half of the same test walks each threaded chain
+backwards through the interpreter, at both tiers.
 
 ## v3.6 -- 2026-09-08
 

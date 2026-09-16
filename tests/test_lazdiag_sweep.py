@@ -104,6 +104,15 @@ def fresh(cmd):
 
 # --------------------------------------------------------------- the DXF
 
+def dxfs(vm):
+    return {k: v for k, v in vm.files.items() if k.endswith(".dxf")}
+
+
+def logof(vm):
+    hits = [v for k, v in vm.files.items() if k.endswith(".log")]
+    return hits[0] if hits else ""
+
+
 def parses(body):
     lines = body.split("\n")
     if lines and lines[-1] == "":
@@ -123,6 +132,7 @@ check("the roster is most of the panel", len(ROSTER) >= 50,
       "%d commands" % len(ROSTER))
 
 no_report, unparsable, wrong_msg, silent, dirty = [], [], [], [], []
+unlogged, mislogged = [], []
 swept = 0
 
 for cmd in ROSTER:
@@ -140,10 +150,16 @@ for cmd in ROSTER:
         check("%s: the failure went through its handler" % cmd, False, msg)
         continue
     swept += 1
-    if not vm.files:
+    if not dxfs(vm):
         no_report.append(cmd)
         continue
-    path, body = sorted(vm.files.items())[0]
+    path, body = sorted(dxfs(vm).items())[0]
+    # the same failure has to reach the LOG, and say it failed
+    rec = logof(vm)
+    if not rec:
+        unlogged.append(cmd)
+    elif "  FAIL " not in rec or BOOM not in rec:
+        mislogged.append(cmd)
     if not parses(body):
         unparsable.append(cmd)
     if BOOM not in body:
@@ -170,6 +186,10 @@ check("every drafter is told, and told to send the file", not silent,
       "said nothing useful: %s" % ", ".join(silent))
 check("no report left an undo group, an error mode or a mark behind",
       not dirty, "; ".join(dirty))
+check("every failure is in the run log too", not unlogged,
+      "nothing logged for: %s" % ", ".join(unlogged))
+check("every log record says FAIL and carries the error", not mislogged,
+      "logged wrong: %s" % ", ".join(mislogged))
 
 print("\na real tool's own selection reaches its report")
 
@@ -197,10 +217,35 @@ if vm.files:
     check("...carrying the geometry the drafter had selected, not just "
           "what the run drew", copied == 3, "%d of 3 lines copied" % copied)
 
+print("\na clean run is logged too, which is what makes the rest a RATE")
+
+# A log of failures alone says a tool broke.  A log that also counts the
+# runs that worked says how OFTEN it breaks, which is the difference
+# between a bug worth chasing and one that happened once.
+QUIET = _names("QUIET")
+noclean, wrongclean = [], []
+for cmd in sorted(QUIET):
+    if cmd not in WHERE:
+        continue
+    vm = fresh(cmd)
+    try:
+        vm.run("c:" + cmd, [])
+    except LispError:
+        continue
+    rec = logof(vm)
+    if not rec:
+        noclean.append(cmd)
+    elif "  ok " not in rec:
+        wrongclean.append("%s -> %s" % (cmd, rec.split("\n")[0][:60]))
+check("a command that runs to the end says so in the log", not noclean,
+      "nothing logged for: %s" % ", ".join(noclean))
+check("...and says ok, not something else", not wrongclean,
+      "; ".join(wrongclean))
+
 print("\na cancel through the same commands writes nothing")
 
 CANCEL = "Function cancelled"
-littered = []
+littered, unquit = [], []
 for cmd in ROSTER[:25]:           # a representative run: Esc is Esc
     if cmd not in WHERE:
         continue
@@ -212,10 +257,14 @@ for cmd in ROSTER[:25]:           # a representative run: Esc is Esc
         vm.run("c:" + cmd, [esc])
     except LispError:
         continue
-    if vm.files:
+    if dxfs(vm):
         littered.append(cmd)
+    elif "  quit" not in logof(vm):
+        unquit.append(cmd)
 check("Esc leaves the Downloads folder alone", not littered,
       "wrote a report for a cancel: %s" % ", ".join(littered))
+check("...but every Esc IS logged, as the quit it was", not unquit,
+      "no quit line for: %s" % ", ".join(unquit))
 
 if failures:
     print("\n%d sweep check(s) FAILED" % len(failures))

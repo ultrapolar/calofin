@@ -46,6 +46,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 from lispvm import VM, LispError  # noqa: E402
 import callib  # noqa: E402
+import gen_ui_data  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, '..'))
@@ -142,6 +143,36 @@ print("   %s, %d buttons over %d commands, none twice on a page"
       % (ver, len(BUTTONS), len(PANEL)))
 
 
+print("== lzp:*blurbs* and lzp:*keywords*: complete, and blurbs match blurbs.txt ==")
+# The one-sentence blurb is not invented here a second time: it is
+# copied in from the palette's own tooltip file, and this is what keeps
+# the copy honest.  A mismatch means someone edited one and not the
+# other, or registered a new tool without carrying its blurb across.
+TXT_BLURBS = gen_ui_data.blurbs()
+BLURBS = {str(c[0]): str(c[1]) for c in vm.globals.get('lzp:*blurbs*') or []}
+missing_blurb = [c for c in PANEL if c not in BLURBS]
+assert not missing_blurb, "buttons with no lzp:*blurbs* row: %r" % missing_blurb
+orphan_blurb = [c for c in BLURBS if c not in set(PANEL)]
+assert not orphan_blurb, "lzp:*blurbs* rows with no button: %r" % orphan_blurb
+assert all(BLURBS.values()), \
+    "blank blurb: %r" % [c for c, v in BLURBS.items() if not v]
+mismatched = [c for c in PANEL if BLURBS[c] != TXT_BLURBS.get(c)]
+assert not mismatched, (
+    "lzp:*blurbs* has drifted from blurbs.txt: %r" % mismatched)
+
+# lzp:*keywords* has no outside source to match -- it exists only to
+# widen the search -- but every command still needs a row, or a search
+# silently loses the extra reach for whichever ones do not.
+KEYWORDS = {str(c[0]): str(c[1])
+            for c in vm.globals.get('lzp:*keywords*') or []}
+missing_kw = [c for c in PANEL if c not in KEYWORDS or not KEYWORDS[c]]
+assert not missing_kw, "buttons with no lzp:*keywords* row: %r" % missing_kw
+orphan_kw = [c for c in KEYWORDS if c not in set(PANEL)]
+assert not orphan_kw, "lzp:*keywords* rows with no button: %r" % orphan_kw
+print("   %d blurbs match blurbs.txt word for word, %d keyword rows, none blank"
+      % (len(BLURBS), len(KEYWORDS)))
+
+
 print("== roster pin: panel == headline commands under lisp/ ==")
 ALL = census()
 HELD = held_commands()
@@ -189,11 +220,18 @@ assert [str(x) for x in vm.globals['test:*pages*']] == flat_rows, \
     "lzp:pages does not flatten lzp:*rows* in strip order"
 
 opens = [l for l in dcl if l.endswith(' : dialog {')]
-# one dialog per page, plus the pin editor
-assert len(opens) == len(PAGES) + 1, (
-    "%d dialogs for %d pages + the pin editor" % (len(opens), len(PAGES)))
+# one dialog per page, plus the pin, hide, settings and names editors
+assert len(opens) == len(PAGES) + 4, (
+    "%d dialogs for %d pages + the pin, hide, settings and names editors"
+    % (len(opens), len(PAGES)))
 assert 'lazpanel_pins : dialog {' in opens, \
     "the pin editor dialog is not in the generated file"
+assert 'lazpanel_hidden : dialog {' in opens, \
+    "the hide editor dialog is not in the generated file"
+assert 'lazpanel_set : dialog {' in opens, \
+    "the settings dialog is not in the generated file"
+assert 'lazpanel_names : dialog {' in opens, \
+    "the names editor dialog is not in the generated file"
 depth = 0
 for line in dcl:
     assert line.count('"') % 2 == 0, "odd quotes: %r" % line
@@ -275,8 +313,10 @@ for gname in PAGES:
     assert set(mine) <= set(keys), \
         "%s: commands with no button: %r" % (gname, sorted(set(mine) - set(keys)))
     # pinned buttons carry a pin_ prefix and repeat a tool already on
-    # some page; pin_edit opens the editor.  Neither is a page command.
-    extra = set(keys) - set(mine) - {'status', 'cancel', 'pin_edit'} \
+    # some page; pin_edit and options_btn open other things.  None of
+    # them is a page command.
+    extra = set(keys) - set(mine) \
+            - {'status', 'cancel', 'pin_edit', 'options_btn'} \
             - {'filter', 'hits', 'msg', 'run'} \
             - {'tab_' + g for g in PAGES} \
             - {k for k in keys if k.startswith('pin_')} \
@@ -1164,6 +1204,27 @@ assert str(cv2.globals.get('t:*p*')) == LIVE, \
 print("   a Recent button launches its tool and greys when it is not loaded")
 
 
+print("== Options: settings, not a roster launch ==")
+# options_btn is wired exactly like a grid button -- rc=1, full dialog
+# teardown before anything runs -- but the pick it sets is a sentinel
+# c:LAZPANEL reads itself rather than a name lzp:launch would look up.
+# LAZSET is stubbed here rather than driven: this is about ROUTING,
+# not about the settings dialog itself, which its own section below
+# covers end to end.
+ov = stubbed()
+ov.loads('(setq t:*lazset-ran* nil)')
+ov.loads('(defun c:LAZSET () (setq t:*lazset-ran* t) (princ))')
+ov.loads('(setq stub:*click* "options_btn")')
+run(ov, 'c:LAZPANEL', 'options-click')
+assert ov.globals.get('t:*lazset-ran*'), "clicking Options did not open LAZSET"
+assert not ov.globals.get('stub:*ran*'), \
+    "Options went through lzp:launch like a roster tool: %r" % ov.globals.get('stub:*ran*')
+assert not (ov.globals.get('lzp:*recent*') or []), \
+    "LAZSET reached Recent, which is for drafting tools only"
+assert ov.globals.get('lzp:*pick*') is None, "pick not cleared after the settings launch"
+print("   clicking Options opens LAZSET, and it never reaches lzp:launch or Recent")
+
+
 print("== the screen button goes up as the file loads ==")
 vm = stubbed(preload=True)
 tbs = [str(x) for x in vm.globals.get('stub:*tbs*') or []]
@@ -1563,17 +1624,30 @@ def captions(v):
     return {str(c[0]): str(c[1]) for c in v.globals['lzp:*captions*']}
 
 
+def blurbs(v):
+    return {str(c[0]): str(c[1]) for c in v.globals['lzp:*blurbs*']}
+
+
+def keywords(v):
+    return {str(c[0]): str(c[1]) for c in v.globals['lzp:*keywords*']}
+
+
 CAPS = captions(fv)
+BLURBS = blurbs(fv)
+KEYWORDS = keywords(fv)
 # an empty box is not a filter: the whole roster, in roster order
 fv.loads('(setq test:*all* (lzp:commands))')
 ALL = [str(x) for x in fv.globals['test:*all*']]
 assert matches(fv, '') == ALL, "an empty search does not list the roster"
 
-# the search reads the caption as well as the name, which is the whole
-# point: half of knowing this toolset is knowing what the names mean
+# the search reads the name, the caption, the one-sentence blurb and
+# the keyword list -- an OR across all four fields for a single word,
+# which is half of knowing this toolset: knowing what the names mean
 for needle in ('cover', 'check', 'spa', 'survey', 'dim'):
     want = [c for c in ALL
-            if needle.upper() in c or needle.upper() in CAPS[c].upper()]
+            if needle.upper() in c or needle.upper() in CAPS[c].upper()
+            or needle.upper() in BLURBS.get(c, '').upper()
+            or needle.upper() in KEYWORDS.get(c, '').upper()]
     assert matches(fv, needle) == want, (
         "%r matched %r, expected %r" % (needle, matches(fv, needle), want))
     assert matches(fv, needle.upper()) == want, "%r is case sensitive" % needle
@@ -1586,15 +1660,47 @@ assert matches(fv, 'survey'), "no tool's caption mentions a survey"
 print("   %d tools match \"survey\" on their captions alone, none by name"
       % len(matches(fv, 'survey')))
 
+# a word that turns up ONLY in the keyword list -- never in the name,
+# the caption or the blurb -- is the whole reason lzp:*keywords* exists:
+# ABHD trades curve count for how far a point may sit off the fit, and
+# nothing but the keyword list ever spells that "tolerance"
+assert 'TOLERANCE' not in CAPS['ABHD'].upper()
+assert 'TOLERANCE' not in BLURBS['ABHD'].upper()
+assert 'TOLERANCE' in KEYWORDS['ABHD'].upper()
+assert matches(fv, 'tolerance') == ['ABHD'], (
+    "a keyword-only word did not find its tool: %r" % matches(fv, 'tolerance'))
+print("   a word found in no name, caption or blurb still finds its tool")
+
+# two words narrow rather than widen: EVERY word has to turn up
+# somewhere, not both in the same field.  "closed" alone is LAZFORMCOVER
+# as well as LHD (LAZFORMCOVER's blurb: "the pool-bottom gate closed");
+# adding "laser" -- LHD's caption, not LAZFORMCOVER's -- drops it to LHD
+# alone, which only happens if the two words are ANDed rather than
+# either one being enough on its own.
+assert matches(fv, 'closed') == ['LAZFORMCOVER', 'LHD'], matches(fv, 'closed')
+assert matches(fv, 'laser closed') == ['LHD'], (
+    "a two-word search did not AND across fields: %r"
+    % matches(fv, 'laser closed'))
+print("   \"laser closed\" narrows \"closed\" from two tools to one")
+
 # The needle is whatever was typed.  wcmatch would read these as
 # pattern syntax -- "*" would match the whole roster and "." none of it
 # -- so a literal search is the difference between a useful box and a
-# baffling one.
+# baffling one.  A blurb or keyword is free to use "." or "#" as an
+# ordinary character (DIMSTAMP's "4.5", ABFIND's "Pt.##"), so the check
+# is that each wildcard finds exactly the commands whose text really
+# holds that character, not that every one of them comes back empty.
+def hay(c):
+    return (c + ' ' + CAPS[c] + ' ' + KEYWORDS.get(c, '')
+            + ' ' + BLURBS.get(c, '')).upper()
+
+
 for wild in ('*', '?', '~', '[A]', '@', '.', '#'):
-    assert matches(fv, wild) == [], \
-        "%r matched %r -- the search is going through wcmatch" \
-        % (wild, matches(fv, wild))
-print("   wildcard characters are searched for, not obeyed")
+    want = [c for c in ALL if wild.upper() in hay(c)]
+    assert matches(fv, wild) == want, \
+        "%r matched %r, expected %r -- literal or wcmatch?" \
+        % (wild, matches(fv, wild), want)
+print("   wildcard characters are searched for literally, not obeyed")
 
 # a row says what a tool is, and says when the session cannot run it
 fv.loads('(setq test:*a* (lzp:hitline "POOL" \'("POOL")))')
@@ -1602,10 +1708,12 @@ fv.loads('(setq test:*b* (lzp:hitline "POOL" nil))')
 assert 'POOL' in str(fv.globals['test:*a*'])
 assert CAPS['POOL'] in str(fv.globals['test:*a*']), \
     "the row does not carry the caption: %r" % fv.globals['test:*a*']
+assert BLURBS['POOL'] in str(fv.globals['test:*a*']), \
+    "the row does not carry the one-sentence blurb: %r" % fv.globals['test:*a*']
 assert 'not loaded' not in str(fv.globals['test:*a*'])
 assert 'not loaded' in str(fv.globals['test:*b*']), \
     "an unloaded tool is listed with nothing to say so"
-print("   a row is NAME - caption, plus (not loaded) when it is not")
+print("   a row is NAME - caption - blurb, plus (not loaded) when it is not")
 
 
 print("== find: filling, picking and running ==")
@@ -1722,6 +1830,59 @@ print("   Run launches the highlighted tool (%s), the panel closing first"
       % LIVE)
 
 
+print("== hidden tools: filtered from the grid, Find, Pinned and Recent ==")
+# lzp:*hidden* is a stored NAME list, the same shape lzp:*pins* and
+# lzp:*recent* already are; lzp:visible is the roster minus it, and
+# everything the panel actually RENDERS -- the grid, Find, Pinned,
+# Recent, the status line's total -- reads that instead of the full
+# lzp:commands, which stays the structural roster the tree is pinned
+# to above and what the hide editor itself still offers in full.
+hv = fresh()
+hv.loads('(setq lzp:*hidden* (list "%s"))' % LIVE)
+
+hv.loads('(setq t:*all* (lzp:commands))')
+assert LIVE in [str(x) for x in hv.globals['t:*all*']], \
+    "hiding a tool removed it from the structural roster"
+hv.loads('(setq t:*vis* (lzp:visible))')
+assert LIVE not in [str(x) for x in hv.globals['t:*vis*']], \
+    "a hidden tool is still in lzp:visible"
+assert len(hv.globals['t:*vis*']) == len(PANEL) - 1, \
+    "hiding one tool should drop the visible count by exactly one"
+
+hv.loads('(setq t:*m* (lzp:matches "%s"))' % LIVE)
+assert LIVE not in [str(x) for x in (hv.globals['t:*m*'] or [])], \
+    "a hidden tool is still a Find hit, even searched by exact name"
+
+# its page's grid loses the button, and the DCL for that page still
+# generates cleanly with no dangling key
+hv.loads('(setq t:*g* (lzp:group-commands "Pool"))')
+mine = [str(x) for x in hv.globals['t:*g*']]
+assert LIVE not in mine, "a hidden tool still has a grid button wired"
+hv.loads('(setq t:*d* (lzp:dcl-one (assoc "Pool" lzp:*groups*)))')
+dtext = '\n'.join(str(l) for l in hv.globals['t:*d*'])
+assert ('key = "%s"' % LIVE) not in dtext, \
+    "a hidden tool's button is still in the generated DCL"
+
+# pinned and recent: stored either way, shown neither way
+hv.loads('(setq lzp:*pins* (list "%s") lzp:*recent* (list "%s"))'
+         % (LIVE, LIVE))
+hv.loads('(setq t:*ps* (lzp:pinshown))')
+assert not (hv.globals['t:*ps*'] or []), \
+    "a hidden, pinned tool is still shown pinned: %r" % hv.globals['t:*ps*']
+hv.loads('(setq t:*rs* (lzp:recshown))')
+assert not (hv.globals['t:*rs*'] or []), \
+    "a hidden, recent tool is still shown recent: %r" % hv.globals['t:*rs*']
+assert LIVE in [str(x) for x in hv.globals['lzp:*pins*']], \
+    "hiding a pinned tool must only stop it showing, not drop the pin itself"
+
+# un-hiding brings it straight back, nothing else touched
+hv.loads('(setq lzp:*hidden* nil)')
+hv.loads('(setq t:*ps2* (lzp:pinshown))')
+assert LIVE in [str(x) for x in hv.globals['t:*ps2*']], \
+    "un-hiding did not bring the pinned chip back"
+print("   a hidden tool stays on the roster, off the grid, Find, Pinned and Recent")
+
+
 print("== LAZPIN: the pin editor, end to end ==")
 # c:LAZPIN was in check_registry's UNTESTED list -- the helpers it wires
 # together were covered above, but the command that wires them was run by
@@ -1815,6 +1976,435 @@ assert any('could not load the dialog file' in str(p) for p in vm.printed), \
 assert any(e.startswith('delete ') for e in events(vm)), \
     "a dialog that would not load left its temp file behind: %r" % events(vm)
 print("   an unwritable or unloadable dialog is reported, and cleans up")
+
+
+print("== LAZHIDE: the hide editor, end to end ==")
+# The same wiring gap LAZPIN closed above: c:LAZHIDE is the only route
+# to lzp:hide-toggle, reachable solely through the action_tile string
+# the dialog fires.
+HIDE = 'AUTODIM'
+
+
+def hidevm(rc, click=None, val="1", stored=""):
+    """A stubbed session whose registry holds STORED under "Hidden",
+    with the hide dialog scripted to fire CLICK and then return RC (1
+    accept, 0 cancel)."""
+    v = stubbed()
+    v.loads('(setq t:*reg* "%s")' % stored)
+    v.loads('(defun vl-registry-read (k n) t:*reg*)')
+    v.loads('(defun vl-registry-write (k n s) (setq t:*reg* s) s)')
+    v.loads("(setq stub:*rcs* '(%d))" % rc)
+    if click:
+        v.loads('(setq stub:*click* "hd_%s" stub:*clickval* "%s")'
+                % (click, val))
+    return v
+
+
+vm = hidevm(1)
+run(vm, 'c:LAZHIDE', 'hide-close')
+assert events(vm) == DIALOG, events(vm)
+assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_hidden', \
+    "LAZHIDE opened %r, not the hidden page" % vm.globals.get('stub:*dlgname*')
+assert any('tools hidden' in str(p) for p in vm.printed), vm.printed
+print("   opens the hide page, unloads it and deletes the temp DCL")
+
+# every command on the roster gets a toggle, set from what is stored
+vm = hidevm(1, stored=HIDE)
+run(vm, 'c:LAZHIDE', 'hide-tiles')
+tiles = {str(k): str(v) for k, v in
+         ((t[0], t[1]) for t in vm.globals.get('stub:*tiles*') or [])}
+assert tiles.get('hd_%s' % HIDE) == '1', \
+    "the stored hide was not ticked: %r" % tiles.get('hd_%s' % HIDE)
+assert tiles.get('hd_%s' % LIVE) == '0', \
+    "an un-hidden tool came up ticked: %r" % tiles.get('hd_%s' % LIVE)
+assert len([k for k in tiles if k.startswith('hd_')]) == len(PANEL), \
+    "the dialog offered %d toggles for a %d-tool roster" % (
+        len([k for k in tiles if k.startswith('hd_')]), len(PANEL))
+print("   one toggle per tool, ticked to match what is stored")
+
+# accept writes the new list; the tick reached lzp:hide-toggle
+vm = hidevm(1, click=HIDE)
+run(vm, 'c:LAZHIDE', 'hide-accept')
+assert [str(x) for x in vm.globals.get('lzp:*hidden*') or []] == [HIDE], \
+    "ticking %s did not hide it: %r" % (HIDE, vm.globals.get('lzp:*hidden*'))
+assert str(vm.globals.get('t:*reg*')) == HIDE, \
+    "accept did not write the hidden list to the registry: %r" % vm.globals.get('t:*reg*')
+assert any('1 tools hidden' in str(p) for p in vm.printed), vm.printed
+print("   ticking a tool and accepting hides it, and stores it")
+
+# cancel throws the tick away by re-reading the registry, exactly as
+# the pin editor's cancel does
+vm = hidevm(0, click=HIDE)
+run(vm, 'c:LAZHIDE', 'hide-cancel')
+assert not (vm.globals.get('lzp:*hidden*') or []), \
+    "cancel kept the tick: %r" % vm.globals.get('lzp:*hidden*')
+assert str(vm.globals.get('t:*reg*')) == "", \
+    "cancel wrote to the registry: %r" % vm.globals.get('t:*reg*')
+print("   cancelling re-reads the store, so the tick is discarded")
+
+# un-ticking a stored hide, accepted, brings the tool back
+vm = hidevm(1, click=HIDE, val="0", stored=HIDE)
+run(vm, 'c:LAZHIDE', 'hide-untick')
+assert not (vm.globals.get('lzp:*hidden*') or []), \
+    "un-ticking left it hidden: %r" % vm.globals.get('lzp:*hidden*')
+assert str(vm.globals.get('t:*reg*')) == "", \
+    "un-ticking did not clear the store: %r" % vm.globals.get('t:*reg*')
+print("   un-ticking a hidden tool and accepting un-hides it")
+
+# a dialog file that cannot be written, and one that cannot be loaded:
+# both are reported, and the unloadable one still deletes its temp file
+vm = hidevm(1)
+vm.loads('(defun lzp:write-dcl () nil)')
+run(vm, 'c:LAZHIDE', 'hide-nofile')
+assert any('could not write the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert 'load' not in events(vm), events(vm)
+vm = hidevm(1)
+vm.loads('(defun load_dialog (f) (stub:ev "load") -1)')
+run(vm, 'c:LAZHIDE', 'hide-noload')
+assert any('could not load the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert any(e.startswith('delete ') for e in events(vm)), \
+    "a dialog that would not load left its temp file behind: %r" % events(vm)
+print("   an unwritable or unloadable dialog is reported, and cleans up")
+
+
+print("== LAZSET: the settings dialog, end to end ==")
+# CALSET's questions as a form: a dropdown for the theme, a box per
+# item colour, the two folders, and a way into the hidden list -- what
+# LAZFORM is to POOL.  The rule the whole dialog turns on is that
+# NOTHING reaches the profile until OK, so every case below is really
+# one question: did this end up in setenv, or did it not.
+
+
+def setvm(rcs, click=None, val="", env=None):
+    """A stubbed session whose profile holds ENV, with the settings
+    dialog scripted to fire CLICK and then return the RCS queue."""
+    v = stubbed()
+    v.loads('(setq t:*reg* "")')
+    v.loads('(defun vl-registry-read (k n) t:*reg*)')
+    v.loads('(defun vl-registry-write (k n s) (setq t:*reg* (list n s)) s)')
+    for k, val_ in (env or {}).items():
+        v.loads('(setenv "%s" "%s")' % (k, val_))
+    v.loads("(setq stub:*rcs* '(%s))" % ' '.join(str(r) for r in rcs))
+    if click:
+        # a Windows path goes through the VM's string reader on its way
+        # in, where a bare \r is a carriage return and not two thirds of
+        # "reports" -- so it is escaped exactly as Lisp source would be
+        v.loads('(setq stub:*click* "%s" stub:*clickval* "%s")'
+                % (click, val.replace('\\', '\\\\')))
+    return v
+
+
+def prof(v, key):
+    v.loads('(setq t:*g* (getenv "%s"))' % key)
+    g = v.globals.get('t:*g*')
+    return '' if g is None else str(g)
+
+
+def tile(v, key):
+    v.loads('(setq t:*t* (stub:tile "%s"))' % key)
+    t = v.globals.get('t:*t*')
+    return '' if t is None else str(t)
+
+
+vm = setvm([0])
+run(vm, 'c:LAZSET', 'set-cancel')
+# the dropdown's start_list is the one event a page cycle does not have
+assert [e for e in events(vm) if not e.startswith('list ')] == DIALOG, events(vm)
+assert 'list set_theme' in events(vm), \
+    "the dropdown was never filled: %r" % events(vm)
+assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_set', \
+    "LAZSET opened %r, not the settings page" % vm.globals.get('stub:*dlgname*')
+assert any('unchanged' in str(p) for p in vm.printed), vm.printed
+assert prof(vm, 'CalofinTheme') == '', "cancel wrote to the profile"
+print("   opens the settings page, unloads it and deletes the temp DCL")
+
+# the dropdown is filled at runtime -- DCL cannot carry a popup_list's
+# list -- and comes up on whatever the profile already says
+vm = setvm([0], env={'CalofinTheme': 'LIGHT'})
+run(vm, 'c:LAZSET', 'set-theme-shown')
+assert [str(x) for x in (vm.globals.get('stub:*list*') or [])] \
+    == ['Auto', 'Dark', 'Light'], vm.globals.get('stub:*list*')
+assert tile(vm, 'set_theme') == '2', \
+    "the dropdown did not open on Light: %r" % tile(vm, 'set_theme')
+print("   the Theme dropdown is filled and opens on the stored answer")
+
+# picking Dark and accepting writes the profile AND the registry copy
+# the VB palette reads, which is the bargain CALSET's own Theme strikes
+vm = setvm([1], click='set_theme', val='1')
+run(vm, 'c:LAZSET', 'set-theme-dark')
+assert prof(vm, 'CalofinTheme') == 'DARK', prof(vm, 'CalofinTheme')
+assert [str(x) for x in (vm.globals.get('t:*reg*') or [])] == ['Theme', 'DARK'], \
+    "the theme was not mirrored to the registry: %r" % vm.globals.get('t:*reg*')
+assert any('settings saved' in str(p) for p in vm.printed), vm.printed
+print("   picking a theme and accepting writes the profile and the registry")
+
+# an item colour is stored under the key cal:ink actually reads
+vm = setvm([1], click='ink_flag', val='42')
+run(vm, 'c:LAZSET', 'set-ink')
+assert prof(vm, 'CalofinInk-FLAG') == '42', prof(vm, 'CalofinInk-FLAG')
+print("   a colour box lands under CalofinInk-<ROLE>")
+
+# ...and emptying one puts that role back to auto
+vm = setvm([1], click='ink_flag', val='', env={'CalofinInk-FLAG': '42'})
+run(vm, 'c:LAZSET', 'set-ink-clear')
+assert prof(vm, 'CalofinInk-FLAG') == '', \
+    "an emptied colour box did not go back to auto: %r" % prof(vm, 'CalofinInk-FLAG')
+print("   ...and emptying it puts the role back to auto")
+
+# a colour box that is not a colour: the state line names it, OK is
+# greyed, and the value never reaches the profile
+vm = setvm([1], click='ink_flag', val='red')
+run(vm, 'c:LAZSET', 'set-ink-bad')
+assert 'Flag' in tile(vm, 'state'), \
+    "the state line does not name the bad box: %r" % tile(vm, 'state')
+assert 'accept' in {str(x) for x in (vm.globals.get('stub:*disabled*') or [])}, \
+    "OK was not greyed while a colour box was unreadable"
+assert prof(vm, 'CalofinInk-FLAG') == '', \
+    "a value that is not a colour was stored: %r" % prof(vm, 'CalofinInk-FLAG')
+print("   a box that is not a colour greys OK and is never written")
+
+# ...and a typo must not ERASE the override that was already there.
+# Greying is not a hard stop: DCL fires an edit box's action before the
+# default button's, so a click on OK with "3x" in the box greys OK and
+# lands anyway.  The write skips a box it cannot read rather than
+# clearing it, which is the difference between ignoring a typo and
+# throwing away the colour the drafter had.
+vm = setvm([1], click='ink_flag', val='3x', env={'CalofinInk-FLAG': '3'})
+run(vm, 'c:LAZSET', 'set-ink-typo-keeps')
+assert prof(vm, 'CalofinInk-FLAG') == '3', \
+    "a typo erased the stored override: %r" % prof(vm, 'CalofinInk-FLAG')
+print("   ...and a typo leaves the override that was already stored alone")
+
+# the accept guard itself: OK refuses while a box is unreadable, and
+# goes through once it is fixed.  The stub forces its own rc, so this
+# drives lzp:set-ok directly rather than through start_dialog.
+gv = stubbed()
+gv.loads('(lzp:set-read)')
+gv.loads('(lzp:set-put "CalofinInk-FLAG" "3x") (setq stub:*done* nil) (lzp:set-ok)')
+assert gv.globals.get('stub:*done*') is None, \
+    "OK closed the dialog with an unreadable colour box in it"
+gv.loads('(lzp:set-put "CalofinInk-FLAG" "3") (lzp:set-ok)')
+assert str(gv.globals.get('stub:*done*')) == '1', \
+    "OK did not go through once the box was fixed: %r" % gv.globals.get('stub:*done*')
+print("   OK re-checks rather than trusting the greying, as LAZFORM's Insert does")
+
+# a padded profile value is what every other reader in the tree trims
+# before deciding: lzp:ui reads " dark " as dark, so the dialog must
+# show Dark -- and must not write AUTO back over it on the way out
+vm = setvm([1], env={'CalofinTheme': ' dark '})
+run(vm, 'c:LAZSET', 'set-theme-padded')
+assert tile(vm, 'set_theme') == '1', \
+    "a padded profile theme did not open on Dark: %r" % tile(vm, 'set_theme')
+assert prof(vm, 'CalofinTheme') == 'DARK', \
+    "OK erased a padded theme override: %r" % prof(vm, 'CalofinTheme')
+print("   a padded profile theme reads as that theme, and OK keeps it")
+
+# auto is stored as EMPTY, which is what every reader takes for auto --
+# the word would show up in LAZICON and lzp:setshow as an override
+vm = setvm([1])
+run(vm, 'c:LAZSET', 'set-theme-auto-empty')
+assert prof(vm, 'CalofinTheme') == '', \
+    "Auto was written as a word, not as empty: %r" % prof(vm, 'CalofinTheme')
+print("   Auto is stored as empty, the way every reader already spells it")
+
+# the folders are plain text, and empty is how one is cleared
+vm = setvm([1], click='set_errdir', val='C:\\reports')
+run(vm, 'c:LAZSET', 'set-errdir')
+assert prof(vm, 'CalofinErrorDir') == 'C:\\reports', prof(vm, 'CalofinErrorDir')
+print("   a folder box is taken as typed -- LAZDIAG reads this one")
+
+# Hidden... closes the dialog, runs the hide editor on the SAME loaded
+# handle, and comes back with the pending answers still in the store --
+# which is the whole reason the store is a global
+vm = setvm([5, 0, 0], click='set_errdir', val='C:\\kept')
+run(vm, 'c:LAZSET', 'set-hidden-hop')
+assert events(vm).count('new') == 3, \
+    "the hop through the hide editor did not reopen the settings page: %r" \
+    % events(vm)
+vm.loads('(setq t:*k* (lzp:set-get "CalofinErrorDir"))')
+assert str(vm.globals.get('t:*k*')) == 'C:\\kept', \
+    "the trip through Hidden... lost what was typed: %r" % vm.globals.get('t:*k*')
+print("   Hidden... hops to the checklist and back without losing an answer")
+
+# a dialog file that cannot be written, and one that cannot be loaded
+vm = setvm([1])
+vm.loads('(defun lzp:write-dcl () nil)')
+run(vm, 'c:LAZSET', 'set-nofile')
+assert any('could not write the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert 'load' not in events(vm), events(vm)
+vm = setvm([1])
+vm.loads('(defun load_dialog (f) (stub:ev "load") -1)')
+run(vm, 'c:LAZSET', 'set-noload')
+assert any('could not load the dialog file' in str(p) for p in vm.printed), \
+    vm.printed
+assert any(e.startswith('delete ') for e in events(vm)), \
+    "a dialog that would not load left its temp file behind: %r" % events(vm)
+print("   an unwritable or unloadable dialog is reported, and cleans up")
+
+# every key the dialog offers is one something actually reads: the two
+# folders and the theme are CALSET's own, and the eight colours are the
+# roles cal:ink resolves -- a settings surface that writes a key nothing
+# reads is worse than none, which is the rule CALSET is already held to
+sv = fresh()
+sv.loads('(setq t:*keys* nil)')
+sv.loads('(foreach r lzp:*inkroles*'
+         ' (setq t:*keys* (cons (lzp:inkkey r) t:*keys*)))')
+inkkeys = {str(x) for x in sv.globals['t:*keys*']}
+assert inkkeys == {'CalofinInk-' + r.upper() for r in
+                   ('flag', 'arc', 'olap', 'orig', 'sugg', 'point',
+                    'constr', 'report')}, sorted(inkkeys)
+setsrc = callib.read(LSP)
+for k in ('CalofinTheme', 'CalofinErrorDir', 'StockCover_Folder'):
+    assert '"%s"' % k in setsrc, k
+print("   %d colour keys plus the theme and the two folders, all real"
+      % len(inkkeys))
+
+
+print("== LAZNAME: names of the drafter's own, end to end ==")
+# Two things a drafter can rename per machine: the name they TYPE to
+# summon a tool, and the words its BUTTON says.  Neither touches the
+# shipped tables, so everything make check reads is unchanged -- which
+# is exactly why the rules have to be enforced here instead.
+
+# an alias is a wrapper defun, the shape DCE already is, built as data
+nv = fresh()
+nv.loads('(setq t:*made* (lzp:alias-make "PL" "POOL"))')
+assert nv.globals.get('t:*made*'), "alias-make refused a good name"
+assert str(nv.globals.get('t:*x*') or '') == ''
+nv.loads('(setq t:*bound* (lzp:alias-taken-p "PL"))')
+assert nv.globals.get('t:*bound*'), "the alias did not define a command"
+# the wrapper resolves its target at CALL time, so the alias may be
+# applied before the tool it names is loaded -- the standalone tier
+# gives no load-order guarantee and this is what makes that safe
+nv.loads('(defun c:POOL () (setq t:*ran* "POOL") (princ))')
+nv.loads('(c:PL)')
+assert str(nv.globals.get('t:*ran*')) == 'POOL', \
+    "the alias did not reach its tool: %r" % nv.globals.get('t:*ran*')
+print("   an alias is a wrapper defun and resolves its tool when it is called")
+
+# a name the session already answers to is REFUSED.  This is the one
+# that matters: (defun c:CHECK ...) would retarget check_drawing.lsp for
+# the whole session, and DIMARCCHECK -- which is (c:CHECK) -- with it.
+nv.loads('(setq t:*why* (lzp:alias-why "LAZPANEL" "POOL"))')
+assert nv.globals.get('t:*why*') and 'already runs' in str(nv.globals['t:*why*']), \
+    "an alias was allowed to shadow a real command: %r" % nv.globals.get('t:*why*')
+nv.loads('(setq t:*clob* (lzp:alias-make "LAZPANEL" "POOL"))')
+assert not nv.globals.get('t:*clob*'), "alias-make clobbered a live command"
+print("   a name the session already answers to is refused, not shadowed")
+
+# a name read cannot survive is refused BEFORE it reaches read:
+# (read "c:MY TOOL") answers c:my and (read "c:") answers c:, silently
+for bad, why in (('MY TOOL', 'a space'), ('2FAST', 'a leading digit'),
+                 ('', 'nothing at all'), ('WAYTOOLONGANAME', 'twelve characters')):
+    nv.loads('(setq t:*s* (lzp:alias-shape-p "%s"))' % bad)
+    assert not nv.globals.get('t:*s*'), "%s was accepted as a name" % why
+nv.loads('(setq t:*s* (lzp:alias-shape-p "PL2"))')
+assert nv.globals.get('t:*s*'), "a perfectly good name was refused"
+print("   a name that read would mangle is refused before read ever sees it")
+
+# a caption carrying the store's own separators, or a quote that would
+# make every page of the panel unloadable, or one long enough to push a
+# page past the screen check_dcl cannot see
+for bad in ('a;b', 'a=b', 'a"b', 'x' * 41):
+    nv.loads('(setq t:*c* (lzp:cap-why "%s"))' % bad.replace('"', '\\"'))
+    assert nv.globals.get('t:*c*'), "a caption of %r was accepted" % bad[:12]
+nv.loads('(setq t:*c* (lzp:cap-why "Pool, the way I say it"))')
+assert not nv.globals.get('t:*c*'), "an ordinary caption was refused"
+print("   a caption that would break the store or the DCL is refused")
+
+# the override is consulted in the ONE accessor, so a rename reaches
+# every surface the panel has: the grid, Find's rows, Find's search and
+# CALHELP, none of which had to change to make that true
+cv = fresh()
+cv.loads('(setq lzp:*capsof* (list (cons "POOL" "My own pool")))')
+cv.loads('(setq t:*cap* (lzp:caption "POOL"))')
+assert str(cv.globals['t:*cap*']) == 'My own pool', cv.globals['t:*cap*']
+cv.loads('(setq t:*row* (lzp:hitline "POOL" (list "POOL")))')
+assert 'My own pool' in str(cv.globals['t:*row*']), cv.globals['t:*row*']
+cv.loads('(setq t:*m* (lzp:matches "my own"))')
+assert 'POOL' in [str(x) for x in (cv.globals['t:*m*'] or [])], \
+    "Find cannot search the drafter's own words"
+cv.loads('(setq t:*d* (lzp:dcl-one (assoc "Layout" lzp:*groups*)))')
+assert 'My own pool' in '\n'.join(str(l) for l in cv.globals['t:*d*']), \
+    "the grid button kept the shipped caption"
+# and the shipped table is untouched, since it is what the VB catalog
+# is generated from
+cv.loads('(setq t:*orig* (cadr (assoc "POOL" lzp:*captions*)))')
+assert str(cv.globals['t:*orig*']) == 'Pool layout', cv.globals['t:*orig*']
+print("   a renamed caption reaches the grid, Find and CALHELP, table untouched")
+
+# the store: NAME=VALUE joined on ';', filtered through the roster on
+# read exactly as a stale pin is, and an empty value is not written
+kv = setvm([0])
+kv.loads('(defun vl-registry-read (k n) "POOL=PL;NOSUCHTOOL=XX")')
+kv.loads('(setq t:*a* (lzp:kv-read "Alias"))')
+# a cons pair is not a Python list, so the shape is asserted in Lisp
+kv.loads('(setq t:*n* (length t:*a*)'
+         '      t:*k* (car (car t:*a*))'
+         '      t:*v* (cdr (car t:*a*)))')
+assert str(kv.globals['t:*n*']) == '1', \
+    "a stale name survived the roster filter: %r" % kv.globals['t:*n*']
+assert str(kv.globals['t:*k*']) == 'POOL' and str(kv.globals['t:*v*']) == 'PL', \
+    "the pair did not come back intact: %r=%r" % (kv.globals['t:*k*'], kv.globals['t:*v*'])
+kv.loads('(setq t:*w* "") (defun vl-registry-write (k n s) (setq t:*w* s) s)')
+kv.loads('(lzp:kv-write "Alias" (list (cons "POOL" "PL") (cons "SPA" "")))')
+assert str(kv.globals['t:*w*']) == 'POOL=PL', \
+    "an empty value was written: %r" % kv.globals['t:*w*']
+print("   the map stores NAME=VALUE, drops a stale name and skips an empty one")
+
+# end to end: pick a tool, type a name, accept -- and cancel writes none.
+# The dialog opens on the first tool of the roster, so what the alias
+# should land against is asked for rather than assumed.
+
+
+def namevm(rc, click=None, val=''):
+    """Like setvm, but every registry write is kept: LAZNAME writes two
+    values and the last one would otherwise be the only one seen."""
+    v = setvm([rc], click=click, val=val)
+    v.loads('(setq t:*writes* nil)')
+    v.loads('(defun vl-registry-write (k n s)'
+            ' (setq t:*writes* (cons (strcat n "|" s) t:*writes*)) s)')
+    return v
+
+
+def writes(v):
+    return [str(x) for x in (v.globals.get('t:*writes*') or [])]
+
+
+fv = fresh()
+fv.loads('(setq t:*first* (car (lzp:commands)))')
+FIRST = str(fv.globals['t:*first*'])
+
+vm = namevm(1, click='name_alias', val='PL')
+run(vm, 'c:LAZNAME', 'name-accept')
+assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_names', \
+    "LAZNAME opened %r" % vm.globals.get('stub:*dlgname*')
+assert ('Alias|%s=PL' % FIRST) in writes(vm), \
+    "the alias was not stored against %s: %r" % (FIRST, writes(vm))
+assert any('answer to a name of yours' in str(p) for p in vm.printed), vm.printed
+print("   typing a name and accepting stores it against the tool that was picked")
+
+vm = namevm(0, click='name_alias', val='PL')
+run(vm, 'c:LAZNAME', 'name-cancel')
+assert not [w for w in writes(vm) if 'PL' in w], \
+    "cancel stored the edit: %r" % writes(vm)
+print("   cancel re-reads the store, as the pin and hide editors do")
+
+# OK is guarded, not merely greyed -- DCL fires an edit box's action
+# before the default button's, so the greying is never the stop
+gn = stubbed()
+gn.loads('(setq lzp:*namesel* "POOL")')
+gn.loads('(setq lzp:*aliases* (list (cons "POOL" "2BAD")))')
+gn.loads('(setq stub:*done* nil) (lzp:name-ok)')
+assert gn.globals.get('stub:*done*') is None, \
+    "OK accepted a name that cannot be a command"
+gn.loads('(setq lzp:*aliases* (list (cons "POOL" "PL"))) (lzp:name-ok)')
+assert str(gn.globals.get('stub:*done*')) == '1', \
+    "OK refused a good name: %r" % gn.globals.get('stub:*done*')
+print("   OK re-checks rather than trusting the greying")
 
 
 print("== LAZPANELVER ==")
@@ -1913,5 +2503,48 @@ print("   the stock folder lands under %s, the key STOCKCOVER reads" % skey)
 DIAG = os.path.join(HERE, '..', 'lisp', 'lazdiag', 'LAZDIAG.lsp')
 assert '(getenv "CalofinErrorDir")' in callib.read(DIAG), DIAG
 print("   ...and CalofinErrorDir is the one LAZDIAG walks to first")
+
+print("== CALSET: Itemcolors, the per-role override cal:ink reads ==")
+vm = fresh()
+vm.run('c:CALSET', ['Itemcolors', 'Flag', '42'])
+out = ''.join(str(p) for p in vm.printed)
+assert vm.env.get('CalofinInk-FLAG') == '42', vm.env
+assert 'Flag colour is now ACI 42' in out, out
+print("   Itemcolors -> Flag -> 42 writes CalofinInk-FLAG")
+
+vm = fresh()
+vm.env['CalofinInk-ARC'] = '99'
+vm.run('c:CALSET', ['Itemcolors', 'Arc', '.'])
+assert vm.env.get('CalofinInk-ARC') == '', vm.env
+print("   ...and . clears one, back to cal:ink's own table")
+
+vm = fresh()
+vm.run('c:CALSET', ['Itemcolors', 'Point', ''])
+out = ''.join(str(p) for p in vm.printed)
+assert 'CalofinInk-POINT' not in vm.env, vm.env
+assert 'Unchanged' in out, out
+print("   an empty answer changes nothing")
+
+vm = fresh()
+vm.run('c:CALSET', ['Itemcolors', 'Olap', 'notanumber'])
+out = ''.join(str(p) for p in vm.printed)
+assert 'CalofinInk-OLAP' not in vm.env, vm.env
+assert 'Not a colour number' in out, out
+print("   text that is not a colour number is refused, not written")
+
+vm = fresh()
+vm.run('c:CALSET', ['Itemcolors', 'Back', 'Quit'])
+out = ''.join(str(p) for p in vm.printed)
+assert out.count('Change which?') == 0  # it is a prompt, not printed prose
+assert 'Nothing changed' in out, out
+print("   Back re-asks Change which? instead of writing anything")
+
+# every role Itemcolors offers has to be a role cal:ink actually
+# resolves, or the override it writes would never be read back
+LIB = os.path.join(HERE, '..', 'shared', 'parts', 'CALOFIN-LIB.lsp')
+libsrc = callib.read(LIB)
+for pair in vm.globals['lzp:*inkroles*']:
+    assert ("(%s . " % pair.b) in libsrc, pair.b
+print("   all eight Itemcolors roles are ones cal:ink resolves")
 
 print("ALL LAZPANEL TESTS PASSED")

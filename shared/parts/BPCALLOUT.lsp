@@ -258,8 +258,9 @@
   ;; it - which is how BPCALLOUT has always taken a pick back
   (setq picked nil txtpt 'RETRY)
   (while (eq txtpt 'RETRY)
-  (while (setq pk (getpoint
-                    "\nClick a bad point (a ringed one un-rings it, Enter when done): "))
+  (while (setq pk ((lambda (v) (if lzd:ask (lzd:ask "\nClick a bad point (a ringed one un-rings it, Enter when done): " v) v))
+                    (getpoint
+                      "\nClick a bad point (a ringed one un-rings it, Enter when done): ")))
     (setq hit (bp:nearest-point pk cands))
     (if hit
       (setq ctr (car hit) nm (cdr hit))
@@ -294,6 +295,7 @@
       (initget "Back Undo")
       (setq txtpt (getpoint (strcat "\nPlace the callout text <beside"
                                     " the last ring> [Back]: ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") txtpt) txtpt)
       (cond
         ((and (= (type txtpt) 'STR) (member txtpt '("Back" "Undo")))
          (princ "\n  Stepping back to the picking.")
@@ -309,6 +311,7 @@
                         ";  \"" phrase "\"")))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  (if lzd:end (lzd:end "BPCALLOUT"))
   (princ))
 
 (defun c:BPCALLOUTVER ()

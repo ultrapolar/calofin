@@ -264,6 +264,7 @@
       (stock:say (strcat "stock folder set to " new))
       (stock:say (strcat (itoa (length (stock:files new))) " DWG(s) there.")))
     (stock:say "unchanged."))
+  (if lzd:end (lzd:end "STOCKCOVER-CFG"))
   (princ))
 
 ;;; -------------------------------------------------------------------
@@ -361,6 +362,7 @@
                   (getstring t
                     (strcat "\nStock drawing name"
                             (if last (strcat " <" last ">") "") ": ")))
+                (if lzd:ask (lzd:ask (getvar "LASTPROMPT") name) name)
                 (if (= name "") (setq name last))
                 (if (null name)
                   (stock:say "no name given.")
@@ -381,6 +383,7 @@
                          (setq i (1+ i)))
                        (initget 7 "Back Undo")
                        (setq pick (getint "\nWhich one? [Back]: "))
+                       (if lzd:ask (lzd:ask "\nWhich one? [Back]: " pick) pick)
                        (if (and (= (type pick) 'STR)
                                 (member pick '("Back" "Undo")))
                          (progn (stock:say "stepping back one question.")
@@ -477,6 +480,7 @@
                       (setq undone nil)))))))))))
 
   (stock:restore)
+  (if lzd:end (lzd:end "STOCKCOVER"))
   (princ))
 
 ;; Which build is loaded - the first thing to check when a run does

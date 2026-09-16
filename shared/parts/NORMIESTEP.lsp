@@ -240,7 +240,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.10") ; printed on load and at command start so a
+(setq *ns-version* "v3.11") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -779,6 +779,12 @@
 ;;;  the prompt when it does not fit.  Selections and point picks are
 ;;;  never form-answered.
 ;;;
+;;;  BEADING IS THREE KEYS, not one.  bead is whether to bead at all,
+;;;  beadsides is All/Some/None along the step side walls, and
+;;;  beadnums is the step numbers Some asks for, as the string the
+;;;  prompt would have taken ("1 3 5").  The whole chain comes off a
+;;;  sheet now; the side to bead TOWARD is a pick and stays here.
+;;;
 ;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used - removed.
 ;;;  Otherwise Back deadlocks: step back onto a form-answered question,
 ;;;  it answers itself instantly and walks forward again, and there is
@@ -1014,6 +1020,7 @@
      (while (null dir)
        (setq pt (getpoint (trans sp 0 1)
                           "\nPick a point on the side the steps go: "))
+       (if lzd:ask (lzd:ask "\nPick a point on the side the steps go: " pt) pt)
        (if (null pt)
          (progn (princ "\nNo direction picked - nothing drawn.") (exit)))
        (setq d1 (cal:dot (ns-vec sp (trans pt 1 0)) (ns-perp u)))
@@ -1032,6 +1039,7 @@
               (exit)))
      (while (null base)
        (setq pt (getpoint "\nPick the line the steps run OFF OF: "))
+       (if lzd:ask (lzd:ask "\nPick the line the steps run OFF OF: " pt) pt)
        (if (null pt)
          (progn (princ "\nNothing picked - nothing drawn.") (exit)))
        (setq base (ns-nearseg segs (trans pt 1 0))
@@ -1158,7 +1166,8 @@
           (progn
             (initget 7)                        ; required, no zero/negative
             (setq wid (getdist
-                        "\nStep width (the same for every step): "))))))
+                        "\nStep width (the same for every step): "))
+            (if lzd:ask (lzd:ask "\nStep width (the same for every step): " wid) wid)))))
     ;; the treatment KEYWORD is asked inside the loop so its Back can
     ;; re-open the width; the size follow-ups wait below until the
     ;; answer stands.  In a U no width came first, so Back is not
@@ -1206,7 +1215,8 @@
          (if (not (numberp rrad))
            (progn
              (initget 7 "Back Undo")
-             (setq rrad (getdist (strcat "\nRadius for " rsubj " [Back]: ")))))
+             (setq rrad (getdist (strcat "\nRadius for " rsubj " [Back]: ")))
+             (if lzd:ask (lzd:ask (getvar "LASTPROMPT") rrad) rrad)))
          (if (ns-back-kw rrad)
            (progn (princ "\n  Stepping back one question.")
                   (setq rrad  nil
@@ -1222,7 +1232,8 @@
              (initget "Offset Cut Back Undo")
              (setq fkey (getkword
                           (strcat "\nIs the cut given as its"
-                                  " [Offset/Cut/Back] <Offset>: ")))))
+                                  " [Offset/Cut/Back] <Offset>: ")))
+             (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)))
          (if (member fkey '("Back" "Undo"))
            (progn (princ "\n  Stepping back one question.")
                   (setq rtype (ns-ftreat rsubj rtype nil)
@@ -1235,7 +1246,8 @@
                    (progn
                      (initget 7 "Back Undo")
                      (setq rcut (getdist (strcat "\nCut face length for "
-                                                 rsubj " [Back]: ")))))
+                                                 rsubj " [Back]: ")))
+                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") rcut) rcut)))
                  (if (ns-back-kw rcut)
                    (setq rcut nil rredo T)
                    (setq roff (/ rcut (sqrt 2.0)))))
@@ -1244,7 +1256,8 @@
                  (if (not (numberp roff))
                    (progn
                      (initget 7 "Back Undo")
-                     (setq roff (getdist "\nOffset back along each line [Back]: "))))
+                     (setq roff (getdist "\nOffset back along each line [Back]: "))
+                     (if lzd:ask (lzd:ask "\nOffset back along each line [Back]: " roff) roff)))
                  (if (ns-back-kw roff)
                    (setq roff nil rredo T)
                    (setq rcut (* roff (sqrt 2.0))))))
@@ -1278,7 +1291,8 @@
   (if (null (setq fkey (ns-fkw 'dims "Yes No" "Yes")))
     (progn
       (initget "Yes No")
-      (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))))
+      (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))
+      (if lzd:ask (lzd:ask "\nDimension the steps? [Yes/No] <Yes>: " fkey) fkey)))
   (setq dimflag (/= "No" fkey))
   (if dimflag
     (progn
@@ -1337,6 +1351,7 @@
                                       (strcat " <Enter = done, Same = "
                                               (rtos lastdep) ">: ")
                                       " <Enter = done>: "))))
+                (if lzd:ask (lzd:ask (getvar "LASTPROMPT") dep) dep)
                 (if (= (type dep) 'STR)
                   (cond
                     ((or (= dep "Back") (= dep "Undo"))
@@ -1558,7 +1573,8 @@
       (if (null (setq fkey (ns-fkw 'profile "Yes No" "Yes")))
         (progn
           (initget "Yes No")
-          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))))
+          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
+          (if lzd:ask (lzd:ask "\nAdd a side profile? [Yes/No] <Yes>: " fkey) fkey)))
       (if (/= "No" fkey)
         (progn
           ;; the treads, top step first: sort the recorded distances
@@ -1592,7 +1608,8 @@
               (if (= k 1)
                 (progn
                   (initget 7 "Back Undo")
-                  (setq dv (getdist "\nStep 1 - step depth (the drop): ")))
+                  (setq dv (getdist "\nStep 1 - step depth (the drop): "))
+                  (if lzd:ask (lzd:ask "\nStep 1 - step depth (the drop): " dv) dv))
                 (progn
                   (initget 6 "Back Undo")
                   (setq dv (getdist
@@ -1601,7 +1618,8 @@
                                        (rtos (car drops)) ">: ")
                                (strcat "\nStep " (itoa k)
                                        " - step depth [Back] <"
-                                       (rtos (car drops)) ">: ")))))))
+                                       (rtos (car drops)) ">: "))))
+                  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") dv) dv))))
             (cond
               ((and (= (type dv) 'STR)
                     (or (= dv "Back") (= dv "Undo")))
@@ -1619,6 +1637,7 @@
            (initget "Back Undo")
            (setq wpu (getpoint (strcat "\nPick the top of the first tread"
                                        " for the side profile [Back]: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") wpu) wpu)
            (if (ns-back-kw wpu)
              (progn (princ "\n  Stepping back one step.")
                     (setq drops (cdr drops)
@@ -1730,7 +1749,8 @@
              (if (null (setq fkey (ns-fkw 'bead "Yes No" "Yes")))
                (progn
                  (initget "Yes No")
-                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))))
+                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))
+                 (if lzd:ask (lzd:ask "\nBead the steps? [Yes/No] <Yes>: " fkey) fkey)))
              (setq bstep (if (/= "No" fkey) 2 5)))
             ((= bstep 2)
              (setq btreads (ns-treadents slog)
@@ -1740,12 +1760,21 @@
                (progn
                  ;; every tread but the last is beaded - the side walls
                  ;; are the question, and None leaves them bare
-                 (initget "All Some None Back Undo")
-                 (setq bside (cond ((getkword (strcat "\nWhich steps have"
-                                                      " beaded side walls?"
-                                                      " [All/Some/None/Back]"
-                                                      " <All>: ")))
-                                   ("All")))
+                 ;; the form can answer this one: a sheet that said
+                 ;; All or None has nothing left to ask here.  Back is
+                 ;; not reachable from a form answer -- there is no
+                 ;; prompt to step back from, and the question above it
+                 ;; came off the same sheet
+                 (if (null (setq bside (ns-fkw 'beadsides
+                                               "All Some None" "All")))
+                   (progn
+                     (initget "All Some None Back Undo")
+                     (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                                          (getkword (strcat "\nWhich steps have"
+                                                            " beaded side walls?"
+                                                            " [All/Some/None/Back]"
+                                                            " <All>: "))))
+                                       ("All")))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -1755,8 +1784,17 @@
                (setq bstep 4)
                (progn
                  (princ (strcat "\n  Steps drawn: " (ns-numsay btreads)))
-                 (setq s (getstring T (strcat "\nStep numbers with"
-                                              " beaded sides (B = back): ")))
+                 ;; ...and this one, as the string the prompt would
+                 ;; have taken: "1 3 5".  Anything that is not a string
+                 ;; is no answer at all rather than one the number
+                 ;; reader would have to guess at
+                 (if (ns-fhas 'beadnums)
+                   (progn (setq s (ns-ftake 'beadnums))
+                          (if (/= (type s) 'STR) (setq s "")))
+                   (progn
+                     (setq s (getstring T (strcat "\nStep numbers with"
+                                                  " beaded sides (B = back): ")))
+                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)))
                  (if (ns-back-word s)
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
@@ -1774,6 +1812,7 @@
             ((= bstep 4)
              (initget "Back Undo")
              (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
+             (if lzd:ask (lzd:ask "\nClick the side to bead toward [Back]: " bdir) bdir)
              (if (ns-back-kw bdir)
                (progn (princ "\n  Stepping back one question.")
                       (setq bstep (if (= bside "Some") 3 2)))
@@ -1807,13 +1846,15 @@
                       ;; it is named here so AUTOBEAD leaves it unbeaded
                       (list (ns-entmid (cdr (last btreads)))))))))))))))
   (ns-fclear)                       ; both exits clear the form store
+  (if lzd:end (lzd:end "NORMIESTEP"))
   (princ))
 
 ;;; --------------------------- tutorial ---------------------------------
 
 (defun ns-tut-pause ( )
   (princ "\n      --- press Enter to continue ---")
-  (getstring)
+  ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+    (getstring))
   (princ))
 
 (defun ns-tut-text (pt h s)
@@ -1907,11 +1948,13 @@
   (ns-tut-pause)
 
   (initget "Yes No")
-  (if (= "No" (getkword (strcat "\nDraw a demonstration in this drawing?"
-                                " [Yes/No] <Yes>: ")))
+  (if (= "No" ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                (getkword (strcat "\nDraw a demonstration in this drawing?"
+                                  " [Yes/No] <Yes>: "))))
     (progn (princ "\nTutorial done - type NORMIESTEP to use it for real.")
            (exit)))
   (setq pt (getpoint "\nPick a clear spot (about 250 x 120 needed): "))
+  (if lzd:ask (lzd:ask "\nPick a clear spot (about 250 x 120 needed): " pt) pt)
   (if (null pt)
     (progn (princ "\nNo spot picked - tutorial done.") (exit)))
   (setq org  (trans pt 1 0)
@@ -1993,6 +2036,7 @@
   (princ "\n[6] Done.  One U removes the demo.  Try the other modes too:")
   (princ "\n    two lines of a corner, or a U outline (even one with")
   (princ "\n    rounded or diagonal back corners) - NORMIESTEP fills it in.")
+  (if lzd:end (lzd:end "TUTORIALNORMIESTEP"))
   (princ))
 
 (defun c:NORMIESTEPVER ()

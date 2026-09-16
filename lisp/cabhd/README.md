@@ -17,7 +17,8 @@ one rule added and one half left out:
   deck and depth shots carry on in the same numbering. Step 8 asks
   `Include points up to [Pick/All] <All>` -- type the LAST point
   number that belongs to the pool edge, or `Pick` that point in the
-  drawing and CABHD reads its number off the block. Enter (or `All`)
+  drawing (click it, or type its number the way `PERPMARK` takes one)
+  and CABHD reads its number off the block. Enter (or `All`)
   keeps every point, which is ABHD's behaviour. Everything past the
   cutoff is out ENTIRELY: not ordered into the loop, not fitted, not
   counted against the miss allowance, and never reported as a point
@@ -78,6 +79,7 @@ All at the top of `CABHD.lsp`; the key ones:
 | `*CAB-POINT-BLOCK*` | `"ab_pt"` | Block whose inserts count as survey points |
 | `*CAB-PT-TAG*` | `"number"` | Attribute tag carrying the point number |
 | `*CAB-MOVED-MARK*` | `"M"` | A number carrying this letter is a *moved* point (ABFIND's `17m`) and is left out of the fit entirely |
+| `*CAB-SNAP*` | `12.0` | How close a **click** has to land to a survey point to name it -- at a wall end, a corner, a held point, the cutoff's `Pick`, an omit. A typed number never uses it. The radius `BPCALLOUT`, `ABFIND` and `PERPMARK` share |
 | `*CAB-OUT-LAYER*` | `"POOL-FIT"` | Layer the candidate fits preview on |
 | `*CAB-MISS-LAYER*` | `"FGStep"` | Layer for the missed-point rings and list |
 | `*CAB-WALL-LAYER*` | `"POOL-WALLS"` | Layer for declared-wall markers |
@@ -116,10 +118,20 @@ still identical.
   holds no digit falls back to its place in the selection, and CABHD
   says so before asking. A cutoff that would starve the fit is refused
   and re-asked.
-* A straight wall, sharp corner or held point declared on a point the
-  cutoff drops is dropped with it and said so -- never quietly snapped
-  onto some other point. The miss allowance is a share of the points
-  the cutoff KEPT.
+* Every question about a survey point -- a wall end, a corner, a held
+  point, the cutoff's `Pick`, a point to omit -- **names** one, the
+  way `PERPMARK` does: click the point, or type its number (`17`,
+  `Pt.17`, `#17` and `017` are the same point). A click has to land
+  within `*CAB-SNAP*` of a point; a click on nothing, a number nothing
+  carries and a number two points share are re-asked where they
+  stand, never snapped to whatever was nearest.
+* A straight wall, sharp corner or held point is declared before the
+  selection and matched to the fit afterwards by the point's own
+  identity. One declared on a point the cutoff drops, or that was
+  never selected, is named and dropped with the reason -- `(Pt.24
+  sits past the cutoff - the hold declared on it is dropped)` -- never
+  quietly snapped onto some other point. The miss allowance is a share
+  of the points the cutoff KEPT.
 * Everything is fitted on the 2D plane; Z coordinates are ignored.
 * A candidate can come out too degenerate for AutoCAD to accept
   (likeliest the tight fit on a survey read whole); the table marks it

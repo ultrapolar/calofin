@@ -187,18 +187,52 @@ regenerated and your edit will vanish.
 **Every command in this tree reports its failures, and a new one is not
 finished until it does.** A failure is not over when the handler prints
 a line: it is over when the drafter has a file they can send in. That
-is `lisp/lazdiag/LAZDIAG.lsp`, and four guarded call sites reach it:
+is `lisp/lazdiag/LAZDIAG.lsp`, and five guarded call sites reach it:
 
 ```lisp
 (if lzd:begin  (lzd:begin  "TOOLNAME" *toolname-version*))      ; top of the command
 (if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))  ; in *error*
-(if lzd:watch  (lzd:watch ss))                                  ; after a selection
-(if lzd:ask    (lzd:ask msg v))                                 ; in an ask helper
+(if lzd:end    (lzd:end "TOOLNAME"))                            ; before the command's (princ)
+(if lzd:watch  (lzd:watch ss) ss)                               ; after a selection
+(if lzd:ask    (lzd:ask msg v) v)                               ; after (setq v (getX ...)), ask helpers included
+((lambda (v) (if lzd:ask (lzd:ask "prompt" v) v))               ; an input READ IN PLACE: a while's
+  (getpoint "prompt"))                                          ;   test, a keyword inside (= ...)
 ```
 
+The `watch` and `ask` lines carry an **else branch** and it is not
+decoration: it makes the whole form evaluate to the variable whether
+LAZDIAG is loaded or not, so dropping one after a
+`(setq ss (ssget ...))` cannot change what the enclosing `progn` or
+`cond` clause returns. `check_lazdiag` fails an injected call that lands
+where it would change a meaning -- last in a body, as an `(if ...)` else
+branch, or as a term of an `(and ...)`.
+
+**Every answer the drafter gives is in the transcript**, not only the
+ask helpers'. A `(setq v (getX ...))` that is a body statement takes
+the `lzd:ask` line after it; an input consumed where it stands -- the
+`(setq p (getpoint))` that is a `while`'s test, a `getkword` inside an
+`(= ...)`, the `getstring` that only pauses -- is wrapped in the lambda
+above, which binds the answer for the length of the record and hands
+it straight back, so the wrapped call means what the bare one did and
+the `nil` that ends a loop is written down like any other answer. The
+answers are typed -- `nil`, `12.5`, `"Yes"`, `(x y z)`,
+`(<ent> (x y z))` -- which is what makes the transcript REPLAYABLE:
+`python3 tools/probe_report.py REPORT.dxf` loads the tool at the
+report's version into the test VM, hands it the geometry and the
+answers the report carries, confirms the same failure comes back, then
+changes one answer at a time (1, 0, half, double, a step either side,
+ten times, a thousand; a point moved) and says which answer the failure
+is tied to, which it is not, and where a range the tool never checks
+begins. When the control run does not reproduce -- a whole-drawing
+sweep the report could not carry, a file dialog -- it says so instead
+of probing. The report itself reads its inputs against each other
+first: THE INPUTS, AND WHAT IS ODD ABOUT THEM flags a zero, a
+negative, two lengths that are the same number, two picks on one spot,
+and says when nothing stands out, which points at the code instead.
+
 Do not write them by hand. `python3 tools/check_lazdiag.py --fix`
-inserts and maintains all four, and `make check` runs the same check,
-so a tool that is missing any of them cannot ship.
+inserts and maintains all of them, and `make check` runs the same
+check, so a tool that is missing any of them cannot ship.
 
 **What `--fix` will not write is the `*error*` handler itself.** What
 belongs in one is the editorial part -- which sysvars this command
@@ -217,6 +251,19 @@ the skeleton in new code. Scanning only for the first spelling is how
 ABHD, ADAB, TUTORIALABHD, CABHD and LHD -- three of the largest tools
 here -- sat reporting nothing while every other command reported
 everything.
+
+**The same four calls feed the run LOG.** A report is written when
+something breaks; the log gets a line from every run, and it answers
+what a report cannot -- how often a tool fails against how many clean
+runs, what the drafter ran in the ten minutes before, and which prompt
+they quietly back out of over and over. `lzd:end` is why a clean run
+appears at all: a command has no early return, so every success falls
+through to its trailing `(princ)` and that is where the hook sits.
+Three outcomes, `ok` (one line), `quit` (and the prompt they stopped
+at) and `FAIL` (the error, the report, the last prompts). It rolls
+monthly into `<profile>\calofin\calofin-YYYY-MM.log`, `LAZLOG` shows
+it, and every failure report carries the tail of it so the one file the
+drafter sends holds the history too.
 
 What a report holds: a copy of the geometry the run drew AND of the
 selection it was handed, every point clicked labelled with the prompt
@@ -265,9 +312,64 @@ point of use through `tool:ink` (`cal:ink` in the grouped build, one
 swap line in `tools/mirror_shared.py`), by role: `fade`, `guide`,
 `dim`, `hi`. A knob left as a NUMBER is used exactly as given. Resolve
 once into a local before a loop -- the measurement is a COM round
-trip. `tests/test_theme.py` pins the table and holds all fourteen
+trip. `tests/test_theme.py` pins the table and holds all fifteen
 copies against the library's; `CALSET` writes the `CalofinTheme`
 override for a drafter whose screen the measurement gets wrong.
+
+### The drafter's object snaps
+
+**A tool that mutes OSMODE gives it back on every path out.** Most of
+the drawing tools here zero it while they feed computed points to
+`(command ...)`, so a running osnap cannot pull a pick onto nearby
+geometry. That is a borrow, and the setting is the one a drafter
+notices last and misses most: left at 0 the failure does not look like
+this tool's, it looks like AutoCAD's, two commands later, when a line
+drawn by eye refuses to snap to an endpoint.
+
+So the restore goes in two places, and `tools/check_osnap.py` fails a
+command missing either:
+
+```lisp
+(defun c:TOOLNAME ( / *error* oos ...)
+  (defun *error* (msg)
+    (if oos (setvar "OSMODE" oos))   ; FIRST -- before anything below throws
+    ...)
+  (setq oos (getvar "OSMODE"))       ; saved BEFORE the mute
+  (setvar "OSMODE" 0)
+  ;; ... the tool ...
+  (setvar "OSMODE" oos))
+```
+
+The handler half is the one that gets forgotten, and it is the half
+that matters: Esc at a prompt is the likeliest way out of a prompting
+command, and it is the only way out that never reaches the line at the
+bottom. Saving into a **local of the command** is what lets the handler
+nested inside it see the value; a save kept in a helper's own local is
+out of the handler's reach, which is exactly how the three check
+tutorials (`TUTORIALCOVERCHECK`, `TUTORIALDIMCHECK`,
+`TUTORIALLINFINCHECK`) sat muting OSMODE round a `DIMLINEAR` with no
+handler that could put it back. The table-driven form counts too --
+`(tool:sysrestore)` over a snapshot whose list names `OSMODE`, with
+`OSMODE` first in that list -- and is what the bigger tools use.
+
+**Borrow only what you move.** A sysvar list is a promise to write the
+value back, so a tool that lists `OSMODE` without ever muting it hands
+the drafter its OPENING snapshot at the end -- over any snap they
+ticked on while it ran, on a clean exit with no error anywhere. Seven
+commands did that, five of them review tools you walk item by item.
+If the tool never calls `(setvar "OSMODE" 0)`, `OSMODE` does not belong
+in its table.
+
+**FIRST means first, inside the helper too.** An error inside `*error*`
+aborts the handler, so a restore behind a bare `(command ...)` is a
+restore that does not run on the path it was written for -- and a
+handler that is nothing but `(tool:finish)` moves that question one
+level down, into the helper, which is where `PERPPTS` hid it. Put the `setvar`s at the top -- they
+cannot throw -- and the drain, the `-DIMSTYLE` and the `_End` after
+them. And drop the snapshot before the risky form, not after: a
+snapshot left standing makes `syssave` a no-op for the rest of the
+session, so every later run restores the stale value over whatever the
+drafter has ticked since. Both are enforced.
 
 ### Adding or removing a command
 
@@ -349,9 +451,32 @@ python3 tools/check_registry.py  # every tool registered everywhere it has
                                  # is not editorial
 python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
                     [--fix]      # lzd:begin at the top and the lzd:report
-                                 # in the *error* handler, plus the one
-                                 # line each ask helper carries to record
-                                 # its prompt; --fix wires what is missing
+                                 # in the *error* handler, lzd:end before
+                                 # the (princ), lzd:watch after a selection
+                                 # and lzd:ask at EVERY input -- after a
+                                 # setq that is a statement, wrapped where
+                                 # the answer is read in place; --fix
+                                 # wires what is missing
+python3 tools/check_osnap.py     # the drafter's OBJECT SNAPS survive every
+       [--list] [--tier T]       # run, the failed ones included -- read over
+                                 # all THREE tiers, releases/ included,
+                                 # because a dated twin is what a shop
+                                 # pins to and it only gets a fix when
+                                 # release_lisp.py is re-run: a command
+                                 # that mutes OSMODE for its own picks puts
+                                 # it back before it returns AND from its
+                                 # *error* handler, because Esc is the one
+                                 # way out the success path never runs --
+                                 # and puts it back BEFORE anything in that
+                                 # handler that can throw, since an error
+                                 # inside *error* skips every line after it.
+                                 # Also: a restore helper may not drop its
+                                 # snapshot behind such a form, or every
+                                 # LATER run restores this run's OSMODE
+python3 tools/probe_report.py    # not a check: replays a failure report in
+                   REPORT.dxf    # the VM and varies its inputs one at a
+                                 # time, to say which one the failure is
+                                 # tied to (see "When a tool fails")
 python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
                                  # VB compiler: blocks closed by the right
                                  # closer, quotes and parens balanced, every

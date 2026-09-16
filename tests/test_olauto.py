@@ -145,6 +145,93 @@ def rect(w, h):
     return [(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)]
 
 
+def heavypoly(vm, verts, closed=True, layer='POOL'):
+    """Old-style POLYLINE.  The VM's entnext walks vm.entities in
+    creation order, so the header, its vertices and the SEQEND simply
+    have to be made in a row."""
+    h = Ent()
+    vm.entities.append(h)
+    vm.entdata[h] = [Dot(0, 'POLYLINE'), Dot(8, layer), Dot(66, 1),
+                     [10, 0.0, 0.0, 0.0], Dot(70, 1 if closed else 0)]
+    for v in verts:
+        w = Ent()
+        vm.entities.append(w)
+        vm.entdata[w] = [Dot(0, 'VERTEX'), Dot(8, layer),
+                         [10, float(v[0]), float(v[1]), 0.0],
+                         Dot(42, float(v[2]) if len(v) > 2 else 0.0),
+                         Dot(70, 0)]
+    q = Ent()
+    vm.entities.append(q)
+    vm.entdata[q] = [Dot(0, 'SEQEND'), Dot(8, layer)]
+    return h
+
+
+def walked(pts, per_side=40):
+    """A closed outline walked out into many short straight steps --
+    what a traced perimeter looks like next to a drawn one."""
+    out = []
+    n = len(pts)
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        for k in range(per_side):
+            f = k / float(per_side)
+            out.append((a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])))
+    return out
+
+
+def explode(vm, pts, layer='POOL', gap=0.0):
+    """A closed outline as loose LINEs, with GAP opened at one joint."""
+    out = []
+    n = len(pts)
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        if i == 0 and gap:
+            ux, uy = b[0] - a[0], b[1] - a[1]
+            L = math.hypot(ux, uy)
+            a = (a[0] + ux / L * gap, a[1] + uy / L * gap)
+        out.append(line(vm, a, b, layer=layer))
+    return out
+
+
+def said(vm):
+    return ' '.join(vm.printed)
+
+
+def asked(vm):
+    """The prompts put, as one string -- a getkword's text goes to the
+    prompt log, not to printed."""
+    return ' '.join(str(p) for p, _ in vm.prompts)
+
+
+def kidney():
+    """An asymmetric outline with no mirror line of its own, so a mirror
+    image of it is a different shape."""
+    return [(0.0, 0.0, 0.35), (220.0, -20.0, 0.15), (400.0, 40.0, 0.45),
+            (380.0, 180.0, 0.2), (240.0, 150.0, -0.3), (120.0, 210.0, 0.4),
+            (-20.0, 150.0, 0.25)]
+
+
+def mirrored(pts):
+    """Reflect about the Y axis: x -> -x, and every bulge flips sign."""
+    return [(-p[0], p[1], -p[2]) if len(p) > 2 else (-p[0], p[1])
+            for p in pts]
+
+
+def worst_reported(vm):
+    r = [x for x in vm.printed if 'best overlay' in x]
+    return float(r[0].split('worst error ')[1].split(',')[0]) if r else None
+
+
+def other_ent(vm, etype, layer='POOL'):
+    """An entity of a type OLAUTO does not read."""
+    e = Ent()
+    vm.entities.append(e)
+    vm.entdata[e] = [Dot(0, etype), Dot(8, layer), [10, 0.0, 0.0, 0.0]]
+    if etype == 'INSERT':
+        vm.entdata[e].append(Dot(2, 'PB'))
+    return e
+
+
 def bind(vm, ents):
     for i, e in enumerate(ents):
         vm.set(Sym(f'_e{i}'), e)
@@ -620,6 +707,437 @@ def test_version_command():
     vm.run('c:OLAUTOVER', [])
     assert 'OLAUTO v' in ' '.join(vm.printed)
     print("ok  OLAUTOVER reports the loaded version")
+
+
+# ---- a gap is a drawing defect, not an open run ------------------------
+
+def test_a_gap_in_the_perimeter_still_reads_closed():
+    """A perimeter exploded and rejoined by hand is riddled with tiny
+    gaps.  CLOSED is what puts the cyclic half of the phase search in
+    play, so an absolute tolerance would drop a sloppily drawn loop into
+    the open path -- where the two walks have to START at corresponding
+    points or no alignment can be found at all."""
+    base = rect(200.0, 120.0)
+    for gap in (0.0, 0.001, 0.05, 1.0):
+        vm = newvm()
+        segs(vm, explode(vm, base, gap=gap), '_fix')
+        assert vm.loads('(ola:closed-p _fix)') is not NIL, \
+            f"a {gap} gap read as an open run"
+    print("ok  gaps up to 1\" in a 640\" outline still read as closed")
+
+
+def test_a_real_open_run_still_reads_open():
+    """...and the relative tolerance must not swallow a bead track that
+    genuinely stops at the steps."""
+    per = walked(rect(200.0, 120.0))
+    for frac, want_closed in ((0.995, True), (0.98, False), (0.75, False)):
+        vm = newvm()
+        segs(vm, [lwpoly(vm, per[:int(len(per) * frac)], closed=False)], '_fix')
+        got = vm.loads('(ola:closed-p _fix)') is not NIL
+        assert got == want_closed, \
+            f"{frac:.1%} of the loop read {'closed' if got else 'open'}"
+    print("ok  a run missing 2% or more of the loop still reads open")
+
+
+def test_reversed_and_gapped_still_fits():
+    """The regression this tolerance exists for.  A 0.05\" gap in a 640\"
+    outline that was ALSO drawn the other way round fitted 55.7 units
+    out under an absolute tolerance -- the gap put it in the open path,
+    and the open path cannot search the cyclic alignment the reversal
+    needed.  Same pair, cyclic search running: 0.002."""
+    vm = newvm()
+    base = rect(200.0, 120.0)
+    segs(vm, explode(vm, pose(list(reversed(base)), 50.0, 700.0, -300.0),
+                     gap=0.05), '_mov')
+    segs(vm, explode(vm, base), '_fix')
+    fit(vm)
+    worst = stats(profile(vm))[0]
+    assert worst < 0.01, f"worst {worst} - the cyclic search did not run"
+    print(f"ok  reversed AND gapped fits to {worst:.4f}, not 55.7")
+
+
+def test_trace_density_does_not_matter():
+    """600 micro-segments against the same shape drawn as four lines:
+    the arc-length walk is what makes the density irrelevant."""
+    vm = newvm()
+    base = rect(200.0, 120.0)
+    segs(vm, [lwpoly(vm, pose(walked(base, 150), 29.0, 600.0, -250.0))], '_mov')
+    segs(vm, [lwpoly(vm, base)], '_fix')
+    fit(vm)
+    assert stats(profile(vm))[0] < 1e-3
+    print("ok  a 600-segment trace fits a 4-line draw exactly")
+
+
+def test_a_square_is_stable_under_its_own_symmetry():
+    """Four overlays are equally right; it has to pick one and not
+    wobble between them."""
+    seen = set()
+    for deg in (0.0, 17.0, 91.0, 183.0, 271.0):
+        vm = newvm()
+        segs(vm, [lwpoly(vm, pose(rect(150.0, 150.0), deg, 400.0, -100.0))],
+             '_mov')
+        segs(vm, [lwpoly(vm, rect(150.0, 150.0))], '_fix')
+        fit(vm)
+        seen.add(round(stats(profile(vm))[0], 9))
+    assert max(seen) < 1e-6, seen
+    print("ok  a square's four-fold symmetry does not unsettle the fit")
+
+
+# ---- the picks OLAUTO refuses ------------------------------------------
+
+def test_the_same_perimeter_picked_twice_is_refused():
+    """The most dangerous mis-pick there is: a curve fitted to itself
+    reports a perfect overlay and nothing to dimension, which is the one
+    answer nobody questions."""
+    vm = newvm()
+    a = lwpoly(vm, rect(80.0, 50.0), layer='POOL')
+    b = lwpoly(vm, pose(rect(80.0, 50.0), 20.0, 300.0, 0.0), layer='Bead Track')
+    run(vm, [[a], [a], [a], [b], 'First', 'New'])
+    assert 'same perimeter twice' in said(vm), said(vm)[-300:]
+    assert 'best overlay' in said(vm), "the re-pick after the refusal never ran"
+    print("ok  one perimeter picked twice is refused, and the re-pick runs")
+
+
+def test_overlapping_picks_are_refused_before_anything_moves():
+    vm = newvm()
+    a = lwpoly(vm, rect(80.0, 50.0), layer='POOL')
+    b = lwpoly(vm, pose(rect(80.0, 50.0), 25.0, 400.0, -90.0),
+               layer='Bead Track')
+    before = corners(vm, b)
+    run(vm, [[a, b], [b], None])
+    assert 'share 1 object' in said(vm), said(vm)[-300:]
+    shift = max(math.dist(p, q) for p, q in zip(before, corners(vm, b)))
+    assert shift < 1e-9, f"the shared entity moved {shift}"
+    print("ok  a pick that shares an object is refused, and nothing moves")
+
+
+def test_a_mirrored_polyline_is_refused():
+    """An LWPOLYLINE keeps its points in the OBJECT plane.  Read a
+    mirrored one (extrusion 0,0,-1) as world and the outline comes out
+    mirrored -- so the fit would be computed on geometry that is not
+    what is on the screen."""
+    vm = newvm()
+    a = lwpoly(vm, rect(80.0, 50.0), layer='POOL')
+    vm.entdata[a].append([210, 0.0, 0.0, -1.0])
+    b = lwpoly(vm, pose(rect(80.0, 50.0), 25.0, 400.0, -90.0),
+               layer='Bead Track')
+    before = corners(vm, a)
+    run(vm, [[a], [b], None])
+    assert 'world XY plane' in said(vm), said(vm)[-300:]
+    assert max(math.dist(p, q) for p, q in zip(before, corners(vm, a))) < 1e-9
+    print("ok  a mirrored polyline is refused rather than fitted backwards")
+
+
+def test_a_line_is_not_refused_for_its_extrusion():
+    """A LINE keeps WORLD points whatever its extrusion says, so the
+    flatness guard must not catch one."""
+    vm = newvm()
+    ents = explode(vm, rect(80.0, 50.0), layer='POOL')
+    vm.entdata[ents[0]].append([210, 0.0, 0.0, -1.0])
+    b = lwpoly(vm, pose(rect(80.0, 50.0), 25.0, 400.0, -90.0),
+               layer='Bead Track')
+    run(vm, [ents, [b], 'First', 'New'])
+    assert 'world XY plane' not in said(vm), "a LINE was refused"
+    print("ok  a LINE with a flipped extrusion is read, not refused")
+
+
+# ---- the fits OLAUTO does not believe -----------------------------------
+
+def test_a_wrong_pick_is_called_out():
+    """OLAUTO has no idea what a pool looks like and will fit any two
+    curves.  A 400x30 slot against a round spa has to come back with
+    the numbers AND the caution."""
+    vm = newvm()
+    a = lwpoly(vm, rect(400.0, 30.0), layer='POOL')
+    b = circle(vm, (0, 0), 60.0, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'])
+    assert 'check the pick' in said(vm), said(vm)[-400:]
+    assert "of the pool's own size" in said(vm), said(vm)[-400:]
+    # and it has to survive to where a drafter actually looks
+    assert '***' in ' '.join(vm.printed[-6:]), "the warning scrolled away"
+    print("ok  a slot fitted to a circle is reported AND doubted")
+
+
+def test_a_real_fault_raises_no_false_alarm():
+    """The other half of that: a genuine 5\" fault on a 200\" pool is
+    exactly what this command is for, and must come back quietly."""
+    vm = newvm()
+    a = lwpoly(vm, pose(bumped(200.0, 200.0, {20: (0.0, -5.0)}),
+                        13.0, 500.0, -200.0), layer='POOL')
+    b = lwpoly(vm, bumped(200.0, 200.0, {}), layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'])
+    assert 'check the pick' not in said(vm) and "own size" not in said(vm), \
+        said(vm)[-400:]
+    print("ok  a real 5\" fault on a 200\" pool sets off no alarm")
+
+
+def test_closed_against_open_is_called_out():
+    vm = newvm()
+    per = walked(rect(200.0, 120.0))
+    a = lwpoly(vm, pose(per, 20.0, 500.0, -100.0), layer='POOL')
+    b = lwpoly(vm, per[:110], closed=False, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'])
+    assert 'closes and the' in said(vm), said(vm)[-400:]
+    print("ok  a closed perimeter fitted to an open run says so")
+
+
+# ---- entity flavours ----------------------------------------------------
+
+def test_heavy_polyline_is_read_moved_and_relayered():
+    """The old-style POLYLINE keeps its points in VERTEX sub-entities --
+    and a layer on every one of them, which has to follow the header or
+    a later sweep reads the old answer."""
+    vm = newvm()
+    h = heavypoly(vm, rect(80.0, 50.0), layer='SCRATCH')
+    og = lwpoly(vm, pose(rect(80.0, 50.0), 25.0, 400.0, -90.0),
+                layer='Bead Track')
+    vm.set(Sym('_h'), h)
+    assert vm.loads('(length (ola:ent-segs _h))') == 4
+    assert near(vm.loads('(ola:chain-len (ola:ent-segs _h))'), 260.0, 1e-9)
+    vx = lambda: [(g[1], g[2]) for e in vm.entities
+                  if _alist_dict(vm.entdata[e]).get(0) == 'VERTEX'
+                  for g in vm.entdata[e] if isinstance(g, list) and g[0] == 10]
+    before = vx()
+    run(vm, [[h], [og], 'First', 'New'])
+    assert max(math.dist(a, b) for a, b in zip(before, vx())) > 1.0, \
+        "the heavy POLYLINE's vertices did not move"
+    lays = {_alist_dict(vm.entdata[e])[8] for e in vm.entities
+            if _alist_dict(vm.entdata[e]).get(0) in ('POLYLINE', 'VERTEX',
+                                                     'SEQEND')}
+    assert lays == {'POOL'}, f"header and vertices disagree: {lays}"
+    print("ok  a heavy POLYLINE is read, moved, and relayered to its last vertex")
+
+
+def test_z_survives_the_move():
+    vm = newvm()
+    a = Ent()
+    vm.entities.append(a)
+    vm.entdata[a] = [Dot(0, 'LINE'), Dot(8, 'POOL'),
+                     [10, 0.0, 0.0, 7.5], [11, 10.0, 0.0, 7.5]]
+    vm.set(Sym('_a'), a)
+    vm.loads("(setq _x (list 0.5 3.0 4.0))")
+    vm.loads("(ola:xform-ent _x _a)")
+    d = _alist_dict(vm.entdata[a])
+    assert d[10][2] == 7.5 and d[11][2] == 7.5, f"Z dropped: {d[10]}, {d[11]}"
+    print("ok  a perimeter drawn off Z zero keeps its elevation")
+
+
+def test_far_from_the_origin():
+    """Pool drawings sit where the survey put them, which can be a long
+    way out; the fit is centroid-relative so it must not lose precision
+    there."""
+    vm = newvm()
+    B = 1.0e8
+    segs(vm, [lwpoly(vm, pose(rect(100.0, 60.0), 0.0, B, B))], '_mov')
+    segs(vm, [lwpoly(vm, pose(rect(100.0, 60.0), 17.0, -B, B / 2))], '_fix')
+    fit(vm)
+    worst = stats(profile(vm))[0]
+    assert worst < 1e-4, f"worst {worst} at 1e8 from the origin"
+    print(f"ok  a fit 1e8 units from the origin holds to {worst:.1e}")
+
+
+def test_a_duplicate_vertex_costs_nothing():
+    vm = newvm()
+    pts = list(rect(50.0, 30.0))
+    pts.insert(2, (50.0, 0.0))
+    segs(vm, [lwpoly(vm, pts)], '_mov')
+    segs(vm, [lwpoly(vm, pose(rect(50.0, 30.0), 20.0, 300.0, -100.0))], '_fix')
+    fit(vm)
+    assert stats(profile(vm))[0] < 1e-4
+    print("ok  a zero-length segment in the perimeter costs the fit nothing")
+
+
+# ---- mirror images ------------------------------------------------------
+
+def test_a_mirror_image_is_detected_and_offered():
+    """A rigid fit can turn and slide but never flip, so a perimeter
+    that arrived as a mirror image fits as badly as it possibly can --
+    38.7 out on this kidney -- and every dimension is nonsense.  The
+    flipped walk is tried too; when it fits far better the mirror is
+    offered, and Yes lands it."""
+    vm = newvm()
+    k = kidney()
+    a = lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New', 'Yes'])
+    assert 'MIRROR image' in said(vm), said(vm)[-400:]
+    w = worst_reported(vm)
+    assert w is not None and w < 0.05, f"after the mirror, worst {w}"
+    print(f"ok  a mirrored kidney is detected, mirrored on Yes, fits to {w:.4f}")
+
+
+def test_enter_never_mirrors_the_drawing():
+    """Enter must not rewrite the drawing by itself: the default is No,
+    the run goes on, and the report says the fit was made without the
+    mirror it asked for."""
+    vm = newvm()
+    k = kidney()
+    a = lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New', None])
+    assert 'WITHOUT the mirror' in ' '.join(vm.printed[-8:]), said(vm)[-400:]
+    assert worst_reported(vm) > 10.0
+    print("ok  Enter declines the mirror, and the report says so")
+
+
+def test_back_at_the_mirror_question_reasks_which_moves():
+    vm = newvm()
+    k = kidney()
+    a = lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New', 'Back', 'New', 'Yes'])
+    assert asked(vm).count('Mirror the new perimeter') == 2
+    assert asked(vm).count('should move onto') == 2
+    print("ok  Back at the mirror question re-asks which one moves")
+
+
+def test_the_mirror_is_never_offered_when_it_should_not_be():
+    """Unmirrored: silent.  Symmetric shapes (a rectangle, a circle)
+    score the same both ways: silent.  A noisy but honest measurement
+    (+/-4\" on a 1300\" kidney): silent."""
+    k = kidney()
+    vm = newvm()
+    a = lwpoly(vm, pose(k, 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'])
+    assert 'MIRROR image' not in said(vm), "offered on an unmirrored pair"
+    for name in ('rectangle', 'circle'):
+        vm = newvm()
+        if name == 'rectangle':
+            a = lwpoly(vm, pose(rect(300.0, 150.0), 40.0, 500.0, 0.0), layer='POOL')
+            b = lwpoly(vm, rect(300.0, 150.0), layer='Bead Track')
+        else:
+            a = circle(vm, (500, 0), 90.0, layer='POOL')
+            b = circle(vm, (0, 0), 90.0, layer='Bead Track')
+        run(vm, [[a], [b], 'First', 'New'], label=name)
+        assert 'MIRROR image' not in said(vm), f"offered on a {name}"
+    import random
+    random.seed(11)
+    vm = newvm()
+    vm.set(Sym('_tmp'), lwpoly(vm, k))
+    pts = vm.loads("(ola:walk (ola:ent-segs _tmp) 80 T)")
+    vm.entities.remove(vm.get(Sym('_tmp')))
+    noisy = [(x + random.uniform(-4, 4), y + random.uniform(-4, 4)) for x, y in pts]
+    a = lwpoly(vm, pose(noisy, 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'New'], label='noisy')
+    assert 'MIRROR image' not in said(vm), "offered on a noisy honest pair"
+    print("ok  the mirror is not offered unmirrored, on symmetric shapes, or under noise")
+
+
+def test_mirroring_gets_the_arcs_right():
+    """Reflecting an ARC turns each direction angle into pi minus itself
+    and runs the sweep the other way, so the reflected arc has to start
+    at the old END's reflection.  An exploded kidney is the test."""
+    vm = newvm()
+    k = kidney()
+    vm.set(Sym('_tmp'), lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0)))
+    segs_ = vm.loads("(ola:ent-segs _tmp)")
+    vm.entities.remove(vm.get(Sym('_tmp')))
+    ents = []
+    for p1, p2, bl in segs_:
+        if abs(bl) < 1e-9:
+            ents.append(line(vm, p1, p2))
+            continue
+        th = 4 * math.atan(bl)
+        ch = math.dist(p1, p2)
+        rs = ch / (2 * math.sin(th / 2))
+        mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
+        h = rs * math.cos(th / 2)
+        ux, uy = (p2[0] - p1[0]) / ch, (p2[1] - p1[1]) / ch
+        cx, cy = mx - uy * h, my + ux * h
+        a0 = math.degrees(math.atan2(p1[1] - cy, p1[0] - cx))
+        a1 = math.degrees(math.atan2(p2[1] - cy, p2[0] - cx))
+        if th < 0:
+            a0, a1 = a1, a0
+        ents.append(arc(vm, (cx, cy), abs(rs), a0, a1))
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [ents, [b], 'First', 'New', 'Yes'])
+    w = worst_reported(vm)
+    assert w is not None and w < 0.05, f"arcs mirrored wrong: worst {w}"
+    print(f"ok  an exploded kidney's ARCs mirror correctly, fitting to {w:.4f}")
+
+
+def test_the_mirror_names_the_perimeter_that_would_move():
+    vm = newvm()
+    k = kidney()
+    a = lwpoly(vm, pose(mirrored(k), 23.0, 900.0, -300.0), layer='POOL')
+    b = lwpoly(vm, k, layer='Bead Track')
+    run(vm, [[a], [b], 'First', 'OG', 'Yes'])
+    assert 'Mirror the original perimeter' in asked(vm)
+    assert 'times better' in said(vm) and '26296699755' not in said(vm)
+    assert worst_reported(vm) < 0.05
+    print("ok  moving the original instead: the offer names it, and the ratio is sane")
+
+
+# ---- what a sloppy window drags in --------------------------------------
+
+def test_a_stray_line_in_the_pick_is_called_out():
+    vm = newvm()
+    base = rect(300.0, 150.0)
+    pts = pose(base, 10.0, 600.0, -200.0)
+    ents = [line(vm, pts[i], pts[(i + 1) % 4], layer='POOL') for i in range(4)]
+    junk = line(vm, (1300.0, -500.0), (1400.0, -480.0), layer='DECK')
+    b = lwpoly(vm, base, layer='Bead Track')
+    run(vm, [ents + [junk], [b], 'First', 'New'])
+    assert '2 separate pieces' in said(vm), said(vm)[-500:]
+    print("ok  a stray deck line in the pick is reported as a second piece")
+
+
+def test_a_skimmer_gap_is_still_one_perimeter():
+    """A foot missing from the bottom wall of a 900\" outline is a
+    perimeter drawn with a break, not two objects."""
+    vm = newvm()
+    base = rect(300.0, 150.0)
+    pts = pose(base, 10.0, 600.0, -200.0)
+    ents = [line(vm, pts[i], pts[(i + 1) % 4], layer='POOL') for i in range(1, 4)]
+    (ax, ay), (bx, by) = pts[0], pts[1]
+    ux, uy = (bx - ax) / 300.0, (by - ay) / 300.0
+    ents.append(line(vm, (ax, ay), (ax + ux * 144, ay + uy * 144), layer='POOL'))
+    ents.append(line(vm, (ax + ux * 156, ay + uy * 156), (bx, by), layer='POOL'))
+    b = lwpoly(vm, base, layer='Bead Track')
+    run(vm, [ents, [b], 'First', 'New'])
+    assert 'separate pieces' not in said(vm), said(vm)[-400:]
+    print("ok  a 12\" skimmer gap is not called a second piece")
+
+
+# ---- what it cannot read, and says so -----------------------------------
+
+def test_unreadable_picks_say_what_to_do():
+    """Picking only a SPLINE used to end the command in silence.  Each
+    kind it cannot read is named with the fix; one it can read beside
+    them keeps the run going; text is dropped without a word."""
+    vm = newvm()
+    run(vm, [[other_ent(vm, 'SPLINE')]], label='spline')
+    assert 'SPLINE' in said(vm) and 'PEDIT' in said(vm), said(vm)[-300:]
+    vm = newvm()
+    run(vm, [[other_ent(vm, 'INSERT')]], label='block')
+    assert 'block' in said(vm) and 'EXPLODE' in said(vm), said(vm)[-300:]
+    vm = newvm()
+    sp = other_ent(vm, 'SPLINE')
+    a = lwpoly(vm, pose(rect(300.0, 150.0), 10.0, 600.0, -200.0), layer='POOL')
+    b = lwpoly(vm, rect(300.0, 150.0), layer='Bead Track')
+    run(vm, [[sp, a], [b], 'First', 'New'], label='spline+pline')
+    assert 'Going on with the rest' in said(vm) and 'best overlay' in said(vm)
+    vm = newvm()
+    tx = other_ent(vm, 'TEXT', layer='TEXT')
+    a = lwpoly(vm, pose(rect(300.0, 150.0), 10.0, 600.0, -200.0), layer='POOL')
+    b = lwpoly(vm, rect(300.0, 150.0), layer='Bead Track')
+    run(vm, [[tx, a], [b], 'First', 'New'], label='text')
+    assert 'cannot be read' not in said(vm) and 'best overlay' in said(vm)
+    print("ok  a SPLINE or block is named with its fix; text is dropped quietly")
+
+
+def test_a_units_mismatch_is_named():
+    for f, word in ((25.4, 'millimetres'), (12.0, 'feet to inches'),
+                    (2.54, 'centimetres')):
+        vm = newvm()
+        base = rect(300.0, 150.0)
+        a = lwpoly(vm, [(x * f, y * f) for x, y in base], layer='POOL')
+        b = lwpoly(vm, base, layer='Bead Track')
+        run(vm, [[a], [b], 'First', 'New'], label=str(f))
+        assert word in said(vm), f"x{f}: {said(vm)[-300:]}"
+    print("ok  a 25.4x, 12x or 2.54x length ratio is named as a units mismatch")
 
 
 # ---- run them ----------------------------------------------------------

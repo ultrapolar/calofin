@@ -47,6 +47,7 @@
 ;; value maps to a plain Enter except one starting with X/x.
 (defun tutorial:pause ( / v)
   (setq v (getstring "\nPress ENTER for the next topic (X then ENTER to stop here): "))
+  (if lzd:ask (lzd:ask "\nPress ENTER for the next topic (X then ENTER to stop here): " v) v)
   (/= (strcase (substr v 1 1)) "X"))
 
 ;;; -------------------- topic 1: welcome --------------------------------
@@ -349,6 +350,7 @@
         (princ "\nhelpers, so it cannot run without it.")
         (princ))
       (tutorial:run))
+  (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 
 (defun tutorial:run ( / *error* undo-open topics textonly k org going fn)
@@ -405,6 +407,7 @@
   (if undo-open (setq undo-open (pool:undoend)))
   (pool:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
+  (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and

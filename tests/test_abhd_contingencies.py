@@ -251,23 +251,71 @@ check("geometry drawn in a tilted UCS is called out",
       'not drawn in the world plane' in said(vm)
       and 'UCS to World' in said(vm))
 
-# a pick nowhere near a survey point still snaps, and says it snapped
+# a declaration NAMES a survey point, PERPMARK's way: a click on
+# nothing is re-asked where it stands rather than snapped to whatever
+# was nearest, however far off it landed
 vm, ents = survey_vm()
 run(vm, 'c:ABHD',
     [None, None, None, None,
-     'Yes', (600.0, 300.0), (600.0, -300.0), 'No',  # a wall, picked far off
+     'Yes', (600.0, 300.0), RING[0], RING[6], 'No',  # a wall, first click far off
      'No', 'No', ents, 'None'])
-check("a wall end picked well off the survey snaps, and says so",
-      'picked well away from any survey point' in said(vm))
+check("a wall end clicked well off the survey is re-asked, not snapped",
+      'No survey point there' in said(vm)
+      and 'picked well away' not in said(vm)
+      and 'Wall Pt.1 - Pt.7' in said(vm)
+      and '1 straight wall(s) noted' in said(vm), said(vm)[-300:])
 
+# ...and a typed number names the point, in any of its spellings
 vm, ents = survey_vm()
 run(vm, 'c:ABHD',
     [None, None, None, None,
-     'Yes', (600.0, 300.0), (610.0, 300.0), 'No',   # both ends, one point
+     'Yes', "Pt.1", "#7", 'No',
+     'Yes', "pt 4", None,
+     'Yes', "010", None,
+     ents, 'None'])
+check("typed numbers name a wall's ends, a corner and a held point",
+      'Wall Pt.1 - Pt.7' in said(vm) and 'Corner Pt.4' in said(vm)
+      and 'Held Pt.10' in said(vm)
+      and '1 straight wall(s) noted' in said(vm)
+      and '1 corner(s) noted' in said(vm)
+      and '1 held point(s) noted' in said(vm), said(vm)[-400:])
+
+# a number nothing carries is named and re-asked
+vm, ents = survey_vm()
+run(vm, 'c:ABHD',
+    [None, None, None, None,
+     'Yes', "99", "1", "7", 'No',
      'No', 'No', ents, 'None'])
-check("a wall whose ends snap to one point is dropped, not drawn",
-      'landed on the same survey point' in said(vm)
-      and 'that wall is ignored' in said(vm))
+check("a number no point carries is named and re-asked",
+      'No survey point is numbered "99"' in said(vm)
+      and 'Wall Pt.1 - Pt.7' in said(vm), said(vm)[-300:])
+
+# the same point for both ends is refused where it stands
+vm, ents = survey_vm()
+run(vm, 'c:ABHD',
+    [None, None, None, None,
+     'Yes', RING[0], RING[0], RING[6], 'No',        # both ends, one point
+     'No', 'No', ents, 'None'])
+check("a wall named on one point twice is refused and the end re-asked",
+      'a wall needs two different points' in said(vm)
+      and 'Wall Pt.1 - Pt.7' in said(vm), said(vm)[-300:])
+
+# a declaration is matched to the selection by the point's identity:
+# one made on a point that was not selected is named and dropped,
+# never snapped onto some other point
+vm, ents = survey_vm()
+run(vm, 'c:ABHD',
+    [None, None, None, None,
+     'Yes', "1", "7", 'No',
+     'Yes', "4", None,
+     'No', ents[1:], 'None'])                       # Pt.1 not selected
+check("a wall declared on a point outside the selection is dropped by name",
+      'Pt.1 is not among the selected points - the wall declared on it'
+      ' is dropped' in said(vm)
+      and 'snapped' not in said(vm), said(vm)[-300:])
+check("...while the corner declared on a selected point stays",
+      'Corner Pt.4' in said(vm) and 'Pt.4 is not among' not in said(vm),
+      said(vm)[-300:])
 
 
 # ------------------------------------------------- 3. the numeric questions
@@ -573,15 +621,74 @@ run(vm, 'c:ADAB', [None, ents])
 check("ADAB without a perimeter says which pieces it needs",
       'No perimeter found in the selection' in said(vm))
 
-# both ends of a break on one point: the pick is re-opened, not aborted
+# both ends of a break on one point: refused where it stands, and the
+# second end re-asked - not carried on to be found four picks later
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB',
-    [None, [pl], SHALLOW[0], SHALLOW[0], DEEP[0], DEEP[1],   # ends coincide
-     SHALLOW[0], SHALLOW[1], DEEP[0], DEEP[1]]               # picked again
+    [None, [pl], SHALLOW[0], SHALLOW[0],                     # ends coincide
+     SHALLOW[1], DEEP[0], DEEP[1]]                           # re-asked
     + ['', '', '', None, None])
-check("a break picked twice on one point re-opens that pick",
-      'landed on the same survey point' in said(vm)
-      and 'Pool bottom added' in said(vm))
+check("a break named on one point twice is refused and the end re-asked",
+      'the shallow break needs two different points' in said(vm)
+      and 'Pool bottom added' in said(vm), said(vm)[-300:])
+
+# the break ends can be typed by number, like every other point here
+vm, ents, pl = adab_vm()
+run(vm, 'c:ADAB', [None, [pl], "6", "Pt.8", "2", "#12"]
+    + ['', '', '', None, None])
+check("break ends typed by survey number land the bottom",
+      'Pool bottom added' in said(vm)
+      and 'Back of the hopper: Pt.1' in said(vm), said(vm)[-300:])
+
+# a slope waypoint is named the same way: the Pt.2 side runs through
+# Pt.3, so "3" typed at the Points prompt is a waypoint on it
+vm, ents, pl = adab_vm()
+run(vm, 'c:ADAB', [None, [pl]] + BREAKS
+    + ['', '', '', 'Points', "3", '', None, None])
+check("a slope waypoint typed by number lands, with its own offset",
+      any('offset at Pt.3' in p for p, _ in vm.prompts)
+      and 'guided through 1 point(s)' in said(vm)
+      and 'Pool bottom added' in said(vm), said(vm)[-400:])
+
+# an offset that fights both its neighbours along the side is named,
+# with the number the wall between them puts there -- and the line is
+# still drawn through what was actually typed
+vm, ents, pl = adab_vm()
+run(vm, 'c:ADAB', [None, [pl]] + BREAKS
+    + ['', '', '',
+       'Points', "3", "40", "4", "10", "5", "30", None,   # the Pt.2 side
+       None])                                             # the other: straight
+m = re.search(r'Pt\.4 is offset 10\.00, against ([\d.]+) and ([\d.]+) on'
+              r' both sides of it - the wall between those puts it near'
+              r' ([\d.]+)\.', said(vm))
+check("a waypoint offset against both its neighbours is named", bool(m),
+      said(vm)[-400:])
+if m:
+    lo, hi, mid = (float(m.group(i)) for i in (1, 2, 3))
+    check("...and the number it suggests sits between those neighbours",
+          min(lo, hi) < mid < max(lo, hi), (lo, hi, mid))
+check("...and the line still follows the offsets that were typed",
+      'The line follows what you typed' in said(vm)
+      and 'Pool bottom added' in said(vm), said(vm)[-200:])
+
+# a side that simply bends says nothing: every offset sits between its
+# neighbours, which is a wall, not a digit
+vm, ents, pl = adab_vm()
+run(vm, 'c:ADAB', [None, [pl]] + BREAKS
+    + ['', '', '',
+       'Points', "3", "40", "4", "38", "5", "30", None,
+       None])
+check("a side that bends away is not second-guessed",
+      'on both sides of it' not in said(vm)
+      and 'Pool bottom added' in said(vm), said(vm)[-300:])
+
+# a click on nothing at a break end is re-asked, never snapped
+vm, ents, pl = adab_vm()
+run(vm, 'c:ADAB', [None, [pl], (900.0, 900.0), SHALLOW[0], SHALLOW[1],
+                   DEEP[0], DEEP[1]] + ['', '', '', None, None])
+check("a break end clicked on nothing is re-asked",
+      'No survey point there' in said(vm)
+      and 'Pool bottom added' in said(vm), said(vm)[-300:])
 
 # a deep break with nothing beyond it: the pool's own flat end, which
 # is what the pick looks like when the two break lines are swapped
@@ -622,6 +729,47 @@ check("a feet-and-inches offset asks for the feet-inch dim style",
       'SIDE DIMENSION' in said(vm) and 'not in this drawing' in said(vm))
 check("the offset it was given is the one it reports",
       'offsets 42.00' in said(vm), said(vm)[-200:])
+
+
+# ---- the inside of the pool, whichever way the wall was drawn ---------
+# The bottom is pulled IN from the perimeter, and which way "in" is
+# comes from the loop's own orientation rather than from anything the
+# drafter says.  Draw the same pool the other way round and every piece
+# of the bottom still lands in the water; get the sign wrong and the
+# hopper is offset outwards, through the wall and into the deck.
+
+def bottom_geometry(vm, perim):
+    """Every point the bottom drew: the ends of each LINE and the
+    vertices of each polyline on the POOL layer, minus the perimeter
+    the run was handed."""
+    out = []
+    for e in live(vm, 'LINE', 'POOL'):
+        for code in (10, 11):
+            for g in vm.entdata.get(e, []):
+                if isinstance(g, list) and g and g[0] == code:
+                    v = g[1] if len(g) == 2 else g[1:]
+                    out.append((float(v[0]), float(v[1])))
+                elif isinstance(g, Dot) and g.a == code:
+                    out.append((float(g.b[0]), float(g.b[1])))
+    for e in live(vm, 'LWPOLYLINE', 'POOL'):
+        if e != perim:
+            out += [tuple(v) for v in pl_verts(vm, e)]
+    return out
+
+
+for label, ring in (("counterclockwise", RING), ("clockwise", RING[::-1])):
+    vm = newvm()
+    layer(vm, 'POINTS')
+    layer(vm, 'POOL', 4)
+    add_points(vm, RING)
+    pl = add_pline(vm, ring)
+    run(vm, 'c:ADAB', [None, [pl]] + BOTTOM)
+    pts = bottom_geometry(vm, pl)
+    worst = max((x / 144.0) ** 2 + (y / 84.0) ** 2 for x, y in pts)
+    check("the bottom lands inside a pool drawn %s" % label,
+          'Pool bottom added' in said(vm) and len(pts) > 8
+          and worst <= 1.0 + 1e-6,
+          "%d point(s), worst %.3f of the way out" % (len(pts), worst))
 
 
 # ----------------------------------------------------------- 7. cover mode
@@ -723,6 +871,17 @@ check("Redo omits the point it was given, by name",
 vm, ents = survey_vm()
 run(vm, 'c:ABHD',
     SETTINGS + [ents, 'Redo',
+                     "5", None,                    # omit one BY NUMBER
+                     None, None, None,
+                     None, None, None,
+                     'None'])
+check("a point to omit can be typed by its number",
+      'omitting Pt.5' in said(vm) and '1 point(s) omitted in total'
+      in said(vm), said(vm)[-200:])
+
+vm, ents = survey_vm()
+run(vm, 'c:ABHD',
+    SETTINGS + [ents, 'Redo',
                      RING[4], RING[4], None,       # omit it, then put it back
                      None, None, None,
                      None, None, None,
@@ -730,6 +889,37 @@ run(vm, 'c:ABHD',
 check("picking a ringed point again puts it back in",
       'Pt.5 back in' in said(vm) and '1 point(s) omitted in total'
       not in said(vm))
+
+# the Redo editors name their points the same way: Add takes two typed
+# ends, or a corner, and Remove names the declared corner to drop
+vm, ents = survey_vm()
+run(vm, 'c:ABHD',
+    SETTINGS + [ents, 'Redo',
+                     None,                         # omit nothing
+                     'Add', "1", "7", None,        # a wall, typed, then Keep
+                     'Add', "4", 'Remove', "Pt.4", None,   # a corner in, then out
+                     'Add', "10", 'Remove', "3", None,     # a hold in; Pt.3 is not one
+                     None, None, None,             # the three numbers: Enter
+                     'None'])
+check("Redo's Add and Remove name their points, typed or clicked",
+      'wall Pt.1 - Pt.7 added' in said(vm)
+      and 'corner Pt.4 added' in said(vm)
+      and 'corner Pt.4 removed' in said(vm)
+      and 'held Pt.10 added' in said(vm)
+      and 'Pt.3 is not a held point' in said(vm), said(vm)[-500:])
+
+# Add refuses the first end again for the second, and re-asks it
+vm, ents = survey_vm()
+run(vm, 'c:ABHD',
+    SETTINGS + [ents, 'Redo',
+                     None,
+                     'Add', "1", "1", "7", None,
+                     None, None,
+                     None, None, None,
+                     'None'])
+check("Redo's Add refuses one point for both ends and re-asks the second",
+      'a wall needs two different points' in said(vm)
+      and 'wall Pt.1 - Pt.7 added' in said(vm), said(vm)[-400:])
 
 # a wall anchored on an omitted point cannot survive it
 vm, ents = survey_vm()

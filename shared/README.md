@@ -39,7 +39,7 @@ file, so there is nothing for it to find on disk and it does not matter
 what folder you run it from. It prints
 
 ```
-LAZPASS: calofin v3.6 loaded - 195 commands in one session.
+LAZPASS: calofin v3.6 loaded - 204 commands in one session.
 ```
 
 Rebuild it after changing anything in `parts/`:
@@ -85,7 +85,7 @@ happens.
 
 ### The multi-file alternative
 
-`parts/CALOFIN-LOADER.lsp` keeps the build as 68 separate files and loads
+`parts/CALOFIN-LOADER.lsp` keeps the build as 70 separate files and loads
 them in order, which is friendlier when you are editing them. It has to
 locate its own folder first, and AutoCAD only lets it look along the
 support file search path -- which is *not* where APPLOAD's file dialog
@@ -136,7 +136,16 @@ dotn midn proj-param axis-pt pt-line-dist`), angles (`cal:angnorm
 signed-dang ang-diff`), `cal:circumcenter`, `cal:bbox-ent` /
 `cal:bbox-ss`, lists (`cal:nthcdr sublist dedupe`), numbers
 (`cal:ceil tan`), strings (`cal:trim pad zeropad2 datestr`), entity
-creation (`cal:text cal:mtext`), and `cal:block-number`. Each
+creation (`cal:text cal:mtext`), `cal:block-number`, the inside of a
+closed wall (`cal:loop-area`, `cal:inward-sign`, `cal:in-loop-p` -- which
+way to turn a tangent to point into the water, and whether a position
+landed in it), the measurement that fights both its neighbours
+(`cal:spikes`), and the
+survey-point naming PERPMARK introduced -- `cal:as-number`, `cal:canon`,
+`cal:cand-matches`, `cal:cand-nearest` and `cal:askpoint`, the one
+prompt that takes a click or a typed point number and re-asks a miss
+where it stands, which ABHD, CABHD, LHD, ABLOBF and FITABHD now ask
+every declaration through. Each
 helper's comment names the tool implementation it was lifted from.
 
 **The chart-form kit** is the newest of them, and the largest single

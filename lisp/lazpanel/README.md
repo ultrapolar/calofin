@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 87 of them across 198 buttons, because the pages come in two kinds
+-- 91 of them across 206 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both. (Both numbers are
 *checked*, not counted by hand: `tools/check_registry.py` computes them
 off the tree and `make check` fails when the prose disagrees.)
@@ -11,34 +11,47 @@ off the tree and `make check` fails when the prose disagrees.)
 ## Find
 
 The one page that does not need you to know where a tool was filed.
-Type any part of a name **or of its caption** and the list narrows to
-what matches; the top hit is selected as you type, so Enter runs it.
+Type any part of a name, its caption, its one-sentence blurb, or a
+search keyword calofin has attached to it, and the list narrows to what
+matches; the top hit is selected as you type, so Enter runs it. Type
+more than one word and EVERY word has to turn up somewhere -- narrowing,
+never widening.
 
 ```
-Find  [cover                      ]
-+----------------------------------------------------+
-| POOLCOVER    -  Pool layout, no bottom             |
-| LAZFORMCOVER -  Chart to pool, no bottom           |
-| ABHDCOVER    -  Survey perimeter, no bottom        |
-| FITABHDCOVER -  Typed template fit, no bottom      |
-| STOCKCOVER   -  Stock cover placement  (not loaded)|
-| COVERCHECK   -  Cover review                       |
-+----------------------------------------------------+
-8 of 67 match "cover"
+Find  [cover                                                          ]
++------------------------------------------------------------------------------+
+| POOLCOVER     -  Pool layout, no bottom  -  POOL for a cover sheet -         |
+|                  the bottom question pre-answered No                        |
+| ABHDCOVER     -  Survey perimeter, no bottom  -  ABHD for a cover sheet      |
+|                  that stops at the perimeter                                |
+| LAZSPA        -  Spa from a filled-in chart  -  LAZFORM's argument          |
+|                  applied to SPA - fill the chart in and the spa is drawn    |
+| STOCKCOVER    -  Stock cover placement  -  Replaces a highlighted           |
+|                  perimeter with a stock cover drawing  (not loaded)         |
++------------------------------------------------------------------------------+
+10 of 91 match "cover"
 ```
 
-Searching the captions is the point rather than a bonus. `cover` would
-have worked either way -- all eight of its hits carry the word in their
-names. `survey` is the case that matters: it finds `ABHD`, `ABHDCOVER`
-and `ABPCHECK`, and not one of those three says anything about a survey
-in its name. Half of knowing this toolset is knowing what the names stand
-for, and this is where you stop needing to.
+(rows wrapped here for the page; the list box itself is one line each.)
+
+Searching the caption and the blurb is the point rather than a bonus.
+`cover` would have half-worked on names alone -- most of its hits carry
+the word there too. `survey` is the case that matters: it finds `ABHD`,
+`ABHDCOVER` and `ABPCHECK`, and not one of those three says anything
+about a survey in its name. `LAZSPA` above is the other half of the
+point: neither its name nor its caption ever says "cover", only the
+keyword list attached to it for exactly this search does -- a word the
+name and the blurb never use still finds the tool. Half of knowing this
+toolset is knowing what the names stand for, and this is where you stop
+needing to.
 
 The needle is taken **literally**. `lzp:instr` is a written-out
 substring search rather than a call to `wcmatch`, because the text is
 whatever was typed: `wcmatch` would read `*`, `?`, `~`, `[`, `]`, `@`,
 `.` and `#` as pattern syntax, so a typed `*` would match the whole
-roster and a typed `.` would match none of it.
+roster and a typed `.` would match none of it (though a blurb or
+keyword is free to use `.` or `#` as an ordinary character -- `DIMSTAMP`'s
+blurb has "4.5" in it, so typing `.` alone does find it, literally).
 
 A tool this session has not loaded is **listed** here, marked `(not
 loaded)`, and `Run` refuses it with that reason on the message line
@@ -311,6 +324,85 @@ its own error handler runs, the panel stays closed, and `LAZPANEL`
 brings it back. That is the right way round: the alternative is a panel
 bouncing back in front of the error you are trying to read.
 
+**The Options button.** Beside Close, on every page including Find, an
+`Options...` button opens `LAZSET` -- the settings as a **dialog**, with
+the theme on a dropdown, a box for each of the eight item colours, the
+two folders, and a way into the hidden list, all in front of you at
+once. It is wired exactly like a grid button -- the same full teardown
+before anything runs -- but the pick it sends is a sentinel
+`c:LAZPANEL` reads itself: settings are not on the roster, so clicking
+Options never lands in Recent the way running a real tool does.
+
+**The settings dialog.** `LAZSET` is to `CALSET` what `LAZFORM` is to
+`POOL`: the same answers, as a form rather than an interview. Every box
+comes up filled in from the profile, and **nothing is written until
+`OK`** -- what you type lands in `lzp:*setvals*`, an alist keyed by the
+profile key itself, and `lzp:set-write` is the only place that reaches
+`setenv`. `Cancel` drops the store on the floor.
+
+A colour box holds an ACI number (1 to 255) or nothing at all, where
+nothing means *auto* -- the shared table in `cal:ink`. While a box
+holds anything else the state line names it and `OK` stays greyed, the
+same bargain `LAZFORM`'s `Insert` strikes and for the same reason: a
+value nothing can read must not be stored and then silently ignored by
+the tool that goes looking for it. `lzp:aci-p` is spelled out rather
+than handed to `atoi`, which answers 0 for `red` and reads `12x` as 12.
+
+The theme dropdown is emitted **empty** -- DCL has no way to write a
+`popup_list`'s list into the file -- and filled with `start_list` once
+the dialog is up, exactly as `LAZFORM` fills its corner dropdowns; what
+comes back from it is an *index*, not the word. Picking a theme writes
+the profile **and** the registry copy the VB palette reads, the same
+bargain `CALSET`'s own `Theme` branch strikes.
+
+`Hidden...` closes the dialog, runs the hide editor on the same loaded
+handle and comes back -- which is why the store is a global and not a
+local: the reopen repaints every box from it, so a trip through the
+checklist does not cost you the colour you had just typed.
+
+`CALSET` is unchanged and still there for a drafter who would rather
+type, and it is what a support call reaches for: it *prints* every
+setting before it asks anything.
+
+**Names of your own.** `Names...` in that dialog, or `LAZNAME` typed,
+opens a list of every tool with two boxes under it: the name you want
+to **type** to run it, and the words you want its **button to say**.
+Both are per machine, stored beside the pins, and neither touches the
+shipped tables -- `lzp:*captions*` stays the file's single truth and no
+alias is ever written into a `.lsp`, so `make check` reads the same
+tree it always did.
+
+An alias is a **wrapper defun**, which is the shape this tree already
+ships for `DCE` (`(defun c:DCE () (c:DIMCONTEND))`). Built at run time
+it is the same form, assembled as *data* rather than as source text,
+because a string spliced from what a drafter typed would go through
+`read` and a malformed one throws from inside a file load. The wrapper
+resolves its target when it is **called**, so an alias can be applied
+before the tool it names is loaded -- which matters, because only the
+grouped build guarantees LAZPANEL loads last.
+
+What is refused, and why each one earns its place:
+
+- a name that is not letters and digits, or does not start with a
+  letter, or runs past 12 characters. `(read "c:MY TOOL")` answers
+  `c:my` and `(read "c:")` answers `c:`, both silently, so the check
+  happens *before* anything reaches `read`, as a whitelist.
+- **a name the session already answers to.** This is the one that
+  matters: `(defun c:CHECK () ...)` would retarget `check_drawing.lsp`'s
+  own `CHECK` for the whole session, and `DIMARCCHECK` -- which is
+  `(c:CHECK)` -- with it, while `lzp:has` kept the button lit.
+- a caption carrying `;` or `=`, the store's own separators, or a
+  double quote, which `lzp:dcl-one` pastes straight into DCL and which
+  would make every page of the panel fail to load.
+- a caption past 40 characters. `tools/check_dcl.py` measures the
+  *shipped* tables and structurally cannot see a drafter's override, so
+  the cap is the only thing between a long rename and a page that will
+  not open.
+
+Removing a name stops it being remembered, but the name it already
+defined answers until the drawing is closed -- AutoLISP has no way to
+take a `defun` back, and the state line says so rather than pretending.
+
 **The Pinned row.** Pins are the answer to "I run four of these
 eighty-one all day": ticked tools sit in a row at the top of *every*
 page, in the order you pinned them, so the ones you actually use stop
@@ -353,6 +445,21 @@ for the first time is exactly as tall as it has always been -- and DCL
 height is what stops a dialog opening at all. Both rows pack through the
 same `lzp:packrow`, so neither can be the one that forgets the width
 budget.
+
+**Hiding a tool.** Pin says "always show me this"; `LAZHIDE` (or
+`CALSET`, `Hidden`) says the opposite. It opens the same kind of
+checklist `LAZPIN` does -- every tool as a toggle -- and a ticked one
+stops appearing anywhere the panel shows itself: no grid button, no
+Pinned or Recent chip (even if it is still pinned or was just run --
+storage and display are separate, the same bargain a pinned tool
+already strikes against Recent), no Find hit, and it is no longer
+counted in the status line's total or in `LAZPANELVER`'s count. It is
+not deleted or disabled -- `lzp:has` and `lzp:launch` never look at the
+hidden list, so typing the name still runs it -- and `LAZHIDE` always
+offers the **whole** roster as toggles, so a hidden tool can always be
+found again and un-hidden. The list is stored under its own `Hidden`
+value beside `Pins` and `Recent` in the same registry key, though
+nothing on the VB palette side reads it yet.
 
 Clicking a button closes the panel and runs that command exactly as if
 its name had been typed -- the panel adds nothing in front of a tool and
@@ -453,19 +560,23 @@ second file to ship, no support-path entry to add, and no DLL to
 `NETLOAD` -- unlike the VB.NET palette in `ui/`, which needs its
 assembly loaded on every machine.
 
-## The two commands that are not the panel
+## The commands that are not the panel
 
-`CALHELP` and `CALSET` live in this file because this is where their
-answers already were: the captions are here, and so were the only
-settings calofin keeps in the AutoCAD profile. Neither carries a
-panel button -- both are named in `NAMED_SATELLITES` in
-`tools/callib.py`, and a button that told you what buttons do would be
-a joke at the drafter's expense.
+`CALHELP`, `CALSET`, `LAZHIDE`, `LAZSET` and `LAZNAME` live in this file because
+this is where their answers already were: the captions are here, so is
+the roster `LAZHIDE` edits, and so were the only settings calofin keeps
+in the AutoCAD profile. None carries a panel button -- all five are
+named in `NAMED_SATELLITES` in `tools/callib.py`; `LAZPIN` is there for
+the same reason, and a button that told you what buttons do (or which
+ones to hide) would be a joke at the drafter's expense.
 
 | Command | Answers |
 | --- | --- |
-| `CALHELP` | what a command IS, at the command line. Type any part of a name **or of its caption** -- the same search the Find page runs, so `survey` finds `ABHD` -- and it prints the matches with their captions; Enter lists every tool. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
-| `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
+| `CALHELP` | what a command IS, at the command line. Type any part of a name, its caption, its one-sentence blurb or a search keyword -- the same search the Find page runs, so `survey` finds `ABHD` and `cover` finds `LAZSPA` on a keyword alone -- and it prints the matches with their caption AND blurb; Enter lists every tool that is not hidden. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
+| `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it, plus a `Hidden` option that routes straight to `LAZHIDE`. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
+| `LAZHIDE` | opens the checklist of every tool, ticked to match what is currently hidden -- see "Hiding a tool" above. Accept stores the new list; Cancel re-reads the stored one, exactly as `LAZPIN`'s editor does |
+| `LAZNAME` | your own name for a tool and for its button -- see "Names of your own" above. Reached from `Names...` in `LAZSET`, or typed |
+| `LAZSET` | the same settings as a **dialog** -- theme dropdown, a box per item colour, the two folders, and `Hidden...` into the checklist. This is what the panel's `Options...` button opens; see "The settings dialog" above. Nothing is written until `OK`, and `OK` is greyed while a colour box holds something that is not a colour |
 
 ## The icon follows the theme
 
@@ -484,8 +595,10 @@ came from.
 APPLOAD `LAZPANEL.lsp` on its own, or load `shared/LAZPASS.lsp`, which
 carries it along with every tool it lists. The button toolbar appears
 on load; type `LAZPANEL` to open the panel directly, or `LAZBUTTON` to
-re-summon the button, `LAZPIN` to choose the pinned tools, `CALHELP`
-to ask what a command does, or `CALSET` to see the settings.
+re-summon the button, `LAZPIN` to choose the pinned tools, `LAZHIDE` to
+choose which stay off the panel, `CALHELP` to ask what a command does,
+`LAZSET` for the settings dialog, `LAZNAME` to give a tool a name of
+your own, or `CALSET` for the same settings as prompts.
 
 ## Tunables
 
@@ -502,6 +615,9 @@ maintains them.
 | `lzp:*tbname*` | `"LazPanel"` | the screen-button toolbar's name, as the CUI lists it |
 | `lzp:*poskey*` | `"LazPanel_Pos"` | where the panel remembers its position between restarts: a value in the AutoCAD profile, which is always writable where the registry may not be |
 | `lzp:*pinkey*` | `"HKEY_CURRENT_USER\\Software\\Calofin\\LazPanel"` | where pins and recents live. **The VB palette reads the same key**, so a drafter has one set of pins whichever surface they pinned from -- change it here and in `ui/calofin_net/PaletteMemory.vb` together |
+| `lzp:*aliasval*` | `"Alias"` | the value on that key holding the names this drafter types, `NAME=ALIAS` joined on `;`. Named here rather than at the call site so the whole set of values this file stores can be read in one place -- `tests/test_palette_shell.py` holds the panel and the palette to that list, and a value it cannot see is a value that can drift |
+| `lzp:*capval*` | `"Caption"` | the same, for the words this drafter's buttons say. Lisp-side only: the VB palette's catalog is generated from `lzp:*captions*` at build time, so it keeps the shipped words |
+| `lzp:*capmax*` | `40` | the longest caption `LAZNAME` will take. A ceiling, not a preference: `tools/check_dcl.py` measures the shipped tables and can never see a drafter's override, so this is the only thing between a long rename and a page too wide to open |
 | `lzp:*pinbudget*` | `84` | how wide a row of pinned or recent buttons may be, in DCL character cells. A ceiling, not a preference: DCL does not scroll, and a row past the screen's width stops the dialog opening at all |
 | `lzp:*colbudget*` | `16` | how many captioned buttons may stack in ONE column before a page wraps into more. The height twin of the budget above, and the same wall: `Rest` reached 1085px against a 1080px screen at 28 tools and stopped opening, `Layout` had passed it at 32. Columns come out balanced, captions kept |
 | `lzp:*pinrowmax*` | `3` | how many rows the Pinned strip may occupy. The one part of a page whose height a drafter sets, so it is capped as a tool is ticked AND on the way in from the registry, where a list stored by an older build has never been through the cap |

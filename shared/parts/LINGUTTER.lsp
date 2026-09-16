@@ -43,11 +43,31 @@
 ;;;       is reported as the wrap it is, because a hull has no concave
 ;;;       features and PADDLE will find nothing to pad.
 ;;;
-;;;    2. KEEP.  Two rules, and nothing else highlighted survives them:
-;;;         * a dimension in a lg:*anystyles* style ("CROSS DIM*", which
-;;;           catches both "CROSS DIM" and this repo's "CROSS
-;;;           DIMENSIONS") is kept wherever it sits -- a cross dim
-;;;           spans the pool, so most of it is nowhere near the edge;
+;;;    2. KEEP.  Three rules, and nothing else highlighted survives them:
+;;;         * a RADIUS or DIAMETER dimension that is ON the perimeter
+;;;           (its one attachment point, DXF 10, within lg:*ontol* of
+;;;           the loop) is kept regardless of its style.  A corner
+;;;           radius under a foot is put in "STANDARD INCHES" by
+;;;           AUTODIM like any other short measurement, and that style
+;;;           is not in lg:*perimstyles* -- without this rule the call-
+;;;           out for the very corner PADDLE is about to pad would be
+;;;           the thing erased;
+;;;         * LINGUTTER asks once, "Keep CROSS DIMENSIONS?".  Answered
+;;;           Yes, a dimension in a lg:*anystyles* style ("CROSS DIM*",
+;;;           which catches "CROSS DIM", "CROSS DIMENSIONS" and "CROSS
+;;;           DIMENSIONS 0.5") is kept when it reads as a genuine cross
+;;;           measurement of THIS pool: both attachment points belong
+;;;           to the perimeter at all (inside it, or on it), AND either
+;;;           the two points span at least lg:*crossspan* of the
+;;;           perimeter's own width or height -- "goes full X" or "goes
+;;;           full Y" -- or they sit at two of its VERTICES, corner to
+;;;           corner along one whole edge however short.  A dim from
+;;;           one corner to some other point along that SAME edge --
+;;;           the start of a line to a point in the middle of it -- is
+;;;           never kept, regardless of span: it is reading a fraction
+;;;           of one side, not the pool.  Answered No, none of these
+;;;           dimensions gets any exemption and each is judged like any
+;;;           other style below;
 ;;;         * a dimension in a lg:*perimstyles* style ("STANDARD",
 ;;;           "SIDE STANDARD") is kept only when it is ON the perimeter
 ;;;           -- every one of its attachment points within
@@ -64,11 +84,12 @@
 ;;;       its largest closed loop, which after a scoped gut may well be
 ;;;       a title block border rather than the pool.
 ;;;
-;;;  LINGUTTER erases a great deal of what you highlight, so it asks
-;;;  first -- after printing exactly what it found, and defaulting to
-;;;  No.  LINGUTTERSCAN prints the same report and stops without
-;;;  touching the drawing; run it first on a sheet you care about.  The
-;;;  whole run is one undo group: a single U puts the drawing back.
+;;;  LINGUTTER erases a great deal of what you highlight, and does so
+;;;  straight through -- no confirmation asked, just the report of
+;;;  exactly what it found before it erases it.  LINGUTTERSCAN prints
+;;;  the same report and stops without touching the drawing; run it
+;;;  first on a sheet you care about.  The whole run is one undo
+;;;  group: a single U puts the drawing back.
 ;;;  (In a drawing with undo control off there is no group to open, so
 ;;;  the gut still happens but a U will not take it back in one step.)
 ;;;
@@ -78,16 +99,21 @@
 ;;;                             it asks for one.  There is no "the whole
 ;;;                             drawing" answer -- it erases what it
 ;;;                             sweeps, so it sweeps only what you showed
-;;;                             it
-;;;    Command: LINGUTTERSCAN   the report, and nothing else
+;;;                             it.  Then it asks "Keep CROSS DIMENSIONS?"
+;;;                             <Yes> before reporting what it found
+;;;    Command: LINGUTTERSCAN   the same two prompts and the same report
+;;;                             -- nothing else changes in the drawing
 ;;;    Command: LINGUTTERVER    prints the version
 ;;;
 ;;;  Tunables (setq them after loading if a drawing needs different
 ;;;  names, e.g. in a startup file):
 ;;;    lg:*poollayer*    layer the perimeter is drawn on    ("POOL")
 ;;;    lg:*poolcolor*    its colour when the layer has to be created
-;;;    lg:*anystyles*    dim styles kept wherever they sit, as wildcard
-;;;                      patterns matched against the style name
+;;;    lg:*anystyles*    dim styles kept when "Keep CROSS DIMENSIONS?"
+;;;                      is answered Yes and the dim is a genuine cross
+;;;                      measurement of this pool (see lg:cross-ok-p
+;;;                      and lg:*crossspan*), as wildcard patterns
+;;;                      matched against the style name
 ;;;    lg:*perimstyles*  dim styles kept only on the perimeter
 ;;;    lg:*keeplayers*   layers left alone entirely (nil = none)
 ;;;    lg:*skiplayers*   layers the perimeter is never traced from
@@ -99,6 +125,10 @@
 ;;;                      typed in cannot change what the report claims
 ;;;    lg:*cover*        how much of the highlight's extent a traced
 ;;;                      exterior must span before it is believed
+;;;    lg:*crossspan*    how much of the perimeter's own bounding box a
+;;;                      kept lg:*anystyles* dim must span, in X or Y,
+;;;                      to count as a full cross measurement rather
+;;;                      than a small local one
 ;;;    lg:*runpaddle*    T to run PADDLE at the end, nil to stop after
 ;;;                      the gut
 ;;;
@@ -115,11 +145,23 @@
 ;;;      never a veto -- the alternative to a partial answer is a convex
 ;;;      hull, which is worse.
 ;;;    * "STANDARD INCHES" is deliberately NOT in lg:*perimstyles*: the
-;;;      request named STANDARD and SIDE STANDARD.  A perimeter side
+;;;      request named STANDARD and SIDE STANDARD.  A perimeter SIDE
 ;;;      under 12" that AUTODIM put in STANDARD INCHES therefore goes
 ;;;      with the rest -- but it is never silent about it, the report
 ;;;      counts every dropped dimension by style.  Add the style to
-;;;      lg:*perimstyles* to keep those too.
+;;;      lg:*perimstyles* to keep those too.  A RADIUS or DIAMETER dim
+;;;      is not caught by this: AUTODIM puts a corner radius under 12"
+;;;      in STANDARD INCHES too, and that one is kept, style aside,
+;;;      by the radial-on-the-perimeter rule above.
+;;;    * "Keep CROSS DIMENSIONS?" answered No drops every lg:*anystyles*
+;;;      dimension like any other style not in lg:*perimstyles* -- counted
+;;;      in the report, not silently.
+;;;    * A lg:*anystyles* dim is judged by SHAPE as well as location: a
+;;;      small one entirely inside the pool, touching nothing, is kept
+;;;      no more than a stray one outside it is -- lg:*crossspan* and
+;;;      lg:vertex-to-vertex-p are what a genuine cross measurement has
+;;;      to satisfy, and "start of one edge to a random point along
+;;;      that SAME edge" satisfies neither one, on purpose.
 ;;;    * The perimeter is always redrawn, even when it was already one
 ;;;      closed polyline on POOL, so the result is the same object
 ;;;      whatever went in.  An associative dimension attached to the old
@@ -136,7 +178,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.4")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.7")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -203,6 +245,15 @@
                                    ; perimeter: a fraction, 0.8 = 80%.
                                    ; Falling short is a warning, never a
                                    ; veto -- see the Notes
+(setq lg:*crossspan*   0.8)        ; how much of the PERIMETER's own
+                                   ; bounding box a kept lg:*anystyles*
+                                   ; dim has to span, in X or in Y, to
+                                   ; count as a full cross measurement
+                                   ; rather than a small local one; a
+                                   ; fraction, 0.8 = 80%.  A dim short
+                                   ; of this is still kept when it runs
+                                   ; corner to corner along one whole
+                                   ; edge instead -- see lg:cross-ok-p
 (setq lg:*runpaddle*   t)          ; T to hand the new perimeter to
                                    ; PADDLE and pad it; nil to stop after
                                    ; the gut and leave it unpadded
@@ -776,6 +827,15 @@
     (if (setq p (cdr (assoc 10 ed))) (setq out (list p))))
   out)
 
+;; T when ED is a RADIUS or DIAMETER dimension -- DXF 70's low three
+;; bits are 4 for radius, 3 for diameter, the two kinds lg:dim-pts hangs
+;; off group 10 rather than 13/14.  Read from the type flag rather than
+;; "has no 13/14": a malformed dim is then just "not radial", not a
+;; silent radial match.
+(defun lg:radial-p (ed / k)
+  (setq k (logand 7 (cdr (assoc 70 ed))))
+  (or (= k 3) (= k 4)))
+
 ;; T when every attachment point sits within lg:*ontol* of the loop.
 ;; Every, not any: a dim running from the pool edge in to the hopper is
 ;; measuring the hopper, and one end on the perimeter does not make it a
@@ -786,6 +846,113 @@
   (foreach p pts
     (if (> (lg:pt-loop-dist p vts) lg:*ontol*) (setq ok nil)))
   ok)
+
+;; T when P lies inside the polygon VTS by the even-odd rule.  A curved
+;; side is taken as its own straight chord here -- close enough to tell
+;; "inside" from "outside" deep in the pool, and a point that is instead
+;; RIGHT AT a curved side is caught by lg:pt-loop-dist's true arc math in
+;; lg:cross-ok-p below, not by this approximation.
+(defun lg:pt-inside-p (p vts / n i a b xi yi xj yj px py inside)
+  (setq px     (car (cal:2d p))
+        py     (cadr (cal:2d p))
+        n      (length vts)
+        i      0
+        inside nil)
+  (repeat n
+    (setq a  (nth i vts)
+          b  (nth (rem (1+ i) n) vts)
+          xi (car a) yi (cadr a)
+          xj (car b) yj (cadr b))
+    (if (and (not (eq (> yi py) (> yj py)))
+             (< px (+ xi (/ (* (- xj xi) (- py yi)) (- yj yi)))))
+      (setq inside (not inside)))
+    (setq i (1+ i)))
+  inside)
+
+;; T when P sits inside the perimeter, or on it -- the baseline "does
+;; this point belong to the pool LINGUTTER just gutted at all" test.  A
+;; point that fails this is not a fraction of an inch off; it is a
+;; stray dim, or one measuring a second pool in the same highlight.
+(defun lg:pt-belongs-p (p vts)
+  (or (lg:pt-inside-p p vts) (<= (lg:pt-loop-dist p vts) lg:*ontol*)))
+
+;; T when P sits within lg:*ontol* of a VERTEX of the perimeter -- a
+;; true corner, not merely somewhere along the edge leaving or
+;; arriving at it.
+(defun lg:at-vertex-p (p vts / hit v)
+  (foreach v vts
+    (if (<= (distance (cal:2d p) (cal:2d v)) lg:*ontol*) (setq hit t)))
+  hit)
+
+;; T when P1 and P2 both sit on some ONE perimeter edge and are NOT
+;; that edge's own two endpoints -- the start of a line to some random
+;; point in the middle of that same line.  A cross dim shaped like this
+;; measures a fraction of one side, not the pool, and is never kept
+;; regardless of span: a long enough side could otherwise make a
+;; partial reading look like it spans the pool by accident.
+;; Every edge is checked in its own right rather than classifying each
+;; point to "the" edge it sits on first: a point sitting exactly at a
+;; shared VERTEX sits on the two edges that meet there, and picking
+;; only one by iteration order could clear a partial read on whichever
+;; edge it did not pick.
+(defun lg:same-edge-partial-p (p1 p2 vts / n i a b blg d1 d2 veto)
+  (setq n (length vts) i 0 veto nil)
+  (repeat n
+    (setq a   (nth i vts)
+          b   (nth (rem (1+ i) n) vts)
+          blg (caddr a)
+          d1  (if (/= blg 0.0)
+                (lg:pt-arc-dist p1 (cal:2d a) (cal:2d b) blg)
+                (lg:pt-seg-dist p1 (cal:2d a) (cal:2d b)))
+          d2  (if (/= blg 0.0)
+                (lg:pt-arc-dist p2 (cal:2d a) (cal:2d b) blg)
+                (lg:pt-seg-dist p2 (cal:2d a) (cal:2d b))))
+    (if (and (<= d1 lg:*ontol*) (<= d2 lg:*ontol*)
+             (not (or (and (<= (distance (cal:2d p1) (cal:2d a)) lg:*ontol*)
+                           (<= (distance (cal:2d p2) (cal:2d b)) lg:*ontol*))
+                      (and (<= (distance (cal:2d p1) (cal:2d b)) lg:*ontol*)
+                           (<= (distance (cal:2d p2) (cal:2d a)) lg:*ontol*)))))
+      (setq veto t))
+    (setq i (1+ i)))
+  veto)
+
+;; T when P1-P2 spans at least lg:*crossspan* of the perimeter's own
+;; bounding box, in X or in Y -- "goes full X" or "goes full Y", an
+;; overall check dimension from one side to the other, corners or not.
+(defun lg:full-span-p (p1 p2 vts / bb w h dx dy)
+  (setq bb (lg:bbox (lg:segs-pts (lg:vts->segs T vts))))
+  (if bb
+    (progn
+      (setq w  (- (nth 2 bb) (car bb))
+            h  (- (nth 3 bb) (cadr bb))
+            dx (abs (- (car (cal:2d p1)) (car (cal:2d p2))))
+            dy (abs (- (cadr (cal:2d p1)) (cadr (cal:2d p2)))))
+      (or (and (> w 1e-9) (>= (/ dx w) lg:*crossspan*))
+          (and (> h 1e-9) (>= (/ dy h) lg:*crossspan*))))))
+
+;; T when P1 and P2 are each within lg:*ontol* of SOME vertex of the
+;; perimeter -- corner to corner, "the start of a line to the end of a
+;; line", whichever two corners they are and however short that run is.
+;; A short notch side would otherwise never pass lg:full-span-p.
+(defun lg:vertex-to-vertex-p (p1 p2 vts)
+  (and (lg:at-vertex-p p1 vts) (lg:at-vertex-p p2 vts)))
+
+;; T when a lg:*anystyles* dimension is a genuine cross dim OF THIS
+;; POOL: both attachment points belong to the perimeter at all, neither
+;; is a partial read along one same edge, and together they either span
+;; most of the pool (lg:full-span-p) or run corner to corner along one
+;; full edge (lg:vertex-to-vertex-p).  Anything else highlighted in
+;; this style -- a small dimension entirely inside touching nothing, a
+;; stray one answering to a different pool -- goes with the rest.
+(defun lg:cross-ok-p (ed vts / pts p1 p2)
+  (setq pts (lg:dim-pts ed))
+  (and (= (length pts) 2)
+       (setq p1 (car pts) p2 (cadr pts))
+       (lg:pt-belongs-p p1 vts)
+       (lg:pt-belongs-p p2 vts)
+       (not (lg:same-edge-partial-p p1 p2 vts))
+       (or (lg:full-span-p p1 p2 vts)
+           (lg:vertex-to-vertex-p p1 p2 vts))))
 
 ;;; -------------------- styles and tallies ------------------------------
 
@@ -809,6 +976,22 @@
   (if (setq p (assoc key lst))
     (subst (cons key (1+ (cdr p))) p lst)
     (append lst (list (cons key 1)))))
+
+;; Why a highlighted DIMENSION in style STY would be dropped, for the
+;; report's tally -- a reason, not a raw style name, is the whole point
+;; of counting drops at all.  A style already ruled out by the caller
+;; (lg:radial-p and lg:on-perim-p, ahead of this in lg:analyze) never
+;; reaches here on THAT ground, so a lg:*anystyles* style always means
+;; either the CROSS DIMENSIONS question or lg:cross-ok-p is why it goes.
+(defun lg:drop-reason (sty keepcross)
+  (strcat (if (= sty "") "(no style)" sty)
+          (cond
+            ((lg:stylep sty lg:*anystyles*)
+             (if keepcross
+               " - not a full span or a full perimeter edge"
+               " - \"Keep CROSS DIMENSIONS?\" answered No"))
+            ((lg:stylep sty lg:*perimstyles*) " - not on the perimeter")
+            (t " - style not kept"))))
 
 (defun lg:s (n) (if (= n 1) "" "s"))
 
@@ -868,24 +1051,29 @@
 ;; Everything both commands need to know about the highlighted set SS,
 ;; worked out without changing a thing.  Nothing outside SS is looked
 ;; at: the perimeter is traced from the geometry in it, and only what
-;; is in it can be kept or erased.
-;; Returns (vts gap kill nany nperim dropped nother nspared):
+;; is in it can be kept or erased.  KEEPCROSS is the answer to "Keep
+;; CROSS DIMENSIONS?" -- T to spare lg:*anystyles* dims that are inside
+;; the perimeter or connected to it, nil to give them no exemption.
+;; Returns (vts gap kill nany nperim nrad dropped nother nspared):
 ;;   vts      the perimeter as (x y bulge) vertices, nil when none found
 ;;   how      (tol short) from lg:perimeter: how the perimeter was
 ;;            arrived at, and whether it covers the highlight
 ;;   kill     the entities that would be erased
-;;   nany     dims kept for their style alone
-;;   nperim   dims kept because they sit on the perimeter
+;;   nany     lg:*anystyles* dims kept (KEEPCROSS, inside or connected)
+;;   nperim   dims kept because they sit on the perimeter, by style
+;;   nrad     radius/diameter dims kept because they sit on the
+;;            perimeter, REGARDLESS of style
 ;;   dropped  ((reason . count) ...) for the dimensions that would go
 ;;   nother   objects that would go which are not dimensions
 ;;   nspared  objects left alone because lg:*keeplayers* names their layer
-(defun lg:analyze (ss / best vts how kill nany nperim dropped nother
-                        nspared en ed typ sty lay spare)
+(defun lg:analyze (ss keepcross / best vts how kill nany nperim nrad
+                       dropped nother nspared en ed typ sty lay spare)
   (setq best    (lg:perimeter (lg:trace-segs ss))
         vts     (car best)
         how     (cadr best)
         nany    0
         nperim  0
+        nrad    0
         nother  0
         nspared 0
         spare   (mapcar 'strcase lg:*keeplayers*))
@@ -900,21 +1088,19 @@
         ((= typ "DIMENSION")
          (setq sty (lg:dim-style ed))
          (cond
-           ((lg:stylep sty lg:*anystyles*)
+           ((and (lg:radial-p ed) (lg:on-perim-p ed vts))
+            (setq nrad (1+ nrad)))
+           ((and keepcross (lg:stylep sty lg:*anystyles*)
+                 (lg:cross-ok-p ed vts))
             (setq nany (1+ nany)))
            ((and (lg:stylep sty lg:*perimstyles*) (lg:on-perim-p ed vts))
             (setq nperim (1+ nperim)))
            (t
-            (setq dropped
-                  (lg:tally (strcat (if (= sty "") "(no style)" sty)
-                                    (if (lg:stylep sty lg:*perimstyles*)
-                                      " - not on the perimeter"
-                                      " - style not kept"))
-                            dropped)
-                  kill (cons en kill)))))
+            (setq dropped (lg:tally (lg:drop-reason sty keepcross) dropped)
+                  kill    (cons en kill)))))
         (t (setq nother (1+ nother)
                  kill   (cons en kill))))))
-  (list vts how (reverse kill) nany nperim dropped nother nspared))
+  (list vts how (reverse kill) nany nperim nrad dropped nother nspared))
 
 ;;; -------------------- writing the drawing -----------------------------
 
@@ -945,15 +1131,17 @@
 
 ;;; -------------------- the report --------------------------------------
 
-(defun lg:report (res / vts how kill nany nperim dropped nother nspared d)
+(defun lg:report (res keepcross / vts how kill nany nperim nrad dropped
+                        nother nspared d)
   (setq vts     (nth 0 res)
         how     (nth 1 res)
         kill    (nth 2 res)
         nany    (nth 3 res)
         nperim  (nth 4 res)
-        dropped (nth 5 res)
-        nother  (nth 6 res)
-        nspared (nth 7 res))
+        nrad    (nth 5 res)
+        dropped (nth 6 res)
+        nother  (nth 7 res)
+        nspared (nth 8 res))
   (if (null vts)
     (princ (strcat "\nLINGUTTER: nothing to draw a perimeter round - the"
                    " highlight holds no lines, arcs or polylines, or none"
@@ -981,12 +1169,20 @@
                        " highlighted.  Check it really is the pool before"
                        " answering Yes - highlighting less, or closing the"
                        " outline, is what fixes it.")))
-      (princ (strcat "\nLINGUTTER: keeping " (itoa nany) " dimension"
-                     (lg:s nany) " in " (lg:names lg:*anystyles*)
-                     " (kept wherever they sit)."))
+      (if keepcross
+        (princ (strcat "\nLINGUTTER: keeping " (itoa nany) " dimension"
+                       (lg:s nany) " in " (lg:names lg:*anystyles*)
+                       " as a full-span or full-edge cross measurement"
+                       " of the pool."))
+        (princ (strcat "\nLINGUTTER: \"Keep CROSS DIMENSIONS?\" answered"
+                       " No - dimensions in " (lg:names lg:*anystyles*)
+                       " get no exemption.")))
       (princ (strcat "\nLINGUTTER: keeping " (itoa nperim) " dimension"
                      (lg:s nperim) " on the perimeter in "
                      (lg:names lg:*perimstyles*) "."))
+      (princ (strcat "\nLINGUTTER: keeping " (itoa nrad) " radius/diameter"
+                     " dimension" (lg:s nrad) " on the perimeter,"
+                     " regardless of style."))
       (princ (strcat "\nLINGUTTER: erasing " (itoa (length kill))
                      " highlighted object" (lg:s (length kill)) " - "
                      (itoa nother)
@@ -1034,8 +1230,8 @@
 
 ;;; -------------------- the commands ------------------------------------
 
-(defun c:LINGUTTER ( / *error* undo-open ss res vts kill
-                       locked en ask perim)
+(defun c:LINGUTTER ( / *error* undo-open ss keepcross res vts kill
+                       locked en perim)
 
   ;; The user's settings come back FIRST so nothing below can skip them,
   ;; then the undo group is closed - or the next U would swallow the
@@ -1060,60 +1256,56 @@
   (if (null ss)
     (princ "\nLINGUTTER: nothing highlighted - nothing to gut.")
     (progn
-      (setq res  (lg:analyze ss)
-            vts  (nth 0 res)
-            kill (nth 2 res))
-      (lg:report res)))
+      (setq keepcross (cal:askyn "Keep CROSS DIMENSIONS?" "Yes" nil)
+            res       (lg:analyze ss keepcross)
+            vts       (nth 0 res)
+            kill      (nth 2 res))
+      (lg:report res keepcross)))
 
-  ;; no perimeter, no question: without one there is no telling which of
-  ;; the highlighted lines was the pool, so nothing is erased
+  ;; no perimeter, nothing to erase: without one there is no telling
+  ;; which of the highlighted lines was the pool
   (if vts
     (progn
-      (setq ask (strcat "Erase the " (itoa (length kill))
-                        " highlighted object" (lg:s (length kill))
-                        " LINGUTTER did not keep?"))
-      (if (not (cal:askyn ask "No" nil))
-        (princ "\nLINGUTTER: nothing erased - the drawing is as you left it.")
+      (setvar "CMDECHO" 0)
+      (setvar "OSMODE" 0)
+      ;; only when undo is recording - _Begin in a drawing with UNDO
+      ;; off (bit 1 of UNDOCTL clear) errors out of the command
+      (if (= 1 (logand 1 (getvar "UNDOCTL")))
         (progn
-          (setvar "CMDECHO" 0)
-          (setvar "OSMODE" 0)
-          ;; only when undo is recording - _Begin in a drawing with UNDO
-          ;; off (bit 1 of UNDOCTL clear) errors out of the command
-          (if (= 1 (logand 1 (getvar "UNDOCTL")))
-            (progn
-              (command "_.UNDO" "_Begin")
-              (setq undo-open T)))
-          ;; entdel refuses an entity on a locked layer, so open the ones
-          ;; this erase has to reach and shut them again afterwards
-          (setq locked (lg:unlock (lg:kill-layers kill)))
-          (foreach en kill (if (entget en) (entdel en)))
-          (setvar "CLAYER" (cal:ensure-layer lg:*poollayer* lg:*poolcolor*))
-          (setq perim (lg:draw-perim vts lg:*poollayer*))
-          (lg:relock locked)
-          (setq locked nil)
-          ;; closed only if one was opened: with undo control off there
-          ;; is no group of this command's to end, and closing one it
-          ;; never opened is an error out of the command -- the same
-          ;; guard the handler above already makes
-          (if undo-open
-            (progn
-              (command "_.UNDO" "_End")
-              (setq undo-open nil)))
-          (princ (strcat "\nLINGUTTER: " (itoa (length kill))
-                         " highlighted object" (lg:s (length kill))
-                         " erased; the perimeter is one closed polyline"
-                         " on layer " lg:*poollayer*
-                         ".  Nothing outside the highlight was touched."))
-          ;; the sysvars go back BEFORE PADDLE runs: it is a command in its
-          ;; own right and must start from the user's settings, not this
-          ;; one's zeroed OSMODE
-          (cal:sysrestore)
-          (lg:paddle perim)))))
+          (command "_.UNDO" "_Begin")
+          (setq undo-open T)))
+      ;; entdel refuses an entity on a locked layer, so open the ones
+      ;; this erase has to reach and shut them again afterwards
+      (setq locked (lg:unlock (lg:kill-layers kill)))
+      (foreach en kill (if (entget en) (entdel en)))
+      (setvar "CLAYER" (cal:ensure-layer lg:*poollayer* lg:*poolcolor*))
+      (setq perim (lg:draw-perim vts lg:*poollayer*))
+      (lg:relock locked)
+      (setq locked nil)
+      ;; closed only if one was opened: with undo control off there
+      ;; is no group of this command's to end, and closing one it
+      ;; never opened is an error out of the command -- the same
+      ;; guard the handler above already makes
+      (if undo-open
+        (progn
+          (command "_.UNDO" "_End")
+          (setq undo-open nil)))
+      (princ (strcat "\nLINGUTTER: " (itoa (length kill))
+                     " highlighted object" (lg:s (length kill))
+                     " erased; the perimeter is one closed polyline"
+                     " on layer " lg:*poollayer*
+                     ".  Nothing outside the highlight was touched."))
+      ;; the sysvars go back BEFORE PADDLE runs: it is a command in its
+      ;; own right and must start from the user's settings, not this
+      ;; one's zeroed OSMODE
+      (cal:sysrestore)
+      (lg:paddle perim)))
 
   (cal:sysrestore)
+  (if lzd:end (lzd:end "LINGUTTER"))
   (princ))
 
-(defun c:LINGUTTERSCAN ( / *error* ss)
+(defun c:LINGUTTERSCAN ( / *error* ss keepcross)
   (defun *error* (m)
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -1127,8 +1319,10 @@
   (if (null ss)
     (princ "\nLINGUTTERSCAN: nothing highlighted - nothing to report on.")
     (progn
-      (lg:report (lg:analyze ss))
+      (setq keepcross (cal:askyn "Keep CROSS DIMENSIONS?" "Yes" nil))
+      (lg:report (lg:analyze ss keepcross) keepcross)
       (princ "\nLINGUTTERSCAN: nothing changed.  Type LINGUTTER to do it.")))
+  (if lzd:end (lzd:end "LINGUTTERSCAN"))
   (princ))
 
 (defun c:LINGUTTERVER ()

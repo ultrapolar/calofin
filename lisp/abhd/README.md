@@ -279,6 +279,7 @@ table here.
 | `*PF-POINT-BLOCK*` | `"ab_pt"` | Block whose inserts are survey points |
 | `*PF-PT-TAG*` | `"number"` | Attribute tag carrying the point number |
 | `*PF-MOVED-MARK*` | `"M"` | A number carrying this letter is a *moved* point (ABFIND's `17m`) and is left out of the fit entirely |
+| `*PF-SNAP*` | `12.0` | How close a **click** has to land to a survey point to name it — at a wall end, a corner, a held point, a break end, a slope waypoint, an omit. A typed number never uses it. The radius `BPCALLOUT`, `ABFIND` and `PERPMARK` share |
 | `*PF-OUT-LAYER*` / `*PF-OUT-COLOUR*` | `"POOL-FIT"` / 3 | Layer the three candidates preview on |
 | `*PF-MISS-LAYER*` / `*PF-MISS-COLOUR*` | `"FGStep"` / 1 | Layer for the unheld-point rings and their list |
 | `*PF-MISS-RADIUS*` / `*PF-HOLD-RADIUS*` | `4.0` / half of it | Ring sizes: a miss / corner / omitted point, and a held point |
@@ -317,9 +318,9 @@ starts.)
 | `*PF-FLOAT-GAIN*` | `2` | Extra points a floating arc must cover to beat an exact one |
 | `*PF-DROP-PCT*` / `*PF-DROP-MULT*` / `*PF-DROP-GAIN*` | `0.10` / `2.0` / `2` | The give-up budget: how many, how plainly off, and how much span each must buy |
 | `*PF-CAP-RELAX*` / `*PF-CAP-TRIES*` | `1.4` / `40` | How the curve cap's refits relax the distance, and how often |
-| `*PF-PICK-WARN*` | `3.0` | A pick further than this × the distance from any point is called out |
 | `*PF-PICKUP-EPS*` | `3.0` | How near the loop a point must sit for `ADAB` to take it as one of its own |
 | `*PF-BOTTOM-STEP*` / `*PF-BOTTOM-FIT*` | `6.0` / `0.25` | Hopper sampling step, and how far a sample may sit off the arcs drawn through it |
+| `*PF-SPIKE-TOL*` | `2.0` | How far a slope waypoint's offset must sit **against both** its neighbours along that side before the run names it — and names the number the wall between them puts there. Raising it hides typos; lowering it starts naming real steps |
 
 **3. Guards** — limits that keep the maths finite and the searches
 bounded. Named so each is defined once and can be read, not because
@@ -368,19 +369,19 @@ ABHD - fit a pool perimeter through the surveyed points.
   Maximum curves <Auto> [Auto/None]:
 
   Step 4 of 7 - does the pool edge have any dead-straight walls?
-  If Yes you will pick the two end points of each (snap to the
-  survey points); a dashed line marks each declared wall.
+  If Yes you will name the two end points of each - click the
+  survey point, or type its number; a dashed line marks each wall.
   Any straight lines? [Yes/No] <No>:
 
   Step 5 of 7 - are there any sharp corners the fit must not round off?
   Obvious ones are found automatically; declare the gentler ones here.
-  If Yes you will pick each corner point (snap to the survey points).
+  If Yes you will name each corner point - click it, or type its number.
   Any sharp corners? [Yes/No] <No>:
 
   Step 6 of 7 - any points that must be held ABSOLUTELY?
   A held point can never be fudged: the line passes through it
-  exactly, in every candidate.  If Yes you will pick each one
-  (snap to the survey points); a small dashed ring marks it.
+  exactly, in every candidate.  If Yes you will name each one -
+  click it, or type its number; a small dashed ring marks it.
   Any held points? [Yes/No] <No>:
 
   Step 7 of 7 - select the survey points (POINTS layer or ab_pt
@@ -397,6 +398,42 @@ So a repeat run is just `ABHD` + `Enter` × 6 + select — and
 `SIMPABHD` is `Enter` × 3 + select, because it asks none of the first
 three at all (see
 [SIMPABHD](#simpabhd--the-same-fit-with-nothing-to-decide-first)).
+
+## Naming a survey point
+
+Every question ABHD asks about a survey point — a wall end at step
+4, a corner at step 5, a held point at step 6, a break end or a slope
+waypoint in the bottom flow, a point to leave out at a `Redo` — is a
+question about a point the drawing already holds, not about a place.
+So it is asked the way `PERPMARK` asks it:
+
+```
+  First end of the straight wall - pick it or type its number [Back] <Enter = done>:
+  Second end, from Pt.17 - pick it or type its number [Back]:
+```
+
+- **click the point, or type its number**: `17`, `Pt.17`, `pt 17`,
+  `#17` and `017` all name the same one;
+- a click has to land within `*PF-SNAP*` (12 units — what
+  `BPCALLOUT`, `ABFIND` and `PERPMARK` snap at) of a point to pick it;
+  a typed number never uses the radius, because a name is exact;
+- **a miss is re-asked where it stands**, never guessed at: a click on
+  nothing (`No survey point there`), a number nothing carries (`No
+  survey point is numbered "99"`), a number two points share (`2
+  points are numbered "3" - click the one you mean`), and a second
+  wall or break end that is the first one again;
+- steps 4 to 6 come before the points are selected, so they name any
+  survey point in the drawing (a moved `17m` point excepted — it is
+  never in the fit). Each declaration is then **matched to the
+  selection by the point's own identity**: one made on a point that
+  was not selected is named and dropped — `(Pt.17 is not among the
+  selected points - the wall declared on it is dropped)` — never
+  snapped onto some other point.
+
+Before this, every one of those prompts took a bare click and snapped
+it to the nearest survey point after the selection, however far off
+it had landed; a wall end that took the wrong point was a bad fit with
+no visible cause.
 
 ### Declaring straight walls
 
@@ -539,19 +576,19 @@ the fit at exactly the distance you typed.
 
 **`Redo`** throws all three away and refits without leaving the
 command. First it asks whether any points should be left out this
-time — pick each one (mis-shots, duplicates, anything the line should
-not chase; each gets a dashed ring and is named), or press `Enter`
-for none. **The pick is a toggle**: omissions carry over from redo to
-redo, and clicking a ringed, already-omitted point puts it **back
-in** — its ring disappears and its duplicates rejoin the fit, the
+time — name each one, clicked or typed by number (mis-shots,
+duplicates, anything the line should not chase; each gets a dashed
+ring and is named), or press `Enter` for none. **The pick is a
+toggle**: omissions carry over from redo to redo, and naming a
+ringed, already-omitted point puts it **back in** — its ring disappears and its duplicates rejoin the fit, the
 stats and the miss allowance. (A wall or corner that was dropped when
 its point went out is not resurrected — re-add it in the next step if
 it is still wanted.) Then the **declared straight walls and sharp corners can
-change too**: each gets an `[Add/Remove/Keep]` loop — `Add` picks new
-ends or corner points (snapped to the survey points, markers drawn on
-the spot), `Remove` takes a pick near the wall or on the corner to
-drop (named in the confirmation, markers redrawn to match), and
-`Enter`/`Keep` moves on. Finally the distance, the percent and the
+change too**: each gets an `[Add/Remove/Keep]` loop — `Add` names new
+ends or corner points (click each, or type its number; markers drawn
+on the spot), `Remove` takes a pick near the wall, or names the corner
+or held point, to drop (named in the confirmation, markers redrawn to
+match), and `Enter`/`Keep` moves on. Finally the distance, the percent and the
 curve cap are asked again — `Enter` keeps each as it is — and three
 new candidates are drawn from the surviving points. Walls and corners
 otherwise carry over; one anchored on an omitted point is dropped
@@ -802,6 +839,25 @@ offset is dimensioned** just like the three hopper offsets. A pick
 that isn't on that side of the pool, or that lands on a break point,
 is called out and ignored; picking no points at all just gives the
 plain guided line.
+
+**An offset that fights both its neighbours is named.** 40, then 10,
+then 30 at three points in a row down one side is not a wall — the
+wall between a 40 and a 30 is about 35, and the 10 is a digit that
+went in wrong. Before the line is drawn, any waypoint offset sitting
+against **both** its neighbours by more than `*PF-SPIKE-TOL*` (2″) is
+called out with the number they put there:
+
+```
+  (Pt.4 is offset 10.00, against 40.00 and 30.00 on both sides of it -
+   the wall between those puts it near 35.00.  The line follows what
+   you typed.)
+```
+
+Nothing is changed: an offset you measured is yours, so the line is
+drawn through exactly what you gave it. A side that simply **bends**
+says nothing however hard it bends — 40, 38, 30 has every value
+between its neighbours, and it is fighting *both* sides at once that
+marks a typo rather than a curve.
 
 **Everything lands on the `POOL` layer** with the perimeter: the
 shallow break, the three-piece deep break, the hopper outline, the

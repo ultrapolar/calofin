@@ -114,6 +114,7 @@
 
   (setq osm (getvar "OSMODE"))
   (setq pt (getpoint "\nPick top-left point for LINTXTCHK checklist: "))
+  (if lzd:ask (lzd:ask "\nPick top-left point for LINTXTCHK checklist: " pt) pt)
 
   (if pt
     (progn
@@ -155,6 +156,7 @@
     )
     (princ "\nLINTXTCHK cancelled.")
   )
+  (if lzd:end (lzd:end "LINTXTCHK"))
   (princ)
 )
 

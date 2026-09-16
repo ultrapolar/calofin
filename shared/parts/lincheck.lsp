@@ -125,6 +125,7 @@
                                  "\n      (Enter = done"
                                  (if back ", B = back" "")
                                  ", or type a note): ")))
+  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") val) val)
   (cond
     ((and back (cal:back-word-p val)) 'LIN-BACK)
     ((= val "") (lin:log (strcat lin:*tick* item)) val)
@@ -169,6 +170,7 @@
 (defun lin:value (label back / val)
   (setq val (getstring T (strcat "\n    " label " (value or NA"
                                  (if back ", B = back" "") "): ")))
+  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") val) val)
   (cond
     ((and back (cal:back-word-p val)) 'LIN-BACK)
     ((or (= val "") (= (strcase val) "NA") (= (strcase val) "N/A"))
@@ -401,6 +403,7 @@
     (cons nil  'lin:st-final)
   ))
   (lin:report)
+  (if lzd:end (lzd:end "LINCHECK"))
   (princ)
 )
 
@@ -412,6 +415,7 @@
   (while (not done)
     (setq entry (getstring T (strcat "\n  Cross dim (label=value / NA"
                                      ", B = back, blank to finish): ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") entry) entry)
     (cond
       ((cal:back-word-p entry)
        (if (> n 0)

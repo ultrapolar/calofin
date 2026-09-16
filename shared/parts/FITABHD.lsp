@@ -124,7 +124,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.8")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.0")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -135,6 +135,12 @@
                                    ; points; insertion point = location
 (setq fit:*pt-tag*      "number")  ; attribute tag carrying the point
                                    ; number, for the miss report
+(setq fit:*snap*        12.0)      ; a CLICK within this of a survey
+                                   ; point names that point, at the
+                                   ; Redo's omit prompt.  A typed
+                                   ; number never uses it: a name is
+                                   ; exact.  12.0 is what BPCALLOUT,
+                                   ; ABFIND and PERPMARK snap at
 (setq fit:*moved-mark*  "M")       ; a point number carrying this letter
                                    ; is a MOVED point - ABFIND writes
                                    ; "17m" when it copies Pt.17 to a
@@ -519,6 +525,27 @@
     (setq d (cal:dist p q))
     (if (or (null bd) (< d bd)) (setq best q bd d)))
   best)
+
+;; ---- naming a survey point -------------------------------------------
+;; The Redo's omit prompt is a question about a survey point the
+;; drawing already holds, so it NAMES one rather than placing it - this
+;; is PERPMARK's infrastructure, carried here under this file's own
+;; prefix so the standalone file loads alone (STANDARDS section 4; the
+;; grouped build takes it from CALOFIN-LIB): one prompt takes a click
+;; OR a typed number - "17", "Pt.17", "pt 17", "#17" and "017" all name
+;; the same point - a click has to land within fit:*snap* of a point to
+;; pick it, and every miss - a click on nothing, a number nothing
+;; carries, a number two points share - is re-asked where it stands.
+;; What used to happen: any click was snapped to the nearest survey
+;; point, however far off it landed.
+;;
+;; A candidate is (position name): where the point is, and what the
+;; prompts and the report call it.
+
+;; The candidates for the points in hand - the fit's, or the omit
+;; list's - named the way the report names them.
+(defun fit:cands-of (qs)
+  (mapcar '(lambda (q) (list q (fit:pt-name q))) qs))
 
 ;; Order points into a closed tour: nearest-neighbour walk from the
 ;; leftmost point, then 2-opt passes to remove crossings (ABHD's).
@@ -4270,6 +4297,7 @@
   (while (null res)
     (setq s (getstring T (strcat "\n" msg " <" (fit:fmt-off def) ">"
                                  (if back " [Back]" "") ": ")))
+    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
     (cond
       ((= s "") (setq res def))
       ((and back (cal:back-word-p s)) (setq res 'CAL-BACK))
@@ -4413,6 +4441,7 @@
    ;; first break below re-opens the pick instead
    (initget "Back Undo")
    (setq pick (getpoint "\nPick a point at the DEEP end of the pool [Back]: "))
+   (if lzd:ask (lzd:ask "\nPick a point at the DEEP end of the pool [Back]: " pick) pick)
    (cond
     ((and (= (type pick) 'STR) (member pick '("Back" "Undo")))
      (princ "\n  Stepping back one question.")
@@ -4647,6 +4676,7 @@
        (setq v (getint (strcat "\nPercent of points allowed beyond <"
                                (itoa (fix (+ 0.5 (* 100.0 pct))))
                                "> [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
        (cond
          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
           (princ "\nStepping back one step.")
@@ -4755,18 +4785,22 @@
 
 ;; The omit/restore loop.  Each pick toggles: a point in the fit goes
 ;; out and gets a ring, a ringed one comes back in and loses it.
-(defun fit:omit-loop ( / wp pick)
+(defun fit:omit-loop ( / cand pick)
   (princ "\n\n  Any points to leave out this time?")
-  (princ "\n  Pick each one (Enter for none) - mis-shots, duplicates, or")
-  (princ "\n  anything the outline should not chase; each gets a dashed ring.")
+  (princ "\n  Name each one - click it, or type its number (Enter for none):")
+  (princ "\n  mis-shots, duplicates, anything the outline should not chase;")
+  (princ "\n  each gets a dashed ring.")
   (if fit-omit
     (princ (strcat "\n  " (itoa (length fit-omit))
-                   " point(s) are already out - picking one of those puts"
+                   " point(s) are already out - naming one of those puts"
                    " it BACK IN.")))
-  (while (setq wp (getpoint "\n  Point to leave out - or a ringed one to restore (Enter when done): "))
-    (setq pick (fit:omit-choose (cal:2d wp)))
+  (while (setq cand (cal:askpoint
+                      "  Point to leave out, or a ringed one to restore - pick it or type its number"
+                      "Enter = done" nil
+                      (fit:cands-of (append (fit:active) (mapcar 'car fit-omit)))
+                      fit:*snap*))
+    (setq pick (fit:omit-choose (car cand)))
     (cond
-      ((null pick) (princ "  - (no survey point near that pick)"))
       ((eq (car pick) 'RESTORE)
        (setq fit-omit (fit:omit-drop (cdr pick)))
        (princ (strcat "  - Pt." (fit:pt-name (cdr pick)) " back in")))
@@ -4813,7 +4847,10 @@
     (if lzd:report (lzd:report "FITABHD" *fitabhd-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "FITABHD" *fitabhd-version*))
-  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+  ;; no OSMODE: FITABHD never changes it, and listing it here would
+  ;; put this run's opening snapshot back over any snap the drafter
+  ;; ticked on during the seven steps -- on a clean exit.
+  (cal:syssave '("CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
@@ -4938,6 +4975,7 @@
   (setq undo-open nil)
   (cal:sysrestore)
   (setq fit:*nobottom* nil)
+  (if lzd:end (lzd:end "FITABHD"))
   (princ))
 
 ;; FITABHD for a cover sheet: the same template fit, with the
